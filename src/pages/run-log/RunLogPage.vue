@@ -48,9 +48,12 @@ function remove(id: string) {
       <div v-if="filteredRuns.length" class="run-list">
         <article v-for="run in filteredRuns" :key="run.id" class="run-row">
           <div>
-            <strong>{{ run.date }} · {{ run.type }}</strong>
+            <strong>{{ run.date }} · {{ run.sessionTitle || run.type }}</strong>
             <span>{{ run.distanceKm }}km · {{ formatDuration(run.durationSec) }} · {{ formatPace(run.avgPaceSec) }}/km</span>
             <small>HR {{ run.avgHeartRate ?? '-' }} / {{ run.maxHeartRate ?? '-' }} · Cad {{ run.cadence ?? '-' }} · {{ estimateHeartRateDrift(run) }}</small>
+            <small v-if="run.courseType !== 'Unknown' || run.rpe || run.workoutFeeling">
+              {{ run.courseType }} · RPE {{ run.rpe ?? '-' }} · {{ run.workoutFeeling || run.companion || '-' }}
+            </small>
           </div>
           <div class="row-actions">
             <button class="ghost" type="button" @click="startEdit(run)">수정</button>

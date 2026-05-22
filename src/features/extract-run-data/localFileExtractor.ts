@@ -62,6 +62,7 @@ async function extractFromFit(buffer: ArrayBuffer): Promise<ExtractedRunData> {
 
 export function createEmptyRun(): ExtractedRunData {
   return {
+    sessionTitle: '',
     date: new Date().toISOString().slice(0, 10),
     type: 'Unknown',
     distanceKm: 0,
@@ -71,7 +72,18 @@ export function createEmptyRun(): ExtractedRunData {
     maxHeartRate: null,
     cadence: null,
     temperature: null,
+    humidity: null,
+    windMps: null,
+    elevationGainM: null,
+    elevationLossM: null,
+    courseType: 'Unknown',
     rpe: null,
+    workoutFeeling: '',
+    painNote: '',
+    sleepQuality: null,
+    conditionScore: null,
+    stressLevel: null,
+    companion: '',
     memo: '',
     laps: [],
     tags: []

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { runTypes, type ExtractedRunData, type RunType } from '@/entities/run/model'
+import { courseTypes, runTypes, type ExtractedRunData } from '@/entities/run/model'
 import { toNumberOrNull } from '@/shared/lib/format'
 
 const model = defineModel<ExtractedRunData>({ required: true })
@@ -34,6 +34,10 @@ function updateNumber(key: keyof ExtractedRunData, value: string) {
 
 <template>
   <form class="form-grid">
+    <label class="full">
+      세션 제목
+      <input v-model="model.sessionTitle" placeholder="예: 오늘 목요일 템포" />
+    </label>
     <label>
       날짜
       <input v-model="model.date" type="date" />
@@ -73,8 +77,54 @@ function updateNumber(key: keyof ExtractedRunData, value: string) {
       <input :value="model.temperature ?? ''" type="number" @input="updateNumber('temperature', ($event.target as HTMLInputElement).value)" />
     </label>
     <label>
+      습도 %
+      <input :value="model.humidity ?? ''" type="number" min="0" max="100" @input="updateNumber('humidity', ($event.target as HTMLInputElement).value)" />
+    </label>
+    <label>
+      바람 m/s
+      <input :value="model.windMps ?? ''" type="number" step="0.1" @input="updateNumber('windMps', ($event.target as HTMLInputElement).value)" />
+    </label>
+    <label>
+      코스 타입
+      <select v-model="model.courseType">
+        <option v-for="courseType in courseTypes" :key="courseType" :value="courseType">{{ courseType }}</option>
+      </select>
+    </label>
+    <label>
+      누적 상승 m
+      <input :value="model.elevationGainM ?? ''" type="number" @input="updateNumber('elevationGainM', ($event.target as HTMLInputElement).value)" />
+    </label>
+    <label>
+      누적 하강 m
+      <input :value="model.elevationLossM ?? ''" type="number" @input="updateNumber('elevationLossM', ($event.target as HTMLInputElement).value)" />
+    </label>
+    <label>
       RPE
       <input :value="model.rpe ?? ''" type="number" min="1" max="10" @input="updateNumber('rpe', ($event.target as HTMLInputElement).value)" />
+    </label>
+    <label>
+      수면 점수
+      <input :value="model.sleepQuality ?? ''" type="number" min="1" max="10" @input="updateNumber('sleepQuality', ($event.target as HTMLInputElement).value)" />
+    </label>
+    <label>
+      컨디션 점수
+      <input :value="model.conditionScore ?? ''" type="number" min="1" max="10" @input="updateNumber('conditionScore', ($event.target as HTMLInputElement).value)" />
+    </label>
+    <label>
+      스트레스
+      <input :value="model.stressLevel ?? ''" type="number" min="1" max="10" @input="updateNumber('stressLevel', ($event.target as HTMLInputElement).value)" />
+    </label>
+    <label class="full">
+      동행/상황
+      <input v-model="model.companion" placeholder="예: 배우자 회복런, 혼자, 그룹런" />
+    </label>
+    <label class="full">
+      운동 후 느낌
+      <textarea v-model="model.workoutFeeling" rows="2" placeholder="예: 템포 후 9분대 조깅은 회복 느낌이었음" />
+    </label>
+    <label class="full">
+      통증/불편
+      <textarea v-model="model.painNote" rows="2" placeholder="예: 좌측 햄스트링 이상 없음" />
     </label>
     <label class="full">
       메모

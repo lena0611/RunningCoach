@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 type RunLogRow = {
   id: string
+  session_title: string | null
   date: string
   type: string
   distance_km: number
@@ -11,7 +12,18 @@ type RunLogRow = {
   max_heart_rate: number | null
   cadence: number | null
   temperature: number | null
+  humidity: number | null
+  wind_mps: number | null
+  elevation_gain_m: number | null
+  elevation_loss_m: number | null
+  course_type: string | null
   rpe: number | null
+  workout_feeling: string | null
+  pain_note: string | null
+  sleep_quality: number | null
+  condition_score: number | null
+  stress_level: number | null
+  companion: string | null
   memo: string
   laps: unknown[]
   tags: string[]

@@ -4,6 +4,7 @@ import { requireSupabase } from '@/shared/api/supabase'
 type RunLogRow = {
   id: string
   user_id: string
+  session_title: string | null
   date: string
   type: RunLog['type']
   distance_km: number
@@ -13,7 +14,18 @@ type RunLogRow = {
   max_heart_rate: number | null
   cadence: number | null
   temperature: number | null
+  humidity: number | null
+  wind_mps: number | null
+  elevation_gain_m: number | null
+  elevation_loss_m: number | null
+  course_type: RunLog['courseType'] | null
   rpe: number | null
+  workout_feeling: string | null
+  pain_note: string | null
+  sleep_quality: number | null
+  condition_score: number | null
+  stress_level: number | null
+  companion: string | null
   memo: string
   laps: RunLog['laps']
   tags: string[]
@@ -42,6 +54,7 @@ export async function updateRunLog(run: RunLog): Promise<RunLog> {
     .update({
       date: rest.date,
       type: rest.type,
+      session_title: rest.sessionTitle,
       distance_km: rest.distanceKm,
       duration_sec: rest.durationSec,
       avg_pace_sec: rest.avgPaceSec,
@@ -49,7 +62,18 @@ export async function updateRunLog(run: RunLog): Promise<RunLog> {
       max_heart_rate: rest.maxHeartRate,
       cadence: rest.cadence,
       temperature: rest.temperature,
+      humidity: rest.humidity,
+      wind_mps: rest.windMps,
+      elevation_gain_m: rest.elevationGainM,
+      elevation_loss_m: rest.elevationLossM,
+      course_type: rest.courseType,
       rpe: rest.rpe,
+      workout_feeling: rest.workoutFeeling,
+      pain_note: rest.painNote,
+      sleep_quality: rest.sleepQuality,
+      condition_score: rest.conditionScore,
+      stress_level: rest.stressLevel,
+      companion: rest.companion,
       memo: rest.memo,
       laps: rest.laps,
       tags: rest.tags,
@@ -72,6 +96,7 @@ function toInsertRow(data: ExtractedRunData, source: RunLog['source']) {
   return {
     date: data.date,
     type: data.type,
+    session_title: data.sessionTitle,
     distance_km: data.distanceKm,
     duration_sec: data.durationSec,
     avg_pace_sec: data.avgPaceSec,
@@ -79,7 +104,18 @@ function toInsertRow(data: ExtractedRunData, source: RunLog['source']) {
     max_heart_rate: data.maxHeartRate,
     cadence: data.cadence,
     temperature: data.temperature,
+    humidity: data.humidity,
+    wind_mps: data.windMps,
+    elevation_gain_m: data.elevationGainM,
+    elevation_loss_m: data.elevationLossM,
+    course_type: data.courseType,
     rpe: data.rpe ?? null,
+    workout_feeling: data.workoutFeeling,
+    pain_note: data.painNote,
+    sleep_quality: data.sleepQuality,
+    condition_score: data.conditionScore,
+    stress_level: data.stressLevel,
+    companion: data.companion,
     memo: data.memo,
     laps: data.laps,
     tags: data.tags ?? [],
@@ -91,6 +127,7 @@ function fromRow(row: RunLogRow): RunLog {
   return {
     id: row.id,
     userId: row.user_id,
+    sessionTitle: row.session_title ?? '',
     date: row.date,
     type: row.type,
     distanceKm: row.distance_km,
@@ -100,7 +137,18 @@ function fromRow(row: RunLogRow): RunLog {
     maxHeartRate: row.max_heart_rate,
     cadence: row.cadence,
     temperature: row.temperature,
+    humidity: row.humidity,
+    windMps: row.wind_mps,
+    elevationGainM: row.elevation_gain_m,
+    elevationLossM: row.elevation_loss_m,
+    courseType: row.course_type ?? 'Unknown',
     rpe: row.rpe,
+    workoutFeeling: row.workout_feeling ?? '',
+    painNote: row.pain_note ?? '',
+    sleepQuality: row.sleep_quality,
+    conditionScore: row.condition_score,
+    stressLevel: row.stress_level,
+    companion: row.companion ?? '',
     memo: row.memo,
     laps: row.laps ?? [],
     tags: row.tags ?? [],

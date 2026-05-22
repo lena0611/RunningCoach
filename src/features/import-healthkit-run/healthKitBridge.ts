@@ -77,6 +77,7 @@ export function toExtractedRunData(candidate: HealthKitRunCandidate): ExtractedR
   const distanceKm = candidate.distanceKm ?? 0
   const durationSec = candidate.durationSec
   return {
+    sessionTitle: '',
     date: candidate.date || new Date().toISOString().slice(0, 10),
     type: 'Unknown',
     distanceKm,
@@ -86,7 +87,18 @@ export function toExtractedRunData(candidate: HealthKitRunCandidate): ExtractedR
     maxHeartRate: candidate.maxHeartRate,
     cadence: candidate.cadence,
     temperature: candidate.temperature,
+    humidity: null,
+    windMps: null,
+    elevationGainM: null,
+    elevationLossM: null,
+    courseType: candidate.routeAvailable ? 'Mixed' : 'Unknown',
     rpe: null,
+    workoutFeeling: '',
+    painNote: '',
+    sleepQuality: null,
+    conditionScore: null,
+    stressLevel: null,
+    companion: '',
     memo: createMemo(candidate),
     laps: candidate.laps ?? [],
     tags: ['healthkit']

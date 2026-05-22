@@ -8,6 +8,8 @@ export type RunType =
   | 'Race'
   | 'Unknown'
 
+export type CourseType = 'Unknown' | 'Flat' | 'Hilly' | 'Track' | 'Treadmill' | 'Trail' | 'Mixed'
+
 export type Lap = {
   index: number
   distanceKm: number | null
@@ -19,6 +21,7 @@ export type Lap = {
 export type RunLog = {
   id: string
   userId: string
+  sessionTitle: string
   date: string
   type: RunType
   distanceKm: number
@@ -28,7 +31,18 @@ export type RunLog = {
   maxHeartRate: number | null
   cadence: number | null
   temperature: number | null
+  humidity: number | null
+  windMps: number | null
+  elevationGainM: number | null
+  elevationLossM: number | null
+  courseType: CourseType
   rpe: number | null
+  workoutFeeling: string
+  painNote: string
+  sleepQuality: number | null
+  conditionScore: number | null
+  stressLevel: number | null
+  companion: string
   memo: string
   laps: Lap[]
   tags: string[]
@@ -47,6 +61,8 @@ export const runTypes: RunType[] = [
   'Race',
   'Unknown'
 ]
+
+export const courseTypes: CourseType[] = ['Unknown', 'Flat', 'Hilly', 'Track', 'Treadmill', 'Trail', 'Mixed']
 
 export type ExtractedRunData = Omit<RunLog, 'id' | 'userId' | 'source' | 'createdAt' | 'updatedAt' | 'rpe' | 'tags'> & {
   rpe?: number | null
