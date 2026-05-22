@@ -6,28 +6,33 @@
 - `src/app`: 앱 부트스트랩, 라우터, 전역 스토어, 전역 스타일을 담당한다.
 - `src/pages`: 화면 단위 조합을 담당한다.
 - `src/widgets`: 재사용 가능한 화면 블록을 담당한다.
-- `src/features`: 파일 import, 규칙 기반 코칭, 컨텍스트 생성 같은 사용자 행동 중심 로직을 담당한다.
+- `src/features`: 파일 import, HealthKit 후보 수신, AI 컨텍스트 생성 같은 사용자 행동 중심 로직을 담당한다.
 - `src/entities`: `RunLog`, `Lap`, `TrainingMemory` 같은 도메인 타입과 상수를 담당한다.
 - `src/shared`: 포맷터, 통계 계산, 공통 UI, 외부 라이브러리 타입 선언을 담당한다.
 
 ## 의존 방향
 - 상위 레이어는 하위 레이어를 사용할 수 있지만, 하위 레이어가 pages/widgets에 의존하지 않는다.
 - 도메인 타입은 `entities`에 두고 계산 유틸은 `shared/lib` 또는 관련 `features`에 둔다.
-- 정적 앱 기본 경로에서는 서버 API 호출을 만들지 않는다.
+- 정적 프론트는 직접 secret을 갖지 않는다. DB/Auth/AI 호출은 Supabase public client와 Edge Function 경계로만 수행한다.
 
 ## 공개 API 경계
-- 현재 웹 앱은 정적 PWA이며 공개 서버 API가 없다.
+- 현재 웹 앱은 GitHub Pages 정적 프론트이며, 백엔드/Auth/DB/AI 경계는 Supabase를 사용한다.
 - iOS 확장 방향은 하이브리드 앱이다. Vue 화면은 WebView 또는 로컬 번들로 유지하고, 네이티브 iOS 레이어는 HealthKit 권한/조회와 웹-네이티브 브리지만 담당한다.
-- Strava 연동을 추가할 때만 별도 서버리스 API를 둔다. 이 API는 Strava OAuth, refresh token, activity fetch만 책임진다.
-- 서버리스 API는 `RunLog` 영구 저장소가 아니다. 개인 데이터 저장은 기본적으로 브라우저 로컬 저장소가 담당한다.
-- 개인 서버/클라우드 동기화는 현재 기본 범위가 아니다.
+- Strava 연동을 추가할 때는 Supabase Edge Function 또는 별도 서버리스 API가 Strava OAuth, refresh token, activity fetch를 책임진다.
+- `RunLog`, `TrainingMemory`, `coach_reports`, `coach_memory_items`의 영구 저장소는 Supabase Postgres다. localStorage는 Supabase 미설정/개발 fallback으로만 취급한다.
 
 ## 데이터 흐름
-- FIT 파일 선택 -> 브라우저 로컬 파싱 -> 사용자가 확인/수정 -> `RunLog` 저장 -> 대시보드/Rule Coach 계산
-- iOS 하이브리드 확장: Workoutdoors -> Apple 건강 앱/HealthKit 저장 -> 네이티브 iOS HealthKit 조회 -> 웹 앱에 `RunLog` 후보 전달 -> 사용자 확인/저장
-- `TrainingMemory` 수정 -> 로컬 저장 -> Rule Coach와 컨텍스트 생성에 반영
-- 백업/복원 확장: 로컬 저장 데이터 -> JSON export/import -> 동일 브라우저 또는 새 기기에서 복원
+- FIT 파일 선택 -> 브라우저 로컬 파싱 -> 사용자가 확인/수정 -> Supabase `run_logs` 저장 -> 대시보드/AI Coach 컨텍스트 계산
+- iOS 하이브리드 확장: Workoutdoors/Apple Fitness -> Apple 건강 앱/HealthKit 저장 -> 네이티브 iOS HealthKit 조회 -> 웹 앱에 `RunLog` 후보 전달 -> 사용자 확인/저장 또는 월간 일괄 저장
+- `TrainingMemory` 수정 -> Supabase `training_memory` 저장 -> AI Coach 컨텍스트 생성에 반영
+- AI 코칭 요청 -> Supabase Edge Function -> DB에서 `TrainingMemory`, `RunLog`, `coach_memory_items` 조회 -> OpenAI 호출 -> `coach_reports`와 새 `coach_memory_items` 저장
 - 장기 확장: Strava activity fetch -> `RunLog` 후보 생성 -> 사용자 확인/저장
+
+## 화면 로딩과 스토어 규칙
+- Dashboard, Run Log, Coach처럼 `RunLog`를 읽는 화면은 앱 초기화에만 의존하지 말고, 화면 진입 시 스토어가 아직 로드되지 않았으면 `load()`를 보장한다.
+- 데이터 화면은 빈 상태와 로딩 실패를 구분한다. Supabase 조회 실패가 0km처럼 보이지 않도록 로딩/오류/다시 불러오기 UI를 둔다.
+- 수정/삭제 같은 모바일 주요 액션은 사용자가 즉시 결과를 확인할 수 있게 폼 위치, 진행 상태, 오류 메시지를 명시한다.
+- WebView 배포 직후 캐시/전파 지연으로 Vue 마운트가 늦을 수 있다. 웹 `index.html`은 빈 `#app`만 두지 말고 기본 로딩 텍스트를 제공한다.
 
 ## HealthKit 브리지 계약
 - HealthKit 데이터 구조와 `RunLog` 매핑은 `.harness/project/healthkit-data-contract.md`를 기준으로 한다.
