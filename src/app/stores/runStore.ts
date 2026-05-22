@@ -16,6 +16,7 @@ export const useRunStore = defineStore('runStore', {
   }),
   getters: {
     selectedUserRuns: (state) => {
+      if (isSupabaseConfigured) return state.runs
       const memoryStore = useMemoryStore()
       return state.runs.filter((run) => run.userId === memoryStore.selectedUserId)
     },
