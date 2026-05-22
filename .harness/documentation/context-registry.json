@@ -56,6 +56,15 @@
       "keywords": ["AI", "코칭", "OpenAI", "TrainingMemory", "coach", "memory"]
     },
     {
+      "id": "github-pages-supabase-playbook",
+      "file": ".harness/project/github-pages-supabase-playbook.md",
+      "category": "external-system",
+      "taskTypes": ["feature", "bugfix", "docs", "maintenance", "review"],
+      "priority": "high",
+      "appliesTo": ["GitHub Pages", "Supabase", "Auth", "Edge Function", "secrets", "iOS WebView"],
+      "keywords": ["GitHub Pages", "Supabase", "인증", "OTP", "secret", "variables", "WebView", "배포"]
+    },
+    {
       "id": "workflow-rules",
       "file": ".harness/project/workflow-rules.md",
       "category": "workflow",
