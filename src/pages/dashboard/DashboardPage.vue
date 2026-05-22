@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
+import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import RunSummaryCard from '@/widgets/run-summary-card/RunSummaryCard.vue'
 import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
 import FatigueCard from '@/widgets/fatigue-card/FatigueCard.vue'
-import { averagePace, getEasyRatio, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, getVolumeWarning, sumDistance } from '@/shared/lib/runStats'
+import { averagePace, getEasyRatio, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, getVolumeWarning, sumDistance } from '@/shared/lib/runStats'
 import { formatPace } from '@/shared/lib/format'
 
 const runStore = useRunStore()
+const memoryStore = useMemoryStore()
 
 onMounted(() => {
   if (!runStore.loaded && !runStore.loading) {
     runStore.load()
+  }
+  if (!memoryStore.loading) {
+    memoryStore.load()
   }
 })
 
@@ -21,11 +26,7 @@ const monthDistance = computed(() => sumDistance(getThisMonthRuns(runs.value)))
 const last7 = computed(() => sumDistance(getRunsWithinDays(runs.value, 7)))
 const last14 = computed(() => sumDistance(getRunsWithinDays(runs.value, 14)))
 const easyRatio = computed(() => getEasyRatio(getRunsWithinDays(runs.value, 30)))
-const nextSession = computed(() => {
-  const recent = getRunsWithinDays(runs.value, 3)
-  const hasHard = recent.some((run) => ['Tempo', 'Steady Long', 'Race'].includes(run.type))
-  return hasHard ? 'Recovery 또는 5km Easy' : 'Easy + Strides 또는 Tempo'
-})
+const nextSession = computed(() => getNextSessionRecommendation(memoryStore.memory, runs.value))
 </script>
 
 <template>
@@ -56,7 +57,9 @@ const nextSession = computed(() => {
           <div class="section-heading">
             <h2>다음 추천 세션</h2>
           </div>
-          <p>{{ nextSession }}</p>
+          <strong>{{ nextSession.title }}</strong>
+          <p>{{ nextSession.reason }}</p>
+          <p class="helper">{{ nextSession.intensity }}</p>
         </section>
       </div>
     </div>
