@@ -45,7 +45,7 @@ const nextSession = computed(() => {
       <RunSummaryCard label="이번 달" :value="`${monthDistance}km`" />
       <RunSummaryCard label="최근 7일" :value="`${last7}km`" />
       <RunSummaryCard label="최근 14일" :value="`${last14}km`" />
-      <RunSummaryCard label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 기준" />
+      <RunSummaryCard label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 · 랩/페이스 기준" />
       <RunSummaryCard label="평균 페이스" :value="formatPace(averagePace(runs))" />
     </div>
     <div class="two-column">

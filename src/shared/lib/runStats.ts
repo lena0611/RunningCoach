@@ -1,6 +1,7 @@
-import type { RunLog, RunType } from '@/entities/run/model'
+import type { Lap, RunLog, RunType } from '@/entities/run/model'
 
 const dayMs = 24 * 60 * 60 * 1000
+const easyPaceThresholdSec = 390
 
 export function getRunsWithinDays(runs: RunLog[], days: number, today = new Date()): RunLog[] {
   const start = new Date(today.getTime() - (days - 1) * dayMs)
@@ -27,9 +28,10 @@ export function getThisMonthRuns(runs: RunLog[], today = new Date()): RunLog[] {
 }
 
 export function getEasyRatio(runs: RunLog[]): number {
-  const total = sumDistance(runs)
+  const segments = runs.flatMap(getPaceSegments)
+  const total = round(segments.reduce((sum, segment) => sum + segment.distanceKm, 0))
   if (!total) return 0
-  const easy = sumDistance(runs.filter((run) => ['Easy', 'Recovery', 'Easy + Strides', 'LSD'].includes(run.type)))
+  const easy = round(segments.filter((segment) => segment.paceSec >= easyPaceThresholdSec).reduce((sum, segment) => sum + segment.distanceKm, 0))
   return Math.round((easy / total) * 100)
 }
 
@@ -86,4 +88,22 @@ export function getLatestByTypes(runs: RunLog[], types: RunType[]): RunLog | nul
 
 function round(value: number): number {
   return Math.round(value * 100) / 100
+}
+
+function getPaceSegments(run: RunLog): Array<{ distanceKm: number; paceSec: number }> {
+  const lapSegments = run.laps
+    .map((lap) => toPaceSegment(lap))
+    .filter((segment): segment is { distanceKm: number; paceSec: number } => Boolean(segment))
+
+  if (lapSegments.length) return lapSegments
+  if (run.distanceKm > 0 && run.avgPaceSec) return [{ distanceKm: run.distanceKm, paceSec: run.avgPaceSec }]
+  return []
+}
+
+function toPaceSegment(lap: Lap): { distanceKm: number; paceSec: number } | null {
+  if (!lap.distanceKm || lap.distanceKm <= 0 || !lap.paceSec) return null
+  return {
+    distanceKm: lap.distanceKm,
+    paceSec: lap.paceSec
+  }
 }

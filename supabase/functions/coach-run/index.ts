@@ -258,9 +258,29 @@ function sumDistance(runs: RunLogRow[]) {
 }
 
 function easyRatio(runs: RunLogRow[]) {
-  if (!runs.length) return 0
-  const easy = runs.filter((run) => ['Easy', 'Recovery', 'Easy + Strides', 'LSD'].includes(run.type)).length
-  return Math.round((easy / runs.length) * 100)
+  const segments = runs.flatMap(getPaceSegments)
+  const total = segments.reduce((sum, segment) => sum + segment.distanceKm, 0)
+  if (!total) return 0
+  const easy = segments.filter((segment) => segment.paceSec >= 390).reduce((sum, segment) => sum + segment.distanceKm, 0)
+  return Math.round((easy / total) * 100)
+}
+
+function getPaceSegments(run: RunLogRow): Array<{ distanceKm: number; paceSec: number }> {
+  const laps = Array.isArray(run.laps) ? run.laps : []
+  const lapSegments = laps
+    .map((lap) => {
+      const item = lap as { distanceKm?: unknown; paceSec?: unknown }
+      const distanceKm = Number(item.distanceKm)
+      const paceSec = Number(item.paceSec)
+      return Number.isFinite(distanceKm) && distanceKm > 0 && Number.isFinite(paceSec) ? { distanceKm, paceSec } : null
+    })
+    .filter((segment): segment is { distanceKm: number; paceSec: number } => Boolean(segment))
+
+  if (lapSegments.length) return lapSegments
+  const distanceKm = Number(run.distance_km)
+  const paceSec = Number(run.avg_pace_sec)
+  if (Number.isFinite(distanceKm) && distanceKm > 0 && Number.isFinite(paceSec)) return [{ distanceKm, paceSec }]
+  return []
 }
 
 function safeJson(value: string) {
