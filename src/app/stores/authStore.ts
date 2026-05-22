@@ -2,13 +2,6 @@ import { defineStore } from 'pinia'
 import type { Session, User } from '@supabase/supabase-js'
 import { isSupabaseConfigured, supabase } from '@/shared/api/supabase'
 
-const productionRedirectUrl = import.meta.env.VITE_AUTH_REDIRECT_URL as string | undefined
-
-function getEmailRedirectTo() {
-  if (productionRedirectUrl) return productionRedirectUrl
-  return window.location.origin + window.location.pathname
-}
-
 export const useAuthStore = defineStore('authStore', {
   state: () => ({
     initialized: false,
@@ -45,14 +38,30 @@ export const useAuthStore = defineStore('authStore', {
 
       this.loading = true
       this.error = ''
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: getEmailRedirectTo()
-        }
-      })
+      const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } })
       this.loading = false
       if (error) this.error = error.message
+    },
+    async verifyEmailOtp(email: string, token: string) {
+      if (!supabase) {
+        this.error = 'Supabase 환경변수가 설정되지 않았습니다.'
+        return
+      }
+
+      this.loading = true
+      this.error = ''
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: 'email'
+      })
+      this.loading = false
+      if (error) {
+        this.error = error.message
+        return
+      }
+      this.session = data.session
+      this.user = data.user
     },
     async signOut() {
       if (!supabase) return
