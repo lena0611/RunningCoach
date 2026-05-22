@@ -30,7 +30,12 @@
 - 메일 magic link나 OTP 코드를 대화에 붙여넣게 해서는 안 된다. 토큰이 포함된 URL이 노출되면 세션 폐기 또는 사용자 재생성이 필요할 수 있다.
 
 ## 사용자가 직접 해야 하는 GitHub 설정
-- Repository Settings > Pages에서 Source를 `GitHub Actions`로 둔다.
+- GitHub Pages 최초 설정:
+  - 대상 repository로 이동한다.
+  - `Settings`를 연다.
+  - 왼쪽 메뉴에서 `Pages`를 연다.
+  - `Build and deployment` 섹션에서 `Source`를 `GitHub Actions`로 변경한다.
+  - 저장 버튼이 있으면 저장한다.
 - Repository Settings > Secrets and variables > Actions > Variables에 프론트 공개 변수를 등록한다.
 - RunContext 기준 필수 변수:
   - `VITE_SUPABASE_URL`: Supabase Project URL
