@@ -98,27 +98,46 @@ Deno.serve(async (req) => {
 })
 
 async function buildContext(admin: ReturnType<typeof createClient>, userId: string, selectedRunId: string | null, userNote: string) {
-  const [{ data: memoryRow }, { data: runs }, { data: memoryItems }] = await Promise.all([
+  const [{ data: memoryRow }, { data: runs }, { data: memoryItems }, { data: reports }] = await Promise.all([
     admin.from('training_memory').select('memory').eq('user_id', userId).maybeSingle(),
     admin.from('run_logs').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(120),
-    admin.from('coach_memory_items').select('content, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(40)
+    admin.from('coach_memory_items').select('content, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(40),
+    admin.from('coach_reports').select('selected_run_id, user_note, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(5)
   ])
   const runRows = (runs ?? []) as RunLogRow[]
   const selectedRun = selectedRunId ? runRows.find((run) => run.id === selectedRunId) ?? null : null
-  const recent14 = withinDays(runRows, 14)
-  const recent30 = withinDays(runRows, 30)
+  const currentDate = currentDateInSeoul()
+  const anchorDate = selectedRun?.date ?? currentDate
+  const selectedRunAgeDays = selectedRun ? diffDays(selectedRun.date, currentDate) : null
+  const selectedRunTiming = selectedRun ? describeTiming(selectedRunAgeDays) : 'no_selected_run'
+  const recent14 = withinDaysFromAnchor(runRows, 14, anchorDate)
+  const recent30 = withinDaysFromAnchor(runRows, 30, anchorDate)
+  const runsAfterSelected = selectedRun ? afterDate(runRows, selectedRun.date) : []
   const currentMonth = inCurrentMonth(runRows)
   const latestTempo = runRows.find((run) => run.type === 'Tempo') ?? null
   const latestLong = runRows.find((run) => ['LSD', 'Steady Long'].includes(run.type)) ?? null
 
   return {
     userNote,
+    currentDate,
+    contextMode: selectedRun ? 'selected_run_review' : 'current_flow_review',
+    selectedRunTiming,
+    selectedRunAgeDays,
+    anchorDateForWindowStats: anchorDate,
+    instructionForDateHandling:
+      'selectedRun.date는 훈련이 실제로 수행된 날짜이고 coach_reports.created_at은 코칭을 받은 날짜다. 둘을 혼동하지 마라. selectedRunTiming이 past이면 과거 기록 리뷰로 말하고, 오늘 뛴 기록/마지막 코칭 이후 새 기록이라고 단정하지 마라.',
     trainingMemory: memoryRow?.memory ?? null,
     coachMemoryItems: (memoryItems ?? []).map((item) => item.content),
+    recentCoachReports: (reports ?? []).map((report) => ({
+      selectedRunId: report.selected_run_id,
+      userNote: report.user_note,
+      createdAt: report.created_at
+    })),
     selectedRun,
+    runsAfterSelectedRun: runsAfterSelected.slice(0, 20),
     recent14,
     summaryStats: {
-      recent7DistanceKm: sumDistance(withinDays(runRows, 7)),
+      recent7DistanceKm: sumDistance(withinDaysFromAnchor(runRows, 7, anchorDate)),
       recent14DistanceKm: sumDistance(recent14),
       recent30DistanceKm: sumDistance(recent30),
       recent30EasyRatio: easyRatio(recent30),
@@ -126,7 +145,8 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
       currentMonthDistanceKm: sumDistance(currentMonth),
       currentMonthEasyRatio: easyRatio(currentMonth),
       currentMonthHardSessions: currentMonth.filter((run) => ['Tempo', 'Steady Long', 'Race'].includes(run.type)).length,
-      hardSessionsLast7: withinDays(runRows, 7).filter((run) => ['Tempo', 'Steady Long', 'Race'].includes(run.type)).length,
+      hardSessionsLast7: withinDaysFromAnchor(runRows, 7, anchorDate).filter((run) => ['Tempo', 'Steady Long', 'Race'].includes(run.type)).length,
+      runsAfterSelectedRunCount: runsAfterSelected.length,
       latestTempo,
       latestLong
     }
@@ -142,6 +162,11 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     '답변 구조는 가능한 한 다음 순서를 따른다: 한 줄 결론, 핵심 지표, 오늘 해석, 조심할 점, 다음 훈련, 한 줄 요약.',
     '전체 report는 기본 700~1000자 안팎으로 제한한다. 한 문단은 최대 2~3문장으로 짧게 쓴다.',
     '잘한 점은 최대 3개, 조심할 점은 최대 2개만 말한다.',
+    '반드시 currentDate, selectedRun.date, selectedRunTiming을 확인한 뒤 말한다.',
+    'selectedRunTiming이 past이면 "오늘", "방금", "이번 훈련 이후"처럼 현재 훈련처럼 보이는 표현을 쓰지 말고, 과거 기록을 복기하는 톤으로 말한다.',
+    'coach_reports.created_at이나 최근 코칭 시각을 훈련 날짜로 착각하지 않는다. 마지막 코칭 이후에 뛴 기록이라고 단정하지 않는다.',
+    'recent14/recent30은 anchorDateForWindowStats 기준 창이다. selectedRun이 있으면 선택 기록 날짜 기준의 이전 흐름으로 해석한다.',
+    'runsAfterSelectedRun은 선택 기록 이후 실제로 저장된 러닝이다. 과거 기록 리뷰에서는 이 목록이 있으면 이후 흐름을 짧게 참고할 수 있지만, 선택 기록 자체 평가와 혼동하지 않는다.',
     '사용자가 말한 세션명을 그대로 믿지 말고 요일, 최근 흐름, 랩, 심박, 페이스, RPE, 메모, TrainingMemory로 재해석한다.',
     '앱 로그가 적어도 TrainingMemory나 coachMemoryItems의 장기 맥락을 부정하지 않는다. 로그가 덜 들어온 상태로 보고 조심스럽게 해석한다.',
     '최근 14일 앱 로그가 적다는 이유만으로 훈련 성과를 판단할 수 없다고 길게 말하지 않는다.',
@@ -176,20 +201,56 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
   }
 }
 
-function withinDays(runs: RunLogRow[], days: number) {
-  const cutoff = new Date()
-  cutoff.setDate(cutoff.getDate() - days)
-  return runs.filter((run) => new Date(run.date) >= cutoff)
+function withinDaysFromAnchor(runs: RunLogRow[], days: number, anchorDate: string) {
+  const anchor = parseDateOnly(anchorDate)
+  const cutoff = new Date(anchor)
+  cutoff.setDate(cutoff.getDate() - days + 1)
+  return runs.filter((run) => {
+    const date = parseDateOnly(run.date)
+    return date >= cutoff && date <= anchor
+  })
+}
+
+function afterDate(runs: RunLogRow[], dateText: string) {
+  const selectedDate = parseDateOnly(dateText)
+  return runs.filter((run) => parseDateOnly(run.date) > selectedDate)
 }
 
 function inCurrentMonth(runs: RunLogRow[]) {
-  const now = new Date()
+  const now = parseDateOnly(currentDateInSeoul())
   const year = now.getFullYear()
   const month = now.getMonth()
   return runs.filter((run) => {
-    const date = new Date(run.date)
+    const date = parseDateOnly(run.date)
     return date.getFullYear() === year && date.getMonth() === month
   })
+}
+
+function currentDateInSeoul() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date())
+}
+
+function parseDateOnly(value: string) {
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day))
+}
+
+function diffDays(from: string, to: string) {
+  const diffMs = parseDateOnly(to).getTime() - parseDateOnly(from).getTime()
+  return Math.round(diffMs / 86400000)
+}
+
+function describeTiming(ageDays: number | null) {
+  if (ageDays === null) return 'unknown'
+  if (ageDays === 0) return 'today'
+  if (ageDays === 1) return 'yesterday'
+  if (ageDays > 1) return 'past'
+  return 'future'
 }
 
 function sumDistance(runs: RunLogRow[]) {
