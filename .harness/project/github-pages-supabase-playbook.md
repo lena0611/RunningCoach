@@ -112,9 +112,9 @@
 - Authentication > Sign In / Providers에서 Email provider가 enabled인지 확인한다.
 - Email OTP 코드 입력 방식을 쓰려면 Authentication > Emails > Magic Link 템플릿을 수정한다.
   - 기본 템플릿은 Sign-In Link 문구와 링크 중심일 수 있다.
-  - 앱에서 6자리 코드를 입력받으려면 이메일 본문에 `{{ .Token }}`을 포함해야 한다.
+  - 앱에서 인증 코드를 입력받으려면 이메일 본문에 `{{ .Token }}`을 포함해야 한다.
   - 예: `RunContext 로그인 인증 코드: {{ .Token }}`
-  - 사용자는 메일의 링크를 누르지 않고 6자리 코드만 앱에 입력한다.
+  - 사용자는 메일의 링크를 누르지 않고 인증 코드만 앱에 입력한다.
 - Magic link/OAuth를 쓰는 경우 Authentication > URL Configuration에서 Site URL과 Redirect URL을 설정한다.
 - OTP 코드 입력 방식은 redirect URL을 핵심 경로로 쓰지 않지만, 나중에 magic link/OAuth로 전환할 수 있으니 GitHub Pages와 localhost URL을 정상 값으로 유지한다.
 - Supabase 기본 이메일 발송 제한은 개발 중에 금방 걸릴 수 있다. 기본 SMTP에서 rate limit을 수정할 수 없다면 기다리거나 custom SMTP를 연결한다.
@@ -157,7 +157,7 @@
   - 단점: iOS WebView 앱에서는 메일 링크가 Safari로 열려 WebView 세션에 반영되지 않을 수 있다.
   - iOS 앱으로 복귀시키려면 URL scheme, Universal Link, native token handoff가 필요하다.
 - Email OTP:
-  - 장점: 앱 WebView 안에서 6자리 코드 입력으로 세션을 만들 수 있어 redirect 문제가 적다.
+  - 장점: 앱 WebView 안에서 인증 코드 입력으로 세션을 만들 수 있어 redirect 문제가 적다.
   - 단점: 이메일 발송 제한은 magic link와 동일하게 적용된다.
   - RunContext MVP의 기본값이다.
 - OAuth:
@@ -179,8 +179,8 @@
 - GitHub Actions 최신 deploy가 성공했는가?
 - Supabase project URL과 publishable key가 올바른 project의 값인가?
 - Supabase Email provider가 enabled인가?
-- OTP 이메일 본문에 `{{ .Token }}`이 포함되어 실제 6자리 코드가 보이는가?
+- OTP 이메일 본문에 `{{ .Token }}`이 포함되어 실제 인증 코드가 보이는가?
 - 이메일 발송 제한에 걸리지 않았는가?
 - magic link URL이 localhost나 잘못된 URL로 생성되면 Site URL/Redirect URL 또는 앱의 redirect 설정을 점검한다.
-- OTP 방식에서는 메일의 6자리 코드만 앱에 입력하고, 링크는 누르지 않는다.
+- OTP 방식에서는 메일의 인증 코드만 앱에 입력하고, 링크는 누르지 않는다.
 - iOS 앱에서 여전히 이전 화면이 보이면 GitHub Pages 배포 완료 여부, WebView 캐시, 앱 재실행/재설치를 순서대로 확인한다.

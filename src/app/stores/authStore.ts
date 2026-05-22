@@ -45,7 +45,7 @@ export const useAuthStore = defineStore('authStore', {
     async verifyEmailOtp(email: string, token: string) {
       if (!supabase) {
         this.error = 'Supabase 환경변수가 설정되지 않았습니다.'
-        return
+        return false
       }
 
       this.loading = true
@@ -58,10 +58,11 @@ export const useAuthStore = defineStore('authStore', {
       this.loading = false
       if (error) {
         this.error = error.message
-        return
+        return false
       }
       this.session = data.session
       this.user = data.user
+      return true
     },
     async signOut() {
       if (!supabase) return

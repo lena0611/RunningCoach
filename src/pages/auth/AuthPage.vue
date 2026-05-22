@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/app/stores/authStore'
 
 const authStore = useAuthStore()
+const router = useRouter()
 const email = ref('')
 const token = ref('')
 const sent = ref(false)
@@ -13,7 +15,8 @@ async function submit() {
 }
 
 async function verify() {
-  await authStore.verifyEmailOtp(email.value, token.value.trim())
+  const success = await authStore.verifyEmailOtp(email.value, token.value.trim())
+  if (success) await router.replace('/')
 }
 </script>
 
@@ -40,7 +43,7 @@ async function verify() {
             v-model="token"
             inputmode="numeric"
             autocomplete="one-time-code"
-            placeholder="메일의 6자리 코드"
+            placeholder="메일의 인증 코드"
             required
           />
         </label>
@@ -49,7 +52,7 @@ async function verify() {
           <button type="button" class="secondary" :disabled="authStore.loading" @click="sent = false">이메일 다시 입력</button>
         </div>
       </form>
-      <p v-if="sent" class="helper">메일함에서 6자리 인증 코드를 확인한 뒤 여기에 입력하세요.</p>
+      <p v-if="sent" class="helper">메일함에서 인증 코드를 확인한 뒤 여기에 입력하세요.</p>
       <p v-if="authStore.error" class="error">{{ authStore.error }}</p>
       <p v-if="!authStore.isConfigured" class="error">VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY 설정이 필요합니다.</p>
     </section>
