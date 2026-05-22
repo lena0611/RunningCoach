@@ -45,11 +45,16 @@ async function coach() {
 }
 
 type CoachBlock =
-  | { type: 'heading'; text: string }
-  | { type: 'paragraph'; text: string }
-  | { type: 'list'; items: string[] }
+  | { type: 'heading'; text: InlineSegment[] }
+  | { type: 'paragraph'; text: InlineSegment[] }
+  | { type: 'list'; items: InlineSegment[][] }
   | { type: 'code'; text: string }
   | { type: 'divider' }
+
+type InlineSegment = {
+  text: string
+  bold: boolean
+}
 
 function parseCoachMarkdown(markdown: string): CoachBlock[] {
   const blocks: CoachBlock[] = []
@@ -61,14 +66,14 @@ function parseCoachMarkdown(markdown: string): CoachBlock[] {
 
   function flushParagraph() {
     if (paragraph.length) {
-      blocks.push({ type: 'paragraph', text: paragraph.join(' ') })
+      blocks.push({ type: 'paragraph', text: parseInlineMarkdown(paragraph.join(' ')) })
       paragraph = []
     }
   }
 
   function flushList() {
     if (list.length) {
-      blocks.push({ type: 'list', items: list })
+      blocks.push({ type: 'list', items: list.map(parseInlineMarkdown) })
       list = []
     }
   }
@@ -110,7 +115,7 @@ function parseCoachMarkdown(markdown: string): CoachBlock[] {
     if (heading) {
       flushParagraph()
       flushList()
-      blocks.push({ type: 'heading', text: heading[1] })
+      blocks.push({ type: 'heading', text: parseInlineMarkdown(heading[1]) })
       continue
     }
 
@@ -129,6 +134,27 @@ function parseCoachMarkdown(markdown: string): CoachBlock[] {
   flushList()
   if (code.length) blocks.push({ type: 'code', text: code.join('\n') })
   return blocks
+}
+
+function parseInlineMarkdown(text: string): InlineSegment[] {
+  const segments: InlineSegment[] = []
+  const pattern = /\*\*([^*]+)\*\*/g
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = pattern.exec(text))) {
+    if (match.index > lastIndex) {
+      segments.push({ text: text.slice(lastIndex, match.index), bold: false })
+    }
+    segments.push({ text: match[1], bold: true })
+    lastIndex = match.index + match[0].length
+  }
+
+  if (lastIndex < text.length) {
+    segments.push({ text: text.slice(lastIndex), bold: false })
+  }
+
+  return segments.length ? segments : [{ text, bold: false }]
 }
 </script>
 
@@ -176,10 +202,25 @@ function parseCoachMarkdown(markdown: string): CoachBlock[] {
           <small>RunContext Coach</small>
           <div class="coach-report">
             <template v-for="(block, index) in report.blocks" :key="index">
-              <h3 v-if="block.type === 'heading'">{{ block.text }}</h3>
-              <p v-else-if="block.type === 'paragraph'">{{ block.text }}</p>
+              <h3 v-if="block.type === 'heading'">
+                <template v-for="(segment, segmentIndex) in block.text" :key="segmentIndex">
+                  <strong v-if="segment.bold">{{ segment.text }}</strong>
+                  <span v-else>{{ segment.text }}</span>
+                </template>
+              </h3>
+              <p v-else-if="block.type === 'paragraph'">
+                <template v-for="(segment, segmentIndex) in block.text" :key="segmentIndex">
+                  <strong v-if="segment.bold">{{ segment.text }}</strong>
+                  <span v-else>{{ segment.text }}</span>
+                </template>
+              </p>
               <ul v-else-if="block.type === 'list'">
-                <li v-for="item in block.items" :key="item">{{ item }}</li>
+                <li v-for="(item, itemIndex) in block.items" :key="itemIndex">
+                  <template v-for="(segment, segmentIndex) in item" :key="segmentIndex">
+                    <strong v-if="segment.bold">{{ segment.text }}</strong>
+                    <span v-else>{{ segment.text }}</span>
+                  </template>
+                </li>
               </ul>
               <pre v-else-if="block.type === 'code'"><code>{{ block.text }}</code></pre>
               <hr v-else />
