@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "activeStack": "vue3-vite-pinia-router",
+  "harnessMode": "bootstrap",
+  "available": [
+    "none",
+    "vue3-vite-pinia-router"
+  ],
+  "stackManifest": ".harness/stacks/.applied/vue3-vite-pinia-router/manifest.json",
+  "notes": "activeStack 값으로 프리셋이 활성화됩니다. harnessMode는 bootstrap, active, maintenance, strict 중 하나를 권장합니다. 'none'이면 공통 하네스만 동작하고 프레임워크-특화 검사와 기준 병합은 비활성화됩니다. 일반 프로젝트 개발자는 스택 하네스의 npx ... init 흐름을 사용합니다. 사내 스택 하네스 후보는 standards:list로 조회합니다. 관리자/고급 흐름에서는 stackManifest에 적용 스냅샷 manifest.json 경로를 지정하거나 stack:apply -- --preset-path <dir>, stack:apply -- --preset-git <repo-url> --ref <tag>로 직접 적용할 수 있습니다."
+}

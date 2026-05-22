@@ -1,0 +1,114 @@
+{
+  "id": "vue3-vite-pinia-router",
+  "title": "Vue 3 + Vite + Pinia + Vue Router Stack Harness",
+  "version": 1,
+  "stackHarness": {
+    "repo": "https://git.smartscore.kr/ai-standard/harnesses/vue3-vite-pinia-router.git",
+    "ref": "v0.1.23"
+  },
+  "baseHarness": {
+    "repo": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git",
+    "ref": "v0.2.40",
+    "minVersion": "0.2.40"
+  },
+  "compatibility": {
+    "allowEmptyProject": true,
+    "expected": [
+      {
+        "package": "vue",
+        "major": 3,
+        "label": "Vue 3"
+      },
+      {
+        "package": "vue-router",
+        "majors": [
+          4,
+          5
+        ],
+        "label": "Vue Router 4 or 5"
+      },
+      {
+        "package": "pinia",
+        "label": "Pinia"
+      },
+      {
+        "package": "vite",
+        "label": "Vite"
+      }
+    ],
+    "incompatible": [
+      {
+        "package": "vue",
+        "major": 2,
+        "label": "Vue 2"
+      },
+      {
+        "package": "vue-router",
+        "major": 3,
+        "label": "Vue Router 3"
+      },
+      {
+        "package": "vuex",
+        "label": "Vuex"
+      },
+      {
+        "package": "vue-template-compiler",
+        "label": "Vue 2 template compiler"
+      },
+      {
+        "package": "@vue/cli-service",
+        "label": "Vue CLI"
+      },
+      {
+        "package": "@vitejs/plugin-vue2",
+        "label": "Vite Vue2 plugin"
+      },
+      {
+        "package": "react",
+        "label": "React"
+      },
+      {
+        "package": "next",
+        "label": "Next.js"
+      },
+      {
+        "package": "@angular/core",
+        "label": "Angular"
+      },
+      {
+        "package": "svelte",
+        "label": "Svelte"
+      }
+    ]
+  },
+  "framework": {
+    "view": "Vue 3",
+    "bundler": "Vite",
+    "state": "Pinia",
+    "router": "Vue Router",
+    "style": "SCSS"
+  },
+  "designPattern": [
+    "admin frontend",
+    "server-driven menu routing",
+    "Pinia module stores",
+    "global plugin adapter",
+    "SCSS design system"
+  ],
+  "instructions": [
+    "instructions/overview.md",
+    "instructions/project-structure.md",
+    "instructions/runtime-env.md",
+    "instructions/routing.md",
+    "instructions/state-management.md",
+    "instructions/api-i18n.md",
+    "instructions/ui-style.md",
+    "instructions/page-development.md",
+    "instructions/verification.md"
+  ],
+  "policiesFile": "policies.json",
+  "checksKey": null,
+  "source": {
+    "type": "none"
+  }
+}

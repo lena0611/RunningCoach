@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "stackId": "vue3-vite-pinia-router",
+  "policies": [
+    {
+      "id": "vue3-vite-runtime",
+      "title": "Vue Vite runtime contract",
+      "documents": [
+        ".harness/project/stack-preset-rules.md"
+      ],
+      "ownedAreas": [
+        "package.json",
+        ".nvmrc",
+        "vite.config.js",
+        "vite.config.ts",
+        "jsconfig.json",
+        "tsconfig.json",
+        ".env.example",
+        ".env.local.example",
+        "src/main.js",
+        "src/main.ts",
+        "src/App.vue"
+      ],
+      "checks": []
+    },
+    {
+      "id": "vue-router-menu",
+      "title": "Vue Router and menu registry contract",
+      "documents": [
+        ".harness/project/stack-preset-rules.md"
+      ],
+      "ownedAreas": [
+        "src/router/**",
+        "src/constants/componentRegistry.js",
+        "src/constants/componentRegistry.ts"
+      ],
+      "checks": []
+    },
+    {
+      "id": "pinia-state-composable",
+      "title": "Pinia state and composable contract",
+      "documents": [
+        ".harness/project/stack-preset-rules.md"
+      ],
+      "ownedAreas": [
+        "src/store/**",
+        "src/stores/**",
+        "src/composable/**",
+        "src/composables/**"
+      ],
+      "checks": []
+    },
+    {
+      "id": "api-i18n-plugin",
+      "title": "API plugin and i18n contract",
+      "documents": [
+        ".harness/project/stack-preset-rules.md"
+      ],
+      "ownedAreas": [
+        "src/apis/**",
+        "src/api/**",
+        "src/plugins/**",
+        "src/service/**",
+        "src/services/**",
+        "src/utils/http.js",
+        "src/utils/http.ts",
+        "src/store/lang.js",
+        "src/store/lang.ts"
+      ],
+      "checks": []
+    },
+    {
+      "id": "scss-ui-system",
+      "title": "SCSS UI system contract",
+      "documents": [
+        ".harness/project/stack-preset-rules.md"
+      ],
+      "ownedAreas": [
+        "src/assets/scss/**",
+        "src/styles/**",
+        "src/components/**"
+      ],
+      "checks": []
+    },
+    {
+      "id": "vue-stack-verification",
+      "title": "Vue stack verification contract",
+      "documents": [
+        ".harness/project/stack-preset-rules.md"
+      ],
+      "ownedAreas": [
+        "scripts/**",
+        ".github/workflows/**",
+        ".gitlab-ci.yml"
+      ],
+      "checks": []
+    }
+  ]
+}

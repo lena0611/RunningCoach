@@ -1,0 +1,836 @@
+import { execFileSync } from 'node:child_process'
+import crypto from 'node:crypto'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const repoRoot = path.resolve(__dirname, '..', '..')
+const harnessRootRel = fs.existsSync(path.join(repoRoot, '.harness')) ? '.harness' : '.github'
+const harnessRoot = path.join(repoRoot, harnessRootRel)
+const registryPath = path.join(harnessRoot, harnessRootRel === '.harness' ? 'policy' : 'policy-harness', 'policy-registry.json')
+const profilePath = path.join(harnessRoot, harnessRootRel === '.harness' ? 'policy' : 'policy-harness', 'profile.json')
+const stacksRoot = path.join(harnessRoot, 'stacks')
+
+const args = process.argv.slice(2)
+const mode = args[0] ?? 'guard'
+const strictMode = args.includes('--strict') || (() => {
+  try {
+    return JSON.parse(fs.readFileSync(profilePath, 'utf8'))?.harnessMode === 'strict'
+  } catch {
+    return false
+  }
+})()
+const briefMode = args.includes('--brief')
+const verboseMode = args.includes('--verbose') || args.includes('--all-files')
+const showBaseline = args.includes('--show-baseline') || verboseMode
+
+function readProfile() {
+  if (!fs.existsSync(profilePath)) {
+    return { activeStack: 'none' }
+  }
+
+  try {
+    return JSON.parse(fs.readFileSync(profilePath, 'utf8'))
+  } catch {
+    return { activeStack: 'none' }
+  }
+}
+
+function resolvePresetManifestPath(stackId, profile) {
+  if (profile.stackManifest) {
+    return path.resolve(repoRoot, profile.stackManifest)
+  }
+
+  return path.join(stacksRoot, stackId, 'manifest.json')
+}
+
+function resolveManifestRelative(manifestRoot, relPath) {
+  if (!relPath) {
+    return null
+  }
+
+  if (path.isAbsolute(relPath)) {
+    return relPath
+  }
+
+  if (relPath.startsWith('.harness/') || relPath.startsWith('.github/') || relPath.startsWith('scripts/')) {
+    return path.join(repoRoot, relPath)
+  }
+
+  return path.join(manifestRoot, relPath)
+}
+
+function readActiveStack() {
+  const profile = readProfile()
+  const stackId = profile.activeStack ?? 'none'
+
+  if (stackId === 'none') {
+    return { id: 'none', manifest: null, policies: [], checksKey: null }
+  }
+
+  const manifestPath = resolvePresetManifestPath(stackId, profile)
+
+  if (!fs.existsSync(manifestPath)) {
+    console.warn(`activeStack='${stackId}' 의 manifest를 찾을 수 없습니다: ${manifestPath}`)
+    return { id: stackId, manifest: null, policies: [], checksKey: null }
+  }
+
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+  const manifestRoot = path.dirname(manifestPath)
+  const policiesFile = manifest.policiesFile
+    ? resolveManifestRelative(manifestRoot, manifest.policiesFile)
+    : path.join(manifestRoot, 'policies.json')
+
+  let policies = []
+
+  if (fs.existsSync(policiesFile)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(policiesFile, 'utf8'))
+      policies = parsed.policies ?? []
+    } catch {
+      console.warn(`스택 정책 파일 파싱 실패: ${policiesFile}`)
+    }
+  }
+
+  return {
+    id: stackId,
+    manifest,
+    policies,
+    checksKey: manifest.checksKey ?? null,
+  }
+}
+
+function getArgValue(flag) {
+  const index = args.indexOf(flag)
+
+  if (index === -1 || index === args.length - 1) {
+    return undefined
+  }
+
+  return args[index + 1]
+}
+
+function toPosixPath(filePath) {
+  return filePath.split(path.sep).join('/')
+}
+
+function sha256(absPath) {
+  return crypto.createHash('sha256').update(fs.readFileSync(absPath)).digest('hex')
+}
+
+function readJsonFile(absPath, fallback = null) {
+  if (!fs.existsSync(absPath)) {
+    return fallback
+  }
+
+  try {
+    return JSON.parse(fs.readFileSync(absPath, 'utf8'))
+  } catch {
+    return fallback
+  }
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[|\\{}()[\]^$+?.]/g, '\\$&')
+}
+
+function globToRegExp(glob) {
+  const escaped = glob
+    .split('**')
+    .map((segment) => segment.split('*').map(escapeRegExp).join('[^/]*'))
+    .join('::DOUBLE_STAR::')
+
+  return new RegExp(
+    `^${escaped.replaceAll('::DOUBLE_STAR::', '.*')}$`,
+  )
+}
+
+function matchesGlob(filePath, glob) {
+  return globToRegExp(glob).test(filePath)
+}
+
+function matchesAnyGlob(filePath, globs) {
+  return globs.some((glob) => matchesGlob(filePath, glob))
+}
+
+function walkDirectory(directoryPath) {
+  if (!fs.existsSync(directoryPath)) {
+    return []
+  }
+
+  const entries = fs.readdirSync(directoryPath, { withFileTypes: true })
+  const files = []
+
+  for (const entry of entries) {
+    const entryPath = path.join(directoryPath, entry.name)
+
+    if (entry.isDirectory()) {
+      files.push(...walkDirectory(entryPath))
+      continue
+    }
+
+    files.push(toPosixPath(path.relative(repoRoot, entryPath)))
+  }
+
+  return files
+}
+
+function readRegistry() {
+  const base = JSON.parse(fs.readFileSync(registryPath, 'utf8'))
+  const stack = readActiveStack()
+
+  return {
+    ...base,
+    policies: [
+      ...(base.policies ?? []).map((policy) => ({ ...policy, __origin: 'base' })),
+      ...stack.policies.map((policy) => ({ ...policy, __origin: 'stack' })),
+    ],
+  }
+}
+
+function runGit(argsToRun) {
+  return execFileSync('git', argsToRun, {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim()
+}
+
+function getAllTrackedFiles() {
+  return walkDirectory(path.join(repoRoot, 'src')).concat(
+    walkDirectory(path.join(repoRoot, '.github')),
+    walkDirectory(path.join(repoRoot, '.harness/bin')),
+    walkDirectory(path.join(repoRoot, 'scripts')),
+    ['package.json', 'README.md'].filter((filePath) => fs.existsSync(path.join(repoRoot, filePath))),
+  )
+}
+
+function getChangedFiles() {
+  const base = getArgValue('--base')
+  const head = getArgValue('--head')
+
+  if (base && head && !/^0+$/.test(base)) {
+    try {
+      const output = runGit(['diff', '--name-only', base, head])
+      return output ? output.split('\n').filter(Boolean) : []
+    } catch {
+      return getChangedFilesFromHead()
+    }
+  }
+
+  return getChangedFilesFromHead()
+}
+
+function unique(values) {
+  return [...new Set(values)]
+}
+
+function getWorkingTreeChangedFiles() {
+  const changed = []
+
+  try {
+    const trackedChanges = runGit(['diff', '--name-only', 'HEAD'])
+    changed.push(...(trackedChanges ? trackedChanges.split('\n').filter(Boolean) : []))
+  } catch {
+    // noop
+  }
+
+  try {
+    const untrackedChanges = runGit(['ls-files', '--others', '--exclude-standard'])
+    changed.push(...(untrackedChanges ? untrackedChanges.split('\n').filter(Boolean) : []))
+  } catch {
+    // noop
+  }
+
+  return unique(changed).filter((filePath) => !isIgnoredPolicyChange(filePath))
+}
+
+function getChangedFilesFromHead() {
+  const workingTreeChangedFiles = getWorkingTreeChangedFiles()
+
+  if (workingTreeChangedFiles.length > 0) {
+    return workingTreeChangedFiles
+  }
+
+  try {
+    const output = runGit(['diff', '--name-only', 'HEAD~1', 'HEAD'])
+    return output ? output.split('\n').filter(Boolean) : []
+  } catch {
+    try {
+      const output = runGit(['status', '--short'])
+      return output
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => line.slice(3))
+        .filter((filePath) => !isIgnoredPolicyChange(filePath))
+    } catch {
+      return []
+    }
+  }
+}
+
+function isIgnoredPolicyChange(filePath) {
+  return (
+    filePath.startsWith('node_modules/') ||
+    filePath.startsWith('dist/') ||
+    filePath.startsWith('.git/') ||
+    filePath.startsWith('.idea/') ||
+    filePath === '.package-json.hash' ||
+    filePath === '.node-version.cache'
+  )
+}
+
+function collectViolations() {
+  const registry = readRegistry()
+  const stack = readActiveStack()
+  const violations = validatePolicyRegistry(registry)
+  const checksKey = stack.checksKey
+
+  if (!checksKey) {
+    return violations
+  }
+
+  console.warn(`checksKey='${checksKey}' 는 본체에서 실행하지 않습니다. 프리셋 전용 검사는 해당 스택 기준 또는 템플릿 저장소의 guard에 연결하세요.`)
+
+  return violations
+}
+
+function validatePolicyRegistry(registry) {
+  const violations = []
+  const ids = new Set()
+  const validLayers = new Set(['common', 'stack', 'template', 'project', 'personal'])
+  const validStatuses = new Set(['draft', 'active', 'deprecated', 'superseded', 'experimental'])
+  const validSeverities = new Set(['info', 'warning', 'error', 'blocker'])
+  const validEnforcement = new Set(['inform', 'trigger', 'hook', 'block'])
+
+  for (const policy of registry.policies ?? []) {
+    const requiredBasicFields = ['id', 'title', 'documents', 'ownedAreas']
+
+    for (const field of requiredBasicFields) {
+      if (policy[field] === undefined || policy[field] === null || policy[field] === '') {
+        violations.push({
+          rule: 'policy-registry-schema',
+          file: `${harnessRootRel}/policy/policy-registry.json`,
+          message: `policy '${policy.id ?? '(unknown)'}' missing required field '${field}'`,
+        })
+      }
+    }
+
+    if (policy.id) {
+      if (ids.has(policy.id)) {
+        violations.push({
+          rule: 'policy-registry-schema',
+          file: `${harnessRootRel}/policy/policy-registry.json`,
+          message: `duplicate policy id '${policy.id}'`,
+        })
+      }
+
+      ids.add(policy.id)
+    }
+
+    if (!Array.isArray(policy.documents) || policy.documents.length === 0) {
+      violations.push({
+        rule: 'policy-registry-schema',
+        file: `${harnessRootRel}/policy/policy-registry.json`,
+        message: `policy '${policy.id ?? '(unknown)'}' documents must be a non-empty array`,
+      })
+    }
+
+    if (!Array.isArray(policy.ownedAreas) || policy.ownedAreas.length === 0) {
+      violations.push({
+        rule: 'policy-registry-schema',
+        file: `${harnessRootRel}/policy/policy-registry.json`,
+        message: `policy '${policy.id ?? '(unknown)'}' ownedAreas must be a non-empty array`,
+      })
+    }
+
+    if (registry.version < 3 || policy.__origin !== 'base') {
+      continue
+    }
+
+    const requiredV3Fields = ['layer', 'category', 'status', 'severity', 'enforcement', 'waiverAllowed', 'owner', 'source', 'checks']
+
+    for (const field of requiredV3Fields) {
+      if (policy[field] === undefined || policy[field] === null || policy[field] === '') {
+        violations.push({
+          rule: 'policy-registry-v3-schema',
+          file: `${harnessRootRel}/policy/policy-registry.json`,
+          message: `policy '${policy.id}' missing v3 field '${field}'`,
+        })
+      }
+    }
+
+    if (policy.layer && !validLayers.has(policy.layer)) {
+      violations.push({
+        rule: 'policy-registry-v3-schema',
+        file: `${harnessRootRel}/policy/policy-registry.json`,
+        message: `policy '${policy.id}' has invalid layer '${policy.layer}'`,
+      })
+    }
+
+    if (policy.status && !validStatuses.has(policy.status)) {
+      violations.push({
+        rule: 'policy-registry-v3-schema',
+        file: `${harnessRootRel}/policy/policy-registry.json`,
+        message: `policy '${policy.id}' has invalid status '${policy.status}'`,
+      })
+    }
+
+    if (policy.severity && !validSeverities.has(policy.severity)) {
+      violations.push({
+        rule: 'policy-registry-v3-schema',
+        file: `${harnessRootRel}/policy/policy-registry.json`,
+        message: `policy '${policy.id}' has invalid severity '${policy.severity}'`,
+      })
+    }
+
+    if (policy.enforcement && !validEnforcement.has(policy.enforcement)) {
+      violations.push({
+        rule: 'policy-registry-v3-schema',
+        file: `${harnessRootRel}/policy/policy-registry.json`,
+        message: `policy '${policy.id}' has invalid enforcement '${policy.enforcement}'`,
+      })
+    }
+
+    if (typeof policy.waiverAllowed !== 'boolean') {
+      violations.push({
+        rule: 'policy-registry-v3-schema',
+        file: `${harnessRootRel}/policy/policy-registry.json`,
+        message: `policy '${policy.id}' waiverAllowed must be boolean`,
+      })
+    }
+
+    if (!Array.isArray(policy.checks)) {
+      violations.push({
+        rule: 'policy-registry-v3-schema',
+        file: `${harnessRootRel}/policy/policy-registry.json`,
+        message: `policy '${policy.id}' checks must be an array`,
+      })
+    }
+  }
+
+  return violations
+}
+
+function formatFileList(files) {
+  if (files.length === 0) {
+    return '  - 없음'
+  }
+
+  return files.map((filePath) => `  - ${filePath}`).join('\n')
+}
+
+function formatFileSummary(files) {
+  if (files.length === 0) {
+    return '  - 없음'
+  }
+
+  if (showBaseline) {
+    return formatFileList(files)
+  }
+
+  const groups = new Map()
+
+  for (const filePath of files) {
+    const key = filePath.includes('/')
+      ? `${filePath.split('/')[0]}/**`
+      : filePath
+    groups.set(key, (groups.get(key) ?? 0) + 1)
+  }
+
+  return [...groups.entries()]
+    .map(([key, count]) => `  - ${key} (${count} files)`)
+    .join('\n')
+}
+
+function readInstallManifest() {
+  return readJsonFile(path.join(harnessRoot, 'install-manifest.json'), {})
+}
+
+function readStackMarker() {
+  return readJsonFile(path.join(harnessRoot, '.stack-applied.json'), {})
+}
+
+function isUnmodifiedManagedHarnessFile(filePath, manifest) {
+  const managed = manifest?.managedFiles?.[filePath]
+  const absPath = path.join(repoRoot, filePath)
+  if (!managed?.sha256 || !fs.existsSync(absPath) || !fs.statSync(absPath).isFile()) {
+    return false
+  }
+
+  try {
+    return sha256(absPath) === managed.sha256
+  } catch {
+    return false
+  }
+}
+
+function isGeneratedHarnessFile(filePath) {
+  return (
+    filePath === `${harnessRootRel}/install-manifest.json` ||
+    filePath === `${harnessRootRel}/harness-lock.json` ||
+    filePath === `${harnessRootRel}/.stack-applied.json` ||
+    filePath === `${harnessRootRel}/session/project-scan-report.md` ||
+    filePath === `${harnessRootRel}/session/handoff.md` ||
+    filePath.startsWith(`${harnessRootRel}/stacks/.applied/`)
+  )
+}
+
+function isTrackedInGit(filePath) {
+  try {
+    runGit(['ls-files', '--error-unmatch', filePath])
+    return true
+  } catch {
+    return false
+  }
+}
+
+function isInitialInstallConfigFile(filePath, manifest) {
+  return Boolean(
+    manifest?.installedAt &&
+    ['package.json', 'package-lock.json', '.gitignore'].includes(filePath) &&
+    !isTrackedInGit(filePath),
+  )
+}
+
+function isHarnessBaselineFile(filePath, manifest, marker) {
+  if (isUnmodifiedManagedHarnessFile(filePath, manifest)) {
+    return true
+  }
+
+  if (isInitialInstallConfigFile(filePath, manifest)) {
+    return true
+  }
+
+  const copiedStackFiles = new Set(marker?.copiedFiles ?? [])
+  if (copiedStackFiles.has(filePath)) {
+    return true
+  }
+
+  return false
+}
+
+function isLocalHarnessFile(filePath) {
+  return (
+    filePath === `${harnessRootRel}/README.md` ||
+    filePath.startsWith(`${harnessRootRel}/project/`) ||
+    filePath.startsWith(`${harnessRootRel}/session/`) ||
+    filePath.startsWith(`${harnessRootRel}/policy/`) ||
+    filePath.startsWith(`${harnessRootRel}/documentation/`) ||
+    filePath.startsWith(`${harnessRootRel}/style/`) ||
+    filePath.startsWith(`${harnessRootRel}/stacks/`)
+  )
+}
+
+function isConfigFile(filePath) {
+  return (
+    filePath === 'package.json' ||
+    filePath === 'package-lock.json' ||
+    filePath.endsWith('.config.js') ||
+    filePath.endsWith('.config.mjs') ||
+    filePath.endsWith('.config.ts') ||
+    ['.gitignore', '.editorconfig', '.env.example', 'tsconfig.json', 'jsconfig.json', 'eslint.config.js', 'eslint.config.mjs'].includes(filePath)
+  )
+}
+
+function isFeatureSourceFile(filePath) {
+  return /^(src|app|lib|packages|apps|pkg|internal|test|tests|spec|__tests__)\//.test(filePath)
+}
+
+function isHarnessScriptFile(filePath) {
+  return (
+    filePath.startsWith('.harness/bin/') ||
+    filePath.startsWith('scripts/') ||
+    filePath === 'CLAUDE.md' ||
+    filePath === 'AGENTS.md'
+  )
+}
+
+function groupChangedFiles(changedFiles) {
+  const manifest = readInstallManifest()
+  const marker = readStackMarker()
+  const groups = {
+    feature: [],
+    localHarness: [],
+    harnessScripts: [],
+    config: [],
+    generated: [],
+    baseline: [],
+    other: [],
+  }
+
+  for (const filePath of changedFiles) {
+    if (isGeneratedHarnessFile(filePath)) {
+      groups.generated.push(filePath)
+    } else if (isHarnessBaselineFile(filePath, manifest, marker)) {
+      groups.baseline.push(filePath)
+    } else if (isFeatureSourceFile(filePath)) {
+      groups.feature.push(filePath)
+    } else if (isLocalHarnessFile(filePath)) {
+      groups.localHarness.push(filePath)
+    } else if (isHarnessScriptFile(filePath)) {
+      groups.harnessScripts.push(filePath)
+    } else if (isConfigFile(filePath)) {
+      groups.config.push(filePath)
+    } else {
+      groups.other.push(filePath)
+    }
+  }
+
+  return groups
+}
+
+function printChangedFileGroups(changedFiles) {
+  const groups = groupChangedFiles(changedFiles)
+  const userChangeCount = groups.feature.length + groups.localHarness.length + groups.harnessScripts.length + groups.config.length + groups.other.length
+  const baselineCount = groups.baseline.length + groups.generated.length
+
+  console.log('Changed files summary:')
+  console.log(`  user project changes: ${userChangeCount}`)
+  console.log(`  harness baseline/generated changes: ${baselineCount}`)
+  console.log('')
+
+  if (briefMode && !verboseMode && !showBaseline) {
+    console.log('Changed files brief:')
+    console.log(`  feature source changes: ${groups.feature.length}`)
+    console.log(`  local harness updates: ${groups.localHarness.length}`)
+    console.log(`  harness script/entrypoint changes: ${groups.harnessScripts.length}`)
+    console.log(`  config changes: ${groups.config.length}`)
+    console.log(`  other project changes: ${groups.other.length}`)
+    console.log(`  harness baseline/generated changes: ${baselineCount}`)
+    console.log('')
+    console.log('상세 파일 목록은 npm run harness:impact 또는 npm run harness:check -- --verbose 로 확인하세요.')
+    console.log('')
+    return groups
+  }
+
+  console.log('Feature source changes')
+  console.log(formatFileList(groups.feature))
+  console.log('')
+
+  console.log('Local harness updates')
+  console.log(formatFileList(groups.localHarness))
+  console.log('')
+
+  console.log('Harness script/entrypoint changes')
+  console.log(formatFileList(groups.harnessScripts))
+  console.log('')
+
+  console.log('Config changes')
+  console.log(formatFileList(groups.config))
+  console.log('')
+
+  if (groups.other.length > 0) {
+    console.log('Other project changes')
+    console.log(formatFileList(groups.other))
+    console.log('')
+  }
+
+  console.log('Harness baseline changes')
+  console.log(formatFileSummary(groups.baseline))
+  console.log('')
+
+  if (groups.generated.length > 0) {
+    console.log('Harness generated/lock files')
+    console.log(formatFileSummary(groups.generated))
+    console.log('')
+  }
+
+  if (!showBaseline && baselineCount > 0) {
+    console.log('전체 하네스 baseline 파일을 보려면 --show-baseline 또는 --verbose 옵션을 사용하세요.')
+    console.log('')
+  }
+
+  return groups
+}
+
+function isInformationalSyncGap(changedGroups, harnessMode) {
+  const sourceChangeCount = changedGroups.feature.length + changedGroups.harnessScripts.length + changedGroups.other.length
+  return sourceChangeCount === 0 && (
+    harnessMode === 'bootstrap' ||
+    changedGroups.baseline.length > 0 ||
+    changedGroups.generated.length > 0
+  )
+}
+
+function printProjectRuleCandidateReminder(changedGroups) {
+  const sourceChangeCount = changedGroups.feature.length + changedGroups.harnessScripts.length + changedGroups.config.length + changedGroups.other.length
+  const localHarnessChangeCount = changedGroups.localHarness.length
+
+  if (briefMode && changedGroups.feature.length === 0 && changedGroups.harnessScripts.length === 0 && changedGroups.other.length === 0) {
+    return
+  }
+
+  if (sourceChangeCount === 0 && localHarnessChangeCount === 0) {
+    return
+  }
+
+  console.log('Project rule candidate check:')
+  console.log('- 이번 변경에서 반복되는 도메인 규칙, 구조 결정, 검증/리뷰 절차가 생겼는지 확인하세요.')
+  console.log('- 확정 가능한 내용은 .harness/project/domain-rules.md, architecture-rules.md, workflow-rules.md에 기록합니다.')
+  console.log('- 확신이 없거나 팀 선택이 필요하면 .harness/session/developer-input-queue.md에 질문으로 남기고, 선택 이유는 decision-log.md에 남깁니다.')
+  console.log('')
+}
+
+function runImpact() {
+  const registry = readRegistry()
+  const trackedFiles = getAllTrackedFiles()
+  const changedFiles = getChangedFiles()
+  const profile = readProfile()
+  const harnessMode = profile.harnessMode ?? 'bootstrap'
+
+  console.log('Policy impact analysis')
+  console.log(`Harness mode: ${harnessMode}${strictMode ? ' (strict)' : ''}`)
+  console.log('')
+
+  if (changedFiles.length === 0) {
+    console.log('변경 파일을 찾지 못했습니다. 정책 영향도는 현재 작업 트리 기준으로 수동 확인이 필요합니다.')
+    return
+  }
+
+  const changedGroups = printChangedFileGroups(changedFiles)
+  printProjectRuleCandidateReminder(changedGroups)
+  const baselineOnly = changedGroups.feature.length + changedGroups.harnessScripts.length + changedGroups.other.length === 0 && (changedGroups.baseline.length > 0 || changedGroups.generated.length > 0)
+
+  const policyTriggered = []
+  const codeTriggered = []
+  const syncGaps = []
+
+  for (const policy of registry.policies) {
+    const documents = policy.documents ?? []
+    const ownedAreas = policy.ownedAreas ?? []
+    const documentChanged = changedFiles.some((filePath) => matchesAnyGlob(filePath, documents))
+    const sourceChanged = changedFiles.some((filePath) => matchesAnyGlob(filePath, ownedAreas))
+    const hasOwnedFiles = trackedFiles.some((filePath) => matchesAnyGlob(filePath, ownedAreas))
+
+    if (documentChanged) {
+      const impactedFiles = trackedFiles.filter((filePath) => matchesAnyGlob(filePath, ownedAreas))
+      policyTriggered.push({
+        title: policy.title,
+        files: impactedFiles,
+      })
+    }
+
+    if (sourceChanged) {
+      codeTriggered.push({
+        title: policy.title,
+        documents,
+      })
+    }
+
+    if (documentChanged !== sourceChanged && (sourceChanged || hasOwnedFiles)) {
+      syncGaps.push({
+        id: policy.id,
+        title: policy.title,
+        side: documentChanged ? 'document-only' : 'source-only',
+        documents,
+        ownedAreas,
+      })
+    }
+  }
+
+  if (policyTriggered.length > 0) {
+    if (briefMode && !verboseMode) {
+      console.log(`Policy document changes require source review: ${policyTriggered.length}개 기준 영향`)
+      console.log('')
+    } else {
+      console.log('Policy document changes require source review:')
+
+      for (const item of policyTriggered) {
+        console.log(`- ${item.title}`)
+        console.log(baselineOnly && !showBaseline ? formatFileSummary(item.files) : formatFileList(item.files))
+      }
+
+      console.log('')
+    }
+  }
+
+  if (codeTriggered.length > 0) {
+    if (briefMode && !verboseMode) {
+      console.log(`Source changes require policy review: ${codeTriggered.length}개 기준 영향`)
+      console.log('')
+    } else {
+      console.log('Source changes require policy review:')
+
+      for (const item of codeTriggered) {
+        console.log(`- ${item.title}`)
+        console.log(baselineOnly && !showBaseline ? formatFileSummary(item.documents) : formatFileList(item.documents))
+      }
+
+      console.log('')
+    }
+  }
+
+  if (policyTriggered.length === 0 && codeTriggered.length === 0) {
+    console.log('등록된 정책-코드 매핑에 걸리는 변경은 없습니다.')
+  }
+
+  if (syncGaps.length > 0) {
+    console.log('')
+    const informational = !strictMode && isInformationalSyncGap(changedGroups, harnessMode)
+    console.log(informational
+      ? 'SYNC GAP notice (초기 설치/스택 적용 직후라면 정상일 수 있음):'
+      : strictMode
+        ? 'SYNC GAP error (strict 모드에서는 기준-코드 불일치를 실패로 봅니다):'
+        : 'SYNC GAP warning (한쪽만 변경되어 기준-코드 동기화가 무너질 수 있음):')
+
+    if (briefMode && !verboseMode) {
+      console.log(`- ${syncGaps.length}개 기준에서 한쪽 변경이 감지되었습니다.`)
+      console.log('- 상세 기준과 파일 목록은 npm run harness:impact 또는 npm run harness:check -- --verbose 로 확인하세요.')
+    } else {
+      for (const gap of syncGaps) {
+        const sideLabel = gap.side === 'document-only' ? '문서만 변경됨' : '소스만 변경됨'
+        console.log(`- [${gap.id}] ${gap.title} — ${sideLabel}`)
+        console.log('  documents:')
+        console.log(informational && !showBaseline ? formatFileSummary(gap.documents) : formatFileList(gap.documents))
+        console.log('  ownedAreas:')
+        console.log(informational && !showBaseline ? formatFileSummary(gap.ownedAreas) : formatFileList(gap.ownedAreas))
+      }
+    }
+
+    console.log('')
+    if (informational) {
+      console.log('안내: 설치 baseline 또는 rules-only 스택 기준이 처음 추가된 상황이면 정상입니다.')
+      console.log('업무 기능 변경 중이라면 관련 코드, decision-log, waiver 반영 여부를 확인하세요.')
+    } else {
+      console.log('해결: 반대편을 함께 갱신하거나, 의도적이라면 waiver/decision-log에 기록하세요.')
+    }
+
+    if (strictMode) {
+      process.exitCode = 1
+    }
+  }
+}
+
+function runCheck() {
+  const violations = collectViolations()
+
+  if (violations.length === 0) {
+    console.log('Policy check passed')
+    return
+  }
+
+  console.error('Policy check failed')
+  console.error('')
+
+  for (const violation of violations) {
+    console.error(`[${violation.rule}] ${violation.file}: ${violation.message}`)
+  }
+
+  process.exitCode = 1
+}
+
+if (mode === 'impact') {
+  runImpact()
+} else if (mode === 'check') {
+  runCheck()
+} else if (mode === 'guard') {
+  runImpact()
+  console.log('')
+  runCheck()
+} else {
+  console.error(`Unknown mode: ${mode}`)
+  process.exit(1)
+}

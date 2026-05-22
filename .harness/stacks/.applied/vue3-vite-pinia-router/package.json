@@ -1,0 +1,23 @@
+{
+  "name": "vue3-vite-pinia-router-harness",
+  "version": "0.1.23",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "vue3-vite-pinia-router": "./scripts/init.mjs"
+  },
+  "files": [
+    "manifest.json",
+    "policies.json",
+    "instructions",
+    "scripts",
+    "README.md"
+  ],
+  "scripts": {
+    "check": "node scripts/check.mjs",
+    "test:init": "node scripts/test-init.mjs"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

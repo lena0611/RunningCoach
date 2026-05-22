@@ -1,0 +1,48 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useRunStore } from '@/app/stores/runStore'
+import RunSummaryCard from '@/widgets/run-summary-card/RunSummaryCard.vue'
+import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
+import FatigueCard from '@/widgets/fatigue-card/FatigueCard.vue'
+import { averagePace, getEasyRatio, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, getVolumeWarning, sumDistance } from '@/shared/lib/runStats'
+import { formatPace } from '@/shared/lib/format'
+
+const runStore = useRunStore()
+
+const runs = computed(() => runStore.sortedRuns)
+const weekDistance = computed(() => sumDistance(getThisWeekRuns(runs.value)))
+const monthDistance = computed(() => sumDistance(getThisMonthRuns(runs.value)))
+const last7 = computed(() => sumDistance(getRunsWithinDays(runs.value, 7)))
+const last14 = computed(() => sumDistance(getRunsWithinDays(runs.value, 14)))
+const easyRatio = computed(() => getEasyRatio(getRunsWithinDays(runs.value, 30)))
+const nextSession = computed(() => {
+  const recent = getRunsWithinDays(runs.value, 3)
+  const hasHard = recent.some((run) => ['Tempo', 'Steady Long', 'Race'].includes(run.type))
+  return hasHard ? 'Recovery 또는 5km Easy' : 'Easy + Strides 또는 Tempo'
+})
+</script>
+
+<template>
+  <section class="page">
+    <div class="metric-grid">
+      <RunSummaryCard label="이번 주" :value="`${weekDistance}km`" />
+      <RunSummaryCard label="이번 달" :value="`${monthDistance}km`" />
+      <RunSummaryCard label="최근 7일" :value="`${last7}km`" />
+      <RunSummaryCard label="최근 14일" :value="`${last14}km`" />
+      <RunSummaryCard label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 기준" />
+      <RunSummaryCard label="평균 페이스" :value="formatPace(averagePace(runs))" />
+    </div>
+    <div class="two-column">
+      <RecentRuns :runs="runs.slice(0, 6)" />
+      <div class="stack">
+        <FatigueCard :warning="getVolumeWarning(runs)" />
+        <section class="panel">
+          <div class="section-heading">
+            <h2>다음 추천 세션</h2>
+          </div>
+          <p>{{ nextSession }}</p>
+        </section>
+      </div>
+    </div>
+  </section>
+</template>

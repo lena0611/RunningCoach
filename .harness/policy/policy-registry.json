@@ -1,0 +1,500 @@
+{
+  "version": 3,
+  "schema": {
+    "required": [
+      "id",
+      "title",
+      "layer",
+      "category",
+      "status",
+      "severity",
+      "enforcement",
+      "waiverAllowed",
+      "owner",
+      "source",
+      "documents",
+      "ownedAreas",
+      "checks"
+    ],
+    "layers": ["common", "stack", "template", "project", "personal"],
+    "statuses": ["draft", "active", "deprecated", "superseded", "experimental"],
+    "severities": ["info", "warning", "error", "blocker"],
+    "enforcement": ["inform", "trigger", "hook", "block"]
+  },
+  "policies": [
+    {
+      "id": "common.policy.registry-schema",
+      "title": "Policy registry must remain machine-readable",
+      "layer": "common",
+      "category": "policy-db-readiness",
+      "status": "active",
+      "severity": "error",
+      "enforcement": "hook",
+      "waiverAllowed": false,
+      "owner": "ai-standard/harness-seed",
+      "source": {
+        "type": "local",
+        "path": ".harness/policy/policy-registry.json"
+      },
+      "documents": [
+        ".harness/policy/policy-registry.json",
+        ".harness/policy/policy-db-readiness.md"
+      ],
+      "ownedAreas": [
+        ".harness/policy/policy-registry.json",
+        ".harness/bin/policy-harness.mjs"
+      ],
+      "checks": [
+        "npm run policy:check",
+        "npm run harness:check"
+      ],
+      "conflictsWith": [],
+      "supersedes": ["policy-harness"],
+      "tags": ["db-ready", "schema", "registry"]
+    },
+    {
+      "id": "common.guiding-policy.source-trace",
+      "title": "Guiding policy source must be traceable",
+      "layer": "common",
+      "category": "source-traceability",
+      "status": "active",
+      "severity": "warning",
+      "enforcement": "trigger",
+      "waiverAllowed": false,
+      "owner": "ai-standard/docs",
+      "source": {
+        "type": "external",
+        "repo": "https://git.smartscore.kr/ai-standard/docs",
+        "path": "standards/ai-standard-guiding-policy.md"
+      },
+      "documents": [
+        ".harness/policy/ai-standard-guiding-policy.md",
+        ".harness/policy/policy-db-readiness.md"
+      ],
+      "ownedAreas": [
+        ".harness/policy/ai-standard-guiding-policy.md",
+        ".harness/policy/context-protocol.md",
+        ".harness/project/standards-layers.md"
+      ],
+      "checks": [
+        "npm run harness:impact",
+        "npm run harness:check"
+      ],
+      "conflictsWith": [],
+      "supersedes": [],
+      "tags": ["source", "docs", "traceability"]
+    },
+    {
+      "id": "common.policy.sync-gap",
+      "title": "Policy and source changes must stay synchronized",
+      "layer": "common",
+      "category": "sync",
+      "status": "active",
+      "severity": "warning",
+      "enforcement": "hook",
+      "waiverAllowed": true,
+      "owner": "ai-standard/harness-seed",
+      "source": {
+        "type": "local",
+        "path": ".harness/policy/sync-protocol.md"
+      },
+      "documents": [
+        ".harness/policy/**",
+        ".harness/session/**"
+      ],
+      "ownedAreas": [
+        ".harness/policy/**",
+        ".harness/session/**",
+        ".harness/bin/policy-harness.mjs",
+        ".harness/bin/sync-context.mjs",
+        ".harness/bin/build-context.mjs",
+        ".harness/bin/doc-link-check.mjs",
+        ".harness/bin/scan-project.mjs",
+        ".harness/bin/handoff.mjs",
+        ".harness/bin/guard.mjs",
+        "scripts/init.mjs",
+        "scripts/test-init.mjs"
+      ],
+      "checks": [
+        "npm run harness:impact",
+        "npm run harness:check",
+        "npm run harness:check:strict"
+      ],
+      "conflictsWith": [],
+      "supersedes": ["policy-harness"],
+      "tags": ["sync", "guard", "trace"]
+    },
+    {
+      "id": "common.documentation.registry-integrity",
+      "title": "Documentation registry and links must stay valid",
+      "layer": "common",
+      "category": "documentation",
+      "status": "active",
+      "severity": "error",
+      "enforcement": "hook",
+      "waiverAllowed": false,
+      "owner": "ai-standard/harness-seed",
+      "source": {
+        "type": "local",
+        "path": ".harness/documentation/document-registry.json"
+      },
+      "documents": [
+        ".harness/documentation/**"
+      ],
+      "ownedAreas": [
+        ".harness/documentation/**",
+        ".harness/bin/doc-link-check.mjs"
+      ],
+      "checks": [
+        "npm run docs:check",
+        "npm run docs:check:strict",
+        "npm run harness:check"
+      ],
+      "conflictsWith": [],
+      "supersedes": ["documentation-harness"],
+      "tags": ["docs", "registry", "links"]
+    },
+    {
+      "id": "common.context.generated-not-source",
+      "title": "Generated context must not become source of truth",
+      "layer": "common",
+      "category": "context",
+      "status": "active",
+      "severity": "warning",
+      "enforcement": "trigger",
+      "waiverAllowed": false,
+      "owner": "ai-standard/harness-seed",
+      "source": {
+        "type": "local",
+        "path": ".harness/policy/context-protocol.md"
+      },
+      "documents": [
+        ".harness/policy/context-protocol.md",
+        ".harness/documentation/context-registry.json",
+        ".harness/session/task-context.md"
+      ],
+      "ownedAreas": [
+        ".harness/bin/build-context.mjs",
+        ".harness/bin/sync-context.mjs",
+        ".harness/documentation/context-registry.json",
+        ".harness/generated/**"
+      ],
+      "checks": [
+        "npm run harness:context -- \"작업 설명\"",
+        "npm run harness:sync",
+        "npm run harness:check"
+      ],
+      "conflictsWith": [],
+      "supersedes": [],
+      "tags": ["context", "generated", "truth-source"]
+    },
+    {
+      "id": "common.install.preserve-project-owned-files",
+      "title": "Install and update must preserve project-owned files",
+      "layer": "common",
+      "category": "install-safety",
+      "status": "active",
+      "severity": "blocker",
+      "enforcement": "block",
+      "waiverAllowed": false,
+      "owner": "ai-standard/harness-seed",
+      "source": {
+        "type": "local",
+        "path": ".harness/policy/sync-protocol.md"
+      },
+      "documents": [
+        ".harness/policy/sync-protocol.md",
+        ".harness/project/portability-guide.md",
+        "README.md"
+      ],
+      "ownedAreas": [
+        "scripts/init.mjs",
+        "scripts/test-init.mjs",
+        ".harness/bin/update-harness.mjs",
+        ".harness/bin/apply-stack.mjs",
+        ".harness/project/**",
+        ".harness/session/**",
+        ".harness/policy/profile.json",
+        ".harness/policy/waivers.json"
+      ],
+      "checks": [
+        "node scripts/test-init.mjs",
+        "npm run harness:check"
+      ],
+      "conflictsWith": [],
+      "supersedes": [],
+      "tags": ["install", "update", "preserve"]
+    },
+    {
+      "id": "common.install.force-overwrite-confirmation",
+      "title": "Force overwrite must require explicit confirmation",
+      "layer": "common",
+      "category": "install-safety",
+      "status": "active",
+      "severity": "blocker",
+      "enforcement": "block",
+      "waiverAllowed": false,
+      "owner": "ai-standard/harness-seed",
+      "source": {
+        "type": "local",
+        "path": ".harness/policy/sync-protocol.md"
+      },
+      "documents": [
+        ".harness/policy/sync-protocol.md"
+      ],
+      "ownedAreas": [
+        "scripts/init.mjs",
+        "scripts/test-init.mjs",
+        ".harness/bin/update-harness.mjs"
+      ],
+      "checks": [
+        "node scripts/test-init.mjs",
+        "npm run harness:check"
+      ],
+      "conflictsWith": [],
+      "supersedes": [],
+      "tags": ["force", "overwrite", "confirmation"]
+    },
+    {
+      "id": "common.runtime.minimum-node",
+      "title": "Harness runtime must enforce minimum Node version",
+      "layer": "common",
+      "category": "runtime",
+      "status": "active",
+      "severity": "error",
+      "enforcement": "block",
+      "waiverAllowed": false,
+      "owner": "ai-standard/harness-seed",
+      "source": {
+        "type": "local",
+        "path": ".harness/project/portability-guide.md"
+      },
+      "documents": [
+        ".harness/project/portability-guide.md",
+        ".harness/project/config-contract.md"
+      ],
+      "ownedAreas": [
+        ".harness/bin/check-node-version.mjs",
+        "scripts/init.mjs",
+        "scripts/test-init.mjs"
+      ],
+      "checks": [
+        "npm run node:check",
+        "node scripts/test-init.mjs",
+        "npm run harness:check"
+      ],
+      "conflictsWith": [],
+      "supersedes": [],
+      "tags": ["node", "runtime", "install"]
+    },
+    {
+      "id": "common.stack.bundle-integrity",
+      "title": "Stack preset bundles must remain isolated and traceable",
+      "layer": "common",
+      "category": "stack",
+      "status": "active",
+      "severity": "error",
+      "enforcement": "hook",
+      "waiverAllowed": false,
+      "owner": "ai-standard/harness-seed",
+      "source": {
+        "type": "local",
+        "path": ".harness/stacks/README.md"
+      },
+      "documents": [
+        ".harness/stacks/**",
+        ".harness/project/stack-preset-rules.md",
+        ".harness/policy/profile.json"
+      ],
+      "ownedAreas": [
+        ".harness/stacks/**",
+        ".harness/policy/profile.json",
+        ".harness/bin/apply-stack.mjs",
+        ".harness/bin/outdated-harness.mjs",
+        ".harness/bin/update-harness.mjs",
+        ".harness/bin/list-stack-standards.mjs"
+      ],
+      "checks": [
+        "npm run stack:status",
+        "npm run harness:check"
+      ],
+      "conflictsWith": [],
+      "supersedes": ["stack-preset"],
+      "tags": ["stack", "manifest", "isolation"]
+    },
+    {
+      "id": "common.template.contract-bridge",
+      "title": "Scaffold templates must use a contract bridge, not overwrite project rules",
+      "layer": "common",
+      "category": "template",
+      "status": "active",
+      "severity": "warning",
+      "enforcement": "trigger",
+      "waiverAllowed": true,
+      "owner": "ai-standard/harness-seed",
+      "source": {
+        "type": "local",
+        "path": ".harness/project/template-contract.md"
+      },
+      "documents": [
+        ".harness/project/template-contract.md",
+        ".harness/project/portability-guide.md",
+        ".harness/stacks/README.md"
+      ],
+      "ownedAreas": [
+        ".harness/bin/apply-stack.mjs",
+        ".harness/project/template-contract.md",
+        ".harness/templates/.applied/**"
+      ],
+      "checks": [
+        "npm run template:status",
+        "node scripts/test-init.mjs",
+        "npm run harness:check"
+      ],
+      "conflictsWith": [],
+      "supersedes": [],
+      "tags": ["template", "contract", "bridge"]
+    },
+    {
+      "id": "common.agent.visible-trace",
+      "title": "Agent reasoning must be exposed as visible trace, not raw hidden reasoning",
+      "layer": "common",
+      "category": "agent",
+      "status": "active",
+      "severity": "warning",
+      "enforcement": "trigger",
+      "waiverAllowed": false,
+      "owner": "ai-standard/harness-seed",
+      "source": {
+        "type": "local",
+        "path": ".harness/policy/context-protocol.md"
+      },
+      "documents": [
+        ".harness/policy/context-protocol.md",
+        "CLAUDE.md",
+        "AGENTS.md",
+        ".github/copilot-instructions.md"
+      ],
+      "ownedAreas": [
+        "CLAUDE.md",
+        "AGENTS.md",
+        ".claude/**",
+        ".github/copilot-instructions.md",
+        ".github/copilot-instructions/**"
+      ],
+      "checks": [
+        "npm run harness:check"
+      ],
+      "conflictsWith": [],
+      "supersedes": [],
+      "tags": ["agent", "trace", "reasoning"]
+    },
+    {
+      "id": "common.hooks.commit-push-check",
+      "title": "Optional git hooks must run harness checks before commit and push",
+      "layer": "common",
+      "category": "guard",
+      "status": "active",
+      "severity": "warning",
+      "enforcement": "hook",
+      "waiverAllowed": true,
+      "owner": "ai-standard/harness-seed",
+      "source": {
+        "type": "local",
+        "path": ".harness/project/standards-layers.md"
+      },
+      "documents": [
+        ".harness/project/standards-layers.md",
+        ".harness/project/workflow-rules.md"
+      ],
+      "ownedAreas": [
+        ".githooks/**",
+        ".harness/bin/install-hooks.mjs",
+        ".harness/bin/run-previous-hook.mjs",
+        ".github/commit-template.txt"
+      ],
+      "checks": [
+        "npm run hooks:install",
+        "npm run harness:check"
+      ],
+      "conflictsWith": [],
+      "supersedes": [],
+      "tags": ["hook", "commit", "push"]
+    },
+    {
+      "id": "common.agent.skill-selection",
+      "title": "Agent requests must select focused harness skills and reading sets",
+      "layer": "common",
+      "category": "agent",
+      "status": "active",
+      "severity": "warning",
+      "enforcement": "trigger",
+      "waiverAllowed": true,
+      "owner": "ai-standard/harness-seed",
+      "source": {
+        "type": "local",
+        "path": ".harness/skills/README.md"
+      },
+      "documents": [
+        ".harness/skills/README.md",
+        ".harness/skills/registry.json",
+        ".harness/policy/context-protocol.md",
+        "CLAUDE.md",
+        "AGENTS.md"
+      ],
+      "ownedAreas": [
+        ".harness/skills/**",
+        ".harness/bin/build-context.mjs",
+        ".harness/documentation/context-registry.json",
+        ".harness/documentation/document-registry.json",
+        "CLAUDE.md",
+        "AGENTS.md"
+      ],
+      "checks": [
+        "npm run harness:context -- \"작업 설명\"",
+        "npm run harness:check"
+      ],
+      "conflictsWith": [],
+      "supersedes": [],
+      "tags": ["agent", "skill", "context", "reading-set"]
+    },
+    {
+      "id": "common.local-rule.promotion",
+      "title": "Repeated project learning must be promoted to local rules",
+      "layer": "common",
+      "category": "learning",
+      "status": "active",
+      "severity": "info",
+      "enforcement": "trigger",
+      "waiverAllowed": true,
+      "owner": "ai-standard/harness-seed",
+      "source": {
+        "type": "local",
+        "path": ".harness/project/project-harness-guide.md"
+      },
+      "documents": [
+        ".harness/project/project-harness-guide.md",
+        ".harness/project/domain-rules.md",
+        ".harness/project/architecture-rules.md",
+        ".harness/project/workflow-rules.md",
+        ".harness/session/decision-log.md",
+        ".harness/session/developer-input-queue.md"
+      ],
+      "ownedAreas": [
+        ".harness/project/domain-rules.md",
+        ".harness/project/architecture-rules.md",
+        ".harness/project/workflow-rules.md",
+        ".harness/session/decision-log.md",
+        ".harness/session/developer-input-queue.md",
+        ".harness/bin/policy-harness.mjs"
+      ],
+      "checks": [
+        "npm run harness:impact",
+        "npm run harness:check"
+      ],
+      "conflictsWith": [],
+      "supersedes": [],
+      "tags": ["local-rule", "learning", "promotion"]
+    }
+  ]
+}

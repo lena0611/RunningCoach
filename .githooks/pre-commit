@@ -1,0 +1,22 @@
+#!/usr/bin/env sh
+set -eu
+
+if [ -z "${NVM_DIR:-}" ]; then
+  export NVM_DIR="$HOME/.nvm"
+fi
+
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  # git hook은 로그인 셸의 nvm 상태를 물려받지 않을 수 있으므로 프로젝트 Node를 직접 적용한다.
+  . "$NVM_DIR/nvm.sh"
+  nvm use >/dev/null 2>&1 || true
+fi
+
+# 기존 프로젝트 pre-commit hook이 있으면 먼저 실행
+node .harness/bin/run-previous-hook.mjs pre-commit "$@"
+
+# 시드 하네스 가드: .harness-seed-mode가 있으면 stack:apply 산출물의 staging을 차단
+# (일반 사용자는 .harness-seed-mode를 삭제하면 자동으로 비활성화됨)
+node .harness/bin/check-seed-mode.mjs
+
+# 통합 검사: 스택 미적용 시 lint/test/build를 자동 스킵, 적용 시 전체 검사
+npm run harness:check

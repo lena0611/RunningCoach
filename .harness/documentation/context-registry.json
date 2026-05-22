@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "contexts": [
+    {
+      "id": "guiding-policy",
+      "file": ".harness/policy/ai-standard-guiding-policy.md",
+      "category": "policy",
+      "taskTypes": ["feature", "bugfix", "refactor", "docs", "review", "maintenance"],
+      "priority": "critical",
+      "appliesTo": ["all"],
+      "keywords": ["정책", "기준", "위배", "공통", "ai-standard"]
+    },
+    {
+      "id": "standards-layers",
+      "file": ".harness/project/standards-layers.md",
+      "category": "priority",
+      "taskTypes": ["feature", "bugfix", "refactor", "review", "maintenance"],
+      "priority": "high",
+      "appliesTo": [".harness/project/**", ".harness/policy/**"],
+      "keywords": ["우선순위", "충돌", "공통", "스택", "템플릿", "프로젝트", "개인"]
+    },
+    {
+      "id": "domain-rules",
+      "file": ".harness/project/domain-rules.md",
+      "category": "domain",
+      "taskTypes": ["feature", "bugfix", "review"],
+      "priority": "high",
+      "appliesTo": ["src/**", "domain", "api", "external-system"],
+      "keywords": ["도메인", "업무", "용어", "불변식", "외부"]
+    },
+    {
+      "id": "architecture-rules",
+      "file": ".harness/project/architecture-rules.md",
+      "category": "architecture",
+      "taskTypes": ["feature", "bugfix", "refactor", "review"],
+      "priority": "high",
+      "appliesTo": ["src/**", "routing", "state", "api", "module"],
+      "keywords": ["아키텍처", "구조", "모듈", "의존", "router", "store", "api"]
+    },
+    {
+      "id": "healthkit-data-contract",
+      "file": ".harness/project/healthkit-data-contract.md",
+      "category": "external-system",
+      "taskTypes": ["feature", "bugfix", "review"],
+      "priority": "high",
+      "appliesTo": ["ios", "HealthKit", "native-bridge", "RunLog"],
+      "keywords": ["HealthKit", "HKWorkout", "iOS", "네이티브", "브리지", "RunLog"]
+    },
+    {
+      "id": "ai-coaching-goal",
+      "file": ".harness/project/ai-coaching-goal.md",
+      "category": "domain",
+      "taskTypes": ["feature", "bugfix", "review"],
+      "priority": "high",
+      "appliesTo": ["coach", "OpenAI", "AI", "TrainingMemory"],
+      "keywords": ["AI", "코칭", "OpenAI", "TrainingMemory", "coach", "memory"]
+    },
+    {
+      "id": "workflow-rules",
+      "file": ".harness/project/workflow-rules.md",
+      "category": "workflow",
+      "taskTypes": ["feature", "bugfix", "maintenance", "review"],
+      "priority": "medium",
+      "appliesTo": ["package.json", "test", "build", "ci", "release"],
+      "keywords": ["검증", "테스트", "빌드", "리뷰", "릴리스", "배포"]
+    },
+    {
+      "id": "stack-preset-rules",
+      "file": ".harness/project/stack-preset-rules.md",
+      "category": "stack",
+      "taskTypes": ["feature", "bugfix", "refactor", "review"],
+      "priority": "medium",
+      "appliesTo": ["src/**", "package.json", "stack"],
+      "keywords": ["스택", "프리셋", "vue", "vite", "router", "pinia"]
+    },
+    {
+      "id": "template-contract",
+      "file": ".harness/project/template-contract.md",
+      "category": "template",
+      "taskTypes": ["feature", "bugfix", "refactor", "maintenance"],
+      "priority": "medium",
+      "appliesTo": ["src/**", "template", "scaffold"],
+      "keywords": ["템플릿", "scaffold", "contract", "사용 계약"]
+    },
+    {
+      "id": "context-protocol",
+      "file": ".harness/policy/context-protocol.md",
+      "category": "context",
+      "taskTypes": ["feature", "bugfix", "refactor", "docs", "review", "maintenance"],
+      "priority": "high",
+      "appliesTo": [".harness/session/task-context.md", ".harness/generated/**"],
+      "keywords": ["컨텍스트", "context", "decision", "판단", "합성"]
+    },
+    {
+      "id": "skill-registry",
+      "file": ".harness/skills/README.md",
+      "category": "skill",
+      "taskTypes": ["feature", "bugfix", "refactor", "docs", "review", "maintenance"],
+      "priority": "medium",
+      "appliesTo": [".harness/skills/registry.json", ".harness/session/task-context.md"],
+      "keywords": ["스킬", "skill", "작업 절차", "읽을거리", "선택", "context"]
+    }
+  ]
+}

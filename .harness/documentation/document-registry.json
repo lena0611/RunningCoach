@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "groups": [
+    {
+      "id": "harness-root",
+      "index": ".harness/README.md",
+      "children": []
+    },
+    {
+      "id": "agent-entrypoints",
+      "index": "CLAUDE.md",
+      "children": [
+        "AGENTS.md"
+      ]
+    },
+    {
+      "id": "claude-code-adapter",
+      "index": ".claude/README.md",
+      "children": [
+        ".claude/commands/decision.md",
+        ".claude/commands/harness-scan.md",
+        ".claude/commands/memory.md",
+        ".claude/commands/reminder.md",
+        ".claude/agents/code-reviewer.md",
+        ".claude/agents/debug-detective.md",
+        ".claude/agents/test-writer.md",
+        ".claude/agents/security-auditor.md",
+        ".claude/settings.json"
+      ]
+    },
+    {
+      "id": "session-harness",
+      "index": ".harness/session/README.md",
+      "children": [
+        ".harness/session/next-session-reminder.md",
+        ".harness/session/session-start-alert.md",
+        ".harness/session/session-boot.md",
+        ".harness/session/project-memory.md",
+        ".harness/session/active-context.md",
+        ".harness/session/decision-log.md",
+        ".harness/session/developer-input-queue.md"
+      ]
+    },
+    {
+      "id": "project-harness",
+      "index": ".harness/project/README.md",
+      "children": [
+        ".harness/project/project-harness-guide.md",
+        ".harness/project/terminology.md",
+        ".harness/project/config-contract.md",
+        ".harness/project/project-charter.md",
+        ".harness/project/scope-contract.md",
+        ".harness/project/local-methodology.md",
+        ".harness/project/standards-layers.md",
+        ".harness/project/personal-methodology.example.md",
+        ".harness/project/stack-preset-rules.md",
+        ".harness/project/template-contract.md",
+        ".harness/project/domain-rules.md",
+        ".harness/project/architecture-rules.md",
+        ".harness/project/healthkit-data-contract.md",
+        ".harness/project/ai-coaching-goal.md",
+        ".harness/project/workflow-rules.md",
+        ".harness/project/portability-guide.md",
+        ".harness/project/bootstrap.md"
+      ]
+    },
+    {
+      "id": "policy-harness",
+      "index": ".harness/policy/README.md",
+      "children": [
+        ".harness/policy/ai-standard-guiding-policy.md",
+        ".harness/policy/enforcement-ladder.md",
+        ".harness/policy/policy-steward.md",
+        ".harness/policy/policy-db-readiness.md",
+        ".harness/policy/context-protocol.md",
+        ".harness/policy/sync-protocol.md",
+        ".harness/policy/automation-coverage.md",
+        ".harness/policy/waiver-guidelines.md",
+        ".harness/policy/policy-registry.json",
+        ".harness/policy/profile.json",
+        ".harness/policy/waivers.json"
+      ]
+    },
+    {
+      "id": "documentation-harness",
+      "index": ".harness/documentation/README.md",
+      "children": [
+        ".harness/documentation/concept-map.md",
+        ".harness/documentation/decision-flow.md",
+        ".harness/documentation/guide/index.html",
+        ".harness/documentation/context-registry.json",
+        ".harness/documentation/indexing-rules.md",
+        ".harness/documentation/split-thresholds.md",
+        ".harness/documentation/document-registry.json"
+      ]
+    },
+    {
+      "id": "skill-harness",
+      "index": ".harness/skills/README.md",
+      "children": [
+        ".harness/skills/registry.json"
+      ]
+    },
+    {
+      "id": "style-harness",
+      "index": ".harness/style/README.md",
+      "children": [
+        ".harness/style/style-rules.md",
+        ".harness/style/validation-rules.md",
+        ".harness/style/presets.md",
+        ".harness/style/style-evolution.md"
+      ]
+    },
+    {
+      "id": "stacks",
+      "index": ".harness/stacks/README.md",
+      "children": [
+        ".harness/stacks/authoring-guide.md"
+      ]
+    }
+  ]
+}

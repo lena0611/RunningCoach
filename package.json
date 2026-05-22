@@ -1,0 +1,45 @@
+{
+  "name": "runcontext",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "harness:guide": "node .harness/bin/check-node-version.mjs && node .harness/bin/harness-guide.mjs",
+    "harness:scan": "node .harness/bin/check-node-version.mjs && node .harness/bin/scan-project.mjs --write",
+    "harness:handoff": "node .harness/bin/check-node-version.mjs && node .harness/bin/handoff.mjs --write",
+    "harness:impact": "node .harness/bin/check-node-version.mjs && node .harness/bin/policy-harness.mjs impact",
+    "harness:check": "node .harness/bin/check-node-version.mjs && node .harness/bin/guard.mjs",
+    "harness:check:strict": "node .harness/bin/check-node-version.mjs && node .harness/bin/guard.mjs --strict",
+    "harness:sync": "node .harness/bin/check-node-version.mjs && node .harness/bin/sync-context.mjs",
+    "harness:context": "node .harness/bin/check-node-version.mjs && node .harness/bin/build-context.mjs",
+    "harness:outdated": "node .harness/bin/check-node-version.mjs && node .harness/bin/outdated-harness.mjs",
+    "harness:update": "node .harness/bin/check-node-version.mjs && node .harness/bin/update-harness.mjs",
+    "hooks:install": "node .harness/bin/check-node-version.mjs && node .harness/bin/install-hooks.mjs",
+    "standards:list": "node .harness/bin/check-node-version.mjs && node .harness/bin/list-stack-standards.mjs",
+    "templates:list": "node .harness/bin/check-node-version.mjs && node .harness/bin/list-templates.mjs",
+    "stack:status": "node .harness/bin/check-node-version.mjs && node .harness/bin/apply-stack.mjs --status",
+    "stack:apply": "node .harness/bin/check-node-version.mjs && node .harness/bin/apply-stack.mjs",
+    "stack:reset": "node .harness/bin/check-node-version.mjs && node .harness/bin/apply-stack.mjs --reset",
+    "template:status": "node .harness/bin/check-node-version.mjs && node .harness/bin/apply-stack.mjs --template-status",
+    "template:apply": "node .harness/bin/check-node-version.mjs && node .harness/bin/apply-stack.mjs --template",
+    "template:reset": "node .harness/bin/check-node-version.mjs && node .harness/bin/apply-stack.mjs --template-reset"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.106.1",
+    "@vitejs/plugin-vue": "^6.0.3",
+    "fit-file-parser": "^3.0.0",
+    "nanoid": "^5.1.6",
+    "pinia": "^3.0.4",
+    "typescript": "~5.9.3",
+    "vite": "^7.2.4",
+    "vue": "^3.5.25",
+    "vue-router": "^4.6.3",
+    "vue-tsc": "^3.1.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1"
+  }
+}
