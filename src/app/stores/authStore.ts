@@ -2,6 +2,13 @@ import { defineStore } from 'pinia'
 import type { Session, User } from '@supabase/supabase-js'
 import { isSupabaseConfigured, supabase } from '@/shared/api/supabase'
 
+const productionRedirectUrl = import.meta.env.VITE_AUTH_REDIRECT_URL as string | undefined
+
+function getEmailRedirectTo() {
+  if (productionRedirectUrl) return productionRedirectUrl
+  return window.location.origin + window.location.pathname
+}
+
 export const useAuthStore = defineStore('authStore', {
   state: () => ({
     initialized: false,
@@ -41,7 +48,7 @@ export const useAuthStore = defineStore('authStore', {
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: window.location.origin + window.location.pathname
+          emailRedirectTo: getEmailRedirectTo()
         }
       })
       this.loading = false
