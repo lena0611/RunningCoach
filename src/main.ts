@@ -20,6 +20,7 @@ await authStore.init()
 router.beforeEach((to) => {
   if (!canUseAppFeatures() && to.path !== '/access') return '/access'
   if (canUseAppFeatures() && to.path === '/access') return '/'
+  if (!isSupabaseConfigured && to.path !== '/auth') return '/auth'
   if (isSupabaseConfigured && !authStore.isAuthenticated && to.path !== '/auth') return '/auth'
   if (authStore.isAuthenticated && to.path === '/auth') return '/'
 })
