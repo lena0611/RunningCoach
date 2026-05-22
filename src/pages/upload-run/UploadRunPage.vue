@@ -24,6 +24,7 @@ const healthKitCandidates = ref<HealthKitRunCandidate[]>([])
 const selectedHealthKitId = ref('')
 const loading = ref(false)
 const saving = ref(false)
+const bulkSaving = ref(false)
 const healthKitLoading = ref(false)
 const healthKitStatus = ref('')
 const error = ref('')
@@ -89,6 +90,44 @@ function importFromHealthKit() {
   }
 }
 
+async function saveMayHealthKitRuns() {
+  const year = new Date().getFullYear()
+  const mayRuns = healthKitCandidates.value
+    .filter((candidate) => candidate.date >= `${year}-05-01` && candidate.date <= `${year}-05-31`)
+    .filter((candidate) => !isAlreadySaved(candidate))
+
+  if (!mayRuns.length) {
+    healthKitStatus.value = `${year}년 5월 HealthKit 후보 중 새로 저장할 기록이 없습니다.`
+    return
+  }
+
+  bulkSaving.value = true
+  error.value = ''
+  try {
+    const inserted = await runStore.addRuns(
+      mayRuns.map((candidate) => toExtractedRunData(candidate)),
+      'healthkit'
+    )
+    healthKitStatus.value = `${year}년 5월 HealthKit 기록 ${inserted.length}개를 Run Log에 저장했습니다.`
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '5월 HealthKit 기록 저장 실패'
+  } finally {
+    bulkSaving.value = false
+  }
+}
+
+function isAlreadySaved(candidate: HealthKitRunCandidate) {
+  return runStore.runs.some((run) => {
+    if (run.externalId && run.externalId === candidate.externalId) return true
+    return (
+      run.source === 'healthkit' &&
+      run.date === candidate.date &&
+      run.distanceKm === (candidate.distanceKm ?? 0) &&
+      run.durationSec === candidate.durationSec
+    )
+  })
+}
+
 function selectHealthKitCandidate() {
   const candidate = healthKitCandidates.value.find((item) => item.externalId === selectedHealthKitId.value)
   if (candidate) {
@@ -126,6 +165,9 @@ async function save() {
       <div class="actions">
         <button type="button" :disabled="healthKitLoading" @click="importFromHealthKit">
           {{ healthKitLoading ? '가져오는 중' : '최근 러닝 가져오기' }}
+        </button>
+        <button class="ghost" type="button" :disabled="!healthKitCandidates.length || bulkSaving" @click="saveMayHealthKitRuns">
+          {{ bulkSaving ? '저장 중' : '올해 5월 기록 일괄 저장' }}
         </button>
       </div>
       <p v-if="healthKitStatus" class="helper">{{ healthKitStatus }}</p>

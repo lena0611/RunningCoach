@@ -3,7 +3,7 @@ import { nanoid } from 'nanoid'
 import type { ExtractedRunData, RunLog } from '@/entities/run/model'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
-import { deleteRunLog, fetchRunLogs, insertRunLog, updateRunLog } from '@/shared/api/runRepository'
+import { deleteRunLog, fetchRunLogs, insertRunLog, insertRunLogs, updateRunLog } from '@/shared/api/runRepository'
 
 const storageKey = 'runcontext.runLogs'
 
@@ -50,6 +50,7 @@ export const useRunStore = defineStore('runStore', {
         ...data,
         id: nanoid(),
         userId: memoryStore.selectedUserId,
+        externalId: data.externalId ?? null,
         source,
         rpe: data.rpe ?? null,
         tags: data.tags ?? [],
@@ -59,6 +60,31 @@ export const useRunStore = defineStore('runStore', {
       this.runs.push(run)
       this.persist()
       return run
+    },
+    async addRuns(items: ExtractedRunData[], source: RunLog['source'] = 'file_import') {
+      if (!items.length) return []
+      if (isSupabaseConfigured) {
+        const inserted = await insertRunLogs(items, source)
+        this.runs.push(...inserted)
+        return inserted
+      }
+
+      const now = new Date().toISOString()
+      const memoryStore = useMemoryStore()
+      const runs = items.map((item) => ({
+        ...item,
+        id: nanoid(),
+        userId: memoryStore.selectedUserId,
+        externalId: item.externalId ?? null,
+        source,
+        rpe: item.rpe ?? null,
+        tags: item.tags ?? [],
+        createdAt: now,
+        updatedAt: now
+      }))
+      this.runs.push(...runs)
+      this.persist()
+      return runs
     },
     async updateRun(run: RunLog) {
       if (isSupabaseConfigured) {
@@ -92,9 +118,10 @@ function loadRuns(): RunLog[] {
     const raw = localStorage.getItem(storageKey)
     const parsed = raw ? JSON.parse(raw) : []
     return Array.isArray(parsed)
-      ? parsed.map((run) => ({
-          ...run,
-          userId: run.userId ?? 'default'
+        ? parsed.map((run) => ({
+            ...run,
+          userId: run.userId ?? 'default',
+          externalId: run.externalId ?? null
         }))
       : []
   } catch {

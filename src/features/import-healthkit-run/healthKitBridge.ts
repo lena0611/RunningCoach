@@ -77,6 +77,7 @@ export function toExtractedRunData(candidate: HealthKitRunCandidate): ExtractedR
   const distanceKm = candidate.distanceKm ?? 0
   const durationSec = candidate.durationSec
   return {
+    externalId: candidate.externalId,
     sessionTitle: '',
     date: candidate.date || new Date().toISOString().slice(0, 10),
     type: 'Unknown',

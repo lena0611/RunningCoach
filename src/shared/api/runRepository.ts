@@ -4,6 +4,7 @@ import { requireSupabase } from '@/shared/api/supabase'
 type RunLogRow = {
   id: string
   user_id: string
+  external_id: string | null
   session_title: string | null
   date: string
   type: RunLog['type']
@@ -47,6 +48,14 @@ export async function insertRunLog(data: ExtractedRunData, source: RunLog['sourc
   return fromRow(inserted)
 }
 
+export async function insertRunLogs(items: ExtractedRunData[], source: RunLog['source']): Promise<RunLog[]> {
+  if (!items.length) return []
+  const rows = items.map((item) => toInsertRow(item, source))
+  const { data, error } = await requireSupabase().from('run_logs').insert(rows).select('*')
+  if (error) throw error
+  return (data ?? []).map(fromRow)
+}
+
 export async function updateRunLog(run: RunLog): Promise<RunLog> {
   const { id: _id, userId: _userId, createdAt: _createdAt, ...rest } = run
   const { data, error } = await requireSupabase()
@@ -54,6 +63,7 @@ export async function updateRunLog(run: RunLog): Promise<RunLog> {
     .update({
       date: rest.date,
       type: rest.type,
+      external_id: rest.externalId,
       session_title: rest.sessionTitle,
       distance_km: rest.distanceKm,
       duration_sec: rest.durationSec,
@@ -94,6 +104,7 @@ export async function deleteRunLog(id: string) {
 
 function toInsertRow(data: ExtractedRunData, source: RunLog['source']) {
   return {
+    external_id: data.externalId,
     date: data.date,
     type: data.type,
     session_title: data.sessionTitle,
@@ -127,6 +138,7 @@ function fromRow(row: RunLogRow): RunLog {
   return {
     id: row.id,
     userId: row.user_id,
+    externalId: row.external_id,
     sessionTitle: row.session_title ?? '',
     date: row.date,
     type: row.type,

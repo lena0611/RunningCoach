@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 type RunLogRow = {
   id: string
+  external_id: string | null
   session_title: string | null
   date: string
   type: string
@@ -106,6 +107,7 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
   const selectedRun = selectedRunId ? runRows.find((run) => run.id === selectedRunId) ?? null : null
   const recent14 = withinDays(runRows, 14)
   const recent30 = withinDays(runRows, 30)
+  const currentMonth = inCurrentMonth(runRows)
   const latestTempo = runRows.find((run) => run.type === 'Tempo') ?? null
   const latestLong = runRows.find((run) => ['LSD', 'Steady Long'].includes(run.type)) ?? null
 
@@ -120,6 +122,10 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
       recent14DistanceKm: sumDistance(recent14),
       recent30DistanceKm: sumDistance(recent30),
       recent30EasyRatio: easyRatio(recent30),
+      currentMonthRunCount: currentMonth.length,
+      currentMonthDistanceKm: sumDistance(currentMonth),
+      currentMonthEasyRatio: easyRatio(currentMonth),
+      currentMonthHardSessions: currentMonth.filter((run) => ['Tempo', 'Steady Long', 'Race'].includes(run.type)).length,
       hardSessionsLast7: withinDays(runRows, 7).filter((run) => ['Tempo', 'Steady Long', 'Race'].includes(run.type)).length,
       latestTempo,
       latestLong
@@ -174,6 +180,16 @@ function withinDays(runs: RunLogRow[], days: number) {
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - days)
   return runs.filter((run) => new Date(run.date) >= cutoff)
+}
+
+function inCurrentMonth(runs: RunLogRow[]) {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth()
+  return runs.filter((run) => {
+    const date = new Date(run.date)
+    return date.getFullYear() === year && date.getMonth() === month
+  })
 }
 
 function sumDistance(runs: RunLogRow[]) {

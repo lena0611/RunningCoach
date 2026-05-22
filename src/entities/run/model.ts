@@ -21,6 +21,7 @@ export type Lap = {
 export type RunLog = {
   id: string
   userId: string
+  externalId: string | null
   sessionTitle: string
   date: string
   type: RunType

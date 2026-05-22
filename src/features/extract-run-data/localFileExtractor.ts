@@ -62,6 +62,7 @@ async function extractFromFit(buffer: ArrayBuffer): Promise<ExtractedRunData> {
 
 export function createEmptyRun(): ExtractedRunData {
   return {
+    externalId: null,
     sessionTitle: '',
     date: new Date().toISOString().slice(0, 10),
     type: 'Unknown',
