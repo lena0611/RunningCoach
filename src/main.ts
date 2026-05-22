@@ -12,7 +12,6 @@ import './app/styles.css'
 const pinia = createPinia()
 const app = createApp(App)
 app.use(pinia)
-app.use(router)
 
 const authStore = useAuthStore()
 await authStore.init()
@@ -29,4 +28,6 @@ if (!isSupabaseConfigured || authStore.isAuthenticated) {
   await Promise.all([useMemoryStore().load(), useRunStore().load()])
 }
 
+app.use(router)
+await router.isReady()
 app.mount('#app')
