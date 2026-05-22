@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRunStore } from '@/app/stores/runStore'
 import RunSummaryCard from '@/widgets/run-summary-card/RunSummaryCard.vue'
 import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
@@ -8,6 +8,12 @@ import { averagePace, getEasyRatio, getRunsWithinDays, getThisMonthRuns, getThis
 import { formatPace } from '@/shared/lib/format'
 
 const runStore = useRunStore()
+
+onMounted(() => {
+  if (!runStore.loaded && !runStore.loading) {
+    runStore.load()
+  }
+})
 
 const runs = computed(() => runStore.sortedRuns)
 const weekDistance = computed(() => sumDistance(getThisWeekRuns(runs.value)))
@@ -24,6 +30,16 @@ const nextSession = computed(() => {
 
 <template>
   <section class="page">
+    <section v-if="runStore.loading || runStore.error" class="panel">
+      <div class="section-heading">
+        <h2>데이터 상태</h2>
+        <button class="ghost" type="button" :disabled="runStore.loading" @click="runStore.load">
+          {{ runStore.loading ? '불러오는 중' : '다시 불러오기' }}
+        </button>
+      </div>
+      <p v-if="runStore.loading" class="helper">Run Log를 불러오고 있습니다.</p>
+      <p v-if="runStore.error" class="error">{{ runStore.error }}</p>
+    </section>
     <div class="metric-grid">
       <RunSummaryCard label="이번 주" :value="`${weekDistance}km`" />
       <RunSummaryCard label="이번 달" :value="`${monthDistance}km`" />

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRunStore } from '@/app/stores/runStore'
 import { runTypes, type RunLog, type RunType } from '@/entities/run/model'
 import { formatDuration, formatPace } from '@/shared/lib/format'
@@ -17,6 +17,12 @@ const error = ref('')
 const filteredRuns = computed(() =>
   selectedType.value === 'All' ? runStore.sortedRuns : runStore.sortedRuns.filter((run) => run.type === selectedType.value)
 )
+
+onMounted(() => {
+  if (!runStore.loaded && !runStore.loading) {
+    runStore.load()
+  }
+})
 
 function startEdit(run: RunLog) {
   error.value = ''
@@ -75,6 +81,7 @@ async function remove(run: RunLog) {
           <option v-for="type in runTypes" :key="type" :value="type">{{ type }}</option>
         </select>
       </div>
+      <p v-if="runStore.loading" class="helper">Run Log를 불러오고 있습니다.</p>
       <div v-if="filteredRuns.length" class="run-list">
         <article v-for="run in filteredRuns" :key="run.id" class="run-row">
           <div>
