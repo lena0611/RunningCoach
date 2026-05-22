@@ -13,6 +13,12 @@ const error = ref('')
 const reports = ref<CoachReport[]>([])
 
 const selectedRun = computed(() => runStore.sortedRuns.find((run) => run.id === selectedRunId.value) ?? null)
+const reportThreads = computed(() =>
+  reports.value.map((report) => ({
+    ...report,
+    blocks: parseCoachMarkdown(report.report)
+  }))
+)
 
 onMounted(loadReports)
 
@@ -37,15 +43,102 @@ async function coach() {
     loading.value = false
   }
 }
+
+type CoachBlock =
+  | { type: 'heading'; text: string }
+  | { type: 'paragraph'; text: string }
+  | { type: 'list'; items: string[] }
+  | { type: 'code'; text: string }
+  | { type: 'divider' }
+
+function parseCoachMarkdown(markdown: string): CoachBlock[] {
+  const blocks: CoachBlock[] = []
+  const lines = markdown.replace(/\r\n/g, '\n').split('\n')
+  let paragraph: string[] = []
+  let list: string[] = []
+  let code: string[] = []
+  let inCode = false
+
+  function flushParagraph() {
+    if (paragraph.length) {
+      blocks.push({ type: 'paragraph', text: paragraph.join(' ') })
+      paragraph = []
+    }
+  }
+
+  function flushList() {
+    if (list.length) {
+      blocks.push({ type: 'list', items: list })
+      list = []
+    }
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (trimmed.startsWith('```')) {
+      if (inCode) {
+        blocks.push({ type: 'code', text: code.join('\n') })
+        code = []
+        inCode = false
+      } else {
+        flushParagraph()
+        flushList()
+        inCode = true
+      }
+      continue
+    }
+
+    if (inCode) {
+      code.push(line)
+      continue
+    }
+
+    if (!trimmed) {
+      flushParagraph()
+      flushList()
+      continue
+    }
+
+    if (trimmed === '---') {
+      flushParagraph()
+      flushList()
+      blocks.push({ type: 'divider' })
+      continue
+    }
+
+    const heading = trimmed.match(/^#{1,3}\s+(.+)$/)
+    if (heading) {
+      flushParagraph()
+      flushList()
+      blocks.push({ type: 'heading', text: heading[1] })
+      continue
+    }
+
+    const bullet = trimmed.match(/^[-*]\s+(.+)$/)
+    if (bullet) {
+      flushParagraph()
+      list.push(bullet[1])
+      continue
+    }
+
+    flushList()
+    paragraph.push(trimmed)
+  }
+
+  flushParagraph()
+  flushList()
+  if (code.length) blocks.push({ type: 'code', text: code.join('\n') })
+  return blocks
+}
 </script>
 
 <template>
-  <section class="page">
-    <section class="panel">
+  <section class="page coach-page">
+    <section class="panel coach-composer">
       <div class="section-heading">
         <h2>AI Coach</h2>
       </div>
-      <p class="helper">선택한 기록과 누적 메모리를 함께 보내 AI 코칭 리포트를 생성합니다.</p>
+      <p class="helper">RunLog, 누적 메모리, 오늘 메모를 합쳐 짧은 코칭 리포트를 생성합니다.</p>
       <label>
         선택 RunLog
         <select v-model="selectedRunId">
@@ -54,13 +147,14 @@ async function coach() {
         </select>
       </label>
       <section v-if="selectedRun" class="sub-panel">
-        <strong>{{ selectedRun.date }} · {{ selectedRun.type }}</strong>
+        <strong>{{ selectedRun.date }} · {{ selectedRun.sessionTitle || selectedRun.type }}</strong>
         <p>{{ selectedRun.distanceKm }}km · {{ formatDuration(selectedRun.durationSec) }} · {{ formatPace(selectedRun.avgPaceSec) }}/km · HR {{ selectedRun.avgHeartRate ?? '-' }}</p>
-        <p>{{ selectedRun.memo }}</p>
+        <p v-if="selectedRun.memo">{{ selectedRun.memo }}</p>
+        <p v-if="selectedRun.workoutFeeling" class="helper">느낌: {{ selectedRun.workoutFeeling }}</p>
       </section>
       <label>
         오늘 메모
-        <textarea v-model="userNote" rows="4" placeholder="예: 오늘 목요일 템포. 후반 3.5km는 와이프랑 9분대 회복 조깅." />
+        <textarea v-model="userNote" rows="3" placeholder="예: 오늘 목요일 템포. 후반 3.5km는 와이프랑 9분대 회복 조깅." />
       </label>
       <div class="actions">
         <button type="button" :disabled="loading || !isSupabaseConfigured" @click="coach">{{ loading ? '분석 중' : 'AI 코칭 요청' }}</button>
@@ -69,14 +163,29 @@ async function coach() {
       <p v-if="error" class="error">{{ error }}</p>
     </section>
 
-    <section class="panel">
+    <section class="panel coach-thread">
       <div class="section-heading">
         <h2>코칭 리포트</h2>
       </div>
-      <article v-for="report in reports" :key="report.id" class="sub-panel">
-        <small>{{ new Date(report.createdAt).toLocaleString() }}</small>
-        <p v-if="report.userNote" class="helper">메모: {{ report.userNote }}</p>
-        <pre class="coach-report">{{ report.report }}</pre>
+      <article v-for="report in reportThreads" :key="report.id" class="coach-message">
+        <div v-if="report.userNote" class="coach-bubble coach-bubble-user">
+          <small>{{ new Date(report.createdAt).toLocaleString() }}</small>
+          <p>{{ report.userNote }}</p>
+        </div>
+        <div class="coach-bubble coach-bubble-ai">
+          <small>RunContext Coach</small>
+          <div class="coach-report">
+            <template v-for="(block, index) in report.blocks" :key="index">
+              <h3 v-if="block.type === 'heading'">{{ block.text }}</h3>
+              <p v-else-if="block.type === 'paragraph'">{{ block.text }}</p>
+              <ul v-else-if="block.type === 'list'">
+                <li v-for="item in block.items" :key="item">{{ item }}</li>
+              </ul>
+              <pre v-else-if="block.type === 'code'"><code>{{ block.text }}</code></pre>
+              <hr v-else />
+            </template>
+          </div>
+        </div>
       </article>
       <p v-if="!reports.length" class="empty">아직 코칭 리포트가 없습니다.</p>
     </section>
