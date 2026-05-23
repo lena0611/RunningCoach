@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useRunStore } from '@/app/stores/runStore'
 import RunImageUploader from '@/widgets/run-image-uploader/RunImageUploader.vue'
 import RunForm from '@/shared/ui/RunForm.vue'
+import SectionCard from '@/shared/ui/SectionCard.vue'
 import type { ExtractedRunData } from '@/entities/run/model'
 import { createEmptyRun, extractRunDataFromFile } from '@/features/extract-run-data/localFileExtractor'
 import {
@@ -157,8 +158,8 @@ async function save() {
 </script>
 
 <template>
-  <section class="page">
-    <section class="panel">
+  <section class="page upload-page">
+    <SectionCard>
       <div class="section-heading">
         <h2>HealthKit 가져오기</h2>
       </div>
@@ -180,7 +181,7 @@ async function save() {
         </select>
       </label>
       <p class="helper">iOS 앱에서는 HealthKit에서 러닝 기록을 가져오고, 일반 웹에서는 아래 FIT 업로드를 사용합니다.</p>
-    </section>
+    </SectionCard>
     <RunImageUploader ref="uploader" @selected="onSelected" @cleared="file = null" />
     <div class="actions">
       <button type="button" :disabled="!file || loading" @click="analyze">
@@ -189,7 +190,7 @@ async function save() {
       <button class="ghost" type="button" @click="manual">수동 입력</button>
       <p v-if="error" class="error">{{ error }}</p>
     </div>
-    <section v-if="form" class="panel">
+    <SectionCard v-if="form">
       <div class="section-heading">
         <h2>분석 결과 확인</h2>
       </div>
@@ -197,6 +198,6 @@ async function save() {
       <div class="actions">
         <button type="button" :disabled="saving" @click="save">{{ saving ? '저장 중' : '저장' }}</button>
       </div>
-    </section>
+    </SectionCard>
   </section>
 </template>

@@ -5,6 +5,9 @@ import { runTypes, type RunLog, type RunType } from '@/entities/run/model'
 import { formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
 import RunForm from '@/shared/ui/RunForm.vue'
 import { estimateHeartRateDrift } from '@/shared/lib/runStats'
+import EmptyState from '@/shared/ui/EmptyState.vue'
+import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
+import SectionCard from '@/shared/ui/SectionCard.vue'
 
 const runStore = useRunStore()
 const selectedType = ref<RunType | 'All'>('All')
@@ -63,7 +66,7 @@ async function remove(run: RunLog) {
 
 <template>
   <section class="page">
-    <section v-if="editing" ref="editPanel" class="panel">
+    <section v-if="editing" ref="editPanel" class="section-card">
       <div class="section-heading">
         <h2>기록 수정</h2>
       </div>
@@ -73,10 +76,10 @@ async function remove(run: RunLog) {
         <button class="ghost" type="button" :disabled="saving" @click="editing = null">취소</button>
       </div>
     </section>
-    <section class="panel">
+    <SectionCard>
       <div class="section-heading">
         <h2>Run Log</h2>
-        <select v-model="selectedType">
+        <select v-model="selectedType" class="compact-select">
           <option value="All">All</option>
           <option v-for="type in runTypes" :key="type" :value="type">{{ type }}</option>
         </select>
@@ -85,8 +88,15 @@ async function remove(run: RunLog) {
       <div v-if="filteredRuns.length" class="run-list">
         <article v-for="run in filteredRuns" :key="run.id" class="run-row">
           <div>
-            <strong>{{ run.date }} · {{ run.sessionTitle || run.type }}</strong>
-            <span>{{ run.distanceKm }}km · {{ formatDuration(run.durationSec) }} · {{ formatPace(run.avgPaceSec) }}/km</span>
+            <div class="run-row-title">
+              <strong>{{ run.date }}<span v-if="run.sessionTitle"> · {{ run.sessionTitle }}</span></strong>
+              <RunTypeBadge :type="run.type" />
+            </div>
+            <div class="run-metrics-line">
+              <strong>{{ run.distanceKm }}km</strong>
+              <span>{{ formatDuration(run.durationSec) }}</span>
+              <span>{{ formatPace(run.avgPaceSec) }}/km</span>
+            </div>
             <small>HR {{ formatInteger(run.avgHeartRate) }} / {{ formatInteger(run.maxHeartRate) }} · Cad {{ formatInteger(run.cadence) }} · {{ estimateHeartRateDrift(run) }}</small>
             <small v-if="run.courseType !== 'Unknown' || run.rpe || run.workoutFeeling">
               {{ run.courseType }} · RPE {{ run.rpe ?? '-' }} · {{ run.workoutFeeling || run.companion || '-' }}
@@ -100,8 +110,8 @@ async function remove(run: RunLog) {
           </div>
         </article>
       </div>
-      <p v-else class="empty">기록이 없습니다.</p>
+      <EmptyState v-else title="기록이 없습니다." description="Upload에서 HealthKit 또는 FIT 기록을 저장하세요." />
       <p v-if="error" class="error">{{ error }}</p>
-    </section>
+    </SectionCard>
   </section>
 </template>

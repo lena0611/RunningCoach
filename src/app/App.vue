@@ -1,32 +1,19 @@
 <script setup lang="ts">
 import { useAuthStore } from '@/app/stores/authStore'
+import AppShell from '@/shared/ui/AppShell.vue'
 
 const authStore = useAuthStore()
 const navItems = [
-  { to: '/', label: 'Dashboard' },
-  { to: '/upload', label: 'Upload' },
-  { to: '/runs', label: 'Run Log' },
-  { to: '/memory', label: 'Memory' },
-  { to: '/coach', label: 'Coach' }
+  { to: '/', label: 'Dashboard', shortLabel: 'Home' },
+  { to: '/upload', label: 'Upload', shortLabel: 'Upload' },
+  { to: '/runs', label: 'Run Log', shortLabel: 'Log' },
+  { to: '/memory', label: 'Memory', shortLabel: 'Memo' },
+  { to: '/coach', label: 'Coach', shortLabel: 'Coach' }
 ]
 </script>
 
 <template>
-  <div class="app-shell">
-    <header class="topbar">
-      <div>
-        <p class="eyebrow">RunContext</p>
-        <h1>러닝 기록 코치</h1>
-      </div>
-      <nav>
-        <RouterLink v-for="item in navItems" :key="item.to" :to="item.to">
-          {{ item.label }}
-        </RouterLink>
-        <button v-if="authStore.isAuthenticated" class="nav-button" type="button" @click="authStore.signOut()">Logout</button>
-      </nav>
-    </header>
-    <main>
-      <RouterView />
-    </main>
-  </div>
+  <AppShell :nav-items="navItems" :is-authenticated="authStore.isAuthenticated" @sign-out="authStore.signOut()">
+    <RouterView />
+  </AppShell>
 </template>

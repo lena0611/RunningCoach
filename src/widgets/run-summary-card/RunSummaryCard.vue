@@ -1,11 +1,9 @@
 <script setup lang="ts">
+import StatCard from '@/shared/ui/StatCard.vue'
+
 defineProps<{ label: string; value: string; hint?: string }>()
 </script>
 
 <template>
-  <article class="metric">
-    <span>{{ label }}</span>
-    <strong>{{ value }}</strong>
-    <small v-if="hint">{{ hint }}</small>
-  </article>
+  <StatCard :label="label" :value="value" :hint="hint" />
 </template>

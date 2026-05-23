@@ -1,6 +1,10 @@
+<script setup lang="ts">
+import SectionCard from '@/shared/ui/SectionCard.vue'
+</script>
+
 <template>
   <section class="page narrow-page">
-    <section class="panel">
+    <SectionCard>
       <div class="section-heading">
         <h2>RunContext는 iOS 앱에서 사용합니다</h2>
       </div>
@@ -9,6 +13,6 @@
         네이티브 브리지 또는 로컬 개발 환경에서만 열립니다.
       </p>
       <p class="helper">개발 중에는 localhost로 접속하고, 실사용은 Xcode로 설치한 iPhone 앱에서 실행하세요.</p>
-    </section>
+    </SectionCard>
   </section>
 </template>

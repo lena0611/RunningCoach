@@ -65,6 +65,15 @@
       "keywords": ["GitHub Pages", "Supabase", "인증", "OTP", "secret", "variables", "WebView", "배포"]
     },
     {
+      "id": "ui-guidelines",
+      "file": ".harness/project/ui-guidelines.md",
+      "category": "ui",
+      "taskTypes": ["feature", "bugfix", "refactor", "review"],
+      "priority": "high",
+      "appliesTo": ["src/app/styles.css", "src/pages/**", "src/widgets/**", "src/shared/ui/**"],
+      "keywords": ["UI", "UX", "모바일", "다크모드", "카드", "대시보드", "코칭"]
+    },
+    {
       "id": "workflow-rules",
       "file": ".harness/project/workflow-rules.md",
       "category": "workflow",

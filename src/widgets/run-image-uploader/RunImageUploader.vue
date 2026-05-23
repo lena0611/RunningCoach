@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import SectionCard from '@/shared/ui/SectionCard.vue'
 
 const emit = defineEmits<{ selected: [file: File]; cleared: [] }>()
 
@@ -31,19 +32,20 @@ defineExpose({ clear })
 </script>
 
 <template>
-  <section class="panel">
+  <SectionCard>
     <div class="section-heading">
       <h2>FIT 파일 업로드</h2>
       <button v-if="fileName" class="ghost" type="button" @click="clear">폐기</button>
     </div>
     <label class="upload-box">
       <input type="file" accept=".fit,application/octet-stream" @change="onFileChange" />
-      <span>Workoutdoors FIT 파일 선택</span>
+      <span class="upload-icon">FIT</span>
+      <strong>Workoutdoors FIT 파일 선택</strong>
       <small>FIT 파일을 브라우저에서 로컬 분석합니다. 원본 파일명과 파일 내용은 저장하지 않습니다.</small>
     </label>
     <div v-if="fileName" class="preview file-preview">
       <strong>{{ fileName }}</strong>
       <p>{{ fileSize }}</p>
     </div>
-  </section>
+  </SectionCard>
 </template>

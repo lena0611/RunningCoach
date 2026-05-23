@@ -2,6 +2,7 @@
 import { reactive, ref, watch } from 'vue'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import type { PersonalBest, TrainingMemory } from '@/entities/training-memory/model'
+import SectionCard from '@/shared/ui/SectionCard.vue'
 
 const memoryStore = useMemoryStore()
 const draft = reactive<TrainingMemory>(JSON.parse(JSON.stringify(memoryStore.memory)))
@@ -91,14 +92,15 @@ function addUser() {
 </script>
 
 <template>
-  <section class="page">
-    <section class="panel">
+  <section class="page memory-page">
+    <SectionCard>
       <div class="section-heading">
         <h2>사용자와 TrainingMemory</h2>
         <button type="button" :disabled="saving" @click="save">{{ saving ? '저장 중' : '저장' }}</button>
       </div>
       <p v-if="error || memoryStore.error" class="error">{{ error || memoryStore.error }}</p>
       <form class="form-grid">
+        <div class="form-section-title full">사용자</div>
         <label>
           선택 사용자
           <select :value="memoryStore.selectedUserId" @change="memoryStore.selectUser(($event.target as HTMLSelectElement).value)">
@@ -120,6 +122,7 @@ function addUser() {
         <div class="actions full">
           <button class="ghost" type="button" @click="addUser">사용자 등록</button>
         </div>
+        <div class="form-section-title full">목표와 프로필</div>
         <label class="full">
           선택 사용자 목표
           <input v-model="draft.goal" />
@@ -153,6 +156,7 @@ function addUser() {
           거리별 PB
           <textarea :value="formatPersonalBests()" rows="4" placeholder="5, 28:30, 2026-05-01, race" @input="draft.athleteProfile.personalBests = parsePersonalBests(($event.target as HTMLTextAreaElement).value)" />
         </label>
+        <div class="form-section-title full">훈련 루틴</div>
         <label class="full">
           주간 루틴
           <textarea :value="join(draft.weeklyPattern)" rows="5" @input="draft.weeklyPattern = split(($event.target as HTMLTextAreaElement).value)" />
@@ -165,6 +169,7 @@ function addUser() {
           현재 볼륨 노트
           <textarea v-model="draft.currentVolumeNote" rows="3" />
         </label>
+        <div class="form-section-title full">개인화 메모</div>
         <label class="full">
           부상/이슈
           <textarea :value="join(draft.knownIssues)" rows="5" @input="draft.knownIssues = split(($event.target as HTMLTextAreaElement).value)" />
@@ -182,6 +187,6 @@ function addUser() {
           <textarea :value="join(draft.aiNotes)" rows="5" @input="draft.aiNotes = split(($event.target as HTMLTextAreaElement).value)" />
         </label>
       </form>
-    </section>
+    </SectionCard>
   </section>
 </template>

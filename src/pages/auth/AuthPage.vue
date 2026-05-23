@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/app/stores/authStore'
+import SectionCard from '@/shared/ui/SectionCard.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -22,7 +23,7 @@ async function verify() {
 
 <template>
   <section class="page narrow-page">
-    <section class="panel">
+    <SectionCard>
       <div class="section-heading">
         <h2>로그인</h2>
       </div>
@@ -49,12 +50,12 @@ async function verify() {
         </label>
         <div class="actions full">
           <button type="submit" :disabled="authStore.loading">{{ authStore.loading ? '확인 중' : '로그인' }}</button>
-          <button type="button" class="secondary" :disabled="authStore.loading" @click="sent = false">이메일 다시 입력</button>
+          <button type="button" class="ghost" :disabled="authStore.loading" @click="sent = false">이메일 다시 입력</button>
         </div>
       </form>
       <p v-if="sent" class="helper">메일함에서 인증 코드를 확인한 뒤 여기에 입력하세요.</p>
       <p v-if="authStore.error" class="error">{{ authStore.error }}</p>
       <p v-if="!authStore.isConfigured" class="error">VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY 설정이 필요합니다.</p>
-    </section>
+    </SectionCard>
   </section>
 </template>
