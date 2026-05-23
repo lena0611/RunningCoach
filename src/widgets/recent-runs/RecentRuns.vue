@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { RunLog } from '@/entities/run/model'
-import { formatDuration, formatPace } from '@/shared/lib/format'
+import { formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
 
 defineProps<{ runs: RunLog[] }>()
 </script>
@@ -16,7 +16,7 @@ defineProps<{ runs: RunLog[] }>()
           <strong>{{ run.date }} · {{ run.type }}</strong>
           <span>{{ run.distanceKm }}km · {{ formatDuration(run.durationSec) }} · {{ formatPace(run.avgPaceSec) }}/km</span>
         </div>
-        <small>HR {{ run.avgHeartRate ?? '-' }} · Cad {{ run.cadence ?? '-' }}</small>
+        <small>HR {{ formatInteger(run.avgHeartRate) }} · Cad {{ formatInteger(run.cadence) }}</small>
       </article>
     </div>
     <p v-else class="empty">아직 저장된 러닝 기록이 없습니다.</p>

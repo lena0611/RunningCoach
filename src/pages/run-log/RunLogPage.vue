@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRunStore } from '@/app/stores/runStore'
 import { runTypes, type RunLog, type RunType } from '@/entities/run/model'
-import { formatDuration, formatPace } from '@/shared/lib/format'
+import { formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
 import RunForm from '@/shared/ui/RunForm.vue'
 import { estimateHeartRateDrift } from '@/shared/lib/runStats'
 
@@ -87,7 +87,7 @@ async function remove(run: RunLog) {
           <div>
             <strong>{{ run.date }} · {{ run.sessionTitle || run.type }}</strong>
             <span>{{ run.distanceKm }}km · {{ formatDuration(run.durationSec) }} · {{ formatPace(run.avgPaceSec) }}/km</span>
-            <small>HR {{ run.avgHeartRate ?? '-' }} / {{ run.maxHeartRate ?? '-' }} · Cad {{ run.cadence ?? '-' }} · {{ estimateHeartRateDrift(run) }}</small>
+            <small>HR {{ formatInteger(run.avgHeartRate) }} / {{ formatInteger(run.maxHeartRate) }} · Cad {{ formatInteger(run.cadence) }} · {{ estimateHeartRateDrift(run) }}</small>
             <small v-if="run.courseType !== 'Unknown' || run.rpe || run.workoutFeeling">
               {{ run.courseType }} · RPE {{ run.rpe ?? '-' }} · {{ run.workoutFeeling || run.companion || '-' }}
             </small>
