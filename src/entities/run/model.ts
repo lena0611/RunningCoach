@@ -18,6 +18,15 @@ export type Lap = {
   cadence: number | null
 }
 
+export type FastSegment = {
+  index: number
+  startSec: number | null
+  durationSec: number | null
+  distanceKm: number | null
+  avgPaceSec: number | null
+  bestPaceSec: number | null
+}
+
 export type RunLog = {
   id: string
   userId: string
@@ -46,6 +55,7 @@ export type RunLog = {
   companion: string
   memo: string
   laps: Lap[]
+  fastSegments: FastSegment[]
   tags: string[]
   source: 'file_import' | 'healthkit' | 'manual' | 'image_extracted'
   createdAt: string

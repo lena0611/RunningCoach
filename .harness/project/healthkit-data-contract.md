@@ -46,6 +46,7 @@ type HealthKitRunCandidate = {
   temperature: number | null
   routeAvailable: boolean
   laps: Lap[]
+  fastSegments: FastSegment[]
   rawAvailability: {
     workout: boolean
     heartRate: boolean
@@ -53,6 +54,15 @@ type HealthKitRunCandidate = {
     cadence: boolean
     runningDynamics: boolean
   }
+}
+
+type FastSegment = {
+  index: number
+  startSec: number | null
+  durationSec: number | null
+  distanceKm: number | null
+  avgPaceSec: number | null
+  bestPaceSec: number | null
 }
 ```
 
@@ -75,12 +85,14 @@ type HealthKitRunCandidate = {
 - `cadence`: HealthKit에서 cadence 계열 지표가 있을 때만 사용한다. 없으면 `null`.
 - `temperature`: HealthKit 기본 러닝 workout에서 안정적으로 기대하지 않는다. 없으면 `null`.
 - `laps`: HealthKit에서 route 또는 거리 샘플이 있으면 네이티브가 1km 단위 split으로 가공해 채운다. 각 lap은 거리, 페이스, 평균 심박을 우선 채우고 cadence는 가능한 경우에만 채운다.
+- `fastSegments`: route 또는 speed 샘플에서 계산한 짧은 고속 구간 요약이다. Easy + Strides 추론에 사용하며 원본 좌표나 파일을 저장하지 않는다.
 - `source`: HealthKit 후보 저장 시 `healthkit`을 사용한다.
 
 ## 제한과 보완
 - HealthKit은 Workoutdoors의 FIT 전체 필드를 1:1로 보장하지 않는다.
 - Workoutdoors 고유 메타데이터, 일부 러닝 다이내믹스는 누락될 수 있다.
 - route가 없고 거리 샘플도 부족하면 lap은 세션 전체 1개 요약 또는 빈 배열일 수 있다.
+- route/speed 샘플이 없으면 `fastSegments`는 빈 배열일 수 있다. 이 경우 Easy + Strides 자동 판정은 보수적으로 수행한다.
 - FIT 업로드는 HealthKit 누락 지표를 보완하는 입력 채널로 유지한다.
 - Route 좌표는 민감정보이므로 기본 저장 금지다.
 

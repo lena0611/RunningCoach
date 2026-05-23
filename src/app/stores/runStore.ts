@@ -53,6 +53,7 @@ export const useRunStore = defineStore('runStore', {
         externalId: data.externalId ?? null,
         source,
         rpe: data.rpe ?? null,
+        fastSegments: data.fastSegments ?? [],
         tags: data.tags ?? [],
         createdAt: now,
         updatedAt: now
@@ -78,6 +79,7 @@ export const useRunStore = defineStore('runStore', {
         externalId: item.externalId ?? null,
         source,
         rpe: item.rpe ?? null,
+        fastSegments: item.fastSegments ?? [],
         tags: item.tags ?? [],
         createdAt: now,
         updatedAt: now
@@ -118,10 +120,11 @@ function loadRuns(): RunLog[] {
     const raw = localStorage.getItem(storageKey)
     const parsed = raw ? JSON.parse(raw) : []
     return Array.isArray(parsed)
-        ? parsed.map((run) => ({
-            ...run,
+      ? parsed.map((run) => ({
+          ...run,
           userId: run.userId ?? 'default',
-          externalId: run.externalId ?? null
+          externalId: run.externalId ?? null,
+          fastSegments: run.fastSegments ?? []
         }))
       : []
   } catch {

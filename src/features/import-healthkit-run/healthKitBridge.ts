@@ -1,4 +1,5 @@
-import type { ExtractedRunData, Lap } from '@/entities/run/model'
+import type { ExtractedRunData, FastSegment, Lap } from '@/entities/run/model'
+import { inferRunType } from '@/features/infer-run-type/inferRunType'
 
 export type HealthKitRunCandidate = {
   externalId: string
@@ -16,6 +17,7 @@ export type HealthKitRunCandidate = {
   temperature: number | null
   routeAvailable: boolean
   laps: Lap[]
+  fastSegments: FastSegment[]
   rawAvailability: {
     workout: boolean
     heartRate: boolean
@@ -80,7 +82,14 @@ export function toExtractedRunData(candidate: HealthKitRunCandidate): ExtractedR
     externalId: candidate.externalId,
     sessionTitle: '',
     date: candidate.date || new Date().toISOString().slice(0, 10),
-    type: 'Unknown',
+    type: inferRunType({
+      distanceKm,
+      avgPaceSec: candidate.avgPaceSec ?? (distanceKm > 0 && durationSec ? Math.round(durationSec / distanceKm) : null),
+      avgHeartRate: candidate.avgHeartRate,
+      laps: candidate.laps ?? [],
+      fastSegments: candidate.fastSegments ?? [],
+      date: candidate.date
+    }),
     distanceKm,
     durationSec,
     avgPaceSec: candidate.avgPaceSec ?? (distanceKm > 0 && durationSec ? Math.round(durationSec / distanceKm) : null),
@@ -102,6 +111,7 @@ export function toExtractedRunData(candidate: HealthKitRunCandidate): ExtractedR
     companion: '',
     memo: createMemo(candidate),
     laps: candidate.laps ?? [],
+    fastSegments: candidate.fastSegments ?? [],
     tags: ['healthkit']
   }
 }
@@ -118,6 +128,7 @@ function normalizeCandidate(candidate: HealthKitRunCandidate): HealthKitRunCandi
     activeEnergyKcal: normalizeNumber(candidate.activeEnergyKcal),
     temperature: normalizeNumber(candidate.temperature),
     laps: candidate.laps ?? [],
+    fastSegments: candidate.fastSegments ?? [],
     rawAvailability: {
       workout: Boolean(candidate.rawAvailability?.workout),
       heartRate: Boolean(candidate.rawAvailability?.heartRate),

@@ -87,6 +87,7 @@ export function createEmptyRun(): ExtractedRunData {
     companion: '',
     memo: '',
     laps: [],
+    fastSegments: [],
     tags: []
   }
 }
