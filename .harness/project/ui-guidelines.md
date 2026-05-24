@@ -13,11 +13,16 @@ RunContext is a personal running coach app, not an admin dashboard.
 ## Visual Rules
 
 - Use CSS design tokens from `src/app/styles.css`.
+- RunContext follows a TDS-inspired mobile system, not raw Toss branding. Treat TDS as interaction/layout guidance: neutral grey scales, clear typography hierarchy, pressable rows, fixed CTA bars, bottom sheets, and toast behavior. Keep RunContext's running-coach identity and green primary color.
+- TDS adaptation source: https://tossmini-docs.toss.im/tds-mobile/
 - Define theme values through CSS tokens. Add light-mode overrides in `@media (prefers-color-scheme: light)` instead of hard-coding one-off light colors.
+- New colors should be added as semantic tokens or TDS-like scale tokens first. Do not scatter page-specific hex values across components.
+- Typography must use a small set of shared scale tokens: display, title, body, caption, and metric. Avoid one-off font-size values in page components unless the component is genuinely unique.
 - Light mode must be checked separately from dark mode. Buttons need explicit foreground contrast, and cards/nav should look clean white rather than washed-out green-gray.
 - Important metrics use large, bold numerals.
 - Supporting labels and metadata are smaller and muted.
 - Cards should have generous spacing, soft borders, and `--radius-card`.
+- Repeated list content should prefer a ListRow pattern over mini cards: primary title, muted detail, optional right metric/addon, and a clear press/action target.
 - Primary actions use green emphasis; destructive actions are subdued red, not loud.
 - Keep bottom navigation usable with one hand on mobile.
 - Fixed mobile bottom navigation must use `viewport-fit=cover`, `env(safe-area-inset-bottom)`, a fixed nav height token, and matching `.app-main` bottom reserve. The nav should stay attached to the visual viewport before and after full scroll.
@@ -79,8 +84,19 @@ Prefer shared UI components in `src/shared/ui`:
 - `BottomSheetSelect`
 - `DateField`
 - `ToastHost`
+- `ListRow`
 
 New page work should reuse these before adding page-specific layout.
+
+## TDS-Inspired Pattern Mapping
+
+- `Top`: Use `AppHeader` for root screens and stack headers for deep screens. Header copy must be compact: small service label, large page title, and one right-side action.
+- `ListRow`: Use for logs, goals, injuries, account details, and other repeated navigable items. Do not turn every row into a heavy card.
+- `Button`: Primary is filled green, secondary is weak/neutral, danger is weak red unless the destructive action is inside a confirmation sheet.
+- `TextField`: Use box-style inputs with persistent labels. iOS zoom prevention requires 16px or larger input text.
+- `BottomSheet`: Use for selection and delete confirmation. It must be Teleported or root-hosted above all stacks.
+- `Toast`: Bottom is default. Top is reserved for system/background events such as HealthKit sync.
+- `FixedBottomCTA`: Edit/create stack pages use a fixed full-width save CTA. Disable it until dirty state is true.
 
 ## Prohibited Patterns
 

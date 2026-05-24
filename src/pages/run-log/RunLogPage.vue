@@ -6,6 +6,7 @@ import { formatDateWithWeekday, formatDuration, formatInteger, formatPace } from
 import RunForm from '@/shared/ui/RunForm.vue'
 import { estimateHeartRateDrift } from '@/shared/lib/runStats'
 import EmptyState from '@/shared/ui/EmptyState.vue'
+import ListRow from '@/shared/ui/ListRow.vue'
 import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
@@ -102,29 +103,33 @@ function closeEdit() {
       </div>
       <p v-if="runStore.loading" class="helper">Run Log를 불러오고 있습니다.</p>
       <div v-if="filteredRuns.length" class="run-list">
-        <article v-for="run in filteredRuns" :key="run.id" class="run-row">
+        <ListRow
+          v-for="run in filteredRuns"
+          :key="run.id"
+          class="run-list-row"
+          :kicker="formatDateWithWeekday(run.date)"
+          :title="run.sessionTitle || run.type"
+          :detail="`HR ${formatInteger(run.avgHeartRate)} / ${formatInteger(run.maxHeartRate)} · Cad ${formatInteger(run.cadence)} · ${estimateHeartRateDrift(run)}`"
+          :metric="`${run.distanceKm}km`"
+        >
+          <template #addon>
+            <RunTypeBadge :type="run.type" />
+            <div class="row-actions">
+              <button class="ghost" type="button" @click="startEdit(run)">수정</button>
+              <button class="ghost danger" type="button" :disabled="deletingId === run.id" @click="askRemove(run)">
+                {{ deletingId === run.id ? '삭제 중' : '삭제' }}
+              </button>
+            </div>
+          </template>
           <div>
             <div class="run-row-title">
-              <strong>{{ formatDateWithWeekday(run.date) }}<span v-if="run.sessionTitle"> · {{ run.sessionTitle }}</span></strong>
-              <RunTypeBadge :type="run.type" />
+              <strong>{{ formatDuration(run.durationSec) }} · {{ formatPace(run.avgPaceSec) }}/km</strong>
             </div>
-            <div class="run-metrics-line">
-              <strong>{{ run.distanceKm }}km</strong>
-              <span>{{ formatDuration(run.durationSec) }}</span>
-              <span>{{ formatPace(run.avgPaceSec) }}/km</span>
-            </div>
-            <small>HR {{ formatInteger(run.avgHeartRate) }} / {{ formatInteger(run.maxHeartRate) }} · Cad {{ formatInteger(run.cadence) }} · {{ estimateHeartRateDrift(run) }}</small>
             <small v-if="run.courseType !== 'Unknown' || run.rpe || run.workoutFeeling">
               {{ run.courseType }} · RPE {{ run.rpe ?? '-' }} · {{ run.workoutFeeling || run.companion || '-' }}
             </small>
           </div>
-          <div class="row-actions">
-            <button class="ghost" type="button" @click="startEdit(run)">수정</button>
-            <button class="ghost danger" type="button" :disabled="deletingId === run.id" @click="askRemove(run)">
-              {{ deletingId === run.id ? '삭제 중' : '삭제' }}
-            </button>
-          </div>
-        </article>
+        </ListRow>
       </div>
       <EmptyState v-else title="기록이 없습니다." description="Upload에서 HealthKit 또는 FIT 기록을 저장하세요." />
       <p v-if="error" class="error">{{ error }}</p>
