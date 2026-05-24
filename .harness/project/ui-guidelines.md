@@ -5,7 +5,7 @@ RunContext is a personal running coach app, not an admin dashboard.
 ## Product Feel
 
 - Mobile-first.
-- Dark mode by default.
+- Follow iOS day/night appearance with `prefers-color-scheme`; dark remains the default visual baseline.
 - The visual target is between Apple Fitness, Strava, and a ChatGPT coaching card.
 - Primary screens should feel like a running app: strong metrics, card-based summaries, and readable coaching text.
 - Avoid wireframe/admin-table layouts unless debugging.
@@ -13,7 +13,7 @@ RunContext is a personal running coach app, not an admin dashboard.
 ## Visual Rules
 
 - Use CSS design tokens from `src/app/styles.css`.
-- Main background stays dark.
+- Define theme values through CSS tokens. Add light-mode overrides in `@media (prefers-color-scheme: light)` instead of hard-coding one-off light colors.
 - Important metrics use large, bold numerals.
 - Supporting labels and metadata are smaller and muted.
 - Cards should have generous spacing, soft borders, and `--radius-card`.
