@@ -504,6 +504,27 @@ label {
   line-height: 1.45;
 }
 
+.app-toast-success {
+  background: color-mix(in srgb, var(--color-primary-soft) 45%, var(--color-surface-2));
+  border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
+}
+
+.app-toast-error {
+  background: color-mix(in srgb, var(--color-danger-soft) 45%, var(--color-surface-2));
+  border-color: color-mix(in srgb, var(--color-danger) 30%, var(--color-border));
+}
+
+.toast-pop-enter-active,
+.toast-pop-leave-active {
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.toast-pop-enter-from,
+.toast-pop-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
 .page {
   display: grid;
   gap: 18px;

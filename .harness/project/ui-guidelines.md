@@ -56,6 +56,7 @@ Use a screen stack when the user is drilling into a deeper flow without changing
 - Memory overview should summarize the current coaching basis first, then provide drill-in cards for goal and injury management. Deep edit fields belong only on focused edit/create screens.
 - Coach: chat-like user and coach messages, markdown rendered as readable headings, paragraphs, lists, code blocks, and dividers.
 - User-facing dates must include the weekday, e.g. `2026-05-24(일)`. Store raw ISO dates in data, but format every displayed date through the shared formatter.
+- Toast messages must use the shared toast store and `ToastHost` component. Feature stores/pages should call the shared toast API instead of keeping one-off toast state or rendering inline toast markup.
 
 ## Component Rules
 
@@ -73,6 +74,7 @@ Prefer shared UI components in `src/shared/ui`:
 - `EmptyState`
 - `MetricGrid`
 - `BottomSheetSelect`
+- `ToastHost`
 
 New page work should reuse these before adding page-specific layout.
 

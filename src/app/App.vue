@@ -6,6 +6,7 @@ import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import AppShell from '@/shared/ui/AppShell.vue'
+import ToastHost from '@/shared/ui/ToastHost.vue'
 import type { BottomNavItem } from '@/shared/ui/BottomNav.vue'
 
 const authStore = useAuthStore()
@@ -65,7 +66,7 @@ onBeforeUnmount(() => {
 
 <template>
   <AppShell :nav-items="navItems" :is-authenticated="authStore.isAuthenticated" @sign-out="authStore.signOut()">
-    <div v-if="healthKitSyncStore.toast" class="app-toast" role="status">{{ healthKitSyncStore.toast }}</div>
+    <ToastHost />
     <RouterView v-slot="{ Component, route: viewRoute }">
       <Transition :name="transitionName" mode="out-in">
         <component :is="Component" :key="viewRoute.path" />
