@@ -2,6 +2,8 @@ export type TrainingMemory = {
   goal: string
   goals: TrainingGoal[]
   activeGoalId: string
+  injuryItems: TrainingInjuryItem[]
+  activeInjuryItemId: string | null
   athleteProfile: AthleteProfile
   weeklyPattern: string[]
   longRunStrategy: string
@@ -26,6 +28,20 @@ export type TrainingGoal = {
   updatedAt: string
 }
 
+export type TrainingInjuryItem = {
+  id: string
+  title: string
+  area: string
+  status: 'active' | 'monitoring' | 'resolved' | 'archived'
+  severity: number | null
+  onsetDate: string | null
+  lastFlareDate: string | null
+  notes: string
+  managementPlan: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type AthleteProfile = {
   birthYear: number | null
   sex: 'male' | 'female' | 'other' | 'unknown'
@@ -43,10 +59,12 @@ export type PersonalBest = {
 }
 
 export const defaultGoalId = 'goal-10k-60'
+export const defaultInjuryItemId = 'injury-left-hamstring'
 
 export const initialTrainingMemory: TrainingMemory = {
   goal: '10km 60분 달성',
   activeGoalId: defaultGoalId,
+  activeInjuryItemId: defaultInjuryItemId,
   goals: [
     {
       id: defaultGoalId,
@@ -58,6 +76,21 @@ export const initialTrainingMemory: TrainingMemory = {
       priority: 1,
       status: 'active',
       notes: '기본 활성 목표',
+      createdAt: '2026-05-24T00:00:00.000Z',
+      updatedAt: '2026-05-24T00:00:00.000Z'
+    }
+  ],
+  injuryItems: [
+    {
+      id: defaultInjuryItemId,
+      title: '좌측 근위부 햄스트링 이슈',
+      area: '좌측 햄스트링',
+      status: 'monitoring',
+      severity: null,
+      onsetDate: null,
+      lastFlareDate: null,
+      notes: '과거 이슈. 강훈련/롱런 뒤 뻣뻣함 여부 확인.',
+      managementPlan: '통증 단정 없이 피로 누적 신호를 보수적으로 관찰한다.',
       createdAt: '2026-05-24T00:00:00.000Z',
       updatedAt: '2026-05-24T00:00:00.000Z'
     }
@@ -105,6 +138,11 @@ export function getActiveGoal(memory: TrainingMemory): TrainingGoal {
   return memory.goals.find((goal) => goal.id === memory.activeGoalId) ?? memory.goals[0]
 }
 
+export function getActiveInjuryItem(memory: TrainingMemory): TrainingInjuryItem | null {
+  if (!memory.activeInjuryItemId) return memory.injuryItems.find((item) => item.status === 'active' || item.status === 'monitoring') ?? null
+  return memory.injuryItems.find((item) => item.id === memory.activeInjuryItemId) ?? null
+}
+
 export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null | undefined): TrainingMemory {
   const base = cloneMemory(initialTrainingMemory)
   const merged = {
@@ -119,11 +157,17 @@ export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null |
   const goals = normalizeGoals(memory)
   const activeGoalId = goals.some((goal) => goal.id === memory?.activeGoalId) ? memory?.activeGoalId ?? goals[0].id : goals[0].id
   const activeGoal = goals.find((goal) => goal.id === activeGoalId) ?? goals[0]
+  const injuryItems = normalizeInjuryItems(memory)
+  const activeInjuryItemId = memory?.activeInjuryItemId && injuryItems.some((item) => item.id === memory.activeInjuryItemId)
+    ? memory.activeInjuryItemId
+    : injuryItems.find((item) => item.status === 'active' || item.status === 'monitoring')?.id ?? null
 
   return {
     ...merged,
     goals,
     activeGoalId,
+    injuryItems,
+    activeInjuryItemId,
     goal: activeGoal.title
   }
 }
@@ -172,6 +216,52 @@ function normalizeGoalCategory(value: unknown): TrainingGoal['category'] {
 
 function normalizeGoalStatus(value: unknown): TrainingGoal['status'] {
   return value === 'paused' || value === 'completed' || value === 'archived' || value === 'active' ? value : 'active'
+}
+
+function normalizeInjuryItems(memory: Partial<TrainingMemory> | null | undefined): TrainingInjuryItem[] {
+  const now = new Date().toISOString()
+  const rawItems = Array.isArray(memory?.injuryItems) ? memory.injuryItems : []
+  const items = rawItems
+    .map((item, index) => normalizeInjuryItem(item as Partial<TrainingInjuryItem>, index, now))
+    .filter((item): item is TrainingInjuryItem => Boolean(item))
+
+  if (items.length) return items
+
+  const legacyItems = (memory?.knownIssues ?? [])
+    .filter((issue) => /햄스트링|통증|부상|이슈|무릎|발목|족저|아킬레스|정강|고관절/.test(issue))
+    .map((issue, index) => normalizeInjuryItem({ title: issue, notes: issue, status: 'monitoring' }, index, now))
+    .filter((item): item is TrainingInjuryItem => Boolean(item))
+
+  if (legacyItems.length) return legacyItems
+  return cloneMemory(initialTrainingMemory.injuryItems)
+}
+
+function normalizeInjuryItem(item: Partial<TrainingInjuryItem>, index: number, now: string): TrainingInjuryItem | null {
+  const title = typeof item.title === 'string' ? item.title.trim() : ''
+  if (!title) return null
+  return {
+    id: typeof item.id === 'string' && item.id ? item.id : `injury-${index + 1}`,
+    title,
+    area: typeof item.area === 'string' ? item.area : '',
+    status: normalizeInjuryStatus(item.status),
+    severity: normalizeSeverity(item.severity),
+    onsetDate: typeof item.onsetDate === 'string' && item.onsetDate ? item.onsetDate : null,
+    lastFlareDate: typeof item.lastFlareDate === 'string' && item.lastFlareDate ? item.lastFlareDate : null,
+    notes: typeof item.notes === 'string' ? item.notes : '',
+    managementPlan: typeof item.managementPlan === 'string' ? item.managementPlan : '',
+    createdAt: typeof item.createdAt === 'string' ? item.createdAt : now,
+    updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : now
+  }
+}
+
+function normalizeInjuryStatus(value: unknown): TrainingInjuryItem['status'] {
+  return value === 'active' || value === 'resolved' || value === 'archived' || value === 'monitoring' ? value : 'monitoring'
+}
+
+function normalizeSeverity(value: unknown): number | null {
+  const numberValue = Number(value)
+  if (!Number.isFinite(numberValue)) return null
+  return Math.min(5, Math.max(1, Math.round(numberValue)))
 }
 
 function normalizeNullableNumber(value: unknown): number | null {

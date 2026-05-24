@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '@/app/stores/authStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
-import { getActiveGoal, type PersonalBest, type TrainingMemory } from '@/entities/training-memory/model'
+import { getActiveGoal, getActiveInjuryItem, type PersonalBest, type TrainingMemory } from '@/entities/training-memory/model'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 
 defineProps<{ isAuthenticated: boolean }>()
@@ -29,6 +29,7 @@ const accountLabel = computed(() => {
 
 const accountEmail = computed(() => authStore.user?.email || '로그인 정보 없음')
 const activeGoalTitle = computed(() => getActiveGoal(memoryStore.memory).title)
+const activeInjuryTitle = computed(() => getActiveInjuryItem(memoryStore.memory)?.title ?? '관리 항목 없음')
 
 watch(
   () => [memoryStore.selectedUserId, memoryStore.selectedUser.updatedAt],
@@ -163,6 +164,10 @@ function signOutAndClose() {
             <div>
               <dt>선호 롱런</dt>
               <dd>{{ memoryStore.memory.athleteProfile.preferredLongRunDay || '미입력' }}</dd>
+            </div>
+            <div>
+              <dt>부상관리</dt>
+              <dd>{{ activeInjuryTitle }}</dd>
             </div>
           </dl>
 

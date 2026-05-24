@@ -134,6 +134,8 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
   const trainingMemory = memoryRow?.memory ?? null
   const goals = getGoals(trainingMemory)
   const activeGoal = getActiveGoal(trainingMemory, goals)
+  const injuryItems = getInjuryItems(trainingMemory)
+  const activeInjuryItem = getActiveInjuryItem(trainingMemory, injuryItems)
 
   return {
     userNote,
@@ -147,6 +149,8 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
     trainingMemory,
     goals,
     activeGoal,
+    injuryItems,
+    activeInjuryItem,
     coachMemoryItems: (memoryItems ?? []).map((item) => item.content),
     recentCoachReports: (reports ?? []).map((report) => ({
       selectedRunId: report.selected_run_id,
@@ -204,6 +208,9 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     '더위, 케이던스/호흡 성향, 과거 좌측 근위부 햄스트링 이슈, 격주 롱런 패턴을 필요한 때만 짧게 연결한다.',
     '목표는 하나로 고정하지 않는다. goals 전체를 참고하되 activeGoal을 이번 코칭의 1차 기준으로 삼는다.',
     '다른 목표는 보조 관점으로만 활용하고, activeGoal과 충돌하면 activeGoal을 우선한다.',
+    '부상관리는 knownIssues 자유 텍스트보다 injuryItems와 activeInjuryItem을 우선한다.',
+    'activeInjuryItem이 active 또는 monitoring이면 강훈련/롱런 뒤 회복 반응, pain_note, workout_feeling을 보수적으로 해석한다.',
+    '부상은 진단하지 말고 훈련 조절과 관찰 포인트로만 말한다.',
     '코칭은 해당 러닝 세션 평가에서 끝나지 않는다. 반드시 계정의 목표와 누적 데이터를 보고 현재 weeklyPattern을 유지할지 수정할지 판단한다.',
     'weeklyPattern은 사용자가 직접 세우는 고정 루틴이 아니라 AI가 목표, 최근 14/30일 누적, 강훈련 빈도, 롱런 상태, 회복 신호를 보고 관리하는 훈련 계획이다.',
     '루틴 변경이 필요 없으면 trainingMemoryPatch는 null로 둔다.',
@@ -307,6 +314,25 @@ function getActiveGoal(memory: unknown, goals: unknown[]) {
     return goal && typeof goal === 'object' && (goal as { id?: unknown }).id === activeGoalId
   })
   return activeGoal ?? goals[0] ?? null
+}
+
+function getInjuryItems(memory: unknown): unknown[] {
+  if (!memory || typeof memory !== 'object') return []
+  const injuryItems = (memory as { injuryItems?: unknown }).injuryItems
+  return Array.isArray(injuryItems) ? injuryItems : []
+}
+
+function getActiveInjuryItem(memory: unknown, injuryItems: unknown[]) {
+  if (!memory || typeof memory !== 'object') return injuryItems[0] ?? null
+  const activeInjuryItemId = (memory as { activeInjuryItemId?: unknown }).activeInjuryItemId
+  const activeItem = injuryItems.find((item) => {
+    return item && typeof item === 'object' && (item as { id?: unknown }).id === activeInjuryItemId
+  })
+  return activeItem ?? injuryItems.find((item) => {
+    if (!item || typeof item !== 'object') return false
+    const status = (item as { status?: unknown }).status
+    return status === 'active' || status === 'monitoring'
+  }) ?? null
 }
 
 function inCurrentMonth(runs: RunLogRow[]) {

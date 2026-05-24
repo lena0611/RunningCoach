@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { useMemoryStore } from '@/app/stores/memoryStore'
-import type { TrainingGoal, TrainingMemory } from '@/entities/training-memory/model'
+import type { TrainingGoal, TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 
@@ -10,6 +10,7 @@ const draft = reactive<TrainingMemory>(JSON.parse(JSON.stringify(memoryStore.mem
 const saving = ref(false)
 const error = ref('')
 const newGoalTitle = ref('')
+const newInjuryTitle = ref('')
 const goalCategoryOptions = [
   { value: 'race', label: '기록 목표' },
   { value: 'fitness', label: '체력 목표' },
@@ -23,8 +24,25 @@ const goalStatusOptions = [
   { value: 'completed', label: '완료' },
   { value: 'archived', label: '보관' }
 ]
+const injuryStatusOptions = [
+  { value: 'active', label: '현재 관리 중' },
+  { value: 'monitoring', label: '관찰 중' },
+  { value: 'resolved', label: '해소됨' },
+  { value: 'archived', label: '보관' }
+]
 const activeGoal = computed(() => draft.goals.find((goal) => goal.id === draft.activeGoalId) ?? draft.goals[0])
 const goalOptions = computed(() => draft.goals.map((goal) => ({ value: goal.id, label: goal.title, description: goal.status === 'active' ? '진행 중' : goal.status })))
+const activeInjury = computed(() => {
+  if (!draft.activeInjuryItemId) return draft.injuryItems.find((item) => item.status === 'active' || item.status === 'monitoring') ?? draft.injuryItems[0] ?? null
+  return draft.injuryItems.find((item) => item.id === draft.activeInjuryItemId) ?? null
+})
+const injuryOptions = computed(() =>
+  draft.injuryItems.map((item) => ({
+    value: item.id,
+    label: item.title,
+    description: item.status === 'active' ? '현재 관리 중' : item.status
+  }))
+)
 
 watch(
   () => memoryStore.selectedUserId,
@@ -87,6 +105,45 @@ function removeActiveGoal() {
   draft.goals = draft.goals.filter((goal) => goal.id !== goalId)
   draft.activeGoalId = draft.goals[0].id
   syncLegacyGoal()
+}
+
+function selectActiveInjury(itemId: string) {
+  if (!draft.injuryItems.some((item) => item.id === itemId)) return
+  draft.activeInjuryItemId = itemId
+}
+
+function addInjury() {
+  const title = newInjuryTitle.value.trim()
+  if (!title) return
+  const now = new Date().toISOString()
+  const item: TrainingInjuryItem = {
+    id: crypto.randomUUID(),
+    title,
+    area: '',
+    status: 'monitoring',
+    severity: null,
+    onsetDate: null,
+    lastFlareDate: null,
+    notes: '',
+    managementPlan: '',
+    createdAt: now,
+    updatedAt: now
+  }
+  draft.injuryItems.push(item)
+  draft.activeInjuryItemId = item.id
+  newInjuryTitle.value = ''
+}
+
+function updateActiveInjury() {
+  if (!activeInjury.value) return
+  activeInjury.value.updatedAt = new Date().toISOString()
+}
+
+function removeActiveInjury() {
+  if (!activeInjury.value) return
+  const itemId = activeInjury.value.id
+  draft.injuryItems = draft.injuryItems.filter((item) => item.id !== itemId)
+  draft.activeInjuryItemId = draft.injuryItems.find((item) => item.status === 'active' || item.status === 'monitoring')?.id ?? draft.injuryItems[0]?.id ?? null
 }
 
 async function save() {
@@ -166,6 +223,69 @@ async function save() {
             </li>
           </ul>
         </div>
+
+        <div class="form-section-title full">부상 관리</div>
+        <div class="sub-panel full">
+          <strong>현재 코칭 기준 부상/주의사항</strong>
+          <p class="helper">AI 코칭은 현재 관리 항목과 전체 부상 이력을 참고해 강도와 회복 판단을 보수적으로 조정합니다.</p>
+          <BottomSheetSelect
+            :model-value="draft.activeInjuryItemId || ''"
+            label="현재 관리 항목"
+            :options="injuryOptions"
+            @update:model-value="selectActiveInjury"
+          />
+        </div>
+
+        <template v-if="activeInjury">
+          <label class="full">
+            항목명
+            <input v-model="activeInjury.title" placeholder="예: 좌측 햄스트링" @input="updateActiveInjury" />
+          </label>
+          <label>
+            부위
+            <input v-model="activeInjury.area" placeholder="예: 좌측 햄스트링" @input="updateActiveInjury" />
+          </label>
+          <BottomSheetSelect v-model="activeInjury.status" label="상태" :options="injuryStatusOptions" />
+          <label>
+            심각도(1~5)
+            <input v-model.number="activeInjury.severity" type="number" inputmode="numeric" min="1" max="5" placeholder="미입력" @input="updateActiveInjury" />
+          </label>
+          <label>
+            시작일
+            <input v-model="activeInjury.onsetDate" type="date" @input="updateActiveInjury" />
+          </label>
+          <label>
+            최근 신호일
+            <input v-model="activeInjury.lastFlareDate" type="date" @input="updateActiveInjury" />
+          </label>
+          <label class="full">
+            메모
+            <textarea v-model="activeInjury.notes" rows="3" placeholder="예: 템포 다음날 뻣뻣함 확인 필요" @input="updateActiveInjury" />
+          </label>
+          <label class="full">
+            관리 계획
+            <textarea v-model="activeInjury.managementPlan" rows="3" placeholder="예: 통증 단정 없이 강훈련 후 반응 확인" @input="updateActiveInjury" />
+          </label>
+        </template>
+
+        <label class="full">
+          새 부상/주의사항 추가
+          <input v-model="newInjuryTitle" placeholder="예: 오른쪽 무릎 바깥쪽 불편감" />
+        </label>
+        <div class="actions full">
+          <button class="ghost" type="button" @click="addInjury">부상 항목 추가</button>
+          <button class="danger" type="button" :disabled="!activeInjury" @click="removeActiveInjury">현재 항목 삭제</button>
+        </div>
+
+        <div class="sub-panel full">
+          <strong>전체 부상/주의사항</strong>
+          <ul class="memory-list">
+            <li v-for="item in draft.injuryItems" :key="item.id">
+              {{ item.id === draft.activeInjuryItemId ? '현재 · ' : '' }}{{ item.title }} · {{ item.status }}{{ item.severity ? ` · ${item.severity}/5` : '' }}
+            </li>
+          </ul>
+        </div>
+
         <div class="form-section-title full">AI 관리 훈련 루틴</div>
         <div class="sub-panel full">
           <strong>주간 루틴</strong>
@@ -184,7 +304,7 @@ async function save() {
         </label>
         <div class="form-section-title full">개인화 메모</div>
         <label class="full">
-          부상/이슈
+          기타 주의사항
           <textarea :value="join(draft.knownIssues)" rows="5" @input="draft.knownIssues = split(($event.target as HTMLTextAreaElement).value)" />
         </label>
         <label class="full">
