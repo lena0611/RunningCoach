@@ -41,6 +41,8 @@
   --radius-card: 20px;
   --radius-button: 14px;
   --radius-field: 14px;
+  --bottom-nav-height: 86px;
+  --bottom-nav-reserve: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 18px);
   --shadow-card: 0 12px 30px rgba(0, 0, 0, 0.25);
   color-scheme: dark;
   color: var(--color-text);
@@ -99,7 +101,14 @@
 }
 
 html {
+  min-height: 100%;
   background: var(--color-bg);
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
 }
 
 body {
@@ -108,6 +117,14 @@ body {
   background:
     radial-gradient(circle at top left, var(--color-page-aura), transparent 34rem),
     linear-gradient(180deg, var(--color-body-gradient-start) 0%, var(--color-body-gradient-end) 100%);
+}
+
+@supports (height: 100dvh) {
+  html,
+  body,
+  #app {
+    min-height: 100dvh;
+  }
 }
 
 body.sheet-open {
@@ -199,7 +216,13 @@ label {
 
 .app-shell {
   min-height: 100vh;
-  padding-bottom: calc(118px + env(safe-area-inset-bottom));
+  padding-bottom: 0;
+}
+
+@supports (min-height: 100dvh) {
+  .app-shell {
+    min-height: 100dvh;
+  }
 }
 
 .app-header {
@@ -395,18 +418,21 @@ label {
 
 .bottom-nav {
   position: fixed;
-  left: 0;
-  right: 0;
+  inset-inline: 0;
   bottom: 0;
   z-index: 30;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
-  padding: 10px 10px calc(env(safe-area-inset-bottom) + 14px);
+  min-height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
+  padding: 10px 10px calc(max(env(safe-area-inset-bottom), 12px) + 10px);
   background: var(--color-nav-bg);
   border-top: 1px solid var(--color-border);
   backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   box-shadow: var(--color-nav-shadow);
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
 }
 
 .bottom-nav a {
@@ -426,7 +452,7 @@ label {
 }
 
 .app-main {
-  padding: 18px 18px calc(118px + env(safe-area-inset-bottom));
+  padding: 18px 18px var(--bottom-nav-reserve);
 }
 
 .page {
@@ -1048,6 +1074,7 @@ label {
   .bottom-nav {
     position: sticky;
     top: 84px;
+    min-height: auto;
     max-width: 1080px;
     margin: 0 auto;
     grid-template-columns: repeat(5, auto);

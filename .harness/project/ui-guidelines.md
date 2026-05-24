@@ -20,10 +20,20 @@ RunContext is a personal running coach app, not an admin dashboard.
 - Cards should have generous spacing, soft borders, and `--radius-card`.
 - Primary actions use green emphasis; destructive actions are subdued red, not loud.
 - Keep bottom navigation usable with one hand on mobile.
-- Fixed mobile bottom navigation must reserve enough content padding for `env(safe-area-inset-bottom)`, so the last card/message never sits underneath the nav while scrolling.
+- Fixed mobile bottom navigation must use `viewport-fit=cover`, `env(safe-area-inset-bottom)`, a fixed nav height token, and matching `.app-main` bottom reserve. The nav should stay attached to the visual viewport before and after full scroll.
 - Do not use native `<select>` for app workflows. Use `BottomSheetSelect`, opening options in a bottom sheet.
 - Account/profile management belongs in the header account drawer, not inside the `Memo` tab.
 - The account drawer opens from right to left. Profile editing is a second right-to-left stack inside the drawer.
+
+## Screen Stack Pattern
+
+Use a screen stack when the user is drilling into a deeper flow without changing the main tab.
+
+- A tab remains the root surface. Deeper screens slide over it instead of replacing the bottom tab context.
+- First-level stack screens open from right to left and include an explicit close/back action in the top right.
+- Second-level stack screens continue right-to-left inside the same stack container.
+- Use stacks for account/profile editing, run detail/edit flows, and focused settings. Do not use a stack for ordinary tab-to-tab navigation.
+- The bottom navigation remains a root-level control. Stack overlays sit above it when modal, or keep it visually stable when inline.
 
 ## Screen Priorities
 
