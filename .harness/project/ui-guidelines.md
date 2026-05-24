@@ -22,13 +22,15 @@ RunContext is a personal running coach app, not an admin dashboard.
 - Keep bottom navigation usable with one hand on mobile.
 - Fixed mobile bottom navigation must reserve enough content padding for `env(safe-area-inset-bottom)`, so the last card/message never sits underneath the nav while scrolling.
 - Do not use native `<select>` for app workflows. Use `BottomSheetSelect`, opening options in a bottom sheet.
+- Account/profile management belongs in the header account drawer, not inside the `Memo` tab.
+- The account drawer opens from right to left. Profile editing is a second right-to-left stack inside the drawer.
 
 ## Screen Priorities
 
 - Dashboard: home screen, weekly/monthly distance, Easy ratio, hard session count, next recommended session, recent runs.
 - Upload: simple HealthKit/FIT/manual import flow with large upload/import cards.
 - Run Log: chronological cards, run type badges, distance/pace/HR summary, edit/delete actions.
-- Memory: sectioned profile, goals, weekly routine, long-run strategy, injury/heat/style notes.
+- Memory: training context only: goals, weekly routine, long-run strategy, injury/heat/style notes. Do not mix account registration controls into this screen.
 - Coach: chat-like user and coach messages, markdown rendered as readable headings, paragraphs, lists, code blocks, and dividers.
 
 ## Component Rules
