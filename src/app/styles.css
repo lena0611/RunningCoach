@@ -489,7 +489,6 @@ label {
   position: fixed;
   left: 16px;
   right: 16px;
-  bottom: calc(var(--bottom-nav-reserve) + 6px);
   z-index: 90;
   max-width: 680px;
   margin: 0 auto;
@@ -504,9 +503,26 @@ label {
   line-height: 1.45;
 }
 
+.app-toast-bottom {
+  bottom: calc(var(--bottom-nav-reserve) + 6px);
+}
+
+.app-toast-top {
+  top: calc(env(safe-area-inset-top) + 12px);
+  z-index: 180;
+  border-width: 1.5px;
+}
+
 .app-toast-success {
   background: color-mix(in srgb, var(--color-primary-soft) 45%, var(--color-surface-2));
   border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
+}
+
+.app-toast-top.app-toast-success {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-strong));
+  border-color: rgba(255, 255, 255, 0.28);
+  color: var(--color-on-primary);
+  box-shadow: 0 14px 34px rgba(34, 197, 94, 0.32);
 }
 
 .app-toast-error {
@@ -514,15 +530,30 @@ label {
   border-color: color-mix(in srgb, var(--color-danger) 30%, var(--color-border));
 }
 
-.toast-pop-enter-active,
-.toast-pop-leave-active {
+.app-toast-top.app-toast-error {
+  background: linear-gradient(135deg, var(--color-danger), #b91c1c);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+  box-shadow: 0 14px 34px rgba(239, 68, 68, 0.3);
+}
+
+.toast-rise-enter-active,
+.toast-rise-leave-active,
+.toast-drop-enter-active,
+.toast-drop-leave-active {
   transition: opacity 160ms ease, transform 160ms ease;
 }
 
-.toast-pop-enter-from,
-.toast-pop-leave-to {
+.toast-rise-enter-from,
+.toast-rise-leave-to {
   opacity: 0;
   transform: translateY(10px);
+}
+
+.toast-drop-enter-from,
+.toast-drop-leave-to {
+  opacity: 0;
+  transform: translateY(-12px);
 }
 
 .page {
@@ -885,6 +916,37 @@ label {
   white-space: nowrap;
 }
 
+.date-field-control {
+  position: relative;
+  display: block;
+  min-height: 48px;
+}
+
+.date-field-display {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-field);
+  background: var(--color-field);
+  color: var(--color-text);
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.date-field-native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 48px;
+  opacity: 0;
+  color: transparent;
+  cursor: pointer;
+}
+
 .select-chevron {
   flex: 0 0 auto;
   width: 19px;
@@ -899,7 +961,7 @@ label {
 .bottom-sheet-layer {
   position: fixed;
   inset: 0;
-  z-index: 160;
+  z-index: 1000;
   display: grid;
   align-items: end;
   background: var(--color-backdrop);
@@ -1259,7 +1321,7 @@ label {
 }
 
 .confirm-layer {
-  z-index: 170;
+  z-index: 1010;
 }
 
 .confirm-sheet {

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { courseTypes, runTypes, type ExtractedRunData } from '@/entities/run/model'
-import { formatDateWithWeekday, toNumberOrNull } from '@/shared/lib/format'
+import { toNumberOrNull } from '@/shared/lib/format'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
+import DateField from '@/shared/ui/DateField.vue'
 
 const model = defineModel<ExtractedRunData>({ required: true })
 
@@ -16,8 +17,9 @@ const durationMin = computed({
 const paceText = computed({
   get: () => {
     if (!model.value.avgPaceSec) return ''
-    const min = Math.floor(model.value.avgPaceSec / 60)
-    const sec = String(model.value.avgPaceSec % 60).padStart(2, '0')
+    const rounded = Math.round(model.value.avgPaceSec)
+    const min = Math.floor(rounded / 60)
+    const sec = String(rounded % 60).padStart(2, '0')
     return `${min}:${sec}`
   },
   set: (value: string) => {
@@ -39,11 +41,7 @@ function updateNumber(key: keyof ExtractedRunData, value: string) {
       세션 제목
       <input v-model="model.sessionTitle" placeholder="예: 오늘 목요일 템포" />
     </label>
-    <label>
-      날짜
-      <input v-model="model.date" type="date" />
-      <small>{{ formatDateWithWeekday(model.date) }}</small>
-    </label>
+    <DateField v-model="model.date" label="날짜" />
     <BottomSheetSelect
       v-model="model.type"
       label="타입"

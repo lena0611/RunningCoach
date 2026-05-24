@@ -25,7 +25,9 @@ RunContext is a personal running coach app, not an admin dashboard.
 - Main tabs support horizontal swipe navigation. Swipes should be disabled over interactive controls, bottom sheets, and side drawers to avoid accidental data changes.
 - Root tab navigation through the bottom nav resets the main scroll position to top. Deep in-tab stacks preserve the root surface and restore the previous stack page scroll on Back.
 - Do not use native `<select>` for app workflows. Use `BottomSheetSelect`, opening options in a bottom sheet.
-- `BottomSheetSelect` overlays must sit above screen stacks and side drawers. When adding stack/drawer/modal z-index layers, keep the common bottom sheet layer higher than those surfaces and destructive confirmation sheets higher than ordinary selection sheets.
+- `BottomSheetSelect` overlays must sit above screen stacks, fixed action bars, and side drawers. It must stop pointer/click propagation on the trigger and sheet so stack swipe/overlay handlers cannot swallow the tap. When adding stack/drawer/modal z-index layers, keep the common bottom sheet layer higher than those surfaces and destructive confirmation sheets higher than ordinary selection sheets.
+- App date inputs must use the shared `DateField` wrapper instead of exposing native `input[type='date']` directly. The visible field must show the shared weekday format such as `2026-05-23(토)` while the hidden native input only provides the platform picker.
+- Pace fields must display rounded `m:ss` values. Never show raw fractional seconds such as `7:13.2714718`.
 - Account/profile management belongs in the header account drawer, not inside the `Memo` tab.
 - The account drawer opens from right to left. Profile editing is a second right-to-left stack inside the drawer.
 
@@ -57,7 +59,7 @@ Use a screen stack when the user is drilling into a deeper flow without changing
 - Memory overview should summarize the current coaching basis first, then provide drill-in cards for goal and injury management. Deep edit fields belong only on focused edit/create screens.
 - Coach: chat-like user and coach messages, markdown rendered as readable headings, paragraphs, lists, code blocks, and dividers.
 - User-facing dates must include the weekday, e.g. `2026-05-24(일)`. Store raw ISO dates in data, but format every displayed date through the shared formatter.
-- Toast messages must use the shared toast store and `ToastHost` component. Feature stores/pages should call the shared toast API instead of keeping one-off toast state or rendering inline toast markup.
+- Toast messages must use the shared toast store and `ToastHost` component. Feature stores/pages should call the shared toast API instead of keeping one-off toast state or rendering inline toast markup. Default placement is bottom with a rise animation. System/background events such as HealthKit sync use top placement with a drop animation and stronger success/error colors.
 
 ## Component Rules
 
@@ -75,6 +77,7 @@ Prefer shared UI components in `src/shared/ui`:
 - `EmptyState`
 - `MetricGrid`
 - `BottomSheetSelect`
+- `DateField`
 - `ToastHost`
 
 New page work should reuse these before adding page-specific layout.

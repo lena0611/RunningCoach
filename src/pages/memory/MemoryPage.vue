@@ -4,6 +4,7 @@ import { useMemoryStore } from '@/app/stores/memoryStore'
 import type { TrainingGoal, TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
 import { formatDateWithWeekday } from '@/shared/lib/format'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
+import DateField from '@/shared/ui/DateField.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 
 type MemoryPanel = 'overview' | 'goals' | 'goal-edit' | 'goal-new' | 'injuries' | 'injury-edit' | 'injury-new'
@@ -474,16 +475,8 @@ async function save() {
                 <input v-model="newGoal.title" placeholder="예: 2026년 11월 10km 59:59" />
               </label>
               <BottomSheetSelect v-model="newGoal.category" label="목표 유형" :options="goalCategoryOptions" />
-              <label>
-                시작일
-                <input v-model="newGoal.startDate" type="date" />
-                <small>{{ formatDateWithWeekday(newGoal.startDate) }}</small>
-              </label>
-              <label>
-                목표 날짜
-                <input v-model="newGoal.targetDate" type="date" />
-                <small>{{ formatDateWithWeekday(newGoal.targetDate) }}</small>
-              </label>
+              <DateField v-model="newGoal.startDate" label="시작일" />
+              <DateField v-model="newGoal.targetDate" label="목표 날짜" />
               <label>
                 목표 거리(km)
                 <input v-model.number="newGoal.distanceKm" type="number" inputmode="decimal" placeholder="예: 10" />
@@ -521,16 +514,8 @@ async function save() {
               </label>
               <BottomSheetSelect v-model="editingGoal.category" label="목표 유형" :options="goalCategoryOptions" @update:model-value="updateGoal(editingGoal)" />
               <BottomSheetSelect v-model="editingGoal.status" label="상태" :options="goalStatusOptions" @update:model-value="updateGoal(editingGoal)" />
-              <label>
-                시작일
-                <input v-model="editingGoal.startDate" type="date" @input="updateGoal(editingGoal)" />
-                <small>{{ formatDateWithWeekday(editingGoal.startDate) }}</small>
-              </label>
-              <label>
-                목표 날짜
-                <input v-model="editingGoal.targetDate" type="date" @input="updateGoal(editingGoal)" />
-                <small>{{ formatDateWithWeekday(editingGoal.targetDate) }}</small>
-              </label>
+              <DateField v-model="editingGoal.startDate" label="시작일" @update:model-value="updateGoal(editingGoal)" />
+              <DateField v-model="editingGoal.targetDate" label="목표 날짜" @update:model-value="updateGoal(editingGoal)" />
               <label>
                 목표 거리(km)
                 <input v-model.number="editingGoal.distanceKm" type="number" inputmode="decimal" placeholder="예: 10" @input="updateGoal(editingGoal)" />
@@ -590,16 +575,8 @@ async function save() {
                 심각도(1~5)
                 <input v-model.number="newInjury.severity" type="number" inputmode="numeric" min="1" max="5" placeholder="미입력" />
               </label>
-              <label>
-                시작일
-                <input v-model="newInjury.onsetDate" type="date" />
-                <small>{{ formatDateWithWeekday(newInjury.onsetDate) }}</small>
-              </label>
-              <label>
-                최근 신호일
-                <input v-model="newInjury.lastFlareDate" type="date" />
-                <small>{{ formatDateWithWeekday(newInjury.lastFlareDate) }}</small>
-              </label>
+              <DateField v-model="newInjury.onsetDate" label="시작일" />
+              <DateField v-model="newInjury.lastFlareDate" label="최근 신호일" />
               <label class="full">
                 악화 트리거
                 <textarea :value="join(newInjury.triggers)" rows="3" placeholder="예: 템포 다음날 뻣뻣함&#10;볼륨 급증" @input="newInjury.triggers = split(($event.target as HTMLTextAreaElement).value)" />
@@ -640,16 +617,8 @@ async function save() {
                 심각도(1~5)
                 <input v-model.number="editingInjury.severity" type="number" inputmode="numeric" min="1" max="5" placeholder="미입력" @input="updateInjury(editingInjury)" />
               </label>
-              <label>
-                시작일
-                <input v-model="editingInjury.onsetDate" type="date" @input="updateInjury(editingInjury)" />
-                <small>{{ formatDateWithWeekday(editingInjury.onsetDate) }}</small>
-              </label>
-              <label>
-                최근 신호일
-                <input v-model="editingInjury.lastFlareDate" type="date" @input="updateInjury(editingInjury)" />
-                <small>{{ formatDateWithWeekday(editingInjury.lastFlareDate) }}</small>
-              </label>
+              <DateField v-model="editingInjury.onsetDate" label="시작일" @update:model-value="updateInjury(editingInjury)" />
+              <DateField v-model="editingInjury.lastFlareDate" label="최근 신호일" @update:model-value="updateInjury(editingInjury)" />
               <label class="full">
                 악화 트리거
                 <textarea :value="join(editingInjury.triggers)" rows="3" placeholder="예: 템포 다음날 뻣뻣함&#10;볼륨 급증" @input="editingInjury.triggers = split(($event.target as HTMLTextAreaElement).value); updateInjury(editingInjury)" />

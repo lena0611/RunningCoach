@@ -33,12 +33,16 @@ function choose(value: string) {
   emit('update:modelValue', value)
   open.value = false
 }
+
+function openSheet() {
+  open.value = true
+}
 </script>
 
 <template>
   <div class="bottom-sheet-select" :class="{ 'bottom-sheet-select-compact': compact }">
     <span class="bottom-sheet-label">{{ label }}</span>
-    <button class="bottom-sheet-trigger" type="button" @click="open = true">
+    <button class="bottom-sheet-trigger" type="button" @pointerdown.stop @click.stop="openSheet">
       <span>{{ displayText }}</span>
       <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24">
         <path d="m6 9 6 6 6-6" />
@@ -46,8 +50,8 @@ function choose(value: string) {
     </button>
 
     <Teleport to="body">
-      <div v-if="open" class="bottom-sheet-layer" role="presentation" @click.self="open = false">
-        <section class="bottom-sheet" role="dialog" aria-modal="true" :aria-label="label">
+      <div v-if="open" class="bottom-sheet-layer" role="presentation" @pointerdown.stop @click.self="open = false">
+        <section class="bottom-sheet" role="dialog" aria-modal="true" :aria-label="label" @click.stop>
           <div class="bottom-sheet-handle" />
           <div class="bottom-sheet-heading">
             <h2>{{ label }}</h2>
