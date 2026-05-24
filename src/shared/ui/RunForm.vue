@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { courseTypes, runTypes, type ExtractedRunData } from '@/entities/run/model'
 import { toNumberOrNull } from '@/shared/lib/format'
+import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 
 const model = defineModel<ExtractedRunData>({ required: true })
 
@@ -42,12 +43,11 @@ function updateNumber(key: keyof ExtractedRunData, value: string) {
       날짜
       <input v-model="model.date" type="date" />
     </label>
-    <label>
-      타입
-      <select v-model="model.type">
-        <option v-for="type in runTypes" :key="type" :value="type">{{ type }}</option>
-      </select>
-    </label>
+    <BottomSheetSelect
+      v-model="model.type"
+      label="타입"
+      :options="runTypes.map((type) => ({ value: type, label: type }))"
+    />
     <label>
       거리 km
       <input :value="model.distanceKm" type="number" step="0.01" @input="updateNumber('distanceKm', ($event.target as HTMLInputElement).value)" />
@@ -84,12 +84,11 @@ function updateNumber(key: keyof ExtractedRunData, value: string) {
       바람 m/s
       <input :value="model.windMps ?? ''" type="number" step="0.1" @input="updateNumber('windMps', ($event.target as HTMLInputElement).value)" />
     </label>
-    <label>
-      코스 타입
-      <select v-model="model.courseType">
-        <option v-for="courseType in courseTypes" :key="courseType" :value="courseType">{{ courseType }}</option>
-      </select>
-    </label>
+    <BottomSheetSelect
+      v-model="model.courseType"
+      label="코스 타입"
+      :options="courseTypes.map((courseType) => ({ value: courseType, label: courseType }))"
+    />
     <label>
       누적 상승 m
       <input :value="model.elevationGainM ?? ''" type="number" @input="updateNumber('elevationGainM', ($event.target as HTMLInputElement).value)" />

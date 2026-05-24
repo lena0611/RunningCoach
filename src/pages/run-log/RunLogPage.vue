@@ -8,6 +8,7 @@ import { estimateHeartRateDrift } from '@/shared/lib/runStats'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
+import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 
 const runStore = useRunStore()
 const selectedType = ref<RunType | 'All'>('All')
@@ -20,6 +21,10 @@ const error = ref('')
 const filteredRuns = computed(() =>
   selectedType.value === 'All' ? runStore.sortedRuns : runStore.sortedRuns.filter((run) => run.type === selectedType.value)
 )
+const filterOptions = computed(() => [
+  { value: 'All', label: 'All' },
+  ...runTypes.map((type) => ({ value: type, label: type }))
+])
 
 onMounted(() => {
   if (!runStore.loaded && !runStore.loading) {
@@ -79,10 +84,7 @@ async function remove(run: RunLog) {
     <SectionCard>
       <div class="section-heading">
         <h2>Run Log</h2>
-        <select v-model="selectedType" class="compact-select">
-          <option value="All">All</option>
-          <option v-for="type in runTypes" :key="type" :value="type">{{ type }}</option>
-        </select>
+        <BottomSheetSelect v-model="selectedType" label="세션 타입" :options="filterOptions" compact />
       </div>
       <p v-if="runStore.loading" class="helper">Run Log를 불러오고 있습니다.</p>
       <div v-if="filteredRuns.length" class="run-list">

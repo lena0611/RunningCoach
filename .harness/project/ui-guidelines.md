@@ -19,6 +19,7 @@ RunContext is a personal running coach app, not an admin dashboard.
 - Cards should have generous spacing, soft borders, and `--radius-card`.
 - Primary actions use green emphasis; destructive actions are subdued red, not loud.
 - Keep bottom navigation usable with one hand on mobile.
+- Do not use native `<select>` for app workflows. Use `BottomSheetSelect`, opening options in a bottom sheet.
 
 ## Screen Priorities
 
@@ -43,6 +44,7 @@ Prefer shared UI components in `src/shared/ui`:
 - `CoachMessage`
 - `EmptyState`
 - `MetricGrid`
+- `BottomSheetSelect`
 
 New page work should reuse these before adding page-specific layout.
 

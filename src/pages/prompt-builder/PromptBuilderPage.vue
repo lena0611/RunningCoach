@@ -7,6 +7,7 @@ import { formatDuration, formatPace } from '@/shared/lib/format'
 import CoachMessage from '@/shared/ui/CoachMessage.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
+import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 
 const runStore = useRunStore()
 const selectedRunId = ref('')
@@ -16,6 +17,14 @@ const error = ref('')
 const reports = ref<CoachReport[]>([])
 
 const selectedRun = computed(() => runStore.sortedRuns.find((run) => run.id === selectedRunId.value) ?? null)
+const runOptions = computed(() => [
+  { value: '', label: '최근 흐름만 사용' },
+  ...runStore.sortedRuns.map((run) => ({
+    value: run.id,
+    label: `${run.date} · ${run.type}`,
+    description: `${run.distanceKm}km`
+  }))
+])
 
 onMounted(loadReports)
 
@@ -49,13 +58,7 @@ async function coach() {
         <h2>AI Coach</h2>
       </div>
       <p class="helper">RunLog, 누적 메모리, 오늘 메모를 합쳐 짧은 코칭 리포트를 생성합니다.</p>
-      <label>
-        선택 RunLog
-        <select v-model="selectedRunId">
-          <option value="">최근 흐름만 사용</option>
-          <option v-for="run in runStore.sortedRuns" :key="run.id" :value="run.id">{{ run.date }} · {{ run.type }} · {{ run.distanceKm }}km</option>
-        </select>
-      </label>
+      <BottomSheetSelect v-model="selectedRunId" label="선택 RunLog" :options="runOptions" />
       <section v-if="selectedRun" class="sub-panel">
         <strong>{{ selectedRun.date }} · {{ selectedRun.sessionTitle || selectedRun.type }}</strong>
         <p>{{ selectedRun.distanceKm }}km · {{ formatDuration(selectedRun.durationSec) }} · {{ formatPace(selectedRun.avgPaceSec) }}/km · HR {{ selectedRun.avgHeartRate ?? '-' }}</p>

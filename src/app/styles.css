@@ -44,6 +44,10 @@ body {
     linear-gradient(180deg, #0b0f14 0%, #10161d 100%);
 }
 
+body.sheet-open {
+  overflow: hidden;
+}
+
 button,
 input,
 select,
@@ -430,6 +434,160 @@ label {
 
 .compact-select {
   max-width: 220px;
+}
+
+.bottom-sheet-select {
+  display: grid;
+  gap: 8px;
+}
+
+.bottom-sheet-select-compact {
+  min-width: min(220px, 48vw);
+}
+
+.bottom-sheet-label {
+  color: var(--color-muted);
+  font-size: 14px;
+  font-weight: 760;
+}
+
+.bottom-sheet-select-compact .bottom-sheet-label {
+  display: none;
+}
+
+.bottom-sheet-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-field);
+  box-shadow: none;
+  text-align: left;
+}
+
+.bottom-sheet-trigger span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bottom-sheet-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  align-items: end;
+  background: rgba(0, 0, 0, 0.58);
+  backdrop-filter: blur(8px);
+}
+
+.bottom-sheet {
+  max-height: min(72vh, 680px);
+  padding: 10px 16px calc(env(safe-area-inset-bottom) + 16px);
+  border: 1px solid var(--color-border);
+  border-radius: 28px 28px 0 0;
+  background: linear-gradient(180deg, var(--color-surface-2), var(--color-surface));
+  box-shadow: 0 -20px 45px rgba(0, 0, 0, 0.38);
+  animation: sheet-rise 160ms ease-out;
+}
+
+.bottom-sheet-handle {
+  width: 44px;
+  height: 5px;
+  margin: 0 auto 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.bottom-sheet-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.bottom-sheet-heading h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.sheet-close {
+  min-height: 38px;
+  padding: 0 12px;
+}
+
+.bottom-sheet-options {
+  display: grid;
+  gap: 8px;
+  max-height: calc(min(72vh, 680px) - 96px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 4px;
+}
+
+.bottom-sheet-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 58px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  box-shadow: none;
+  text-align: left;
+}
+
+.bottom-sheet-option > span:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.bottom-sheet-option strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bottom-sheet-option small {
+  color: var(--color-muted);
+  font-weight: 700;
+}
+
+.bottom-sheet-option.selected {
+  border-color: rgba(74, 222, 128, 0.45);
+  background: var(--color-primary-soft);
+}
+
+.option-check {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: #06210f;
+  font-weight: 950;
+}
+
+@keyframes sheet-rise {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
 
 .upload-box {

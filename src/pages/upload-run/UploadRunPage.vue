@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRunStore } from '@/app/stores/runStore'
 import RunImageUploader from '@/widgets/run-image-uploader/RunImageUploader.vue'
 import RunForm from '@/shared/ui/RunForm.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
+import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import type { ExtractedRunData } from '@/entities/run/model'
 import { createEmptyRun, extractRunDataFromFile } from '@/features/extract-run-data/localFileExtractor'
 import {
@@ -29,6 +30,13 @@ const bulkSaving = ref(false)
 const healthKitLoading = ref(false)
 const healthKitStatus = ref('')
 const error = ref('')
+const healthKitOptions = computed(() =>
+  healthKitCandidates.value.map((candidate) => ({
+    value: candidate.externalId,
+    label: `${candidate.date} · ${candidate.distanceKm ?? '-'}km`,
+    description: candidate.sourceName ?? 'HealthKit'
+  }))
+)
 
 registerHealthKitBridge({
   onRuns(runs) {
@@ -172,14 +180,14 @@ async function save() {
         </button>
       </div>
       <p v-if="healthKitStatus" class="helper">{{ healthKitStatus }}</p>
-      <label v-if="healthKitCandidates.length" class="full">
-        HealthKit 후보
-        <select v-model="selectedHealthKitId" @change="selectHealthKitCandidate">
-          <option v-for="candidate in healthKitCandidates" :key="candidate.externalId" :value="candidate.externalId">
-            {{ candidate.date }} · {{ candidate.distanceKm ?? '-' }}km · {{ candidate.sourceName ?? 'HealthKit' }}
-          </option>
-        </select>
-      </label>
+      <BottomSheetSelect
+        v-if="healthKitCandidates.length"
+        v-model="selectedHealthKitId"
+        class="full"
+        label="HealthKit 후보"
+        :options="healthKitOptions"
+        @update:model-value="selectHealthKitCandidate"
+      />
       <p class="helper">iOS 앱에서는 HealthKit에서 러닝 기록을 가져오고, 일반 웹에서는 아래 FIT 업로드를 사용합니다.</p>
     </SectionCard>
     <RunImageUploader ref="uploader" @selected="onSelected" @cleared="file = null" />

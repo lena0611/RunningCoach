@@ -3,6 +3,7 @@ import { reactive, ref, watch } from 'vue'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import type { PersonalBest, TrainingMemory } from '@/entities/training-memory/model'
 import SectionCard from '@/shared/ui/SectionCard.vue'
+import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 
 const memoryStore = useMemoryStore()
 const draft = reactive<TrainingMemory>(JSON.parse(JSON.stringify(memoryStore.memory)))
@@ -11,6 +12,12 @@ const newUserName = ref('')
 const newUserGoal = ref('10km 59:59 달성')
 const saving = ref(false)
 const error = ref('')
+const sexOptions = [
+  { value: 'unknown', label: '미입력' },
+  { value: 'male', label: '남성' },
+  { value: 'female', label: '여성' },
+  { value: 'other', label: '기타' }
+]
 
 watch(
   () => memoryStore.selectedUserId,
@@ -101,12 +108,12 @@ function addUser() {
       <p v-if="error || memoryStore.error" class="error">{{ error || memoryStore.error }}</p>
       <form class="form-grid">
         <div class="form-section-title full">사용자</div>
-        <label>
-          선택 사용자
-          <select :value="memoryStore.selectedUserId" @change="memoryStore.selectUser(($event.target as HTMLSelectElement).value)">
-            <option v-for="user in memoryStore.users" :key="user.id" :value="user.id">{{ user.name }}</option>
-          </select>
-        </label>
+        <BottomSheetSelect
+          :model-value="memoryStore.selectedUserId"
+          label="선택 사용자"
+          :options="memoryStore.users.map((user) => ({ value: user.id, label: user.name }))"
+          @update:model-value="memoryStore.selectUser"
+        />
         <label>
           사용자 이름
           <input v-model="selectedUserName" />
@@ -131,15 +138,7 @@ function addUser() {
           출생연도
           <input v-model.number="draft.athleteProfile.birthYear" type="number" inputmode="numeric" placeholder="예: 1989" />
         </label>
-        <label>
-          성별
-          <select v-model="draft.athleteProfile.sex">
-            <option value="unknown">미입력</option>
-            <option value="male">남성</option>
-            <option value="female">여성</option>
-            <option value="other">기타</option>
-          </select>
-        </label>
+        <BottomSheetSelect v-model="draft.athleteProfile.sex" label="성별" :options="sexOptions" />
         <label>
           러닝 경력(개월)
           <input v-model.number="draft.athleteProfile.runningExperienceMonths" type="number" inputmode="numeric" placeholder="예: 18" />
