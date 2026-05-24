@@ -25,7 +25,7 @@ function isInteractiveTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) return false
   return Boolean(
     target.closest(
-      'a, button, input, textarea, select, label, [role="button"], .bottom-sheet-layer, .side-drawer-layer, [data-no-swipe]'
+      'a, button, input, textarea, select, label, [role="button"], .bottom-sheet-layer, .side-drawer-layer, .memory-stack-layer, [data-no-swipe]'
     )
   )
 }
