@@ -437,18 +437,32 @@ label {
 
 .bottom-nav a {
   display: grid;
+  grid-template-rows: 25px auto;
   place-items: center;
-  min-height: 48px;
+  gap: 3px;
+  min-height: 54px;
+  padding: 7px 3px 6px;
   color: var(--color-muted);
   text-decoration: none;
   border-radius: 16px;
-  font-size: 13px;
+  font-size: 10.5px;
   font-weight: 850;
+  line-height: 1;
 }
 
 .bottom-nav a.router-link-active {
   background: var(--color-primary-soft);
   color: var(--color-primary);
+}
+
+.bottom-nav-icon {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .app-main {
