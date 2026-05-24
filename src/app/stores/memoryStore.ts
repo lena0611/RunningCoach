@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { initialTrainingMemory, type TrainingMemory } from '@/entities/training-memory/model'
+import { initialTrainingMemory, normalizeTrainingMemory, type TrainingMemory } from '@/entities/training-memory/model'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { fetchTrainingMemory, saveTrainingMemory } from '@/shared/api/memoryRepository'
 
@@ -78,7 +78,7 @@ export const useMemoryStore = defineStore('memoryStore', {
     },
     async update(memory: TrainingMemory) {
       const user = this.selectedUser
-      user.memory = normalizeMemory(memory)
+      user.memory = normalizeTrainingMemory(memory)
       user.updatedAt = new Date().toISOString()
       if (isSupabaseConfigured) {
         await saveTrainingMemory(user.memory)
@@ -100,7 +100,7 @@ function loadUsers(): RunContextUser[] {
       if (Array.isArray(parsed) && parsed.length) {
         return parsed.map((user) => ({
           ...user,
-          memory: normalizeMemory(user.memory)
+          memory: normalizeTrainingMemory(user.memory)
         }))
       }
     }
@@ -133,20 +133,9 @@ function persistSelectedUserId(userId: string) {
 function loadLegacyMemory(): TrainingMemory {
   try {
     const raw = localStorage.getItem(storageKey)
-    return raw ? normalizeMemory(JSON.parse(raw)) : cloneMemory(initialTrainingMemory)
+    return raw ? normalizeTrainingMemory(JSON.parse(raw)) : cloneMemory(initialTrainingMemory)
   } catch {
     return cloneMemory(initialTrainingMemory)
-  }
-}
-
-function normalizeMemory(memory: Partial<TrainingMemory> | null | undefined): TrainingMemory {
-  return {
-    ...cloneMemory(initialTrainingMemory),
-    ...(memory ?? {}),
-    athleteProfile: {
-      ...initialTrainingMemory.athleteProfile,
-      ...(memory?.athleteProfile ?? {})
-    }
   }
 }
 

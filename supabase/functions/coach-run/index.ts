@@ -131,6 +131,9 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
   const currentMonth = inCurrentMonth(runRows)
   const latestTempo = runRows.find((run) => run.type === 'Tempo') ?? null
   const latestLong = runRows.find((run) => ['LSD', 'Steady Long'].includes(run.type)) ?? null
+  const trainingMemory = memoryRow?.memory ?? null
+  const goals = getGoals(trainingMemory)
+  const activeGoal = getActiveGoal(trainingMemory, goals)
 
   return {
     userNote,
@@ -141,7 +144,9 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
     anchorDateForWindowStats: anchorDate,
     instructionForDateHandling:
       'selectedRun.date는 훈련이 실제로 수행된 날짜이고 coach_reports.created_at은 코칭을 받은 날짜다. 둘을 혼동하지 마라. selectedRunTiming이 past이면 과거 기록 리뷰로 말하고, 오늘 뛴 기록/마지막 코칭 이후 새 기록이라고 단정하지 마라.',
-    trainingMemory: memoryRow?.memory ?? null,
+    trainingMemory,
+    goals,
+    activeGoal,
     coachMemoryItems: (memoryItems ?? []).map((item) => item.content),
     recentCoachReports: (reports ?? []).map((report) => ({
       selectedRunId: report.selected_run_id,
@@ -197,6 +202,8 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     '최근 14일 앱 로그가 적다는 이유만으로 훈련 성과를 판단할 수 없다고 길게 말하지 않는다.',
     '템포 뒤 9분대 조깅, 심박 125~128, 배우자 동행런 맥락이면 추가 강훈련보다 회복 조깅으로 해석한다.',
     '더위, 케이던스/호흡 성향, 과거 좌측 근위부 햄스트링 이슈, 격주 롱런 패턴을 필요한 때만 짧게 연결한다.',
+    '목표는 하나로 고정하지 않는다. goals 전체를 참고하되 activeGoal을 이번 코칭의 1차 기준으로 삼는다.',
+    '다른 목표는 보조 관점으로만 활용하고, activeGoal과 충돌하면 activeGoal을 우선한다.',
     '코칭은 해당 러닝 세션 평가에서 끝나지 않는다. 반드시 계정의 목표와 누적 데이터를 보고 현재 weeklyPattern을 유지할지 수정할지 판단한다.',
     'weeklyPattern은 사용자가 직접 세우는 고정 루틴이 아니라 AI가 목표, 최근 14/30일 누적, 강훈련 빈도, 롱런 상태, 회복 신호를 보고 관리하는 훈련 계획이다.',
     '루틴 변경이 필요 없으면 trainingMemoryPatch는 null로 둔다.',
@@ -285,6 +292,21 @@ function withinDaysFromAnchor(runs: RunLogRow[], days: number, anchorDate: strin
 function afterDate(runs: RunLogRow[], dateText: string) {
   const selectedDate = parseDateOnly(dateText)
   return runs.filter((run) => parseDateOnly(run.date) > selectedDate)
+}
+
+function getGoals(memory: unknown): unknown[] {
+  if (!memory || typeof memory !== 'object') return []
+  const goals = (memory as { goals?: unknown }).goals
+  return Array.isArray(goals) ? goals : []
+}
+
+function getActiveGoal(memory: unknown, goals: unknown[]) {
+  if (!memory || typeof memory !== 'object') return goals[0] ?? null
+  const activeGoalId = (memory as { activeGoalId?: unknown }).activeGoalId
+  const activeGoal = goals.find((goal) => {
+    return goal && typeof goal === 'object' && (goal as { id?: unknown }).id === activeGoalId
+  })
+  return activeGoal ?? goals[0] ?? null
 }
 
 function inCurrentMonth(runs: RunLogRow[]) {

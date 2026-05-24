@@ -1,4 +1,4 @@
-import { initialTrainingMemory, type TrainingMemory } from '@/entities/training-memory/model'
+import { initialTrainingMemory, normalizeTrainingMemory, type TrainingMemory } from '@/entities/training-memory/model'
 import { requireSupabase } from '@/shared/api/supabase'
 
 export async function fetchTrainingMemory(): Promise<TrainingMemory> {
@@ -8,10 +8,10 @@ export async function fetchTrainingMemory(): Promise<TrainingMemory> {
 
   const { data, error } = await supabase.from('training_memory').select('memory').eq('user_id', userData.user.id).maybeSingle()
   if (error) throw error
-  if (data?.memory) return normalizeMemory(data.memory as Partial<TrainingMemory>)
+  if (data?.memory) return normalizeTrainingMemory(data.memory as Partial<TrainingMemory>)
 
   await saveTrainingMemory(initialTrainingMemory)
-  return normalizeMemory(initialTrainingMemory)
+  return normalizeTrainingMemory(initialTrainingMemory)
 }
 
 export async function saveTrainingMemory(memory: TrainingMemory) {
@@ -25,15 +25,4 @@ export async function saveTrainingMemory(memory: TrainingMemory) {
     updated_at: new Date().toISOString()
   })
   if (error) throw error
-}
-
-function normalizeMemory(memory: Partial<TrainingMemory> | null | undefined): TrainingMemory {
-  return {
-    ...JSON.parse(JSON.stringify(initialTrainingMemory)),
-    ...(memory ?? {}),
-    athleteProfile: {
-      ...initialTrainingMemory.athleteProfile,
-      ...(memory?.athleteProfile ?? {})
-    }
-  }
 }

@@ -1,5 +1,7 @@
 export type TrainingMemory = {
   goal: string
+  goals: TrainingGoal[]
+  activeGoalId: string
   athleteProfile: AthleteProfile
   weeklyPattern: string[]
   longRunStrategy: string
@@ -8,6 +10,20 @@ export type TrainingMemory = {
   runningStyle: string[]
   heatStrategy: string[]
   aiNotes: string[]
+}
+
+export type TrainingGoal = {
+  id: string
+  title: string
+  category: 'race' | 'fitness' | 'health' | 'habit' | 'maintenance'
+  targetDate: string | null
+  distanceKm: number | null
+  targetDurationSec: number | null
+  priority: number
+  status: 'active' | 'paused' | 'completed' | 'archived'
+  notes: string
+  createdAt: string
+  updatedAt: string
 }
 
 export type AthleteProfile = {
@@ -26,8 +42,26 @@ export type PersonalBest = {
   source: 'race' | 'time_trial' | 'estimated'
 }
 
+export const defaultGoalId = 'goal-10k-60'
+
 export const initialTrainingMemory: TrainingMemory = {
   goal: '10km 60분 달성',
+  activeGoalId: defaultGoalId,
+  goals: [
+    {
+      id: defaultGoalId,
+      title: '10km 60분 달성',
+      category: 'race',
+      targetDate: null,
+      distanceKm: 10,
+      targetDurationSec: 3600,
+      priority: 1,
+      status: 'active',
+      notes: '기본 활성 목표',
+      createdAt: '2026-05-24T00:00:00.000Z',
+      updatedAt: '2026-05-24T00:00:00.000Z'
+    }
+  ],
   athleteProfile: {
     birthYear: null,
     sex: 'unknown',
@@ -65,4 +99,86 @@ export const initialTrainingMemory: TrainingMemory = {
     '코칭은 단일 기록보다 최근 훈련 흐름과 격주 롱런 패턴을 함께 봐야 한다',
     '다음 훈련 추천은 피로도, 최근 14일 기록, 장거리 주차 여부를 함께 반영한다'
   ]
+}
+
+export function getActiveGoal(memory: TrainingMemory): TrainingGoal {
+  return memory.goals.find((goal) => goal.id === memory.activeGoalId) ?? memory.goals[0]
+}
+
+export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null | undefined): TrainingMemory {
+  const base = cloneMemory(initialTrainingMemory)
+  const merged = {
+    ...base,
+    ...(memory ?? {}),
+    athleteProfile: {
+      ...base.athleteProfile,
+      ...(memory?.athleteProfile ?? {})
+    }
+  }
+
+  const goals = normalizeGoals(memory)
+  const activeGoalId = goals.some((goal) => goal.id === memory?.activeGoalId) ? memory?.activeGoalId ?? goals[0].id : goals[0].id
+  const activeGoal = goals.find((goal) => goal.id === activeGoalId) ?? goals[0]
+
+  return {
+    ...merged,
+    goals,
+    activeGoalId,
+    goal: activeGoal.title
+  }
+}
+
+function normalizeGoals(memory: Partial<TrainingMemory> | null | undefined): TrainingGoal[] {
+  const now = new Date().toISOString()
+  const rawGoals = Array.isArray(memory?.goals) ? memory.goals : []
+  const goals = rawGoals
+    .map((goal, index) => normalizeGoal(goal as Partial<TrainingGoal>, index, now))
+    .filter((goal): goal is TrainingGoal => Boolean(goal))
+
+  if (goals.length) return goals
+
+  const title = memory?.goal?.trim() || initialTrainingMemory.goal
+  return [
+    {
+      ...cloneMemory(initialTrainingMemory.goals[0]),
+      id: defaultGoalId,
+      title,
+      updatedAt: now
+    }
+  ]
+}
+
+function normalizeGoal(goal: Partial<TrainingGoal>, index: number, now: string): TrainingGoal | null {
+  const title = typeof goal.title === 'string' ? goal.title.trim() : ''
+  if (!title) return null
+  return {
+    id: typeof goal.id === 'string' && goal.id ? goal.id : `goal-${index + 1}`,
+    title,
+    category: normalizeGoalCategory(goal.category),
+    targetDate: typeof goal.targetDate === 'string' && goal.targetDate ? goal.targetDate : null,
+    distanceKm: normalizeNullableNumber(goal.distanceKm),
+    targetDurationSec: normalizeNullableNumber(goal.targetDurationSec),
+    priority: Number.isFinite(goal.priority) ? Number(goal.priority) : index + 1,
+    status: normalizeGoalStatus(goal.status),
+    notes: typeof goal.notes === 'string' ? goal.notes : '',
+    createdAt: typeof goal.createdAt === 'string' ? goal.createdAt : now,
+    updatedAt: typeof goal.updatedAt === 'string' ? goal.updatedAt : now
+  }
+}
+
+function normalizeGoalCategory(value: unknown): TrainingGoal['category'] {
+  return value === 'fitness' || value === 'health' || value === 'habit' || value === 'maintenance' || value === 'race' ? value : 'race'
+}
+
+function normalizeGoalStatus(value: unknown): TrainingGoal['status'] {
+  return value === 'paused' || value === 'completed' || value === 'archived' || value === 'active' ? value : 'active'
+}
+
+function normalizeNullableNumber(value: unknown): number | null {
+  const numberValue = Number(value)
+  return Number.isFinite(numberValue) ? numberValue : null
+}
+
+function cloneMemory<T>(memory: T): T {
+  return JSON.parse(JSON.stringify(memory))
 }

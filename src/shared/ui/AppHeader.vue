@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '@/app/stores/authStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
-import type { PersonalBest, TrainingMemory } from '@/entities/training-memory/model'
+import { getActiveGoal, type PersonalBest, type TrainingMemory } from '@/entities/training-memory/model'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 
 defineProps<{ isAuthenticated: boolean }>()
@@ -28,6 +28,7 @@ const accountLabel = computed(() => {
 })
 
 const accountEmail = computed(() => authStore.user?.email || '로그인 정보 없음')
+const activeGoalTitle = computed(() => getActiveGoal(memoryStore.memory).title)
 
 watch(
   () => [memoryStore.selectedUserId, memoryStore.selectedUser.updatedAt],
@@ -153,7 +154,7 @@ function signOutAndClose() {
           <dl class="account-details">
             <div>
               <dt>목표</dt>
-              <dd>{{ memoryStore.memory.goal }}</dd>
+              <dd>{{ activeGoalTitle }}</dd>
             </div>
             <div>
               <dt>러닝 경력</dt>
@@ -185,10 +186,6 @@ function signOutAndClose() {
             <label class="full">
               계정 표시 이름
               <input v-model="draftName" autocomplete="name" />
-            </label>
-            <label class="full">
-              목표
-              <input v-model="draft.goal" />
             </label>
             <label>
               출생연도

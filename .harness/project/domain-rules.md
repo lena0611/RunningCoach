@@ -4,18 +4,18 @@
 
 ## 업무 용어
 - `RunLog`: 한 번의 러닝 세션을 구조화한 저장 단위다.
-- `TrainingMemory`: 목표, 주간 패턴, 장거리 전략, 부상/더위 이슈, 러닝 스타일 같은 장기 맥락이다.
+- `TrainingMemory`: 목표 목록, 활성 목표, 주간 패턴, 장거리 전략, 부상/더위 이슈, 러닝 스타일 같은 장기 맥락이다.
 - `AthleteProfile`: 나이, 성별, 러닝 경력, 주간 목표 러닝 횟수, 선호 롱런 요일, 거리별 PB 같은 개인화 입력이다.
 - `RunContextUser`: 앱에 등록된 사용자 단위다. 각 사용자는 자기 `TrainingMemory`와 목표를 가진다.
 - `FIT import`: Workoutdoors에서 export한 `.fit` 파일을 브라우저에서 로컬 파싱해 `RunLog` 후보를 만드는 흐름이다.
 - `AI Coach`: 저장 데이터와 프로그램 통계를 기반으로 OpenAI가 자연어 코칭 리포트를 생성하는 코칭 엔진이다.
-- `Goal`: 현재 확정 목표는 2026-11-21까지 10km 59:59 달성이다.
+- `Goal`: 사용자는 여러 목표를 가질 수 있고, `activeGoalId`로 지정된 활성 목표가 코칭의 1차 판단 기준이다. 다른 목표는 보조 관점으로 참고한다.
 
 ## 핵심 엔티티
 - `RunLog`: 사용자 ID, 외부 원본 ID, 날짜, 타입, 거리, 시간, 페이스, 심박, 케이던스, 기온, RPE, 메모, 랩, 고속 구간 요약, 태그, 출처, 생성/수정 시각을 가진다.
 - `Lap`: 랩 번호, 랩 거리, 랩 페이스, 평균 심박, 케이던스를 가진다.
 - `FastSegment`: route/speed 샘플에서 계산한 짧은 고속 구간 요약이다. 시작 시각, 지속 시간, 거리, 평균/최고 페이스를 가진다. 원본 GPS 좌표는 저장하지 않는다.
-- `TrainingMemory`: 목표, AthleteProfile, 주간 루틴, 장거리 전략, 현재 볼륨 노트, known issues, running style, heat strategy, ai notes를 가진다.
+- `TrainingMemory`: legacy `goal`, `goals`, `activeGoalId`, AthleteProfile, 주간 루틴, 장거리 전략, 현재 볼륨 노트, known issues, running style, heat strategy, ai notes를 가진다. `goal`은 기존 호환용이며 활성 목표 제목과 동기화한다.
 
 ## 불변식
 - 원본 운동 파일은 저장하지 않는다.
