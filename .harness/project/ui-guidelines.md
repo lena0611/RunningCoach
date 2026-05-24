@@ -14,11 +14,13 @@ RunContext is a personal running coach app, not an admin dashboard.
 
 - Use CSS design tokens from `src/app/styles.css`.
 - Define theme values through CSS tokens. Add light-mode overrides in `@media (prefers-color-scheme: light)` instead of hard-coding one-off light colors.
+- Light mode must be checked separately from dark mode. Buttons need explicit foreground contrast, and cards/nav should look clean white rather than washed-out green-gray.
 - Important metrics use large, bold numerals.
 - Supporting labels and metadata are smaller and muted.
 - Cards should have generous spacing, soft borders, and `--radius-card`.
 - Primary actions use green emphasis; destructive actions are subdued red, not loud.
 - Keep bottom navigation usable with one hand on mobile.
+- Fixed mobile bottom navigation must reserve enough content padding for `env(safe-area-inset-bottom)`, so the last card/message never sits underneath the nav while scrolling.
 - Do not use native `<select>` for app workflows. Use `BottomSheetSelect`, opening options in a bottom sheet.
 
 ## Screen Priorities
