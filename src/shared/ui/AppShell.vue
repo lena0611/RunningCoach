@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppHeader from '@/shared/ui/AppHeader.vue'
 import BottomNav, { type BottomNavItem } from '@/shared/ui/BottomNav.vue'
@@ -16,6 +16,18 @@ const touchStartX = ref(0)
 const touchStartY = ref(0)
 const touchStartAt = ref(0)
 const swipeableRoutes = computed(() => props.navItems.map((item) => item.to))
+
+watch(
+  () => route.path,
+  (path, previousPath) => {
+    if (path === previousPath) return
+    if (getRouteIndex(path) === -1 || getRouteIndex(previousPath) === -1) return
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+      document.querySelector('.app-main')?.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+    })
+  }
+)
 
 function getRouteIndex(path: string) {
   return swipeableRoutes.value.indexOf(path)

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import type { TrainingGoal, TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
@@ -9,7 +9,9 @@ type MemoryPanel = 'overview' | 'goals' | 'goal-edit' | 'goal-new' | 'injuries' 
 
 const memoryStore = useMemoryStore()
 const draft = reactive<TrainingMemory>(JSON.parse(JSON.stringify(memoryStore.memory)))
-const panel = ref<MemoryPanel>('overview')
+const stack = ref<MemoryPanel[]>([])
+const stackContentRef = ref<HTMLElement | null>(null)
+const stackScroll = reactive<Record<string, number>>({})
 const editingGoalId = ref('')
 const editingInjuryId = ref('')
 const saving = ref(false)
@@ -75,6 +77,7 @@ const activeInjuryMeta = computed(() => {
   if (!activeInjury.value) return '관리 항목 없음'
   return [activeInjury.value.status, activeInjury.value.severity ? `${activeInjury.value.severity}/5` : '강도 미입력'].join(' · ')
 })
+const panel = computed<MemoryPanel>(() => stack.value.at(-1) ?? 'overview')
 const isStackOpen = computed(() => panel.value !== 'overview')
 const stackTitle = computed(() => {
   switch (panel.value) {
@@ -99,7 +102,7 @@ watch(
   () => memoryStore.selectedUserId,
   () => {
     Object.assign(draft, JSON.parse(JSON.stringify(memoryStore.memory)))
-    panel.value = 'overview'
+    stack.value = []
     editingGoalId.value = ''
     editingInjuryId.value = ''
   }
@@ -126,12 +129,13 @@ function syncLegacyGoal() {
 }
 
 function openGoals() {
-  panel.value = 'goals'
+  pushPanel('goals')
 }
 
 function openGoalEdit(goalId: string) {
+  saveCurrentStackScroll()
   editingGoalId.value = goalId
-  panel.value = 'goal-edit'
+  pushPanel('goal-edit')
 }
 
 function openGoalNew() {
@@ -147,7 +151,7 @@ function openGoalNew() {
     strategyNotes: '',
     notes: ''
   })
-  panel.value = 'goal-new'
+  pushPanel('goal-new')
 }
 
 function addGoal() {
@@ -173,7 +177,8 @@ function addGoal() {
   draft.goals.push(goal)
   draft.activeGoalId = goal.id
   draft.goal = goal.title
-  openGoalEdit(goal.id)
+  editingGoalId.value = goal.id
+  replaceTopPanel('goal-edit')
 }
 
 function updateGoal(goal: TrainingGoal) {
@@ -192,16 +197,17 @@ function removeGoal(goalId: string) {
   draft.goals = draft.goals.filter((goal) => goal.id !== goalId)
   if (draft.activeGoalId === goalId) draft.activeGoalId = draft.goals[0]?.id ?? null
   syncLegacyGoal()
-  panel.value = 'goals'
+  replaceTopPanel('goals')
 }
 
 function openInjuries() {
-  panel.value = 'injuries'
+  pushPanel('injuries')
 }
 
 function openInjuryEdit(itemId: string) {
+  saveCurrentStackScroll()
   editingInjuryId.value = itemId
-  panel.value = 'injury-edit'
+  pushPanel('injury-edit')
 }
 
 function openInjuryNew() {
@@ -218,7 +224,7 @@ function openInjuryNew() {
     restrictions: [],
     returnToRunCriteria: ''
   })
-  panel.value = 'injury-new'
+  pushPanel('injury-new')
 }
 
 function addInjury() {
@@ -243,7 +249,8 @@ function addInjury() {
   }
   draft.injuryItems.push(item)
   draft.activeInjuryItemId = item.id
-  openInjuryEdit(item.id)
+  editingInjuryId.value = item.id
+  replaceTopPanel('injury-edit')
 }
 
 function updateInjury(item: TrainingInjuryItem) {
@@ -260,23 +267,53 @@ function removeInjury(itemId: string) {
   if (draft.activeInjuryItemId === itemId) {
     draft.activeInjuryItemId = draft.injuryItems.find((item) => item.status === 'active' || item.status === 'monitoring')?.id ?? draft.injuryItems[0]?.id ?? null
   }
-  panel.value = 'injuries'
+  replaceTopPanel('injuries')
 }
 
 function goBack() {
-  if (panel.value === 'goal-edit' || panel.value === 'goal-new') {
-    panel.value = 'goals'
-    return
-  }
-  if (panel.value === 'injury-edit' || panel.value === 'injury-new') {
-    panel.value = 'injuries'
-    return
-  }
-  panel.value = 'overview'
+  saveCurrentStackScroll()
+  stack.value = stack.value.slice(0, -1)
+  restoreCurrentStackScroll()
 }
 
 function closeStack() {
-  panel.value = 'overview'
+  saveCurrentStackScroll()
+  stack.value = []
+}
+
+function stackKey(value = panel.value) {
+  if (value === 'goal-edit') return `${value}:${editingGoalId.value}`
+  if (value === 'injury-edit') return `${value}:${editingInjuryId.value}`
+  return value
+}
+
+function saveCurrentStackScroll() {
+  const key = stackKey()
+  if (key === 'overview') return
+  stackScroll[key] = stackContentRef.value?.scrollTop ?? 0
+}
+
+function restoreCurrentStackScroll() {
+  const key = stackKey()
+  requestAnimationFrame(() => {
+    if (stackContentRef.value) stackContentRef.value.scrollTop = stackScroll[key] ?? 0
+  })
+}
+
+function pushPanel(nextPanel: MemoryPanel) {
+  saveCurrentStackScroll()
+  stack.value = [...stack.value, nextPanel]
+  nextTick(() => {
+    if (stackContentRef.value) stackContentRef.value.scrollTop = 0
+  })
+}
+
+function replaceTopPanel(nextPanel: MemoryPanel) {
+  saveCurrentStackScroll()
+  stack.value = [...stack.value.slice(0, -1), nextPanel]
+  nextTick(() => {
+    if (stackContentRef.value) stackContentRef.value.scrollTop = 0
+  })
 }
 
 async function save() {
@@ -375,7 +412,7 @@ async function save() {
             <button class="icon-action" type="button" @click="closeStack">닫기</button>
           </header>
 
-          <main class="memory-stack-content">
+          <main ref="stackContentRef" class="memory-stack-content">
             <p v-if="error || memoryStore.error" class="error">{{ error || memoryStore.error }}</p>
             <div class="stack-save-row">
               <span>변경 후 저장을 눌러야 코칭 기준에 반영됩니다.</span>

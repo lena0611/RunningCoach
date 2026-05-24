@@ -23,6 +23,7 @@ RunContext is a personal running coach app, not an admin dashboard.
 - Fixed mobile bottom navigation must use `viewport-fit=cover`, `env(safe-area-inset-bottom)`, a fixed nav height token, and matching `.app-main` bottom reserve. The nav should stay attached to the visual viewport before and after full scroll.
 - Bottom navigation is icon-first. Labels stay under icons as small captions, not as the primary visual element.
 - Main tabs support horizontal swipe navigation. Swipes should be disabled over interactive controls, bottom sheets, and side drawers to avoid accidental data changes.
+- Root tab navigation through the bottom nav resets the main scroll position to top. Deep in-tab stacks preserve the root surface and restore the previous stack page scroll on Back.
 - Do not use native `<select>` for app workflows. Use `BottomSheetSelect`, opening options in a bottom sheet.
 - Account/profile management belongs in the header account drawer, not inside the `Memo` tab.
 - The account drawer opens from right to left. Profile editing is a second right-to-left stack inside the drawer.
@@ -35,6 +36,7 @@ Use a screen stack when the user is drilling into a deeper flow without changing
 - First-level stack screens open from right to left and include an explicit close/back action in the top right.
 - Second-level stack screens continue right-to-left inside the same stack container.
 - Focused management flows such as Memory goal/injury list, create, and edit use a full-screen stack page, not an inner card section. The stack header must include Back on the left, the page title in the center, and Close on the right.
+- Stack navigation must push pages onto an in-tab stack instead of replacing the root route. Back pops one stack page and restores that page's prior scroll/data state; Close exits the stack to the tab root.
 - Use stacks for account/profile editing, run detail/edit flows, and focused settings. Do not use a stack for ordinary tab-to-tab navigation.
 - The bottom navigation remains a root-level control. Stack overlays sit above it when modal, or keep it visually stable when inline.
 - Horizontal page slide transitions are for root tab movement. Deeper stack screens use their own right-to-left stack transition.
