@@ -100,6 +100,7 @@ New page work should reuse these before adding page-specific layout.
 - `TextField`: Use box-style inputs with persistent labels. iOS zoom prevention requires 16px or larger input text.
 - `BottomSheet`: Use for selection and delete confirmation. It must be Teleported or root-hosted above all stacks.
 - `Toast`: Bottom is default. Top is reserved for system/background events such as HealthKit sync.
+- Top system toasts triggered during app startup or activation should use a small display delay so the page has painted before the drop animation starts.
 - `FixedBottomCTA`: Edit/create stack pages use a fixed full-width save CTA. Disable it until dirty state is true.
 
 ## Prohibited Patterns

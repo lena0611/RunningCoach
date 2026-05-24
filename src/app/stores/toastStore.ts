@@ -10,25 +10,53 @@ export type ToastMessage = {
   placement: ToastPlacement
 }
 
+export type ToastOptions = {
+  durationMs?: number
+  placement?: ToastPlacement
+  delayMs?: number
+}
+
 export const useToastStore = defineStore('toastStore', {
   state: () => ({
-    current: null as ToastMessage | null
+    current: null as ToastMessage | null,
+    pendingTimer: null as number | null
   }),
   actions: {
-    show(message: string, tone: ToastTone = 'neutral', durationMs = 3200, placement: ToastPlacement = 'bottom') {
+    show(message: string, tone: ToastTone = 'neutral', options: ToastOptions = {}) {
+      const { durationMs = 3200, placement = 'bottom', delayMs = 0 } = options
       const id = crypto.randomUUID()
-      this.current = { id, message, tone, placement }
+      if (this.pendingTimer) {
+        window.clearTimeout(this.pendingTimer)
+        this.pendingTimer = null
+      }
+
+      const display = () => {
+        this.current = { id, message, tone, placement }
+        this.pendingTimer = null
+      }
+
+      if (delayMs > 0) {
+        this.current = null
+        this.pendingTimer = window.setTimeout(display, delayMs)
+      } else {
+        display()
+      }
+
       window.setTimeout(() => {
         if (this.current?.id === id) this.current = null
-      }, durationMs)
+      }, delayMs + durationMs)
     },
-    success(message: string, durationMs?: number, placement?: ToastPlacement) {
-      this.show(message, 'success', durationMs, placement)
+    success(message: string, options?: ToastOptions) {
+      this.show(message, 'success', options)
     },
-    error(message: string, durationMs?: number, placement?: ToastPlacement) {
-      this.show(message, 'error', durationMs, placement)
+    error(message: string, options?: ToastOptions) {
+      this.show(message, 'error', options)
     },
     clear() {
+      if (this.pendingTimer) {
+        window.clearTimeout(this.pendingTimer)
+        this.pendingTimer = null
+      }
       this.current = null
     }
   }

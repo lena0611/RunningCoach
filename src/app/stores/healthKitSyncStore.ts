@@ -14,6 +14,7 @@ import { hasNativeBridge } from '@/shared/lib/runtime'
 const defaultLookbackDays = 90
 const maxLookbackDays = 365
 const minSyncIntervalMs = 30_000
+const syncToastDelayMs = 280
 let listenersAttached = false
 
 export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
@@ -95,18 +96,18 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         if (newRuns.length) {
           const inserted = await runStore.addRuns(newRuns.map((candidate) => toExtractedRunData(candidate)), 'healthkit')
           this.status = `HealthKit 동기화 완료 · 새 러닝 ${inserted.length}개 저장`
-          useToastStore().success(this.status, 3600, 'top')
+          showSyncToast('success', this.status, 3600)
         } else {
           this.status = latestDate
             ? `HealthKit 동기화 완료 · ${latestDate} 이후 새 러닝 없음`
             : 'HealthKit 동기화 완료 · 새 러닝 없음'
-          useToastStore().success(this.status, 3200, 'top')
+          showSyncToast('success', this.status, 3200)
         }
         this.error = ''
         this.lastCompletedAt = Date.now()
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'HealthKit 동기화 저장 실패'
-        useToastStore().error(this.error, 4200, 'top')
+        showSyncToast('error', this.error, 4200)
       } finally {
         this.syncing = false
       }
@@ -115,10 +116,19 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
       this.syncing = false
       this.status = ''
       this.error = message || 'HealthKit 동기화 실패'
-      useToastStore().error(this.error, 4200, 'top')
+      showSyncToast('error', this.error, 4200)
     }
   }
 })
+
+function showSyncToast(tone: 'success' | 'error', message: string, durationMs: number) {
+  const toastStore = useToastStore()
+  toastStore[tone](message, {
+    durationMs,
+    placement: 'top',
+    delayMs: syncToastDelayMs
+  })
+}
 
 function getLatestSavedDate() {
   const runStore = useRunStore()
