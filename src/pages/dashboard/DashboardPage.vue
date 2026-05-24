@@ -38,8 +38,8 @@ const hardSessions = computed(() =>
   <section class="page dashboard-page">
     <section class="hero-card">
       <div>
-        <p class="eyebrow">오늘의 컨디션</p>
-        <h2>최근 흐름을 기준으로 다음 훈련을 잡습니다.</h2>
+        <p class="eyebrow">훈련 요약</p>
+        <h2>최근 기록과 주간 루틴으로 다음 훈련을 추천합니다.</h2>
       </div>
       <div class="hero-metric">
         <span>이번 주</span>

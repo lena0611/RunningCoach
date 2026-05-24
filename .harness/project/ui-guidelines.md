@@ -41,6 +41,7 @@ Use a screen stack when the user is drilling into a deeper flow without changing
 ## Screen Priorities
 
 - Dashboard: home screen, weekly/monthly distance, Easy ratio, hard session count, next recommended session, recent runs.
+- Dashboard hero copy must not imply measured physiology unless the app has measured it. Use clear labels like "훈련 요약" instead of ambiguous labels like "오늘의 컨디션".
 - Upload: simple HealthKit/FIT/manual import flow with large upload/import cards.
 - Run Log: chronological cards, run type badges, distance/pace/HR summary, edit/delete actions.
 - Memory: training context only: goals, weekly routine, long-run strategy, injury/heat/style notes. Do not mix account registration controls into this screen.

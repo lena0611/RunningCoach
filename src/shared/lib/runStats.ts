@@ -97,6 +97,21 @@ export function getNextSessionRecommendation(memory: TrainingMemory, runs: RunLo
   const sorted = [...runs].sort((a, b) => b.date.localeCompare(a.date))
   const upcoming = getNextPlannedWorkout(memory, today)
   const lastRun = sorted[0] ?? null
+  const lastRunDaysAgo = lastRun ? daysSinceRun(lastRun, today) : null
+
+  if (lastRun && lastRunDaysAgo !== null && lastRunDaysAgo <= 1 && isLongRunStress(lastRun)) {
+    return {
+      title: 'Recovery 또는 완전 휴식',
+      reason: [
+        `최근 저장 기록은 ${lastRun.date} ${lastRun.sessionTitle || lastRun.type} ${lastRun.distanceKm}km입니다.`,
+        '전날 또는 직전 롱런 뒤에는 다음 주 계획보다 회복 반응 확인이 먼저입니다.',
+        upcoming.pattern ? `다음 주간 루틴은 ${upcoming.pattern}이지만, 오늘은 회복 우선으로 둡니다.` : ''
+      ]
+        .filter(Boolean)
+        .join(' '),
+      intensity: describeRecoveryAfterLongRun(lastRun)
+    }
+  }
 
   if (upcoming.dayName === memory.athleteProfile.preferredLongRunDay || upcoming.pattern.includes('LSD') || upcoming.pattern.includes('Long')) {
     const recentLong = getRecentSaturdayLongRun(sorted)
@@ -113,12 +128,29 @@ export function getNextSessionRecommendation(memory: TrainingMemory, runs: RunLo
   }
 
   const recent = getRunsWithinDays(runs, 3, today)
-  const hasHard = recent.some((run) => ['Tempo', 'Steady Long', 'Race'].includes(run.type))
+  const hasHard = recent.some((run) => ['Tempo', 'LSD', 'Steady Long', 'Race'].includes(run.type) || isLongRunStress(run))
   return {
     title: hasHard ? 'Recovery 또는 5km Easy' : upcoming.workout || 'Easy + Strides',
     reason: upcoming.pattern ? `주간 루틴상 다음 세션은 ${upcoming.pattern}입니다.` : '최근 강훈련 여부와 주간 루틴을 함께 본 추천입니다.',
     intensity: hasHard ? '최근 3일 안에 강한 세션이 있어 회복 우선입니다.' : '무리하지 않는 기본 강도로 진행합니다.'
   }
+}
+
+function daysSinceRun(run: RunLog, today: Date): number {
+  const todayStart = new Date(today)
+  todayStart.setHours(0, 0, 0, 0)
+  const runDate = new Date(`${run.date}T00:00:00`)
+  runDate.setHours(0, 0, 0, 0)
+  return Math.round((todayStart.getTime() - runDate.getTime()) / dayMs)
+}
+
+function isLongRunStress(run: RunLog): boolean {
+  return ['LSD', 'Steady Long'].includes(run.type) || run.distanceKm >= 10
+}
+
+function describeRecoveryAfterLongRun(run: RunLog): string {
+  const basePace = run.avgPaceSec ? `직전 롱런 평균 페이스 ${formatPaceText(run.avgPaceSec)}/km 기준, ` : ''
+  return `${basePace}오늘은 20~40분 아주 편한 조깅이나 휴식이 맞습니다. 뛰더라도 대화 가능한 강도와 다리 피로 확인을 우선하세요.`
 }
 
 function round(value: number): number {
