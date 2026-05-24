@@ -1,5 +1,6 @@
 import type { Lap, RunLog, RunType } from '@/entities/run/model'
 import type { TrainingMemory } from '@/entities/training-memory/model'
+import { formatDateWithWeekday } from '@/shared/lib/format'
 
 const dayMs = 24 * 60 * 60 * 1000
 const easyPaceThresholdSec = 390
@@ -103,7 +104,7 @@ export function getNextSessionRecommendation(memory: TrainingMemory, runs: RunLo
     return {
       title: 'Recovery 또는 완전 휴식',
       reason: [
-        `최근 저장 기록은 ${lastRun.date} ${lastRun.sessionTitle || lastRun.type} ${lastRun.distanceKm}km입니다.`,
+        `최근 저장 기록은 ${formatDateWithWeekday(lastRun.date)} ${lastRun.sessionTitle || lastRun.type} ${lastRun.distanceKm}km입니다.`,
         '전날 또는 직전 롱런 뒤에는 다음 주 계획보다 회복 반응 확인이 먼저입니다.',
         upcoming.pattern ? `다음 주간 루틴은 ${upcoming.pattern}이지만, 오늘은 회복 우선으로 둡니다.` : ''
       ]
@@ -120,8 +121,8 @@ export function getNextSessionRecommendation(memory: TrainingMemory, runs: RunLo
       title: `${upcoming.dayName} ${longType}`,
       reason: [
         `주간 루틴의 다음 주요 세션은 ${upcoming.pattern || `${upcoming.dayName} 롱런`}입니다.`,
-        lastRun ? `최근 저장 기록은 ${lastRun.date} ${lastRun.sessionTitle || lastRun.type}입니다.` : '최근 저장 기록이 아직 없습니다.',
-        recentLong ? `최근 토요일 10km+ 기록은 ${recentLong.date} ${recentLong.distanceKm}km입니다.` : '최근 토요일 10km+ 기준 기록은 아직 부족합니다.'
+        lastRun ? `최근 저장 기록은 ${formatDateWithWeekday(lastRun.date)} ${lastRun.sessionTitle || lastRun.type}입니다.` : '최근 저장 기록이 아직 없습니다.',
+        recentLong ? `최근 토요일 10km+ 기록은 ${formatDateWithWeekday(recentLong.date)} ${recentLong.distanceKm}km입니다.` : '최근 토요일 10km+ 기준 기록은 아직 부족합니다.'
       ].join(' '),
       intensity: describeLongRunIntensity(longType, recentLong)
     }

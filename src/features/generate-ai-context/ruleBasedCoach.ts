@@ -1,6 +1,6 @@
 import type { RunLog } from '@/entities/run/model'
 import type { TrainingMemory } from '@/entities/training-memory/model'
-import { formatPace } from '@/shared/lib/format'
+import { formatDateWithWeekday, formatPace } from '@/shared/lib/format'
 import { getEasyRatio, getLatestByTypes, getRunsWithinDays, getVolumeWarning, sumDistance } from '@/shared/lib/runStats'
 
 export type RuleBasedCoaching = {
@@ -67,10 +67,10 @@ export function createRuleBasedCoaching(memory: TrainingMemory, runs: RunLog[], 
   if (easyDurationRatio >= 75) reasons.push(`최근 30일 쉬운 강도 비율은 ${easyDurationRatio}%로 지구력 훈련 분포가 안정적입니다.`)
   else reasons.push(`최근 30일 쉬운 강도 비율은 ${easyDurationRatio}%로, 강한 훈련보다 Easy/Recovery 비중을 먼저 확보하는 편이 좋습니다.`)
 
-  if (latestTempo) reasons.push(`최근 Tempo: ${latestTempo.date} ${latestTempo.distanceKm}km`)
+  if (latestTempo) reasons.push(`최근 Tempo: ${formatDateWithWeekday(latestTempo.date)} ${latestTempo.distanceKm}km`)
   else reasons.push('최근 Tempo 기록이 없어 목표 페이스 적응 지표가 부족합니다.')
 
-  if (latestLong) reasons.push(`최근 Long Run: ${latestLong.date} ${latestLong.type} ${latestLong.distanceKm}km`)
+  if (latestLong) reasons.push(`최근 Long Run: ${formatDateWithWeekday(latestLong.date)} ${latestLong.type} ${latestLong.distanceKm}km`)
   else reasons.push('최근 Long Run 기록이 없어 지구력 지표가 부족합니다.')
 
   const performanceSignal = estimateGoalPerformanceSignal(runs, target)

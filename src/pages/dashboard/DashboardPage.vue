@@ -7,7 +7,7 @@ import RunSummaryCard from '@/widgets/run-summary-card/RunSummaryCard.vue'
 import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
 import FatigueCard from '@/widgets/fatigue-card/FatigueCard.vue'
 import { averagePace, getEasyRatio, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, getVolumeWarning, sumDistance } from '@/shared/lib/runStats'
-import { formatPace } from '@/shared/lib/format'
+import { formatDateWithWeekday, formatPace } from '@/shared/lib/format'
 import MetricGrid from '@/shared/ui/MetricGrid.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 
@@ -54,7 +54,7 @@ const hardSessions = computed(() =>
       <div>
         <span>활성 목표</span>
         <strong>{{ activeGoal.title }}</strong>
-        <small>{{ activeGoal.targetDate ? `${activeGoal.targetDate}까지` : '목표일 미정' }}</small>
+        <small>{{ activeGoal.targetDate ? `${formatDateWithWeekday(activeGoal.targetDate)}까지` : '목표일 미정' }}</small>
       </div>
       <div>
         <span>부상 기준</span>

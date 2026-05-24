@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { courseTypes, runTypes, type ExtractedRunData } from '@/entities/run/model'
-import { toNumberOrNull } from '@/shared/lib/format'
+import { formatDateWithWeekday, toNumberOrNull } from '@/shared/lib/format'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 
 const model = defineModel<ExtractedRunData>({ required: true })
@@ -42,6 +42,7 @@ function updateNumber(key: keyof ExtractedRunData, value: string) {
     <label>
       날짜
       <input v-model="model.date" type="date" />
+      <small>{{ formatDateWithWeekday(model.date) }}</small>
     </label>
     <BottomSheetSelect
       v-model="model.type"

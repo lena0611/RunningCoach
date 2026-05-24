@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { RunLog } from '@/entities/run/model'
-import { formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
+import { formatDateWithWeekday, formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
@@ -17,7 +17,7 @@ defineProps<{ runs: RunLog[] }>()
       <article v-for="run in runs" :key="run.id" class="run-row">
         <div>
           <div class="run-row-title">
-            <strong>{{ run.date }}</strong>
+            <strong>{{ formatDateWithWeekday(run.date) }}</strong>
             <RunTypeBadge :type="run.type" />
           </div>
           <span>{{ run.distanceKm }}km · {{ formatDuration(run.durationSec) }} · {{ formatPace(run.avgPaceSec) }}/km</span>

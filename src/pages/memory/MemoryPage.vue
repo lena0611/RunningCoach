@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import type { TrainingGoal, TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
+import { formatDateWithWeekday } from '@/shared/lib/format'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 
@@ -73,7 +74,7 @@ const activeInjury = computed(() => {
 const editingInjury = computed(() => draft.injuryItems.find((item) => item.id === editingInjuryId.value) ?? null)
 const activeGoalMeta = computed(() => {
   if (!activeGoal.value) return '목표 없음'
-  return [activeGoal.value.category, activeGoal.value.targetDate ? `${activeGoal.value.targetDate}까지` : '목표일 미정'].join(' · ')
+  return [activeGoal.value.category, activeGoal.value.targetDate ? `${formatDateWithWeekday(activeGoal.value.targetDate)}까지` : '목표일 미정'].join(' · ')
 })
 const activeInjuryMeta = computed(() => {
   if (!activeInjury.value) return '관리 항목 없음'
@@ -122,6 +123,16 @@ onBeforeUnmount(() => {
 
 function join(items: string[]) {
   return items.join('\n')
+}
+
+function goalDateMeta(goal: TrainingGoal) {
+  return goal.targetDate ? ` · ${formatDateWithWeekday(goal.targetDate)}까지` : ''
+}
+
+function injuryDateMeta(item: TrainingInjuryItem) {
+  if (item.lastFlareDate) return ` · 최근 ${formatDateWithWeekday(item.lastFlareDate)}`
+  if (item.onsetDate) return ` · 시작 ${formatDateWithWeekday(item.onsetDate)}`
+  return ''
 }
 
 function split(value: string) {
@@ -450,7 +461,7 @@ async function save() {
               <button v-for="goal in draft.goals" :key="goal.id" class="memory-list-card" type="button" @click="openGoalEdit(goal.id)">
                 <span>
                   <strong>{{ goal.title }}</strong>
-                  <small>{{ goal.id === draft.activeGoalId ? '활성 목표 · ' : '' }}{{ goal.category }} · {{ goal.status }}</small>
+                  <small>{{ goal.id === draft.activeGoalId ? '활성 목표 · ' : '' }}{{ goal.category }} · {{ goal.status }}{{ goalDateMeta(goal) }}</small>
                 </span>
                 <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
               </button>
@@ -466,10 +477,12 @@ async function save() {
               <label>
                 시작일
                 <input v-model="newGoal.startDate" type="date" />
+                <small>{{ formatDateWithWeekday(newGoal.startDate) }}</small>
               </label>
               <label>
                 목표 날짜
                 <input v-model="newGoal.targetDate" type="date" />
+                <small>{{ formatDateWithWeekday(newGoal.targetDate) }}</small>
               </label>
               <label>
                 목표 거리(km)
@@ -511,10 +524,12 @@ async function save() {
               <label>
                 시작일
                 <input v-model="editingGoal.startDate" type="date" @input="updateGoal(editingGoal)" />
+                <small>{{ formatDateWithWeekday(editingGoal.startDate) }}</small>
               </label>
               <label>
                 목표 날짜
                 <input v-model="editingGoal.targetDate" type="date" @input="updateGoal(editingGoal)" />
+                <small>{{ formatDateWithWeekday(editingGoal.targetDate) }}</small>
               </label>
               <label>
                 목표 거리(km)
@@ -554,7 +569,7 @@ async function save() {
               <button v-for="item in draft.injuryItems" :key="item.id" class="memory-list-card" type="button" @click="openInjuryEdit(item.id)">
                 <span>
                   <strong>{{ item.title }}</strong>
-                  <small>{{ item.id === draft.activeInjuryItemId ? '현재 기준 · ' : '' }}{{ item.status }}{{ item.severity ? ` · ${item.severity}/5` : '' }}</small>
+                  <small>{{ item.id === draft.activeInjuryItemId ? '현재 기준 · ' : '' }}{{ item.status }}{{ item.severity ? ` · ${item.severity}/5` : '' }}{{ injuryDateMeta(item) }}</small>
                 </span>
                 <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
               </button>
@@ -578,10 +593,12 @@ async function save() {
               <label>
                 시작일
                 <input v-model="newInjury.onsetDate" type="date" />
+                <small>{{ formatDateWithWeekday(newInjury.onsetDate) }}</small>
               </label>
               <label>
                 최근 신호일
                 <input v-model="newInjury.lastFlareDate" type="date" />
+                <small>{{ formatDateWithWeekday(newInjury.lastFlareDate) }}</small>
               </label>
               <label class="full">
                 악화 트리거
@@ -626,10 +643,12 @@ async function save() {
               <label>
                 시작일
                 <input v-model="editingInjury.onsetDate" type="date" @input="updateInjury(editingInjury)" />
+                <small>{{ formatDateWithWeekday(editingInjury.onsetDate) }}</small>
               </label>
               <label>
                 최근 신호일
                 <input v-model="editingInjury.lastFlareDate" type="date" @input="updateInjury(editingInjury)" />
+                <small>{{ formatDateWithWeekday(editingInjury.lastFlareDate) }}</small>
               </label>
               <label class="full">
                 악화 트리거

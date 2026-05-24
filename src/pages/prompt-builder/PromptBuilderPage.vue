@@ -5,7 +5,7 @@ import { useRunStore } from '@/app/stores/runStore'
 import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
 import { fetchCoachReports, requestCoachRun, type CoachReport } from '@/shared/api/coachRepository'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
-import { formatDuration, formatPace } from '@/shared/lib/format'
+import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, formatPace } from '@/shared/lib/format'
 import CoachMessage from '@/shared/ui/CoachMessage.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
@@ -26,7 +26,7 @@ const runOptions = computed(() => [
   { value: '', label: '최근 흐름만 사용' },
   ...runStore.sortedRuns.map((run) => ({
     value: run.id,
-    label: `${run.date} · ${run.type}`,
+    label: `${formatDateWithWeekday(run.date)} · ${run.type}`,
     description: `${run.distanceKm}km`
   }))
 ])
@@ -74,7 +74,7 @@ async function coach() {
       </div>
       <BottomSheetSelect v-model="selectedRunId" label="선택 RunLog" :options="runOptions" />
       <section v-if="selectedRun" class="sub-panel">
-        <strong>{{ selectedRun.date }} · {{ selectedRun.sessionTitle || selectedRun.type }}</strong>
+        <strong>{{ formatDateWithWeekday(selectedRun.date) }} · {{ selectedRun.sessionTitle || selectedRun.type }}</strong>
         <p>{{ selectedRun.distanceKm }}km · {{ formatDuration(selectedRun.durationSec) }} · {{ formatPace(selectedRun.avgPaceSec) }}/km · HR {{ selectedRun.avgHeartRate ?? '-' }}</p>
         <p v-if="selectedRun.memo">{{ selectedRun.memo }}</p>
         <p v-if="selectedRun.workoutFeeling" class="helper">느낌: {{ selectedRun.workoutFeeling }}</p>
@@ -95,7 +95,7 @@ async function coach() {
         <h2>코칭 리포트</h2>
       </div>
       <div v-for="report in reports" :key="report.id" class="coach-thread-item">
-        <CoachMessage v-if="report.userNote" role="user" :text="report.userNote" :meta="new Date(report.createdAt).toLocaleString()" />
+        <CoachMessage v-if="report.userNote" role="user" :text="report.userNote" :meta="formatDateTimeWithWeekday(report.createdAt)" />
         <CoachMessage role="coach" :text="report.report" meta="RunContext Coach" />
         <p v-if="report.trainingMemoryUpdated" class="helper">AI가 목표와 누적 기록을 기준으로 코칭 메모리의 주간 루틴을 갱신했습니다.</p>
       </div>

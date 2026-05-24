@@ -1,6 +1,6 @@
 import type { RunLog } from '@/entities/run/model'
 import type { TrainingMemory } from '@/entities/training-memory/model'
-import { formatPace, formatDuration } from '@/shared/lib/format'
+import { formatDateWithWeekday, formatPace, formatDuration } from '@/shared/lib/format'
 import { getLatestByTypes, getRunsWithinDays, sumDistance } from '@/shared/lib/runStats'
 
 export function buildCoachContext(memory: TrainingMemory, runs: RunLog[], selectedRun: RunLog | null, question = ''): string {
@@ -29,5 +29,5 @@ export function buildCoachContext(memory: TrainingMemory, runs: RunLog[], select
 }
 
 function formatRunLine(run: RunLog): string {
-  return `- ${run.date} ${run.type} ${run.distanceKm}km ${formatDuration(run.durationSec)} pace ${formatPace(run.avgPaceSec)} HR ${run.avgHeartRate ?? '-'} cadence ${run.cadence ?? '-'} memo ${run.memo || '-'}`
+  return `- ${formatDateWithWeekday(run.date)} ${run.type} ${run.distanceKm}km ${formatDuration(run.durationSec)} pace ${formatPace(run.avgPaceSec)} HR ${run.avgHeartRate ?? '-'} cadence ${run.cadence ?? '-'} memo ${run.memo || '-'}`
 }

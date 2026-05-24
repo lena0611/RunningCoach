@@ -140,10 +140,12 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
   return {
     userNote,
     currentDate,
+    currentDateDisplay: formatDateWithWeekday(currentDate),
     contextMode: selectedRun ? 'selected_run_review' : 'current_flow_review',
     selectedRunTiming,
     selectedRunAgeDays,
     anchorDateForWindowStats: anchorDate,
+    anchorDateForWindowStatsDisplay: formatDateWithWeekday(anchorDate),
     instructionForDateHandling:
       'selectedRun.date는 훈련이 실제로 수행된 날짜이고 coach_reports.created_at은 코칭을 받은 날짜다. 둘을 혼동하지 마라. selectedRunTiming이 past이면 과거 기록 리뷰로 말하고, 오늘 뛴 기록/마지막 코칭 이후 새 기록이라고 단정하지 마라.',
     trainingMemory,
@@ -155,11 +157,12 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
     recentCoachReports: (reports ?? []).map((report) => ({
       selectedRunId: report.selected_run_id,
       userNote: report.user_note,
-      createdAt: report.created_at
+      createdAt: report.created_at,
+      createdAtDisplay: formatDateTimeWithWeekday(report.created_at)
     })),
-    selectedRun,
-    runsAfterSelectedRun: runsAfterSelected.slice(0, 20),
-    recent14,
+    selectedRun: decorateRunDate(selectedRun),
+    runsAfterSelectedRun: runsAfterSelected.slice(0, 20).map(decorateRunDate),
+    recent14: recent14.map(decorateRunDate),
     summaryStats: {
       recent7DistanceKm: sumDistance(withinDaysFromAnchor(runRows, 7, anchorDate)),
       recent14DistanceKm: sumDistance(recent14),
@@ -171,8 +174,8 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
       currentMonthHardSessions: currentMonth.filter((run) => ['Tempo', 'Steady Long', 'Race'].includes(run.type)).length,
       hardSessionsLast7: withinDaysFromAnchor(runRows, 7, anchorDate).filter((run) => ['Tempo', 'Steady Long', 'Race'].includes(run.type)).length,
       runsAfterSelectedRunCount: runsAfterSelected.length,
-      latestTempo,
-      latestLong
+      latestTempo: decorateRunDate(latestTempo),
+      latestLong: decorateRunDate(latestLong)
     }
   }
 }
@@ -195,7 +198,8 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     '답변 구조는 가능한 한 다음 순서를 따른다: 한 줄 결론, 핵심 지표, 오늘 해석, 조심할 점, 다음 훈련, 한 줄 요약.',
     '전체 report는 기본 700~1000자 안팎으로 제한한다. 한 문단은 최대 2~3문장으로 짧게 쓴다.',
     '잘한 점은 최대 3개, 조심할 점은 최대 2개만 말한다.',
-    '반드시 currentDate, selectedRun.date, selectedRunTiming을 확인한 뒤 말한다.',
+    '반드시 currentDateDisplay, selectedRun.dateDisplay, selectedRunTiming을 확인한 뒤 말한다.',
+    'report에 날짜를 쓸 때는 가능한 한 2026-05-24(일)처럼 요일을 붙인다.',
     'selectedRunTiming이 past이면 "오늘", "방금", "이번 훈련 이후"처럼 현재 훈련처럼 보이는 표현을 쓰지 말고, 과거 기록을 복기하는 톤으로 말한다.',
     'coach_reports.created_at이나 최근 코칭 시각을 훈련 날짜로 착각하지 않는다. 마지막 코칭 이후에 뛴 기록이라고 단정하지 않는다.',
     'recent14/recent30은 anchorDateForWindowStats 기준 창이다. selectedRun이 있으면 선택 기록 날짜 기준의 이전 흐름으로 해석한다.',
@@ -354,6 +358,42 @@ function currentDateInSeoul() {
     month: '2-digit',
     day: '2-digit'
   }).format(new Date())
+}
+
+function decorateRunDate<T extends RunLogRow | null>(run: T): T extends RunLogRow ? RunLogRow & { dateDisplay: string } : null {
+  if (!run) return null as T extends RunLogRow ? RunLogRow & { dateDisplay: string } : null
+  return {
+    ...run,
+    dateDisplay: formatDateWithWeekday(run.date)
+  } as T extends RunLogRow ? RunLogRow & { dateDisplay: string } : null
+}
+
+function formatDateWithWeekday(value: string | null | undefined) {
+  if (!value) return '-'
+  const dateText = value.slice(0, 10)
+  const date = parseDateOnly(dateText)
+  if (!Number.isFinite(date.getTime())) return value
+  const weekdays = ['일', '월', '화', '수', '목', '금', '토']
+  return `${dateText}(${weekdays[date.getUTCDay()]})`
+}
+
+function formatDateTimeWithWeekday(value: string | null | undefined) {
+  if (!value) return '-'
+  const date = new Date(value ?? '')
+  if (!Number.isFinite(date.getTime())) return formatDateWithWeekday(value)
+  const seoulDate = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(date)
+  const seoulTime = new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(date)
+  return `${formatDateWithWeekday(seoulDate)} ${seoulTime}`
 }
 
 function parseDateOnly(value: string) {

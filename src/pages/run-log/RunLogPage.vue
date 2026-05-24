@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRunStore } from '@/app/stores/runStore'
 import { runTypes, type RunLog, type RunType } from '@/entities/run/model'
-import { formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
+import { formatDateWithWeekday, formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
 import RunForm from '@/shared/ui/RunForm.vue'
 import { estimateHeartRateDrift } from '@/shared/lib/runStats'
 import EmptyState from '@/shared/ui/EmptyState.vue'
@@ -105,7 +105,7 @@ function closeEdit() {
         <article v-for="run in filteredRuns" :key="run.id" class="run-row">
           <div>
             <div class="run-row-title">
-              <strong>{{ run.date }}<span v-if="run.sessionTitle"> · {{ run.sessionTitle }}</span></strong>
+              <strong>{{ formatDateWithWeekday(run.date) }}<span v-if="run.sessionTitle"> · {{ run.sessionTitle }}</span></strong>
               <RunTypeBadge :type="run.type" />
             </div>
             <div class="run-metrics-line">
@@ -159,7 +159,7 @@ function closeEdit() {
         <section class="bottom-sheet confirm-sheet" role="dialog" aria-modal="true" aria-label="삭제 확인">
           <div class="bottom-sheet-handle" />
           <h2>러닝 기록을 삭제할까요?</h2>
-          <p>{{ pendingDeleteRun.date }} · {{ pendingDeleteRun.distanceKm }}km 기록이 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</p>
+          <p>{{ formatDateWithWeekday(pendingDeleteRun.date) }} · {{ pendingDeleteRun.distanceKm }}km 기록이 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</p>
           <div class="confirm-actions">
             <button class="danger" type="button" :disabled="deletingId === pendingDeleteRun.id" @click="confirmRemove">
               {{ deletingId === pendingDeleteRun.id ? '삭제 중' : '삭제' }}

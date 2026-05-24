@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '@/app/stores/authStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { getActiveGoal, getActiveInjuryItem, type PersonalBest, type TrainingMemory } from '@/entities/training-memory/model'
+import { formatDateWithWeekday } from '@/shared/lib/format'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 
 defineProps<{ isAuthenticated: boolean }>()
@@ -69,16 +70,20 @@ function parsePersonalBests(value: string) {
       return {
         distanceKm,
         durationSec,
-        date,
+        date: normalizeDateInput(date),
         source: pbSource
       }
     })
     .filter((item): item is NonNullable<typeof item> => item !== null)
 }
 
+function normalizeDateInput(value: string) {
+  return value.replace(/\([^)]+\)/g, '').trim()
+}
+
 function formatPersonalBests() {
   return draft.athleteProfile.personalBests
-    .map((pb) => `${pb.distanceKm}, ${formatDuration(pb.durationSec)}, ${pb.date}, ${pb.source}`)
+    .map((pb) => `${pb.distanceKm}, ${formatDuration(pb.durationSec)}, ${formatDateWithWeekday(pb.date)}, ${pb.source}`)
     .join('\n')
 }
 

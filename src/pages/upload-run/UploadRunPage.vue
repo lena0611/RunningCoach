@@ -6,6 +6,7 @@ import RunImageUploader from '@/widgets/run-image-uploader/RunImageUploader.vue'
 import RunForm from '@/shared/ui/RunForm.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
+import { formatDateWithWeekday } from '@/shared/lib/format'
 import type { ExtractedRunData } from '@/entities/run/model'
 import { createEmptyRun, extractRunDataFromFile } from '@/features/extract-run-data/localFileExtractor'
 import {
@@ -33,7 +34,7 @@ const error = ref('')
 const healthKitOptions = computed(() =>
   healthKitCandidates.value.map((candidate) => ({
     value: candidate.externalId,
-    label: `${candidate.date} · ${candidate.distanceKm ?? '-'}km`,
+    label: `${formatDateWithWeekday(candidate.date)} · ${candidate.distanceKm ?? '-'}km`,
     description: candidate.sourceName ?? 'HealthKit'
   }))
 )
