@@ -2,6 +2,7 @@
 import { computed, onMounted } from 'vue'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
 import RunSummaryCard from '@/widgets/run-summary-card/RunSummaryCard.vue'
 import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
 import FatigueCard from '@/widgets/fatigue-card/FatigueCard.vue'
@@ -29,6 +30,8 @@ const last7 = computed(() => sumDistance(getRunsWithinDays(runs.value, 7)))
 const last14 = computed(() => sumDistance(getRunsWithinDays(runs.value, 14)))
 const easyRatio = computed(() => getEasyRatio(getRunsWithinDays(runs.value, 30)))
 const nextSession = computed(() => getNextSessionRecommendation(memoryStore.memory, runs.value))
+const activeGoal = computed(() => getActiveGoal(memoryStore.memory))
+const activeInjury = computed(() => getActiveInjuryItem(memoryStore.memory))
 const hardSessions = computed(() =>
   getRunsWithinDays(runs.value, 7).filter((run) => ['Tempo', 'LSD', 'Steady Long', 'Race'].includes(run.type)).length
 )
@@ -44,6 +47,19 @@ const hardSessions = computed(() =>
       <div class="hero-metric">
         <span>이번 주</span>
         <strong>{{ weekDistance }}km</strong>
+      </div>
+    </section>
+
+    <section class="context-strip">
+      <div>
+        <span>활성 목표</span>
+        <strong>{{ activeGoal.title }}</strong>
+        <small>{{ activeGoal.targetDate ? `${activeGoal.targetDate}까지` : '목표일 미정' }}</small>
+      </div>
+      <div>
+        <span>부상 기준</span>
+        <strong>{{ activeInjury?.title || '관리 항목 없음' }}</strong>
+        <small>{{ activeInjury ? `${activeInjury.status}${activeInjury.severity ? ` · ${activeInjury.severity}/5` : ''}` : '코칭 제한 없음' }}</small>
       </div>
     </section>
 

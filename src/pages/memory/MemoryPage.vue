@@ -17,10 +17,13 @@ const error = ref('')
 const newGoal = reactive({
   title: '',
   category: 'race' as TrainingGoal['category'],
+  startDate: null as string | null,
   targetDate: null as string | null,
   distanceKm: null as number | null,
   targetDurationSec: null as number | null,
   priority: 1,
+  successCriteria: '',
+  strategyNotes: '',
   notes: ''
 })
 const newInjury = reactive({
@@ -31,7 +34,10 @@ const newInjury = reactive({
   onsetDate: null as string | null,
   lastFlareDate: null as string | null,
   notes: '',
-  managementPlan: ''
+  managementPlan: '',
+  triggers: [] as string[],
+  restrictions: [] as string[],
+  returnToRunCriteria: ''
 })
 
 const goalCategoryOptions = [
@@ -61,6 +67,14 @@ const activeInjury = computed(() => {
   return draft.injuryItems.find((item) => item.id === draft.activeInjuryItemId) ?? null
 })
 const editingInjury = computed(() => draft.injuryItems.find((item) => item.id === editingInjuryId.value) ?? null)
+const activeGoalMeta = computed(() => {
+  if (!activeGoal.value) return '목표 없음'
+  return [activeGoal.value.category, activeGoal.value.targetDate ? `${activeGoal.value.targetDate}까지` : '목표일 미정'].join(' · ')
+})
+const activeInjuryMeta = computed(() => {
+  if (!activeInjury.value) return '관리 항목 없음'
+  return [activeInjury.value.status, activeInjury.value.severity ? `${activeInjury.value.severity}/5` : '강도 미입력'].join(' · ')
+})
 
 watch(
   () => memoryStore.selectedUserId,
@@ -97,10 +111,13 @@ function openGoalNew() {
   Object.assign(newGoal, {
     title: '',
     category: 'race',
+    startDate: null,
     targetDate: null,
     distanceKm: null,
     targetDurationSec: null,
     priority: draft.goals.length + 1,
+    successCriteria: '',
+    strategyNotes: '',
     notes: ''
   })
   panel.value = 'goal-new'
@@ -114,11 +131,14 @@ function addGoal() {
     id: crypto.randomUUID(),
     title,
     category: newGoal.category,
+    startDate: newGoal.startDate || null,
     targetDate: newGoal.targetDate || null,
     distanceKm: newGoal.distanceKm,
     targetDurationSec: newGoal.targetDurationSec,
     priority: newGoal.priority || draft.goals.length + 1,
     status: 'active',
+    successCriteria: newGoal.successCriteria,
+    strategyNotes: newGoal.strategyNotes,
     notes: newGoal.notes,
     createdAt: now,
     updatedAt: now
@@ -166,7 +186,10 @@ function openInjuryNew() {
     onsetDate: null,
     lastFlareDate: null,
     notes: '',
-    managementPlan: ''
+    managementPlan: '',
+    triggers: [],
+    restrictions: [],
+    returnToRunCriteria: ''
   })
   panel.value = 'injury-new'
 }
@@ -185,6 +208,9 @@ function addInjury() {
     lastFlareDate: newInjury.lastFlareDate || null,
     notes: newInjury.notes,
     managementPlan: newInjury.managementPlan,
+    triggers: newInjury.triggers,
+    restrictions: newInjury.restrictions,
+    returnToRunCriteria: newInjury.returnToRunCriteria,
     createdAt: now,
     updatedAt: now
   }
@@ -240,6 +266,12 @@ async function save() {
       <p class="helper">계정 이름, 출생연도, 성별, PB 같은 개인정보는 우상단 계정 메뉴에서 수정합니다.</p>
 
       <div v-if="panel === 'overview'" class="memory-stack">
+        <div class="memory-hero">
+          <span class="context-chip">현재 코칭 기준</span>
+          <strong>{{ activeGoal?.title || '목표 없음' }}</strong>
+          <small>{{ activeGoalMeta }}</small>
+          <small v-if="activeInjury">부상관리: {{ activeInjury.title }} · {{ activeInjuryMeta }}</small>
+        </div>
         <button class="memory-nav-card" type="button" @click="openGoals">
           <span>
             <strong>목표 관리</strong>
@@ -314,6 +346,10 @@ async function save() {
         </label>
         <BottomSheetSelect v-model="newGoal.category" label="목표 유형" :options="goalCategoryOptions" />
         <label>
+          시작일
+          <input v-model="newGoal.startDate" type="date" />
+        </label>
+        <label>
           목표 날짜
           <input v-model="newGoal.targetDate" type="date" />
         </label>
@@ -328,6 +364,14 @@ async function save() {
         <label>
           우선순위
           <input v-model.number="newGoal.priority" type="number" inputmode="numeric" min="1" />
+        </label>
+        <label class="full">
+          성공 기준
+          <textarea v-model="newGoal.successCriteria" rows="3" placeholder="예: 10km를 59:59 이내로 완주" />
+        </label>
+        <label class="full">
+          목표 전략
+          <textarea v-model="newGoal.strategyNotes" rows="3" placeholder="예: Easy 기반 + 목요일 Tempo + 토요일 격주 롱런" />
         </label>
         <label class="full">
           목표 메모
@@ -347,6 +391,10 @@ async function save() {
         <BottomSheetSelect v-model="editingGoal.category" label="목표 유형" :options="goalCategoryOptions" @update:model-value="updateGoal(editingGoal)" />
         <BottomSheetSelect v-model="editingGoal.status" label="상태" :options="goalStatusOptions" @update:model-value="updateGoal(editingGoal)" />
         <label>
+          시작일
+          <input v-model="editingGoal.startDate" type="date" @input="updateGoal(editingGoal)" />
+        </label>
+        <label>
           목표 날짜
           <input v-model="editingGoal.targetDate" type="date" @input="updateGoal(editingGoal)" />
         </label>
@@ -361,6 +409,14 @@ async function save() {
         <label>
           우선순위
           <input v-model.number="editingGoal.priority" type="number" inputmode="numeric" min="1" @input="updateGoal(editingGoal)" />
+        </label>
+        <label class="full">
+          성공 기준
+          <textarea v-model="editingGoal.successCriteria" rows="3" placeholder="예: 10km를 59:59 이내로 완주" @input="updateGoal(editingGoal)" />
+        </label>
+        <label class="full">
+          목표 전략
+          <textarea v-model="editingGoal.strategyNotes" rows="3" placeholder="예: Easy 기반 + 목요일 Tempo + 토요일 격주 롱런" @input="updateGoal(editingGoal)" />
         </label>
         <label class="full">
           목표 메모
@@ -410,6 +466,18 @@ async function save() {
           <input v-model="newInjury.lastFlareDate" type="date" />
         </label>
         <label class="full">
+          악화 트리거
+          <textarea :value="join(newInjury.triggers)" rows="3" placeholder="예: 템포 다음날 뻣뻣함&#10;볼륨 급증" @input="newInjury.triggers = split(($event.target as HTMLTextAreaElement).value)" />
+        </label>
+        <label class="full">
+          훈련 제한
+          <textarea :value="join(newInjury.restrictions)" rows="3" placeholder="예: 통증이 있으면 스트라이드 생략&#10;롱런 후 하루 회복 우선" @input="newInjury.restrictions = split(($event.target as HTMLTextAreaElement).value)" />
+        </label>
+        <label class="full">
+          복귀 기준
+          <textarea v-model="newInjury.returnToRunCriteria" rows="3" placeholder="예: 다음날 뻣뻣함 없이 Easy가 편할 때 강도 복귀" />
+        </label>
+        <label class="full">
           메모
           <textarea v-model="newInjury.notes" rows="3" placeholder="예: 템포 다음날 뻣뻣함 확인 필요" />
         </label>
@@ -444,6 +512,18 @@ async function save() {
         <label>
           최근 신호일
           <input v-model="editingInjury.lastFlareDate" type="date" @input="updateInjury(editingInjury)" />
+        </label>
+        <label class="full">
+          악화 트리거
+          <textarea :value="join(editingInjury.triggers)" rows="3" placeholder="예: 템포 다음날 뻣뻣함&#10;볼륨 급증" @input="editingInjury.triggers = split(($event.target as HTMLTextAreaElement).value); updateInjury(editingInjury)" />
+        </label>
+        <label class="full">
+          훈련 제한
+          <textarea :value="join(editingInjury.restrictions)" rows="3" placeholder="예: 통증이 있으면 스트라이드 생략&#10;롱런 후 하루 회복 우선" @input="editingInjury.restrictions = split(($event.target as HTMLTextAreaElement).value); updateInjury(editingInjury)" />
+        </label>
+        <label class="full">
+          복귀 기준
+          <textarea v-model="editingInjury.returnToRunCriteria" rows="3" placeholder="예: 다음날 뻣뻣함 없이 Easy가 편할 때 강도 복귀" @input="updateInjury(editingInjury)" />
         </label>
         <label class="full">
           메모

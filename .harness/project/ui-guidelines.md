@@ -42,10 +42,12 @@ Use a screen stack when the user is drilling into a deeper flow without changing
 
 - Dashboard: home screen, weekly/monthly distance, Easy ratio, hard session count, next recommended session, recent runs.
 - Dashboard hero copy must not imply measured physiology unless the app has measured it. Use clear labels like "훈련 요약" instead of ambiguous labels like "오늘의 컨디션".
+- Dashboard and Coach must surface the active goal and active injury context near the top. The user should not have to infer which goal or restriction the recommendation used.
 - Upload: simple HealthKit/FIT/manual import flow with large upload/import cards.
 - Run Log: chronological cards, run type badges, distance/pace/HR summary, edit/delete actions.
 - Memory: training context only: goal management, injury management, AI-managed weekly routine, long-run strategy, heat/style notes. Do not mix account registration controls into this screen. Weekly routine is shown as AI-managed context, not as a freeform user-authored plan.
 - Memory goal and injury management must use separated flows: overview card -> list -> edit or new item screen. Do not place active selection, edit fields, creation fields, and full lists in one long mixed form.
+- Memory overview should summarize the current coaching basis first, then provide drill-in cards for goal and injury management. Deep edit fields belong only on focused edit/create screens.
 - Coach: chat-like user and coach messages, markdown rendered as readable headings, paragraphs, lists, code blocks, and dividers.
 
 ## Component Rules

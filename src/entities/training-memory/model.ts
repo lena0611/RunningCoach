@@ -18,11 +18,14 @@ export type TrainingGoal = {
   id: string
   title: string
   category: 'race' | 'fitness' | 'health' | 'habit' | 'maintenance'
+  startDate: string | null
   targetDate: string | null
   distanceKm: number | null
   targetDurationSec: number | null
   priority: number
   status: 'active' | 'paused' | 'completed' | 'archived'
+  successCriteria: string
+  strategyNotes: string
   notes: string
   createdAt: string
   updatedAt: string
@@ -38,6 +41,9 @@ export type TrainingInjuryItem = {
   lastFlareDate: string | null
   notes: string
   managementPlan: string
+  triggers: string[]
+  restrictions: string[]
+  returnToRunCriteria: string
   createdAt: string
   updatedAt: string
 }
@@ -70,11 +76,14 @@ export const initialTrainingMemory: TrainingMemory = {
       id: defaultGoalId,
       title: '10km 60분 달성',
       category: 'race',
+      startDate: null,
       targetDate: null,
       distanceKm: 10,
       targetDurationSec: 3600,
       priority: 1,
       status: 'active',
+      successCriteria: '10km를 59:59 이내로 완주한다.',
+      strategyNotes: 'Easy 기반을 유지하면서 Tempo와 격주 롱런으로 10km 지속 능력을 끌어올린다.',
       notes: '기본 활성 목표',
       createdAt: '2026-05-24T00:00:00.000Z',
       updatedAt: '2026-05-24T00:00:00.000Z'
@@ -91,6 +100,9 @@ export const initialTrainingMemory: TrainingMemory = {
       lastFlareDate: null,
       notes: '과거 이슈. 강훈련/롱런 뒤 뻣뻣함 여부 확인.',
       managementPlan: '통증 단정 없이 피로 누적 신호를 보수적으로 관찰한다.',
+      triggers: ['템포/롱런 다음날 뻣뻣함', '볼륨 급증'],
+      restrictions: ['통증이 있으면 스트라이드와 템포를 줄인다', '롱런 후 회복 반응을 먼저 확인한다'],
+      returnToRunCriteria: '다음날 뻣뻣함이나 통증 신호 없이 Easy 조깅이 편하게 느껴질 때 강도를 올린다.',
       createdAt: '2026-05-24T00:00:00.000Z',
       updatedAt: '2026-05-24T00:00:00.000Z'
     }
@@ -199,11 +211,14 @@ function normalizeGoal(goal: Partial<TrainingGoal>, index: number, now: string):
     id: typeof goal.id === 'string' && goal.id ? goal.id : `goal-${index + 1}`,
     title,
     category: normalizeGoalCategory(goal.category),
+    startDate: typeof goal.startDate === 'string' && goal.startDate ? goal.startDate : null,
     targetDate: typeof goal.targetDate === 'string' && goal.targetDate ? goal.targetDate : null,
     distanceKm: normalizeNullableNumber(goal.distanceKm),
     targetDurationSec: normalizeNullableNumber(goal.targetDurationSec),
     priority: Number.isFinite(goal.priority) ? Number(goal.priority) : index + 1,
     status: normalizeGoalStatus(goal.status),
+    successCriteria: typeof goal.successCriteria === 'string' ? goal.successCriteria : '',
+    strategyNotes: typeof goal.strategyNotes === 'string' ? goal.strategyNotes : '',
     notes: typeof goal.notes === 'string' ? goal.notes : '',
     createdAt: typeof goal.createdAt === 'string' ? goal.createdAt : now,
     updatedAt: typeof goal.updatedAt === 'string' ? goal.updatedAt : now
@@ -249,6 +264,9 @@ function normalizeInjuryItem(item: Partial<TrainingInjuryItem>, index: number, n
     lastFlareDate: typeof item.lastFlareDate === 'string' && item.lastFlareDate ? item.lastFlareDate : null,
     notes: typeof item.notes === 'string' ? item.notes : '',
     managementPlan: typeof item.managementPlan === 'string' ? item.managementPlan : '',
+    triggers: normalizeStringArray(item.triggers),
+    restrictions: normalizeStringArray(item.restrictions),
+    returnToRunCriteria: typeof item.returnToRunCriteria === 'string' ? item.returnToRunCriteria : '',
     createdAt: typeof item.createdAt === 'string' ? item.createdAt : now,
     updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : now
   }
@@ -267,6 +285,11 @@ function normalizeSeverity(value: unknown): number | null {
 function normalizeNullableNumber(value: unknown): number | null {
   const numberValue = Number(value)
   return Number.isFinite(numberValue) ? numberValue : null
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((item) => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
 }
 
 function cloneMemory<T>(memory: T): T {

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
 import { fetchCoachReports, requestCoachRun, type CoachReport } from '@/shared/api/coachRepository'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { formatDuration, formatPace } from '@/shared/lib/format'
@@ -19,6 +20,8 @@ const error = ref('')
 const reports = ref<CoachReport[]>([])
 
 const selectedRun = computed(() => runStore.sortedRuns.find((run) => run.id === selectedRunId.value) ?? null)
+const activeGoal = computed(() => getActiveGoal(memoryStore.memory))
+const activeInjury = computed(() => getActiveInjuryItem(memoryStore.memory))
 const runOptions = computed(() => [
   { value: '', label: '최근 흐름만 사용' },
   ...runStore.sortedRuns.map((run) => ({
@@ -62,7 +65,13 @@ async function coach() {
       <div class="section-heading">
         <h2>AI Coach</h2>
       </div>
-      <p class="helper">RunLog, 누적 메모리, 오늘 메모를 합쳐 짧은 코칭 리포트를 생성합니다.</p>
+      <p class="helper">선택 기록을 활성 목표와 부상관리 기준에 맞춰 짧게 해석합니다.</p>
+      <div class="coach-context-card">
+        <span class="context-chip">코칭 기준</span>
+        <strong>{{ activeGoal.title }}</strong>
+        <small>{{ activeGoal.successCriteria || activeGoal.notes || '성공 기준 미입력' }}</small>
+        <small v-if="activeInjury">부상관리: {{ activeInjury.title }} · {{ activeInjury.status }}</small>
+      </div>
       <BottomSheetSelect v-model="selectedRunId" label="선택 RunLog" :options="runOptions" />
       <section v-if="selectedRun" class="sub-panel">
         <strong>{{ selectedRun.date }} · {{ selectedRun.sessionTitle || selectedRun.type }}</strong>

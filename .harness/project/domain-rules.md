@@ -9,14 +9,16 @@
 - `RunContextUser`: 앱에 등록된 사용자 단위다. 각 사용자는 자기 `TrainingMemory`와 목표를 가진다.
 - `FIT import`: Workoutdoors에서 export한 `.fit` 파일을 브라우저에서 로컬 파싱해 `RunLog` 후보를 만드는 흐름이다.
 - `AI Coach`: 저장 데이터와 프로그램 통계를 기반으로 OpenAI가 자연어 코칭 리포트를 생성하는 코칭 엔진이다.
-- `Goal`: 사용자는 여러 목표를 가질 수 있고, `activeGoalId`로 지정된 활성 목표가 코칭의 1차 판단 기준이다. 다른 목표는 보조 관점으로 참고한다.
-- `InjuryItem`: 사용자는 여러 부상/주의사항을 관리할 수 있고, `activeInjuryItemId`로 지정된 항목이 코칭의 1차 부상관리 기준이다. 의료 진단이 아니라 훈련 강도 조절과 관찰 포인트로만 사용한다.
+- `Goal`: 사용자는 여러 목표를 가질 수 있고, `activeGoalId`로 지정된 활성 목표가 코칭의 1차 판단 기준이다. 시작일, 목표일, 성공 기준, 목표 전략을 함께 가진다. 다른 목표는 보조 관점으로 참고한다.
+- `InjuryItem`: 사용자는 여러 부상/주의사항을 관리할 수 있고, `activeInjuryItemId`로 지정된 항목이 코칭의 1차 부상관리 기준이다. 악화 트리거, 훈련 제한, 복귀 기준을 함께 가지며, 의료 진단이 아니라 훈련 강도 조절과 관찰 포인트로만 사용한다.
 
 ## 핵심 엔티티
 - `RunLog`: 사용자 ID, 외부 원본 ID, 날짜, 타입, 거리, 시간, 페이스, 심박, 케이던스, 기온, RPE, 메모, 랩, 고속 구간 요약, 태그, 출처, 생성/수정 시각을 가진다.
 - `Lap`: 랩 번호, 랩 거리, 랩 페이스, 평균 심박, 케이던스를 가진다.
 - `FastSegment`: route/speed 샘플에서 계산한 짧은 고속 구간 요약이다. 시작 시각, 지속 시간, 거리, 평균/최고 페이스를 가진다. 원본 GPS 좌표는 저장하지 않는다.
 - `TrainingMemory`: legacy `goal`, `goals`, `activeGoalId`, `injuryItems`, `activeInjuryItemId`, AthleteProfile, 주간 루틴, 장거리 전략, 현재 볼륨 노트, known issues, running style, heat strategy, ai notes를 가진다. `goal`은 기존 호환용이며 활성 목표 제목과 동기화한다.
+- `TrainingGoal`: title/category/status 외에 startDate, targetDate, distanceKm, targetDurationSec, successCriteria, strategyNotes를 가진다. AI는 active goal의 성공 기준과 전략을 우선 기준으로 삼는다.
+- `TrainingInjuryItem`: title/area/status/severity 외에 triggers, restrictions, returnToRunCriteria를 가진다. AI는 active injury의 제한 조건을 다음 훈련 추천에 반영한다.
 
 ## 불변식
 - 원본 운동 파일은 저장하지 않는다.
@@ -33,6 +35,7 @@
 - Dashboard의 다음 추천 세션은 단순 최근 강훈련 여부만으로 정하지 않는다. `TrainingMemory.weeklyPattern`, 선호 롱런 요일, 최근 실제 RunLog 날짜, 최근 토요일 10km+ 기록의 평균 페이스를 함께 본다.
 - `TrainingMemory.weeklyPattern`은 사용자가 직접 세우는 정적 루틴이 아니다. AI 코칭이 계정 목표와 누적 RunLog를 보고 유지/수정하는 훈련 계획이며, 사용자는 목표/프로필/개인 맥락을 제공한다.
 - AI 코칭은 세션 평가와 동시에 주간 루틴 유지/수정 필요성을 판단한다. 루틴 변경이 필요하면 Edge Function이 `training_memory.memory.weeklyPattern` 전체를 갱신하고, 변경 근거를 report와 `aiNotes`에 짧게 남긴다.
+- AI 코칭과 홈 요약은 활성 목표와 활성 부상관리 항목을 명시적으로 보여줘야 한다. 추천/분석의 기준이 사용자에게 보이지 않으면 코칭 신뢰도가 떨어진다.
 - 토요일 롱런 추천은 최근 토요일 10km+ 기록의 평균 페이스를 기준으로 LSD/Steady Long 강도 범위를 제안한다. 세션 타입은 참고하되, 실제 강도 판단은 페이스와 최근 흐름을 우선한다.
 - 토요일 또는 직전일 10km+ 롱런/LSD/Steady Long 뒤의 다음날은 주간 루틴의 다음 세션보다 Recovery 또는 휴식을 우선 추천한다. 특히 일요일 홈 추천은 전날 롱런 피로 회복 여부를 먼저 본다.
 - 코칭과 대시보드, 기록 목록은 현재 선택된 사용자 기준 `RunLog`와 `TrainingMemory`만 사용한다.
