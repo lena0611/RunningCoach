@@ -189,6 +189,18 @@ textarea {
   -webkit-text-size-adjust: 100%;
 }
 
+input[type='date'] {
+  min-width: 0;
+  max-width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+input[type='date']::-webkit-date-and-time-value {
+  min-width: 0;
+  text-align: left;
+}
+
 input:focus,
 select:focus,
 textarea:focus {
@@ -715,8 +727,9 @@ label {
 
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
   gap: 14px;
+  min-width: 0;
 }
 
 .full {
@@ -777,6 +790,17 @@ label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.select-chevron {
+  flex: 0 0 auto;
+  width: 19px;
+  height: 19px;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
 }
 
 .bottom-sheet-layer {
@@ -880,6 +904,7 @@ label {
   background: var(--color-primary);
   color: var(--color-on-primary);
   font-weight: 950;
+  line-height: 1;
 }
 
 @keyframes sheet-rise {
@@ -1003,6 +1028,80 @@ label {
   padding-left: 20px;
   color: var(--color-text);
   line-height: 1.55;
+}
+
+.memory-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.memory-nav-card,
+.memory-list-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  min-height: 76px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: var(--color-subtle);
+  color: var(--color-text);
+  box-shadow: none;
+  text-align: left;
+}
+
+.memory-nav-card span,
+.memory-list-card span {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.memory-nav-card strong,
+.memory-list-card strong {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-nav-card small,
+.memory-list-card small {
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: 13px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-nav-card .select-chevron,
+.memory-list-card .select-chevron {
+  color: var(--color-muted);
+}
+
+.compact-heading {
+  margin-bottom: 0;
+}
+
+.compact-heading h3 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.compact-heading button {
+  min-height: 40px;
+  padding: 0 14px;
+}
+
+.compact-action {
+  min-height: 34px;
+  margin: 0 0 8px;
+  padding: 0 12px;
+  font-size: 13px;
 }
 
 .recommendation-card {

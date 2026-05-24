@@ -40,7 +40,9 @@ function choose(value: string) {
     <span class="bottom-sheet-label">{{ label }}</span>
     <button class="bottom-sheet-trigger" type="button" @click="open = true">
       <span>{{ displayText }}</span>
-      <span aria-hidden="true">⌄</span>
+      <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24">
+        <path d="m6 9 6 6 6-6" />
+      </svg>
     </button>
 
     <Teleport to="body">
