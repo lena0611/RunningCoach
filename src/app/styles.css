@@ -899,7 +899,7 @@ label {
 .bottom-sheet-layer {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 160;
   display: grid;
   align-items: end;
   background: var(--color-backdrop);
@@ -1259,7 +1259,7 @@ label {
 }
 
 .confirm-layer {
-  z-index: 150;
+  z-index: 170;
 }
 
 .confirm-sheet {

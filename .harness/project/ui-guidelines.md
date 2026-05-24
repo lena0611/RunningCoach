@@ -25,6 +25,7 @@ RunContext is a personal running coach app, not an admin dashboard.
 - Main tabs support horizontal swipe navigation. Swipes should be disabled over interactive controls, bottom sheets, and side drawers to avoid accidental data changes.
 - Root tab navigation through the bottom nav resets the main scroll position to top. Deep in-tab stacks preserve the root surface and restore the previous stack page scroll on Back.
 - Do not use native `<select>` for app workflows. Use `BottomSheetSelect`, opening options in a bottom sheet.
+- `BottomSheetSelect` overlays must sit above screen stacks and side drawers. When adding stack/drawer/modal z-index layers, keep the common bottom sheet layer higher than those surfaces and destructive confirmation sheets higher than ordinary selection sheets.
 - Account/profile management belongs in the header account drawer, not inside the `Memo` tab.
 - The account drawer opens from right to left. Profile editing is a second right-to-left stack inside the drawer.
 
