@@ -15,6 +15,8 @@ RunContext is a personal running coach app, not an admin dashboard.
 - Use CSS design tokens from `src/app/styles.css`.
 - RunContext follows a TDS-inspired mobile system, not raw Toss branding. Treat TDS as interaction/layout guidance: neutral grey scales, clear typography hierarchy, pressable rows, fixed CTA bars, bottom sheets, and toast behavior. Keep RunContext's running-coach identity and green primary color.
 - TDS adaptation source: https://tossmini-docs.toss.im/tds-mobile/
+- Before any UI/UX change, inspect the relevant TDS Mobile category and choose the closest pattern first. Examples: screen headers -> `Top`, repeated items -> `ListRow`, forms -> `TextField`, selections -> `BottomSheet`, persistent save actions -> `FixedBottomCTA`, feedback -> `Toast`, confirmations -> `Dialog` or bottom sheet. Then adapt the pattern to RunContext instead of inventing a new local interaction.
+- If no TDS pattern fits, document the reason in the implementation note or harness decision log before adding a new page-specific UI pattern.
 - Define theme values through CSS tokens. Add light-mode overrides in `@media (prefers-color-scheme: light)` instead of hard-coding one-off light colors.
 - New colors should be added as semantic tokens or TDS-like scale tokens first. Do not scatter page-specific hex values across components.
 - Typography must use a small set of shared scale tokens: display, title, body, caption, and metric. Avoid one-off font-size values in page components unless the component is genuinely unique.
