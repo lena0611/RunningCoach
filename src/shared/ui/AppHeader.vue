@@ -146,7 +146,9 @@ function signOutAndClose() {
               <p class="eyebrow">Account</p>
               <h2>계정 정보</h2>
             </div>
-            <button class="icon-action" type="button" aria-label="닫기" @click="closeDrawer">닫기</button>
+            <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeDrawer">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+            </button>
           </div>
 
           <div class="account-summary">
@@ -188,7 +190,9 @@ function signOutAndClose() {
               <p class="eyebrow">Profile</p>
               <h2>개인정보 수정</h2>
             </div>
-            <button class="icon-action" type="button" aria-label="계정 정보로 돌아가기" @click="editOpen = false">닫기</button>
+            <button class="stack-icon-button" type="button" aria-label="계정 정보로 돌아가기" @click="editOpen = false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+            </button>
           </div>
 
           <p v-if="error" class="error">{{ error }}</p>

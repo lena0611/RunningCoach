@@ -362,6 +362,7 @@ label {
   overflow-y: auto;
   padding: calc(env(safe-area-inset-top) + 18px) 18px calc(env(safe-area-inset-bottom) + 22px);
   transition: transform 180ms ease-out;
+  -webkit-overflow-scrolling: touch;
 }
 
 .side-drawer-editing .side-drawer-panel {
@@ -1113,8 +1114,10 @@ label {
 }
 
 .sheet-close {
+  width: 38px;
+  min-width: 38px;
   min-height: 38px;
-  padding: 0 12px;
+  border-radius: 14px;
 }
 
 .bottom-sheet-options {
@@ -1303,6 +1306,13 @@ label {
   gap: 14px;
 }
 
+.memory-stack-screen {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+}
+
 .memory-stack-layer {
   position: fixed;
   inset: 0;
@@ -1466,6 +1476,35 @@ label {
   to {
     transform: translateX(0);
   }
+}
+
+.stack-slide-forward-enter-active,
+.stack-slide-forward-leave-active,
+.stack-slide-back-enter-active,
+.stack-slide-back-leave-active {
+  transition:
+    transform 180ms ease,
+    opacity 150ms ease;
+}
+
+.stack-slide-forward-enter-from {
+  opacity: 0;
+  transform: translateX(28px);
+}
+
+.stack-slide-forward-leave-to {
+  opacity: 0;
+  transform: translateX(-28px);
+}
+
+.stack-slide-back-enter-from {
+  opacity: 0;
+  transform: translateX(-28px);
+}
+
+.stack-slide-back-leave-to {
+  opacity: 0;
+  transform: translateX(28px);
 }
 
 .memory-nav-card,

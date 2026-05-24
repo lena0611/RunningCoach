@@ -20,6 +20,7 @@ const memorySnapshot = ref(JSON.stringify(draft))
 const saving = ref(false)
 const error = ref('')
 const pendingDelete = ref<{ kind: 'goal' | 'injury'; id: string; title: string } | null>(null)
+const stackTransitionName = ref('stack-slide-forward')
 const newGoal = reactive({
   title: '',
   category: 'race' as TrainingGoal['category'],
@@ -305,12 +306,14 @@ function confirmDelete() {
 
 function goBack() {
   saveCurrentStackScroll()
+  stackTransitionName.value = 'stack-slide-back'
   stack.value = stack.value.slice(0, -1)
   restoreCurrentStackScroll()
 }
 
 function closeStack() {
   saveCurrentStackScroll()
+  stackTransitionName.value = 'stack-slide-back'
   stack.value = []
 }
 
@@ -335,6 +338,7 @@ function restoreCurrentStackScroll() {
 
 function pushPanel(nextPanel: MemoryPanel) {
   saveCurrentStackScroll()
+  stackTransitionName.value = 'stack-slide-forward'
   stack.value = [...stack.value, nextPanel]
   nextTick(() => {
     if (stackContentRef.value) stackContentRef.value.scrollTop = 0
@@ -343,6 +347,7 @@ function pushPanel(nextPanel: MemoryPanel) {
 
 function replaceTopPanel(nextPanel: MemoryPanel) {
   saveCurrentStackScroll()
+  stackTransitionName.value = 'stack-slide-forward'
   stack.value = [...stack.value.slice(0, -1), nextPanel]
   nextTick(() => {
     if (stackContentRef.value) stackContentRef.value.scrollTop = 0
@@ -452,9 +457,11 @@ async function save() {
           </header>
 
           <main ref="stackContentRef" class="memory-stack-content">
-            <p v-if="error || memoryStore.error" class="error">{{ error || memoryStore.error }}</p>
+            <Transition :name="stackTransitionName" mode="out-in">
+              <div :key="stackKey()" class="memory-stack-screen">
+                <p v-if="error || memoryStore.error" class="error">{{ error || memoryStore.error }}</p>
 
-            <div v-if="panel === 'goals'" class="memory-stack">
+                <div v-if="panel === 'goals'" class="memory-stack">
               <div class="section-heading compact-heading">
                 <h3>목표 목록</h3>
                 <button type="button" @click="openGoalNew">새 목표</button>
@@ -466,9 +473,9 @@ async function save() {
                 </span>
                 <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
               </button>
-            </div>
+                </div>
 
-            <form v-else-if="panel === 'goal-new'" class="form-grid">
+                <form v-else-if="panel === 'goal-new'" class="form-grid">
               <div class="form-section-title full">새 목표 생성</div>
               <label class="full">
                 목표명
@@ -504,9 +511,9 @@ async function save() {
               <div class="actions full">
                 <button type="button" @click="addGoal">생성</button>
               </div>
-            </form>
+                </form>
 
-            <form v-else-if="panel === 'goal-edit' && editingGoal" class="form-grid">
+                <form v-else-if="panel === 'goal-edit' && editingGoal" class="form-grid">
               <div class="form-section-title full">목표 편집</div>
               <label class="full">
                 목표명
@@ -544,9 +551,9 @@ async function save() {
                 <button class="ghost" type="button" @click="setActiveGoal(editingGoal.id)">활성 목표로 지정</button>
                 <button class="danger" type="button" :disabled="draft.goals.length <= 1" @click="askRemoveGoal(editingGoal)">삭제</button>
               </div>
-            </form>
+                </form>
 
-            <div v-else-if="panel === 'injuries'" class="memory-stack">
+                <div v-else-if="panel === 'injuries'" class="memory-stack">
               <div class="section-heading compact-heading">
                 <h3>부상 관리 목록</h3>
                 <button type="button" @click="openInjuryNew">새 항목</button>
@@ -558,9 +565,9 @@ async function save() {
                 </span>
                 <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
               </button>
-            </div>
+                </div>
 
-            <form v-else-if="panel === 'injury-new'" class="form-grid">
+                <form v-else-if="panel === 'injury-new'" class="form-grid">
               <div class="form-section-title full">새 부상/주의사항 생성</div>
               <label class="full">
                 항목명
@@ -600,9 +607,9 @@ async function save() {
               <div class="actions full">
                 <button type="button" @click="addInjury">생성</button>
               </div>
-            </form>
+                </form>
 
-            <form v-else-if="panel === 'injury-edit' && editingInjury" class="form-grid">
+                <form v-else-if="panel === 'injury-edit' && editingInjury" class="form-grid">
               <div class="form-section-title full">부상/주의사항 편집</div>
               <label class="full">
                 항목명
@@ -643,7 +650,9 @@ async function save() {
                 <button class="ghost" type="button" @click="setActiveInjury(editingInjury.id)">현재 기준으로 지정</button>
                 <button class="danger" type="button" @click="askRemoveInjury(editingInjury)">삭제</button>
               </div>
-            </form>
+                </form>
+              </div>
+            </Transition>
           </main>
 
           <footer class="stack-action-bar">

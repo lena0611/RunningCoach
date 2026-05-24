@@ -47,7 +47,9 @@ Use a screen stack when the user is drilling into a deeper flow without changing
 - Second-level stack screens continue right-to-left inside the same stack container.
 - Focused management flows such as Memory goal/injury list, create, and edit use a full-screen stack page, not an inner card section. The stack header must include Back on the left, the page title in the center, and Close on the right.
 - Stack navigation must push pages onto an in-tab stack instead of replacing the root route. Back pops one stack page and restores that page's prior scroll/data state; Close exits the stack to the tab root.
+- Nested stack transitions must be visible. When a stack page opens another detail/create/edit page, wrap the keyed page body in a right-to-left `Transition` instead of swapping conditional content in place.
 - Stack headers use compact icon buttons for Back and Close to preserve title space on mobile.
+- Stack and drawer headers must use icon-only Back/Close buttons with accessible `aria-label`; do not show literal text buttons such as "뒤로" or "닫기" in header chrome.
 - Edit/create stack pages use a fixed full-width bottom action bar for saving. Save is disabled until dirty state is detected.
 - Destructive actions ask for confirmation in a bottom sheet, not `window.confirm`.
 - Use stacks for account/profile editing, run detail/edit flows, and focused settings. Do not use a stack for ordinary tab-to-tab navigation.

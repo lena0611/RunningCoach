@@ -55,7 +55,9 @@ function openSheet() {
           <div class="bottom-sheet-handle" />
           <div class="bottom-sheet-heading">
             <h2>{{ label }}</h2>
-            <button class="ghost sheet-close" type="button" @click="open = false">닫기</button>
+            <button class="stack-icon-button sheet-close" type="button" aria-label="닫기" @click="open = false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+            </button>
           </div>
           <div class="bottom-sheet-options">
             <button
