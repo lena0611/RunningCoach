@@ -14,8 +14,10 @@ const stackContentRef = ref<HTMLElement | null>(null)
 const stackScroll = reactive<Record<string, number>>({})
 const editingGoalId = ref('')
 const editingInjuryId = ref('')
+const memorySnapshot = ref(JSON.stringify(draft))
 const saving = ref(false)
 const error = ref('')
+const pendingDelete = ref<{ kind: 'goal' | 'injury'; id: string; title: string } | null>(null)
 const newGoal = reactive({
   title: '',
   category: 'race' as TrainingGoal['category'],
@@ -79,6 +81,7 @@ const activeInjuryMeta = computed(() => {
 })
 const panel = computed<MemoryPanel>(() => stack.value.at(-1) ?? 'overview')
 const isStackOpen = computed(() => panel.value !== 'overview')
+const isDirty = computed(() => JSON.stringify(draft) !== memorySnapshot.value)
 const stackTitle = computed(() => {
   switch (panel.value) {
     case 'goals':
@@ -102,6 +105,7 @@ watch(
   () => memoryStore.selectedUserId,
   () => {
     Object.assign(draft, JSON.parse(JSON.stringify(memoryStore.memory)))
+    memorySnapshot.value = JSON.stringify(draft)
     stack.value = []
     editingGoalId.value = ''
     editingInjuryId.value = ''
@@ -200,6 +204,11 @@ function removeGoal(goalId: string) {
   replaceTopPanel('goals')
 }
 
+function askRemoveGoal(goal: TrainingGoal) {
+  if (draft.goals.length <= 1) return
+  pendingDelete.value = { kind: 'goal', id: goal.id, title: goal.title }
+}
+
 function openInjuries() {
   pushPanel('injuries')
 }
@@ -270,6 +279,18 @@ function removeInjury(itemId: string) {
   replaceTopPanel('injuries')
 }
 
+function askRemoveInjury(item: TrainingInjuryItem) {
+  pendingDelete.value = { kind: 'injury', id: item.id, title: item.title }
+}
+
+function confirmDelete() {
+  const target = pendingDelete.value
+  if (!target) return
+  if (target.kind === 'goal') removeGoal(target.id)
+  if (target.kind === 'injury') removeInjury(target.id)
+  pendingDelete.value = null
+}
+
 function goBack() {
   saveCurrentStackScroll()
   stack.value = stack.value.slice(0, -1)
@@ -322,6 +343,8 @@ async function save() {
   try {
     syncLegacyGoal()
     await memoryStore.update(JSON.parse(JSON.stringify(draft)))
+    Object.assign(draft, JSON.parse(JSON.stringify(memoryStore.memory)))
+    memorySnapshot.value = JSON.stringify(draft)
   } catch (err) {
     error.value = err instanceof Error ? err.message : '저장 실패'
   } finally {
@@ -335,7 +358,7 @@ async function save() {
     <SectionCard>
       <div class="section-heading">
         <h2>코칭 메모리</h2>
-        <button type="button" :disabled="saving" @click="save">{{ saving ? '저장 중' : '저장' }}</button>
+        <button type="button" :disabled="saving || !isDirty" @click="save">{{ saving ? '저장 중' : '저장' }}</button>
       </div>
       <p v-if="error || memoryStore.error" class="error">{{ error || memoryStore.error }}</p>
       <p class="helper">계정 이름, 출생연도, 성별, PB 같은 개인정보는 우상단 계정 메뉴에서 수정합니다.</p>
@@ -404,20 +427,20 @@ async function save() {
       <div v-if="isStackOpen" class="memory-stack-layer" data-no-swipe>
         <section class="memory-stack-page" :class="{ 'memory-stack-detail': panel.includes('edit') || panel.includes('new') }">
           <header class="memory-stack-header">
-            <button class="ghost stack-back" type="button" @click="goBack">뒤로</button>
+            <button class="stack-icon-button" type="button" aria-label="뒤로" @click="goBack">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+            </button>
             <div>
               <p class="eyebrow">Memory</p>
               <h2>{{ stackTitle }}</h2>
             </div>
-            <button class="icon-action" type="button" @click="closeStack">닫기</button>
+            <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeStack">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+            </button>
           </header>
 
           <main ref="stackContentRef" class="memory-stack-content">
             <p v-if="error || memoryStore.error" class="error">{{ error || memoryStore.error }}</p>
-            <div class="stack-save-row">
-              <span>변경 후 저장을 눌러야 코칭 기준에 반영됩니다.</span>
-              <button type="button" :disabled="saving" @click="save">{{ saving ? '저장 중' : '저장' }}</button>
-            </div>
 
             <div v-if="panel === 'goals'" class="memory-stack">
               <div class="section-heading compact-heading">
@@ -519,7 +542,7 @@ async function save() {
               </label>
               <div class="actions full">
                 <button class="ghost" type="button" @click="setActiveGoal(editingGoal.id)">활성 목표로 지정</button>
-                <button class="danger" type="button" :disabled="draft.goals.length <= 1" @click="removeGoal(editingGoal.id)">삭제</button>
+                <button class="danger" type="button" :disabled="draft.goals.length <= 1" @click="askRemoveGoal(editingGoal)">삭제</button>
               </div>
             </form>
 
@@ -630,10 +653,26 @@ async function save() {
               </label>
               <div class="actions full">
                 <button class="ghost" type="button" @click="setActiveInjury(editingInjury.id)">현재 기준으로 지정</button>
-                <button class="danger" type="button" @click="removeInjury(editingInjury.id)">삭제</button>
+                <button class="danger" type="button" @click="askRemoveInjury(editingInjury)">삭제</button>
               </div>
             </form>
           </main>
+
+          <footer class="stack-action-bar">
+            <button type="button" :disabled="saving || !isDirty" @click="save">{{ saving ? '저장 중' : isDirty ? '변경사항 저장' : '저장됨' }}</button>
+          </footer>
+        </section>
+      </div>
+
+      <div v-if="pendingDelete" class="bottom-sheet-layer confirm-layer" role="presentation" @click.self="pendingDelete = null">
+        <section class="bottom-sheet confirm-sheet" role="dialog" aria-modal="true" aria-label="삭제 확인">
+          <div class="bottom-sheet-handle" />
+          <h2>삭제할까요?</h2>
+          <p>{{ pendingDelete.title }} 항목은 저장 전 draft에서 제거됩니다. 최종 반영하려면 저장을 눌러야 합니다.</p>
+          <div class="confirm-actions">
+            <button class="danger" type="button" @click="confirmDelete">삭제</button>
+            <button class="ghost" type="button" @click="pendingDelete = null">취소</button>
+          </div>
         </section>
       </div>
     </Teleport>

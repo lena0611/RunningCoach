@@ -37,6 +37,9 @@ Use a screen stack when the user is drilling into a deeper flow without changing
 - Second-level stack screens continue right-to-left inside the same stack container.
 - Focused management flows such as Memory goal/injury list, create, and edit use a full-screen stack page, not an inner card section. The stack header must include Back on the left, the page title in the center, and Close on the right.
 - Stack navigation must push pages onto an in-tab stack instead of replacing the root route. Back pops one stack page and restores that page's prior scroll/data state; Close exits the stack to the tab root.
+- Stack headers use compact icon buttons for Back and Close to preserve title space on mobile.
+- Edit/create stack pages use a fixed full-width bottom action bar for saving. Save is disabled until dirty state is detected.
+- Destructive actions ask for confirmation in a bottom sheet, not `window.confirm`.
 - Use stacks for account/profile editing, run detail/edit flows, and focused settings. Do not use a stack for ordinary tab-to-tab navigation.
 - The bottom navigation remains a root-level control. Stack overlays sit above it when modal, or keep it visually stable when inline.
 - Horizontal page slide transitions are for root tab movement. Deeper stack screens use their own right-to-left stack transition.
