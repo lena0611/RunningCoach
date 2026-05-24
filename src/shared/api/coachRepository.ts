@@ -6,6 +6,7 @@ export type CoachReport = {
   userNote: string
   report: string
   createdAt: string
+  trainingMemoryUpdated?: boolean
 }
 
 type CoachReportRow = {
@@ -40,6 +41,7 @@ function fromRow(row: CoachReportRow): CoachReport {
     selectedRunId: row.selected_run_id,
     userNote: row.user_note,
     report: row.report,
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    trainingMemoryUpdated: false
   }
 }

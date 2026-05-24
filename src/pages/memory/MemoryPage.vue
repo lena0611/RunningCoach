@@ -52,11 +52,14 @@ async function save() {
           훈련 목표
           <input v-model="draft.goal" />
         </label>
-        <div class="form-section-title full">훈련 루틴</div>
-        <label class="full">
-          주간 루틴
-          <textarea :value="join(draft.weeklyPattern)" rows="5" @input="draft.weeklyPattern = split(($event.target as HTMLTextAreaElement).value)" />
-        </label>
+        <div class="form-section-title full">AI 관리 훈련 루틴</div>
+        <div class="sub-panel full">
+          <strong>주간 루틴</strong>
+          <p class="helper">주간 루틴은 AI 코칭이 목표와 누적 데이터를 보고 유지하거나 수정합니다.</p>
+          <ul class="memory-list">
+            <li v-for="item in draft.weeklyPattern" :key="item">{{ item }}</li>
+          </ul>
+        </div>
         <label class="full">
           장거리 전략
           <textarea v-model="draft.longRunStrategy" rows="3" />

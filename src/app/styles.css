@@ -996,6 +996,15 @@ label {
   line-height: 1.5;
 }
 
+.memory-list {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding-left: 20px;
+  color: var(--color-text);
+  line-height: 1.55;
+}
+
 .recommendation-card {
   display: grid;
   gap: 8px;

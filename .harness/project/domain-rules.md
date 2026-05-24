@@ -30,6 +30,8 @@
 - HealthKit 후보의 `RunType`은 사용자가 수정 가능한 제안값이다. 자동 추론은 날짜/요일, 총거리, 평균 페이스, 랩별 페이스, `fastSegments`를 함께 보고 판단한다.
 - `Easy + Strides` 자동 추론은 세션 이름보다 “대부분 쉬운 페이스 + 여러 개의 짧은 고속 구간”을 우선한다. route가 없어 `fastSegments`가 비면 보수적으로 `Easy`나 `Unknown`으로 둔다.
 - Dashboard의 다음 추천 세션은 단순 최근 강훈련 여부만으로 정하지 않는다. `TrainingMemory.weeklyPattern`, 선호 롱런 요일, 최근 실제 RunLog 날짜, 최근 토요일 10km+ 기록의 평균 페이스를 함께 본다.
+- `TrainingMemory.weeklyPattern`은 사용자가 직접 세우는 정적 루틴이 아니다. AI 코칭이 계정 목표와 누적 RunLog를 보고 유지/수정하는 훈련 계획이며, 사용자는 목표/프로필/개인 맥락을 제공한다.
+- AI 코칭은 세션 평가와 동시에 주간 루틴 유지/수정 필요성을 판단한다. 루틴 변경이 필요하면 Edge Function이 `training_memory.memory.weeklyPattern` 전체를 갱신하고, 변경 근거를 report와 `aiNotes`에 짧게 남긴다.
 - 토요일 롱런 추천은 최근 토요일 10km+ 기록의 평균 페이스를 기준으로 LSD/Steady Long 강도 범위를 제안한다. 세션 타입은 참고하되, 실제 강도 판단은 페이스와 최근 흐름을 우선한다.
 - 토요일 또는 직전일 10km+ 롱런/LSD/Steady Long 뒤의 다음날은 주간 루틴의 다음 세션보다 Recovery 또는 휴식을 우선 추천한다. 특히 일요일 홈 추천은 전날 롱런 피로 회복 여부를 먼저 본다.
 - 코칭과 대시보드, 기록 목록은 현재 선택된 사용자 기준 `RunLog`와 `TrainingMemory`만 사용한다.

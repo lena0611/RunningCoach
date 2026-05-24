@@ -62,6 +62,17 @@ Deno.serve(async (req) => {
 
     const context = await buildContext(admin, userId, selectedRunId, userNote)
     const ai = await callOpenAI(openaiKey, model, context)
+    const memoryPatch = normalizeTrainingMemoryPatch(ai.trainingMemoryPatch)
+    const updatedMemory = memoryPatch ? mergeTrainingMemoryPatch(context.trainingMemory, memoryPatch) : null
+    if (updatedMemory) {
+      const { error } = await admin.from('training_memory').upsert({
+        user_id: userId,
+        memory: updatedMemory,
+        updated_at: new Date().toISOString()
+      })
+      if (error) throw error
+    }
+
     const { data: reportRow, error: reportError } = await admin
       .from('coach_reports')
       .insert({
@@ -90,8 +101,11 @@ Deno.serve(async (req) => {
         selectedRunId: reportRow.selected_run_id,
         userNote: reportRow.user_note,
         report: reportRow.report,
-        createdAt: reportRow.created_at
-      }
+        createdAt: reportRow.created_at,
+        trainingMemoryUpdated: Boolean(updatedMemory)
+      },
+      trainingMemoryUpdated: Boolean(updatedMemory),
+      trainingMemoryPatch: memoryPatch
     })
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500)
@@ -154,7 +168,16 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
   }
 }
 
-async function callOpenAI(apiKey: string, model: string, context: unknown): Promise<{ report: string; memoryItems: string[] }> {
+type CoachContext = Awaited<ReturnType<typeof buildContext>>
+
+type TrainingMemoryPatch = {
+  weeklyPattern?: string[]
+  longRunStrategy?: string
+  currentVolumeNote?: string
+  aiNotes?: string[]
+}
+
+async function callOpenAI(apiKey: string, model: string, context: unknown): Promise<{ report: string; memoryItems: string[]; trainingMemoryPatch: TrainingMemoryPatch | null }> {
   const instructions = [
     '너는 사용자를 오래 봐온 한국어 러닝 코치다.',
     '목표는 장문 분석문이 아니라 모바일에서 빠르게 읽히는 대화형 코칭 리포트다.',
@@ -174,10 +197,17 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     '최근 14일 앱 로그가 적다는 이유만으로 훈련 성과를 판단할 수 없다고 길게 말하지 않는다.',
     '템포 뒤 9분대 조깅, 심박 125~128, 배우자 동행런 맥락이면 추가 강훈련보다 회복 조깅으로 해석한다.',
     '더위, 케이던스/호흡 성향, 과거 좌측 근위부 햄스트링 이슈, 격주 롱런 패턴을 필요한 때만 짧게 연결한다.',
+    '코칭은 해당 러닝 세션 평가에서 끝나지 않는다. 반드시 계정의 목표와 누적 데이터를 보고 현재 weeklyPattern을 유지할지 수정할지 판단한다.',
+    'weeklyPattern은 사용자가 직접 세우는 고정 루틴이 아니라 AI가 목표, 최근 14/30일 누적, 강훈련 빈도, 롱런 상태, 회복 신호를 보고 관리하는 훈련 계획이다.',
+    '루틴 변경이 필요 없으면 trainingMemoryPatch는 null로 둔다.',
+    '루틴 변경이 필요하면 trainingMemoryPatch.weeklyPattern에 새 주간 루틴을 전체 배열로 넣는다. 일부만 넣지 말고 전체 주간 패턴을 반환한다.',
+    '롱런 전략이나 현재 볼륨 노트도 바뀌어야 하면 trainingMemoryPatch.longRunStrategy, trainingMemoryPatch.currentVolumeNote에 반영한다.',
+    '루틴을 바꾼 이유는 report에 짧게 설명하고, aiNotes에는 장기적으로 기억할 계획 변경 근거만 1~3개 넣는다.',
+    'trainingMemoryPatch는 RunLog 원본 값을 바꾸는 용도가 아니다. 훈련 계획과 코칭 메모리만 갱신한다.',
     '긴 문단, 같은 말 반복, 모든 맥락 나열, 의료 진단, 부상 위험 단정, 목표 달성 보장, 원본 RunLog 임의 수정은 금지한다.',
     'report는 UI가 마크다운처럼 렌더링할 수 있게 짧은 제목, bullet list, --- divider, 필요한 경우 ``` 코드블록을 적절히 사용한다.',
     '이모지는 과하게 쓰지 말고 섹션 제목에 0~3개만 사용한다.',
-    'JSON만 반환한다. 형식: {"report":"사용자에게 보여줄 마크다운 코칭","memoryItems":["장기 기억으로 저장할 짧은 문장"]}'
+    'JSON만 반환한다. 형식: {"report":"사용자에게 보여줄 마크다운 코칭","memoryItems":["장기 기억으로 저장할 짧은 문장"],"trainingMemoryPatch":null 또는 {"weeklyPattern":["화요일: ..."],"longRunStrategy":"...","currentVolumeNote":"...","aiNotes":["..."]}}'
   ].join('\n')
 
   const response = await fetch('https://api.openai.com/v1/responses', {
@@ -199,8 +229,47 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
   const parsed = safeJson(text)
   return {
     report: typeof parsed.report === 'string' ? parsed.report : text,
-    memoryItems: Array.isArray(parsed.memoryItems) ? parsed.memoryItems.filter((item: unknown) => typeof item === 'string').slice(0, 8) : []
+    memoryItems: Array.isArray(parsed.memoryItems) ? parsed.memoryItems.filter((item: unknown) => typeof item === 'string').slice(0, 8) : [],
+    trainingMemoryPatch: parsed.trainingMemoryPatch && typeof parsed.trainingMemoryPatch === 'object' ? parsed.trainingMemoryPatch as TrainingMemoryPatch : null
   }
+}
+
+function normalizeTrainingMemoryPatch(patch: TrainingMemoryPatch | null): TrainingMemoryPatch | null {
+  if (!patch || typeof patch !== 'object') return null
+  const normalized: TrainingMemoryPatch = {}
+
+  if (Array.isArray(patch.weeklyPattern)) {
+    const weeklyPattern = patch.weeklyPattern.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()).slice(0, 10)
+    if (weeklyPattern.length) normalized.weeklyPattern = weeklyPattern
+  }
+  if (typeof patch.longRunStrategy === 'string' && patch.longRunStrategy.trim()) {
+    normalized.longRunStrategy = patch.longRunStrategy.trim().slice(0, 1000)
+  }
+  if (typeof patch.currentVolumeNote === 'string' && patch.currentVolumeNote.trim()) {
+    normalized.currentVolumeNote = patch.currentVolumeNote.trim().slice(0, 1000)
+  }
+  if (Array.isArray(patch.aiNotes)) {
+    const aiNotes = patch.aiNotes.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()).slice(0, 12)
+    if (aiNotes.length) normalized.aiNotes = aiNotes
+  }
+
+  return Object.keys(normalized).length ? normalized : null
+}
+
+function mergeTrainingMemoryPatch(memory: CoachContext['trainingMemory'], patch: TrainingMemoryPatch) {
+  const current = memory && typeof memory === 'object' ? memory as Record<string, unknown> : {}
+  return {
+    ...current,
+    ...(patch.weeklyPattern ? { weeklyPattern: patch.weeklyPattern } : {}),
+    ...(patch.longRunStrategy ? { longRunStrategy: patch.longRunStrategy } : {}),
+    ...(patch.currentVolumeNote ? { currentVolumeNote: patch.currentVolumeNote } : {}),
+    ...(patch.aiNotes ? { aiNotes: mergeAiNotes(current.aiNotes, patch.aiNotes) } : {})
+  }
+}
+
+function mergeAiNotes(current: unknown, next: string[]) {
+  const currentItems = Array.isArray(current) ? current.filter((item) => typeof item === 'string') as string[] : []
+  return [...next, ...currentItems.filter((item) => !next.includes(item))].slice(0, 30)
 }
 
 function withinDaysFromAnchor(runs: RunLogRow[], days: number, anchorDate: string) {

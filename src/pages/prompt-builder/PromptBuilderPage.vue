@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { fetchCoachReports, requestCoachRun, type CoachReport } from '@/shared/api/coachRepository'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
@@ -10,6 +11,7 @@ import SectionCard from '@/shared/ui/SectionCard.vue'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 
 const runStore = useRunStore()
+const memoryStore = useMemoryStore()
 const selectedRunId = ref('')
 const userNote = ref('')
 const loading = ref(false)
@@ -43,6 +45,9 @@ async function coach() {
   try {
     const report = await requestCoachRun(selectedRunId.value || null, userNote.value)
     reports.value = [report, ...reports.value]
+    if (report.trainingMemoryUpdated) {
+      await memoryStore.load()
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'AI 코칭 요청 실패'
   } finally {
@@ -83,6 +88,7 @@ async function coach() {
       <div v-for="report in reports" :key="report.id" class="coach-thread-item">
         <CoachMessage v-if="report.userNote" role="user" :text="report.userNote" :meta="new Date(report.createdAt).toLocaleString()" />
         <CoachMessage role="coach" :text="report.report" meta="RunContext Coach" />
+        <p v-if="report.trainingMemoryUpdated" class="helper">AI가 목표와 누적 기록을 기준으로 코칭 메모리의 주간 루틴을 갱신했습니다.</p>
       </div>
       <EmptyState v-if="!reports.length" title="아직 코칭 리포트가 없습니다." description="RunLog를 고르고 오늘 메모를 짧게 적으면 코치가 맥락을 붙여 해석합니다." />
     </SectionCard>
