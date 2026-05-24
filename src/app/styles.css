@@ -485,6 +485,25 @@ label {
   padding: 18px 18px var(--bottom-nav-reserve);
 }
 
+.app-toast {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(var(--bottom-nav-reserve) + 6px);
+  z-index: 90;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 13px 15px;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
 .page {
   display: grid;
   gap: 18px;

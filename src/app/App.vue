@@ -1,11 +1,17 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/app/stores/authStore'
+import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
+import { useMemoryStore } from '@/app/stores/memoryStore'
+import { useRunStore } from '@/app/stores/runStore'
 import AppShell from '@/shared/ui/AppShell.vue'
 import type { BottomNavItem } from '@/shared/ui/BottomNav.vue'
 
 const authStore = useAuthStore()
+const healthKitSyncStore = useHealthKitSyncStore()
+const memoryStore = useMemoryStore()
+const runStore = useRunStore()
 const navItems: BottomNavItem[] = [
   { to: '/', label: 'Dashboard', shortLabel: 'Home', icon: 'home' },
   { to: '/upload', label: 'Upload', shortLabel: 'Upload', icon: 'upload' },
@@ -32,10 +38,34 @@ watch(
     transitionName.value = nextIndex >= previousIndex ? 'page-slide-forward' : 'page-slide-back'
   }
 )
+
+watch(
+  () => authStore.isAuthenticated,
+  async (isAuthenticated) => {
+    if (!isAuthenticated) return
+    await Promise.all([
+      memoryStore.loading ? Promise.resolve() : memoryStore.load(),
+      runStore.loaded || runStore.loading ? Promise.resolve() : runStore.load()
+    ])
+    await healthKitSyncStore.syncAfterActivation()
+  },
+  { immediate: true }
+)
+
+onMounted(() => {
+  healthKitSyncStore.init()
+  healthKitSyncStore.attachActivationListeners()
+  void healthKitSyncStore.syncAfterActivation()
+})
+
+onBeforeUnmount(() => {
+  healthKitSyncStore.dispose()
+})
 </script>
 
 <template>
   <AppShell :nav-items="navItems" :is-authenticated="authStore.isAuthenticated" @sign-out="authStore.signOut()">
+    <div v-if="healthKitSyncStore.toast" class="app-toast" role="status">{{ healthKitSyncStore.toast }}</div>
     <RouterView v-slot="{ Component, route: viewRoute }">
       <Transition :name="transitionName" mode="out-in">
         <component :is="Component" :key="viewRoute.path" />
