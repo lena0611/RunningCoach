@@ -51,10 +51,19 @@ export async function insertRunLog(data: ExtractedRunData, source: RunLog['sourc
 
 export async function insertRunLogs(items: ExtractedRunData[], source: RunLog['source']): Promise<RunLog[]> {
   if (!items.length) return []
-  const rows = items.map((item) => toInsertRow(item, source))
-  const { data, error } = await requireSupabase().from('run_logs').insert(rows).select('*')
-  if (error) throw error
-  return (data ?? []).map(fromRow)
+  const inserted: RunLog[] = []
+
+  for (const item of items) {
+    try {
+      const run = await insertRunLog(item, source)
+      inserted.push(run)
+    } catch (err) {
+      if (isDuplicateRunError(err)) continue
+      throw err
+    }
+  }
+
+  return inserted
 }
 
 export async function updateRunLog(run: RunLog): Promise<RunLog> {
@@ -106,7 +115,7 @@ export async function deleteRunLog(id: string) {
 
 function toInsertRow(data: ExtractedRunData, source: RunLog['source']) {
   return {
-    external_id: data.externalId,
+    external_id: data.externalId || null,
     date: data.date,
     type: data.type,
     session_title: data.sessionTitle,
@@ -135,6 +144,12 @@ function toInsertRow(data: ExtractedRunData, source: RunLog['source']) {
     tags: data.tags ?? [],
     source
   }
+}
+
+function isDuplicateRunError(err: unknown) {
+  if (!err || typeof err !== 'object') return false
+  const maybeError = err as { code?: string; message?: string }
+  return maybeError.code === '23505' || /duplicate key/i.test(maybeError.message ?? '')
 }
 
 function fromRow(row: RunLogRow): RunLog {

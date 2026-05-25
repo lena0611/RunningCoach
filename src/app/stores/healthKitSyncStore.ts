@@ -63,9 +63,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
       const runStore = useRunStore()
       if (!authStore.isAuthenticated || !hasNativeBridge()) return
 
-      if (!runStore.loaded && !runStore.loading) {
-        await runStore.load()
-      }
+      await ensureRunStoreLoaded()
 
       this.syncing = true
       this.error = ''
@@ -83,9 +81,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
     async handleRuns(runs: HealthKitRunCandidate[]) {
       const runStore = useRunStore()
       try {
-        if (!runStore.loaded && !runStore.loading) {
-          await runStore.load()
-        }
+        await ensureRunStoreLoaded()
 
         const latestDate = getLatestSavedDate()
         const newRuns = runs
@@ -95,7 +91,10 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
 
         if (newRuns.length) {
           const inserted = await runStore.addRuns(newRuns.map((candidate) => toExtractedRunData(candidate)), 'healthkit')
-          this.status = `HealthKit 동기화 완료 · 새 러닝 ${inserted.length}개 저장`
+          const skipped = newRuns.length - inserted.length
+          this.status = skipped > 0
+            ? `HealthKit 동기화 완료 · 새 러닝 ${inserted.length}개 저장 · 중복 ${skipped}개 제외`
+            : `HealthKit 동기화 완료 · 새 러닝 ${inserted.length}개 저장`
           showSyncToast('success', this.status, 3600)
         } else {
           this.status = latestDate
@@ -165,4 +164,23 @@ function isAlreadySaved(candidate: HealthKitRunCandidate) {
 function parseDateOnly(value: string) {
   const [year, month, day] = value.split('-').map(Number)
   return new Date(year, month - 1, day)
+}
+
+async function ensureRunStoreLoaded() {
+  const runStore = useRunStore()
+  if (runStore.loaded) return
+  if (!runStore.loading) {
+    await runStore.load()
+    return
+  }
+
+  await new Promise<void>((resolve) => {
+    const startedAt = Date.now()
+    const timer = window.setInterval(() => {
+      if (!runStore.loading || runStore.loaded || Date.now() - startedAt > 5000) {
+        window.clearInterval(timer)
+        resolve()
+      }
+    }, 80)
+  })
 }

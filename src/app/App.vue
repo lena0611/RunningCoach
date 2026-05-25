@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/app/stores/authStore'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { hasNativeBridge } from '@/shared/lib/runtime'
 import AppShell from '@/shared/ui/AppShell.vue'
 import ToastHost from '@/shared/ui/ToastHost.vue'
 import type { BottomNavItem } from '@/shared/ui/BottomNav.vue'
@@ -13,6 +14,7 @@ const authStore = useAuthStore()
 const healthKitSyncStore = useHealthKitSyncStore()
 const memoryStore = useMemoryStore()
 const runStore = useRunStore()
+const router = useRouter()
 const navItems: BottomNavItem[] = [
   { to: '/', label: 'Dashboard', shortLabel: 'Home', icon: 'home' },
   { to: '/runs', label: 'Run Log', shortLabel: 'Log', icon: 'log' },
@@ -54,12 +56,20 @@ watch(
 onMounted(() => {
   healthKitSyncStore.init()
   healthKitSyncStore.attachActivationListeners()
+  void resetNativeStartupRoute()
   void healthKitSyncStore.syncAfterActivation()
 })
 
 onBeforeUnmount(() => {
   healthKitSyncStore.dispose()
 })
+
+async function resetNativeStartupRoute() {
+  await router.isReady()
+  if (!hasNativeBridge()) return
+  if (route.path === '/auth' || route.path === '/access' || route.path === '/') return
+  await router.replace('/')
+}
 </script>
 
 <template>
