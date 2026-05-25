@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
@@ -8,11 +9,15 @@ import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
 import FatigueCard from '@/widgets/fatigue-card/FatigueCard.vue'
 import { averagePace, getEasyRatio, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, getVolumeWarning, sumDistance } from '@/shared/lib/runStats'
 import { formatDateWithWeekday, formatPace } from '@/shared/lib/format'
+import EmptyState from '@/shared/ui/EmptyState.vue'
+import ListRow from '@/shared/ui/ListRow.vue'
 import MetricGrid from '@/shared/ui/MetricGrid.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 
 const runStore = useRunStore()
 const memoryStore = useMemoryStore()
+const router = useRouter()
+const trendMetric = ref<'month' | 'last7' | 'easy' | 'hard' | null>(null)
 
 onMounted(() => {
   if (!runStore.loaded && !runStore.loading) {
@@ -35,6 +40,51 @@ const activeInjury = computed(() => getActiveInjuryItem(memoryStore.memory))
 const hardSessions = computed(() =>
   getRunsWithinDays(runs.value, 7).filter((run) => ['Tempo', 'LSD', 'Steady Long', 'Race'].includes(run.type)).length
 )
+
+const trendTitle = computed(() => {
+  if (trendMetric.value === 'month') return '이번 달 거리 추이'
+  if (trendMetric.value === 'last7') return '최근 7일 거리 추이'
+  if (trendMetric.value === 'easy') return '최근 30일 Easy 비율 근거'
+  if (trendMetric.value === 'hard') return '최근 7일 강훈련'
+  return ''
+})
+
+const trendRuns = computed(() => {
+  if (trendMetric.value === 'month') return getThisMonthRuns(runs.value)
+  if (trendMetric.value === 'last7') return getRunsWithinDays(runs.value, 7)
+  if (trendMetric.value === 'easy') return getRunsWithinDays(runs.value, 30)
+  if (trendMetric.value === 'hard') return getRunsWithinDays(runs.value, 7).filter((run) => ['Tempo', 'LSD', 'Steady Long', 'Race'].includes(run.type))
+  return []
+})
+
+const trendBars = computed(() => {
+  const maxDistance = Math.max(...trendRuns.value.map((run) => run.distanceKm), 1)
+  return [...trendRuns.value]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-14)
+    .map((run) => ({
+      id: run.id,
+      label: run.date.slice(5).replace('-', '.'),
+      title: run.sessionTitle || run.type,
+      distance: run.distanceKm,
+      height: Math.max(10, Math.round((run.distanceKm / maxDistance) * 100))
+    }))
+})
+
+watch(
+  () => Boolean(trendMetric.value),
+  (open) => {
+    document.body.classList.toggle('memory-stack-open', open)
+  }
+)
+
+onBeforeUnmount(() => {
+  document.body.classList.remove('memory-stack-open')
+})
+
+function closeTrend() {
+  trendMetric.value = null
+}
 </script>
 
 <template>
@@ -75,14 +125,14 @@ const hardSessions = computed(() =>
     </SectionCard>
 
     <MetricGrid>
-      <RunSummaryCard label="이번 달" :value="`${monthDistance}km`" />
-      <RunSummaryCard label="최근 7일" :value="`${last7}km`" />
-      <RunSummaryCard label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 · 랩/페이스 기준" />
-      <RunSummaryCard label="강훈련" :value="`${hardSessions}회`" hint="최근 7일" />
+      <RunSummaryCard label="이번 달" :value="`${monthDistance}km`" interactive @click="trendMetric = 'month'" />
+      <RunSummaryCard label="최근 7일" :value="`${last7}km`" interactive @click="trendMetric = 'last7'" />
+      <RunSummaryCard label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 · 랩/페이스 기준" interactive @click="trendMetric = 'easy'" />
+      <RunSummaryCard label="강훈련" :value="`${hardSessions}회`" hint="최근 7일" interactive @click="trendMetric = 'hard'" />
     </MetricGrid>
 
     <div class="two-column">
-      <RecentRuns :runs="runs.slice(0, 6)" />
+      <RecentRuns :runs="runs.slice(0, 5)" @show-all="router.push('/runs')" />
       <div class="stack">
         <FatigueCard :warning="getVolumeWarning(runs)" />
         <SectionCard>
@@ -98,5 +148,55 @@ const hardSessions = computed(() =>
         </SectionCard>
       </div>
     </div>
+
+    <Teleport to="body">
+      <div v-if="trendMetric" class="memory-stack-layer" data-no-swipe>
+        <section class="memory-stack-page">
+          <header class="memory-stack-header">
+            <button class="stack-icon-button" type="button" aria-label="뒤로" @click="closeTrend">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+            </button>
+            <div>
+              <p class="eyebrow">Dashboard</p>
+              <h2>{{ trendTitle }}</h2>
+            </div>
+            <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeTrend">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+            </button>
+          </header>
+          <main class="memory-stack-content">
+            <SectionCard>
+              <div class="section-heading">
+                <h2>추이</h2>
+                <small class="helper">{{ trendRuns.length }}개 세션</small>
+              </div>
+              <div v-if="trendBars.length" class="trend-chart">
+                <div v-for="bar in trendBars" :key="bar.id" class="trend-bar">
+                  <div class="trend-bar-track">
+                    <span :style="{ height: `${bar.height}%` }" />
+                  </div>
+                  <small>{{ bar.label }}</small>
+                </div>
+              </div>
+              <EmptyState v-else title="표시할 기록이 없습니다." description="해당 기간의 러닝 기록이 아직 부족합니다." />
+            </SectionCard>
+            <SectionCard v-if="trendRuns.length">
+              <div class="section-heading">
+                <h2>세션</h2>
+              </div>
+              <div class="run-list">
+                <ListRow
+                  v-for="run in trendRuns"
+                  :key="run.id"
+                  :kicker="formatDateWithWeekday(run.date)"
+                  :title="run.sessionTitle || run.type"
+                  :detail="`${run.distanceKm}km · ${formatPace(run.avgPaceSec)}/km`"
+                />
+              </div>
+            </SectionCard>
+          </main>
+        </section>
+      </div>
+    </Teleport>
   </section>
 </template>

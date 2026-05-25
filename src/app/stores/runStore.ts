@@ -93,14 +93,16 @@ export const useRunStore = defineStore('runStore', {
         const updated = await updateRunLog(run)
         const index = this.runs.findIndex((item) => item.id === run.id)
         if (index >= 0) this.runs[index] = updated
-        return
+        return updated
       }
 
       const index = this.runs.findIndex((item) => item.id === run.id)
       if (index >= 0) {
         this.runs[index] = { ...run, updatedAt: new Date().toISOString() }
         this.persist()
+        return this.runs[index]
       }
+      return run
     },
     async deleteRun(id: string) {
       if (isSupabaseConfigured) {

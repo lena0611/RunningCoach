@@ -7,10 +7,10 @@ export const router = createRouter({
     { path: '/upload', component: () => import('@/pages/upload-run/UploadRunPage.vue') },
     { path: '/runs', component: () => import('@/pages/run-log/RunLogPage.vue') },
     { path: '/memory', component: () => import('@/pages/memory/MemoryPage.vue') },
-    { path: '/coach', component: () => import('@/pages/prompt-builder/PromptBuilderPage.vue') },
+    { path: '/coach', redirect: '/runs' },
     { path: '/auth', component: () => import('@/pages/auth/AuthPage.vue') },
     { path: '/access', component: () => import('@/pages/access-gate/AccessGuidePage.vue') },
-    { path: '/prompt', redirect: '/coach' },
-    { path: '/chat', redirect: '/coach' }
+    { path: '/prompt', redirect: '/runs' },
+    { path: '/chat', redirect: '/runs' }
   ]
 })

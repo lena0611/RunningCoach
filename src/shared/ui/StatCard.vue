@@ -6,7 +6,10 @@ const props = defineProps<{
   value: string
   hint?: string
   tone?: 'primary' | 'accent' | 'warning'
+  interactive?: boolean
 }>()
+
+const emit = defineEmits<{ click: [] }>()
 
 const parsedValue = computed(() => {
   const match = props.value.match(/^([0-9.,]+)(.*)$/)
@@ -19,12 +22,21 @@ const parsedValue = computed(() => {
 </script>
 
 <template>
-  <article class="stat-card" :class="tone ? `stat-card-${tone}` : ''">
+  <component
+    :is="interactive ? 'button' : 'article'"
+    class="stat-card"
+    :class="[tone ? `stat-card-${tone}` : '', { 'stat-card-interactive': interactive }]"
+    :type="interactive ? 'button' : undefined"
+    @click="interactive && emit('click')"
+  >
     <span>{{ label }}</span>
     <strong class="stat-card-value">
       <span>{{ parsedValue.amount }}</span>
       <small v-if="parsedValue.unit" class="stat-card-unit">{{ parsedValue.unit }}</small>
     </strong>
     <small v-if="hint">{{ hint }}</small>
-  </article>
+    <svg v-if="interactive" class="card-arrow" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m9 6 6 6-6 6" />
+    </svg>
+  </component>
 </template>

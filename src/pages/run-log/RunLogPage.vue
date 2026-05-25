@@ -1,50 +1,132 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useRunStore } from '@/app/stores/runStore'
 import { runTypes, type RunLog, type RunType } from '@/entities/run/model'
-import { formatDateWithWeekday, formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
-import RunForm from '@/shared/ui/RunForm.vue'
+import { fetchCoachReports, requestCoachRun, type CoachReport } from '@/shared/api/coachRepository'
+import { isSupabaseConfigured } from '@/shared/api/supabase'
+import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
 import { estimateHeartRateDrift } from '@/shared/lib/runStats'
+import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
+import CoachMessage from '@/shared/ui/CoachMessage.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import ListRow from '@/shared/ui/ListRow.vue'
+import RunForm from '@/shared/ui/RunForm.vue'
 import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
-import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 
 const runStore = useRunStore()
+const router = useRouter()
 const selectedType = ref<RunType | 'All'>('All')
+const selectedDate = ref<string | null>(null)
+const visibleCount = ref(10)
+const loadMoreRef = ref<HTMLElement | null>(null)
+const observer = ref<IntersectionObserver | null>(null)
+const detailRun = ref<RunLog | null>(null)
 const editing = ref<RunLog | null>(null)
 const editSnapshot = ref('')
+const coachRun = ref<RunLog | null>(null)
+const coachNote = ref('')
+const coachLoading = ref(false)
+const coachError = ref('')
+const reports = ref<CoachReport[]>([])
+const reportsLoaded = ref(false)
 const saving = ref(false)
 const deletingId = ref<string | null>(null)
 const pendingDeleteRun = ref<RunLog | null>(null)
 const error = ref('')
+const calendarMonth = ref(toMonthKey(new Date()))
 
-const filteredRuns = computed(() =>
-  selectedType.value === 'All' ? runStore.sortedRuns : runStore.sortedRuns.filter((run) => run.type === selectedType.value)
-)
 const filterOptions = computed(() => [
   { value: 'All', label: 'All' },
   ...runTypes.map((type) => ({ value: type, label: type }))
 ])
+
+const filteredRuns = computed(() => {
+  const byType = selectedType.value === 'All' ? runStore.sortedRuns : runStore.sortedRuns.filter((run) => run.type === selectedType.value)
+  return selectedDate.value ? byType.filter((run) => run.date === selectedDate.value) : byType
+})
+
+const visibleRuns = computed(() => filteredRuns.value.slice(0, visibleCount.value))
+const hasMoreRuns = computed(() => visibleCount.value < filteredRuns.value.length)
 const isEditDirty = computed(() => Boolean(editing.value) && JSON.stringify(editing.value) !== editSnapshot.value)
+const openStack = computed(() => Boolean(detailRun.value || editing.value || coachRun.value))
+const runsByDate = computed(() => {
+  const map = new Map<string, RunLog[]>()
+  for (const run of runStore.sortedRuns) {
+    const list = map.get(run.date) ?? []
+    list.push(run)
+    map.set(run.date, list)
+  }
+  return map
+})
+const calendarTitle = computed(() => {
+  const [year, month] = calendarMonth.value.split('-')
+  return `${year}. ${Number(month)}.`
+})
+const calendarCells = computed(() => buildCalendarCells(calendarMonth.value, runsByDate.value))
+const selectedReport = computed(() => {
+  if (!coachRun.value) return null
+  return reports.value.find((report) => report.selectedRunId === coachRun.value?.id) ?? null
+})
 
 onMounted(() => {
   if (!runStore.loaded && !runStore.loading) {
     runStore.load()
   }
+  setupObserver()
 })
 
-watch(
-  () => Boolean(editing.value),
-  (open) => {
-    document.body.classList.toggle('memory-stack-open', open)
-  }
-)
+watch(openStack, (open) => {
+  document.body.classList.toggle('memory-stack-open', open)
+})
+
+watch([filteredRuns, selectedType, selectedDate], () => {
+  visibleCount.value = 10
+  nextTick(setupObserver)
+})
 
 onBeforeUnmount(() => {
   document.body.classList.remove('memory-stack-open')
+  observer.value?.disconnect()
 })
+
+function setupObserver() {
+  observer.value?.disconnect()
+  if (!loadMoreRef.value) return
+  observer.value = new IntersectionObserver((entries) => {
+    if (entries.some((entry) => entry.isIntersecting)) {
+      showMore()
+    }
+  })
+  observer.value.observe(loadMoreRef.value)
+}
+
+function showMore() {
+  if (hasMoreRuns.value) visibleCount.value += 10
+}
+
+function previousMonth() {
+  calendarMonth.value = shiftMonth(calendarMonth.value, -1)
+}
+
+function nextMonth() {
+  calendarMonth.value = shiftMonth(calendarMonth.value, 1)
+}
+
+function toggleDate(date: string, hasRun: boolean) {
+  if (!hasRun) return
+  selectedDate.value = selectedDate.value === date ? null : date
+}
+
+function openDetail(run: RunLog) {
+  error.value = ''
+  detailRun.value = run
+}
+
+function closeDetail() {
+  detailRun.value = null
+}
 
 function startEdit(run: RunLog) {
   error.value = ''
@@ -58,14 +140,22 @@ async function saveEdit() {
   error.value = ''
   try {
     const updated = await runStore.updateRun(editing.value)
-    editing.value = JSON.parse(JSON.stringify(updated))
-    editSnapshot.value = JSON.stringify(editing.value)
+    if (updated) {
+      detailRun.value = updated
+      coachRun.value = coachRun.value?.id === updated.id ? updated : coachRun.value
+    }
     editing.value = null
+    editSnapshot.value = ''
   } catch (err) {
     error.value = err instanceof Error ? err.message : '수정 실패'
   } finally {
     saving.value = false
   }
+}
+
+function closeEdit() {
+  editing.value = null
+  editSnapshot.value = ''
 }
 
 function askRemove(run: RunLog) {
@@ -79,7 +169,9 @@ async function confirmRemove() {
   error.value = ''
   try {
     await runStore.deleteRun(run.id)
+    if (detailRun.value?.id === run.id) detailRun.value = null
     if (editing.value?.id === run.id) editing.value = null
+    if (coachRun.value?.id === run.id) coachRun.value = null
     pendingDeleteRun.value = null
   } catch (err) {
     error.value = err instanceof Error ? err.message : '삭제 실패'
@@ -88,40 +180,138 @@ async function confirmRemove() {
   }
 }
 
-function closeEdit() {
-  editing.value = null
-  editSnapshot.value = ''
+async function openCoach(run: RunLog) {
+  coachRun.value = run
+  coachError.value = ''
+  if (!reportsLoaded.value && isSupabaseConfigured) {
+    try {
+      reports.value = await fetchCoachReports()
+      reportsLoaded.value = true
+    } catch (err) {
+      coachError.value = err instanceof Error ? err.message : '코칭 기록을 불러오지 못했습니다.'
+    }
+  }
+}
+
+function closeCoach() {
+  coachRun.value = null
+  coachNote.value = ''
+  coachError.value = ''
+}
+
+async function requestCoach() {
+  if (!coachRun.value) return
+  coachLoading.value = true
+  coachError.value = ''
+  try {
+    const report = await requestCoachRun(coachRun.value.id, coachNote.value)
+    reports.value = [
+      report,
+      ...reports.value.filter((item) => item.id !== report.id && item.selectedRunId !== report.selectedRunId)
+    ]
+    reportsLoaded.value = true
+  } catch (err) {
+    coachError.value = err instanceof Error ? err.message : 'AI 코칭 요청 실패'
+  } finally {
+    coachLoading.value = false
+  }
+}
+
+function toMonthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+
+function shiftMonth(monthKey: string, offset: number) {
+  const [year, month] = monthKey.split('-').map(Number)
+  return toMonthKey(new Date(year, month - 1 + offset, 1))
+}
+
+function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
+  const [year, month] = monthKey.split('-').map(Number)
+  const first = new Date(year, month - 1, 1)
+  const daysInMonth = new Date(year, month, 0).getDate()
+  const cells: Array<{ key: string; date: string; day: number | null; runs: RunLog[] }> = []
+  for (let i = 0; i < first.getDay(); i += 1) {
+    cells.push({ key: `blank-${i}`, date: '', day: null, runs: [] })
+  }
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const date = `${monthKey}-${String(day).padStart(2, '0')}`
+    cells.push({ key: date, date, day, runs: map.get(date) ?? [] })
+  }
+  return cells
 }
 </script>
 
 <template>
-  <section class="page">
-    <SectionCard>
+  <section class="page run-log-page">
+    <SectionCard class="calendar-card">
       <div class="section-heading">
         <h2>Run Log</h2>
-        <BottomSheetSelect v-model="selectedType" label="세션 타입" :options="filterOptions" compact />
+        <div class="run-log-heading-actions">
+          <button class="icon-link-button" type="button" aria-label="기록 추가" @click="router.push('/upload')">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
+          </button>
+          <BottomSheetSelect v-model="selectedType" label="세션 타입" :options="filterOptions" compact />
+        </div>
+      </div>
+      <div class="calendar-header">
+        <button class="icon-only-button" type="button" aria-label="이전 달" @click="previousMonth">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+        </button>
+        <strong>{{ calendarTitle }}</strong>
+        <button class="icon-only-button" type="button" aria-label="다음 달" @click="nextMonth">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+        </button>
+      </div>
+      <div class="run-calendar-weekdays">
+        <span v-for="day in ['일', '월', '화', '수', '목', '금', '토']" :key="day">{{ day }}</span>
+      </div>
+      <div class="run-calendar-grid">
+        <button
+          v-for="cell in calendarCells"
+          :key="cell.key"
+          class="run-calendar-day"
+          :class="{ 'has-run': cell.runs.length, selected: selectedDate === cell.date }"
+          type="button"
+          :disabled="!cell.day || !cell.runs.length"
+          @click="toggleDate(cell.date, Boolean(cell.runs.length))"
+        >
+          <span v-if="cell.day">{{ cell.day }}</span>
+          <small v-if="cell.runs.length">{{ cell.runs.length }}</small>
+        </button>
+      </div>
+      <button v-if="selectedDate" class="ghost full compact-action" type="button" @click="selectedDate = null">
+        전체 기록 보기
+      </button>
+    </SectionCard>
+
+    <SectionCard>
+      <div class="section-heading">
+        <h2>{{ selectedDate ? formatDateWithWeekday(selectedDate) : '전체 기록' }}</h2>
+        <small class="helper">{{ filteredRuns.length }}개</small>
       </div>
       <p v-if="runStore.loading" class="helper">Run Log를 불러오고 있습니다.</p>
-      <div v-if="filteredRuns.length" class="run-list">
+      <div v-if="visibleRuns.length" class="run-list">
         <ListRow
-          v-for="run in filteredRuns"
+          v-for="run in visibleRuns"
           :key="run.id"
-          class="run-list-row"
+          class="run-list-row run-click-row"
           :kicker="formatDateWithWeekday(run.date)"
           :title="run.sessionTitle || run.type"
           :detail="`HR ${formatInteger(run.avgHeartRate)} / ${formatInteger(run.maxHeartRate)} · Cad ${formatInteger(run.cadence)} · ${estimateHeartRateDrift(run)}`"
           :metric="`${run.distanceKm}km`"
+          @click="openDetail(run)"
         >
           <template #addon>
             <RunTypeBadge :type="run.type" />
             <div class="row-actions">
-              <button class="icon-only-button" type="button" aria-label="기록 수정" @click="startEdit(run)">
+              <button class="icon-only-button" type="button" aria-label="기록 수정" @click.stop="startEdit(run)">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M4.5 19.5h4.2L18.8 9.4a2.1 2.1 0 0 0 0-3l-1.2-1.2a2.1 2.1 0 0 0-3 0L4.5 15.3z" />
                   <path d="m13.6 6.2 4.2 4.2" />
                 </svg>
               </button>
-              <button class="icon-only-button danger" type="button" :disabled="deletingId === run.id" aria-label="기록 삭제" @click="askRemove(run)">
+              <button class="icon-only-button danger" type="button" :disabled="deletingId === run.id" aria-label="기록 삭제" @click.stop="askRemove(run)">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M5.5 7h13" />
                   <path d="M9.5 7V5.5h5V7" />
@@ -142,12 +332,112 @@ function closeEdit() {
           </div>
         </ListRow>
       </div>
-      <EmptyState v-else title="기록이 없습니다." description="Upload에서 HealthKit 또는 FIT 기록을 저장하세요." />
+      <div ref="loadMoreRef" class="load-more-sentinel">
+        <button v-if="hasMoreRuns" class="secondary full" type="button" @click="showMore">다음 10개 보기</button>
+      </div>
+      <EmptyState v-if="!visibleRuns.length && !runStore.loading" title="기록이 없습니다." description="Upload에서 HealthKit 또는 FIT 기록을 저장하세요." />
       <p v-if="error" class="error">{{ error }}</p>
     </SectionCard>
 
     <Teleport to="body">
-      <div v-if="editing" class="memory-stack-layer" data-no-swipe>
+      <div v-if="detailRun" class="memory-stack-layer" data-no-swipe>
+        <section class="memory-stack-page">
+          <header class="memory-stack-header">
+            <button class="stack-icon-button" type="button" aria-label="뒤로" @click="closeDetail">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+            </button>
+            <div>
+              <p class="eyebrow">Run Log</p>
+              <h2>훈련 상세</h2>
+            </div>
+            <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeDetail">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+            </button>
+          </header>
+          <main class="memory-stack-content">
+            <SectionCard class="run-detail-hero">
+              <span class="list-row-kicker">{{ formatDateWithWeekday(detailRun.date) }}</span>
+              <h2>{{ detailRun.sessionTitle || detailRun.type }}</h2>
+              <div class="run-detail-metrics">
+                <strong>{{ detailRun.distanceKm }}km</strong>
+                <span>{{ formatDuration(detailRun.durationSec) }}</span>
+                <span>{{ formatPace(detailRun.avgPaceSec) }}/km</span>
+              </div>
+              <RunTypeBadge :type="detailRun.type" />
+            </SectionCard>
+            <SectionCard>
+              <div class="metric-grid compact-metric-grid">
+                <div class="metric"><span>평균 심박</span><strong>{{ formatInteger(detailRun.avgHeartRate) }}</strong></div>
+                <div class="metric"><span>최고 심박</span><strong>{{ formatInteger(detailRun.maxHeartRate) }}</strong></div>
+                <div class="metric"><span>케이던스</span><strong>{{ formatInteger(detailRun.cadence) }}</strong></div>
+                <div class="metric"><span>RPE</span><strong>{{ detailRun.rpe ?? '-' }}</strong></div>
+              </div>
+            </SectionCard>
+            <SectionCard v-if="detailRun.memo || detailRun.workoutFeeling || detailRun.painNote">
+              <div class="section-heading"><h2>메모</h2></div>
+              <p v-if="detailRun.memo">{{ detailRun.memo }}</p>
+              <p v-if="detailRun.workoutFeeling" class="helper">느낌: {{ detailRun.workoutFeeling }}</p>
+              <p v-if="detailRun.painNote" class="helper">통증/주의: {{ detailRun.painNote }}</p>
+            </SectionCard>
+            <SectionCard>
+              <div class="section-heading">
+                <h2>랩</h2>
+                <small class="helper">{{ detailRun.laps.length ? `${detailRun.laps.length}개` : '데이터 부족' }}</small>
+              </div>
+              <div v-if="detailRun.laps.length" class="lap-list">
+                <div v-for="lap in detailRun.laps" :key="lap.index" class="lap-row">
+                  <strong>{{ lap.index }}</strong>
+                  <span>{{ lap.distanceKm ?? '-' }}km</span>
+                  <span>{{ formatPace(lap.paceSec) }}/km</span>
+                  <span>HR {{ formatInteger(lap.avgHeartRate) }}</span>
+                </div>
+              </div>
+              <p v-else class="helper">랩별 페이스와 심박이 있으면 자동 세션 재해석과 코칭 근거가 좋아집니다.</p>
+            </SectionCard>
+            <div class="detail-actions">
+              <button type="button" @click="openCoach(detailRun)">AI 코칭</button>
+              <button class="secondary" type="button" @click="startEdit(detailRun)">수정</button>
+              <button class="ghost danger-text" type="button" @click="askRemove(detailRun)">삭제</button>
+            </div>
+          </main>
+        </section>
+      </div>
+
+      <div v-if="coachRun" class="memory-stack-layer stack-layer-top" data-no-swipe>
+        <section class="memory-stack-page">
+          <header class="memory-stack-header">
+            <button class="stack-icon-button" type="button" aria-label="뒤로" @click="closeCoach">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+            </button>
+            <div>
+              <p class="eyebrow">RunContext Coach</p>
+              <h2>AI 코칭</h2>
+            </div>
+            <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeCoach">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+            </button>
+          </header>
+          <main class="memory-stack-content coach-stack-content">
+            <CoachMessage role="user" :text="`${formatDateWithWeekday(coachRun.date)} ${coachRun.sessionTitle || coachRun.type}`" />
+            <CoachMessage
+              v-if="selectedReport"
+              role="coach"
+              :text="selectedReport.report"
+              :meta="formatDateTimeWithWeekday(selectedReport.updatedAt || selectedReport.createdAt)"
+            />
+            <EmptyState v-else title="아직 이 세션의 코칭이 없습니다." description="짧은 메모를 넣고 AI 코칭을 요청하세요." />
+            <p v-if="coachError" class="error">{{ coachError }}</p>
+          </main>
+          <footer class="stack-action-bar coach-input-bar">
+            <textarea v-model="coachNote" rows="2" placeholder="예: 오늘 목요일 템포. 후반은 와이프랑 회복 조깅." />
+            <button type="button" :disabled="coachLoading || !isSupabaseConfigured" @click="requestCoach">
+              {{ coachLoading ? '코칭 중' : selectedReport ? '코칭 갱신' : 'AI 코칭 요청' }}
+            </button>
+          </footer>
+        </section>
+      </div>
+
+      <div v-if="editing" class="memory-stack-layer stack-layer-top" data-no-swipe>
         <section class="memory-stack-page">
           <header class="memory-stack-header">
             <button class="stack-icon-button" type="button" aria-label="뒤로" @click="closeEdit">

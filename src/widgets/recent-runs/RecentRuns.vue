@@ -7,12 +7,16 @@ import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 
 defineProps<{ runs: RunLog[] }>()
+defineEmits<{ showAll: [] }>()
 </script>
 
 <template>
   <SectionCard>
     <div class="section-heading">
       <h2>최근 세션</h2>
+      <button class="icon-link-button" type="button" aria-label="전체 Run Log 보기" @click="$emit('showAll')">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+      </button>
     </div>
     <div v-if="runs.length" class="run-list">
       <ListRow

@@ -15,10 +15,8 @@ const memoryStore = useMemoryStore()
 const runStore = useRunStore()
 const navItems: BottomNavItem[] = [
   { to: '/', label: 'Dashboard', shortLabel: 'Home', icon: 'home' },
-  { to: '/upload', label: 'Upload', shortLabel: 'Upload', icon: 'upload' },
   { to: '/runs', label: 'Run Log', shortLabel: 'Log', icon: 'log' },
-  { to: '/memory', label: 'Memory', shortLabel: 'Memo', icon: 'memo' },
-  { to: '/coach', label: 'Coach', shortLabel: 'Coach', icon: 'coach' }
+  { to: '/memory', label: 'Memory', shortLabel: 'Memo', icon: 'memo' }
 ]
 const route = useRoute()
 const transitionName = ref('page-slide-forward')
