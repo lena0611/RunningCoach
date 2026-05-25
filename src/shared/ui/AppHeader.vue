@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useAuthStore } from '@/app/stores/authStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
+import { useSettingsStore, type ManualThemeMode } from '@/app/stores/settingsStore'
 import { getActiveGoal, getActiveInjuryItem, type PersonalBest, type TrainingMemory } from '@/entities/training-memory/model'
 import { formatDateWithWeekday } from '@/shared/lib/format'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
@@ -11,8 +12,9 @@ const emit = defineEmits<{ signOut: [] }>()
 
 const authStore = useAuthStore()
 const memoryStore = useMemoryStore()
+const settingsStore = useSettingsStore()
 const drawerOpen = ref(false)
-const editOpen = ref(false)
+const drawerPanel = ref<'account' | 'profile' | 'settings'>('account')
 const saving = ref(false)
 const error = ref('')
 const draftName = ref(memoryStore.selectedUser.name)
@@ -22,6 +24,10 @@ const sexOptions = [
   { value: 'male', label: '남성' },
   { value: 'female', label: '여성' },
   { value: 'other', label: '기타' }
+]
+const themeModeOptions = [
+  { value: 'light', label: '데이 버전', description: '밝은 배경과 선명한 텍스트를 사용합니다.' },
+  { value: 'dark', label: '나이트 버전', description: '어두운 배경과 낮은 눈부심을 사용합니다.' }
 ]
 
 const accountLabel = computed(() => {
@@ -50,12 +56,12 @@ function resetDraft() {
 function openDrawer() {
   resetDraft()
   drawerOpen.value = true
-  editOpen.value = false
+  drawerPanel.value = 'account'
 }
 
 function closeDrawer() {
   drawerOpen.value = false
-  editOpen.value = false
+  drawerPanel.value = 'account'
 }
 
 function parsePersonalBests(value: string) {
@@ -111,7 +117,7 @@ async function saveProfile() {
   try {
     memoryStore.updateSelectedUserName(draftName.value)
     await memoryStore.update(clone(draft))
-    editOpen.value = false
+    drawerPanel.value = 'account'
   } catch (err) {
     error.value = err instanceof Error ? err.message : '정보 저장 실패'
   } finally {
@@ -122,6 +128,10 @@ async function saveProfile() {
 function signOutAndClose() {
   closeDrawer()
   emit('signOut')
+}
+
+function setThemeMode(value: string) {
+  if (value === 'light' || value === 'dark') settingsStore.setManualTheme(value as ManualThemeMode)
 }
 </script>
 
@@ -139,15 +149,23 @@ function signOutAndClose() {
 
   <Teleport to="body">
     <div v-if="drawerOpen" class="side-drawer-layer" @click.self="closeDrawer">
-      <aside class="side-drawer" :class="{ 'side-drawer-editing': editOpen }" aria-label="계정 정보">
+      <aside class="side-drawer" :class="{ 'side-drawer-editing': drawerPanel !== 'account' }" aria-label="계정 정보">
         <section class="side-drawer-panel account-panel">
           <div class="drawer-heading">
             <div>
               <h2>계정 정보</h2>
             </div>
-            <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeDrawer">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
-            </button>
+            <div class="drawer-heading-actions">
+              <button class="stack-icon-button" type="button" aria-label="설정 열기" @click="drawerPanel = 'settings'">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
+                  <path d="M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1 1.6V21a2 2 0 0 1-4 0v-.1a1.8 1.8 0 0 0-1-1.6 1.8 1.8 0 0 0-2 .4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.8 1.8 0 0 0 .4-2 1.8 1.8 0 0 0-1.6-1H3a2 2 0 0 1 0-4h.1a1.8 1.8 0 0 0 1.6-1 1.8 1.8 0 0 0-.4-2l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.8 1.8 0 0 0 2 .4 1.8 1.8 0 0 0 1-1.6V3a2 2 0 0 1 4 0v.1a1.8 1.8 0 0 0 1 1.6 1.8 1.8 0 0 0 2-.4l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.8 1.8 0 0 0-.4 2 1.8 1.8 0 0 0 1.6 1H21a2 2 0 0 1 0 4h-.1a1.8 1.8 0 0 0-1.5 1Z" />
+                </svg>
+              </button>
+              <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeDrawer">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+              </button>
+            </div>
           </div>
 
           <div class="account-summary">
@@ -178,14 +196,14 @@ function signOutAndClose() {
           </dl>
 
           <div class="drawer-actions">
-            <button type="button" @click="editOpen = true">정보수정</button>
+            <button type="button" @click="drawerPanel = 'profile'">정보수정</button>
             <button class="ghost" type="button" @click="signOutAndClose">로그아웃</button>
           </div>
         </section>
 
-        <section class="side-drawer-panel edit-panel">
+        <section v-if="drawerPanel === 'profile'" class="side-drawer-panel edit-panel">
           <div class="drawer-heading">
-            <button class="stack-icon-button" type="button" aria-label="계정 정보로 돌아가기" @click="editOpen = false">
+            <button class="stack-icon-button" type="button" aria-label="계정 정보로 돌아가기" @click="drawerPanel = 'account'">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
             </button>
             <div>
@@ -227,6 +245,51 @@ function signOutAndClose() {
             </label>
             <button class="full" type="submit" :disabled="saving">{{ saving ? '저장 중' : '저장' }}</button>
           </form>
+        </section>
+
+        <section v-else-if="drawerPanel === 'settings'" class="side-drawer-panel settings-panel">
+          <div class="drawer-heading">
+            <button class="stack-icon-button" type="button" aria-label="계정 정보로 돌아가기" @click="drawerPanel = 'account'">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+            </button>
+            <div>
+              <h2>설정</h2>
+            </div>
+          </div>
+
+          <section class="settings-section">
+            <div class="settings-section-heading">
+              <p class="eyebrow">Theme</p>
+              <h3>화면 테마</h3>
+            </div>
+
+            <div class="settings-row">
+              <div>
+                <strong>iOS 테마 자동 따라가기</strong>
+                <span>기기 appearance가 바뀌면 RunContext도 같이 바뀝니다.</span>
+              </div>
+              <button
+                class="switch-control"
+                :class="{ on: settingsStore.followsSystem }"
+                type="button"
+                role="switch"
+                :aria-checked="settingsStore.followsSystem"
+                @click="settingsStore.setFollowSystem(!settingsStore.followsSystem)"
+              >
+                <span />
+              </button>
+            </div>
+
+            <BottomSheetSelect
+              v-if="!settingsStore.followsSystem"
+              :model-value="settingsStore.manualTheme"
+              label="수동 테마"
+              :options="themeModeOptions"
+              @update:model-value="setThemeMode"
+            />
+
+            <p class="helper">현재 적용: {{ settingsStore.effectiveTheme === 'light' ? '데이 버전' : '나이트 버전' }}</p>
+          </section>
         </section>
       </aside>
     </div>

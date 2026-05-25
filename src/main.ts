@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import App from './app/App.vue'
 import { router } from './app/router'
 import { useAuthStore } from '@/app/stores/authStore'
+import { useSettingsStore } from '@/app/stores/settingsStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
@@ -12,6 +13,8 @@ import './app/styles.css'
 const pinia = createPinia()
 const app = createApp(App)
 app.use(pinia)
+
+useSettingsStore().initTheme()
 
 const authStore = useAuthStore()
 await withTimeout(authStore.init(), 4000, '인증 초기화 시간이 초과되었습니다.').catch((error) => {

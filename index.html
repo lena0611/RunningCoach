@@ -9,6 +9,22 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="RunContext" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <script>
+      ;(() => {
+        try {
+          const raw = localStorage.getItem('runcontext.settings')
+          const saved = raw ? JSON.parse(raw) : {}
+          const preference = ['system', 'light', 'dark'].includes(saved.themePreference) ? saved.themePreference : 'system'
+          const systemTheme = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+          const theme = preference === 'system' ? systemTheme : preference
+          document.documentElement.classList.add(`theme-${theme}`)
+          document.documentElement.dataset.themePreference = preference
+          document.documentElement.dataset.theme = theme
+        } catch {
+          document.documentElement.classList.add('theme-dark')
+        }
+      })()
+    </script>
     <title>RunContext</title>
   </head>
   <body>

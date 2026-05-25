@@ -40,6 +40,8 @@ RunContext is a personal running coach app, not an admin dashboard.
 - Pace fields must display rounded `m:ss` values. Never show raw fractional seconds such as `7:13.2714718`.
 - Account/profile management belongs in the header account drawer, not inside the `Memo` tab.
 - The account drawer opens from right to left. Profile editing is a second right-to-left stack inside the drawer.
+- Account-level settings live in the account drawer as a separate settings stack, opened by an icon-only gear action in the account header. Do not add global settings into tab pages.
+- Theme settings are owned by `settingsStore`: `system` follows iOS appearance, while manual `light`/`dark` applies explicit `html.theme-light` or `html.theme-dark` classes. Future settings should extend this store or a sibling settings domain instead of scattering localStorage reads in components.
 
 ## Screen Stack Pattern
 
