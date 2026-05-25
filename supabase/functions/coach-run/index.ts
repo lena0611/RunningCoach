@@ -74,17 +74,25 @@ Deno.serve(async (req) => {
       if (error) throw error
     }
 
-    const { data: reportRow, error: reportError } = await admin
-      .from('coach_reports')
-      .insert({
+    const reportPayload = {
         user_id: userId,
         selected_run_id: selectedRunId,
         user_note: userNote,
-        report: ai.report
+        report: ai.report,
+        updated_at: new Date().toISOString()
+      }
+    const { data: reportRow, error: reportError } = await admin
+      .from('coach_reports')
+      .upsert(reportPayload, {
+        onConflict: 'user_id,selected_run_id',
+        ignoreDuplicates: false
       })
-      .select('id, selected_run_id, user_note, report, created_at')
+      .select('id, selected_run_id, user_note, report, created_at, updated_at')
       .single()
     if (reportError) throw reportError
+
+    const { error: memoryDeleteError } = await admin.from('coach_memory_items').delete().eq('source_report_id', reportRow.id)
+    if (memoryDeleteError) throw memoryDeleteError
 
     const memoryItems = ai.memoryItems.map((content) => ({
       user_id: userId,
@@ -103,6 +111,7 @@ Deno.serve(async (req) => {
         userNote: reportRow.user_note,
         report: reportRow.report,
         createdAt: reportRow.created_at,
+        updatedAt: reportRow.updated_at,
         trainingMemoryUpdated: Boolean(updatedMemory)
       },
       trainingMemoryUpdated: Boolean(updatedMemory),

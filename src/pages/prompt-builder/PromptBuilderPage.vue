@@ -47,7 +47,13 @@ async function coach() {
   error.value = ''
   try {
     const report = await requestCoachRun(selectedRunId.value || null, userNote.value)
-    reports.value = [report, ...reports.value]
+    reports.value = [
+      report,
+      ...reports.value.filter((item) => {
+        if (item.id === report.id) return false
+        return !(report.selectedRunId && item.selectedRunId === report.selectedRunId)
+      })
+    ]
     if (report.trainingMemoryUpdated) {
       await memoryStore.load()
     }
@@ -95,7 +101,7 @@ async function coach() {
         <h2>코칭 리포트</h2>
       </div>
       <div v-for="report in reports" :key="report.id" class="coach-thread-item">
-        <CoachMessage v-if="report.userNote" role="user" :text="report.userNote" :meta="formatDateTimeWithWeekday(report.createdAt)" />
+        <CoachMessage v-if="report.userNote" role="user" :text="report.userNote" :meta="formatDateTimeWithWeekday(report.updatedAt || report.createdAt)" />
         <CoachMessage role="coach" :text="report.report" meta="RunContext Coach" />
         <p v-if="report.trainingMemoryUpdated" class="helper">AI가 목표와 누적 기록을 기준으로 코칭 메모리의 주간 루틴을 갱신했습니다.</p>
       </div>
