@@ -482,22 +482,26 @@ label {
   will-change: transform;
 }
 
-.bottom-nav a {
+.bottom-nav-item {
   display: grid;
   grid-template-rows: 25px auto;
   place-items: center;
   gap: 3px;
   min-height: 54px;
   padding: 7px 3px 6px;
+  border: 0;
   color: var(--color-muted);
+  background: transparent;
   text-decoration: none;
   border-radius: 16px;
   font-size: 10.5px;
   font-weight: 850;
   line-height: 1;
+  box-shadow: none;
+  touch-action: manipulation;
 }
 
-.bottom-nav a.router-link-active {
+.bottom-nav-item.router-link-active {
   background: var(--color-primary-soft);
   color: var(--color-primary);
 }
@@ -688,7 +692,7 @@ label {
 }
 
 .hero-metric span,
-.stat-card span,
+.stat-card > span,
 .metric span {
   color: var(--color-muted);
   font-size: 13px;
@@ -782,6 +786,13 @@ label {
   gap: 3px;
   min-width: 0;
   white-space: nowrap;
+}
+
+.stat-card-value > span {
+  color: var(--color-text);
+  font-size: var(--text-metric-size);
+  font-weight: 950;
+  line-height: 1;
 }
 
 .stat-card .stat-card-value .stat-card-unit {
@@ -1775,10 +1786,14 @@ label {
     backdrop-filter: none;
   }
 
-  .bottom-nav a {
+  .bottom-nav-item {
     min-width: 110px;
     background: var(--color-subtle);
     border: 1px solid var(--color-border);
+  }
+
+  .bottom-nav-item.router-link-active {
+    background: var(--color-primary-soft);
   }
 
   .app-main {

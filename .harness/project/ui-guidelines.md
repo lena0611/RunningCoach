@@ -31,6 +31,7 @@ RunContext is a personal running coach app, not an admin dashboard.
 - Keep bottom navigation usable with one hand on mobile.
 - Fixed mobile bottom navigation must use `viewport-fit=cover`, `env(safe-area-inset-bottom)`, a fixed nav height token, and matching `.app-main` bottom reserve. The nav should stay attached to the visual viewport before and after full scroll.
 - Bottom navigation is icon-first. Labels stay under icons as small captions, not as the primary visual element.
+- Bottom navigation must use explicit programmatic navigation through the router, not rely only on raw anchor default behavior. This keeps iOS WebView taps predictable.
 - Main tabs support horizontal swipe navigation. Swipes should be disabled over interactive controls, bottom sheets, and side drawers to avoid accidental data changes.
 - Root tab navigation through the bottom nav resets the main scroll position to top. Deep in-tab stacks preserve the root surface and restore the previous stack page scroll on Back.
 - Do not use native `<select>` for app workflows. Use `BottomSheetSelect`, opening options in a bottom sheet.

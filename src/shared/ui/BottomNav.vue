@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useRoute, useRouter } from 'vue-router'
+
 export type BottomNavItem = {
   to: string
   label: string
@@ -7,11 +9,28 @@ export type BottomNavItem = {
 }
 
 defineProps<{ items: BottomNavItem[] }>()
+
+const route = useRoute()
+const router = useRouter()
+
+function navigate(to: string) {
+  if (route.path === to) return
+  router.push(to)
+}
 </script>
 
 <template>
   <nav class="bottom-nav" aria-label="주요 화면">
-    <RouterLink v-for="item in items" :key="item.to" :to="item.to">
+    <button
+      v-for="item in items"
+      :key="item.to"
+      class="bottom-nav-item"
+      :class="{ 'router-link-active': route.path === item.to }"
+      type="button"
+      :aria-label="item.label"
+      :aria-current="route.path === item.to ? 'page' : undefined"
+      @click="navigate(item.to)"
+    >
       <svg class="bottom-nav-icon" viewBox="0 0 24 24" aria-hidden="true">
         <template v-if="item.icon === 'home'">
           <path d="M3.5 11.2 12 4l8.5 7.2" />
@@ -43,6 +62,6 @@ defineProps<{ items: BottomNavItem[] }>()
         </template>
       </svg>
       <span>{{ item.shortLabel || item.label }}</span>
-    </RouterLink>
+    </button>
   </nav>
 </template>
