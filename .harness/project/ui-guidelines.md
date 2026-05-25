@@ -106,6 +106,8 @@ New page work should reuse these before adding page-specific layout.
 - `Toast`: Bottom is default. Top is reserved for system/background events such as HealthKit sync.
 - Top system toasts triggered during app startup or activation should use a small display delay so the page has painted before the drop animation starts.
 - `FixedBottomCTA`: Edit/create stack pages use a fixed full-width save CTA. Disable it until dirty state is true.
+- `CoachMessage`: Assistant answers should feel like ChatGPT-style conversation, not a report card inside a large bordered box. Keep user input as a compact bubble, but render coach answers as open text with markdown structure, spacing, lists, and dividers.
+- `StackPage`: Full-screen stack pages enter from right to left and leave with the exact reverse motion when back/close is pressed. Do not remove stack layers immediately without a leave transition.
 
 ## Prohibited Patterns
 

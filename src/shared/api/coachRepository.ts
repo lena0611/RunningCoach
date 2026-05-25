@@ -40,7 +40,7 @@ export async function requestCoachRun(selectedRunId: string | null, userNote: st
 }
 
 export async function fetchCoachReports(): Promise<CoachReport[]> {
-  const { data, error } = await requireSupabase().from('coach_reports').select('*').order('updated_at', { ascending: false }).order('created_at', { ascending: false }).limit(20)
+  const { data, error } = await requireSupabase().from('coach_reports').select('*').order('created_at', { ascending: false }).limit(80)
   if (error) throw error
   return (data ?? []).map(fromRow)
 }

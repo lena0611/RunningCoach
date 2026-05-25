@@ -441,8 +441,9 @@ async function save() {
     </SectionCard>
 
     <Teleport to="body">
-      <div v-if="isStackOpen" class="memory-stack-layer" data-no-swipe>
-        <section class="memory-stack-page" :class="{ 'memory-stack-detail': panel.includes('edit') || panel.includes('new') }">
+      <Transition name="stack-page">
+        <div v-if="isStackOpen" class="memory-stack-layer" data-no-swipe>
+          <section class="memory-stack-page" :class="{ 'memory-stack-detail': panel.includes('edit') || panel.includes('new') }">
           <header class="memory-stack-header">
             <button class="stack-icon-button" type="button" aria-label="뒤로" @click="goBack">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
@@ -670,8 +671,9 @@ async function save() {
             <button class="danger" type="button" @click="confirmDelete">삭제</button>
             <button class="ghost" type="button" @click="pendingDelete = null">취소</button>
           </div>
-        </section>
-      </div>
+          </section>
+        </div>
+      </Transition>
     </Teleport>
   </section>
 </template>

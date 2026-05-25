@@ -1671,7 +1671,6 @@ button.stat-card {
   inset: 0;
   z-index: 115;
   background: var(--color-bg);
-  animation: stack-page-in 180ms ease-out;
 }
 
 .memory-stack-page {
@@ -1822,13 +1821,23 @@ button.stat-card {
   gap: 10px;
 }
 
-@keyframes stack-page-in {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(0);
-  }
+.stack-page-enter-active,
+.stack-page-leave-active {
+  transition:
+    transform 210ms ease,
+    opacity 180ms ease;
+}
+
+.stack-page-enter-from,
+.stack-page-leave-to {
+  opacity: 0.96;
+  transform: translateX(100%);
+}
+
+.stack-page-enter-to,
+.stack-page-leave-from {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .stack-slide-forward-enter-active,
@@ -1995,12 +2004,15 @@ button.stat-card {
 .coach-message-ai {
   justify-self: start;
   max-width: 100%;
-  background: var(--color-subtle);
+  padding: 4px 0 12px;
+  border-color: transparent;
+  border-radius: 0;
+  background: transparent;
 }
 
 .coach-report {
   display: grid;
-  gap: 12px;
+  gap: 11px;
   word-break: keep-all;
   overflow-wrap: anywhere;
 }
@@ -2023,9 +2035,7 @@ button.stat-card {
   display: grid;
   gap: 7px;
   margin: 0;
-  padding: 12px 14px 12px 32px;
-  border-radius: 16px;
-  background: var(--color-subtle);
+  padding: 0 0 0 24px;
 }
 
 .coach-report pre {
@@ -2047,6 +2057,11 @@ button.stat-card {
 .coach-report strong {
   color: var(--color-strong);
   font-weight: 950;
+}
+
+.coach-turn {
+  display: grid;
+  gap: 8px;
 }
 
 @media (min-width: 900px) {

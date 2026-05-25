@@ -150,53 +150,55 @@ function closeTrend() {
     </div>
 
     <Teleport to="body">
-      <div v-if="trendMetric" class="memory-stack-layer" data-no-swipe>
-        <section class="memory-stack-page">
-          <header class="memory-stack-header">
-            <button class="stack-icon-button" type="button" aria-label="뒤로" @click="closeTrend">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
-            </button>
-            <div>
-              <p class="eyebrow">Dashboard</p>
-              <h2>{{ trendTitle }}</h2>
-            </div>
-            <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeTrend">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
-            </button>
-          </header>
-          <main class="memory-stack-content">
-            <SectionCard>
-              <div class="section-heading">
-                <h2>추이</h2>
-                <small class="helper">{{ trendRuns.length }}개 세션</small>
+      <Transition name="stack-page">
+        <div v-if="trendMetric" class="memory-stack-layer" data-no-swipe>
+          <section class="memory-stack-page">
+            <header class="memory-stack-header">
+              <button class="stack-icon-button" type="button" aria-label="뒤로" @click="closeTrend">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+              </button>
+              <div>
+                <p class="eyebrow">Dashboard</p>
+                <h2>{{ trendTitle }}</h2>
               </div>
-              <div v-if="trendBars.length" class="trend-chart">
-                <div v-for="bar in trendBars" :key="bar.id" class="trend-bar">
-                  <div class="trend-bar-track">
-                    <span :style="{ height: `${bar.height}%` }" />
-                  </div>
-                  <small>{{ bar.label }}</small>
+              <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeTrend">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+              </button>
+            </header>
+            <main class="memory-stack-content">
+              <SectionCard>
+                <div class="section-heading">
+                  <h2>추이</h2>
+                  <small class="helper">{{ trendRuns.length }}개 세션</small>
                 </div>
-              </div>
-              <EmptyState v-else title="표시할 기록이 없습니다." description="해당 기간의 러닝 기록이 아직 부족합니다." />
-            </SectionCard>
-            <SectionCard v-if="trendRuns.length">
-              <div class="section-heading">
-                <h2>세션</h2>
-              </div>
-              <div class="run-list">
-                <ListRow
-                  v-for="run in trendRuns"
-                  :key="run.id"
-                  :kicker="formatDateWithWeekday(run.date)"
-                  :title="run.sessionTitle || run.type"
-                  :detail="`${run.distanceKm}km · ${formatPace(run.avgPaceSec)}/km`"
-                />
-              </div>
-            </SectionCard>
-          </main>
-        </section>
-      </div>
+                <div v-if="trendBars.length" class="trend-chart">
+                  <div v-for="bar in trendBars" :key="bar.id" class="trend-bar">
+                    <div class="trend-bar-track">
+                      <span :style="{ height: `${bar.height}%` }" />
+                    </div>
+                    <small>{{ bar.label }}</small>
+                  </div>
+                </div>
+                <EmptyState v-else title="표시할 기록이 없습니다." description="해당 기간의 러닝 기록이 아직 부족합니다." />
+              </SectionCard>
+              <SectionCard v-if="trendRuns.length">
+                <div class="section-heading">
+                  <h2>세션</h2>
+                </div>
+                <div class="run-list">
+                  <ListRow
+                    v-for="run in trendRuns"
+                    :key="run.id"
+                    :kicker="formatDateWithWeekday(run.date)"
+                    :title="run.sessionTitle || run.type"
+                    :detail="`${run.distanceKm}km · ${formatPace(run.avgPaceSec)}/km`"
+                  />
+                </div>
+              </SectionCard>
+            </main>
+          </section>
+        </div>
+      </Transition>
     </Teleport>
   </section>
 </template>

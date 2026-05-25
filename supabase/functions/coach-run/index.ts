@@ -74,25 +74,18 @@ Deno.serve(async (req) => {
       if (error) throw error
     }
 
-    const reportPayload = {
+    const { data: reportRow, error: reportError } = await admin
+      .from('coach_reports')
+      .insert({
         user_id: userId,
         selected_run_id: selectedRunId,
         user_note: userNote,
         report: ai.report,
         updated_at: new Date().toISOString()
-      }
-    const { data: reportRow, error: reportError } = await admin
-      .from('coach_reports')
-      .upsert(reportPayload, {
-        onConflict: 'user_id,selected_run_id',
-        ignoreDuplicates: false
       })
       .select('id, selected_run_id, user_note, report, created_at, updated_at')
       .single()
     if (reportError) throw reportError
-
-    const { error: memoryDeleteError } = await admin.from('coach_memory_items').delete().eq('source_report_id', reportRow.id)
-    if (memoryDeleteError) throw memoryDeleteError
 
     const memoryItems = ai.memoryItems.map((content) => ({
       user_id: userId,
@@ -150,7 +143,7 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
     admin.from('training_memory').select('memory').eq('user_id', userId).maybeSingle(),
     admin.from('run_logs').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(120),
     admin.from('coach_memory_items').select('content, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(40),
-    admin.from('coach_reports').select('selected_run_id, user_note, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(5)
+    admin.from('coach_reports').select('selected_run_id, user_note, report, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(40)
   ])
   const runRows = (runs ?? []) as RunLogRow[]
   const selectedRun = selectedRunId ? runRows.find((run) => run.id === selectedRunId) ?? null : null
@@ -188,12 +181,24 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
     injuryItems,
     activeInjuryItem,
     coachMemoryItems: (memoryItems ?? []).map((item) => item.content),
-    recentCoachReports: (reports ?? []).map((report) => ({
+    recentCoachReports: (reports ?? []).slice(0, 5).map((report) => ({
       selectedRunId: report.selected_run_id,
       userNote: report.user_note,
       createdAt: report.created_at,
       createdAtDisplay: formatDateTimeWithWeekday(report.created_at)
     })),
+    selectedRunCoachThread: selectedRunId
+      ? (reports ?? [])
+          .filter((report) => report.selected_run_id === selectedRunId)
+          .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+          .slice(-12)
+          .map((report) => ({
+            userNote: report.user_note,
+            coachAnswer: report.report,
+            createdAt: report.created_at,
+            createdAtDisplay: formatDateTimeWithWeekday(report.created_at)
+          }))
+      : [],
     selectedRun: decorateRunDate(selectedRun),
     runsAfterSelectedRun: runsAfterSelected.slice(0, 20).map(decorateRunDate),
     recent14: recent14.map(decorateRunDate),
@@ -233,6 +238,8 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     '한국어 반말 기반으로 자연스럽게 말한다. 너무 정중한 리포트체를 피한다.',
     '사용자가 쓴 표현과 뉘앙스를 자연스럽게 받아준다. 예: "와이프랑 완전 이지", "회복런 느낌", "오늘 LSD" 같은 표현을 답변에서 재해석해 이어 말한다.',
     '사용자가 이미 아는 정보를 길게 반복하지 않는다.',
+    'context.selectedRunCoachThread는 같은 세션에서 이미 나눈 코칭 대화다. 이 목록이 있으면 이전 답변을 다시 리포트처럼 반복하지 말고, 사용자의 새 질문/메모에 이어서 답한다.',
+    '같은 세션의 추가 대화에서는 필요한 핵심만 짧게 답하고, 이전 평가를 바꿔야 할 때만 "아까 답에서 이 부분은 이렇게 보정된다"처럼 자연스럽게 수정한다.',
     '숫자는 근거로 쓰되, 사람처럼 해석한다.',
     '핵심 지표는 짧은 목록으로만 보여준다. 문장 속에 숫자를 길게 묻지 않는다.',
     '답변 우선순위는 오늘 세션의 정체, 사용자가 의도한 훈련과 맞는지, 중요한 지표 2~3개, 최근 맥락, 조심할 점, 다음 훈련 순서다.',

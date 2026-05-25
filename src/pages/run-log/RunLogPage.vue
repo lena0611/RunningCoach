@@ -65,9 +65,11 @@ const calendarTitle = computed(() => {
   return `${year}. ${Number(month)}.`
 })
 const calendarCells = computed(() => buildCalendarCells(calendarMonth.value, runsByDate.value))
-const selectedReport = computed(() => {
-  if (!coachRun.value) return null
-  return reports.value.find((report) => report.selectedRunId === coachRun.value?.id) ?? null
+const selectedReports = computed(() => {
+  if (!coachRun.value) return []
+  return reports.value
+    .filter((report) => report.selectedRunId === coachRun.value?.id)
+    .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
 })
 
 onMounted(() => {
@@ -205,10 +207,8 @@ async function requestCoach() {
   coachError.value = ''
   try {
     const report = await requestCoachRun(coachRun.value.id, coachNote.value)
-    reports.value = [
-      report,
-      ...reports.value.filter((item) => item.id !== report.id && item.selectedRunId !== report.selectedRunId)
-    ]
+    reports.value = [report, ...reports.value.filter((item) => item.id !== report.id)]
+    coachNote.value = ''
     reportsLoaded.value = true
   } catch (err) {
     coachError.value = err instanceof Error ? err.message : 'AI 코칭 요청 실패'
@@ -340,7 +340,8 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
     </SectionCard>
 
     <Teleport to="body">
-      <div v-if="detailRun" class="memory-stack-layer" data-no-swipe>
+      <Transition name="stack-page">
+        <div v-if="detailRun" class="memory-stack-layer" data-no-swipe>
         <section class="memory-stack-page">
           <header class="memory-stack-header">
             <button class="stack-icon-button" type="button" aria-label="뒤로" @click="closeDetail">
@@ -401,9 +402,11 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
             </div>
           </main>
         </section>
-      </div>
+        </div>
+      </Transition>
 
-      <div v-if="coachRun" class="memory-stack-layer stack-layer-top" data-no-swipe>
+      <Transition name="stack-page">
+        <div v-if="coachRun" class="memory-stack-layer stack-layer-top" data-no-swipe>
         <section class="memory-stack-page">
           <header class="memory-stack-header">
             <button class="stack-icon-button" type="button" aria-label="뒤로" @click="closeCoach">
@@ -419,25 +422,27 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
           </header>
           <main class="memory-stack-content coach-stack-content">
             <CoachMessage role="user" :text="`${formatDateWithWeekday(coachRun.date)} ${coachRun.sessionTitle || coachRun.type}`" />
-            <CoachMessage
-              v-if="selectedReport"
-              role="coach"
-              :text="selectedReport.report"
-              :meta="formatDateTimeWithWeekday(selectedReport.updatedAt || selectedReport.createdAt)"
-            />
+            <template v-if="selectedReports.length">
+              <div v-for="report in selectedReports" :key="report.id" class="coach-turn">
+                <CoachMessage v-if="report.userNote" role="user" :text="report.userNote" :meta="formatDateTimeWithWeekday(report.createdAt)" />
+                <CoachMessage role="coach" :text="report.report" :meta="formatDateTimeWithWeekday(report.updatedAt || report.createdAt)" />
+              </div>
+            </template>
             <EmptyState v-else title="아직 이 세션의 코칭이 없습니다." description="짧은 메모를 넣고 AI 코칭을 요청하세요." />
             <p v-if="coachError" class="error">{{ coachError }}</p>
           </main>
           <footer class="stack-action-bar coach-input-bar">
             <textarea v-model="coachNote" rows="2" placeholder="예: 오늘 목요일 템포. 후반은 와이프랑 회복 조깅." />
             <button type="button" :disabled="coachLoading || !isSupabaseConfigured" @click="requestCoach">
-              {{ coachLoading ? '코칭 중' : selectedReport ? '코칭 갱신' : 'AI 코칭 요청' }}
+              {{ coachLoading ? '코칭 중' : selectedReports.length ? '추가 대화' : 'AI 코칭 요청' }}
             </button>
           </footer>
         </section>
-      </div>
+        </div>
+      </Transition>
 
-      <div v-if="editing" class="memory-stack-layer stack-layer-top" data-no-swipe>
+      <Transition name="stack-page">
+        <div v-if="editing" class="memory-stack-layer stack-layer-top" data-no-swipe>
         <section class="memory-stack-page">
           <header class="memory-stack-header">
             <button class="stack-icon-button" type="button" aria-label="뒤로" @click="closeEdit">
@@ -459,7 +464,8 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
             <button type="button" :disabled="saving || !isEditDirty" @click="saveEdit">{{ saving ? '저장 중' : isEditDirty ? '변경사항 저장' : '저장됨' }}</button>
           </footer>
         </section>
-      </div>
+        </div>
+      </Transition>
 
       <div v-if="pendingDeleteRun" class="bottom-sheet-layer confirm-layer" role="presentation" @click.self="pendingDeleteRun = null">
         <section class="bottom-sheet confirm-sheet" role="dialog" aria-modal="true" aria-label="삭제 확인">
