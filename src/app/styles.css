@@ -376,16 +376,24 @@ label {
 
 .drawer-heading {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 10px;
   margin-bottom: 22px;
 }
 
+.drawer-heading > div {
+  min-width: 0;
+  flex: 1;
+}
+
 .drawer-heading h2 {
-  margin: 4px 0 0;
-  font-size: 27px;
-  line-height: 1.05;
+  overflow: hidden;
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .account-summary {
@@ -1729,26 +1737,30 @@ button.stat-card {
   top: 0;
   z-index: 2;
   display: grid;
-  grid-template-columns: minmax(58px, auto) minmax(0, 1fr) minmax(58px, auto);
+  grid-template-columns: minmax(0, 1fr) 40px;
   align-items: center;
-  gap: 10px;
-  padding: calc(env(safe-area-inset-top) + 14px) 16px 12px;
+  gap: 8px;
+  padding: calc(env(safe-area-inset-top) + 12px) 16px 10px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-header-bg);
   backdrop-filter: blur(18px);
 }
 
+.memory-stack-header:has(> .stack-icon-button:first-child) {
+  grid-template-columns: 40px minmax(0, 1fr);
+}
+
 .memory-stack-header > div {
   min-width: 0;
-  text-align: center;
+  text-align: left;
 }
 
 .memory-stack-header h2 {
   overflow: hidden;
-  margin: 2px 0 0;
+  margin: 0;
   color: var(--color-text);
-  font-size: 23px;
-  line-height: 1.1;
+  font-size: 21px;
+  line-height: 1.15;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1760,20 +1772,20 @@ button.stat-card {
 .stack-icon-button {
   display: grid;
   place-items: center;
-  width: 44px;
-  min-width: 44px;
-  min-height: 44px;
+  width: 40px;
+  min-width: 40px;
+  min-height: 40px;
   padding: 0;
   border: 0;
-  border-radius: 16px;
+  border-radius: 14px;
   background: var(--color-surface-2);
   color: var(--color-text);
   box-shadow: none;
 }
 
 .stack-icon-button svg {
-  width: 22px;
-  height: 22px;
+  width: 21px;
+  height: 21px;
   stroke: currentColor;
   stroke-width: 2.4;
   stroke-linecap: round;

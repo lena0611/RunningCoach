@@ -356,11 +356,7 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
         <div v-if="detailRun" class="memory-stack-layer" data-no-swipe>
         <section class="memory-stack-page">
           <header class="memory-stack-header">
-            <button class="stack-icon-button" type="button" aria-label="뒤로" @click="closeDetail">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
-            </button>
             <div>
-              <p class="eyebrow">Run Log</p>
               <h2>훈련 상세</h2>
             </div>
             <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeDetail">
@@ -421,11 +417,7 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
         <div v-if="addingRun" class="memory-stack-layer stack-layer-top" data-no-swipe>
           <section class="memory-stack-page">
             <header class="memory-stack-header">
-              <button class="stack-icon-button" type="button" aria-label="뒤로" @click="closeAddRun(false)">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
-              </button>
               <div>
-                <p class="eyebrow">Run Log</p>
                 <h2>기록 추가</h2>
               </div>
               <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeAddRun(false)">
@@ -447,12 +439,8 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
             </button>
             <div>
-              <p class="eyebrow">RunContext Coach</p>
-              <h2>AI 코칭</h2>
+              <h2>코칭</h2>
             </div>
-            <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeCoach">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
-            </button>
           </header>
           <main class="memory-stack-content coach-stack-content">
             <CoachMessage role="user" :text="`${formatDateWithWeekday(coachRun.date)} ${coachRun.sessionTitle || coachRun.type}`" />
@@ -479,14 +467,13 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
         <div v-if="editing" class="memory-stack-layer stack-layer-top" data-no-swipe>
         <section class="memory-stack-page">
           <header class="memory-stack-header">
-            <button class="stack-icon-button" type="button" aria-label="뒤로" @click="closeEdit">
+            <button v-if="detailRun" class="stack-icon-button" type="button" aria-label="뒤로" @click="closeEdit">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
             </button>
             <div>
-              <p class="eyebrow">Run Log</p>
               <h2>기록 수정</h2>
             </div>
-            <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeEdit">
+            <button v-if="!detailRun" class="stack-icon-button" type="button" aria-label="닫기" @click="closeEdit">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
             </button>
           </header>

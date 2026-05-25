@@ -154,11 +154,7 @@ function closeTrend() {
         <div v-if="trendMetric" class="memory-stack-layer" data-no-swipe>
           <section class="memory-stack-page">
             <header class="memory-stack-header">
-              <button class="stack-icon-button" type="button" aria-label="뒤로" @click="closeTrend">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
-              </button>
               <div>
-                <p class="eyebrow">Dashboard</p>
                 <h2>{{ trendTitle }}</h2>
               </div>
               <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeTrend">

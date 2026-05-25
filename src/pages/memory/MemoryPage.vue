@@ -445,14 +445,13 @@ async function save() {
         <div v-if="isStackOpen" class="memory-stack-layer" data-no-swipe>
           <section class="memory-stack-page" :class="{ 'memory-stack-detail': panel.includes('edit') || panel.includes('new') }">
           <header class="memory-stack-header">
-            <button class="stack-icon-button" type="button" aria-label="뒤로" @click="goBack">
+            <button v-if="stack.length > 1" class="stack-icon-button" type="button" aria-label="뒤로" @click="goBack">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
             </button>
             <div>
-              <p class="eyebrow">Memory</p>
               <h2>{{ stackTitle }}</h2>
             </div>
-            <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeStack">
+            <button v-if="stack.length <= 1" class="stack-icon-button" type="button" aria-label="닫기" @click="closeStack">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
             </button>
           </header>
