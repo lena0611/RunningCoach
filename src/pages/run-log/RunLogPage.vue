@@ -132,6 +132,7 @@ function openDetail(run: RunLog) {
   error.value = ''
   lapView.value = 'list'
   detailRun.value = run
+  void ensureReportsLoaded()
 }
 
 function closeDetail() {
@@ -205,6 +206,10 @@ async function confirmRemove() {
 async function openCoach(run: RunLog) {
   coachRun.value = run
   coachError.value = ''
+  await ensureReportsLoaded()
+}
+
+async function ensureReportsLoaded() {
   if (!reportsLoaded.value && isSupabaseConfigured) {
     try {
       reports.value = await fetchCoachReports()
@@ -213,6 +218,15 @@ async function openCoach(run: RunLog) {
       coachError.value = err instanceof Error ? err.message : '코칭 기록을 불러오지 못했습니다.'
     }
   }
+}
+
+function hasCoachThread(run: RunLog) {
+  return reports.value.some((report) => report.selectedRunId === run.id)
+}
+
+function detailCoachButtonLabel(run: RunLog) {
+  if (!reportsLoaded.value) return 'AI 코칭'
+  return hasCoachThread(run) ? '코칭 이어가기' : 'AI 코칭 받기'
 }
 
 function closeCoach() {
@@ -327,23 +341,9 @@ function formatLapDuration(lap: Lap) {
         >
           <template #addon>
             <RunTypeBadge :type="run.type" />
-            <div class="row-actions">
-              <button class="icon-only-button" type="button" aria-label="기록 수정" @click.stop="startEdit(run)">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4.5 19.5h4.2L18.8 9.4a2.1 2.1 0 0 0 0-3l-1.2-1.2a2.1 2.1 0 0 0-3 0L4.5 15.3z" />
-                  <path d="m13.6 6.2 4.2 4.2" />
-                </svg>
-              </button>
-              <button class="icon-only-button danger" type="button" :disabled="deletingId === run.id" aria-label="기록 삭제" @click.stop="askRemove(run)">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M5.5 7h13" />
-                  <path d="M9.5 7V5.5h5V7" />
-                  <path d="m8 9 .6 9.5h6.8L16 9" />
-                  <path d="M10.5 11.5v4" />
-                  <path d="M13.5 11.5v4" />
-                </svg>
-              </button>
-            </div>
+            <span class="run-list-chevron" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
+            </span>
           </template>
           <div>
             <div class="run-row-title">
@@ -368,15 +368,34 @@ function formatLapDuration(lap: Lap) {
         <section class="memory-stack-page">
           <header class="memory-stack-header">
             <div>
-              <h2>훈련 상세</h2>
+              <h2>세션 상세</h2>
             </div>
             <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeDetail">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
             </button>
           </header>
-          <main class="memory-stack-content">
+          <main class="memory-stack-content run-detail-content">
             <SectionCard class="run-detail-hero">
-              <span class="list-row-kicker">{{ formatDateWithWeekday(detailRun.date) }}</span>
+              <div class="run-detail-topline">
+                <span class="list-row-kicker">{{ formatDateWithWeekday(detailRun.date) }}</span>
+                <div class="run-detail-actions" aria-label="세션 관리">
+                  <button class="icon-only-button" type="button" aria-label="기록 수정" @click="startEdit(detailRun)">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M4.5 19.5h4.2L18.8 9.4a2.1 2.1 0 0 0 0-3l-1.2-1.2a2.1 2.1 0 0 0-3 0L4.5 15.3z" />
+                      <path d="m13.6 6.2 4.2 4.2" />
+                    </svg>
+                  </button>
+                  <button class="icon-only-button danger" type="button" :disabled="deletingId === detailRun.id" aria-label="기록 삭제" @click="askRemove(detailRun)">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M5.5 7h13" />
+                      <path d="M9.5 7V5.5h5V7" />
+                      <path d="m8 9 .6 9.5h6.8L16 9" />
+                      <path d="M10.5 11.5v4" />
+                      <path d="M13.5 11.5v4" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
               <h2>{{ detailRun.sessionTitle || detailRun.type }}</h2>
               <div class="run-detail-metrics">
                 <strong>{{ detailRun.distanceKm }}km</strong>
@@ -430,12 +449,12 @@ function formatLapDuration(lap: Lap) {
               </div>
               <p v-else class="helper">랩별 페이스와 심박이 있으면 자동 세션 재해석과 코칭 근거가 좋아집니다.</p>
             </SectionCard>
-            <div class="detail-actions">
-              <button type="button" @click="openCoach(detailRun)">AI 코칭</button>
-              <button class="secondary" type="button" @click="startEdit(detailRun)">수정</button>
-              <button class="ghost danger-text" type="button" @click="askRemove(detailRun)">삭제</button>
-            </div>
           </main>
+          <footer class="stack-action-bar run-detail-cta">
+            <button type="button" :disabled="!isSupabaseConfigured" @click="openCoach(detailRun)">
+              {{ detailCoachButtonLabel(detailRun) }}
+            </button>
+          </footer>
         </section>
         </div>
       </Transition>

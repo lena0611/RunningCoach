@@ -18,7 +18,8 @@ export function getRunningWeatherAdvice(snapshot: WeatherSnapshot | null): Runni
   }
 
   const current = snapshot.current
-  const nextSixHours = getUpcomingHours(snapshot.hourly, 6)
+  const observedAt = Date.parse(snapshot.observedAt)
+  const nextSixHours = getUpcomingHours(snapshot.hourly, 6, Number.isFinite(observedAt) ? observedAt : Date.now())
   const apparent = current.apparentTemperatureC ?? current.temperatureC
   const rainHours = nextSixHours.filter((hour) => hasRain(hour))
   const maxRainChance = Math.max(...nextSixHours.map((hour) => hour.precipitationChance ?? 0), current.precipitationIntensityMmPerHour ? 0.7 : 0)
@@ -60,12 +61,11 @@ export function getRunningWeatherAdvice(snapshot: WeatherSnapshot | null): Runni
   }
 }
 
-export function getUpcomingHours(hourly: WeatherHourlyPoint[], count: number) {
-  const now = Date.now()
+export function getUpcomingHours(hourly: WeatherHourlyPoint[], count: number, referenceTime = Date.now()) {
   return hourly
     .filter((hour) => {
       const time = Date.parse(hour.time)
-      return Number.isFinite(time) && time >= now - 60 * 60 * 1000
+      return Number.isFinite(time) && time >= referenceTime - 60 * 60 * 1000
     })
     .slice(0, count)
 }

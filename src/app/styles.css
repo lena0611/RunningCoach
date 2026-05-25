@@ -1068,7 +1068,27 @@ button.stat-card {
 }
 
 .run-list-row .list-row-addon {
-  min-width: 96px;
+  grid-template-columns: auto auto;
+  align-items: center;
+  min-width: 88px;
+}
+
+.run-list-chevron {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: var(--color-muted);
+}
+
+.run-list-chevron svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
 }
 
 .run-row > div:first-child {
@@ -1303,6 +1323,26 @@ button.stat-card {
   gap: 12px;
 }
 
+.run-detail-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.run-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.run-detail-actions .icon-only-button {
+  width: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 14px;
+}
+
 .run-detail-hero h2 {
   margin: 0;
   color: var(--color-text);
@@ -1468,10 +1508,13 @@ button.stat-card {
   min-height: 260px;
 }
 
-.detail-actions {
+.run-detail-content {
+  padding-bottom: 16px;
+}
+
+.run-detail-cta {
   display: grid;
-  grid-template-columns: 1.2fr 0.8fr 0.8fr;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .stack-layer-top {
@@ -2529,6 +2572,10 @@ button.stat-card {
 
   .run-list-row .list-row-addon {
     min-width: 0;
+  }
+
+  .run-list-chevron {
+    margin-left: auto;
   }
 
   .coach-composer {
