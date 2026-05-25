@@ -115,9 +115,20 @@ function closeEdit() {
           <template #addon>
             <RunTypeBadge :type="run.type" />
             <div class="row-actions">
-              <button class="ghost" type="button" @click="startEdit(run)">수정</button>
-              <button class="ghost danger" type="button" :disabled="deletingId === run.id" @click="askRemove(run)">
-                {{ deletingId === run.id ? '삭제 중' : '삭제' }}
+              <button class="icon-only-button" type="button" aria-label="기록 수정" @click="startEdit(run)">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4.5 19.5h4.2L18.8 9.4a2.1 2.1 0 0 0 0-3l-1.2-1.2a2.1 2.1 0 0 0-3 0L4.5 15.3z" />
+                  <path d="m13.6 6.2 4.2 4.2" />
+                </svg>
+              </button>
+              <button class="icon-only-button danger" type="button" :disabled="deletingId === run.id" aria-label="기록 삭제" @click="askRemove(run)">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5.5 7h13" />
+                  <path d="M9.5 7V5.5h5V7" />
+                  <path d="m8 9 .6 9.5h6.8L16 9" />
+                  <path d="M10.5 11.5v4" />
+                  <path d="M13.5 11.5v4" />
+                </svg>
               </button>
             </div>
           </template>

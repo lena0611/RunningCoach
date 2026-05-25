@@ -887,6 +887,12 @@ label {
 
 .run-list-row .row-actions {
   justify-content: end;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.run-list-row .list-row-addon {
+  min-width: 96px;
 }
 
 .run-row > div:first-child {
@@ -901,6 +907,35 @@ label {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.icon-only-button {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 15px;
+  background: var(--pressable-bg);
+  color: var(--color-muted);
+  box-shadow: none;
+}
+
+.icon-only-button.danger {
+  background: var(--color-danger-soft);
+  color: var(--color-danger-text);
+}
+
+.icon-only-button svg {
+  width: 21px;
+  height: 21px;
+  stroke: currentColor;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
 }
 
 .run-row-title {
@@ -1782,6 +1817,10 @@ label {
 
   .run-list-row .row-actions {
     margin-left: auto;
+  }
+
+  .run-list-row .list-row-addon {
+    min-width: 0;
   }
 
   .coach-composer {

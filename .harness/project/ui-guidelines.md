@@ -25,6 +25,7 @@ RunContext is a personal running coach app, not an admin dashboard.
 - Supporting labels and metadata are smaller and muted.
 - Cards should have generous spacing, soft borders, and `--radius-card`.
 - Repeated list content should prefer a ListRow pattern over mini cards: primary title, muted detail, optional right metric/addon, and a clear press/action target.
+- Compact repeated rows such as Run Log must use icon-only edit/delete actions with accessible labels. Do not use text buttons when the row has limited horizontal space.
 - Primary actions use green emphasis; destructive actions are subdued red, not loud.
 - Keep bottom navigation usable with one hand on mobile.
 - Fixed mobile bottom navigation must use `viewport-fit=cover`, `env(safe-area-inset-bottom)`, a fixed nav height token, and matching `.app-main` bottom reserve. The nav should stay attached to the visual viewport before and after full scroll.
