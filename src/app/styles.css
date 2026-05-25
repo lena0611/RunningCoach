@@ -1104,8 +1104,8 @@ button.stat-card {
   min-width: 0;
   min-height: 38px;
   padding: 0;
-  border: 1px solid transparent;
-  border-radius: 14px;
+  border: 0;
+  border-radius: 0;
   background: transparent;
   color: var(--color-muted);
   box-shadow: none;
@@ -1118,29 +1118,48 @@ button.stat-card {
 }
 
 .run-calendar-day.has-run {
-  border-color: color-mix(in srgb, var(--color-primary) 18%, var(--color-border));
+  color: var(--color-text);
+}
+
+.run-calendar-day span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+}
+
+.run-calendar-day.has-run span {
   background: var(--color-primary-soft);
   color: var(--color-text);
 }
 
-.run-calendar-day.selected {
+.run-calendar-day.selected span {
   background: var(--color-primary);
   color: var(--color-bg);
 }
 
 .run-calendar-day small {
   position: absolute;
-  right: 5px;
-  bottom: 4px;
+  right: 0;
+  top: 1px;
   display: grid;
   place-items: center;
-  min-width: 15px;
-  height: 15px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
   border-radius: 999px;
-  background: var(--color-surface);
-  color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-bg);
   font-size: 10px;
   font-weight: 950;
+  line-height: 1;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+}
+
+.run-calendar-day.selected small {
+  background: var(--color-surface);
+  color: var(--color-primary);
 }
 
 .run-log-heading-actions {
@@ -1376,9 +1395,15 @@ button.stat-card {
   border: 0;
   border-radius: var(--radius-field);
   font-size: 16px;
-  box-shadow: none;
+  box-shadow: inset 0 0 0 1px var(--color-border);
   text-align: left;
   -webkit-tap-highlight-color: transparent;
+}
+
+.bottom-sheet-trigger:focus-visible {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 55%, transparent),
+    0 0 0 4px var(--color-primary-soft);
 }
 
 .bottom-sheet-trigger span:first-child {
