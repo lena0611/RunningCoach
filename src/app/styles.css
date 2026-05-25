@@ -1172,11 +1172,13 @@ label {
 
 .bottom-sheet-options {
   display: grid;
-  gap: 8px;
   max-height: calc(min(72vh, 680px) - 96px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding-bottom: 4px;
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  background: var(--color-surface);
+  padding: 0;
 }
 
 .bottom-sheet-option {
@@ -1184,14 +1186,18 @@ label {
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  min-height: 58px;
-  padding: 12px 14px;
-  background: var(--color-surface);
+  min-height: 54px;
+  padding: 13px 15px;
+  background: transparent;
   color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: 18px;
+  border: 0;
+  border-radius: 0;
   box-shadow: none;
   text-align: left;
+}
+
+.bottom-sheet-option + .bottom-sheet-option {
+  border-top: 1px solid var(--color-border);
 }
 
 .bottom-sheet-option > span:first-child {
@@ -1211,7 +1217,6 @@ label {
 }
 
 .bottom-sheet-option.selected {
-  border-color: rgba(74, 222, 128, 0.45);
   background: var(--color-primary-soft);
 }
 
