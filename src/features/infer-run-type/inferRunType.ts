@@ -12,6 +12,13 @@ type InferRunTypeInput = {
 
 const easyHeartRateCeiling = 145
 const recoveryHeartRateCeiling = 130
+const strideTimingTolerance = {
+  minDurationSec: 6,
+  maxDurationSec: 45,
+  minGapSec: 55,
+  maxGapSec: 210,
+  minWarmupSec: 240
+}
 
 export function inferRunType(input: InferRunTypeInput): RunType {
   const distanceKm = Number(input.distanceKm || 0)
@@ -31,11 +38,7 @@ export function inferRunType(input: InferRunTypeInput): RunType {
     }
   }
 
-  if (
-    distanceKm <= 10 &&
-    easyRatio >= 0.45 &&
-    (hasStridesPattern || (fastSegmentCount >= 4 && scheduledWorkout?.includes('strides')))
-  ) {
+  if (distanceKm <= 10 && easyRatio >= 0.45 && (hasStridesPattern || (fastSegmentCount >= 4 && isScheduledStrides(scheduledWorkout)))) {
     return 'Easy + Strides'
   }
 
@@ -59,11 +62,12 @@ function countUsefulFastSegments(segments: FastSegment[]) {
     const distanceKm = Number(segment.distanceKm)
     return (
       Number.isFinite(durationSec) &&
-      durationSec >= 8 &&
+      durationSec >= strideTimingTolerance.minDurationSec &&
+      durationSec <= strideTimingTolerance.maxDurationSec &&
       Number.isFinite(distanceKm) &&
-      distanceKm >= 0.03 &&
+      distanceKm >= 0.02 &&
       Number.isFinite(paceSec) &&
-      paceSec <= 330
+      paceSec <= 345
     )
   }).length
 }
@@ -107,10 +111,10 @@ function hasStrideIntervalPattern(segments: FastSegment[]) {
       return (
         Number.isFinite(startSec) &&
         Number.isFinite(durationSec) &&
-        durationSec >= 8 &&
-        durationSec <= 35 &&
+        durationSec >= strideTimingTolerance.minDurationSec &&
+        durationSec <= strideTimingTolerance.maxDurationSec &&
         Number.isFinite(paceSec) &&
-        paceSec <= 330
+        paceSec <= 345
       )
     })
     .sort((a, b) => Number(a.startSec) - Number(b.startSec))
@@ -118,10 +122,10 @@ function hasStrideIntervalPattern(segments: FastSegment[]) {
   if (useful.length < 4) return false
   const warmupStart = Number(useful[0].startSec)
   const gaps = useful.slice(1).map((segment, index) => Number(segment.startSec) - Number(useful[index].startSec))
-  const intervalLikeGaps = gaps.filter((gap) => gap >= 75 && gap <= 165).length
-  const hasWorkoutWarmup = Number.isFinite(warmupStart) && warmupStart >= 300
+  const intervalLikeGaps = gaps.filter((gap) => gap >= strideTimingTolerance.minGapSec && gap <= strideTimingTolerance.maxGapSec).length
+  const hasWorkoutWarmup = Number.isFinite(warmupStart) && warmupStart >= strideTimingTolerance.minWarmupSec
 
-  return hasWorkoutWarmup && intervalLikeGaps >= Math.min(5, gaps.length)
+  return hasWorkoutWarmup && intervalLikeGaps >= Math.min(4, gaps.length)
 }
 
 function getSustainedTempoDistance(laps: Lap[], distanceKm: number, avgPaceSec: number | null) {
@@ -187,4 +191,9 @@ function getScheduledWorkout(date: string, weeklyPattern: string[]) {
   const dayName = weekdays[weekday]
   const pattern = weeklyPattern.find((item) => item.trim().toLowerCase().startsWith(dayName.toLowerCase()))
   return pattern?.toLowerCase() ?? ''
+}
+
+function isScheduledStrides(value: string | undefined) {
+  if (!value) return false
+  return value.includes('strides') || value.includes('스트라이드')
 }
