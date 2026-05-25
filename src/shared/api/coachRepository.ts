@@ -21,7 +21,15 @@ export async function requestCoachRun(selectedRunId: string | null, userNote: st
   const { data, error } = await requireSupabase().functions.invoke('coach-run', {
     body: {
       selectedRunId,
-      userNote
+      userNote,
+      responseStyle: {
+        tone: 'conversational_coach',
+        format: 'sectioned_markdown',
+        avoid: ['report_style', 'medical_diagnosis', 'long_paragraphs'],
+        firstSentence: 'reaction_before_analysis',
+        maxParagraphSentences: 2,
+        maxBulletsPerSection: 5
+      }
     }
   })
   if (error) throw error

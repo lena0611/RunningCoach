@@ -59,8 +59,9 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}))
     const selectedRunId = typeof body.selectedRunId === 'string' && body.selectedRunId ? body.selectedRunId : null
     const userNote = typeof body.userNote === 'string' ? body.userNote.slice(0, 2000) : ''
+    const responseStyle = normalizeResponseStyle(body.responseStyle)
 
-    const context = await buildContext(admin, userId, selectedRunId, userNote)
+    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle)
     const ai = await callOpenAI(openaiKey, model, context)
     const memoryPatch = normalizeTrainingMemoryPatch(ai.trainingMemoryPatch)
     const updatedMemory = memoryPatch ? mergeTrainingMemoryPatch(context.trainingMemory, memoryPatch) : null
@@ -112,7 +113,30 @@ Deno.serve(async (req) => {
   }
 })
 
-async function buildContext(admin: ReturnType<typeof createClient>, userId: string, selectedRunId: string | null, userNote: string) {
+type ResponseStyle = {
+  tone: 'conversational_coach'
+  format: 'sectioned_markdown'
+  avoid: string[]
+  firstSentence: 'reaction_before_analysis'
+  maxParagraphSentences: number
+  maxBulletsPerSection: number
+}
+
+function normalizeResponseStyle(value: unknown): ResponseStyle {
+  const item = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  return {
+    tone: item.tone === 'conversational_coach' ? 'conversational_coach' : 'conversational_coach',
+    format: item.format === 'sectioned_markdown' ? 'sectioned_markdown' : 'sectioned_markdown',
+    avoid: Array.isArray(item.avoid)
+      ? item.avoid.filter((entry): entry is string => typeof entry === 'string').slice(0, 10)
+      : ['report_style', 'medical_diagnosis', 'long_paragraphs'],
+    firstSentence: item.firstSentence === 'reaction_before_analysis' ? 'reaction_before_analysis' : 'reaction_before_analysis',
+    maxParagraphSentences: Number.isFinite(Number(item.maxParagraphSentences)) ? Math.max(1, Math.min(Number(item.maxParagraphSentences), 3)) : 2,
+    maxBulletsPerSection: Number.isFinite(Number(item.maxBulletsPerSection)) ? Math.max(3, Math.min(Number(item.maxBulletsPerSection), 6)) : 5
+  }
+}
+
+async function buildContext(admin: ReturnType<typeof createClient>, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle) {
   const [{ data: memoryRow }, { data: runs }, { data: memoryItems }, { data: reports }] = await Promise.all([
     admin.from('training_memory').select('memory').eq('user_id', userId).maybeSingle(),
     admin.from('run_logs').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(120),
@@ -139,6 +163,7 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
 
   return {
     userNote,
+    responseStyle,
     currentDate,
     currentDateDisplay: formatDateWithWeekday(currentDate),
     contextMode: selectedRun ? 'selected_run_review' : 'current_flow_review',
@@ -192,12 +217,26 @@ type TrainingMemoryPatch = {
 async function callOpenAI(apiKey: string, model: string, context: unknown): Promise<{ report: string; memoryItems: string[]; trainingMemoryPatch: TrainingMemoryPatch | null }> {
   const instructions = [
     '너는 사용자를 오래 봐온 한국어 러닝 코치다.',
-    '목표는 장문 분석문이 아니라 모바일에서 빠르게 읽히는 대화형 코칭 리포트다.',
-    '한국어 반말 기반으로 친근하게 말하되, 판단은 데이터와 누적 맥락에 근거한다.',
-    '결론을 먼저 말하고, 숫자는 문장에 묻지 말고 짧은 목록으로 보여준다.',
-    '답변 구조는 가능한 한 다음 순서를 따른다: 한 줄 결론, 핵심 지표, 오늘 해석, 조심할 점, 다음 훈련, 한 줄 요약.',
-    '전체 report는 기본 700~1000자 안팎으로 제한한다. 한 문단은 최대 2~3문장으로 짧게 쓴다.',
-    '잘한 점은 최대 3개, 조심할 점은 최대 2개만 말한다.',
+    '너는 훈련 리포트를 작성하는 분석기가 아니다. 사용자의 러닝을 오래 봐온 AI 코치처럼 대화한다.',
+    '답변은 보고서가 아니라 대화처럼 느껴져야 한다.',
+    '첫 문장은 반드시 분석이나 숫자가 아니라 반응으로 시작한다. 예: "좋다. 이건 진짜 회복런 맞다.", "오 이건 꽤 잘 눌렀다.", "오늘은 욕심 안 낸 게 제일 잘한 점이다."',
+    '첫 문장에 날짜, 거리, 평균심박 같은 숫자로 시작하지 않는다.',
+    '한국어 반말 기반으로 자연스럽게 말한다. 너무 정중한 리포트체를 피한다.',
+    '사용자가 쓴 표현과 뉘앙스를 자연스럽게 받아준다. 예: "와이프랑 완전 이지", "회복런 느낌", "오늘 LSD" 같은 표현을 답변에서 재해석해 이어 말한다.',
+    '사용자가 이미 아는 정보를 길게 반복하지 않는다.',
+    '숫자는 근거로 쓰되, 사람처럼 해석한다.',
+    '핵심 지표는 짧은 목록으로만 보여준다. 문장 속에 숫자를 길게 묻지 않는다.',
+    '답변 우선순위는 오늘 세션의 정체, 사용자가 의도한 훈련과 맞는지, 중요한 지표 2~3개, 최근 맥락, 조심할 점, 다음 훈련 순서다.',
+    '모든 데이터를 다 설명하지 말고 오늘 기록에서 가장 중요한 의미 1개를 먼저 말한다.',
+    '답변 구조는 가능한 한 다음 순서를 따른다: 반응, 핵심 지표, 오늘 해석, 조심할 점, 다음 훈련, 한 줄 요약.',
+    '전체 report는 기본 600~900자 안팎으로 제한한다. 한 문단은 최대 2문장으로 짧게 쓴다.',
+    '각 섹션 bullet은 최대 5개로 제한한다.',
+    '잘한 점은 먼저 짚고, 조심할 점은 겁주지 말고 체크포인트처럼 말한다.',
+    '다음 훈련 제안은 3줄 이내로 한다.',
+    '마지막은 짧고 기억에 남는 한 줄로 끝낸다. 예: "오늘은 더 뛴 게 아니라 잘 풀어준 날이다."',
+    '좋은 말투 예: "좋다. 이건 회복런 맞다.", "이건 나쁘지 않은 정도가 아니라 꽤 잘 눌렀다.", "여기서 욕심내면 세션 의미가 바뀐다.", "발바닥 메모가 있으니 딱 하나만 보면 된다. 다음에 뛸 때 착지감이 조용한지."',
+    '피해야 할 말투: "해석됩니다", "판단됩니다", "우선입니다", "기준입니다", "해당 기록은", "훈련 성과를 재단", "누적 피로 관리가 필요".',
+    '대신 이렇게 말한다: "이건 ~로 보는 게 맞다", "오늘은 ~가 제일 좋다", "지금은 ~만 보면 된다", "이 정도면 잘 눌렀다", "데이터도 그걸 보여준다".',
     '반드시 currentDateDisplay, selectedRun.dateDisplay, selectedRunTiming을 확인한 뒤 말한다.',
     'report에 날짜를 쓸 때는 가능한 한 2026-05-24(일)처럼 요일을 붙인다.',
     'selectedRunTiming이 past이면 "오늘", "방금", "이번 훈련 이후"처럼 현재 훈련처럼 보이는 표현을 쓰지 말고, 과거 기록을 복기하는 톤으로 말한다.',
@@ -216,7 +255,8 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     '부상관리는 knownIssues 자유 텍스트보다 injuryItems와 activeInjuryItem을 우선한다.',
     'activeInjuryItem의 triggers, restrictions, returnToRunCriteria는 다음 훈련 추천과 강도 제한 판단에 반드시 반영한다.',
     'activeInjuryItem이 active 또는 monitoring이면 강훈련/롱런 뒤 회복 반응, pain_note, workout_feeling을 보수적으로 해석한다.',
-    '부상은 진단하지 말고 훈련 조절과 관찰 포인트로만 말한다.',
+    '통증/부상 메모가 있어도 의료 진단처럼 말하지 않는다. 통증은 훈련 판단 기준과 관찰 포인트로만 다룬다.',
+    '통증 수치가 없으면 단정하지 않는다. 예: "통증 강도가 안 나와 있으니 크게 단정하진 말자. 다만 다음 착지감은 체크하자."',
     '코칭은 해당 러닝 세션 평가에서 끝나지 않는다. 반드시 계정의 목표와 누적 데이터를 보고 현재 weeklyPattern을 유지할지 수정할지 판단한다.',
     'weeklyPattern은 사용자가 직접 세우는 고정 루틴이 아니라 AI가 목표, 최근 14/30일 누적, 강훈련 빈도, 롱런 상태, 회복 신호를 보고 관리하는 훈련 계획이다.',
     '루틴 변경이 필요 없으면 trainingMemoryPatch는 null로 둔다.',
@@ -225,8 +265,10 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     '루틴을 바꾼 이유는 report에 짧게 설명하고, aiNotes에는 장기적으로 기억할 계획 변경 근거만 1~3개 넣는다.',
     'trainingMemoryPatch는 RunLog 원본 값을 바꾸는 용도가 아니다. 훈련 계획과 코칭 메모리만 갱신한다.',
     '긴 문단, 같은 말 반복, 모든 맥락 나열, 의료 진단, 부상 위험 단정, 목표 달성 보장, 원본 RunLog 임의 수정은 금지한다.',
-    'report는 UI가 마크다운처럼 렌더링할 수 있게 짧은 제목, bullet list, --- divider, 필요한 경우 ``` 코드블록을 적절히 사용한다.',
-    '이모지는 과하게 쓰지 말고 섹션 제목에 0~3개만 사용한다.',
+    'report는 UI가 마크다운처럼 렌더링할 수 있게 짧은 제목, bullet list, --- divider를 적절히 사용한다.',
+    '이모지는 필요할 때만 0~3개 사용한다.',
+    '좋은 출력 예시의 밀도: "좋다. 이건 진짜 회복런 맞다. 어제 롱런 뒤에 강도 욕심 안 내고 아주 잘 눌렀어.\\n\\n## 핵심 지표\\n- 세션: Recovery / 와이프 동반주\\n- 거리: 5.02km\\n- 평균 페이스: 10분09초/km\\n- 평균 심박: 115\\n\\n## 오늘 해석\\n제일 좋은 건 심박이 완전히 낮게 잡혔다는 점이다.\\n\\n롱런 다음날인데 평균 115면, 몸을 더 밀어붙인 게 아니라 회복 쪽으로 잘 돌린 세션이다.\\n\\n## 조심할 점\\n체크할 건 하나다. 오른발 발바닥이 다음에도 조용한지.\\n\\n## 다음 훈련\\n- 내일: 휴식 or 5km 완전 이지\\n- 뛰면: 페이스 보지 말고 착지감만 보기\\n- 강도훈련: 발바닥이 조용해진 뒤 진행\\n\\n## 한 줄 요약\\n오늘은 더 뛴 게 아니라 잘 풀어준 날이다."',
+    'context.responseStyle이 있으면 반드시 따른다. tone=conversational_coach, firstSentence=reaction_before_analysis, avoid=report_style/medical_diagnosis/long_paragraphs를 강하게 우선한다.',
     'JSON만 반환한다. 형식: {"report":"사용자에게 보여줄 마크다운 코칭","memoryItems":["장기 기억으로 저장할 짧은 문장"],"trainingMemoryPatch":null 또는 {"weeklyPattern":["화요일: ..."],"longRunStrategy":"...","currentVolumeNote":"...","aiNotes":["..."]}}'
   ].join('\n')
 
