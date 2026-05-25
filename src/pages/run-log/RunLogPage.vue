@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
-import { runTypes, type RunLog, type RunType } from '@/entities/run/model'
+import { runTypes, type Lap, type RunLog, type RunType } from '@/entities/run/model'
 import UploadRunPage from '@/pages/upload-run/UploadRunPage.vue'
 import { fetchCoachReports, requestCoachRun, type CoachReport } from '@/shared/api/coachRepository'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
@@ -18,10 +18,13 @@ import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
 
+const LapSplitChart = defineAsyncComponent(() => import('@/shared/ui/LapSplitChart.vue'))
+
 const runStore = useRunStore()
 const weatherStore = useWeatherStore()
 const selectedType = ref<RunType | 'All'>('All')
 const selectedDate = ref<string | null>(null)
+const lapView = ref<'list' | 'chart'>('list')
 const visibleCount = ref(10)
 const loadMoreRef = ref<HTMLElement | null>(null)
 const observer = ref<IntersectionObserver | null>(null)
@@ -127,6 +130,7 @@ function toggleDate(date: string, hasRun: boolean) {
 
 function openDetail(run: RunLog) {
   error.value = ''
+  lapView.value = 'list'
   detailRun.value = run
 }
 
@@ -255,6 +259,11 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
     cells.push({ key: date, date, day, runs: map.get(date) ?? [] })
   }
   return cells
+}
+
+function formatLapDuration(lap: Lap) {
+  if (!lap.distanceKm || !lap.paceSec) return '-'
+  return formatDuration(lap.distanceKm * lap.paceSec)
 }
 </script>
 
@@ -393,17 +402,31 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
               <p v-if="detailRun.painNote" class="helper">통증/주의: {{ detailRun.painNote }}</p>
             </SectionCard>
             <SectionCard>
-              <SectionHeader title="랩">
+              <SectionHeader title="스플릿">
                 <small class="helper">{{ detailRun.laps.length ? `${detailRun.laps.length}개` : '데이터 부족' }}</small>
               </SectionHeader>
-              <div v-if="detailRun.laps.length" class="lap-list">
-                <div v-for="lap in detailRun.laps" :key="lap.index" class="lap-row">
-                  <strong>{{ lap.index }}</strong>
-                  <span>{{ lap.distanceKm ?? '-' }}km</span>
-                  <span>{{ formatPace(lap.paceSec) }}/km</span>
-                  <span>HR {{ formatInteger(lap.avgHeartRate) }}</span>
-                  <span>Cad {{ formatInteger(lap.cadence) }}</span>
+              <div v-if="detailRun.laps.length" class="lap-content">
+                <div class="view-toggle" role="tablist" aria-label="스플릿 표시 방식">
+                  <button type="button" :class="{ active: lapView === 'list' }" role="tab" :aria-selected="lapView === 'list'" @click="lapView = 'list'">목록</button>
+                  <button type="button" :class="{ active: lapView === 'chart' }" role="tab" :aria-selected="lapView === 'chart'" @click="lapView = 'chart'">차트</button>
                 </div>
+                <div v-if="lapView === 'list'" class="lap-split-table">
+                  <div class="lap-split-head">
+                    <span></span>
+                    <span>시간</span>
+                    <span>페이스</span>
+                    <span>심박수</span>
+                    <span>케이던스</span>
+                  </div>
+                  <div v-for="lap in detailRun.laps" :key="lap.index" class="lap-split-row">
+                    <strong>{{ lap.index }}</strong>
+                    <span class="lap-time">{{ formatLapDuration(lap) }}</span>
+                    <span class="lap-pace">{{ formatPace(lap.paceSec) }}/km</span>
+                    <span class="lap-hr">{{ formatInteger(lap.avgHeartRate) }}<small>BPM</small></span>
+                    <span class="lap-cad">{{ formatInteger(lap.cadence) }}<small>SPM</small></span>
+                  </div>
+                </div>
+                <LapSplitChart v-else :laps="detailRun.laps" />
               </div>
               <p v-else class="helper">랩별 페이스와 심박이 있으면 자동 세션 재해석과 코칭 근거가 좋아집니다.</p>
             </SectionCard>
