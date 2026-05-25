@@ -43,6 +43,9 @@ declare global {
         runContextHealthKit?: {
           postMessage: (message: unknown) => void
         }
+        runContextWeatherKit?: {
+          postMessage: (message: unknown) => void
+        }
       }
     }
   }

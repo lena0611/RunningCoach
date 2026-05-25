@@ -47,6 +47,15 @@
       "keywords": ["HealthKit", "HKWorkout", "iOS", "네이티브", "브리지", "RunLog"]
     },
     {
+      "id": "weatherkit-data-contract",
+      "file": ".harness/project/weatherkit-data-contract.md",
+      "category": "external-system",
+      "taskTypes": ["feature", "bugfix", "review"],
+      "priority": "high",
+      "appliesTo": ["ios", "WeatherKit", "native-bridge", "Dashboard", "weather"],
+      "keywords": ["WeatherKit", "기상", "날씨", "체감온도", "강수", "iOS", "네이티브", "브리지"]
+    },
+    {
       "id": "ai-coaching-goal",
       "file": ".harness/project/ai-coaching-goal.md",
       "category": "domain",

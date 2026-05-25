@@ -5,6 +5,7 @@ import { useAuthStore } from '@/app/stores/authStore'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { useWeatherStore } from '@/app/stores/weatherStore'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import AppShell from '@/shared/ui/AppShell.vue'
 import ToastHost from '@/shared/ui/ToastHost.vue'
@@ -14,6 +15,7 @@ const authStore = useAuthStore()
 const healthKitSyncStore = useHealthKitSyncStore()
 const memoryStore = useMemoryStore()
 const runStore = useRunStore()
+const weatherStore = useWeatherStore()
 const router = useRouter()
 const navItems: BottomNavItem[] = [
   { to: '/', label: 'Dashboard', shortLabel: 'Home', icon: 'home' },
@@ -49,6 +51,7 @@ watch(
       runStore.loaded || runStore.loading ? Promise.resolve() : runStore.load()
     ])
     await healthKitSyncStore.syncAfterActivation()
+    await weatherStore.refreshAfterActivation()
   },
   { immediate: true }
 )
@@ -56,12 +59,16 @@ watch(
 onMounted(() => {
   healthKitSyncStore.init()
   healthKitSyncStore.attachActivationListeners()
+  weatherStore.init()
+  weatherStore.attachActivationListeners()
   void resetNativeStartupRoute()
   void healthKitSyncStore.syncAfterActivation()
+  void weatherStore.refreshAfterActivation()
 })
 
 onBeforeUnmount(() => {
   healthKitSyncStore.dispose()
+  weatherStore.dispose()
 })
 
 async function resetNativeStartupRoute() {

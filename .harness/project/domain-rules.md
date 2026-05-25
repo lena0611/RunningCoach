@@ -9,6 +9,7 @@
 - `RunContextUser`: 앱에 등록된 사용자 단위다. 각 사용자는 자기 `TrainingMemory`와 목표를 가진다.
 - `FIT import`: Workoutdoors에서 export한 `.fit` 파일을 브라우저에서 로컬 파싱해 `RunLog` 후보를 만드는 흐름이다.
 - `AI Coach`: 저장 데이터와 프로그램 통계를 기반으로 OpenAI가 자연어 코칭 리포트를 생성하는 코칭 엔진이다.
+- `WeatherSnapshot`: iOS WeatherKit에서 받은 현재/시간별/일별 기상 요약이다. 러닝 준비 판단의 체감온도, 강수확률, 강수량, 강수시간 근거로 쓴다.
 - `Goal`: 사용자는 여러 목표를 가질 수 있고, `activeGoalId`로 지정된 활성 목표가 코칭의 1차 판단 기준이다. 시작일, 목표일, 성공 기준, 목표 전략을 함께 가진다. 다른 목표는 보조 관점으로 참고한다.
 - `InjuryItem`: 사용자는 여러 부상/주의사항을 관리할 수 있고, `activeInjuryItemId`로 지정된 항목이 코칭의 1차 부상관리 기준이다. 악화 트리거, 훈련 제한, 복귀 기준을 함께 가지며, 의료 진단이 아니라 훈련 강도 조절과 관찰 포인트로만 사용한다.
 
@@ -37,6 +38,7 @@
 - iOS 하이브리드 앱을 새로 기동할 때 기능 탭 URL이 남아 있어도 기본 진입은 Home이다. 로그인/접근 차단 같은 시스템 라우트는 예외로 둔다.
 - `Easy + Strides` 자동 추론은 세션 이름보다 “대부분 쉬운 페이스 + 여러 개의 짧은 고속 구간”을 우선한다. route가 없어 `fastSegments`가 비면 보수적으로 `Easy`나 `Unknown`으로 둔다.
 - Dashboard의 다음 추천 세션은 단순 최근 강훈련 여부만으로 정하지 않는다. `TrainingMemory.weeklyPattern`, 선호 롱런 요일, 최근 실제 RunLog 날짜, 최근 토요일 10km+ 기록의 평균 페이스를 함께 본다.
+- Dashboard의 다음 세션 준비에는 WeatherKit 기상정보가 있으면 체감온도, 강수확률, 강수량, 강수시간을 함께 보여준다. 30도 이상 체감온도나 높은 강수확률은 페이스/강도 조절 근거로만 쓰고 안전을 보장하지 않는다.
 - `TrainingMemory.weeklyPattern`은 사용자가 직접 세우는 정적 루틴이 아니다. AI 코칭이 계정 목표와 누적 RunLog를 보고 유지/수정하는 훈련 계획이며, 사용자는 목표/프로필/개인 맥락을 제공한다.
 - AI 코칭은 세션 평가와 동시에 주간 루틴 유지/수정 필요성을 판단한다. 루틴 변경이 필요하면 Edge Function이 `training_memory.memory.weeklyPattern` 전체를 갱신하고, 변경 근거를 report와 `aiNotes`에 짧게 남긴다.
 - AI 코칭과 홈 요약은 활성 목표와 활성 부상관리 항목을 명시적으로 보여줘야 한다. 추천/분석의 기준이 사용자에게 보이지 않으면 코칭 신뢰도가 떨어진다.
@@ -67,6 +69,7 @@
 - Workoutdoors export의 기본 지원 포맷은 FIT로 제한한다.
 - Strava 연동은 장기 확장이다. Strava OAuth token exchange, refresh token 보관, webhook callback은 정적 프론트가 아니라 서버리스 백엔드가 담당해야 한다.
 - Strava 연동은 당장 구현하지 않고 확장 메모로 둔다. 모바일 FIT 업로드 불편이 커지면 MVP 이후 구현한다.
+- WeatherKit 연동은 iOS 네이티브 브리지 전용이다. GitHub Pages 일반 브라우저에서는 직접 WeatherKit을 호출하지 않는다.
 
 ## 금지되는 도메인 처리
 - 브라우저 코드에 OpenAI API Key, Strava client secret, refresh token 같은 secret을 넣지 않는다.

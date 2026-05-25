@@ -58,6 +58,7 @@
         ".harness/project/domain-rules.md",
         ".harness/project/architecture-rules.md",
         ".harness/project/healthkit-data-contract.md",
+        ".harness/project/weatherkit-data-contract.md",
         ".harness/project/ai-coaching-goal.md",
         ".harness/project/github-pages-supabase-playbook.md",
         ".harness/project/ui-guidelines.md",

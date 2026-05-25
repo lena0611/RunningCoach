@@ -3,10 +3,12 @@ import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch 
 import { useRouter } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { useWeatherStore } from '@/app/stores/weatherStore'
 import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
 import RunSummaryCard from '@/widgets/run-summary-card/RunSummaryCard.vue'
 import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
 import FatigueCard from '@/widgets/fatigue-card/FatigueCard.vue'
+import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
 import { averagePace, getEasyRatio, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, getVolumeWarning, sumDistance } from '@/shared/lib/runStats'
 import { formatDateWithWeekday, formatPace } from '@/shared/lib/format'
 import ContentStack from '@/shared/ui/ContentStack.vue'
@@ -22,6 +24,7 @@ const TrendChart = defineAsyncComponent(() => import('@/shared/ui/TrendChart.vue
 
 const runStore = useRunStore()
 const memoryStore = useMemoryStore()
+const weatherStore = useWeatherStore()
 const router = useRouter()
 const trendMetric = ref<'month' | 'last7' | 'easy' | 'hard' | null>(null)
 
@@ -32,6 +35,8 @@ onMounted(() => {
   if (!memoryStore.loading) {
     memoryStore.load()
   }
+  weatherStore.init()
+  void weatherStore.refreshAfterActivation()
 })
 
 const runs = computed(() => runStore.sortedRuns)
@@ -146,6 +151,12 @@ function closeTrend() {
           <p>{{ nextSession.reason }}</p>
           <p class="helper">{{ nextSession.intensity }}</p>
         </SectionCard>
+        <WeatherCard
+          :snapshot="weatherStore.snapshot"
+          :loading="weatherStore.loading"
+          :error="weatherStore.error"
+          @refresh="weatherStore.requestForecast()"
+        />
       </ContentStack>
     </div>
 
