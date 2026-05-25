@@ -39,6 +39,11 @@ type CoachReportRow = {
   created_at: string
 }
 
+type CoachMemoryItemRow = {
+  content: string
+  created_at: string
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -70,6 +75,7 @@ Deno.serve(async (req) => {
 
     const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle)
     const ai = await callOpenAI(openaiKey, model, context)
+    const durableMemoryItems = normalizeMemoryItems(ai.memoryItems, context.coachMemoryItems)
     const memoryPatch = normalizeTrainingMemoryPatch(ai.trainingMemoryPatch)
     const updatedMemory = memoryPatch ? mergeTrainingMemoryPatch(context.trainingMemory, memoryPatch) : null
     if (updatedMemory) {
@@ -94,7 +100,7 @@ Deno.serve(async (req) => {
       .single()
     if (reportError) throw reportError
 
-    const memoryItems = ai.memoryItems.map((content) => ({
+    const memoryItems = durableMemoryItems.map((content) => ({
       user_id: userId,
       content,
       source_report_id: reportRow.id
@@ -149,11 +155,12 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
   const [{ data: memoryRow }, { data: runs }, { data: memoryItems }, { data: reports }] = await Promise.all([
     admin.from('training_memory').select('memory').eq('user_id', userId).maybeSingle(),
     admin.from('run_logs').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(120),
-    admin.from('coach_memory_items').select('content, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(40),
+    admin.from('coach_memory_items').select('content, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(80),
     admin.from('coach_reports').select('selected_run_id, user_note, report, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(80)
   ])
   const runRows = (runs ?? []) as RunLogRow[]
   const reportRows = (reports ?? []) as CoachReportRow[]
+  const memoryRows = (memoryItems ?? []) as CoachMemoryItemRow[]
   const selectedRun = selectedRunId ? runRows.find((run) => run.id === selectedRunId) ?? null : null
   const currentDate = currentDateInSeoul()
   const anchorDate = selectedRun?.date ?? currentDate
@@ -188,7 +195,7 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
     activeGoal,
     injuryItems,
     activeInjuryItem,
-    coachMemoryItems: (memoryItems ?? []).map((item) => item.content),
+    coachMemoryItems: buildRelevantCoachMemoryItems(memoryRows, selectedRun, userNote),
     recentCoachReports: reportRows.slice(0, 5).map((report) => ({
       selectedRunId: report.selected_run_id,
       userNote: report.user_note,
@@ -275,6 +282,7 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     '예: 토요일 12~15km 기록이고 격주 패턴상 Steady Long 주차라면 DB에 LSD라고 저장되어 있어도 "LSD라기보다 Steady Long 성격"이라고 부드럽게 재해석한다.',
     'fast_segments는 route/speed 기반 짧은 고속 구간 요약이다. Easy + Strides 판단에서는 세션 타입명보다 lap 페이스와 fast_segments를 우선한다.',
     '앱 로그가 적어도 TrainingMemory나 coachMemoryItems의 장기 맥락을 부정하지 않는다. 로그가 덜 들어온 상태로 보고 조심스럽게 해석한다.',
+    'context.coachMemoryItems는 장기기억 전체가 아니라 현재 선택 세션과 관련도 높은 일부만 선별한 것이다. 여기에 없다고 사용자가 그런 성향이 없다고 단정하지 않는다.',
     '최근 14일 앱 로그가 적다는 이유만으로 훈련 성과를 판단할 수 없다고 길게 말하지 않는다.',
     '템포 뒤 9분대 조깅, 심박 125~128, 배우자 동행런 맥락이면 추가 강훈련보다 회복 조깅으로 해석한다.',
     '더위, 케이던스/호흡 성향, 과거 좌측 근위부 햄스트링 이슈, 격주 롱런 패턴을 필요한 때만 짧게 연결한다.',
@@ -298,6 +306,9 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     '이모지는 필요할 때만 0~3개 사용한다.',
     '좋은 출력 예시의 밀도: "좋다. 이건 진짜 회복런 맞다. 어제 롱런 뒤에 강도 욕심 안 내고 아주 잘 눌렀어.\\n\\n## 핵심 지표\\n- 세션: Recovery / 와이프 동반주\\n- 거리: 5.02km\\n- 평균 페이스: 10분09초/km\\n- 평균 심박: 115\\n\\n## 오늘 해석\\n제일 좋은 건 심박이 완전히 낮게 잡혔다는 점이다.\\n\\n롱런 다음날인데 평균 115면, 몸을 더 밀어붙인 게 아니라 회복 쪽으로 잘 돌린 세션이다.\\n\\n## 조심할 점\\n체크할 건 하나다. 오른발 발바닥이 다음에도 조용한지.\\n\\n## 다음 훈련\\n- 내일: 휴식 or 5km 완전 이지\\n- 뛰면: 페이스 보지 말고 착지감만 보기\\n- 강도훈련: 발바닥이 조용해진 뒤 진행\\n\\n## 한 줄 요약\\n오늘은 더 뛴 게 아니라 잘 풀어준 날이다."',
     'context.responseStyle이 있으면 반드시 따른다. tone=conversational_coach, firstSentence=reaction_before_analysis, avoid=report_style/medical_diagnosis/long_paragraphs를 강하게 우선한다.',
+    'memoryItems는 0~3개만 반환한다. 반복 패턴, 성향, 부상/더위/회복 기준, 계획 변경처럼 다음 코칭에도 쓸 장기 기억만 넣는다.',
+    'memoryItems에 단일 세션의 거리/페이스/심박, "오늘 잘했다", "다음 훈련은 휴식" 같은 일회성 코멘트를 넣지 않는다.',
+    '이미 context.coachMemoryItems나 trainingMemory에 같은 의미가 있으면 memoryItems에 다시 넣지 않는다.',
     'JSON만 반환한다. 형식: {"report":"사용자에게 보여줄 마크다운 코칭","memoryItems":["장기 기억으로 저장할 짧은 문장"],"trainingMemoryPatch":null 또는 {"weeklyPattern":["화요일: ..."],"longRunStrategy":"...","currentVolumeNote":"...","aiNotes":["..."]}}'
   ].join('\n')
 
@@ -361,6 +372,114 @@ function mergeTrainingMemoryPatch(memory: CoachContext['trainingMemory'], patch:
 function mergeAiNotes(current: unknown, next: string[]) {
   const currentItems = Array.isArray(current) ? current.filter((item) => typeof item === 'string') as string[] : []
   return [...next, ...currentItems.filter((item) => !next.includes(item))].slice(0, 30)
+}
+
+function buildRelevantCoachMemoryItems(memoryItems: CoachMemoryItemRow[], selectedRun: RunLogRow | null, userNote: string) {
+  const contextTags = extractContextTags(`${selectedRun?.session_title ?? ''} ${selectedRun?.type ?? ''} ${selectedRun?.memo ?? ''} ${userNote}`)
+  const seen = new Set<string>()
+
+  return memoryItems
+    .map((item, index) => {
+      const content = truncateText(item.content, 260)
+      const key = normalizeMemoryKey(content)
+      if (!content || seen.has(key) || !looksLikeDurableMemory(content)) return null
+      seen.add(key)
+      return {
+        content,
+        score: scoreMemoryItem(content, item.created_at, contextTags, index)
+      }
+    })
+    .filter((item): item is { content: string; score: number } => Boolean(item))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 18)
+    .map((item) => item.content)
+}
+
+function normalizeMemoryItems(items: string[], existingItems: string[]) {
+  const existingKeys = new Set(existingItems.map(normalizeMemoryKey))
+  const nextKeys = new Set<string>()
+  const normalized: string[] = []
+
+  for (const raw of items) {
+    const content = truncateText(raw, 260)
+    const key = normalizeMemoryKey(content)
+    if (!content || nextKeys.has(key) || existingKeys.has(key)) continue
+    if (!looksLikeDurableMemory(content)) continue
+    nextKeys.add(key)
+    normalized.push(content)
+    if (normalized.length >= 3) break
+  }
+
+  return normalized
+}
+
+function scoreMemoryItem(content: string, createdAt: string, contextTags: Set<string>, index: number) {
+  let score = 0
+  const tags = extractContextTags(content)
+  for (const tag of contextTags) {
+    if (tags.has(tag)) score += 6
+  }
+  if (tags.size) score += 2
+  if (containsAny(content, ['항상', '자주', '반복', '패턴', '성향', '기준', '전략', '루틴', '주의', '관리', '피해야'])) score += 4
+  if (containsAny(content, ['더위', '햄스트링', '발바닥', '케이던스', '복식호흡', '와이프', '배우자', '롱런', 'LSD', 'Steady'])) score += 3
+
+  const ageDays = Math.max(0, diffDays(createdAt.slice(0, 10), currentDateInSeoul()))
+  if (ageDays <= 14) score += 3
+  else if (ageDays <= 45) score += 2
+  else if (ageDays <= 90) score += 1
+
+  return score - Math.min(index, 20) * 0.05
+}
+
+function looksLikeDurableMemory(content: string) {
+  const text = content.trim()
+  if (text.length < 12) return false
+  if (isOneOffSessionFact(text)) return false
+  return containsAny(text, [
+    '성향',
+    '패턴',
+    '반복',
+    '기준',
+    '전략',
+    '루틴',
+    '주의',
+    '관리',
+    '피해야',
+    '우선',
+    '더위',
+    '햄스트링',
+    '발바닥',
+    '케이던스',
+    '호흡',
+    '와이프',
+    '배우자',
+    '동반',
+    '회복',
+    'LSD',
+    'Steady',
+    '롱런',
+    '템포'
+  ])
+}
+
+function isOneOffSessionFact(content: string) {
+  const lower = content.toLowerCase()
+  if (/(오늘|이번 세션|해당 세션|이 기록|이번 기록)/.test(content) && /\d+(\.\d+)?\s?(km|분|초|bpm|심박|페이스)/i.test(content)) return true
+  if (/(잘했다|좋았다|무난했다|휴식|다음 훈련)/.test(content) && !containsAny(content, ['패턴', '성향', '기준', '전략', '주의'])) return true
+  if (/^\d{4}-\d{2}-\d{2}/.test(lower)) return true
+  return false
+}
+
+function normalizeMemoryKey(content: string) {
+  return content
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '')
+    .slice(0, 120)
+}
+
+function containsAny(value: string, keywords: string[]) {
+  const lower = value.toLowerCase()
+  return keywords.some((keyword) => lower.includes(keyword.toLowerCase()))
 }
 
 function buildSimilarPastCoachSnippets(selectedRun: RunLogRow | null, runs: RunLogRow[], reports: CoachReportRow[]) {

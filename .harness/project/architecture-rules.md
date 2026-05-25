@@ -29,6 +29,7 @@
 - `TrainingMemory` 수정 -> Supabase `training_memory` 저장 -> AI Coach 컨텍스트 생성에 반영
 - AI 코칭 요청 -> Supabase Edge Function -> DB에서 `TrainingMemory`, `RunLog`, `coach_memory_items` 조회 -> OpenAI 호출 -> `coach_reports`, 새 `coach_memory_items`, 필요한 경우 갱신된 `training_memory.memory.weeklyPattern` 저장
 - AI 코칭 컨텍스트는 비용을 통제한다. 같은 세션 대화 thread는 이어서 넣되, 다른 세션 대화는 전체 전문이 아니라 유사 세션 snippet과 `coach_memory_items` 중심으로 주입한다.
+- 장기기억 컨텍스트는 `coach_memory_items` 최근 목록을 그대로 넣지 않고, 선택 세션/메모 태그, 반복 패턴 키워드, 중요 러닝 맥락, 최근성을 점수화해 최대 소량만 넣는다.
 - 장기 확장: Strava activity fetch -> `RunLog` 후보 생성 -> 사용자 확인/저장
 
 ## 화면 로딩과 스토어 규칙
