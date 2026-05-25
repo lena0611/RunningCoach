@@ -23,7 +23,7 @@ const parsedValue = computed(() => {
     <span>{{ label }}</span>
     <strong class="stat-card-value">
       <span>{{ parsedValue.amount }}</span>
-      <small v-if="parsedValue.unit">{{ parsedValue.unit }}</small>
+      <small v-if="parsedValue.unit" class="stat-card-unit">{{ parsedValue.unit }}</small>
     </strong>
     <small v-if="hint">{{ hint }}</small>
   </article>

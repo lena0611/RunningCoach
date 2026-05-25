@@ -784,9 +784,9 @@ label {
   white-space: nowrap;
 }
 
-.stat-card-value small {
+.stat-card .stat-card-value .stat-card-unit {
   color: currentColor;
-  font-size: 0.52em;
+  font-size: clamp(15px, 4.3vw, 21px);
   font-weight: 900;
   line-height: 1;
 }
