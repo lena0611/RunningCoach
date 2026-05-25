@@ -78,7 +78,7 @@ export function requestHealthKitRuns(days = 14) {
   })
 }
 
-export function toExtractedRunData(candidate: HealthKitRunCandidate): ExtractedRunData {
+export function toExtractedRunData(candidate: HealthKitRunCandidate, weeklyPattern: string[] = []): ExtractedRunData {
   const distanceKm = candidate.distanceKm ?? 0
   const durationSec = candidate.durationSec
   return {
@@ -91,6 +91,7 @@ export function toExtractedRunData(candidate: HealthKitRunCandidate): ExtractedR
       avgHeartRate: candidate.avgHeartRate,
       laps: candidate.laps ?? [],
       fastSegments: candidate.fastSegments ?? [],
+      weeklyPattern,
       date: candidate.date
     }),
     distanceKm,

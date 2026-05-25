@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { useAuthStore } from '@/app/stores/authStore'
+import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import {
@@ -90,7 +91,8 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
           .sort((a, b) => a.date.localeCompare(b.date) || a.startAt.localeCompare(b.startAt))
 
         if (newRuns.length) {
-          const inserted = await runStore.addRuns(newRuns.map((candidate) => toExtractedRunData(candidate)), 'healthkit')
+          const memoryStore = useMemoryStore()
+          const inserted = await runStore.addRuns(newRuns.map((candidate) => toExtractedRunData(candidate, memoryStore.memory.weeklyPattern)), 'healthkit')
           const skipped = newRuns.length - inserted.length
           this.status = skipped > 0
             ? `HealthKit 동기화 완료 · 새 러닝 ${inserted.length}개 저장 · 중복 ${skipped}개 제외`
