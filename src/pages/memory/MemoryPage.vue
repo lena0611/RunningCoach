@@ -3,9 +3,13 @@ import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import type { TrainingGoal, TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
 import { formatDateWithWeekday } from '@/shared/lib/format'
+import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import DateField from '@/shared/ui/DateField.vue'
+import FormGrid from '@/shared/ui/FormGrid.vue'
+import PageLayout from '@/shared/ui/PageLayout.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
+import SectionHeader from '@/shared/ui/SectionHeader.vue'
 
 type MemoryPanel = 'overview' | 'goals' | 'goal-edit' | 'goal-new' | 'injuries' | 'injury-edit' | 'injury-new'
 
@@ -371,12 +375,11 @@ async function save() {
 </script>
 
 <template>
-  <section class="page memory-page">
+  <PageLayout variant="memory">
     <SectionCard>
-      <div class="section-heading">
-        <h2>코칭 메모리</h2>
+      <SectionHeader title="코칭 메모리">
         <button type="button" :disabled="saving || !isDirty" @click="save">{{ saving ? '저장 중' : '저장' }}</button>
-      </div>
+      </SectionHeader>
       <p v-if="error || memoryStore.error" class="error">{{ error || memoryStore.error }}</p>
       <p class="helper">계정 이름, 출생연도, 성별, PB 같은 개인정보는 우상단 계정 메뉴에서 수정합니다.</p>
 
@@ -410,7 +413,7 @@ async function save() {
             <li v-for="item in draft.weeklyPattern" :key="item">{{ item }}</li>
           </ul>
         </div>
-        <form class="form-grid">
+        <FormGrid>
           <label class="full">
             장거리 전략
             <textarea v-model="draft.longRunStrategy" rows="3" />
@@ -436,7 +439,7 @@ async function save() {
             코칭 메모
             <textarea :value="join(draft.aiNotes)" rows="5" @input="draft.aiNotes = split(($event.target as HTMLTextAreaElement).value)" />
           </label>
-        </form>
+        </FormGrid>
       </div>
     </SectionCard>
 
@@ -462,10 +465,9 @@ async function save() {
                 <p v-if="error || memoryStore.error" class="error">{{ error || memoryStore.error }}</p>
 
                 <div v-if="panel === 'goals'" class="memory-stack">
-              <div class="section-heading compact-heading">
-                <h3>목표 목록</h3>
+              <SectionHeader title="목표 목록" compact>
                 <button type="button" @click="openGoalNew">새 목표</button>
-              </div>
+              </SectionHeader>
               <button v-for="goal in draft.goals" :key="goal.id" class="memory-list-card" type="button" @click="openGoalEdit(goal.id)">
                 <span>
                   <strong>{{ goal.title }}</strong>
@@ -475,7 +477,7 @@ async function save() {
               </button>
                 </div>
 
-                <form v-else-if="panel === 'goal-new'" class="form-grid">
+                <FormGrid v-else-if="panel === 'goal-new'">
               <div class="form-section-title full">새 목표 생성</div>
               <label class="full">
                 목표명
@@ -508,12 +510,12 @@ async function save() {
                 목표 메모
                 <textarea v-model="newGoal.notes" rows="3" />
               </label>
-              <div class="actions full">
+              <ActionGroup full>
                 <button type="button" @click="addGoal">생성</button>
-              </div>
-                </form>
+              </ActionGroup>
+                </FormGrid>
 
-                <form v-else-if="panel === 'goal-edit' && editingGoal" class="form-grid">
+                <FormGrid v-else-if="panel === 'goal-edit' && editingGoal">
               <div class="form-section-title full">목표 편집</div>
               <label class="full">
                 목표명
@@ -547,17 +549,16 @@ async function save() {
                 목표 메모
                 <textarea v-model="editingGoal.notes" rows="3" @input="updateGoal(editingGoal)" />
               </label>
-              <div class="actions full">
+              <ActionGroup full>
                 <button class="ghost" type="button" @click="setActiveGoal(editingGoal.id)">활성 목표로 지정</button>
                 <button class="danger" type="button" :disabled="draft.goals.length <= 1" @click="askRemoveGoal(editingGoal)">삭제</button>
-              </div>
-                </form>
+              </ActionGroup>
+                </FormGrid>
 
                 <div v-else-if="panel === 'injuries'" class="memory-stack">
-              <div class="section-heading compact-heading">
-                <h3>부상 관리 목록</h3>
+              <SectionHeader title="부상 관리 목록" compact>
                 <button type="button" @click="openInjuryNew">새 항목</button>
-              </div>
+              </SectionHeader>
               <button v-for="item in draft.injuryItems" :key="item.id" class="memory-list-card" type="button" @click="openInjuryEdit(item.id)">
                 <span>
                   <strong>{{ item.title }}</strong>
@@ -567,7 +568,7 @@ async function save() {
               </button>
                 </div>
 
-                <form v-else-if="panel === 'injury-new'" class="form-grid">
+                <FormGrid v-else-if="panel === 'injury-new'">
               <div class="form-section-title full">새 부상/주의사항 생성</div>
               <label class="full">
                 항목명
@@ -604,12 +605,12 @@ async function save() {
                 관리 계획
                 <textarea v-model="newInjury.managementPlan" rows="3" placeholder="예: 통증 단정 없이 강훈련 후 반응 확인" />
               </label>
-              <div class="actions full">
+              <ActionGroup full>
                 <button type="button" @click="addInjury">생성</button>
-              </div>
-                </form>
+              </ActionGroup>
+                </FormGrid>
 
-                <form v-else-if="panel === 'injury-edit' && editingInjury" class="form-grid">
+                <FormGrid v-else-if="panel === 'injury-edit' && editingInjury">
               <div class="form-section-title full">부상/주의사항 편집</div>
               <label class="full">
                 항목명
@@ -646,11 +647,11 @@ async function save() {
                 관리 계획
                 <textarea v-model="editingInjury.managementPlan" rows="3" placeholder="예: 통증 단정 없이 강훈련 후 반응 확인" @input="updateInjury(editingInjury)" />
               </label>
-              <div class="actions full">
+              <ActionGroup full>
                 <button class="ghost" type="button" @click="setActiveInjury(editingInjury.id)">현재 기준으로 지정</button>
                 <button class="danger" type="button" @click="askRemoveInjury(editingInjury)">삭제</button>
-              </div>
-                </form>
+              </ActionGroup>
+                </FormGrid>
               </div>
             </Transition>
           </main>
@@ -674,5 +675,5 @@ async function save() {
         </div>
       </Transition>
     </Teleport>
-  </section>
+  </PageLayout>
 </template>

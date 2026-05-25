@@ -6,10 +6,13 @@ import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/m
 import { fetchCoachReports, requestCoachRun, type CoachReport } from '@/shared/api/coachRepository'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, formatPace } from '@/shared/lib/format'
+import ActionGroup from '@/shared/ui/ActionGroup.vue'
+import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import CoachMessage from '@/shared/ui/CoachMessage.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
+import PageLayout from '@/shared/ui/PageLayout.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
-import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
+import SectionHeader from '@/shared/ui/SectionHeader.vue'
 
 const runStore = useRunStore()
 const memoryStore = useMemoryStore()
@@ -66,11 +69,9 @@ async function coach() {
 </script>
 
 <template>
-  <section class="page coach-page">
+  <PageLayout variant="coach">
     <SectionCard class="coach-composer">
-      <div class="section-heading">
-        <h2>AI Coach</h2>
-      </div>
+      <SectionHeader title="AI Coach" />
       <p class="helper">선택 기록을 활성 목표와 부상관리 기준에 맞춰 짧게 해석합니다.</p>
       <div class="coach-context-card">
         <span class="context-chip">코칭 기준</span>
@@ -89,17 +90,15 @@ async function coach() {
         오늘 메모
         <textarea v-model="userNote" rows="3" placeholder="예: 오늘 목요일 템포. 후반 3.5km는 와이프랑 9분대 회복 조깅." />
       </label>
-      <div class="actions">
+      <ActionGroup>
         <button type="button" :disabled="loading || !isSupabaseConfigured" @click="coach">{{ loading ? '분석 중' : 'AI 코칭 요청' }}</button>
-      </div>
+      </ActionGroup>
       <p v-if="!isSupabaseConfigured" class="error">Supabase 환경변수가 설정되어야 AI 코칭을 사용할 수 있습니다.</p>
       <p v-if="error" class="error">{{ error }}</p>
     </SectionCard>
 
     <SectionCard class="coach-thread">
-      <div class="section-heading">
-        <h2>코칭 리포트</h2>
-      </div>
+      <SectionHeader title="코칭 리포트" />
       <div v-for="report in reports" :key="report.id" class="coach-thread-item">
         <CoachMessage v-if="report.userNote" role="user" :text="report.userNote" :meta="formatDateTimeWithWeekday(report.updatedAt || report.createdAt)" />
         <CoachMessage role="coach" :text="report.report" meta="RunContext Coach" />
@@ -107,5 +106,5 @@ async function coach() {
       </div>
       <EmptyState v-if="!reports.length" title="아직 코칭 리포트가 없습니다." description="RunLog를 고르고 오늘 메모를 짧게 적으면 코치가 맥락을 붙여 해석합니다." />
     </SectionCard>
-  </section>
+  </PageLayout>
 </template>

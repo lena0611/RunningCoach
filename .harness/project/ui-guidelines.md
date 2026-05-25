@@ -81,6 +81,11 @@ Prefer shared UI components in `src/shared/ui`:
 
 - `AppShell`
 - `AppHeader`
+- `PageLayout`
+- `ContentStack`
+- `SectionHeader`
+- `ActionGroup`
+- `FormGrid`
 - `BottomNav`
 - `StatCard`
 - `SectionCard`
@@ -93,9 +98,14 @@ Prefer shared UI components in `src/shared/ui`:
 - `BottomSheetSelect`
 - `DateField`
 - `ToastHost`
+- `TrendChart`
 - `ListRow`
 
 New page work should reuse these before adding page-specific layout.
+
+Common display components should not decide how much page space they receive. Page-level spacing, grids, stacks, section headers, action rows, and forms must be owned by layout components such as `PageLayout`, `ContentStack`, `SectionHeader`, `ActionGroup`, and `FormGrid`.
+
+Charts should use `TrendChart` and ECharts unless there is a specific reason to add another chart primitive. Keep chart libraries lazy-loaded or page-split so the root app chunk does not grow unnecessarily.
 
 ## TDS-Inspired Pattern Mapping
 

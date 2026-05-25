@@ -1085,6 +1085,19 @@ button.stat-card {
   flex-wrap: wrap;
 }
 
+.content-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.content-stack-compact {
+  gap: 10px;
+}
+
+.content-stack-loose {
+  gap: 20px;
+}
+
 .icon-only-button {
   display: grid;
   place-items: center;
@@ -1137,6 +1150,12 @@ button.stat-card {
   min-height: 180px;
   overflow-x: auto;
   padding: 8px 2px 2px;
+}
+
+.trend-echart {
+  width: 100%;
+  height: 260px;
+  min-height: 220px;
 }
 
 .trend-bar {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
@@ -9,10 +9,16 @@ import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
 import FatigueCard from '@/widgets/fatigue-card/FatigueCard.vue'
 import { averagePace, getEasyRatio, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, getVolumeWarning, sumDistance } from '@/shared/lib/runStats'
 import { formatDateWithWeekday, formatPace } from '@/shared/lib/format'
+import ContentStack from '@/shared/ui/ContentStack.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import ListRow from '@/shared/ui/ListRow.vue'
 import MetricGrid from '@/shared/ui/MetricGrid.vue'
+import PageLayout from '@/shared/ui/PageLayout.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
+import SectionHeader from '@/shared/ui/SectionHeader.vue'
+import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
+
+const TrendChart = defineAsyncComponent(() => import('@/shared/ui/TrendChart.vue'))
 
 const runStore = useRunStore()
 const memoryStore = useMemoryStore()
@@ -57,17 +63,14 @@ const trendRuns = computed(() => {
   return []
 })
 
-const trendBars = computed(() => {
-  const maxDistance = Math.max(...trendRuns.value.map((run) => run.distanceKm), 1)
+const trendChartPoints = computed<TrendChartPoint[]>(() => {
   return [...trendRuns.value]
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(-14)
     .map((run) => ({
-      id: run.id,
       label: run.date.slice(5).replace('-', '.'),
-      title: run.sessionTitle || run.type,
-      distance: run.distanceKm,
-      height: Math.max(10, Math.round((run.distanceKm / maxDistance) * 100))
+      value: run.distanceKm,
+      detail: run.sessionTitle || run.type
     }))
 })
 
@@ -88,7 +91,7 @@ function closeTrend() {
 </script>
 
 <template>
-  <section class="page dashboard-page">
+  <PageLayout variant="dashboard">
     <section class="hero-card">
       <div>
         <p class="eyebrow">훈련 요약</p>
@@ -114,12 +117,11 @@ function closeTrend() {
     </section>
 
     <SectionCard v-if="runStore.loading || runStore.error">
-      <div class="section-heading">
-        <h2>데이터 상태</h2>
+      <SectionHeader title="데이터 상태">
         <button class="ghost" type="button" :disabled="runStore.loading" @click="runStore.load">
           {{ runStore.loading ? '불러오는 중' : '다시 불러오기' }}
         </button>
-      </div>
+      </SectionHeader>
       <p v-if="runStore.loading" class="helper">Run Log를 불러오고 있습니다.</p>
       <p v-if="runStore.error" class="error">{{ runStore.error }}</p>
     </SectionCard>
@@ -133,12 +135,10 @@ function closeTrend() {
 
     <div class="two-column">
       <RecentRuns :runs="runs.slice(0, 5)" @show-all="router.push('/runs')" />
-      <div class="stack">
+      <ContentStack>
         <FatigueCard :warning="getVolumeWarning(runs)" />
         <SectionCard>
-          <div class="section-heading">
-            <h2>다음 추천 세션</h2>
-          </div>
+          <SectionHeader title="다음 추천 세션" />
           <div class="recommendation-card">
             <strong>{{ nextSession.title }}</strong>
             <span>{{ formatPace(averagePace(runs)) }}/km 평균 흐름</span>
@@ -146,7 +146,7 @@ function closeTrend() {
           <p>{{ nextSession.reason }}</p>
           <p class="helper">{{ nextSession.intensity }}</p>
         </SectionCard>
-      </div>
+      </ContentStack>
     </div>
 
     <Teleport to="body">
@@ -163,24 +163,14 @@ function closeTrend() {
             </header>
             <main class="memory-stack-content">
               <SectionCard>
-                <div class="section-heading">
-                  <h2>추이</h2>
+                <SectionHeader title="추이">
                   <small class="helper">{{ trendRuns.length }}개 세션</small>
-                </div>
-                <div v-if="trendBars.length" class="trend-chart">
-                  <div v-for="bar in trendBars" :key="bar.id" class="trend-bar">
-                    <div class="trend-bar-track">
-                      <span :style="{ height: `${bar.height}%` }" />
-                    </div>
-                    <small>{{ bar.label }}</small>
-                  </div>
-                </div>
+                </SectionHeader>
+                <TrendChart v-if="trendChartPoints.length" :points="trendChartPoints" unit="km" />
                 <EmptyState v-else title="표시할 기록이 없습니다." description="해당 기간의 러닝 기록이 아직 부족합니다." />
               </SectionCard>
               <SectionCard v-if="trendRuns.length">
-                <div class="section-heading">
-                  <h2>세션</h2>
-                </div>
+                <SectionHeader title="세션" />
                 <div class="run-list">
                   <ListRow
                     v-for="run in trendRuns"
@@ -196,5 +186,5 @@ function closeTrend() {
         </div>
       </Transition>
     </Teleport>
-  </section>
+  </PageLayout>
 </template>

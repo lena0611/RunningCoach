@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import SectionCard from '@/shared/ui/SectionCard.vue'
+import SectionHeader from '@/shared/ui/SectionHeader.vue'
 
 defineProps<{ warning: string }>()
 </script>
 
 <template>
   <SectionCard>
-    <div class="section-heading">
-      <h2>피로 경고</h2>
-    </div>
+    <SectionHeader title="피로 경고" />
     <p>{{ warning }}</p>
   </SectionCard>
 </template>

@@ -11,9 +11,11 @@ import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import CoachMessage from '@/shared/ui/CoachMessage.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import ListRow from '@/shared/ui/ListRow.vue'
+import PageLayout from '@/shared/ui/PageLayout.vue'
 import RunForm from '@/shared/ui/RunForm.vue'
 import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
+import SectionHeader from '@/shared/ui/SectionHeader.vue'
 
 const runStore = useRunStore()
 const selectedType = ref<RunType | 'All'>('All')
@@ -255,17 +257,16 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
 </script>
 
 <template>
-  <section class="page run-log-page">
+  <PageLayout variant="run-log">
     <SectionCard class="calendar-card">
-      <div class="section-heading">
-        <h2>Run Log</h2>
+      <SectionHeader title="Run Log">
         <div class="run-log-heading-actions">
           <button class="icon-link-button" type="button" aria-label="기록 추가" @click="openAddRun">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
           </button>
           <BottomSheetSelect v-model="selectedType" label="세션 타입" :options="filterOptions" compact />
         </div>
-      </div>
+      </SectionHeader>
       <div class="calendar-header">
         <button class="icon-only-button" type="button" aria-label="이전 달" @click="previousMonth">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
@@ -298,10 +299,9 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
     </SectionCard>
 
     <SectionCard>
-      <div class="section-heading">
-        <h2>{{ selectedDate ? formatDateWithWeekday(selectedDate) : '전체 기록' }}</h2>
+      <SectionHeader :title="selectedDate ? formatDateWithWeekday(selectedDate) : '전체 기록'">
         <small class="helper">{{ filteredRuns.length }}개</small>
-      </div>
+      </SectionHeader>
       <p v-if="runStore.loading" class="helper">Run Log를 불러오고 있습니다.</p>
       <div v-if="visibleRuns.length" class="run-list">
         <ListRow
@@ -383,16 +383,15 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
               </div>
             </SectionCard>
             <SectionCard v-if="detailRun.memo || detailRun.workoutFeeling || detailRun.painNote">
-              <div class="section-heading"><h2>메모</h2></div>
+              <SectionHeader title="메모" />
               <p v-if="detailRun.memo">{{ detailRun.memo }}</p>
               <p v-if="detailRun.workoutFeeling" class="helper">느낌: {{ detailRun.workoutFeeling }}</p>
               <p v-if="detailRun.painNote" class="helper">통증/주의: {{ detailRun.painNote }}</p>
             </SectionCard>
             <SectionCard>
-              <div class="section-heading">
-                <h2>랩</h2>
+              <SectionHeader title="랩">
                 <small class="helper">{{ detailRun.laps.length ? `${detailRun.laps.length}개` : '데이터 부족' }}</small>
-              </div>
+              </SectionHeader>
               <div v-if="detailRun.laps.length" class="lap-list">
                 <div v-for="lap in detailRun.laps" :key="lap.index" class="lap-row">
                   <strong>{{ lap.index }}</strong>
@@ -502,5 +501,5 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
         </section>
       </div>
     </Teleport>
-  </section>
+  </PageLayout>
 </template>

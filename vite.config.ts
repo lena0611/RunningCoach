@@ -7,7 +7,8 @@ export default defineConfig({
   base: process.env.GITHUB_PAGES === 'true' ? '/RunningCoach/' : './',
   plugins: [vue()],
   build: {
-    assetsDir: ''
+    assetsDir: '',
+    chunkSizeWarningLimit: 650
   },
   test: {
     environment: 'jsdom',

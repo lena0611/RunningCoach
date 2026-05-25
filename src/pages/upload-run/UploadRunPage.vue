@@ -4,8 +4,11 @@ import { useRouter } from 'vue-router'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useRunStore } from '@/app/stores/runStore'
 import RunImageUploader from '@/widgets/run-image-uploader/RunImageUploader.vue'
+import ActionGroup from '@/shared/ui/ActionGroup.vue'
+import ContentStack from '@/shared/ui/ContentStack.vue'
 import RunForm from '@/shared/ui/RunForm.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
+import SectionHeader from '@/shared/ui/SectionHeader.vue'
 import type { ExtractedRunData } from '@/entities/run/model'
 import { createEmptyRun, extractRunDataFromFile } from '@/features/extract-run-data/localFileExtractor'
 import { hasNativeBridge } from '@/shared/lib/runtime'
@@ -73,10 +76,9 @@ async function save() {
 
 <template>
   <section class="upload-page" :class="{ page: !stackMode }">
+    <ContentStack>
     <SectionCard>
-      <div class="section-heading">
-        <h2>HealthKit 자동 동기화</h2>
-      </div>
+      <SectionHeader title="HealthKit 자동 동기화" />
       <p v-if="hasNativeBridge()" class="helper">
         로그인 상태에서 앱을 켜거나 다시 활성화하면, 저장된 최신 Run Log 이후의 HealthKit 러닝만 자동으로 동기화합니다.
       </p>
@@ -86,21 +88,20 @@ async function save() {
       <p v-if="healthKitSyncStore.error" class="error">{{ healthKitSyncStore.error }}</p>
     </SectionCard>
     <RunImageUploader ref="uploader" @selected="onSelected" @cleared="file = null" />
-    <div class="actions">
+    <ActionGroup>
       <button type="button" :disabled="!file || loading" @click="analyze">
         {{ loading ? '분석 중' : '파일 분석' }}
       </button>
       <button class="ghost" type="button" @click="manual">수동 입력</button>
       <p v-if="error" class="error">{{ error }}</p>
-    </div>
+    </ActionGroup>
     <SectionCard v-if="form">
-      <div class="section-heading">
-        <h2>분석 결과 확인</h2>
-      </div>
+      <SectionHeader title="분석 결과 확인" />
       <RunForm v-model="form" />
-      <div class="actions">
+      <ActionGroup>
         <button type="button" :disabled="saving" @click="save">{{ saving ? '저장 중' : '저장' }}</button>
-      </div>
+      </ActionGroup>
     </SectionCard>
+    </ContentStack>
   </section>
 </template>

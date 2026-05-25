@@ -5,7 +5,9 @@ import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useSettingsStore, type ManualThemeMode } from '@/app/stores/settingsStore'
 import { getActiveGoal, getActiveInjuryItem, type PersonalBest, type TrainingMemory } from '@/entities/training-memory/model'
 import { formatDateWithWeekday } from '@/shared/lib/format'
+import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
+import FormGrid from '@/shared/ui/FormGrid.vue'
 
 defineProps<{ isAuthenticated: boolean }>()
 const emit = defineEmits<{ signOut: [] }>()
@@ -195,10 +197,10 @@ function setThemeMode(value: string) {
             </div>
           </dl>
 
-          <div class="drawer-actions">
+          <ActionGroup class="drawer-actions">
             <button type="button" @click="drawerPanel = 'profile'">정보수정</button>
             <button class="ghost" type="button" @click="signOutAndClose">로그아웃</button>
-          </div>
+          </ActionGroup>
         </section>
 
         <section v-if="drawerPanel === 'profile'" class="side-drawer-panel edit-panel">
@@ -212,7 +214,7 @@ function setThemeMode(value: string) {
           </div>
 
           <p v-if="error" class="error">{{ error }}</p>
-          <form class="form-grid" @submit.prevent="saveProfile">
+          <FormGrid as="form" @submit.prevent="saveProfile">
             <label class="full">
               계정 표시 이름
               <input v-model="draftName" autocomplete="name" />
@@ -244,7 +246,7 @@ function setThemeMode(value: string) {
               />
             </label>
             <button class="full" type="submit" :disabled="saving">{{ saving ? '저장 중' : '저장' }}</button>
-          </form>
+          </FormGrid>
         </section>
 
         <section v-else-if="drawerPanel === 'settings'" class="side-drawer-panel settings-panel">
