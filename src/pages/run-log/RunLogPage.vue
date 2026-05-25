@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRunStore } from '@/app/stores/runStore'
+import { useWeatherStore } from '@/app/stores/weatherStore'
 import { runTypes, type RunLog, type RunType } from '@/entities/run/model'
 import UploadRunPage from '@/pages/upload-run/UploadRunPage.vue'
 import { fetchCoachReports, requestCoachRun, type CoachReport } from '@/shared/api/coachRepository'
@@ -18,6 +19,7 @@ import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
 
 const runStore = useRunStore()
+const weatherStore = useWeatherStore()
 const selectedType = ref<RunType | 'All'>('All')
 const selectedDate = ref<string | null>(null)
 const visibleCount = ref(10)
@@ -220,7 +222,7 @@ async function requestCoach() {
   coachLoading.value = true
   coachError.value = ''
   try {
-    const report = await requestCoachRun(coachRun.value.id, coachNote.value)
+    const report = await requestCoachRun(coachRun.value.id, coachNote.value, weatherStore.snapshot)
     reports.value = [report, ...reports.value.filter((item) => item.id !== report.id)]
     coachNote.value = ''
     reportsLoaded.value = true
@@ -310,7 +312,7 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
           class="run-list-row run-click-row"
           :kicker="formatDateWithWeekday(run.date)"
           :title="run.sessionTitle || run.type"
-          :detail="`HR ${formatInteger(run.avgHeartRate)} / ${formatInteger(run.maxHeartRate)} · Cad ${formatInteger(run.cadence)} · ${estimateHeartRateDrift(run)}`"
+          :detail="`HR ${formatInteger(run.avgHeartRate)} / ${formatInteger(run.maxHeartRate)} · Avg Cad ${formatInteger(run.cadence)} · ${estimateHeartRateDrift(run)}`"
           :metric="`${run.distanceKm}km`"
           @click="openDetail(run)"
         >
@@ -376,10 +378,12 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
             </SectionCard>
             <SectionCard>
               <div class="metric-grid compact-metric-grid">
+                <div class="metric"><span>평균 페이스</span><strong>{{ formatPace(detailRun.avgPaceSec) }}/km</strong></div>
+                <div class="metric"><span>평균 케이던스</span><strong>{{ formatInteger(detailRun.cadence) }}</strong></div>
                 <div class="metric"><span>평균 심박</span><strong>{{ formatInteger(detailRun.avgHeartRate) }}</strong></div>
                 <div class="metric"><span>최고 심박</span><strong>{{ formatInteger(detailRun.maxHeartRate) }}</strong></div>
-                <div class="metric"><span>케이던스</span><strong>{{ formatInteger(detailRun.cadence) }}</strong></div>
                 <div class="metric"><span>RPE</span><strong>{{ detailRun.rpe ?? '-' }}</strong></div>
+                <div class="metric"><span>드리프트</span><strong>{{ estimateHeartRateDrift(detailRun) }}</strong></div>
               </div>
             </SectionCard>
             <SectionCard v-if="detailRun.memo || detailRun.workoutFeeling || detailRun.painNote">
@@ -398,6 +402,7 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
                   <span>{{ lap.distanceKm ?? '-' }}km</span>
                   <span>{{ formatPace(lap.paceSec) }}/km</span>
                   <span>HR {{ formatInteger(lap.avgHeartRate) }}</span>
+                  <span>Cad {{ formatInteger(lap.cadence) }}</span>
                 </div>
               </div>
               <p v-else class="helper">랩별 페이스와 심박이 있으면 자동 세션 재해석과 코칭 근거가 좋아집니다.</p>

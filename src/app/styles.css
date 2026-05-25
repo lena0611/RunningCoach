@@ -1337,6 +1337,11 @@ button.stat-card {
   min-height: 92px;
 }
 
+.compact-metric-grid .metric strong {
+  font-size: clamp(22px, 6vw, 30px);
+  overflow-wrap: anywhere;
+}
+
 .lap-list {
   display: grid;
   gap: 8px;
@@ -1344,7 +1349,7 @@ button.stat-card {
 
 .lap-row {
   display: grid;
-  grid-template-columns: 34px repeat(3, minmax(0, 1fr));
+  grid-template-columns: 34px repeat(4, minmax(0, 1fr));
   align-items: center;
   gap: 8px;
   padding: 10px 12px;

@@ -44,6 +44,25 @@ type CoachMemoryItemRow = {
   created_at: string
 }
 
+type CurrentWeatherContext = {
+  source: 'ios_weatherkit'
+  observedAt: string
+  locationName: string | null
+  current: {
+    temperatureC: number | null
+    apparentTemperatureC: number | null
+    humidity: number | null
+    windMps: number | null
+    condition: string
+    symbolName: string
+  }
+  next12Hours: {
+    maxPrecipitationChance: number
+    precipitationAmountMm: number
+    rainHours: string[]
+  }
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -71,9 +90,10 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}))
     const selectedRunId = typeof body.selectedRunId === 'string' && body.selectedRunId ? body.selectedRunId : null
     const userNote = typeof body.userNote === 'string' ? body.userNote.slice(0, 2000) : ''
+    const currentWeather = normalizeCurrentWeather(body.currentWeather)
     const responseStyle = normalizeResponseStyle(body.responseStyle)
 
-    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle)
+    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather)
     const ai = await callOpenAI(openaiKey, model, context)
     const durableMemoryItems = normalizeMemoryItems(ai.memoryItems, context.coachMemoryItems)
     const memoryPatch = normalizeTrainingMemoryPatch(ai.trainingMemoryPatch)
@@ -151,7 +171,37 @@ function normalizeResponseStyle(value: unknown): ResponseStyle {
   }
 }
 
-async function buildContext(admin: ReturnType<typeof createClient>, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle) {
+function normalizeCurrentWeather(value: unknown): CurrentWeatherContext | null {
+  if (!value || typeof value !== 'object') return null
+  const item = value as Record<string, unknown>
+  const current = item.current && typeof item.current === 'object' ? item.current as Record<string, unknown> : {}
+  const next12Hours = item.next12Hours && typeof item.next12Hours === 'object' ? item.next12Hours as Record<string, unknown> : {}
+  const observedAt = typeof item.observedAt === 'string' ? item.observedAt : ''
+  if (!observedAt) return null
+
+  return {
+    source: 'ios_weatherkit',
+    observedAt,
+    locationName: typeof item.locationName === 'string' ? item.locationName : null,
+    current: {
+      temperatureC: nullableNumber(current.temperatureC),
+      apparentTemperatureC: nullableNumber(current.apparentTemperatureC),
+      humidity: nullableNumber(current.humidity),
+      windMps: nullableNumber(current.windMps),
+      condition: typeof current.condition === 'string' ? current.condition.slice(0, 80) : '',
+      symbolName: typeof current.symbolName === 'string' ? current.symbolName.slice(0, 80) : ''
+    },
+    next12Hours: {
+      maxPrecipitationChance: clampNumber(next12Hours.maxPrecipitationChance, 0, 1, 0),
+      precipitationAmountMm: clampNumber(next12Hours.precipitationAmountMm, 0, 500, 0),
+      rainHours: Array.isArray(next12Hours.rainHours)
+        ? next12Hours.rainHours.filter((entry): entry is string => typeof entry === 'string').slice(0, 12)
+        : []
+    }
+  }
+}
+
+async function buildContext(admin: ReturnType<typeof createClient>, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null) {
   const [{ data: memoryRow }, { data: runs }, { data: memoryItems }, { data: reports }] = await Promise.all([
     admin.from('training_memory').select('memory').eq('user_id', userId).maybeSingle(),
     admin.from('run_logs').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(120),
@@ -190,6 +240,9 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
     anchorDateForWindowStatsDisplay: formatDateWithWeekday(anchorDate),
     instructionForDateHandling:
       'selectedRun.date는 훈련이 실제로 수행된 날짜이고 coach_reports.created_at은 코칭을 받은 날짜다. 둘을 혼동하지 마라. selectedRunTiming이 past이면 과거 기록 리뷰로 말하고, 오늘 뛴 기록/마지막 코칭 이후 새 기록이라고 단정하지 마라.',
+    currentWeather,
+    instructionForWeatherHandling:
+      'currentWeather는 iOS WeatherKit에서 받은 현재/향후 12시간 날씨이며 다음 세션 준비용이다. selectedRun이 과거 기록이면 currentWeather를 그 과거 훈련 당시 날씨로 착각하지 마라. selectedRun.date가 오늘이거나 사용자가 다음 훈련/오늘 뛸지 묻는 경우에만 체감온도, 강수확률, 강수량, 비 가능 시간대를 짧게 반영한다.',
     trainingMemory,
     goals,
     activeGoal,
@@ -275,6 +328,10 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     'report에 날짜를 쓸 때는 가능한 한 2026-05-24(일)처럼 요일을 붙인다.',
     'selectedRunTiming이 past이면 "오늘", "방금", "이번 훈련 이후"처럼 현재 훈련처럼 보이는 표현을 쓰지 말고, 과거 기록을 복기하는 톤으로 말한다.',
     'coach_reports.created_at이나 최근 코칭 시각을 훈련 날짜로 착각하지 않는다. 마지막 코칭 이후에 뛴 기록이라고 단정하지 않는다.',
+    'currentWeather는 현재/다음 세션 준비용 날씨다. 과거 RunLog 평가에서는 해당 과거 훈련의 날씨로 쓰지 않는다.',
+    'currentWeather가 있고 사용자가 다음 훈련, 오늘 러닝, 강도 조절을 묻는 경우 체감온도, 강수확률, 강수량, 비 가능 시간대를 짧게 반영한다.',
+    '체감온도 30도 이상이면 더위에서 심박이 잘 오르는 사용자 성향을 감안해 페이스보다 심박/RPE 우선으로 말한다.',
+    '강수확률이 높거나 향후 12시간 강수량이 있으면 미끄러운 노면, 신발 젖음, 세션 강도 조절을 체크포인트로만 말한다.',
     'recent14/recent30은 anchorDateForWindowStats 기준 창이다. selectedRun이 있으면 선택 기록 날짜 기준의 이전 흐름으로 해석한다.',
     'runsAfterSelectedRun은 선택 기록 이후 실제로 저장된 러닝이다. 과거 기록 리뷰에서는 이 목록이 있으면 이후 흐름을 짧게 참고할 수 있지만, 선택 기록 자체 평가와 혼동하지 않는다.',
     '사용자가 말한 세션명을 그대로 믿지 말고 요일, 최근 흐름, 랩, 심박, 페이스, RPE, 메모, TrainingMemory로 재해석한다.',
@@ -729,6 +786,17 @@ function safeJson(value: string) {
   } catch {
     return {}
   }
+}
+
+function nullableNumber(value: unknown): number | null {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number) {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return fallback
+  return Math.min(Math.max(number, min), max)
 }
 
 function requiredEnv(key: string) {

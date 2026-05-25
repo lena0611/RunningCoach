@@ -1,4 +1,5 @@
 import { requireSupabase } from '@/shared/api/supabase'
+import type { WeatherSnapshot } from '@/features/import-weatherkit/weatherKitBridge'
 
 export type CoachReport = {
   id: string
@@ -19,11 +20,12 @@ type CoachReportRow = {
   updated_at?: string
 }
 
-export async function requestCoachRun(selectedRunId: string | null, userNote: string): Promise<CoachReport> {
+export async function requestCoachRun(selectedRunId: string | null, userNote: string, currentWeather: WeatherSnapshot | null = null): Promise<CoachReport> {
   const { data, error } = await requireSupabase().functions.invoke('coach-run', {
     body: {
       selectedRunId,
       userNote,
+      currentWeather: summarizeWeatherForCoach(currentWeather),
       responseStyle: {
         tone: 'conversational_coach',
         format: 'sectioned_markdown',
@@ -37,6 +39,35 @@ export async function requestCoachRun(selectedRunId: string | null, userNote: st
   if (error) throw error
   if (!data?.report) throw new Error('AI 코칭 응답이 비어 있습니다.')
   return data.report as CoachReport
+}
+
+function summarizeWeatherForCoach(snapshot: WeatherSnapshot | null) {
+  if (!snapshot) return null
+  const upcomingHours = snapshot.hourly.slice(0, 12)
+  const maxPrecipitationChance = Math.max(0, ...upcomingHours.map((hour) => hour.precipitationChance ?? 0))
+  const precipitationAmountMm = Math.round(upcomingHours.reduce((sum, hour) => sum + (hour.precipitationAmountMm ?? 0), 0) * 10) / 10
+  const rainHours = upcomingHours
+    .filter((hour) => (hour.precipitationChance ?? 0) >= 0.35 || (hour.precipitationAmountMm ?? 0) >= 0.1)
+    .map((hour) => hour.time)
+
+  return {
+    source: 'ios_weatherkit',
+    observedAt: snapshot.observedAt,
+    locationName: snapshot.locationName,
+    current: {
+      temperatureC: snapshot.current.temperatureC,
+      apparentTemperatureC: snapshot.current.apparentTemperatureC,
+      humidity: snapshot.current.humidity,
+      windMps: snapshot.current.windMps,
+      condition: snapshot.current.condition,
+      symbolName: snapshot.current.symbolName
+    },
+    next12Hours: {
+      maxPrecipitationChance,
+      precipitationAmountMm,
+      rainHours
+    }
+  }
 }
 
 export async function fetchCoachReports(): Promise<CoachReport[]> {

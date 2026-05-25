@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { useWeatherStore } from '@/app/stores/weatherStore'
 import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
 import { fetchCoachReports, requestCoachRun, type CoachReport } from '@/shared/api/coachRepository'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
@@ -16,6 +17,7 @@ import SectionHeader from '@/shared/ui/SectionHeader.vue'
 
 const runStore = useRunStore()
 const memoryStore = useMemoryStore()
+const weatherStore = useWeatherStore()
 const selectedRunId = ref('')
 const userNote = ref('')
 const loading = ref(false)
@@ -49,7 +51,7 @@ async function coach() {
   loading.value = true
   error.value = ''
   try {
-    const report = await requestCoachRun(selectedRunId.value || null, userNote.value)
+    const report = await requestCoachRun(selectedRunId.value || null, userNote.value, weatherStore.snapshot)
     reports.value = [
       report,
       ...reports.value.filter((item) => {
@@ -82,7 +84,7 @@ async function coach() {
       <BottomSheetSelect v-model="selectedRunId" label="선택 RunLog" :options="runOptions" />
       <section v-if="selectedRun" class="sub-panel">
         <strong>{{ formatDateWithWeekday(selectedRun.date) }} · {{ selectedRun.sessionTitle || selectedRun.type }}</strong>
-        <p>{{ selectedRun.distanceKm }}km · {{ formatDuration(selectedRun.durationSec) }} · {{ formatPace(selectedRun.avgPaceSec) }}/km · HR {{ selectedRun.avgHeartRate ?? '-' }}</p>
+        <p>{{ selectedRun.distanceKm }}km · {{ formatDuration(selectedRun.durationSec) }} · {{ formatPace(selectedRun.avgPaceSec) }}/km · HR {{ selectedRun.avgHeartRate ?? '-' }} · Cad {{ selectedRun.cadence ?? '-' }}</p>
         <p v-if="selectedRun.memo">{{ selectedRun.memo }}</p>
         <p v-if="selectedRun.workoutFeeling" class="helper">느낌: {{ selectedRun.workoutFeeling }}</p>
       </section>
