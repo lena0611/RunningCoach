@@ -37,6 +37,8 @@
 
 ## 검증 명령
 - 기본 검증: `npm run build`
+- 단위/컴포넌트 회귀 검증: `npm run test:run`
+- 모바일 E2E smoke 검증: `npm run e2e`
 - 하네스 검증: `npm run harness:check`
 - 하네스 문맥 확인이 필요한 큰 변경: `npm run harness:context -- "<작업 설명>"`
 
@@ -48,6 +50,13 @@
 3. 통합 테스트: API, 저장소, 외부 연동 경계 검증
 4. E2E 테스트: 주요 사용자/운영 흐름 검증
 5. 테스트 보류: 사유와 재검토 조건을 `decision-log.md`에 기록
+
+## 회귀 테스트 기준
+- 계산/포맷/추천 로직을 바꾸면 Vitest 단위 테스트를 먼저 추가하거나 갱신한다.
+- 반복 UI 버그가 있었던 `BottomSheetSelect`, 날짜 표시, 페이스/시간 표시, Run Log action, stack header는 컴포넌트 테스트 대상이다.
+- 라우팅/접근 제어/모바일 셸이 바뀌면 Playwright E2E smoke를 갱신한다.
+- Supabase, HealthKit, OpenAI 같은 외부 경계는 직접 호출하지 않고 adapter/mock 경계로 테스트한다.
+- 신규 기능이 회귀 위험이 높은 화면 흐름을 추가하면 `build`만으로 완료하지 않고 `test:run` 또는 `e2e` 중 최소 하나를 함께 통과시킨다.
 
 ## 변경 규칙
 - 작업 흐름이 바뀌면 README, CI, hook, `harness:check` 명령과 함께 검토합니다.

@@ -7,6 +7,9 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview --host 0.0.0.0",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "e2e": "playwright test",
     "harness:guide": "node .harness/bin/check-node-version.mjs && node .harness/bin/harness-guide.mjs",
     "harness:scan": "node .harness/bin/check-node-version.mjs && node .harness/bin/scan-project.mjs --write",
     "harness:handoff": "node .harness/bin/check-node-version.mjs && node .harness/bin/handoff.mjs --write",
@@ -40,6 +43,10 @@
     "vue-tsc": "^3.1.5"
   },
   "devDependencies": {
-    "@types/node": "^24.10.1"
+    "@playwright/test": "^1.60.0",
+    "@types/node": "^24.10.1",
+    "@vue/test-utils": "^2.4.10",
+    "jsdom": "^29.1.1",
+    "vitest": "^4.1.7"
   }
 }

@@ -5,6 +5,8 @@ dist
 .idea/
 *.log
 *.tsbuildinfo
+test-results/
+playwright-report/
 supabase/.temp/
 
 # harness-seed generated artifacts

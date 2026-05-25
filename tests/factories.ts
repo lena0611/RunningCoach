@@ -1,0 +1,40 @@
+import type { RunLog } from '@/entities/run/model'
+
+export function makeRun(overrides: Partial<RunLog> = {}): RunLog {
+  const now = '2026-05-25T00:00:00.000Z'
+  return {
+    id: overrides.id ?? `run-${Math.random().toString(36).slice(2)}`,
+    userId: 'user-1',
+    externalId: null,
+    sessionTitle: '',
+    date: '2026-05-24',
+    type: 'Easy',
+    distanceKm: 5,
+    durationSec: 2400,
+    avgPaceSec: 480,
+    avgHeartRate: 130,
+    maxHeartRate: 145,
+    cadence: 165,
+    temperature: null,
+    humidity: null,
+    windMps: null,
+    elevationGainM: null,
+    elevationLossM: null,
+    courseType: 'Unknown',
+    rpe: null,
+    workoutFeeling: '',
+    painNote: '',
+    sleepQuality: null,
+    conditionScore: null,
+    stressLevel: null,
+    companion: '',
+    memo: '',
+    laps: [],
+    fastSegments: [],
+    tags: [],
+    source: 'manual',
+    createdAt: now,
+    updatedAt: now,
+    ...overrides
+  }
+}
