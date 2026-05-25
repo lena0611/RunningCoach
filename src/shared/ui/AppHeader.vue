@@ -26,8 +26,8 @@ const sexOptions = [
   { value: 'other', label: '기타' }
 ]
 const themeModeOptions = [
-  { value: 'light', label: '데이 버전', description: '밝은 배경과 선명한 텍스트를 사용합니다.' },
-  { value: 'dark', label: '나이트 버전', description: '어두운 배경과 낮은 눈부심을 사용합니다.' }
+  { value: 'light', label: '라이트', description: '밝은 배경과 선명한 텍스트를 사용합니다.' },
+  { value: 'dark', label: '다크', description: '어두운 배경과 낮은 눈부심을 사용합니다.' }
 ]
 
 const accountLabel = computed(() => {
@@ -288,7 +288,7 @@ function setThemeMode(value: string) {
               @update:model-value="setThemeMode"
             />
 
-            <p class="helper">현재 적용: {{ settingsStore.effectiveTheme === 'light' ? '데이 버전' : '나이트 버전' }}</p>
+            <p class="helper">현재 적용: {{ settingsStore.effectiveTheme === 'light' ? '라이트' : '다크' }}</p>
           </section>
         </section>
       </aside>
