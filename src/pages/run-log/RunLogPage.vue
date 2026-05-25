@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { useRunStore } from '@/app/stores/runStore'
 import { runTypes, type RunLog, type RunType } from '@/entities/run/model'
+import UploadRunPage from '@/pages/upload-run/UploadRunPage.vue'
 import { fetchCoachReports, requestCoachRun, type CoachReport } from '@/shared/api/coachRepository'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
@@ -16,13 +16,13 @@ import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 
 const runStore = useRunStore()
-const router = useRouter()
 const selectedType = ref<RunType | 'All'>('All')
 const selectedDate = ref<string | null>(null)
 const visibleCount = ref(10)
 const loadMoreRef = ref<HTMLElement | null>(null)
 const observer = ref<IntersectionObserver | null>(null)
 const detailRun = ref<RunLog | null>(null)
+const addingRun = ref(false)
 const editing = ref<RunLog | null>(null)
 const editSnapshot = ref('')
 const coachRun = ref<RunLog | null>(null)
@@ -50,7 +50,7 @@ const filteredRuns = computed(() => {
 const visibleRuns = computed(() => filteredRuns.value.slice(0, visibleCount.value))
 const hasMoreRuns = computed(() => visibleCount.value < filteredRuns.value.length)
 const isEditDirty = computed(() => Boolean(editing.value) && JSON.stringify(editing.value) !== editSnapshot.value)
-const openStack = computed(() => Boolean(detailRun.value || editing.value || coachRun.value))
+const openStack = computed(() => Boolean(detailRun.value || addingRun.value || editing.value || coachRun.value))
 const runsByDate = computed(() => {
   const map = new Map<string, RunLog[]>()
   for (const run of runStore.sortedRuns) {
@@ -128,6 +128,18 @@ function openDetail(run: RunLog) {
 
 function closeDetail() {
   detailRun.value = null
+}
+
+function openAddRun() {
+  error.value = ''
+  addingRun.value = true
+}
+
+async function closeAddRun(saved = false) {
+  addingRun.value = false
+  if (saved) {
+    await runStore.load()
+  }
 }
 
 function startEdit(run: RunLog) {
@@ -248,7 +260,7 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
       <div class="section-heading">
         <h2>Run Log</h2>
         <div class="run-log-heading-actions">
-          <button class="icon-link-button" type="button" aria-label="기록 추가" @click="router.push('/upload')">
+          <button class="icon-link-button" type="button" aria-label="기록 추가" @click="openAddRun">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
           </button>
           <BottomSheetSelect v-model="selectedType" label="세션 타입" :options="filterOptions" compact />
@@ -402,6 +414,28 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
             </div>
           </main>
         </section>
+        </div>
+      </Transition>
+
+      <Transition name="stack-page">
+        <div v-if="addingRun" class="memory-stack-layer stack-layer-top" data-no-swipe>
+          <section class="memory-stack-page">
+            <header class="memory-stack-header">
+              <button class="stack-icon-button" type="button" aria-label="뒤로" @click="closeAddRun(false)">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+              </button>
+              <div>
+                <p class="eyebrow">Run Log</p>
+                <h2>기록 추가</h2>
+              </div>
+              <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeAddRun(false)">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+              </button>
+            </header>
+            <main class="memory-stack-content">
+              <UploadRunPage stack-mode @saved="closeAddRun(true)" />
+            </main>
+          </section>
         </div>
       </Transition>
 

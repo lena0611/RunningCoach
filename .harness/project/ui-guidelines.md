@@ -100,6 +100,7 @@ New page work should reuse these before adding page-specific layout.
 - `Top`: Use `AppHeader` for root screens and stack headers for deep screens. Header copy must be compact: small service label, large page title, and one right-side action.
 - `ListRow`: Use for logs, goals, injuries, account details, and other repeated navigable items. Do not turn every row into a heavy card.
 - `Button`: Primary is filled green, secondary is weak/neutral, danger is weak red unless the destructive action is inside a confirmation sheet.
+- TDS-inspired tone should prefer grey-scale surfaces, weak/filled action hierarchy, and hairline-level dividers over visible boxed borders. Use background, spacing, typography, and subtle shadows to separate sections before adding borders.
 - `TextField`: Use box-style inputs with persistent labels. iOS zoom prevention requires 16px or larger input text.
 - `BottomSheet`: Use for selection and delete confirmation. It must be Teleported or root-hosted above all stacks.
 - Selection bottom sheets should render options as compact rows inside one grouped surface with dividers. Avoid separate card styling for every option unless the option contains rich multi-line content.

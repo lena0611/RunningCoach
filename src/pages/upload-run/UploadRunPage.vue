@@ -10,6 +10,8 @@ import type { ExtractedRunData } from '@/entities/run/model'
 import { createEmptyRun, extractRunDataFromFile } from '@/features/extract-run-data/localFileExtractor'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 
+const props = defineProps<{ stackMode?: boolean }>()
+const emit = defineEmits<{ saved: [] }>()
 const router = useRouter()
 const runStore = useRunStore()
 const healthKitSyncStore = useHealthKitSyncStore()
@@ -56,7 +58,11 @@ async function save() {
     form.value = null
     currentSource.value = 'file_import'
     uploader.value?.clear()
-    router.push('/runs')
+    if (props.stackMode) {
+      emit('saved')
+    } else {
+      router.push('/runs')
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : '저장 실패'
   } finally {
@@ -66,7 +72,7 @@ async function save() {
 </script>
 
 <template>
-  <section class="page upload-page">
+  <section class="upload-page" :class="{ page: !stackMode }">
     <SectionCard>
       <div class="section-heading">
         <h2>HealthKit 자동 동기화</h2>
