@@ -32,6 +32,13 @@ type RunLogRow = {
   source: string
 }
 
+type CoachReportRow = {
+  selected_run_id: string | null
+  user_note: string
+  report: string
+  created_at: string
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -143,9 +150,10 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
     admin.from('training_memory').select('memory').eq('user_id', userId).maybeSingle(),
     admin.from('run_logs').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(120),
     admin.from('coach_memory_items').select('content, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(40),
-    admin.from('coach_reports').select('selected_run_id, user_note, report, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(40)
+    admin.from('coach_reports').select('selected_run_id, user_note, report, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(80)
   ])
   const runRows = (runs ?? []) as RunLogRow[]
+  const reportRows = (reports ?? []) as CoachReportRow[]
   const selectedRun = selectedRunId ? runRows.find((run) => run.id === selectedRunId) ?? null : null
   const currentDate = currentDateInSeoul()
   const anchorDate = selectedRun?.date ?? currentDate
@@ -181,14 +189,15 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
     injuryItems,
     activeInjuryItem,
     coachMemoryItems: (memoryItems ?? []).map((item) => item.content),
-    recentCoachReports: (reports ?? []).slice(0, 5).map((report) => ({
+    recentCoachReports: reportRows.slice(0, 5).map((report) => ({
       selectedRunId: report.selected_run_id,
       userNote: report.user_note,
       createdAt: report.created_at,
       createdAtDisplay: formatDateTimeWithWeekday(report.created_at)
     })),
+    similarPastCoachSnippets: buildSimilarPastCoachSnippets(selectedRun, runRows, reportRows),
     selectedRunCoachThread: selectedRunId
-      ? (reports ?? [])
+      ? reportRows
           .filter((report) => report.selected_run_id === selectedRunId)
           .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
           .slice(-12)
@@ -240,6 +249,8 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     '사용자가 이미 아는 정보를 길게 반복하지 않는다.',
     'context.selectedRunCoachThread는 같은 세션에서 이미 나눈 코칭 대화다. 이 목록이 있으면 이전 답변을 다시 리포트처럼 반복하지 말고, 사용자의 새 질문/메모에 이어서 답한다.',
     '같은 세션의 추가 대화에서는 필요한 핵심만 짧게 답하고, 이전 평가를 바꿔야 할 때만 "아까 답에서 이 부분은 이렇게 보정된다"처럼 자연스럽게 수정한다.',
+    'context.similarPastCoachSnippets는 다른 세션 중 현재 선택 세션과 타입/요일/거리/메모가 비슷한 과거 코칭 요약이다. 전체 대화 전문이 아니라 비용을 줄이기 위해 짧게 잘린 참고 자료다.',
+    'similarPastCoachSnippets는 사용자의 반복 패턴과 이전 해석 톤을 떠올리는 데만 사용한다. 현재 선택 세션의 숫자와 날짜보다 우선하지 않는다.',
     '숫자는 근거로 쓰되, 사람처럼 해석한다.',
     '핵심 지표는 짧은 목록으로만 보여준다. 문장 속에 숫자를 길게 묻지 않는다.',
     '답변 우선순위는 오늘 세션의 정체, 사용자가 의도한 훈련과 맞는지, 중요한 지표 2~3개, 최근 맥락, 조심할 점, 다음 훈련 순서다.',
@@ -350,6 +361,95 @@ function mergeTrainingMemoryPatch(memory: CoachContext['trainingMemory'], patch:
 function mergeAiNotes(current: unknown, next: string[]) {
   const currentItems = Array.isArray(current) ? current.filter((item) => typeof item === 'string') as string[] : []
   return [...next, ...currentItems.filter((item) => !next.includes(item))].slice(0, 30)
+}
+
+function buildSimilarPastCoachSnippets(selectedRun: RunLogRow | null, runs: RunLogRow[], reports: CoachReportRow[]) {
+  if (!selectedRun) return []
+  const runsById = new Map(runs.map((run) => [run.id, run]))
+  const selectedWeekday = parseDateOnly(selectedRun.date).getUTCDay()
+  const selectedTags = extractContextTags(`${selectedRun.session_title ?? ''} ${selectedRun.type} ${selectedRun.memo}`)
+
+  return reports
+    .filter((report) => report.selected_run_id && report.selected_run_id !== selectedRun.id)
+    .map((report) => {
+      const run = runsById.get(report.selected_run_id as string)
+      if (!run) return null
+      const score = scoreSimilarRun(selectedRun, run, selectedWeekday, selectedTags, report.user_note)
+      if (score <= 0) return null
+      return {
+        score,
+        selectedRunId: report.selected_run_id,
+        runDate: run.date,
+        runDateDisplay: formatDateWithWeekday(run.date),
+        runType: run.type,
+        runTitle: run.session_title || run.type,
+        distanceKm: run.distance_km,
+        avgPaceSec: run.avg_pace_sec,
+        avgHeartRate: run.avg_heart_rate,
+        userNote: truncateText(report.user_note, 180),
+        coachSummary: truncateText(report.report, 700),
+        createdAtDisplay: formatDateTimeWithWeekday(report.created_at)
+      }
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5)
+    .map(({ score: _score, ...item }) => item)
+}
+
+function scoreSimilarRun(selectedRun: RunLogRow, run: RunLogRow, selectedWeekday: number, selectedTags: Set<string>, userNote: string) {
+  let score = 0
+  if (run.type === selectedRun.type) score += 5
+  if (sessionGroup(run.type) === sessionGroup(selectedRun.type)) score += 3
+  if (parseDateOnly(run.date).getUTCDay() === selectedWeekday) score += 1
+
+  const selectedDistance = Number(selectedRun.distance_km)
+  const distance = Number(run.distance_km)
+  if (Number.isFinite(selectedDistance) && Number.isFinite(distance)) {
+    const diff = Math.abs(selectedDistance - distance)
+    if (diff <= 1) score += 3
+    else if (diff <= 3) score += 2
+    else if (diff <= 5) score += 1
+  }
+
+  const tags = extractContextTags(`${run.session_title ?? ''} ${run.type} ${run.memo} ${userNote}`)
+  for (const tag of selectedTags) {
+    if (tags.has(tag)) score += 2
+  }
+
+  return score
+}
+
+function sessionGroup(type: string) {
+  if (['LSD', 'Steady Long'].includes(type)) return 'long'
+  if (['Easy', 'Recovery', 'Easy + Strides'].includes(type)) return 'easy'
+  if (['Tempo', 'Race'].includes(type)) return 'quality'
+  return type
+}
+
+function extractContextTags(value: string) {
+  const tags = new Set<string>()
+  const lower = value.toLowerCase()
+  const checks: Array<[string, string[]]> = [
+    ['partner_run', ['와이프', '배우자', '동반']],
+    ['recovery', ['회복', 'recovery']],
+    ['foot_pain', ['발바닥', '족저', 'foot']],
+    ['hamstring', ['햄스트링', 'hamstring']],
+    ['heat', ['더위', '덥', '30도', 'heat']],
+    ['stride', ['스트라이드', 'stride']],
+    ['tempo', ['템포', 'tempo']],
+    ['long_run', ['롱런', 'lsd', 'long', 'steady']]
+  ]
+  for (const [tag, keywords] of checks) {
+    if (keywords.some((keyword) => lower.includes(keyword))) tags.add(tag)
+  }
+  return tags
+}
+
+function truncateText(value: string | null | undefined, maxLength: number) {
+  const text = (value ?? '').replace(/\s+/g, ' ').trim()
+  if (text.length <= maxLength) return text
+  return `${text.slice(0, maxLength).trim()}...`
 }
 
 function withinDaysFromAnchor(runs: RunLogRow[], days: number, anchorDate: string) {
