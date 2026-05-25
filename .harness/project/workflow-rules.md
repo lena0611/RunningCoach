@@ -16,6 +16,7 @@
 - FIT import 결과가 거리, 시간, 페이스, 심박, 케이던스를 일관되게 계산하는지 확인한다.
 - 저장 데이터 스키마 변경은 기존 로컬 데이터 호환성을 검토한다.
 - Supabase 스키마 변경은 migration, repository 매핑, RLS/중복 방지, Edge Function 컨텍스트를 함께 확인한다.
+- Vue 앱 부트스트랩은 인증/DB/HealthKit 같은 외부 I/O가 완료될 때까지 mount를 막지 않는다. 초기 인증은 짧은 timeout으로 제한하고, RunLog/Memory 동기화는 화면 mount 이후 store error 상태로 처리한다.
 - 코칭 규칙 변경은 사용자 목표, 최근 기록, 부상/더위 제약과 충돌하지 않는지 확인한다.
 - AI 코칭 변경은 선택 기록 날짜와 코칭 생성 시각을 혼동하지 않는지 확인한다.
 - RunLog 기반 화면 변경은 Dashboard, Run Log, Coach가 같은 저장소 데이터를 일관되게 읽는지 확인한다.
