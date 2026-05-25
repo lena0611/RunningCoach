@@ -776,6 +776,21 @@ label {
   line-height: 1;
 }
 
+.stat-card-value {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.stat-card-value small {
+  color: currentColor;
+  font-size: 0.52em;
+  font-weight: 900;
+  line-height: 1;
+}
+
 .stat-card small,
 .metric small,
 .run-row small,

@@ -22,6 +22,7 @@ RunContext is a personal running coach app, not an admin dashboard.
 - Typography must use a small set of shared scale tokens: display, title, body, caption, and metric. Avoid one-off font-size values in page components unless the component is genuinely unique.
 - Light mode must be checked separately from dark mode. Buttons need explicit foreground contrast, and cards/nav should look clean white rather than washed-out green-gray.
 - Important metrics use large, bold numerals.
+- Metric units such as `km`, `%`, and `회` must render smaller than the number and should not be concatenated at the same visual size in compact cards.
 - Supporting labels and metadata are smaller and muted.
 - Cards should have generous spacing, soft borders, and `--radius-card`.
 - Repeated list content should prefer a ListRow pattern over mini cards: primary title, muted detail, optional right metric/addon, and a clear press/action target.
