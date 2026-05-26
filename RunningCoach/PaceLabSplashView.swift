@@ -63,27 +63,40 @@ private struct PaceLabMark: View {
     var body: some View {
         GeometryReader { proxy in
             let size = min(proxy.size.width, proxy.size.height)
-            let line = size * 0.105
+            let lime = Color(red: 214 / 255, green: 255 / 255, blue: 53 / 255)
             ZStack {
+                Path { path in
+                    path.move(to: CGPoint(x: size * 0.31, y: size * 0.26))
+                    path.addCurve(
+                        to: CGPoint(x: size * 0.57, y: size * 0.22),
+                        control1: CGPoint(x: size * 0.36, y: size * 0.16),
+                        control2: CGPoint(x: size * 0.49, y: size * 0.16)
+                    )
+                    path.move(to: CGPoint(x: size * 0.56, y: size * 0.22))
+                    path.addLine(to: CGPoint(x: size * 0.69, y: size * 0.22))
+                }
+                .stroke(lime, style: StrokeStyle(lineWidth: size * 0.065, lineCap: .round, lineJoin: .round))
+
                 Circle()
-                    .stroke(Color(red: 214 / 255, green: 255 / 255, blue: 53 / 255), lineWidth: line)
-                    .frame(width: size * 0.72, height: size * 0.72)
-                Circle()
-                    .stroke(Color(red: 214 / 255, green: 255 / 255, blue: 53 / 255), lineWidth: line * 0.78)
-                    .frame(width: size * 0.37, height: size * 0.37)
-                Circle()
-                    .fill(Color(red: 214 / 255, green: 255 / 255, blue: 53 / 255))
-                    .frame(width: size * 0.11, height: size * 0.11)
-                Capsule()
-                    .fill(Color(red: 7 / 255, green: 11 / 255, blue: 18 / 255))
-                    .frame(width: size * 0.5, height: line * 1.25)
-                    .rotationEffect(.degrees(-45))
-                    .offset(x: size * 0.15, y: -size * 0.15)
-                Capsule()
-                    .fill(Color(red: 214 / 255, green: 255 / 255, blue: 53 / 255))
-                    .frame(width: size * 0.47, height: line * 0.55)
-                    .rotationEffect(.degrees(-45))
-                    .offset(x: size * 0.15, y: -size * 0.15)
+                    .fill(lime)
+                    .frame(width: size * 0.16, height: size * 0.16)
+                    .position(x: size * 0.49, y: size * 0.31)
+
+                Path { path in
+                    path.move(to: CGPoint(x: size * 0.50, y: size * 0.44))
+                    path.addLine(to: CGPoint(x: size * 0.42, y: size * 0.58))
+                    path.addLine(to: CGPoint(x: size * 0.56, y: size * 0.64))
+                    path.move(to: CGPoint(x: size * 0.45, y: size * 0.53))
+                    path.addLine(to: CGPoint(x: size * 0.30, y: size * 0.55))
+                    path.move(to: CGPoint(x: size * 0.56, y: size * 0.64))
+                    path.addLine(to: CGPoint(x: size * 0.47, y: size * 0.81))
+                    path.move(to: CGPoint(x: size * 0.58, y: size * 0.65))
+                    path.addLine(to: CGPoint(x: size * 0.75, y: size * 0.71))
+                    path.move(to: CGPoint(x: size * 0.50, y: size * 0.45))
+                    path.addLine(to: CGPoint(x: size * 0.66, y: size * 0.49))
+                    path.addLine(to: CGPoint(x: size * 0.76, y: size * 0.38))
+                }
+                .stroke(lime, style: StrokeStyle(lineWidth: size * 0.075, lineCap: .round, lineJoin: .round))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
