@@ -76,7 +76,7 @@ export async function requestOpenMeteoForecast(): Promise<WeatherSnapshot> {
   })
 
   const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`)
-  if (!response.ok) throw new Error(`기상정보 요청 실패 (${response.status})`)
+  if (!response.ok) throw new Error(`날씨 요청 실패 (${response.status})`)
   const data = (await response.json()) as OpenMeteoForecastResponse
   return toWeatherSnapshot(data)
 }
@@ -159,7 +159,7 @@ function weatherCodeToCondition(code: number | null) {
   if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return '비'
   if ([71, 73, 75, 77, 85, 86].includes(code)) return '눈'
   if ([95, 96, 99].includes(code)) return '뇌우'
-  return '기상 변화'
+  return '날씨 변화'
 }
 
 function weatherCodeToSymbol(code: number | null, isDaylight: boolean) {

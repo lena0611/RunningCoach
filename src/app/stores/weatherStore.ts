@@ -89,7 +89,7 @@ export const useWeatherStore = defineStore('weatherStore', {
     },
     handleError(message: string) {
       this.loading = false
-      this.error = message || '기상정보 가져오기 실패'
+      this.error = message || '날씨 가져오기 실패'
       useToastStore().error(this.error, {
         placement: 'top',
         delayMs: 280,
@@ -101,11 +101,11 @@ export const useWeatherStore = defineStore('weatherStore', {
 
 function formatWeatherError(err: unknown) {
   if (isGeolocationError(err)) {
-    if (err.code === 1) return '위치 권한이 거부되어 기상정보를 가져오지 못했습니다.'
+    if (err.code === 1) return '위치 권한이 거부되어 날씨를 가져오지 못했습니다.'
     if (err.code === 2) return '현재 위치를 확인하지 못했습니다.'
     if (err.code === 3) return '위치 확인 시간이 초과되었습니다.'
   }
-  return err instanceof Error ? err.message : '기상정보 요청 실패'
+  return err instanceof Error ? err.message : '날씨 요청 실패'
 }
 
 function isGeolocationError(err: unknown): err is { code: number } {

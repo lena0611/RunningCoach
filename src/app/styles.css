@@ -2405,8 +2405,10 @@ button.stat-card {
 
 .weather-current > div {
   display: grid;
+  align-content: center;
   gap: 5px;
   min-width: 0;
+  min-height: 84px;
   padding: 12px;
   border-radius: 18px;
   background: var(--color-subtle);
@@ -2425,8 +2427,17 @@ button.stat-card {
 }
 
 .weather-symbol {
-  font-size: 22px;
+  flex: 0 0 auto;
+  font-size: 20px;
   line-height: 1;
+}
+
+.weather-value-inline {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .weather-advice {

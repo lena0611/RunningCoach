@@ -57,7 +57,7 @@ export function registerWeatherKitBridge(handlers: WeatherKitBridgeHandlers) {
       handlers.onForecast(normalizeSnapshot(snapshot))
     },
     receiveError(message) {
-      handlers.onError(message || '기상정보 가져오기 실패')
+      handlers.onError(message || '날씨 가져오기 실패')
     }
   }
 }

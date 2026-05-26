@@ -11,7 +11,7 @@ export function getRunningWeatherAdvice(snapshot: WeatherSnapshot | null): Runni
   if (!snapshot) {
     return {
       level: 'unknown',
-      title: '기상정보 대기',
+      title: '날씨 대기',
       summary: '위치 권한을 허용하면 무료 Open-Meteo 예보로 다음 세션 준비를 보여줍니다.',
       bullets: ['체감온도', '강수확률', '강수량/강수시간']
     }
@@ -56,7 +56,7 @@ export function getRunningWeatherAdvice(snapshot: WeatherSnapshot | null): Runni
   return {
     level: 'good',
     title: '러닝하기 무난',
-    summary: apparent !== null ? `체감 ${Math.round(apparent)}도 기준으로 무난합니다.` : '현재 기상 조건은 큰 부담이 없어 보입니다.',
+    summary: apparent !== null ? `체감 ${Math.round(apparent)}도 기준으로 무난합니다.` : '현재 날씨 조건은 큰 부담이 없어 보입니다.',
     bullets: [`${rainSummary}`, `예상 강수량 ${rainAmount}mm`, maxRainChance ? `최대 강수확률 ${Math.round(maxRainChance * 100)}%` : '강수확률 낮음']
   }
 }

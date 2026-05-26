@@ -49,7 +49,7 @@ function formatLocalDate(value: Date) {
 
 <template>
   <div class="weather-card" :class="`weather-card-${advice.level}`">
-    <SectionHeader title="다음 세션 기상">
+    <SectionHeader title="다음 세션 날씨">
       <button class="ghost compact-action" type="button" :disabled="loading" @click="emit('refresh')">
         {{ loading ? '확인 중' : '새로고침' }}
       </button>
@@ -58,8 +58,10 @@ function formatLocalDate(value: Date) {
 
     <div v-if="snapshot && (!targetDaily || isTargetToday)" class="weather-current">
       <div>
-        <span class="weather-symbol">{{ weatherSymbolToEmoji(snapshot.current.symbolName) }}</span>
-        <strong>{{ formatWeatherNumber(snapshot.current.temperatureC, '°') }}</strong>
+        <strong class="weather-value-inline">
+          <span class="weather-symbol">{{ weatherSymbolToEmoji(snapshot.current.symbolName) }}</span>
+          {{ formatWeatherNumber(snapshot.current.temperatureC, '°') }}
+        </strong>
         <small>실제 온도</small>
       </div>
       <div>
@@ -78,8 +80,10 @@ function formatLocalDate(value: Date) {
 
     <div v-if="snapshot && targetDaily && !isTargetToday" class="weather-current">
       <div>
-        <span class="weather-symbol">{{ weatherSymbolToEmoji(targetDaily.symbolName) }}</span>
-        <strong>{{ formatWeatherNumber(targetDaily.maxTemperatureC, '°') }}</strong>
+        <strong class="weather-value-inline">
+          <span class="weather-symbol">{{ weatherSymbolToEmoji(targetDaily.symbolName) }}</span>
+          {{ formatWeatherNumber(targetDaily.maxTemperatureC, '°') }}
+        </strong>
         <small>최고 온도</small>
       </div>
       <div>
@@ -115,7 +119,7 @@ function formatLocalDate(value: Date) {
     <p v-if="error" class="error">{{ error }}</p>
     <EmptyState
       v-if="!snapshot && !loading"
-      title="기상정보 연결 전입니다."
+      title="날씨 연결 전입니다."
       description="위치 권한을 허용하면 무료 Open-Meteo 예보로 체감온도와 강수 시간을 홈에서 같이 봅니다."
     />
   </div>
