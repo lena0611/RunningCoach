@@ -85,6 +85,30 @@ final class HealthKitRunImporter {
         }
     }
 
+    func fetchRunningWorkout(externalId: String, completion: @escaping (Result<HealthKitRunCandidate, Error>) -> Void) {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            print("[RunContext HealthKit] Health data unavailable")
+            completion(.failure(HealthKitImportError.healthDataUnavailable))
+            return
+        }
+
+        guard let uuid = UUID(uuidString: externalId) else {
+            completion(.failure(HealthKitImportError.invalidExternalId))
+            return
+        }
+
+        requestAuthorization { [weak self] result in
+            switch result {
+            case .success:
+                print("[RunContext HealthKit] authorization success")
+                self?.queryRunningWorkout(uuid: uuid, completion: completion)
+            case .failure(let error):
+                print("[RunContext HealthKit] authorization failed:", error.localizedDescription)
+                completion(.failure(error))
+            }
+        }
+    }
+
     private func requestAuthorization(completion: @escaping (Result<Void, Error>) -> Void) {
         let readTypes = Set(healthTypesToRead())
         healthStore.requestAuthorization(toShare: [], read: readTypes) { success, error in
@@ -134,6 +158,30 @@ final class HealthKitRunImporter {
             let workouts = (samples as? [HKWorkout]) ?? []
             print("[RunContext HealthKit] workouts=\(workouts.count)")
             self?.buildCandidates(from: workouts, completion: completion)
+        }
+
+        healthStore.execute(query)
+    }
+
+    private func queryRunningWorkout(uuid: UUID, completion: @escaping (Result<HealthKitRunCandidate, Error>) -> Void) {
+        let objectPredicate = HKQuery.predicateForObject(with: uuid)
+        let runningPredicate = HKQuery.predicateForWorkouts(with: .running)
+        let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [objectPredicate, runningPredicate])
+
+        let query = HKSampleQuery(sampleType: HKObjectType.workoutType(), predicate: predicate, limit: 1, sortDescriptors: nil) { [weak self] _, samples, error in
+            if let error {
+                completion(.failure(error))
+                return
+            }
+
+            guard let workout = (samples as? [HKWorkout])?.first else {
+                completion(.failure(HealthKitImportError.workoutNotFound))
+                return
+            }
+
+            self?.buildCandidate(from: workout) { candidate in
+                completion(.success(candidate))
+            }
         }
 
         healthStore.execute(query)
@@ -610,6 +658,8 @@ final class HealthKitRunImporter {
 enum HealthKitImportError: LocalizedError {
     case healthDataUnavailable
     case authorizationDenied
+    case invalidExternalId
+    case workoutNotFound
 
     var errorDescription: String? {
         switch self {
@@ -617,6 +667,10 @@ enum HealthKitImportError: LocalizedError {
             return "이 기기에서 HealthKit을 사용할 수 없습니다."
         case .authorizationDenied:
             return "HealthKit 권한이 허용되지 않았습니다."
+        case .invalidExternalId:
+            return "HealthKit 원본 ID 형식이 올바르지 않습니다."
+        case .workoutNotFound:
+            return "HealthKit에서 해당 러닝 세션을 찾지 못했습니다."
         }
     }
 }

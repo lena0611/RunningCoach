@@ -58,25 +58,50 @@ struct RunContextWebView: UIViewRepresentable {
 
             guard message.name == "runContextHealthKit" else { return }
             guard let body = message.body as? [String: Any],
-                  let type = body["type"] as? String,
-                  type == "requestRecentRunningWorkouts" else {
+                  let type = body["type"] as? String else {
                 sendError("지원하지 않는 HealthKit 요청입니다.")
                 return
             }
 
-            let days = body["days"] as? Int ?? 14
-            print("[RunContext HealthKit] requestRecentRunningWorkouts days=\(days)")
-            importer.fetchRecentRunningWorkouts(days: days) { [weak self] result in
-                DispatchQueue.main.async {
-                    switch result {
-                    case .success(let candidates):
-                        print("[RunContext HealthKit] fetched candidates=\(candidates.count)")
-                        self?.sendRuns(candidates)
-                    case .failure(let error):
-                        print("[RunContext HealthKit] failed:", error.localizedDescription)
-                        self?.sendError(error.localizedDescription)
+            switch type {
+            case "requestRecentRunningWorkouts":
+                let days = body["days"] as? Int ?? 14
+                print("[RunContext HealthKit] requestRecentRunningWorkouts days=\(days)")
+                importer.fetchRecentRunningWorkouts(days: days) { [weak self] result in
+                    DispatchQueue.main.async {
+                        switch result {
+                        case .success(let candidates):
+                            print("[RunContext HealthKit] fetched candidates=\(candidates.count)")
+                            self?.sendRuns(candidates)
+                        case .failure(let error):
+                            print("[RunContext HealthKit] failed:", error.localizedDescription)
+                            self?.sendError(error.localizedDescription)
+                        }
                     }
                 }
+
+            case "requestRunningWorkoutByExternalId":
+                guard let externalId = body["externalId"] as? String, !externalId.isEmpty else {
+                    sendRunUpdateError(externalId: nil, message: "HealthKit 원본 ID가 없습니다.")
+                    return
+                }
+
+                print("[RunContext HealthKit] requestRunningWorkoutByExternalId externalId=\(externalId)")
+                importer.fetchRunningWorkout(externalId: externalId) { [weak self] result in
+                    DispatchQueue.main.async {
+                        switch result {
+                        case .success(let candidate):
+                            print("[RunContext HealthKit] refreshed candidate=\(candidate.externalId)")
+                            self?.sendRunUpdate(candidate)
+                        case .failure(let error):
+                            print("[RunContext HealthKit] refresh failed:", error.localizedDescription)
+                            self?.sendRunUpdateError(externalId: externalId, message: error.localizedDescription)
+                        }
+                    }
+                }
+
+            default:
+                sendError("지원하지 않는 HealthKit 요청입니다.")
             }
         }
 
@@ -115,6 +140,17 @@ struct RunContextWebView: UIViewRepresentable {
             }
         }
 
+        private func sendRunUpdate(_ candidate: HealthKitRunCandidate) {
+            guard let webView else { return }
+            do {
+                let data = try JSONEncoder().encode(candidate)
+                let json = String(data: data, encoding: .utf8) ?? "{}"
+                webView.evaluateJavaScript("window.RunContextHealthKit?.receiveRunUpdate(\(json));")
+            } catch {
+                sendRunUpdateError(externalId: candidate.externalId, message: "HealthKit 갱신 응답 직렬화 실패")
+            }
+        }
+
         private func sendError(_ message: String) {
             guard let webView else { return }
             let escaped = message
@@ -122,6 +158,19 @@ struct RunContextWebView: UIViewRepresentable {
                 .replacingOccurrences(of: "'", with: "\\'")
                 .replacingOccurrences(of: "\n", with: "\\n")
             webView.evaluateJavaScript("window.RunContextHealthKit?.receiveError('\(escaped)');")
+        }
+
+        private func sendRunUpdateError(externalId: String?, message: String) {
+            guard let webView else { return }
+            let escapedId = (externalId ?? "")
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "'", with: "\\'")
+                .replacingOccurrences(of: "\n", with: "\\n")
+            let escapedMessage = message
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "'", with: "\\'")
+                .replacingOccurrences(of: "\n", with: "\\n")
+            webView.evaluateJavaScript("window.RunContextHealthKit?.receiveRunUpdateError('\(escapedId)', '\(escapedMessage)');")
         }
 
         private func loadDiagnosticPage(in webView: WKWebView, reason: String) {
