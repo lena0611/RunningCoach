@@ -120,7 +120,7 @@ Charts should use `TrendChart` and ECharts unless there is a specific reason to 
 - Selection bottom sheets should render options as compact rows inside one grouped surface with dividers. Avoid separate card styling for every option unless the option contains rich multi-line content.
 - `Toast`: Bottom is default. Top is reserved for system/background events such as HealthKit sync.
 - Top system toasts triggered during app startup or activation should use a small display delay so the page has painted before the drop animation starts.
-- `Skeleton`: Metric cards, stat grids, and repeated card/list surfaces must keep their final layout dimensions while loading. Do not replace the whole card with a loading text or remove cards during fetch; keep labels/actions visible and skeleton only the data area that is not available yet.
+- `Skeleton`: Metric cards, stat grids, coach threads, and repeated card/list surfaces must keep their final layout dimensions while loading. Do not replace the whole card or thread with a loading text or remove surfaces during fetch; keep labels/actions/current context visible and skeleton only the data/message area that is not available yet.
 - `FixedBottomCTA`: Edit/create stack pages use a fixed full-width save CTA. Disable it until dirty state is true.
 - `CoachMessage`: Assistant answers should feel like ChatGPT-style conversation, not a report card inside a large bordered box. Keep user input as a compact bubble, but render coach answers as open text with markdown structure, spacing, lists, and dividers.
 - `StackPage`: Full-screen stack pages enter from right to left and leave with the exact reverse motion when back/close is pressed. Do not remove stack layers immediately without a leave transition.

@@ -51,6 +51,7 @@ const coachThinkingTimer = ref<number | null>(null)
 const coachAbortController = ref<AbortController | null>(null)
 const reports = ref<CoachReport[]>([])
 const reportsLoaded = ref(false)
+const reportsLoading = ref(false)
 const saving = ref(false)
 const deletingId = ref<string | null>(null)
 const pendingDeleteRun = ref<RunLog | null>(null)
@@ -162,6 +163,7 @@ const selectedReports = computed(() => {
     .filter((report) => report.selectedRunId === coachRun.value?.id)
     .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
 })
+const coachHistoryLoading = computed(() => Boolean(coachRun.value && isSupabaseConfigured && reportsLoading.value && !reportsLoaded.value))
 const coachCommandQuery = computed(() => {
   const text = coachNote.value.trimStart()
   return text.startsWith('/') ? text.slice(1).trim().toLowerCase() : ''
@@ -180,6 +182,8 @@ const filteredCoachCommands = computed(() => {
     return [item.command, item.title, item.description].some((value) => value.toLowerCase().includes(query))
   })
 })
+
+let reportsLoadPromise: Promise<void> | null = null
 
 onMounted(() => {
   if (!runStore.loaded && !runStore.loading) {
@@ -357,14 +361,23 @@ async function openCoach(run: RunLog) {
 }
 
 async function ensureReportsLoaded() {
-  if (!reportsLoaded.value && isSupabaseConfigured) {
+  if (reportsLoaded.value || !isSupabaseConfigured) return
+  if (reportsLoadPromise) return reportsLoadPromise
+
+  reportsLoading.value = true
+  reportsLoadPromise = (async () => {
     try {
       reports.value = await fetchCoachReports()
       reportsLoaded.value = true
     } catch (err) {
       coachError.value = err instanceof Error ? err.message : '코칭 기록을 불러오지 못했습니다.'
+    } finally {
+      reportsLoading.value = false
+      reportsLoadPromise = null
     }
-  }
+  })()
+
+  return reportsLoadPromise
 }
 
 function hasCoachThread(run: RunLog) {
@@ -680,14 +693,27 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
           </header>
           <main class="memory-stack-content coach-stack-content">
             <CoachMessage role="user" :text="`${formatDateWithWeekday(coachRun.date)} ${coachRun.sessionTitle || coachRun.type}`" />
-            <template v-if="selectedReports.length">
-              <div v-for="report in selectedReports" :key="report.id" class="coach-turn">
-                <CoachMessage v-if="report.userNote" role="user" :text="report.userNote" :meta="formatDateTimeWithWeekday(report.createdAt)" />
-                <CoachMessage role="coach" :text="report.report" :meta="formatDateTimeWithWeekday(report.updatedAt || report.createdAt)" />
+            <div v-if="coachHistoryLoading" class="coach-history-skeleton" aria-label="기존 AI 코칭 대화 불러오는 중">
+              <div class="coach-skeleton-user" aria-hidden="true">
+                <span class="skeleton-line skeleton-line-hint" />
               </div>
+              <div class="coach-skeleton-coach" aria-hidden="true">
+                <span class="skeleton-line skeleton-line-title" />
+                <span class="skeleton-line skeleton-line-text" />
+                <span class="skeleton-line skeleton-line-text short" />
+                <span class="skeleton-line skeleton-line-text" />
+              </div>
+            </div>
+            <template v-else>
+              <template v-if="selectedReports.length">
+                <div v-for="report in selectedReports" :key="report.id" class="coach-turn">
+                  <CoachMessage v-if="report.userNote" role="user" :text="report.userNote" :meta="formatDateTimeWithWeekday(report.createdAt)" />
+                  <CoachMessage role="coach" :text="report.report" :meta="formatDateTimeWithWeekday(report.updatedAt || report.createdAt)" />
+                </div>
+              </template>
+              <CoachMessage v-if="visibleStreamingCoachText" role="coach" :text="visibleStreamingCoachText" :meta="streamingCoachMeta" :streaming="coachLoading" :thinking="coachLoading && !streamingCoachText" />
+              <EmptyState v-else-if="!selectedReports.length" title="아직 이 세션의 코칭이 없습니다." description="짧은 메모를 넣고 AI 코칭을 요청하세요." />
             </template>
-            <CoachMessage v-if="visibleStreamingCoachText" role="coach" :text="visibleStreamingCoachText" :meta="streamingCoachMeta" :streaming="coachLoading" :thinking="coachLoading && !streamingCoachText" />
-            <EmptyState v-else-if="!selectedReports.length" title="아직 이 세션의 코칭이 없습니다." description="짧은 메모를 넣고 AI 코칭을 요청하세요." />
             <p v-if="coachError" class="error">{{ coachError }}</p>
           </main>
           <footer class="stack-action-bar coach-input-bar">
