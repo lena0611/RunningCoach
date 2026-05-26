@@ -41,6 +41,7 @@ const editing = ref<RunLog | null>(null)
 const editSnapshot = ref('')
 const coachRun = ref<RunLog | null>(null)
 const coachNote = ref('')
+const coachNoteInput = ref<HTMLTextAreaElement | null>(null)
 const coachLoading = ref(false)
 const coachError = ref('')
 const reports = ref<CoachReport[]>([])
@@ -125,6 +126,10 @@ watch(
   () => route.query.runId,
   () => openRouteRunIfNeeded()
 )
+
+watch(coachNote, () => {
+  void nextTick(resizeCoachNoteInput)
+})
 
 onBeforeUnmount(() => {
   document.body.classList.remove('memory-stack-open')
@@ -244,6 +249,7 @@ async function confirmRemove() {
 async function openCoach(run: RunLog) {
   coachRun.value = run
   coachError.value = ''
+  void nextTick(resizeCoachNoteInput)
   await ensureReportsLoaded()
 }
 
@@ -275,6 +281,20 @@ function closeCoach() {
   coachRun.value = null
   coachNote.value = ''
   coachError.value = ''
+}
+
+function clearCoachNote() {
+  coachNote.value = ''
+  void nextTick(resizeCoachNoteInput)
+}
+
+function resizeCoachNoteInput() {
+  const input = coachNoteInput.value
+  if (!input) return
+  input.style.height = 'auto'
+  const lineHeight = Number.parseFloat(getComputedStyle(input).lineHeight) || 22
+  const maxHeight = lineHeight * 3 + 24
+  input.style.height = `${Math.min(input.scrollHeight, maxHeight)}px`
 }
 
 async function requestCoach() {
@@ -535,9 +555,20 @@ function formatLapDuration(lap: Lap) {
             <p v-if="coachError" class="error">{{ coachError }}</p>
           </main>
           <footer class="stack-action-bar coach-input-bar">
-            <textarea v-model="coachNote" rows="2" placeholder="예: 오늘 목요일 템포. 후반은 와이프랑 회복 조깅." />
-            <button type="button" :disabled="coachLoading || !isSupabaseConfigured" @click="requestCoach">
-              {{ coachLoading ? '코칭 중' : selectedReports.length ? '추가 대화' : 'AI 코칭 요청' }}
+            <div class="chat-input-wrap">
+              <textarea
+                ref="coachNoteInput"
+                v-model="coachNote"
+                rows="1"
+                placeholder="메시지 입력"
+                @input="resizeCoachNoteInput"
+              />
+              <button v-if="coachNote" class="input-clear-button" type="button" aria-label="입력 지우기" @click="clearCoachNote">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+              </button>
+            </div>
+            <button class="chat-send-button" type="button" :disabled="coachLoading || !isSupabaseConfigured" :aria-label="selectedReports.length ? '추가 대화 보내기' : 'AI 코칭 요청 보내기'" @click="requestCoach">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5" /><path d="m5 12 7-7 7 7" /></svg>
             </button>
           </footer>
         </section>

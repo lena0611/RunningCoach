@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/app/stores/authStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useSettingsStore, type ManualThemeMode } from '@/app/stores/settingsStore'
@@ -15,6 +16,7 @@ const emit = defineEmits<{ signOut: [] }>()
 const authStore = useAuthStore()
 const memoryStore = useMemoryStore()
 const settingsStore = useSettingsStore()
+const router = useRouter()
 const drawerOpen = ref(false)
 const drawerPanel = ref<'account' | 'profile' | 'settings'>('account')
 const saving = ref(false)
@@ -135,12 +137,16 @@ function signOutAndClose() {
 function setThemeMode(value: string) {
   if (value === 'light' || value === 'dark') settingsStore.setManualTheme(value as ManualThemeMode)
 }
+
+function goDashboard() {
+  router.push('/')
+}
 </script>
 
 <template>
   <header class="app-header">
     <div class="app-header-brand">
-      <div class="brand-lockup" aria-label="PACELAB">
+      <button class="brand-lockup" type="button" aria-label="요약으로 이동" @click="goDashboard">
         <span class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 64 64">
             <path d="M21 17c3-5 10-6 16-3" />
@@ -155,7 +161,7 @@ function setThemeMode(value: string) {
           </svg>
         </span>
         <span class="brand-word">PACE<strong>LAB</strong></span>
-      </div>
+      </button>
     </div>
     <button v-if="isAuthenticated" class="account-menu-button" type="button" aria-label="계정 메뉴 열기" @click="openDrawer">
       <span class="account-avatar-mini" aria-hidden="true">{{ accountLabel.slice(0, 1).toUpperCase() }}</span>
@@ -169,7 +175,7 @@ function setThemeMode(value: string) {
 
   <Teleport to="body">
     <div v-if="drawerOpen" class="side-drawer-layer" @click.self="closeDrawer">
-      <aside class="side-drawer" :class="{ 'side-drawer-editing': drawerPanel !== 'account' }" aria-label="계정 정보">
+      <aside class="side-drawer" aria-label="계정 정보">
         <section class="side-drawer-panel account-panel">
           <div class="drawer-heading">
             <div>
