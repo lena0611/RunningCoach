@@ -20,7 +20,7 @@
 ## 공개 API 경계
 - 현재 웹 앱은 GitHub Pages 정적 프론트이며, 백엔드/Auth/DB/AI 경계는 Supabase를 사용한다.
 - iOS 확장 방향은 하이브리드 앱이다. Vue 화면은 WebView 또는 로컬 번들로 유지하고, 네이티브 iOS 레이어는 HealthKit/WeatherKit 권한 및 조회와 웹-네이티브 브리지만 담당한다.
-- 현재 로컬 iOS 네이티브 프로젝트 경로는 `/Users/smart-tn-083/practice/RunningCoach/RunningCoach/RunningCoach.xcodeproj`다. Swift 소스는 `/Users/smart-tn-083/practice/RunningCoach/RunningCoach/RunningCoach` 아래에 있다. 웹 repo 밖에 있으므로 네이티브 변경 시 이 경로를 함께 확인한다.
+- 현재 로컬 iOS 네이티브 프로젝트 경로는 `/Users/smart-tn-083/practice/RunningCoach/RunningCoach/RunningCoach.xcodeproj`다. Swift 소스는 `/Users/smart-tn-083/practice/RunningCoach/RunningCoach/RunningCoach` 아래에 있다. 네이티브 Git 저장소는 `https://github.com/lena0611/RunningCoach-Native-Swift`이며, 웹 repo 밖에 있으므로 네이티브 변경 시 이 경로와 저장소를 함께 확인한다.
 - iOS Bundle Identifier는 계정 이메일에서 추론하지 않고 `com.lena0611.RunningCoach`로 고정한다. iPhone의 Apple ID가 `lenas0611@gmail.com`이고 Apple Developer 계정이 `lena0611@gmail.com`이어도 Bundle ID는 개발자 계정 문자열이 아니라 앱 식별자이므로 `lenas0611`로 바꾸지 않는다.
 - 현재 사용자는 Personal Team으로 iPhone 빌드한다. Personal Team은 WeatherKit capability를 지원하지 않으므로 네이티브 타깃에 WeatherKit entitlement/capability를 켜면 안 된다. WeatherKit을 다시 켜려면 유료 Apple Developer Program 전환 또는 다른 날씨 API/서버리스 대안을 먼저 결정한다.
 - Strava 연동을 추가할 때는 Supabase Edge Function 또는 별도 서버리스 API가 Strava OAuth, refresh token, activity fetch를 책임진다.
