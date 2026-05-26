@@ -2764,7 +2764,15 @@ button.run-session-row {
 }
 
 .memory-stack-header:has(> .stack-icon-button:first-child) {
-  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+}
+
+.memory-stack-header:has(> .stack-icon-button:first-child) > div {
+  grid-column: 2;
+}
+
+.memory-stack-header:has(> .stack-icon-button:first-child) > .stack-icon-button:last-child:not(:first-child) {
+  grid-column: 3;
 }
 
 .memory-stack-header > div {
