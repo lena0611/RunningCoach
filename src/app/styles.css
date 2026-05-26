@@ -2640,7 +2640,7 @@ button.run-session-row {
   backdrop-filter: blur(18px);
 }
 
-.stack-action-bar button {
+.stack-action-bar > button {
   width: 100%;
 }
 
