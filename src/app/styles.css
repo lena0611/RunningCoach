@@ -1964,8 +1964,9 @@ button.run-session-row {
   grid-column: 1 / -1;
   display: grid;
   gap: 0;
-  max-height: min(52vh, 360px);
+  max-height: min(52vh, 232px);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   border-radius: 22px;
   background: color-mix(in srgb, var(--color-surface-3) 72%, var(--color-surface));
   box-shadow: var(--shadow-float);

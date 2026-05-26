@@ -45,6 +45,7 @@ const coachNote = ref('')
 const coachNoteInput = ref<HTMLTextAreaElement | null>(null)
 const coachLoading = ref(false)
 const coachError = ref('')
+const coachCommandOpen = ref(false)
 const streamingCoachText = ref('')
 const streamingCoachMeta = ref('')
 const coachThinkingSeconds = ref(1)
@@ -147,7 +148,7 @@ const coachCommandQuery = computed(() => {
   const text = coachNote.value.trimStart()
   return text.startsWith('/') ? text.slice(1).trim().toLowerCase() : ''
 })
-const showCoachCommands = computed(() => coachNote.value.trimStart().startsWith('/'))
+const showCoachCommands = computed(() => coachCommandOpen.value || coachNote.value.trimStart().startsWith('/'))
 const visibleStreamingCoachText = computed(() => {
   if (streamingCoachText.value) return streamingCoachText.value
   if (coachLoading.value) return `${coachThinkingSeconds.value}초째 잘 생각하는 중 >`
@@ -364,21 +365,37 @@ function closeCoach() {
   coachRun.value = null
   coachNote.value = ''
   coachError.value = ''
+  coachCommandOpen.value = false
   streamingCoachText.value = ''
   streamingCoachMeta.value = ''
 }
 
 function clearCoachNote() {
   coachNote.value = ''
+  coachCommandOpen.value = true
   void nextTick(resizeCoachNoteInput)
 }
 
 function selectCoachCommand(prompt: string) {
   coachNote.value = prompt
+  coachCommandOpen.value = false
   void nextTick(() => {
     resizeCoachNoteInput()
     coachNoteInput.value?.focus()
   })
+}
+
+function openCoachCommands() {
+  if (coachLoading.value) return
+  coachCommandOpen.value = true
+}
+
+function closeCoachCommands() {
+  window.setTimeout(() => {
+    const active = document.activeElement
+    if (active === coachNoteInput.value) return
+    coachCommandOpen.value = false
+  }, 120)
 }
 
 function resizeCoachNoteInput() {
@@ -398,6 +415,7 @@ async function requestCoach() {
   }
   coachLoading.value = true
   coachError.value = ''
+  coachCommandOpen.value = false
   streamingCoachText.value = ''
   streamingCoachMeta.value = 'AI 코치가 답변 중'
   const controller = new AbortController()
@@ -414,6 +432,7 @@ async function requestCoach() {
     })
     reports.value = [report, ...reports.value.filter((item) => item.id !== report.id)]
     coachNote.value = ''
+    coachCommandOpen.value = false
     streamingCoachText.value = ''
     streamingCoachMeta.value = ''
     reportsLoaded.value = true
@@ -709,6 +728,7 @@ function formatLapDuration(lap: Lap) {
                 :key="item.id"
                 class="coach-command-item"
                 type="button"
+                @pointerdown.prevent
                 @click="selectCoachCommand(item.prompt)"
               >
                 <span class="coach-command-icon">{{ item.icon }}</span>
@@ -726,6 +746,8 @@ function formatLapDuration(lap: Lap) {
                 v-model="coachNote"
                 rows="1"
                 placeholder="메시지 입력"
+                @focus="openCoachCommands"
+                @blur="closeCoachCommands"
                 @input="resizeCoachNoteInput"
               />
               <button v-if="coachNote" class="input-clear-button" type="button" aria-label="입력 지우기" @click="clearCoachNote">
