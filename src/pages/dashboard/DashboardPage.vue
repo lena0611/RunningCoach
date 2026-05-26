@@ -121,6 +121,10 @@ function closeRunDetail() {
   detailRun.value = null
 }
 
+function openCoachForRun(run: RunLog) {
+  router.push({ path: '/runs', query: { runId: run.id, coach: '1' } })
+}
+
 function formatDateOnly(value: Date) {
   return [
     value.getFullYear(),
@@ -262,7 +266,7 @@ function formatDateOnly(value: Date) {
                   <div class="metric"><span>평균 케이던스</span><strong>{{ formatInteger(detailRun.cadence) }}</strong></div>
                   <div class="metric"><span>평균 심박</span><strong>{{ formatInteger(detailRun.avgHeartRate) }}</strong></div>
                   <div class="metric"><span>최고 심박</span><strong>{{ formatInteger(detailRun.maxHeartRate) }}</strong></div>
-                  <div class="metric"><span>RPE</span><strong>{{ detailRun.rpe ?? '-' }}</strong></div>
+                  <div class="metric"><span>운동강도</span><strong>{{ detailRun.rpe ?? '-' }}</strong></div>
                   <div class="metric"><span>드리프트</span><strong class="metric-text-value">{{ estimateHeartRateDrift(detailRun) }}</strong></div>
                 </div>
               </SectionCard>
@@ -273,6 +277,11 @@ function formatDateOnly(value: Date) {
                 <p v-if="detailRun.painNote" class="helper">통증/주의: {{ detailRun.painNote }}</p>
               </SectionCard>
             </main>
+            <footer class="stack-action-bar run-detail-cta">
+              <button type="button" @click="openCoachForRun(detailRun)">
+                AI 코칭 받기
+              </button>
+            </footer>
           </section>
         </div>
       </Transition>

@@ -97,7 +97,7 @@ function updateNumber(key: keyof ExtractedRunData, value: string) {
       <input :value="model.elevationLossM ?? ''" type="number" @input="updateNumber('elevationLossM', ($event.target as HTMLInputElement).value)" />
     </label>
     <label>
-      RPE
+      운동강도
       <input :value="model.rpe ?? ''" type="number" min="1" max="10" @input="updateNumber('rpe', ($event.target as HTMLInputElement).value)" />
     </label>
     <label>

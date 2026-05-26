@@ -173,9 +173,14 @@ function openDetail(run: RunLog) {
 
 function openRouteRunIfNeeded() {
   const runId = typeof route.query.runId === 'string' ? route.query.runId : ''
-  if (!runId || detailRun.value?.id === runId) return
+  const shouldOpenCoach = route.query.coach === '1'
+  if (!runId) return
   const run = runStore.runs.find((item) => item.id === runId)
-  if (run) openDetail(run)
+  if (!run) return
+  if (detailRun.value?.id !== runId) openDetail(run)
+  if (shouldOpenCoach && coachRun.value?.id !== runId) {
+    void openCoach(run)
+  }
 }
 
 function closeDetail() {
@@ -270,7 +275,7 @@ function hasCoachThread(run: RunLog) {
 
 function detailCoachButtonLabel(run: RunLog) {
   if (!reportsLoaded.value) return 'AI 코칭'
-  return hasCoachThread(run) ? '코칭 이어가기' : 'AI 코칭 받기'
+  return hasCoachThread(run) ? 'AI 코칭 이어가기' : 'AI 코칭 받기'
 }
 
 function canRefreshFromHealthKit(run: RunLog) {
@@ -465,7 +470,7 @@ function formatLapDuration(lap: Lap) {
                 <div class="metric"><span>평균 케이던스</span><strong>{{ formatInteger(detailRun.cadence) }}</strong></div>
                 <div class="metric"><span>평균 심박</span><strong>{{ formatInteger(detailRun.avgHeartRate) }}</strong></div>
                 <div class="metric"><span>최고 심박</span><strong>{{ formatInteger(detailRun.maxHeartRate) }}</strong></div>
-                <div class="metric"><span>RPE</span><strong>{{ detailRun.rpe ?? '-' }}</strong></div>
+                <div class="metric"><span>운동강도</span><strong>{{ detailRun.rpe ?? '-' }}</strong></div>
                 <div class="metric"><span>드리프트</span><strong class="metric-text-value">{{ estimateHeartRateDrift(detailRun) }}</strong></div>
               </div>
             </SectionCard>
@@ -540,7 +545,7 @@ function formatLapDuration(lap: Lap) {
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
             </button>
             <div>
-              <h2>코칭</h2>
+              <h2>AI 코칭</h2>
             </div>
           </header>
           <main class="memory-stack-content coach-stack-content">
