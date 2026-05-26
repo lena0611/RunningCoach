@@ -10,6 +10,7 @@ import UploadRunPage from '@/pages/upload-run/UploadRunPage.vue'
 import { fetchCoachReports, requestCoachRunStream, type CoachReport } from '@/shared/api/coachRepository'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
+import { getRunFilterTags, hasRunFilterTag, type RunFilterTag } from '@/shared/lib/runMetaChips'
 import { estimateHeartRateDrift } from '@/shared/lib/runStats'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import CoachMessage from '@/shared/ui/CoachMessage.vue'
@@ -35,6 +36,7 @@ const healthKitSyncStore = useHealthKitSyncStore()
 const weatherStore = useWeatherStore()
 const route = useRoute()
 const selectedType = ref<RunType | 'All'>('All')
+const selectedMetaTag = ref('All')
 const selectedDate = ref<string | null>(null)
 const lapView = ref<'list' | 'chart'>('list')
 const visibleCount = ref(10)
@@ -119,9 +121,29 @@ const filterOptions = computed(() => [
   ...runTypes.map((type) => ({ value: type, label: type }))
 ])
 
+const metaFilterOptions = computed(() => {
+  const tagMap = new Map<string, { value: string; label: string; description?: string }>()
+  for (const run of runStore.sortedRuns) {
+    for (const tag of getRunFilterTags(run, memoryStore.memory.weeklyPattern)) {
+      tagMap.set(tag.value, {
+        value: tag.value,
+        label: tag.label,
+        description: getMetaFilterGroupLabel(tag.group)
+      })
+    }
+  }
+  return [
+    { value: 'All', label: '모든 메타 태그' },
+    ...Array.from(tagMap.values()).sort((a, b) => `${a.description ?? ''}${a.label}`.localeCompare(`${b.description ?? ''}${b.label}`, 'ko'))
+  ]
+})
+
 const filteredRuns = computed(() => {
   const byType = selectedType.value === 'All' ? runStore.sortedRuns : runStore.sortedRuns.filter((run) => run.type === selectedType.value)
-  return selectedDate.value ? byType.filter((run) => run.date === selectedDate.value) : byType
+  const byMeta = selectedMetaTag.value === 'All'
+    ? byType
+    : byType.filter((run) => hasRunFilterTag(run, selectedMetaTag.value, memoryStore.memory.weeklyPattern))
+  return selectedDate.value ? byMeta.filter((run) => run.date === selectedDate.value) : byMeta
 })
 
 const visibleRuns = computed(() => filteredRuns.value.slice(0, visibleCount.value))
@@ -182,7 +204,7 @@ watch(openStack, (open) => {
   document.body.classList.toggle('memory-stack-open', open)
 })
 
-watch([filteredRuns, selectedType, selectedDate], () => {
+watch([filteredRuns, selectedType, selectedMetaTag, selectedDate], () => {
   visibleCount.value = 10
   nextTick(setupObserver)
 })
@@ -513,6 +535,19 @@ function formatLapDuration(lap: Lap) {
   if (!lap.distanceKm || !lap.paceSec) return '-'
   return formatDuration(lap.distanceKm * lap.paceSec)
 }
+
+function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
+  const labels: Record<RunFilterTag['group'], string> = {
+    schedule: '루틴',
+    period: '시간대',
+    weather: '날씨',
+    source: '입력 방식',
+    data: '데이터',
+    course: '코스',
+    custom: '태그'
+  }
+  return labels[group]
+}
 </script>
 
 <template>
@@ -523,6 +558,7 @@ function formatLapDuration(lap: Lap) {
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
         </button>
         <BottomSheetSelect v-model="selectedType" label="세션 타입" :options="filterOptions" compact />
+        <BottomSheetSelect v-model="selectedMetaTag" label="메타 태그" :options="metaFilterOptions" compact />
       </div>
       <div class="calendar-header">
         <button class="calendar-arrow-button" type="button" aria-label="이전 달" @click="previousMonth">

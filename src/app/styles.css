@@ -1646,7 +1646,7 @@ button.run-session-row {
 
 .run-log-toolbar {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
   gap: 10px;
 }

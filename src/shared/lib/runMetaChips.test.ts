@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RunLog } from '@/entities/run/model'
-import { getRunMetaChips } from './runMetaChips'
+import { getRunFilterTags, getRunMetaChips, hasRunFilterTag } from './runMetaChips'
 
 describe('getRunMetaChips', () => {
   it('adds schedule, period, and weather chips when matched', () => {
@@ -29,6 +29,48 @@ describe('getRunMetaChips', () => {
       { label: '추가', tone: 'extra' },
       { label: '아침', tone: 'period' }
     ])
+  })
+})
+
+describe('getRunFilterTags', () => {
+  it('builds filterable tags for statistics and personal awards', () => {
+    const run = createRun({
+      date: '2026-05-26',
+      sessionTitle: '화요일 밤 러닝',
+      type: 'Easy + Strides',
+      source: 'file_import',
+      temperature: 23,
+      courseType: 'Flat',
+      laps: [{ index: 1, distanceKm: 1, paceSec: 420, avgHeartRate: 130, cadence: 165 }],
+      metricSamples: [{ offsetSec: 0, heartRate: 120, paceSec: 420, cadence: 165 }],
+      routePoints: [{ offsetSec: 0, latitude: 37.1, longitude: 127.1, altitude: 20 }],
+      tags: ['와이프 동반주']
+    })
+
+    expect(getRunFilterTags(run, ['화요일: Easy + Strides']).map((tag) => tag.value)).toEqual([
+      'schedule:scheduled',
+      'period:밤',
+      'weather:present',
+      'source:file_import',
+      'data:laps',
+      'data:metrics',
+      'data:route',
+      'course:Flat',
+      'tag:와이프 동반주'
+    ])
+  })
+
+  it('checks whether a run belongs to a computed filter tag', () => {
+    const run = createRun({
+      date: '2026-05-25',
+      sessionTitle: '월요일 아침 러닝',
+      type: 'Easy',
+      source: 'healthkit'
+    })
+
+    expect(hasRunFilterTag(run, 'schedule:extra', ['화요일: Easy + Strides'])).toBe(true)
+    expect(hasRunFilterTag(run, 'source:healthkit')).toBe(true)
+    expect(hasRunFilterTag(run, 'weather:present')).toBe(false)
   })
 })
 
