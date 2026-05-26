@@ -1007,9 +1007,9 @@ label {
 .metric {
   position: relative;
   display: grid;
-  gap: 8px;
+  gap: 0;
   min-height: 128px;
-  align-content: space-between;
+  align-content: start;
   background: linear-gradient(180deg, var(--color-surface), var(--color-surface-2));
   border: 0;
   border-radius: var(--radius-card);
@@ -1027,7 +1027,6 @@ button.stat-card {
 
 .stat-card-interactive {
   cursor: pointer;
-  padding-right: 34px;
 }
 
 .card-arrow,
@@ -1050,6 +1049,7 @@ button.stat-card {
 
 .stat-card strong,
 .metric strong {
+  margin-top: 10px;
   color: var(--color-text);
   font-size: var(--text-metric-size);
   font-weight: 700;
@@ -1074,6 +1074,7 @@ button.stat-card {
 }
 
 .stat-card small {
+  margin-top: 8px;
   font-size: 12px;
   font-weight: 400;
   line-height: 1.35;
@@ -1081,11 +1082,10 @@ button.stat-card {
 
 .dashboard-context-card {
   align-content: start;
-  gap: 10px;
 }
 
 .dashboard-context-card > span {
-  margin-bottom: 4px;
+  margin-bottom: 0;
 }
 
 .dashboard-context-card strong {
@@ -1100,7 +1100,7 @@ button.stat-card {
 }
 
 .dashboard-context-card small {
-  margin-top: auto;
+  margin-top: 8px;
   font-size: 11px;
   font-weight: 400;
   line-height: 1.35;
