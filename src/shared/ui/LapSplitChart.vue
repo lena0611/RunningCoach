@@ -7,6 +7,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ECharts, EChartsOption } from 'echarts'
 import { init } from 'echarts/core'
 import type { Lap } from '@/entities/run/model'
+import { getChartDomain } from '@/shared/lib/chartAxis'
 import { formatInteger, formatPace } from '@/shared/lib/format'
 
 use([BarChart, LineChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer])
@@ -56,6 +57,11 @@ function renderChart() {
   const paceColor = '#22d3ee'
   const hrColor = '#ef4444'
   const cadColor = '#38bdf8'
+  const paceDomain = getChartDomain(chartLaps.value.map((lap) => lap.paceSec), 'pace')
+  const effortDomain = getChartDomain(
+    chartLaps.value.flatMap((lap) => [lap.avgHeartRate, lap.cadence]),
+    'heartCadence'
+  )
 
   const option: EChartsOption = {
     animationDuration: 520,
@@ -98,8 +104,8 @@ function renderChart() {
       {
         type: 'value',
         inverse: true,
-        min: 'dataMin',
-        max: 'dataMax',
+        min: paceDomain?.min,
+        max: paceDomain?.max,
         splitLine: { lineStyle: { color: subtle } },
         axisLabel: {
           color: paceColor,
@@ -109,8 +115,8 @@ function renderChart() {
       },
       {
         type: 'value',
-        min: 'dataMin',
-        max: 'dataMax',
+        min: effortDomain?.min,
+        max: effortDomain?.max,
         splitLine: { show: false },
         axisLabel: { color: muted, fontWeight: 800 }
       }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { RunLog, RunMetricSample, RunRoutePoint } from '@/entities/run/model'
+import { getChartDomain } from '@/shared/lib/chartAxis'
 import { formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import UnitValue from '@/shared/ui/UnitValue.vue'
@@ -50,6 +51,10 @@ const heartRateStats = computed(() => getStats(scopedSamples.value.map((sample) 
 const paceStats = computed(() => getStats(scopedSamples.value.map((sample) => sample.paceSec)))
 const cadenceStats = computed(() => getStats(scopedSamples.value.map((sample) => sample.cadence)))
 const elevationStats = computed(() => getStats(scopedRoutePoints.value.map((point) => point.altitude)))
+const heartRateDomain = computed(() => getChartDomain(scopedSamples.value.map((sample) => sample.heartRate), 'heartRate'))
+const paceDomain = computed(() => getChartDomain(scopedSamples.value.map((sample) => sample.paceSec), 'pace'))
+const cadenceDomain = computed(() => getChartDomain(scopedSamples.value.map((sample) => sample.cadence), 'cadence'))
+const elevationDomain = computed(() => getChartDomain(scopedRoutePoints.value.map((point) => point.altitude), 'elevation'))
 
 const hasDetailData = computed(() => scopedSamples.value.length > 0 || scopedRoutePoints.value.length > 1)
 
@@ -63,12 +68,20 @@ function setScope(value: 'all' | '15m') {
 }
 
 function barHeight(sample: RunMetricSample, key: 'heartRate' | 'paceSec' | 'cadence') {
-  const stats = key === 'heartRate' ? heartRateStats.value : key === 'paceSec' ? paceStats.value : cadenceStats.value
+  const domain = key === 'heartRate' ? heartRateDomain.value : key === 'paceSec' ? paceDomain.value : cadenceDomain.value
   const value = sample[key]
-  if (value === null || !stats) return 0.16
-  const range = Math.max(stats.max - stats.min, 1)
-  const normalized = key === 'paceSec' ? (stats.max - value) / range : (value - stats.min) / range
-  return 0.2 + Math.min(Math.max(normalized, 0), 1) * 0.8
+  if (value === null || !domain) return 0.16
+  const range = Math.max(domain.max - domain.min, 1)
+  const normalized = key === 'paceSec' ? (domain.max - value) / range : (value - domain.min) / range
+  return 0.12 + Math.min(Math.max(normalized, 0), 1) * 0.76
+}
+
+function elevationHeight(point: RunRoutePoint) {
+  const domain = elevationDomain.value
+  if (point.altitude === null || !domain) return 0.16
+  const range = Math.max(domain.max - domain.min, 1)
+  const normalized = (point.altitude - domain.min) / range
+  return 0.12 + Math.min(Math.max(normalized, 0), 1) * 0.76
 }
 
 function nearestRoutePoint(points: RunRoutePoint[], offsetSec: number) {
@@ -175,7 +188,7 @@ function pointsToPolyline(points: RunRoutePoint[], bounds: ReturnType<typeof get
           :key="`${point.offsetSec}-${index}`"
           type="button"
           :class="{ active: selectedRoutePoint?.offsetSec === point.offsetSec }"
-          :style="{ '--bar-height': `${Math.max(0.18, ((point.altitude ?? elevationStats.min) - elevationStats.min) / Math.max(elevationStats.max - elevationStats.min, 1)) * 100}%` }"
+          :style="{ '--bar-height': `${elevationHeight(point) * 100}%` }"
           @click="selectSample(Math.max(0, scopedSamples.findIndex((sample) => sample.offsetSec >= point.offsetSec)))"
         />
       </div>

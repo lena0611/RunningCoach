@@ -107,7 +107,7 @@ New page work should reuse these before adding page-specific layout.
 
 Common display components should not decide how much page space they receive. Page-level spacing, grids, stacks, section headers, action rows, and forms must be owned by layout components such as `PageLayout`, `ContentStack`, `SectionHeader`, `ActionGroup`, and `FormGrid`.
 
-Charts should use `TrendChart` and ECharts unless there is a specific reason to add another chart primitive. Keep chart libraries lazy-loaded or page-split so the root app chunk does not grow unnecessarily.
+Charts should use `TrendChart` and ECharts unless there is a specific reason to add another chart primitive. Keep chart libraries lazy-loaded or page-split so the root app chunk does not grow unnecessarily. Chart y-axis domains must go through the shared metric-domain helper rather than raw `dataMin`/`dataMax`; heart rate, pace, cadence, elevation, temperature, distance, percent, and count charts need metric-specific padding and minimum spans so normal variation is not visually exaggerated.
 
 ## TDS-Inspired Pattern Mapping
 

@@ -6,6 +6,7 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ECharts, EChartsOption } from 'echarts'
 import { init } from 'echarts/core'
+import { getChartDomain, inferChartMetricKind } from '@/shared/lib/chartAxis'
 
 use([BarChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer])
 
@@ -60,6 +61,7 @@ function renderChart() {
   const text = getColor('--color-text') || '#f4f7fb'
   const muted = getColor('--color-muted') || '#8b98a8'
   const subtle = getColor('--color-subtle-2') || 'rgba(255,255,255,0.08)'
+  const domain = getChartDomain(values.value, inferChartMetricKind(props.unit))
 
   const option: EChartsOption = {
     animationDuration: 520,
@@ -80,6 +82,8 @@ function renderChart() {
     },
     yAxis: {
       type: 'value',
+      min: domain?.min,
+      max: domain?.max,
       splitLine: { lineStyle: { color: subtle } },
       axisLabel: { color: muted, fontWeight: 700 }
     },
