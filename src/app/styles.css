@@ -1407,7 +1407,7 @@ button.stat-card {
 .run-session-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
+  align-items: stretch;
   gap: 13px;
   width: 100%;
   min-width: 0;
@@ -1432,6 +1432,7 @@ button.run-session-row {
 
 .run-session-main {
   display: grid;
+  align-content: center;
   justify-items: start;
   gap: 8px;
   min-width: 0;
@@ -1515,10 +1516,12 @@ button.run-session-row {
 
 .run-session-meta {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
+  align-self: stretch;
   justify-content: end;
   gap: 6px;
   min-width: 76px;
+  padding-bottom: 4px;
   color: var(--color-muted);
   font-size: 13px;
   font-weight: 850;
