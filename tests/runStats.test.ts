@@ -53,10 +53,31 @@ describe('runStats', () => {
           avgPaceSec: 405
         })
       ],
-      new Date('2026-05-21T09:00:00+09:00')
+      new Date('2026-05-22T09:00:00+09:00')
     )
 
     expect(recommendation.title).toBe('토요일 LSD')
     expect(recommendation.intensity).toContain('7:05~7:30/km')
+  })
+
+  it('keeps today weekly routine when yesterday was an extra easy run', () => {
+    const recommendation = getNextSessionRecommendation(
+      initialTrainingMemory,
+      [
+        makeRun({
+          date: '2026-05-25',
+          type: 'Easy',
+          sessionTitle: '추가 이지런',
+          distanceKm: 5,
+          avgPaceSec: 470,
+          avgHeartRate: 128
+        })
+      ],
+      new Date('2026-05-26T09:00:00+09:00')
+    )
+
+    expect(recommendation.title).toBe('Easy + Strides')
+    expect(recommendation.reason).toContain('화요일: Easy + Strides')
+    expect(recommendation.intensity).toContain('무리하지 않는 기본 강도')
   })
 })

@@ -43,6 +43,7 @@
 - `Easy` 자동 추론은 페이스보다 심박을 우선한다. 평균/랩 심박이 낮고 안정적이면 평균 페이스가 빠르더라도 Tempo로 단정하지 않고 Easy 가능성을 먼저 본다.
 - `Easy + Strides` 자동 추론은 요일 루틴과 route 기반 `fastSegments`를 함께 본다. 현재 기본 루틴은 10분 워밍업 + 8개의 스트라이드 가속 인터벌(20초 가속 + 1분40초 회복) + 15분 쿨다운이다. 단, HealthKit/GPS 샘플은 타이트하게 들어오지 않으므로 20초/100초를 기계적으로 요구하지 않는다. 6~45초 정도의 짧은 고속 구간이 4개 이상 반복되고 시작 간격이 대략 1~3.5분이면 Easy + Strides 패턴으로 관용적으로 본다.
 - Dashboard의 다음 추천 세션은 단순 최근 강훈련 여부만으로 정하지 않는다. `TrainingMemory.weeklyPattern`, 선호 롱런 요일, 최근 실제 RunLog 날짜, 최근 토요일 10km+ 기록의 평균 페이스를 함께 본다.
+- Dashboard의 다음 추천 세션은 오늘 요일에 해당하는 `TrainingMemory.weeklyPattern`이 있으면 그 세션을 우선한다. 전날 추가 Easy/Recovery처럼 주간 루틴에 없는 저강도 세션은 오늘의 Easy + Strides/Tempo 같은 예정 세션을 밀어내는 근거가 아니다.
 - Dashboard의 다음 세션 준비에는 WeatherKit 기상정보가 있으면 체감온도, 강수확률, 강수량, 강수시간을 함께 보여준다. 30도 이상 체감온도나 높은 강수확률은 페이스/강도 조절 근거로만 쓰고 안전을 보장하지 않는다.
 - `TrainingMemory.weeklyPattern`은 사용자가 직접 세우는 정적 루틴이 아니다. AI 코칭이 계정 목표와 누적 RunLog를 보고 유지/수정하는 훈련 계획이며, 사용자는 목표/프로필/개인 맥락을 제공한다.
 - AI 코칭은 세션 평가와 동시에 주간 루틴 유지/수정 필요성을 판단한다. 루틴 변경이 필요하면 Edge Function이 `training_memory.memory.weeklyPattern` 전체를 갱신하고, 변경 근거를 report와 `aiNotes`에 짧게 남긴다.

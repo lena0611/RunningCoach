@@ -178,7 +178,7 @@ function getNextPlannedWorkout(memory: TrainingMemory, today: Date): { dayName: 
   const next = patterns
     .map((item) => ({
       ...item,
-      offset: (item.dayIndex - todayIndex + 7) % 7 || 7
+      offset: (item.dayIndex - todayIndex + 7) % 7
     }))
     .sort((a, b) => a.offset - b.offset)[0]
 
