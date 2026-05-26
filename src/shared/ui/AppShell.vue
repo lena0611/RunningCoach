@@ -36,6 +36,7 @@ watch(
     <main class="app-main">
       <slot />
     </main>
+    <div class="bottom-nav-scrim" aria-hidden="true" />
     <BottomNav :items="navItems" />
   </div>
 </template>

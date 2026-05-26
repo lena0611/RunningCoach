@@ -68,8 +68,8 @@
   --run-calendar-count-bg: #000000;
   --run-calendar-count-text: #ffffff;
   --pressable-bg: var(--color-subtle-2);
-  --bottom-nav-height: 86px;
-  --bottom-nav-reserve: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 18px);
+  --bottom-nav-height: 82px;
+  --bottom-nav-reserve: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 12px);
   --shadow-card: 0 10px 26px rgba(0, 0, 0, 0.18);
   --shadow-float: 0 16px 36px rgba(0, 0, 0, 0.24);
   color-scheme: dark;
@@ -698,13 +698,13 @@ label {
   position: fixed;
   left: 50%;
   right: auto;
-  bottom: calc(max(env(safe-area-inset-bottom), 10px) + 10px);
+  bottom: max(calc(env(safe-area-inset-bottom) - 4px), 8px);
   z-index: 30;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   width: min(430px, calc(100vw - 92px));
-  min-height: 74px;
+  min-height: 72px;
   padding: 7px;
   border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
   border-radius: 999px;
@@ -714,6 +714,24 @@ label {
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
   transform: translate3d(-50%, 0, 0);
   will-change: transform;
+}
+
+.bottom-nav-scrim {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 29;
+  height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 76px);
+  pointer-events: none;
+  background:
+    linear-gradient(
+      180deg,
+      transparent 0%,
+      color-mix(in srgb, var(--color-bg) 18%, transparent) 24%,
+      color-mix(in srgb, var(--color-bg) 66%, transparent) 58%,
+      color-mix(in srgb, var(--color-bg) 92%, transparent) 100%
+    );
 }
 
 .bottom-nav-item {
@@ -3421,6 +3439,10 @@ button.run-session-row {
     border: 0;
     background: transparent;
     backdrop-filter: none;
+  }
+
+  .bottom-nav-scrim {
+    display: none;
   }
 
   .bottom-nav-item {
