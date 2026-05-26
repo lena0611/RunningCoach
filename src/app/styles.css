@@ -1437,7 +1437,6 @@ button.run-session-row {
   min-width: 0;
 }
 
-.run-session-chip-row,
 .run-meta-chips {
   display: inline-flex;
   align-items: center;
@@ -1446,9 +1445,30 @@ button.run-session-row {
   flex-wrap: wrap;
 }
 
+.run-session-chip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.run-session-row .run-session-chip-row,
+.run-session-row .run-meta-chips {
+  flex-wrap: nowrap;
+}
+
+.run-session-row .run-meta-chips {
+  overflow: hidden;
+}
+
 .run-meta-chip {
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
   min-height: 20px;
   padding: 0 8px;
   border-radius: 999px;
@@ -1458,6 +1478,10 @@ button.run-session-row {
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
+}
+
+.run-session-row .run-meta-chip {
+  padding-inline: 7px;
 }
 
 .run-meta-chip-schedule {
