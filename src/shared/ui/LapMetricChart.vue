@@ -22,6 +22,7 @@ const props = defineProps<{
   chartType: 'line' | 'bar'
   domainKind: ChartMetricKind
   inverse?: boolean
+  axisName?: string
 }>()
 
 const chartRef = ref<HTMLElement | null>(null)
@@ -93,7 +94,8 @@ function renderChart() {
         const first = list[0] as { axisValue?: string | number; value?: number } | undefined
         const value = Number(first?.value)
         if (!Number.isFinite(value)) return ''
-        return `<strong>${first?.axisValue ?? ''}랩</strong><div style="display:flex;justify-content:space-between;gap:18px"><span>${props.title}</span><strong>${formatMetric(value)}</strong></div>`
+        const label = props.axisName === '랩' ? `${first?.axisValue ?? ''}랩` : `${first?.axisValue ?? ''}`
+        return `<strong>${label}</strong><div style="display:flex;justify-content:space-between;gap:18px"><span>${props.title}</span><strong>${formatMetric(value)}</strong></div>`
       }
     },
     xAxis: {

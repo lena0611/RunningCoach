@@ -2022,6 +2022,12 @@ button.run-session-row {
   gap: 12px;
 }
 
+.compact-helper {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .lap-metric-card {
   display: grid;
   gap: 8px;

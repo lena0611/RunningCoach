@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { defineAsyncComponent, ref } from 'vue'
-import type { Lap } from '@/entities/run/model'
+import type { Lap, RunMetricSample } from '@/entities/run/model'
 import { formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
 
 defineProps<{
   laps: Lap[]
+  metricSamples?: RunMetricSample[]
 }>()
 
 const LapSplitChart = defineAsyncComponent(() => import('@/shared/ui/LapSplitChart.vue'))
@@ -44,7 +45,7 @@ function formatLapDuration(lap: Lap) {
           <span class="lap-cad">{{ formatInteger(lap.cadence) }}<small>SPM</small></span>
         </div>
       </div>
-      <LapSplitChart v-else :laps="laps" />
+      <LapSplitChart v-else :laps="laps" :metric-samples="metricSamples ?? []" />
     </div>
     <p v-else class="helper">랩별 페이스와 심박이 있으면 자동 세션 재해석과 코칭 근거가 좋아집니다.</p>
   </SectionCard>

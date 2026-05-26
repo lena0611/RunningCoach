@@ -63,6 +63,6 @@ defineProps<{
       v-if="(run.metricSamples?.length ?? 0) || (run.routePoints?.length ?? 0)"
       :run="run"
     />
-    <RunSplitSection :laps="run.laps" />
+    <RunSplitSection :laps="run.laps" :metric-samples="run.metricSamples" />
   </main>
 </template>
