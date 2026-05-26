@@ -5,6 +5,7 @@ export type TrainingMemory = {
   injuryItems: TrainingInjuryItem[]
   activeInjuryItemId: string | null
   athleteProfile: AthleteProfile
+  adaptiveTrainingProfile: AdaptiveTrainingProfile
   weeklyPattern: string[]
   longRunStrategy: string
   currentVolumeNote: string
@@ -64,6 +65,21 @@ export type PersonalBest = {
   source: 'race' | 'time_trial' | 'estimated'
 }
 
+export type AdaptiveTrainingProfile = {
+  methodologyVersion: string
+  updatedAt: string | null
+  compliancePatterns: string[]
+  sessionGuides: AdaptiveSessionGuide[]
+}
+
+export type AdaptiveSessionGuide = {
+  type: string
+  boundary: string
+  adjustment: 'maintain' | 'raise' | 'lower' | 'watch'
+  evidence: string
+  nextCheck: string
+}
+
 export const defaultGoalId = 'goal-10k-60'
 export const defaultInjuryItemId = 'injury-left-hamstring'
 
@@ -115,6 +131,12 @@ export const initialTrainingMemory: TrainingMemory = {
     preferredLongRunDay: '토요일',
     personalBests: []
   },
+  adaptiveTrainingProfile: {
+    methodologyVersion: 'pacelab-2026-05-v1',
+    updatedAt: null,
+    compliancePatterns: [],
+    sessionGuides: []
+  },
   weeklyPattern: [
     '화요일: Easy + Strides',
     '목요일: Tempo',
@@ -163,7 +185,8 @@ export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null |
     athleteProfile: {
       ...base.athleteProfile,
       ...(memory?.athleteProfile ?? {})
-    }
+    },
+    adaptiveTrainingProfile: normalizeAdaptiveTrainingProfile(memory?.adaptiveTrainingProfile)
   }
 
   const goals = normalizeGoals(memory)
@@ -182,6 +205,43 @@ export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null |
     activeInjuryItemId,
     goal: activeGoal.title
   }
+}
+
+function normalizeAdaptiveTrainingProfile(value: unknown): AdaptiveTrainingProfile {
+  const raw = value && typeof value === 'object' ? value as Partial<AdaptiveTrainingProfile> : {}
+  const sessionGuides = Array.isArray(raw.sessionGuides)
+    ? raw.sessionGuides
+        .map((guide) => normalizeAdaptiveSessionGuide(guide as Partial<AdaptiveSessionGuide>))
+        .filter((guide): guide is AdaptiveSessionGuide => Boolean(guide))
+        .slice(0, 12)
+    : []
+
+  return {
+    methodologyVersion: typeof raw.methodologyVersion === 'string' && raw.methodologyVersion ? raw.methodologyVersion : 'pacelab-2026-05-v1',
+    updatedAt: typeof raw.updatedAt === 'string' && raw.updatedAt ? raw.updatedAt : null,
+    compliancePatterns: Array.isArray(raw.compliancePatterns)
+      ? raw.compliancePatterns.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()).slice(0, 20)
+      : [],
+    sessionGuides
+  }
+}
+
+function normalizeAdaptiveSessionGuide(value: Partial<AdaptiveSessionGuide>): AdaptiveSessionGuide | null {
+  const type = typeof value.type === 'string' ? value.type.trim() : ''
+  const boundary = typeof value.boundary === 'string' ? value.boundary.trim() : ''
+  const evidence = typeof value.evidence === 'string' ? value.evidence.trim() : ''
+  if (!type || !boundary || !evidence) return null
+  return {
+    type,
+    boundary,
+    adjustment: normalizeAdaptiveAdjustment(value.adjustment),
+    evidence,
+    nextCheck: typeof value.nextCheck === 'string' ? value.nextCheck.trim() : ''
+  }
+}
+
+function normalizeAdaptiveAdjustment(value: unknown): AdaptiveSessionGuide['adjustment'] {
+  return value === 'raise' || value === 'lower' || value === 'watch' || value === 'maintain' ? value : 'watch'
 }
 
 function normalizeGoals(memory: Partial<TrainingMemory> | null | undefined): TrainingGoal[] {

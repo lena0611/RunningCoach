@@ -252,6 +252,8 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
   const selectedRunLapAnalysis = buildLapProgressionAnalysis(selectedRun)
   const selectedRunExecutionGuide = buildSessionExecutionGuide(selectedRun, activeGoal)
   const recentPrescriptionComplianceSignals = buildPrescriptionComplianceSignals(recent14)
+  const prescriptionComplianceSummary = summarizePrescriptionCompliance(recentPrescriptionComplianceSignals)
+  const adaptiveTrainingProfile = getAdaptiveTrainingProfile(trainingMemory)
 
   return {
     userNote,
@@ -309,6 +311,26 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
         '변경 필요성이 명확할 때만 trainingMemoryPatch.weeklyPattern 전체와 activeGoalStrategyNotes를 반환한다. 유지가 맞으면 report의 루틴 업데이트 섹션에는 유지 근거를 짧게 쓰고 trainingMemoryPatch는 null로 둔다. 처방 경계 자체를 조정해야 하면 activeGoalStrategyNotes 또는 aiNotes에 새 기준을 명확히 남긴다.'
     },
     trainingMemory,
+    trainingMethodology: buildTrainingMethodologyAlgorithm(),
+    adaptiveTrainingProfile,
+    adaptiveAlgorithmPolicy: {
+      principle:
+        '문헌 기반 기준선은 코드/프롬프트가 제공하고, 개인화 알고리즘은 trainingMemory.adaptiveTrainingProfile에 저장된 반복 패턴과 세션별 보정 가이드로 진화한다.',
+      boundaries:
+        'AI는 소스 코드를 바꾸지 않는다. 반복 데이터와 사용자 피드백으로 확인된 개인 보정값만 trainingMemoryPatch.adaptiveTrainingProfile에 저장한다.',
+      updateWhen: [
+        '같은 세션 유형에서 최근 2~3회 이상 같은 준수/이탈 패턴이 반복된다.',
+        '사용자가 처방 강도가 너무 쉽다/어렵다, 회복이 좋다/나쁘다처럼 명시 피드백을 준다.',
+        '부상/통증/더위/심박 드리프트 같은 제한 요인이 반복적으로 같은 방식으로 나타난다.',
+        '목표일까지 남은 기간 대비 핵심 세션 소화율과 레이스 예측 신호가 일관되게 개선 또는 정체된다.'
+      ],
+      doNotUpdateWhen: [
+        '단일 세션 하나만 좋거나 나쁘다.',
+        '날씨, 동반주, 과거 기록 리뷰처럼 일시적 맥락으로 설명된다.',
+        '랩/심박/RPE 데이터가 부족하다.',
+        '목표 달성 보장을 암시해야만 설명 가능한 변경이다.'
+      ]
+    },
     goals,
     activeGoal,
     performanceProjection,
@@ -345,6 +367,7 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
     prescriptionAdjustmentInstruction:
       '선택 세션을 단순 기록이 아니라 이전 처방을 수행한 결과로 본다. selectedRunExecutionGuide에 맞게 훈련했는지 먼저 평가하고, 잘 지켰으면 유지 또는 소폭 상향 조건을 말한다. 경계를 반복적으로 넘었거나 회복/부상 신호가 있으면 다음 처방을 낮추거나 기준을 바꾼다. 조정 필요성이 명확하면 trainingMemoryPatch에 반영한다.',
     recentPrescriptionComplianceSignals,
+    prescriptionComplianceSummary,
     prescriptionMemoryInstruction:
       'recentPrescriptionComplianceSignals는 최근 세션들이 각 유형별 처방 기준을 얼마나 지켰는지 보는 신호다. 단일 세션 결과를 장기기억으로 저장하지 말고, 최근 여러 세션에서 반복되는 준수/이탈 패턴만 memoryItems에 저장한다. 예: "최근 Tempo는 165 상한을 대체로 지키지만 후반 1~2랩에서 흔들린다", "Recovery는 심박을 잘 누르는 편이다".',
     runsAfterSelectedRun: runsAfterSelected.slice(0, 20).map(decorateRunDate),
@@ -374,6 +397,22 @@ type TrainingMemoryPatch = {
   currentVolumeNote?: string
   activeGoalStrategyNotes?: string
   aiNotes?: string[]
+  adaptiveTrainingProfile?: AdaptiveTrainingProfilePatch
+}
+
+type AdaptiveTrainingProfilePatch = {
+  methodologyVersion?: string
+  updatedAt?: string
+  compliancePatterns?: string[]
+  sessionGuides?: AdaptiveSessionGuidePatch[]
+}
+
+type AdaptiveSessionGuidePatch = {
+  type?: string
+  boundary?: string
+  adjustment?: 'maintain' | 'raise' | 'lower' | 'watch'
+  evidence?: string
+  nextCheck?: string
 }
 
 async function callOpenAI(apiKey: string, model: string, context: unknown): Promise<{ report: string; memoryItems: string[]; trainingMemoryPatch: TrainingMemoryPatch | null }> {
@@ -428,6 +467,13 @@ function buildCoachInstructions() {
     'Tempo 또는 품질훈련에서는 selectedRunExecutionGuide.boundaries.heartRateCeilingBpm을 확인한다. lapHeartRatesOverTempoCeiling이 있거나 경계를 넘은 랩이 있으면 몇 번째 랩부터 넘었는지 짧게 말하고, 없으면 "상한 165는 넘기지 않았다"처럼 훈련 품질 근거로 쓴다.',
     '세션 유형별 랩당 페이스/심박 경계 가이드가 현재 사용자에게 맞지 않아 보이면 "## 루틴 업데이트"에서 유지/조정 여부를 말한다. 조정이 필요할 때는 trainingMemoryPatch.activeGoalStrategyNotes 또는 aiNotes에 새 기준을 저장한다.',
     'recentPrescriptionComplianceSignals를 보고 최근 여러 세션에서 처방 준수율 패턴이 있는지 활용한다. 반복적으로 잘 지키는 기준은 다음 처방 상향 근거가 되고, 반복적으로 넘는 기준은 처방 하향/보류 근거가 된다.',
+    'context.trainingMethodology는 외부 러닝/지구력 훈련 문헌을 앱 기준선으로 압축한 것이다. 이 기준선을 무시하지 말고, Easy 기반, 제한된 강훈련, 점진적 과부하, 목표 특이성, 회복 게이트를 기본 알고리즘으로 삼는다.',
+    'context.adaptiveTrainingProfile은 사용자 데이터와 대화로 누적된 개인화 레이어다. 문헌 기준선 위에 얹는 보정값이며, 단일 세션을 보고 즉흥적으로 덮어쓰지 않는다.',
+    '알고리즘이 스스로 더 나아진다는 뜻은 소스 코드가 바뀐다는 뜻이 아니다. 반복되는 수행 패턴, 처방 준수율, 사용자 피드백을 trainingMemory.adaptiveTrainingProfile에 저장해 다음 판단에 반영한다는 뜻이다.',
+    'adaptiveTrainingProfile을 업데이트할 때는 최근 2~3회 이상 같은 세션 유형에서 같은 준수/이탈 패턴이 반복되거나, 사용자가 강도/회복/통증에 대해 명시 피드백을 준 경우만 사용한다.',
+    '날씨, 동반주, 과거 기록 리뷰, 데이터 부족처럼 일시적 이유로 설명되는 결과는 adaptiveTrainingProfile을 바꾸지 않는다.',
+    '반복 패턴이 충분하면 trainingMemoryPatch.adaptiveTrainingProfile을 반환한다. compliancePatterns에는 장기적으로 기억할 반복 패턴을, sessionGuides에는 세션 유형별 현재 처방 경계와 조정 방향을 저장한다.',
+    'adaptiveTrainingProfile.sessionGuides 조정 방향은 maintain/raise/lower/watch 중 하나다. raise는 회복 안정과 품질 준수가 반복될 때만, lower는 반복 경계 초과/통증/회복 악화가 있을 때만 쓴다.',
     'memoryItems에는 단일 세션의 준수 여부를 넣지 말고 반복 패턴만 넣는다. 예: "최근 Recovery는 심박을 130 이하로 잘 누르는 편이다", "최근 Tempo는 후반 랩에서 165 상한 근처까지 올라가므로 초반 진입을 보수적으로 잡아야 한다".',
     'Easy/Recovery에서는 페이스보다 심박 흐름을 우선한다. 후반 페이스가 빨라졌더라도 심박이 낮게 유지되면 잘 눌렀다고 본다.',
     'Long Run/LSD/Steady Long에서는 후반 페이스 급락, 심박 드리프트, 전후반 심박 차이를 보고 지속성과 품질을 말한다.',
@@ -515,7 +561,7 @@ function buildCoachInstructions() {
     'memoryItems에 단일 세션의 거리/페이스/심박, "오늘 잘했다", "다음 훈련은 휴식" 같은 일회성 코멘트를 넣지 않는다.',
     '이미 context.coachMemoryItems나 trainingMemory에 같은 의미가 있으면 memoryItems에 다시 넣지 않는다.',
     '스트리밍 UI가 report를 먼저 표시하므로 JSON 객체의 키 순서는 반드시 report, memoryItems, trainingMemoryPatch 순서로 둔다.',
-    'JSON만 반환한다. 형식: {"report":"사용자에게 보여줄 마크다운 코칭","memoryItems":["장기 기억으로 저장할 짧은 문장"],"trainingMemoryPatch":null 또는 {"weeklyPattern":["화요일: ..."],"longRunStrategy":"...","currentVolumeNote":"...","activeGoalStrategyNotes":"활성 목표 전략 메모","aiNotes":["..."]}}'
+    'JSON만 반환한다. 형식: {"report":"사용자에게 보여줄 마크다운 코칭","memoryItems":["장기 기억으로 저장할 짧은 문장"],"trainingMemoryPatch":null 또는 {"weeklyPattern":["화요일: ..."],"longRunStrategy":"...","currentVolumeNote":"...","activeGoalStrategyNotes":"활성 목표 전략 메모","aiNotes":["..."],"adaptiveTrainingProfile":{"compliancePatterns":["반복 패턴"],"sessionGuides":[{"type":"Tempo","boundary":"현재 사용자에게 맞는 처방 경계","adjustment":"maintain","evidence":"반복 근거","nextCheck":"다음 확인 기준"}]}}}'
   ].join('\n')
 
 }
@@ -716,6 +762,197 @@ function createReportStreamExtractor() {
   }
 }
 
+function buildTrainingMethodologyAlgorithm() {
+  return {
+    version: 'pacelab-2026-05-v1',
+    sourceType: 'external_literature_baseline_plus_user_adaptation',
+    references: [
+      {
+        id: 'seiler-2010',
+        title: 'What is best practice for training intensity and duration distribution in endurance athletes?',
+        url: 'https://pubmed.ncbi.nlm.nih.gov/20861519/',
+        usage: '저강도 기반과 강훈련 과다 방지 가드레일'
+      },
+      {
+        id: 'munoz-2014-recreational-10k',
+        title: 'Does polarized training improve performance in recreational runners?',
+        url: 'https://pubmed.ncbi.nlm.nih.gov/23752040/',
+        usage: '10km 목표 개인 러너의 저강도 중심/강훈련 제한 기준'
+      },
+      {
+        id: 'tid-review-2015',
+        title: 'The training intensity distribution among well-trained and elite endurance athletes',
+        url: 'https://pmc.ncbi.nlm.nih.gov/articles/PMC4621419/',
+        usage: 'polarized/pyramidal/threshold 분포를 절대 공식이 아닌 기준선으로 사용'
+      },
+      {
+        id: 'hofmann-tschakert-2017',
+        title: 'Intensity- and Duration-Based Options to Regulate Endurance Training',
+        url: 'https://www.frontiersin.org/articles/10.3389/fphys.2017.00337/full',
+        usage: '강도만이 아니라 지속시간과 피로/회복을 함께 보는 처방 기준'
+      }
+    ],
+    baselinePrinciples: [
+      'Easy 기반을 충분히 유지하고 강훈련은 제한적으로 배치한다.',
+      '80/20 또는 polarized/pyramidal은 고정 공식이 아니라 Easy 부족/강훈련 과다 방지 가드레일이다.',
+      '목표 10km에는 Easy 기반, Tempo/threshold 지속주, Strides 신경근 자극, Long Run을 단계적으로 연결한다.',
+      '볼륨, 강도, 빈도 중 한 번에 하나만 소폭 올린다.',
+      '회복, 통증, 심박 드리프트, RPE가 나쁘면 상향하지 않는다.',
+      '레이스 예상시간은 보조 근거이며, 단독으로 루틴을 바꾸지 않는다.'
+    ],
+    adaptationLoop: [
+      '문헌 기반 기준선으로 세션별 처방 경계를 만든다.',
+      '선택 RunLog의 랩/심박/RPE/메모로 처방 준수 여부를 판정한다.',
+      '최근 여러 세션의 반복 준수/이탈 패턴을 요약한다.',
+      '반복 근거 또는 사용자 피드백이 있을 때만 adaptiveTrainingProfile을 갱신한다.',
+      '다음 코칭에서는 갱신된 개인화 경계를 기준선 위에 얹어 판단한다.'
+    ],
+    evidenceThresholds: {
+      maintain: '현재 처방이 대체로 맞고 반복 근거가 부족하거나 안정적일 때',
+      raise: '같은 유형 2~3회 이상 품질 준수, 회복 안정, 부상 신호 없음이 같이 보일 때',
+      lower: '같은 유형에서 경계 초과, 높은 RPE, 통증/회복 악화가 반복될 때',
+      watch: '단일 세션, 날씨/동반주/과거 리뷰, 데이터 부족처럼 일시 요인이 클 때'
+    },
+    safeguards: [
+      '의료 진단을 하지 않는다.',
+      '목표 달성 보장을 하지 않는다.',
+      '단일 세션으로 개인화 경계를 크게 바꾸지 않는다.',
+      '원본 RunLog 값은 AI가 임의 수정하지 않는다.',
+      '개인화 진화는 trainingMemory.adaptiveTrainingProfile 저장에 한정한다.'
+    ]
+  }
+}
+
+function getAdaptiveTrainingProfile(memory: unknown) {
+  if (!memory || typeof memory !== 'object') return normalizeAdaptiveTrainingProfile(null)
+  return normalizeAdaptiveTrainingProfile((memory as Record<string, unknown>).adaptiveTrainingProfile)
+}
+
+function normalizeAdaptiveTrainingProfile(value: unknown) {
+  const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  return {
+    methodologyVersion: typeof raw.methodologyVersion === 'string' && raw.methodologyVersion.trim()
+      ? raw.methodologyVersion.trim().slice(0, 80)
+      : 'pacelab-2026-05-v1',
+    updatedAt: typeof raw.updatedAt === 'string' && raw.updatedAt.trim() ? raw.updatedAt.trim().slice(0, 80) : null,
+    compliancePatterns: normalizeStringArray(raw.compliancePatterns, 20, 240),
+    sessionGuides: normalizeAdaptiveSessionGuides(raw.sessionGuides)
+  }
+}
+
+function normalizeAdaptiveSessionGuides(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => normalizeAdaptiveSessionGuidePatch(item))
+    .filter((item): item is Required<AdaptiveSessionGuidePatch> => Boolean(item))
+    .slice(0, 12)
+}
+
+function normalizeAdaptiveTrainingProfilePatch(value: unknown): AdaptiveTrainingProfilePatch | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Record<string, unknown>
+  const normalized: AdaptiveTrainingProfilePatch = {}
+  if (typeof raw.methodologyVersion === 'string' && raw.methodologyVersion.trim()) {
+    normalized.methodologyVersion = raw.methodologyVersion.trim().slice(0, 80)
+  }
+  if (typeof raw.updatedAt === 'string' && raw.updatedAt.trim()) {
+    normalized.updatedAt = raw.updatedAt.trim().slice(0, 80)
+  }
+
+  const compliancePatterns = normalizeStringArray(raw.compliancePatterns, 8, 240)
+  if (compliancePatterns.length) normalized.compliancePatterns = compliancePatterns
+
+  const sessionGuides = normalizeAdaptiveSessionGuides(raw.sessionGuides)
+  if (sessionGuides.length) normalized.sessionGuides = sessionGuides
+
+  return Object.keys(normalized).length ? normalized : null
+}
+
+function normalizeAdaptiveSessionGuidePatch(value: unknown): Required<AdaptiveSessionGuidePatch> | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Record<string, unknown>
+  const type = typeof raw.type === 'string' ? raw.type.trim().slice(0, 40) : ''
+  const boundary = typeof raw.boundary === 'string' ? raw.boundary.trim().slice(0, 360) : ''
+  const evidence = typeof raw.evidence === 'string' ? raw.evidence.trim().slice(0, 360) : ''
+  if (!type || !boundary || !evidence) return null
+  return {
+    type,
+    boundary,
+    adjustment: normalizeAdaptiveAdjustment(raw.adjustment),
+    evidence,
+    nextCheck: typeof raw.nextCheck === 'string' ? raw.nextCheck.trim().slice(0, 240) : ''
+  }
+}
+
+function normalizeAdaptiveAdjustment(value: unknown): Required<AdaptiveSessionGuidePatch>['adjustment'] {
+  return value === 'maintain' || value === 'raise' || value === 'lower' || value === 'watch' ? value : 'watch'
+}
+
+function normalizeStringArray(value: unknown, limit: number, maxLength: number) {
+  if (!Array.isArray(value)) return []
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const item of value) {
+    if (typeof item !== 'string') continue
+    const text = item.replace(/\s+/g, ' ').trim().slice(0, maxLength)
+    const key = text.toLowerCase()
+    if (!text || seen.has(key)) continue
+    seen.add(key)
+    result.push(text)
+    if (result.length >= limit) break
+  }
+  return result
+}
+
+function summarizePrescriptionCompliance(signals: ReturnType<typeof buildPrescriptionComplianceSignals>) {
+  const groups = new Map<string, {
+    type: string
+    total: number
+    met: number
+    partial: number
+    missed: number
+    unknown: number
+    latestEvidence: string[]
+  }>()
+
+  for (const signal of signals) {
+    const type = signal.type || 'Unknown'
+    const group = groups.get(type) ?? { type, total: 0, met: 0, partial: 0, missed: 0, unknown: 0, latestEvidence: [] }
+    group.total += 1
+    if (signal.compliance.startsWith('met_')) group.met += 1
+    else if (signal.compliance.startsWith('partial_')) group.partial += 1
+    else if (signal.compliance.startsWith('missed_')) group.missed += 1
+    else group.unknown += 1
+    if (group.latestEvidence.length < 4) {
+      group.latestEvidence.push(`${signal.dateDisplay}: ${signal.compliance}, drift ${signal.heartRateDriftBpm ?? '-'}bpm, HR ${signal.avgHeartRate ?? '-'}/${signal.maxHeartRate ?? '-'}`)
+    }
+    groups.set(type, group)
+  }
+
+  return [...groups.values()].map((group) => ({
+    ...group,
+    dominantPattern: describeCompliancePattern(group),
+    suggestedAdjustment: suggestAdaptiveAdjustment(group)
+  }))
+}
+
+function describeCompliancePattern(group: { total: number; met: number; partial: number; missed: number; unknown: number }) {
+  if (group.total < 2) return 'single_or_insufficient'
+  if (group.met >= 2 && group.missed === 0) return 'stable_compliance'
+  if (group.missed >= 2) return 'repeated_boundary_miss'
+  if (group.partial + group.missed >= 2) return 'watch_boundary_pressure'
+  if (group.unknown >= group.total - 1) return 'insufficient_data'
+  return 'mixed'
+}
+
+function suggestAdaptiveAdjustment(group: { total: number; met: number; partial: number; missed: number; unknown: number }) {
+  const pattern = describeCompliancePattern(group)
+  if (pattern === 'stable_compliance') return 'maintain_or_small_raise'
+  if (pattern === 'repeated_boundary_miss') return 'lower_or_recover'
+  if (pattern === 'watch_boundary_pressure') return 'watch'
+  return 'maintain'
+}
+
 function normalizeTrainingMemoryPatch(patch: TrainingMemoryPatch | null): TrainingMemoryPatch | null {
   if (!patch || typeof patch !== 'object') return null
   const normalized: TrainingMemoryPatch = {}
@@ -737,6 +974,8 @@ function normalizeTrainingMemoryPatch(patch: TrainingMemoryPatch | null): Traini
     const aiNotes = patch.aiNotes.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()).slice(0, 12)
     if (aiNotes.length) normalized.aiNotes = aiNotes
   }
+  const adaptiveTrainingProfile = normalizeAdaptiveTrainingProfilePatch(patch.adaptiveTrainingProfile)
+  if (adaptiveTrainingProfile) normalized.adaptiveTrainingProfile = adaptiveTrainingProfile
 
   return Object.keys(normalized).length ? normalized : null
 }
@@ -764,13 +1003,45 @@ function mergeTrainingMemoryPatch(memory: CoachContext['trainingMemory'], patch:
     ...(patch.weeklyPattern ? { weeklyPattern: patch.weeklyPattern } : {}),
     ...(patch.longRunStrategy ? { longRunStrategy: patch.longRunStrategy } : {}),
     ...(patch.currentVolumeNote ? { currentVolumeNote: patch.currentVolumeNote } : {}),
-    ...(patch.aiNotes ? { aiNotes: mergeAiNotes(current.aiNotes, patch.aiNotes) } : {})
+    ...(patch.aiNotes ? { aiNotes: mergeAiNotes(current.aiNotes, patch.aiNotes) } : {}),
+    ...(patch.adaptiveTrainingProfile
+      ? { adaptiveTrainingProfile: mergeAdaptiveTrainingProfile(current.adaptiveTrainingProfile, patch.adaptiveTrainingProfile) }
+      : {})
+  }
+}
+
+function mergeAdaptiveTrainingProfile(current: unknown, patch: AdaptiveTrainingProfilePatch) {
+  const base = normalizeAdaptiveTrainingProfile(current)
+  const patchGuides = normalizeAdaptiveSessionGuides(patch.sessionGuides)
+  const guidesByType = new Map<string, Required<AdaptiveSessionGuidePatch>>()
+  for (const guide of base.sessionGuides) guidesByType.set(guide.type, guide)
+  for (const guide of patchGuides) guidesByType.set(guide.type, guide)
+
+  return {
+    methodologyVersion: patch.methodologyVersion ?? base.methodologyVersion,
+    updatedAt: patch.updatedAt ?? new Date().toISOString(),
+    compliancePatterns: mergeStringLists(patch.compliancePatterns ?? [], base.compliancePatterns, 20),
+    sessionGuides: [...patchGuides, ...[...guidesByType.values()].filter((guide) => !patchGuides.some((next) => next.type === guide.type))].slice(0, 12)
   }
 }
 
 function mergeAiNotes(current: unknown, next: string[]) {
   const currentItems = Array.isArray(current) ? current.filter((item) => typeof item === 'string') as string[] : []
   return [...next, ...currentItems.filter((item) => !next.includes(item))].slice(0, 30)
+}
+
+function mergeStringLists(next: string[], current: string[], limit: number) {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const item of [...next, ...current]) {
+    const text = item.replace(/\s+/g, ' ').trim()
+    const key = text.toLowerCase()
+    if (!text || seen.has(key)) continue
+    seen.add(key)
+    result.push(text)
+    if (result.length >= limit) break
+  }
+  return result
 }
 
 function buildRelevantCoachMemoryItems(memoryItems: CoachMemoryItemRow[], selectedRun: RunLogRow | null, userNote: string) {

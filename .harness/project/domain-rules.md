@@ -5,6 +5,7 @@
 ## 업무 용어
 - `RunLog`: 한 번의 러닝 세션을 구조화한 저장 단위다.
 - `TrainingMemory`: 목표 목록, 활성 목표, 부상관리 항목, 활성 부상관리 항목, 주간 패턴, 장거리 전략, 부상/더위 이슈, 러닝 스타일 같은 장기 맥락이다.
+- `AdaptiveTrainingProfile`: 문헌 기반 코칭 기준선 위에 얹는 사용자별 개인화 보정값이다. 반복 처방 준수 패턴과 세션별 경계 조정 가이드를 저장한다.
 - `AthleteProfile`: 나이, 성별, 러닝 경력, 주간 목표 러닝 횟수, 선호 롱런 요일, 거리별 PB 같은 개인화 입력이다.
 - `RunContextUser`: 앱에 등록된 사용자 단위다. 각 사용자는 자기 `TrainingMemory`와 목표를 가진다.
 - `FIT import`: Workoutdoors에서 export한 `.fit` 파일을 브라우저에서 로컬 파싱해 `RunLog` 후보를 만드는 흐름이다.
@@ -18,6 +19,7 @@
 - `Lap`: 랩 번호, 랩 거리, 랩 페이스, 평균 심박, 케이던스를 가진다.
 - `FastSegment`: route/speed 샘플에서 계산한 짧은 고속 구간 요약이다. 시작 시각, 지속 시간, 거리, 평균/최고 페이스를 가진다. 원본 GPS 좌표는 저장하지 않는다.
 - `TrainingMemory`: legacy `goal`, `goals`, `activeGoalId`, `injuryItems`, `activeInjuryItemId`, AthleteProfile, 주간 루틴, 장거리 전략, 현재 볼륨 노트, known issues, running style, heat strategy, ai notes를 가진다. `goal`은 기존 호환용이며 활성 목표 제목과 동기화한다.
+- `AdaptiveTrainingProfile`: `methodologyVersion`, `updatedAt`, `compliancePatterns`, `sessionGuides`를 가진다. AI 코칭이 반복 근거를 찾았을 때만 갱신하며, 소스 코드나 원본 RunLog를 바꾸는 용도가 아니다.
 - `TrainingGoal`: title/category/status 외에 startDate, targetDate, distanceKm, targetDurationSec, successCriteria, strategyNotes를 가진다. AI는 active goal의 성공 기준과 전략을 우선 기준으로 삼는다.
 - `TrainingInjuryItem`: title/area/status/severity 외에 triggers, restrictions, returnToRunCriteria를 가진다. AI는 active injury의 제한 조건을 다음 훈련 추천에 반영한다.
 
@@ -55,6 +57,9 @@
 - AI가 제안한 세션은 사용자가 믿고 따른 훈련 처방이다. 이후 저장된 `RunLog`는 “사용자가 임의로 한 운동”이 아니라 직전 목표/스케줄/코칭 처방을 실행한 결과일 수 있으므로, 코칭은 해당 세션이 계획 의도에 맞게 수행됐는지 먼저 평가하고 다음 처방을 조정한다.
 - 목표는 완성 날짜(`TrainingGoal.targetDate`)를 가질 수 있다. AI 코칭은 매 요청마다 활성 목표의 남은 기간, 최근 수행 흐름, Easy + Strides/Tempo/Long Run 수행 여부를 확인하고, 목표 달성에 맞춰 스케줄 유지/수정 필요성을 놓치지 않는다.
 - 부상/주의사항은 별도 이벤트가 아니라 스케줄 관리의 핵심 제약이다. AI 코칭은 매 요청마다 `activeInjuryItem`, `painNote`, 최근 강훈련/롱런 이후 회복 반응을 확인하고, 의료 진단 없이 훈련 강도와 다음 세션 배치에 반영한다.
+- 코칭 알고리즘은 문헌 기반 기준선을 먼저 적용하고, 사용자 데이터와 대화로 확인된 반복 패턴만 `adaptiveTrainingProfile`에 저장해 개인화한다. “스스로 진화”는 소스 코드 수정이 아니라 이 구조화된 개인화 프로필 갱신을 의미한다.
+- `adaptiveTrainingProfile`은 단일 세션으로 크게 바꾸지 않는다. 같은 유형 2~3회 이상의 반복 준수/이탈, 또는 사용자의 명시 피드백이 있을 때만 갱신한다.
+- 날씨, 동반주, 과거 기록 리뷰, 데이터 부족 같은 일시적 요인은 개인화 경계 변경 근거로 쓰지 않는다.
 - AI 코칭과 홈 요약은 활성 목표와 활성 부상관리 항목을 명시적으로 보여줘야 한다. 추천/분석의 기준이 사용자에게 보이지 않으면 코칭 신뢰도가 떨어진다.
 - 토요일 롱런 추천은 최근 토요일 10km+ 기록의 평균 페이스를 기준으로 LSD/Steady Long 강도 범위를 제안한다. 세션 타입은 참고하되, 실제 강도 판단은 페이스와 최근 흐름을 우선한다.
 - 토요일 또는 직전일 10km+ 롱런/LSD/Steady Long 뒤의 다음날은 주간 루틴의 다음 세션보다 Recovery 또는 휴식을 우선 추천한다. 특히 일요일 홈 추천은 전날 롱런 피로 회복 여부를 먼저 본다.

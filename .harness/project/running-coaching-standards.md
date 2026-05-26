@@ -12,6 +12,30 @@ PaceLAB의 AI 코칭은 사용자의 개인 데이터만 보고 즉흥적으로 
 - Easy 판정은 페이스보다 심박/RPE/대화 가능성을 우선한다. 더위, 바람, 동반주, 회복주 같은 맥락을 같이 본다.
 - 레이스 예상 기록은 보조 근거다. PB, Race, 충분한 Tempo/긴 지속주 데이터가 있을 때만 참고하고, 예상 기록 하나만으로 루틴을 바꾸지 않는다.
 
+## 알고리즘 레이어
+
+PaceLAB 코칭 알고리즘은 세 겹으로 동작한다.
+
+1. 문헌 기반 기준선
+   - 저강도 기반, 제한된 강훈련, 점진적 부하, 회복 게이트, 목표 거리 특이성은 코드/프롬프트의 고정 기준선이다.
+   - 기준선은 사용자의 데이터가 적어도 무너지지 않는 안전한 기본값이다.
+2. 프로그램 가공 신호
+   - 최근 7/14/30일 거리, Easy 비율, 강훈련 빈도, 랩별 페이스/심박 흐름, 심박 드리프트, 처방 준수 신호를 계산한다.
+   - AI는 계산 자체보다 이 신호의 의미를 해석한다.
+3. 개인화 적응 프로필
+   - `trainingMemory.adaptiveTrainingProfile`에 반복 패턴과 세션별 보정 가이드를 저장한다.
+   - 소스 코드가 스스로 바뀌는 구조가 아니다. 누적 데이터와 사용자 피드백으로 검증된 개인화 기준만 저장된다.
+
+## 개인화 진화 규칙
+
+- 업데이트 대상은 `adaptiveTrainingProfile.compliancePatterns`와 `adaptiveTrainingProfile.sessionGuides`다.
+- 같은 세션 유형에서 최근 2~3회 이상 같은 준수/이탈 패턴이 반복될 때만 갱신한다.
+- 사용자가 “너무 쉽다”, “다음날 피로가 크다”, “발바닥이 조용했다”, “템포가 버거웠다”처럼 명시 피드백을 주면 갱신 근거로 쓴다.
+- 날씨, 동반주, 과거 기록 리뷰, 데이터 부족처럼 일시적 요인이 크면 `watch`로 두고 갱신하지 않는다.
+- 상향 조정은 `raise`, 유지 관찰은 `maintain` 또는 `watch`, 강도 하향은 `lower`로 기록한다.
+- 단일 세션 결과로 처방 기준을 크게 바꾸지 않는다.
+- 개인화 프로필은 문헌 기준선을 대체하지 않고 그 위에 얹는 보정값이다.
+
 ## 루틴 유지 기준
 
 - 최근 7/14/30일 볼륨이 급증하지 않았다.
@@ -48,8 +72,9 @@ PaceLAB의 AI 코칭은 사용자의 개인 데이터만 보고 즉흥적으로 
 
 ## 참고 기준
 
-- Seiler, S. “What is best practice for training intensity and duration distribution in endurance athletes?” PubMed.
-- “The training intensity distribution among well-trained and elite endurance athletes.” PMC.
-- “Effects of Different Training Intensity Distribution in Recreational Runners.” PMC.
+- Seiler, S. “What is best practice for training intensity and duration distribution in endurance athletes?” PubMed. https://pubmed.ncbi.nlm.nih.gov/20861519/
+- Muñoz et al. “Does polarized training improve performance in recreational runners?” PubMed. https://pubmed.ncbi.nlm.nih.gov/23752040/
+- “The training intensity distribution among well-trained and elite endurance athletes.” PMC. https://pmc.ncbi.nlm.nih.gov/articles/PMC4621419/
+- Hofmann and Tschakert, “Intensity- and Duration-Based Options to Regulate Endurance Training.” Frontiers. https://www.frontiersin.org/articles/10.3389/fphys.2017.00337/full
 - World Athletics, “The importance of rest and recovery.”
 - ACSM Guidelines for Exercise Testing and Prescription.
