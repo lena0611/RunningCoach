@@ -23,6 +23,7 @@
 - 현재 로컬 iOS 네이티브 프로젝트 경로는 `/Users/smart-tn-083/practice/RunningCoach/RunningCoach/RunningCoach.xcodeproj`다. Swift 소스는 `/Users/smart-tn-083/practice/RunningCoach/RunningCoach/RunningCoach` 아래에 있다. 네이티브 Git 저장소는 `https://github.com/lena0611/RunningCoach-Native-Swift`이며, 웹 repo 밖에 있으므로 네이티브 변경 시 이 경로와 저장소를 함께 확인한다.
 - iOS Bundle Identifier는 계정 이메일에서 추론하지 않고 `com.lena0611.RunningCoach`로 고정한다. iPhone의 Apple ID가 `lenas0611@gmail.com`이고 Apple Developer 계정이 `lena0611@gmail.com`이어도 Bundle ID는 개발자 계정 문자열이 아니라 앱 식별자이므로 `lenas0611`로 바꾸지 않는다.
 - 현재 사용자는 Personal Team으로 iPhone 빌드한다. Personal Team은 WeatherKit capability를 지원하지 않으므로 네이티브 타깃에 WeatherKit entitlement/capability를 켜면 안 된다. WeatherKit을 다시 켜려면 유료 Apple Developer Program 전환 또는 다른 날씨 API/서버리스 대안을 먼저 결정한다.
+- iOS WebView는 상단/하단 safe area 안쪽에 갇히지 않고 화면 끝까지 확장한다. 네이티브는 `WKWebView`를 `.ignoresSafeArea()`와 `contentInsetAdjustmentBehavior = .never`로 배치하고, 실제 터치/가독성 여백은 웹 CSS의 `env(safe-area-inset-top/bottom)`에서 책임진다.
 - Strava 연동을 추가할 때는 Supabase Edge Function 또는 별도 서버리스 API가 Strava OAuth, refresh token, activity fetch를 책임진다.
 - `RunLog`, `TrainingMemory`, `coach_reports`, `coach_memory_items`의 영구 저장소는 Supabase Postgres다. localStorage는 Supabase 미설정/개발 fallback으로만 취급한다.
 
