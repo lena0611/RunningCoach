@@ -53,17 +53,17 @@ export const useSettingsStore = defineStore('settingsStore', {
 })
 
 function loadSettings(): { themePreference: ThemePreference } {
-  if (typeof localStorage === 'undefined') return { themePreference: 'system' }
+  if (typeof localStorage === 'undefined') return { themePreference: 'dark' }
   try {
     const parsed = JSON.parse(localStorage.getItem(storageKey) || '{}') as { themePreference?: string }
     return { themePreference: normalizeThemePreference(parsed.themePreference) }
   } catch {
-    return { themePreference: 'system' }
+    return { themePreference: 'dark' }
   }
 }
 
 function normalizeThemePreference(value: string | undefined): ThemePreference {
-  return value === 'light' || value === 'dark' || value === 'system' ? value : 'system'
+  return value === 'light' || value === 'dark' || value === 'system' ? value : 'dark'
 }
 
 function getSystemTheme(): ManualThemeMode {

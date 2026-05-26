@@ -15,15 +15,23 @@ describe('settingsStore', () => {
     }))
   })
 
-  it('follows iOS theme by default and can switch to manual dark mode', () => {
+  it('starts in dark mode by default and can follow iOS theme', () => {
     const store = useSettingsStore()
 
     store.initTheme()
+    expect(store.themePreference).toBe('dark')
+    expect(store.effectiveTheme).toBe('dark')
+    expect(document.documentElement.classList.contains('theme-dark')).toBe(true)
+
+    store.setFollowSystem(true)
+
     expect(store.themePreference).toBe('system')
     expect(store.effectiveTheme).toBe('light')
     expect(document.documentElement.classList.contains('theme-light')).toBe(true)
 
     store.setFollowSystem(false)
+    expect(store.themePreference).toBe('light')
+
     store.setManualTheme('dark')
 
     expect(store.themePreference).toBe('dark')
