@@ -30,8 +30,8 @@ struct RunContextWebView: UIViewRepresentable {
         context.coordinator.webView = webView
         webView.navigationDelegate = context.coordinator
         webView.isOpaque = false
-        webView.backgroundColor = .clear
-        webView.scrollView.backgroundColor = .clear
+        webView.backgroundColor = RunContextColors.nativeBackground
+        webView.scrollView.backgroundColor = RunContextColors.nativeBackground
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.scrollView.contentInset = .zero
         webView.scrollView.scrollIndicatorInsets = .zero
@@ -42,7 +42,10 @@ struct RunContextWebView: UIViewRepresentable {
         return webView
     }
 
-    func updateUIView(_ webView: WKWebView, context: Context) {}
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        webView.backgroundColor = RunContextColors.nativeBackground
+        webView.scrollView.backgroundColor = RunContextColors.nativeBackground
+    }
 
     private func loadWebApp(in webView: WKWebView) {
         webView.load(URLRequest(url: webAppURL))
