@@ -12,6 +12,9 @@ import {
 
 const minRefreshIntervalMs = 15 * 60 * 1000
 let listenersAttached = false
+type ForecastRequestOptions = {
+  silent?: boolean
+}
 
 export const useWeatherStore = defineStore('weatherStore', {
   state: () => ({
@@ -56,9 +59,9 @@ export const useWeatherStore = defineStore('weatherStore', {
       if (!authStore.isAuthenticated) return
       const now = Date.now()
       if (this.loading || (this.snapshot && now - this.lastReceivedAt < minRefreshIntervalMs)) return
-      await this.requestForecast()
+      await this.requestForecast({ silent: true })
     },
-    async requestForecast() {
+    async requestForecast(options: ForecastRequestOptions = {}) {
       this.init()
       this.loading = true
       this.error = ''
@@ -74,11 +77,13 @@ export const useWeatherStore = defineStore('weatherStore', {
       } catch (err) {
         this.loading = false
         this.error = formatWeatherError(err)
-        useToastStore().error(this.error, {
-          placement: 'top',
-          delayMs: 280,
-          durationMs: 3600
-        })
+        if (!options.silent) {
+          useToastStore().error(this.error, {
+            placement: 'top',
+            delayMs: 280,
+            durationMs: 3600
+          })
+        }
       }
     },
     handleForecast(snapshot: WeatherSnapshot) {

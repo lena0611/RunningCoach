@@ -46,52 +46,70 @@ type CachedPosition = {
   savedAt: number
 }
 
+type CachedWeather = {
+  snapshot: WeatherSnapshot
+  savedAt: number
+}
+
 const positionCacheKey = 'runcontext.weather.position.v1'
+const weatherCacheKey = 'runcontext.weather.snapshot.v1'
 const freshPositionMaxAgeMs = 30 * 60 * 1000
-const fallbackPositionMaxAgeMs = 24 * 60 * 60 * 1000
+const fallbackPositionMaxAgeMs = 7 * 24 * 60 * 60 * 1000
+const fallbackWeatherMaxAgeMs = 6 * 60 * 60 * 1000
+const positionLookupTimeoutMs = 10_000
+const forecastFetchTimeoutMs = 12_000
 
 export async function requestOpenMeteoForecast(): Promise<WeatherSnapshot> {
-  const position = await getCurrentPosition()
-  const latitude = roundCoordinate(position.coords.latitude)
-  const longitude = roundCoordinate(position.coords.longitude)
-  const params = new URLSearchParams({
-    latitude: String(latitude),
-    longitude: String(longitude),
-    current: [
-      'temperature_2m',
-      'apparent_temperature',
-      'relative_humidity_2m',
-      'wind_speed_10m',
-      'precipitation',
-      'weather_code',
-      'is_day'
-    ].join(','),
-    hourly: [
-      'temperature_2m',
-      'apparent_temperature',
-      'precipitation_probability',
-      'precipitation',
-      'weather_code',
-      'is_day'
-    ].join(','),
-    daily: [
-      'temperature_2m_min',
-      'temperature_2m_max',
-      'precipitation_probability_max',
-      'precipitation_sum',
-      'weather_code'
-    ].join(','),
-    forecast_days: '7',
-    timezone: 'auto'
-  })
+  try {
+    const position = await getCurrentPosition()
+    const latitude = roundCoordinate(position.coords.latitude)
+    const longitude = roundCoordinate(position.coords.longitude)
+    const params = new URLSearchParams({
+      latitude: String(latitude),
+      longitude: String(longitude),
+      current: [
+        'temperature_2m',
+        'apparent_temperature',
+        'relative_humidity_2m',
+        'wind_speed_10m',
+        'precipitation',
+        'weather_code',
+        'is_day'
+      ].join(','),
+      hourly: [
+        'temperature_2m',
+        'apparent_temperature',
+        'precipitation_probability',
+        'precipitation',
+        'weather_code',
+        'is_day'
+      ].join(','),
+      daily: [
+        'temperature_2m_min',
+        'temperature_2m_max',
+        'precipitation_probability_max',
+        'precipitation_sum',
+        'weather_code'
+      ].join(','),
+      forecast_days: '7',
+      timezone: 'auto'
+    })
 
-  const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`)
-  if (!response.ok) throw new Error(`날씨 요청 실패 (${response.status})`)
-  const data = (await response.json()) as OpenMeteoForecastResponse
-  return toWeatherSnapshot(data)
+    const data = await fetchForecastWithRetry(`https://api.open-meteo.com/v1/forecast?${params.toString()}`)
+    const snapshot = toWeatherSnapshot(data)
+    saveCachedWeather(snapshot)
+    return snapshot
+  } catch (err) {
+    const cached = getCachedWeather(fallbackWeatherMaxAgeMs)
+    if (cached) return cached.snapshot
+    throw err
+  }
 }
 
 async function getCurrentPosition(): Promise<PositionLike> {
+  const freshCached = getCachedPosition(freshPositionMaxAgeMs)
+  if (freshCached) return toPositionLike(freshCached)
+
   if (!navigator.geolocation) {
     const cached = getCachedPosition(fallbackPositionMaxAgeMs)
     if (cached) return toPositionLike(cached)
@@ -112,9 +130,39 @@ async function getCurrentPosition(): Promise<PositionLike> {
     }, {
       enableHighAccuracy: false,
       maximumAge: freshPositionMaxAgeMs,
-      timeout: 30_000
+      timeout: positionLookupTimeoutMs
     })
   })
+}
+
+async function fetchForecastWithRetry(url: string): Promise<OpenMeteoForecastResponse> {
+  try {
+    return await fetchForecast(url)
+  } catch (err) {
+    await delay(500)
+    try {
+      return await fetchForecast(url)
+    } catch {
+      throw err
+    }
+  }
+}
+
+async function fetchForecast(url: string): Promise<OpenMeteoForecastResponse> {
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), forecastFetchTimeoutMs)
+  try {
+    const response = await fetch(url, { signal: controller.signal })
+    if (!response.ok) throw new Error(`날씨 요청 실패 (${response.status})`)
+    return (await response.json()) as OpenMeteoForecastResponse
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error('날씨 요청 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.')
+    }
+    throw err
+  } finally {
+    window.clearTimeout(timer)
+  }
 }
 
 function getCachedPosition(maxAgeMs: number): CachedPosition | null {
@@ -135,6 +183,27 @@ function saveCachedPosition(latitude: number, longitude: number) {
     localStorage.setItem(positionCacheKey, JSON.stringify({ latitude, longitude, savedAt: Date.now() }))
   } catch {
     // 위치 캐시는 편의 기능이다. 저장 실패가 날씨 조회 자체를 막으면 안 된다.
+  }
+}
+
+function getCachedWeather(maxAgeMs: number): CachedWeather | null {
+  try {
+    const raw = localStorage.getItem(weatherCacheKey)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as CachedWeather
+    if (!parsed.snapshot || !Number.isFinite(parsed.savedAt)) return null
+    if (Date.now() - parsed.savedAt > maxAgeMs) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function saveCachedWeather(snapshot: WeatherSnapshot) {
+  try {
+    localStorage.setItem(weatherCacheKey, JSON.stringify({ snapshot, savedAt: Date.now() }))
+  } catch {
+    // 날씨 캐시는 편의 기능이다. 저장 실패가 예보 조회 자체를 막으면 안 된다.
   }
 }
 
@@ -248,4 +317,8 @@ function kmhToMps(value: unknown) {
 
 function roundCoordinate(value: number) {
   return Math.round(value * 100) / 100
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
