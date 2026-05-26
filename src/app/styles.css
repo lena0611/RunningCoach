@@ -1993,7 +1993,7 @@ button.run-session-row {
 
 .run-type-icon {
   --run-icon-bg: var(--color-subtle-2);
-  --run-icon-fg: var(--color-muted);
+  --run-icon-fg: #fff;
   --run-icon-glow: transparent;
   display: inline-grid;
   place-items: center;
@@ -2001,9 +2001,7 @@ button.run-session-row {
   min-width: 50px;
   height: 50px;
   border-radius: 50%;
-  background:
-    radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.2), transparent 34px),
-    var(--run-icon-bg);
+  background: var(--run-icon-bg);
   color: var(--run-icon-fg);
   box-shadow: 0 10px 22px var(--run-icon-glow);
 }
@@ -2015,11 +2013,11 @@ button.run-session-row {
 }
 
 .run-type-icon svg {
-  width: 66%;
-  height: 66%;
+  width: 54%;
+  height: 54%;
   overflow: visible;
   stroke: currentColor;
-  stroke-width: 2.4;
+  stroke-width: 2.2;
   stroke-linecap: round;
   stroke-linejoin: round;
   fill: none;
@@ -2030,45 +2028,64 @@ button.run-session-row {
   stroke: none;
 }
 
-.run-type-icon .run-icon-accent {
-  opacity: 0.72;
+.run-type-icon .run-icon-cut {
+  stroke: var(--run-icon-bg);
+  stroke-width: 2;
+}
+
+.run-type-icon .run-icon-map {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+}
+
+.run-type-icon .run-icon-map-line {
+  stroke-width: 1.8;
+  opacity: 0.9;
+}
+
+.run-type-icon .run-icon-thick {
+  stroke-width: 2.8;
+}
+
+.run-type-icon .run-icon-trophy {
+  stroke-width: 2;
 }
 
 .run-type-icon.run-type-easy {
-  --run-icon-bg: color-mix(in srgb, var(--color-primary) 18%, var(--color-surface-2));
-  --run-icon-fg: var(--color-primary);
+  --run-icon-bg: #34c78b;
   --run-icon-glow: rgba(74, 222, 128, 0.14);
 }
 
 .run-type-icon.run-type-easy-plus-strides {
-  --run-icon-bg: color-mix(in srgb, var(--color-accent) 18%, var(--color-surface-2));
-  --run-icon-fg: var(--color-accent);
+  --run-icon-bg: #38bdf8;
   --run-icon-glow: rgba(56, 189, 248, 0.13);
 }
 
 .run-type-icon.run-type-tempo {
-  --run-icon-bg: color-mix(in srgb, var(--color-warning) 20%, var(--color-surface-2));
-  --run-icon-fg: var(--color-warning-text);
+  --run-icon-bg: #8b5cf6;
+  --run-icon-glow: rgba(139, 92, 246, 0.14);
+}
+
+.run-type-icon.run-type-lsd {
+  --run-icon-bg: #f59e0b;
   --run-icon-glow: rgba(245, 158, 11, 0.14);
 }
 
-.run-type-icon.run-type-lsd,
 .run-type-icon.run-type-steady-long {
-  --run-icon-bg: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface-2));
-  --run-icon-fg: var(--color-accent);
-  --run-icon-glow: rgba(56, 189, 248, 0.12);
+  --run-icon-bg: #ec4899;
+  --run-icon-glow: rgba(236, 72, 153, 0.14);
 }
 
 .run-type-icon.run-type-recovery {
-  --run-icon-bg: color-mix(in srgb, #a78bfa 18%, var(--color-surface-2));
-  --run-icon-fg: var(--color-recovery-text);
-  --run-icon-glow: rgba(167, 139, 250, 0.13);
+  --run-icon-bg: #3b82f6;
+  --run-icon-glow: rgba(59, 130, 246, 0.13);
 }
 
 .run-type-icon.run-type-race {
-  --run-icon-bg: color-mix(in srgb, var(--color-danger) 26%, var(--color-surface-2));
-  --run-icon-fg: var(--color-danger-text);
-  --run-icon-glow: rgba(239, 68, 68, 0.13);
+  --run-icon-bg: #c7ff25;
+  --run-icon-fg: #0b0f14;
+  --run-icon-glow: rgba(199, 255, 37, 0.14);
 }
 
 .run-type-icon.run-type-unknown {

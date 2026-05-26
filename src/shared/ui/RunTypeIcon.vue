@@ -14,18 +14,19 @@ const slug = computed(() => String(props.type).toLowerCase().replaceAll(' ', '-'
 const glyph = computed(() => {
   switch (props.type) {
     case 'Recovery':
-      return 'dot'
+      return 'heart'
     case 'Easy + Strides':
-      return 'speed'
+      return 'strides'
     case 'Tempo':
-      return 'bolt'
+      return 'tempo'
     case 'LSD':
+      return 'map'
     case 'Steady Long':
-      return 'route'
+      return 'infinity'
     case 'Race':
-      return 'flag'
+      return 'trophy'
     case 'Easy':
-      return 'base'
+      return 'leaf'
     default:
       return 'unknown'
   }
@@ -39,16 +40,32 @@ const glyph = computed(() => {
         <path d="M11 10a5 5 0 0 1 10 0c0 5-5 4-5 8" />
         <path d="M16 24h.01" />
       </template>
-      <template v-else>
-        <path class="run-icon-runner" d="M15.5 8.4a2.45 2.45 0 1 0 0-4.9 2.45 2.45 0 0 0 0 4.9Z" />
-        <path class="run-icon-runner" d="m13.8 11 5.4 4.1 4.1-2.1" />
-        <path class="run-icon-runner" d="m18.7 15.1-4.5 5.2-5.1 1.2" />
-        <path class="run-icon-runner" d="m14.7 20.3 4.1 4.2 5.1 2" />
-        <path v-if="glyph === 'speed'" class="run-icon-accent" d="M4.5 12h5.2M5.8 17h4.8M7.4 22h3.6" />
-        <path v-else-if="glyph === 'bolt'" class="run-icon-accent run-icon-fill" d="m25 4-4.6 7.6h4.1l-3.7 8.4 7-10.5h-4.2z" />
-        <path v-else-if="glyph === 'route'" class="run-icon-accent" d="M4 26c4.3-4.5 8.1.8 12-3.5 3.7-4.1 7.2-1 11-5.5" />
-        <path v-else-if="glyph === 'flag'" class="run-icon-accent" d="M24 5v12M24 6h5l-1.7 2.4L29 11h-5" />
-        <circle v-else-if="glyph === 'dot'" class="run-icon-accent run-icon-fill" cx="25" cy="8" r="2.2" />
+      <template v-else-if="glyph === 'leaf'">
+        <path class="run-icon-fill" d="M24.5 8.2c-7.9-.6-13.9 2.9-15.1 8.3-.7 3.3 1.2 6.3 4.5 6.8 5.6.8 9.5-4.8 10.6-15.1Z" />
+        <path class="run-icon-cut" d="M9.5 22.3c3.2-4.6 6.6-6.8 11-8.2" />
+      </template>
+      <template v-else-if="glyph === 'heart'">
+        <path class="run-icon-fill" d="M16 25.2 7.8 17.8c-3.1-2.8-2.8-7.4.7-9.3 2.1-1.1 4.7-.6 6.2 1.2L16 11.2l1.3-1.5c1.5-1.8 4.1-2.3 6.2-1.2 3.5 1.9 3.8 6.5.7 9.3L16 25.2Z" />
+      </template>
+      <template v-else-if="glyph === 'strides'">
+        <path class="run-icon-fill" d="M9 8.5 17.5 16 9 23.5v-15Z" />
+        <path class="run-icon-fill" d="M18 8.5 26.5 16 18 23.5v-15Z" opacity="0.72" />
+      </template>
+      <template v-else-if="glyph === 'tempo'">
+        <path class="run-icon-fill" d="M7 8.5 15.5 16 7 23.5v-15Z" />
+        <path class="run-icon-fill" d="M17 8.5 25.5 16 17 23.5v-15Z" />
+      </template>
+      <template v-else-if="glyph === 'map'">
+        <path class="run-icon-map" d="m6.5 8.5 6-2.5 7 2.8 6-2.3v17l-6 2.4-7-2.8-6 2.4v-17Z" />
+        <path class="run-icon-map-line" d="M12.5 6v17.1M19.5 8.8v17.1" />
+      </template>
+      <template v-else-if="glyph === 'infinity'">
+        <path class="run-icon-thick" d="M8 16c2.7-4.7 5.7-4.7 8 0s5.3 4.7 8 0" />
+        <path class="run-icon-thick" d="M8 16c2.7 4.7 5.7 4.7 8 0s5.3-4.7 8 0" />
+      </template>
+      <template v-else-if="glyph === 'trophy'">
+        <path class="run-icon-fill" d="M11 7h10v3.6c0 3.4-2 6.1-5 6.1s-5-2.7-5-6.1V7Z" />
+        <path class="run-icon-trophy" d="M11 9H7.5v1.5c0 2.3 1.7 3.8 4 3.8M21 9h3.5v1.5c0 2.3-1.7 3.8-4 3.8M16 16.7V22M12 25h8M13.5 22h5" />
       </template>
     </svg>
   </span>
