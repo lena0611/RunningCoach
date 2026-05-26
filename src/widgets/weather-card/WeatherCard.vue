@@ -77,7 +77,7 @@ const maxRainChance = computed(() => Math.max(0, ...hourly.value.map((hour) => h
     <EmptyState
       v-if="!snapshot && !loading"
       title="기상정보 연결 전입니다."
-      description="iOS 앱 빌드에 WeatherKit 브리지를 추가하면 체감온도와 강수 시간을 홈에서 같이 봅니다."
+      description="위치 권한을 허용하면 무료 Open-Meteo 예보로 체감온도와 강수 시간을 홈에서 같이 봅니다."
     />
   </section>
 </template>

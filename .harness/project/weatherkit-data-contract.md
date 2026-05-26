@@ -1,21 +1,22 @@
-# WeatherKit 데이터 계약
+# 기상정보 데이터 계약
 
-이 문서는 iOS 네이티브 WeatherKit 브리지가 Vue 웹 UI에 넘길 기상 데이터 구조를 정의한다.
+이 문서는 RunContext가 홈/AI 코칭에 사용하는 기상 데이터 구조를 정의한다.
 
 ## 목적
 - 러닝 준비 판단에 중요한 체감온도, 강수확률, 강수량, 강수 시간대를 홈의 다음 세션 준비 카드에 제공한다.
-- 웹 앱은 WeatherKit을 직접 호출하지 않는다. iOS 네이티브 레이어가 위치 권한과 WeatherKit 조회를 담당하고, 웹은 plain JSON만 받는다.
+- 기본 구현은 무료 Open-Meteo forecast API를 사용한다. API key는 필요 없고, 사용자의 현재 위치 권한을 받은 뒤 좌표를 낮은 정밀도로 반올림해 호출한다.
+- WeatherKit은 Personal Team 빌드 제한 때문에 보류한다. 유료 Apple Developer Program 전환 전에는 WeatherKit capability를 켜지 않는다.
 - 기상 데이터는 다음 세션 판단 보조 정보다. 코칭/추천은 기상 때문에 세션 강도를 조정할 수 있지만 의료/안전 보장을 단정하지 않는다.
 
-## iOS 입력 소스
-- Apple WeatherKit
-  - `WeatherService`
-  - `WeatherQuery.current`
-  - `WeatherQuery.hourly`
-  - `WeatherQuery.daily`
-- CoreLocation
-  - 현재 위치 기준 예보가 기본값이다.
-  - 위치 권한이 거부되면 네이티브는 웹에 오류를 넘기고, 웹은 날씨 없이 기존 추천을 유지한다.
+## 입력 소스
+- 기본값: Open-Meteo `https://api.open-meteo.com/v1/forecast`
+  - `current`: temperature, apparent temperature, humidity, wind speed, precipitation, weather code
+  - `hourly`: temperature, apparent temperature, precipitation probability/amount/intensity, weather code
+  - `daily`: min/max temperature, precipitation probability/amount, weather code
+- 위치:
+  - 브라우저/WKWebView `navigator.geolocation`을 사용한다.
+  - 위치 권한이 거부되면 웹은 날씨 없이 기존 추천을 유지한다.
+  - API 요청 좌표는 소수 둘째 자리 수준으로 반올림한다.
 
 ## 웹으로 넘길 후보 구조
 
@@ -60,14 +61,16 @@ type WeatherDailyPoint = {
 }
 ```
 
-## 웹-네이티브 브리지
-- 웹 -> 네이티브 요청:
-  - `window.webkit.messageHandlers.runContextWeatherKit.postMessage({ type: 'requestWeatherForecast', hours: 24, days: 7 })`
-- 네이티브 -> 웹 응답:
-  - 성공: `window.RunContextWeatherKit.receiveForecast(snapshot)`
-  - 실패: `window.RunContextWeatherKit.receiveError(message)`
-- 네이티브는 `WeatherSnapshot`을 plain JSON으로 직렬화해 넘긴다.
-- 웹은 앱 기동/활성화 시 WeatherKit 브리지가 있으면 15분 캐시 기준으로 자동 갱신한다.
+## 웹 호출 흐름
+- 웹 -> 위치 권한 요청 -> Open-Meteo forecast API 호출 -> `WeatherSnapshot`으로 변환한다.
+- 앱 기동/활성화 시 로그인 상태이고 15분 캐시가 만료됐으면 자동 갱신한다.
+- 사용자가 홈의 날씨 카드에서 새로고침을 누르면 즉시 다시 요청한다.
+
+## 보류된 WeatherKit 브리지
+- 장기적으로 WeatherKit을 다시 켤 경우 아래 브리지 계약을 사용한다.
+  - 웹 -> 네이티브: `window.webkit.messageHandlers.runContextWeatherKit.postMessage({ type: 'requestWeatherForecast', hours: 24, days: 7 })`
+  - 네이티브 -> 웹 성공: `window.RunContextWeatherKit.receiveForecast(snapshot)`
+  - 네이티브 -> 웹 실패: `window.RunContextWeatherKit.receiveError(message)`
 
 ## 단위 변환
 - 온도: 섭씨 `°C`
@@ -92,15 +95,11 @@ type WeatherDailyPoint = {
 
 ## iOS 빌드 체크리스트
 - 현재 Personal Team 빌드에서는 Xcode target에 WeatherKit capability를 추가하지 않는다. Personal Team은 WeatherKit provisioning을 지원하지 않아 iPhone 빌드가 실패한다.
-- WeatherKit capability는 유료 Apple Developer Program 전환 또는 다른 날씨 API/서버리스 대안을 결정한 뒤에만 다시 검토한다.
-- 위치 권한 설명을 `Info.plist`에 추가한다.
-- `WKUserContentController`에 `runContextWeatherKit` script message handler를 추가한다.
-- 요청 payload의 `type === "requestWeatherForecast"`를 처리한다.
-- WeatherKit 조회 결과를 위 `WeatherSnapshot` 구조로 변환해 `window.RunContextWeatherKit.receiveForecast(...)`를 실행한다.
-- 실패 시 `window.RunContextWeatherKit.receiveError(message)`를 실행한다.
+- WeatherKit capability는 유료 Apple Developer Program 전환 뒤에만 다시 검토한다.
+- Open-Meteo 방식에서도 WKWebView의 HTML5 geolocation 권한을 위해 위치 권한 설명을 `Info.plist`에 유지한다.
 
 ## 구현 검증 기준
 - iOS 앱 기동 후 홈에 `다음 세션 기상` 카드가 채워진다.
 - 체감온도와 실제 온도가 구분되어 보인다.
 - 강수확률과 강수량, 비 가능 시간대가 표시된다.
-- 위치/WeatherKit 권한 거부 시 앱 전체가 실패하지 않고 날씨 카드만 빈 상태 또는 오류 상태로 남는다.
+- 위치 권한 거부나 Open-Meteo 호출 실패 시 앱 전체가 실패하지 않고 날씨 카드만 빈 상태 또는 오류 상태로 남는다.

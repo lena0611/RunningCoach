@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
+import { useAuthStore } from '@/app/stores/authStore'
 import { useToastStore } from '@/app/stores/toastStore'
+import { requestOpenMeteoForecast } from '@/features/import-open-meteo/openMeteoWeather'
 import {
   hasWeatherKitBridge,
   registerWeatherKitBridge,
@@ -50,22 +52,33 @@ export const useWeatherStore = defineStore('weatherStore', {
     },
     async refreshAfterActivation() {
       this.init()
-      if (!hasWeatherKitBridge()) return
+      const authStore = useAuthStore()
+      if (!authStore.isAuthenticated) return
       const now = Date.now()
       if (this.loading || (this.snapshot && now - this.lastReceivedAt < minRefreshIntervalMs)) return
-      this.requestForecast()
+      await this.requestForecast()
     },
-    requestForecast() {
+    async requestForecast() {
       this.init()
-      if (!hasWeatherKitBridge()) return
       this.loading = true
       this.error = ''
       this.lastRequestedAt = Date.now()
       try {
-        requestWeatherForecast()
+        if (hasWeatherKitBridge()) {
+          requestWeatherForecast()
+          return
+        }
+
+        const snapshot = await requestOpenMeteoForecast()
+        this.handleForecast(snapshot)
       } catch (err) {
         this.loading = false
-        this.error = err instanceof Error ? err.message : '기상정보 요청 실패'
+        this.error = formatWeatherError(err)
+        useToastStore().error(this.error, {
+          placement: 'top',
+          delayMs: 280,
+          durationMs: 3600
+        })
       }
     },
     handleForecast(snapshot: WeatherSnapshot) {
@@ -85,3 +98,16 @@ export const useWeatherStore = defineStore('weatherStore', {
     }
   }
 })
+
+function formatWeatherError(err: unknown) {
+  if (isGeolocationError(err)) {
+    if (err.code === 1) return '위치 권한이 거부되어 기상정보를 가져오지 못했습니다.'
+    if (err.code === 2) return '현재 위치를 확인하지 못했습니다.'
+    if (err.code === 3) return '위치 확인 시간이 초과되었습니다.'
+  }
+  return err instanceof Error ? err.message : '기상정보 요청 실패'
+}
+
+function isGeolocationError(err: unknown): err is { code: number } {
+  return typeof err === 'object' && err !== null && 'code' in err && typeof (err as { code?: unknown }).code === 'number'
+}

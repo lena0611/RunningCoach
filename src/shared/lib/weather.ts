@@ -12,7 +12,7 @@ export function getRunningWeatherAdvice(snapshot: WeatherSnapshot | null): Runni
     return {
       level: 'unknown',
       title: '기상정보 대기',
-      summary: 'iOS WeatherKit 연결 후 다음 세션 준비에 체감온도와 강수 정보를 함께 보여줍니다.',
+      summary: '위치 권한을 허용하면 무료 Open-Meteo 예보로 다음 세션 준비를 보여줍니다.',
       bullets: ['체감온도', '강수확률', '강수량/강수시간']
     }
   }

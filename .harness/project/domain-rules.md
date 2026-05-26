@@ -78,7 +78,8 @@
 - Workoutdoors export의 기본 지원 포맷은 FIT로 제한한다.
 - Strava 연동은 장기 확장이다. Strava OAuth token exchange, refresh token 보관, webhook callback은 정적 프론트가 아니라 서버리스 백엔드가 담당해야 한다.
 - Strava 연동은 당장 구현하지 않고 확장 메모로 둔다. 모바일 FIT 업로드 불편이 커지면 MVP 이후 구현한다.
-- WeatherKit 연동은 iOS 네이티브 브리지 전용이다. GitHub Pages 일반 브라우저에서는 직접 WeatherKit을 호출하지 않는다.
+- 날씨 연동의 기본값은 무료 Open-Meteo API다. 사용자가 위치 권한을 허용하면 웹 앱이 현재 위치를 낮은 정밀도로 반올림해 Open-Meteo forecast API를 호출하고, 체감온도/강수확률/강수량/강수시간을 홈과 AI 코칭 컨텍스트에 반영한다.
+- WeatherKit은 현재 보류한다. GitHub Pages 일반 브라우저에서는 직접 WeatherKit을 호출하지 않으며, Personal Team 빌드에서는 WeatherKit capability를 켜지 않는다.
 
 ## 금지되는 도메인 처리
 - 브라우저 코드에 OpenAI API Key, Strava client secret, refresh token 같은 secret을 넣지 않는다.
