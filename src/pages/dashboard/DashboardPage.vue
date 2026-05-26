@@ -125,6 +125,10 @@ function openCoachForRun(run: RunLog) {
   router.push({ path: '/runs', query: { runId: run.id, coach: '1' } })
 }
 
+function openMemoryPanel(panel: 'goals' | 'injuries') {
+  router.push({ path: '/memory', query: { panel } })
+}
+
 function formatDateOnly(value: Date) {
   return [
     value.getFullYear(),
@@ -148,19 +152,6 @@ function formatDateOnly(value: Date) {
       </div>
     </section>
 
-    <section class="context-strip">
-      <div>
-        <span>활성 목표</span>
-        <strong>{{ activeGoal.title }}</strong>
-        <small>{{ activeGoal.targetDate ? `${formatDateWithWeekday(activeGoal.targetDate)}까지` : '목표일 미정' }}</small>
-      </div>
-      <div>
-        <span>부상 기준</span>
-        <strong>{{ activeInjury?.title || '관리 항목 없음' }}</strong>
-        <small>{{ activeInjury ? `${activeInjury.status}${activeInjury.severity ? ` · ${activeInjury.severity}/5` : ''}` : '코칭 제한 없음' }}</small>
-      </div>
-    </section>
-
     <SectionCard v-if="runStore.loading || runStore.error">
       <SectionHeader title="데이터 상태">
         <button class="ghost" type="button" :disabled="runStore.loading" @click="runStore.load">
@@ -176,6 +167,22 @@ function formatDateOnly(value: Date) {
       <RunSummaryCard label="최근 7일" :value="`${last7}km`" interactive @click="trendMetric = 'last7'" />
       <RunSummaryCard label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 · 랩/페이스 기준" interactive @click="trendMetric = 'easy'" />
       <RunSummaryCard label="강훈련" :value="`${hardSessions}회`" hint="최근 7일" interactive @click="trendMetric = 'hard'" />
+      <button class="stat-card stat-card-interactive dashboard-context-card" type="button" @click="openMemoryPanel('goals')">
+        <span>활성 목표</span>
+        <strong>{{ activeGoal.title }}</strong>
+        <small>{{ activeGoal.targetDate ? `${formatDateWithWeekday(activeGoal.targetDate)}까지` : '목표일 미정' }}</small>
+        <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m9 6 6 6-6 6" />
+        </svg>
+      </button>
+      <button class="stat-card stat-card-interactive dashboard-context-card" type="button" @click="openMemoryPanel('injuries')">
+        <span>부상 기준</span>
+        <strong>{{ activeInjury?.title || '관리 항목 없음' }}</strong>
+        <small>{{ activeInjury ? `${activeInjury.status}${activeInjury.severity ? ` · ${activeInjury.severity}/5` : ''}` : '코칭 제한 없음' }}</small>
+        <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m9 6 6 6-6 6" />
+        </svg>
+      </button>
     </MetricGrid>
 
     <div class="two-column">

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import type { TrainingGoal, TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
 import { formatDateWithWeekday } from '@/shared/lib/format'
@@ -14,6 +15,7 @@ import SectionHeader from '@/shared/ui/SectionHeader.vue'
 type MemoryPanel = 'overview' | 'goals' | 'goal-edit' | 'goal-new' | 'injuries' | 'injury-edit' | 'injury-new'
 
 const memoryStore = useMemoryStore()
+const route = useRoute()
 const draft = reactive<TrainingMemory>(JSON.parse(JSON.stringify(memoryStore.memory)))
 const stack = ref<MemoryPanel[]>([])
 const stackContentRef = ref<HTMLElement | null>(null)
@@ -119,6 +121,12 @@ watch(
   }
 )
 
+watch(
+  () => route.query.panel,
+  () => openRoutePanel(),
+  { immediate: true }
+)
+
 watch(isStackOpen, (open) => {
   document.body.classList.toggle('memory-stack-open', open)
 })
@@ -151,6 +159,17 @@ function syncLegacyGoal() {
 
 function openGoals() {
   pushPanel('goals')
+}
+
+function openRoutePanel() {
+  const target = route.query.panel
+  if (target === 'goals' && panel.value !== 'goals') {
+    stack.value = ['goals']
+    return
+  }
+  if (target === 'injuries' && panel.value !== 'injuries') {
+    stack.value = ['injuries']
+  }
 }
 
 function openGoalEdit(goalId: string) {
