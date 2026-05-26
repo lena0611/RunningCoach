@@ -282,7 +282,7 @@ label {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: calc(env(safe-area-inset-top) + 18px) 18px 14px;
+  padding: calc(env(safe-area-inset-top) + 10px) 18px 10px;
   background: var(--color-header-bg);
   border-bottom: 1px solid var(--color-border);
   backdrop-filter: blur(18px);
@@ -366,31 +366,52 @@ label {
   box-shadow: none;
 }
 
-.account-chip {
+.account-menu-button {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
-  max-width: min(45vw, 220px);
-  min-height: 44px;
-  padding: 0 13px 0 16px;
-  background: var(--color-surface);
+  max-width: min(48vw, 230px);
+  min-height: 36px;
+  padding: 0;
+  background: transparent;
   color: var(--color-text);
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-card);
+  border: 0;
+  box-shadow: none;
 }
 
-.account-chip span {
+.account-avatar-mini {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.account-menu-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 14px;
+  font-weight: 800;
 }
 
-.account-chip strong {
+.account-menu-button svg {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.3;
   color: var(--color-primary);
-  font-size: 18px;
-  line-height: 1;
 }
 
 .side-drawer-layer {
@@ -1222,7 +1243,7 @@ button.run-session-row {
 }
 
 .run-session-distance {
-  color: var(--color-primary);
+  color: var(--color-text);
   font-size: clamp(28px, 8vw, 40px);
   font-weight: 700;
   line-height: 0.95;
