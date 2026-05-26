@@ -349,6 +349,7 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
       ],
       updateRoutineWhen: [
         '최근 2~3주 동안 핵심 세션을 안정적으로 소화했고 훈련 품질 게이트를 통과하면 스케줄을 소폭 상향한다.',
+        '사용자가 기존 주간 루틴을 잘 소화하고 회복도 안정적이면 AI 코치가 먼저 더 나은 품질의 다음 루틴을 제안한다. 사용자가 요구할 때까지 기다리지 않는다.',
         'Easy 품질 게이트: 심박/RPE가 낮고, 다음날 피로/통증 신호가 없으며, Easy가 실제로 Easy로 눌린다.',
         'Tempo 품질 게이트: 목표 강도에서 페이스/심박이 급격히 무너지지 않고, 후반 유지 또는 자연 네거티브가 나오며, 다음날 회복 반응이 괜찮다.',
         'Long Run 품질 게이트: 후반 급락 없이 지속되고, 심박 드리프트가 과하지 않으며, 다음날 회복주 또는 휴식으로 회복 가능하다.',
@@ -364,7 +365,7 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
       racePredictionPolicy:
         '레이스 예상시간은 PB, 최근 Tempo/Race/긴 지속주가 충분할 때만 보조 근거로 언급한다. 데이터가 부족하면 예상시간을 단정하지 않는다. 루틴 변경은 예상시간 하나가 아니라 최근 14/30일 수행, 회복, 부상, 목표일까지 남은 기간을 함께 보고 결정한다.',
       patchPolicy:
-        '변경 필요성이 명확할 때만 trainingMemoryPatch.weeklyPattern 전체와 activeGoalStrategyNotes를 반환한다. 유지가 맞으면 report의 루틴 업데이트 섹션에는 유지 근거를 짧게 쓰고 trainingMemoryPatch는 null로 둔다. 처방 경계 자체를 조정해야 하면 activeGoalStrategyNotes 또는 aiNotes에 새 기준을 명확히 남긴다.'
+        '변경 필요성이 명확할 때만 trainingMemoryPatch.weeklyPattern 전체와 activeGoalStrategyNotes를 반환한다. 유지가 맞으면 report의 루틴 업데이트 섹션에는 유지 근거와 다음 상향 조건을 짧게 쓰고 trainingMemoryPatch는 null로 둔다. 처방 경계 자체를 조정해야 하면 activeGoalStrategyNotes 또는 aiNotes에 새 기준을 명확히 남긴다.'
     },
     trainingMemory,
     trainingMethodology: buildTrainingMethodologyAlgorithm(),
@@ -517,11 +518,14 @@ function buildCoachInstructions() {
     '핵심 지표는 짧은 목록으로만 보여준다. 문장 속에 숫자를 길게 묻지 않는다.',
     'selectedRunLapAnalysis가 있으면 "## 핵심 지표"에 랩 진행에 따른 페이스 흐름과 심박 흐름을 반드시 넣는다. 예: "- 페이스: 10분44초 → 10분05초 → 10분29초 → 9분57초 → 9분28초", "- 심박: 108 → 116 → 114 → 118 → 121", "- 케이던스: 159~164".',
     'selectedRunLapAnalysis가 있으면 평균 페이스/평균 심박만 말하고 끝내지 않는다. 러닝 중간 과정, 즉 초반을 서둘렀는지, 심박이 먼저 터졌는지, 잘 눌러 시작했는지, 후반에 페이스를 올려도 심박 품질이 유지됐는지 분석한다.',
-    'selectedRunExecutionGuide가 있으면 세션 유형별 처방 경계를 사용한다. Easy/Recovery는 심박 상한과 RPE를 우선하고, Tempo는 목표 심박 범위와 상한, Long Run은 후반 심박 드리프트, Easy + Strides는 가속/회복 반복과 회복 구간 심박 안정성을 본다.',
+    'selectedRunExecutionGuide가 있으면 세션 유형별 처방 경계를 사용한다. Easy는 145bpm 상한, Recovery는 130bpm 상한, Tempo는 최대 심박 165bpm 상한, Long Run은 후반 심박 드리프트, Easy + Strides는 10분 워밍업 + 8회 가속/회복 + 15분 쿨다운 구조를 본다.',
     '선택 세션은 단순 사후 기록이 아니라 이전 코칭/주간 루틴/처방 가이드의 실행 결과로 본다. 반드시 "처방 가이드에 맞게 임했는지"를 확인하고, 그 결과에 따라 사후 처방을 유지/상향/하향/보류 중 하나로 정리한다.',
-    '처방 가이드에 맞게 잘 수행했으면 칭찬으로 끝내지 말고 다음 처방 기준을 유지할지, 더 나은 품질로 소폭 올릴지 조건을 말한다. 예: "다음 템포도 165 상한은 유지하되, 160 전후 유지 구간을 1km만 늘려보자."',
+    '처방 가이드에 맞게 잘 수행했으면 칭찬으로 끝내지 말고 다음 처방 기준을 유지할지, 더 나은 품질로 소폭 올릴지 조건을 말한다. 단, Tempo 처방의 핵심은 페이스 처방이 아니라 최대 심박 165를 넘기지 않는 것이다.',
     '처방 가이드를 넘겼으면 비난하지 말고 어느 랩부터 심박/페이스 경계가 흔들렸는지 말하고, 다음 처방에서 무엇을 낮출지 또는 어떤 체크포인트를 둘지 제안한다.',
-    'Tempo 또는 품질훈련에서는 selectedRunExecutionGuide.boundaries.heartRateCeilingBpm을 확인한다. lapHeartRatesOverTempoCeiling이 있거나 경계를 넘은 랩이 있으면 몇 번째 랩부터 넘었는지 짧게 말하고, 없으면 "상한 165는 넘기지 않았다"처럼 훈련 품질 근거로 쓴다.',
+    '현재 처방 숫자는 영구 고정값이 아니다. 사용자가 실행 가능한 Workoutdoors 세팅 기준으로 제시하되, 누적 데이터와 회복 반응이 충분하면 AI가 먼저 숫자/구성 변경을 제안한다.',
+    'Tempo 또는 품질훈련에서는 selectedRunExecutionGuide.boundaries.heartRateCeilingBpm을 확인한다. lapHeartRatesOverTempoCeiling이 있거나 maxHeartRate가 165를 넘으면 몇 번째 랩/구간부터 넘었는지 짧게 말하고, 없으면 "상한 165는 넘기지 않았다"처럼 훈련 품질 근거로 쓴다.',
+    'Easy 세션에서는 평균심박만 보지 말고 maxHeartRate와 랩 심박이 145를 넘겼는지 확인한다. 넘겼다면 "이지 처방은 145를 넘기지 않는 게 핵심인데, 오늘은 이 지점이 흔들렸다"처럼 다음 처방을 보수적으로 말한다.',
+    '다음 훈련을 제안할 때는 세션명만 말하지 말고 사용자가 Workoutdoors에 바로 세팅할 수 있는 세부 지침을 준다. 예: Easy는 "145 넘기지 말기", Tempo는 "max 165 넘기지 말기", Easy + Strides는 "워밍업 10분 + 20초 가속/1분40초 회복 x8 + 쿨다운 15분".',
     '세션 유형별 랩당 페이스/심박 경계 가이드가 현재 사용자에게 맞지 않아 보이면 "## 루틴 업데이트"에서 유지/조정 여부를 말한다. 조정이 필요할 때는 trainingMemoryPatch.activeGoalStrategyNotes 또는 aiNotes에 새 기준을 저장한다.',
     'recentPrescriptionComplianceSignals를 보고 최근 여러 세션에서 처방 준수율 패턴이 있는지 활용한다. 반복적으로 잘 지키는 기준은 다음 처방 상향 근거가 되고, 반복적으로 넘는 기준은 처방 하향/보류 근거가 된다.',
     'context.trainingMethodology는 외부 러닝/지구력 훈련 문헌을 앱 기준선으로 압축한 것이다. 이 기준선을 무시하지 말고, Easy 기반, 제한된 강훈련, 점진적 과부하, 목표 특이성, 회복 게이트를 기본 알고리즘으로 삼는다.',
@@ -573,7 +577,7 @@ function buildCoachInstructions() {
     'activeGoal의 startDate, targetDate, distanceKm, targetDurationSec, successCriteria, strategyNotes를 목표 달성 판단의 기준으로 사용한다.',
     'activeGoal.targetDate가 있으면 남은 기간을 의식하고, 최근 수행 흐름이 목표 완성 날짜에 맞는지 짧게 점검한다. 목표 달성 보장은 금지한다.',
     'activeGoal은 큰 목적이다. 필요하면 그 기간 안에서 2~6주 단위의 작은 단계 목표를 설정해 루틴 처방 근거로 삼는다.',
-    '작은 단계 목표 예: "2주간 Easy 볼륨 안정화", "Tempo를 심박 160 전후로 4~5km 유지", "토요일 Long Run을 12~15km로 안정화", "목표 10km 전 5km 테스트로 현재 위치 확인".',
+    '작은 단계 목표 예: "2주간 Easy 볼륨 안정화", "Tempo에서 max 165를 넘기지 않고 지속 시간 확보", "토요일 Long Run을 12~15km로 안정화", "목표 10km 전 5km 테스트로 현재 위치 확인".',
     '단계 목표를 새로 잡거나 바꿔야 하면 report의 루틴 업데이트 섹션에 짧게 말하고, trainingMemoryPatch.activeGoalStrategyNotes에 큰 목표와 단계 목표가 함께 보이도록 반영한다.',
     '다른 목표는 보조 관점으로만 활용하고, activeGoal과 충돌하면 activeGoal을 우선한다.',
     '부상관리는 knownIssues 자유 텍스트보다 injuryItems와 activeInjuryItem을 우선한다.',
@@ -593,10 +597,10 @@ function buildCoachInstructions() {
     '10km 목표라면 Easy 기반만으로 끝내지 말고 Tempo/threshold 성격의 지속주, Strides를 통한 신경근 자극, 토요일 Long Run을 목표일까지 단계적으로 연결한다.',
     '큰 목표를 한 번에 달성하려 하지 말고, 목표일까지 남은 기간을 2~6주 단위 단계 목표로 쪼개서 루틴을 관리한다.',
     '훈련 계획은 부하-회복-적응의 반복이다. 잘 뛴 세션 뒤에도 회복 반응이 나쁘면 다음 처방은 낮춘다. 반대로 회복이 안정되고 핵심 세션이 반복적으로 소화되면 다음 단계로 아주 조금 올린다.',
-    '루틴 변경은 하향 조정만 의미하지 않는다. 사용자가 2~3주 이상 루틴을 잘 소화하고 회복/부상 신호가 안정적이면 더 나은 품질의 훈련으로 상향 조정할 수 있다.',
+    '루틴 변경은 하향 조정만 의미하지 않는다. 사용자가 2~3주 이상 루틴을 잘 소화하고 회복/부상 신호가 안정적이면 더 나은 품질의 훈련으로 AI가 주도적으로 상향 조정할 수 있다.',
     '상향 조정은 한 번에 하나만 한다. 예: Tempo 지속 시간 소폭 증가, Long Run 후반 steady 비중 증가, Strides 품질 강화, 목표 페이스 지속주 준비. 거리와 강도를 동시에 크게 올리지 않는다.',
     '상향 조정 근거는 performanceProjection 개선, 핵심 세션 소화율, 낮은 RPE/안정 심박, 통증 없음, 최근 볼륨 안정 중 최소 2개 이상이 있을 때만 충분하다고 본다.',
-    '훈련 품질 게이트를 본다. Easy는 낮은 심박/RPE와 회복, Tempo는 목표 강도 유지와 후반 안정, Long Run은 지속성과 다음날 회복, Strides는 짧고 선명한 가속과 회복 구간 안정이 기준이다.',
+    '훈련 품질 게이트를 본다. Easy는 145bpm 이하 유지와 회복, Tempo는 max 165bpm 이하 유지와 후반 안정, Long Run은 지속성과 다음날 회복, Easy + Strides는 짧고 선명한 가속과 회복 구간 안정이 기준이다.',
     '사용자가 목표를 향해 필요한 품질을 반복적으로 달성하면, "유지"가 아니라 더 나은 스케줄 제시를 검토한다. 단, 상향은 한 번에 하나의 변수만 소폭 적용한다.',
     '사용자가 잘 수행했는데도 루틴이 그대로라면 "아직 유지"가 아니라 "왜 아직 유지가 더 좋은지" 또는 "다음 상향 조건이 무엇인지"를 루틴 업데이트 섹션에 말한다.',
     'report의 "## 루틴 업데이트" 섹션에는 유지/변경 결론만 쓰지 말고, 근거를 1~3개 짧게 붙인다. 예: "루틴은 유지. 최근 Easy 기반은 살아 있고, 이번 세션도 강도 과부하 신호는 없다."',
@@ -1620,14 +1624,14 @@ function buildSessionExecutionGuide(run: RunLogRow | null, activeGoal: unknown) 
   if (type === 'Tempo') {
     return {
       ...common,
-      primaryMetric: 'heart_rate_then_pace',
+      primaryMetric: 'heart_rate_ceiling',
       boundaries: {
-        targetHeartRateRangeBpm: '158~165',
         heartRateCeilingBpm: 165,
+        paceRule: '페이스는 보조 지표다. 현재 템포 처방의 핵심은 max HR 165bpm을 넘기지 않는 것이다.',
         targetPaceSecPerKm: targetPaceSec,
-        targetPaceDisplay: formatPaceForCoach(targetPaceSec),
+        targetPaceDisplay: targetPaceSec ? formatPaceForCoach(targetPaceSec) : null,
         allowedLapInterpretation:
-          '템포 랩은 165bpm 상한을 넘기지 않고 160 전후에서 유지되는지 본다. 후반 페이스가 빨라져도 심박이 165를 넘지 않으면 품질이 좋다.'
+          '템포 랩은 165bpm 상한을 넘겼는지 먼저 본다. 후반 페이스가 빨라져도 심박이 165를 넘지 않으면 품질이 좋고, 넘겼다면 다음 템포는 초반 진입을 낮춘다.'
       }
     }
   }
@@ -1639,6 +1643,9 @@ function buildSessionExecutionGuide(run: RunLogRow | null, activeGoal: unknown) 
       boundaries: {
         easyHeartRateCeilingBpm: type === 'Recovery' ? 130 : 145,
         recoveryHeartRateCeilingBpm: 130,
+        maxHeartRateRule: type === 'Recovery'
+          ? 'Recovery는 평균뿐 아니라 max/lap 심박도 130 근처에서 조용한지 본다.'
+          : 'Easy는 평균보다 max/lap 심박이 145bpm을 넘지 않았는지 먼저 본다.',
         paceRule: '페이스는 보조 지표다. 심박이 낮고 RPE가 낮으면 페이스가 조금 빨라져도 Easy/Recovery로 볼 수 있다.',
         allowedLapInterpretation:
           '후반 페이스 상승보다 심박 안정성을 우선한다. 심박이 낮게 유지되면 잘 눌렀다고 본다.'
@@ -1651,7 +1658,7 @@ function buildSessionExecutionGuide(run: RunLogRow | null, activeGoal: unknown) 
       ...common,
       primaryMetric: 'pattern_then_recovery_heart_rate',
       boundaries: {
-        pattern: '10분 워밍업 + 짧은 가속 4~8회 + 회복 조깅 + 쿨다운',
+        pattern: '10분 워밍업 + 20초 가속/1분40초 회복 x8 + 15분 쿨다운',
         accelerationDurationToleranceSec: '6~45',
         recoveryWindowToleranceSec: '60~210',
         recoveryHeartRateRule: '가속 뒤 회복 구간에서 심박과 호흡이 내려오는지 본다.',
@@ -1717,10 +1724,12 @@ function classifyPrescriptionCompliance(run: RunLogRow, analysis: ReturnType<typ
 
   if (type === 'Easy' || type === 'Recovery') {
     const ceiling = type === 'Recovery' ? 130 : 145
-    const heartRate = run.avg_heart_rate
-    if (heartRate === null) return 'unknown_no_heart_rate'
-    if (heartRate <= ceiling) return 'met_easy_heart_rate'
-    if (heartRate <= ceiling + 8) return 'partial_easy_heart_rate'
+    const avgHeartRate = run.avg_heart_rate
+    const maxHeartRate = run.max_heart_rate
+    if (avgHeartRate === null && maxHeartRate === null) return 'unknown_no_heart_rate'
+    if ((maxHeartRate ?? avgHeartRate ?? 999) <= ceiling) return 'met_easy_heart_rate'
+    if ((avgHeartRate ?? 999) <= ceiling && (maxHeartRate ?? 999) <= ceiling + 8) return 'partial_easy_heart_rate_late_spike'
+    if ((avgHeartRate ?? 999) <= ceiling + 5 && (maxHeartRate ?? 999) <= ceiling + 12) return 'partial_easy_heart_rate'
     return 'missed_too_hard_for_easy'
   }
 

@@ -135,6 +135,10 @@ const rulesByMethod = computed(() => {
   }
   return groups
 })
+const weeklyRoutineGuides = computed(() => draft.weeklyPattern.map((item) => ({
+  item,
+  ...getWeeklyRoutineGuide(item)
+})))
 
 watch(
   () => memoryStore.selectedUserId,
@@ -326,6 +330,73 @@ function methodMeta(method: TrainingMethod) {
   const distances = method.targetDistances.length ? method.targetDistances.join(', ') : '거리 미지정'
   const days = method.weeklyDaysMin && method.weeklyDaysMax ? `주 ${method.weeklyDaysMin}~${method.weeklyDaysMax}회` : '주간 횟수 미지정'
   return `${distances} · ${days}`
+}
+
+function getWeeklyRoutineGuide(item: string) {
+  const value = item.toLowerCase()
+  if (value.includes('easy + strides') || value.includes('strides') || value.includes('스트라이드')) {
+    return {
+      title: 'Easy + Strides',
+      metric: '현재: 145bpm 이하 + 짧은 가속',
+      details: [
+        '워밍업 10분',
+        '20초 가속 + 1분40초 회복 x 8',
+        '쿨다운 15분',
+        '가속은 선명하게, 회복은 호흡이 내려오게',
+        '데이터가 안정되면 AI가 횟수/강도를 조정'
+      ]
+    }
+  }
+  if (value.includes('tempo') || value.includes('템포')) {
+    return {
+      title: 'Tempo',
+      metric: '현재: max 165bpm 넘기지 않기',
+      details: [
+        '페이스보다 최대 심박 상한 우선',
+        '랩별 심박이 165를 넘는지 확인',
+        '넘기면 다음 템포는 초반 진입을 낮춤',
+        '잘 지키면 지속 시간/품질을 소폭 상향 검토'
+      ]
+    }
+  }
+  if (value.includes('recovery') || value.includes('회복')) {
+    return {
+      title: 'Recovery',
+      metric: '현재: 130bpm 전후로 아주 낮게',
+      details: [
+        '거리 욕심 없이 회복 반응 확인',
+        '전날 롱런/템포 피로를 풀어주는 목적',
+        '통증/착지감이 조용한지 체크'
+      ]
+    }
+  }
+  if (value.includes('lsd') || value.includes('long') || value.includes('롱런')) {
+    return {
+      title: value.includes('steady') ? 'Steady Long' : 'Long Run',
+      metric: '현재: 후반 심박 드리프트 관리',
+      details: [
+        '초반 억제',
+        '후반 급락 없이 유지',
+        '다음날 회복주 또는 휴식으로 반응 확인'
+      ]
+    }
+  }
+  if (value.includes('easy') || value.includes('이지')) {
+    return {
+      title: 'Easy',
+      metric: '현재: 145bpm 넘기지 않기',
+      details: [
+        '페이스보다 심박 우선',
+        '대화 가능한 강도',
+        '다음날 피로/통증이 남지 않아야 함'
+      ]
+    }
+  }
+  return {
+    title: '세부 지침 미정',
+    metric: 'AI 코칭에서 처방 필요',
+    details: ['다음 코칭 때 목표와 최근 기록을 보고 세부 기준을 정합니다.']
+  }
 }
 
 function requestStatusLabel(status: TrainingKnowledgeRequest['status']) {
@@ -531,9 +602,18 @@ async function save() {
         </div>
         <div class="sub-panel">
           <strong>주간 루틴</strong>
-          <p class="helper">주간 루틴은 AI 코칭이 목표와 누적 데이터를 보고 유지하거나 수정합니다.</p>
-          <ul class="memory-list">
-            <li v-for="item in draft.weeklyPattern" :key="item">{{ item }}</li>
+          <p class="helper">아래는 현재 처방 기준입니다. AI 코칭은 목표와 누적 데이터를 보고 유지하거나 숫자를 조정합니다.</p>
+          <ul class="routine-guide-list">
+            <li v-for="guide in weeklyRoutineGuides" :key="guide.item">
+              <div class="routine-guide-head">
+                <strong>{{ guide.item }}</strong>
+                <span>{{ guide.metric }}</span>
+              </div>
+              <small>{{ guide.title }}</small>
+              <ul>
+                <li v-for="detail in guide.details" :key="detail">{{ detail }}</li>
+              </ul>
+            </li>
           </ul>
         </div>
         <FormGrid>
