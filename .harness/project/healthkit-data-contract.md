@@ -69,11 +69,21 @@ type FastSegment = {
 ## 웹-네이티브 브리지
 - 웹 -> 네이티브 요청:
   - `window.webkit.messageHandlers.runContextHealthKit.postMessage({ type: 'requestRecentRunningWorkouts', days: 14 })`
+  - `window.webkit.messageHandlers.runContextHealthKit.postMessage({ type: 'requestRunningWorkoutByExternalId', externalId })`
 - 네이티브 -> 웹 응답:
   - 성공: `window.RunContextHealthKit.receiveRuns(candidates)`
   - 실패: `window.RunContextHealthKit.receiveError(message)`
+  - 단일 세션 갱신 성공: `window.RunContextHealthKit.receiveRunUpdate(candidate)`
+  - 단일 세션 갱신 실패: `window.RunContextHealthKit.receiveRunUpdateError(externalId, message)`
 - 네이티브는 `HealthKitRunCandidate[]`를 plain JSON으로 직렬화해 넘긴다.
 - 웹은 후보를 바로 저장하지 않고 확인/수정 폼에 채운다.
+
+## 동기화 정책
+- 앱 기동/재활성화 자동 동기화는 현재 저장된 최신 `RunLog.date` 이후의 새 HealthKit 러닝만 가져온다.
+- 이미 저장된 HealthKit 세션은 자동 동기화에서 갱신하지 않는다. 기존 세션 보강은 세션 상세의 새로고침 아이콘을 통해 사용자가 명시적으로 요청한다.
+- 단일 세션 갱신은 `RunLog.externalId`와 `HKWorkout.uuid`를 매칭해 같은 원본 운동만 다시 조회한다.
+- 단일 세션 갱신은 HealthKit 유래 구조화 필드(`distanceKm`, `durationSec`, `avgPaceSec`, `avgHeartRate`, `maxHeartRate`, `cadence`, `laps`, `fastSegments`, `rawAvailability`)를 새 값으로 갱신한다.
+- 단일 세션 갱신은 사용자가 입력한 코칭 메모, RPE, 통증 메모, 동반주, 제목, 기존 AI 코칭 대화 기록을 보존한다.
 
 ## `RunLog` 매핑
 - `date`: `HKWorkout.startDate`의 로컬 날짜

@@ -29,14 +29,18 @@ export type HealthKitRunCandidate = {
 
 type HealthKitBridgeHandlers = {
   onRuns: (runs: HealthKitRunCandidate[]) => void
+  onRunUpdate: (run: HealthKitRunCandidate) => void
   onError: (message: string) => void
+  onRunUpdateError: (externalId: string | null, message: string) => void
 }
 
 declare global {
   interface Window {
     RunContextHealthKit?: {
       receiveRuns: (runs: HealthKitRunCandidate[]) => void
+      receiveRunUpdate: (run: HealthKitRunCandidate) => void
       receiveError: (message: string) => void
+      receiveRunUpdateError: (externalId: string | null, message: string) => void
     }
     webkit?: {
       messageHandlers?: {
@@ -56,8 +60,14 @@ export function registerHealthKitBridge(handlers: HealthKitBridgeHandlers) {
     receiveRuns(runs) {
       handlers.onRuns(runs.map(normalizeCandidate))
     },
+    receiveRunUpdate(run) {
+      handlers.onRunUpdate(normalizeCandidate(run))
+    },
     receiveError(message) {
       handlers.onError(message || 'HealthKit 가져오기 실패')
+    },
+    receiveRunUpdateError(externalId, message) {
+      handlers.onRunUpdateError(externalId, message || 'HealthKit 세션 갱신 실패')
     }
   }
 }
@@ -75,6 +85,18 @@ export function requestHealthKitRuns(days = 14) {
   handler.postMessage({
     type: 'requestRecentRunningWorkouts',
     days
+  })
+}
+
+export function requestHealthKitRunUpdate(externalId: string) {
+  const handler = window.webkit?.messageHandlers?.runContextHealthKit
+  if (!handler) {
+    throw new Error('iOS HealthKit 브리지가 연결되어 있지 않습니다. 웹에서는 FIT 업로드를 사용하세요.')
+  }
+
+  handler.postMessage({
+    type: 'requestRunningWorkoutByExternalId',
+    externalId
   })
 }
 

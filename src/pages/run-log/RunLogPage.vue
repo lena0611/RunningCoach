@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import { runTypes, type Lap, type RunLog, type RunType } from '@/entities/run/model'
@@ -18,10 +19,12 @@ import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
 import RunTypeIcon from '@/shared/ui/RunTypeIcon.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
+import { hasNativeBridge } from '@/shared/lib/runtime'
 
 const LapSplitChart = defineAsyncComponent(() => import('@/shared/ui/LapSplitChart.vue'))
 
 const runStore = useRunStore()
+const healthKitSyncStore = useHealthKitSyncStore()
 const weatherStore = useWeatherStore()
 const selectedType = ref<RunType | 'All'>('All')
 const selectedDate = ref<string | null>(null)
@@ -230,6 +233,10 @@ function detailCoachButtonLabel(run: RunLog) {
   return hasCoachThread(run) ? '코칭 이어가기' : 'AI 코칭 받기'
 }
 
+function canRefreshFromHealthKit(run: RunLog) {
+  return hasNativeBridge() && run.source === 'healthkit' && Boolean(run.externalId)
+}
+
 function closeCoach() {
   coachRun.value = null
   coachNote.value = ''
@@ -383,6 +390,22 @@ function formatLapDuration(lap: Lap) {
               <div class="run-detail-topline">
                 <span class="list-row-kicker">{{ formatDateWithWeekday(detailRun.date) }}</span>
                 <div class="run-detail-actions" aria-label="세션 관리">
+                  <button
+                    v-if="canRefreshFromHealthKit(detailRun)"
+                    class="icon-only-button"
+                    :class="{ spinning: healthKitSyncStore.refreshingRunId === detailRun.id }"
+                    type="button"
+                    :disabled="healthKitSyncStore.refreshingRunId === detailRun.id"
+                    aria-label="HealthKit 세션 다시 갱신"
+                    @click="healthKitSyncStore.requestRunRefresh(detailRun)"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M20 11a8 8 0 0 0-14.8-4.2" />
+                      <path d="M5 3v4h4" />
+                      <path d="M4 13a8 8 0 0 0 14.8 4.2" />
+                      <path d="M19 21v-4h-4" />
+                    </svg>
+                  </button>
                   <button class="icon-only-button" type="button" aria-label="기록 수정" @click="startEdit(detailRun)">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M4.5 19.5h4.2L18.8 9.4a2.1 2.1 0 0 0 0-3l-1.2-1.2a2.1 2.1 0 0 0-3 0L4.5 15.3z" />

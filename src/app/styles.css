@@ -1157,6 +1157,16 @@ button.stat-card {
   fill: none;
 }
 
+.icon-only-button.spinning svg {
+  animation: icon-spin 0.9s linear infinite;
+}
+
+@keyframes icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .icon-link-button {
   display: grid;
   place-items: center;
