@@ -63,7 +63,7 @@
   --text-body-line: 1.6;
   --text-caption-size: 13px;
   --text-caption-line: 1.45;
-  --text-metric-size: clamp(30px, 9vw, 42px);
+  --text-metric-size: clamp(28px, 7.8vw, 38px);
   --pressable-bg: var(--color-subtle-2);
   --bottom-nav-height: 86px;
   --bottom-nav-reserve: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 18px);
@@ -827,7 +827,7 @@ label {
 
 .hero-metric strong {
   color: var(--color-primary);
-  font-size: clamp(32px, 11vw, 56px);
+  font-size: clamp(32px, 10vw, 52px);
   font-weight: 700;
   line-height: 1;
 }
@@ -942,8 +942,9 @@ button.stat-card {
 .stat-card-value {
   display: flex;
   align-items: baseline;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
+  max-width: 100%;
   white-space: nowrap;
 }
 
@@ -958,7 +959,7 @@ button.stat-card {
 .unit-value {
   display: inline-flex;
   align-items: baseline;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
   max-width: 100%;
   color: inherit;
@@ -967,18 +968,25 @@ button.stat-card {
 }
 
 .unit-value-number {
-  min-width: 0;
+  flex: 0 0 auto;
   font: inherit;
   font-weight: 700;
   line-height: 1;
 }
 
 .unit-value-unit {
+  flex: 0 0 auto;
   color: currentColor;
-  font-size: 0.48em;
+  font-size: 0.42em;
   font-weight: 650;
   line-height: 1;
   white-space: nowrap;
+}
+
+.stat-card-value .unit-value-unit,
+.metric strong .unit-value-unit,
+.run-session-distance .unit-value-unit {
+  font-size: 0.38em;
 }
 
 .two-column {
@@ -1160,7 +1168,7 @@ button.run-session-row {
 
 .run-session-distance {
   color: var(--color-primary);
-  font-size: clamp(30px, 9vw, 46px);
+  font-size: clamp(28px, 8vw, 40px);
   font-weight: 700;
   line-height: 0.95;
   letter-spacing: 0;
