@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
+import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import { runTypes, type Lap, type RunLog, type RunType } from '@/entities/run/model'
@@ -15,6 +16,7 @@ import CoachMessage from '@/shared/ui/CoachMessage.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
 import RunForm from '@/shared/ui/RunForm.vue'
+import RunMetaChips from '@/shared/ui/RunMetaChips.vue'
 import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
 import RunTypeIcon from '@/shared/ui/RunTypeIcon.vue'
 import RunSessionList from '@/shared/ui/RunSessionList.vue'
@@ -28,6 +30,7 @@ const LapSplitChart = defineAsyncComponent(() => import('@/shared/ui/LapSplitCha
 const FitnessDetailCharts = defineAsyncComponent(() => import('@/shared/ui/FitnessDetailCharts.vue'))
 
 const runStore = useRunStore()
+const memoryStore = useMemoryStore()
 const healthKitSyncStore = useHealthKitSyncStore()
 const weatherStore = useWeatherStore()
 const route = useRoute()
@@ -167,6 +170,9 @@ const filteredCoachCommands = computed(() => {
 onMounted(() => {
   if (!runStore.loaded && !runStore.loading) {
     runStore.load()
+  }
+  if (!memoryStore.loading) {
+    memoryStore.load()
   }
   setupObserver()
   openRouteRunIfNeeded()
@@ -554,7 +560,7 @@ function formatLapDuration(lap: Lap) {
         <small class="helper">{{ filteredRuns.length }}개</small>
       </SectionHeader>
       <p v-if="runStore.loading" class="helper">Run Log를 불러오고 있습니다.</p>
-      <RunSessionList v-if="visibleRuns.length" :runs="visibleRuns" interactive @select="openDetail" />
+      <RunSessionList v-if="visibleRuns.length" :runs="visibleRuns" :weekly-pattern="memoryStore.memory.weeklyPattern" interactive @select="openDetail" />
       <div ref="loadMoreRef" class="load-more-sentinel">
         <button v-if="hasMoreRuns" class="secondary full" type="button" @click="showMore">다음 10개 보기</button>
       </div>
@@ -616,7 +622,10 @@ function formatLapDuration(lap: Lap) {
                 <RunTypeIcon :type="detailRun.type" size="large" />
                 <div>
                   <h2>{{ detailRun.sessionTitle || detailRun.type }}</h2>
-                  <RunTypeBadge :type="detailRun.type" />
+                  <div class="run-session-chip-row">
+                    <RunTypeBadge :type="detailRun.type" />
+                    <RunMetaChips :run="detailRun" :weekly-pattern="memoryStore.memory.weeklyPattern" />
+                  </div>
                 </div>
               </div>
               <div class="run-detail-metrics">

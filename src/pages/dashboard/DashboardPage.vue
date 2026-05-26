@@ -17,6 +17,7 @@ import ContentStack from '@/shared/ui/ContentStack.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import MetricGrid from '@/shared/ui/MetricGrid.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
+import RunMetaChips from '@/shared/ui/RunMetaChips.vue'
 import RunSessionList from '@/shared/ui/RunSessionList.vue'
 import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
 import RunTypeIcon from '@/shared/ui/RunTypeIcon.vue'
@@ -242,7 +243,7 @@ function formatDateOnly(value: Date) {
     </MetricGrid>
 
     <div class="two-column">
-      <RecentRuns :runs="runs.slice(0, 5)" @show-all="router.push('/runs')" @select="openRunDetail" />
+      <RecentRuns :runs="runs.slice(0, 5)" :weekly-pattern="memoryStore.memory.weeklyPattern" @show-all="router.push('/runs')" @select="openRunDetail" />
       <ContentStack>
         <FatigueCard :warning="getVolumeWarning(runs, today)" />
         <SectionCard>
@@ -287,7 +288,7 @@ function formatDateOnly(value: Date) {
               </SectionCard>
               <SectionCard v-if="trendRuns.length">
                 <SectionHeader title="세션" />
-                <RunSessionList :runs="trendRuns" />
+                <RunSessionList :runs="trendRuns" :weekly-pattern="memoryStore.memory.weeklyPattern" />
               </SectionCard>
             </main>
           </section>
@@ -351,7 +352,10 @@ function formatDateOnly(value: Date) {
                   <RunTypeIcon :type="detailRun.type" size="large" />
                   <div>
                     <h2>{{ detailRun.sessionTitle || detailRun.type }}</h2>
-                    <RunTypeBadge :type="detailRun.type" />
+                    <div class="run-session-chip-row">
+                      <RunTypeBadge :type="detailRun.type" />
+                      <RunMetaChips :run="detailRun" :weekly-pattern="memoryStore.memory.weeklyPattern" />
+                    </div>
                   </div>
                 </div>
                 <div class="run-detail-metrics">

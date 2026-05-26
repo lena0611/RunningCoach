@@ -1,0 +1,73 @@
+import { describe, expect, it } from 'vitest'
+import type { RunLog } from '@/entities/run/model'
+import { getRunMetaChips } from './runMetaChips'
+
+describe('getRunMetaChips', () => {
+  it('adds schedule, period, and weather chips when matched', () => {
+    const run = createRun({
+      date: '2026-05-26',
+      sessionTitle: '화요일 밤 러닝',
+      type: 'Easy + Strides',
+      temperature: 23
+    })
+
+    expect(getRunMetaChips(run, ['화요일: Easy + Strides'])).toEqual([
+      { label: '스케줄', tone: 'schedule' },
+      { label: '밤', tone: 'period' },
+      { label: '날씨', tone: 'weather' }
+    ])
+  })
+
+  it('marks non-routine runs as extra', () => {
+    const run = createRun({
+      date: '2026-05-25',
+      sessionTitle: '월요일 아침 러닝',
+      type: 'Easy'
+    })
+
+    expect(getRunMetaChips(run, ['화요일: Easy + Strides'])).toEqual([
+      { label: '추가', tone: 'extra' },
+      { label: '아침', tone: 'period' }
+    ])
+  })
+})
+
+function createRun(input: Partial<RunLog>): RunLog {
+  return {
+    id: 'run-1',
+    userId: 'user-1',
+    externalId: null,
+    sessionTitle: '',
+    date: '2026-05-26',
+    type: 'Easy',
+    distanceKm: 5,
+    durationSec: 1800,
+    avgPaceSec: 360,
+    avgHeartRate: null,
+    maxHeartRate: null,
+    cadence: null,
+    temperature: null,
+    humidity: null,
+    windMps: null,
+    elevationGainM: null,
+    elevationLossM: null,
+    courseType: 'Unknown',
+    rpe: null,
+    workoutFeeling: '',
+    painNote: '',
+    sleepQuality: null,
+    conditionScore: null,
+    stressLevel: null,
+    companion: '',
+    memo: '',
+    laps: [],
+    fastSegments: [],
+    metricSamples: [],
+    routePoints: [],
+    tags: [],
+    source: 'healthkit',
+    createdAt: '2026-05-26T00:00:00.000Z',
+    updatedAt: '2026-05-26T00:00:00.000Z',
+    ...input
+  }
+}

@@ -8,32 +8,16 @@ type CreateSessionTitleInput = {
 }
 
 const weekdays = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
-const weekdayShort = ['일', '월', '화', '수', '목', '금', '토']
 
 export function createSessionTitle(input: CreateSessionTitleInput) {
-  const scope = isScheduledSession(input.date, input.type, input.weeklyPattern ?? []) ? '스케줄' : '추가'
+  const weekday = getWeekdayName(input.date)
   const period = getDayPeriod(input.startAt)
-  return `[${scope}] [${period}] ${input.type}`
+  return `${weekday} ${period} 러닝`
 }
 
-function isScheduledSession(dateText: string, type: RunType, weeklyPattern: string[]) {
+function getWeekdayName(dateText: string) {
   const weekdayIndex = getWeekday(dateText)
-  if (weekdayIndex === null) return false
-  const weekday = weekdays[weekdayIndex]
-  const short = weekdayShort[weekdayIndex]
-
-  return weeklyPattern.some((item) => {
-    const normalized = item.toLowerCase()
-    return (
-      (item.includes(weekday) || item.includes(`${short}요일`)) &&
-      (normalized.includes(type.toLowerCase()) || isLongRunMatch(type, normalized))
-    )
-  })
-}
-
-function isLongRunMatch(type: RunType, pattern: string) {
-  if (type !== 'LSD' && type !== 'Steady Long') return false
-  return pattern.includes('lsd') || pattern.includes('long') || pattern.includes('롱런') || pattern.includes('장거리')
+  return weekdayIndex === null ? '오늘' : weekdays[weekdayIndex]
 }
 
 function getWeekday(value: string) {

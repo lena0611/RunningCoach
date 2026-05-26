@@ -3,11 +3,13 @@ import type { RunLog } from '@/entities/run/model'
 import { formatRunListDate } from '@/shared/lib/format'
 import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
 import RunTypeIcon from '@/shared/ui/RunTypeIcon.vue'
+import RunMetaChips from '@/shared/ui/RunMetaChips.vue'
 import UnitValue from '@/shared/ui/UnitValue.vue'
 
 defineProps<{
   runs: RunLog[]
   interactive?: boolean
+  weeklyPattern?: string[]
 }>()
 
 const emit = defineEmits<{ select: [run: RunLog] }>()
@@ -25,7 +27,10 @@ const emit = defineEmits<{ select: [run: RunLog] }>()
     >
       <RunTypeIcon :type="run.type" />
       <div class="run-session-main">
-        <RunTypeBadge :type="run.type" />
+        <div class="run-session-chip-row">
+          <RunTypeBadge :type="run.type" />
+          <RunMetaChips :run="run" :weekly-pattern="weeklyPattern" />
+        </div>
         <strong class="run-session-distance"><UnitValue :amount="run.distanceKm" unit="km" /></strong>
       </div>
       <div class="run-session-meta">

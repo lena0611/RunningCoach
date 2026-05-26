@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createSessionTitle } from './createSessionTitle'
 
 describe('createSessionTitle', () => {
-  it('marks a weekly routine match as scheduled', () => {
+  it('uses weekday, day period, and running as the default title', () => {
     expect(
       createSessionTitle({
         date: '2026-05-26',
@@ -10,10 +10,10 @@ describe('createSessionTitle', () => {
         type: 'Easy + Strides',
         weeklyPattern: ['화요일: Easy + Strides']
       })
-    ).toBe('[스케줄] [밤] Easy + Strides')
+    ).toBe('화요일 밤 러닝')
   })
 
-  it('marks non-routine runs as extra', () => {
+  it('does not expose schedule scope or inferred type in the default title', () => {
     expect(
       createSessionTitle({
         date: '2026-05-25',
@@ -21,6 +21,6 @@ describe('createSessionTitle', () => {
         type: 'Easy',
         weeklyPattern: ['화요일: Easy + Strides']
       })
-    ).toBe('[추가] [아침] Easy')
+    ).toBe('월요일 아침 러닝')
   })
 })
