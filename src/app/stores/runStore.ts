@@ -54,6 +54,8 @@ export const useRunStore = defineStore('runStore', {
         source,
         rpe: data.rpe ?? null,
         fastSegments: data.fastSegments ?? [],
+        metricSamples: data.metricSamples ?? [],
+        routePoints: data.routePoints ?? [],
         tags: data.tags ?? [],
         createdAt: now,
         updatedAt: now
@@ -80,6 +82,8 @@ export const useRunStore = defineStore('runStore', {
         source,
         rpe: item.rpe ?? null,
         fastSegments: item.fastSegments ?? [],
+        metricSamples: item.metricSamples ?? [],
+        routePoints: item.routePoints ?? [],
         tags: item.tags ?? [],
         createdAt: now,
         updatedAt: now
@@ -126,7 +130,9 @@ function loadRuns(): RunLog[] {
           ...run,
           userId: run.userId ?? 'default',
           externalId: run.externalId ?? null,
-          fastSegments: run.fastSegments ?? []
+          fastSegments: run.fastSegments ?? [],
+          metricSamples: run.metricSamples ?? [],
+          routePoints: run.routePoints ?? []
         }))
       : []
   } catch {

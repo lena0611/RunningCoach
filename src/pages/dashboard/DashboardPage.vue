@@ -26,6 +26,7 @@ import UnitValue from '@/shared/ui/UnitValue.vue'
 import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
 
 const TrendChart = defineAsyncComponent(() => import('@/shared/ui/TrendChart.vue'))
+const FitnessDetailCharts = defineAsyncComponent(() => import('@/shared/ui/FitnessDetailCharts.vue'))
 
 const runStore = useRunStore()
 const memoryStore = useMemoryStore()
@@ -350,6 +351,10 @@ function formatDateOnly(value: Date) {
                 <p v-if="detailRun.workoutFeeling" class="helper">느낌: {{ detailRun.workoutFeeling }}</p>
                 <p v-if="detailRun.painNote" class="helper">통증/주의: {{ detailRun.painNote }}</p>
               </SectionCard>
+              <FitnessDetailCharts
+                v-if="(detailRun.metricSamples?.length ?? 0) || (detailRun.routePoints?.length ?? 0)"
+                :run="detailRun"
+              />
             </main>
             <footer class="stack-action-bar run-detail-cta">
               <button type="button" @click="openCoachForRun(detailRun)">

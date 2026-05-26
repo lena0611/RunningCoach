@@ -26,6 +26,7 @@ export function inferRunType(input: InferRunTypeInput): RunType {
   const easyRatio = getEasyRatio(input.laps, distanceKm, avgPaceSec, input.avgHeartRate)
   const fastSegmentCount = countUsefulFastSegments(input.fastSegments)
   const hasStridesPattern = hasStrideIntervalPattern(input.fastSegments)
+  const hasStrideSplitsPattern = hasStrideLapPattern(input.laps)
   const tempoDistanceKm = getSustainedTempoDistance(input.laps, distanceKm, avgPaceSec)
   const isSaturday = getWeekday(input.date) === 6
   const scheduledWorkout = getScheduledWorkout(input.date, input.weeklyPattern ?? [])
@@ -38,7 +39,7 @@ export function inferRunType(input: InferRunTypeInput): RunType {
     }
   }
 
-  if (distanceKm <= 10 && easyRatio >= 0.45 && (hasStridesPattern || (fastSegmentCount >= 4 && isScheduledStrides(scheduledWorkout)))) {
+  if (distanceKm <= 10 && easyRatio >= 0.45 && (hasStridesPattern || hasStrideSplitsPattern || (fastSegmentCount >= 4 && isScheduledStrides(scheduledWorkout)))) {
     return 'Easy + Strides'
   }
 
@@ -126,6 +127,38 @@ function hasStrideIntervalPattern(segments: FastSegment[]) {
   const hasWorkoutWarmup = Number.isFinite(warmupStart) && warmupStart >= strideTimingTolerance.minWarmupSec
 
   return hasWorkoutWarmup && intervalLikeGaps >= Math.min(4, gaps.length)
+}
+
+function hasStrideLapPattern(laps: Lap[]) {
+  const segments = getLapSegments(laps)
+    .map((lap) => ({
+      ...lap,
+      durationSec: lap.distanceKm * lap.paceSec
+    }))
+    .filter((lap) => Number.isFinite(lap.durationSec) && lap.durationSec > 0)
+
+  if (segments.length < 8) return false
+
+  const shortFastIndexes = segments
+    .map((lap, index) => ({ lap, index }))
+    .filter(({ lap }) => {
+      const isShort = lap.durationSec >= strideTimingTolerance.minDurationSec && lap.durationSec <= strideTimingTolerance.maxDurationSec
+      const isFast = lap.paceSec <= 345
+      return isShort && isFast
+    })
+
+  if (shortFastIndexes.length < 4) return false
+
+  const hasEasyBookends = segments.some((lap, index) => index < 3 && lap.durationSec >= 180 && isLapEasy(lap, null)) ||
+    segments.some((lap, index) => index >= segments.length - 3 && lap.durationSec >= 180 && isLapEasy(lap, null))
+
+  const alternatingRecoveries = shortFastIndexes.filter(({ index }) => {
+    const next = segments[index + 1]
+    if (!next) return false
+    return next.durationSec >= 45 && next.durationSec <= 150 && next.paceSec > segments[index].paceSec + 40
+  }).length
+
+  return hasEasyBookends && alternatingRecoveries >= Math.min(4, shortFastIndexes.length)
 }
 
 function getSustainedTempoDistance(laps: Lap[], distanceKm: number, avgPaceSec: number | null) {

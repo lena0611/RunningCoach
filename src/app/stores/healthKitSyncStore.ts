@@ -177,6 +177,8 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
           memo: mergeHealthKitMemo(target.memo, extracted.memo),
           laps: extracted.laps,
           fastSegments: extracted.fastSegments ?? [],
+          metricSamples: extracted.metricSamples ?? [],
+          routePoints: extracted.routePoints ?? [],
           tags: Array.from(new Set([...(target.tags ?? []), 'healthkit'])),
           source: 'healthkit'
         })

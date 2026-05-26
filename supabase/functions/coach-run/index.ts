@@ -29,6 +29,8 @@ type RunLogRow = {
   memo: string
   laps: unknown[]
   fast_segments: unknown[]
+  metric_samples: unknown[]
+  route_points: unknown[]
   tags: string[]
   source: string
 }
@@ -1543,7 +1545,9 @@ type LapMetric = {
 
 function buildLapProgressionAnalysis(run: RunLogRow | null) {
   if (!run) return null
-  const laps = normalizeLapMetrics(run.laps)
+  const lapMetrics = normalizeLapMetrics(run.laps)
+  const metricSampleMetrics = normalizeMetricSampleMetrics(run.metric_samples)
+  const laps = metricSampleMetrics.length >= 4 ? metricSampleMetrics : lapMetrics
   if (!laps.length) {
     return {
       available: false,
@@ -1578,6 +1582,7 @@ function buildLapProgressionAnalysis(run: RunLogRow | null) {
 
   return {
     available: true,
+    source: metricSampleMetrics.length >= 4 ? 'metric_samples' : 'laps',
     lapCount: laps.length,
     laps,
     paceFlowDisplay: buildFlow(paceLaps.map((lap) => lap.paceDisplay).filter((value): value is string => Boolean(value))),
@@ -1770,6 +1775,36 @@ function normalizeLapMetrics(value: unknown): LapMetric[] {
     })
     .filter((lap) => lap.paceSec !== null || lap.avgHeartRate !== null || lap.cadence !== null)
     .slice(0, 20)
+}
+
+function normalizeMetricSampleMetrics(value: unknown): LapMetric[] {
+  const samples = Array.isArray(value) ? value : []
+  const normalized = samples
+    .map((sample) => {
+      const item = sample as { offsetSec?: unknown; heartRate?: unknown; paceSec?: unknown; cadence?: unknown }
+      return {
+        offsetSec: nullablePositiveNumber(item.offsetSec) ?? 0,
+        paceSec: nullablePositiveNumber(item.paceSec),
+        avgHeartRate: nullablePositiveNumber(item.heartRate),
+        cadence: nullablePositiveNumber(item.cadence)
+      }
+    })
+    .filter((sample) => sample.paceSec !== null || sample.avgHeartRate !== null || sample.cadence !== null)
+    .sort((a, b) => a.offsetSec - b.offsetSec)
+
+  if (normalized.length < 4) return []
+  const stride = Math.max(1, Math.ceil(normalized.length / 10))
+  return normalized
+    .filter((_, index) => index % stride === 0)
+    .slice(0, 12)
+    .map((sample, index) => ({
+      index: index + 1,
+      distanceKm: null,
+      paceSec: sample.paceSec,
+      paceDisplay: formatPaceForCoach(sample.paceSec),
+      avgHeartRate: sample.avgHeartRate === null ? null : Math.round(sample.avgHeartRate),
+      cadence: sample.cadence === null ? null : Math.round(sample.cadence)
+    }))
 }
 
 function getGoalPaceSec(activeGoal: unknown) {

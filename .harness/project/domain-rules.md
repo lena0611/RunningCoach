@@ -17,9 +17,11 @@
 - `InjuryItem`: 사용자는 여러 부상/주의사항을 관리할 수 있고, `activeInjuryItemId`로 지정된 항목이 코칭의 1차 부상관리 기준이다. 악화 트리거, 훈련 제한, 복귀 기준을 함께 가지며, 의료 진단이 아니라 훈련 강도 조절과 관찰 포인트로만 사용한다.
 
 ## 핵심 엔티티
-- `RunLog`: 사용자 ID, 외부 원본 ID, 날짜, 타입, 거리, 시간, 페이스, 심박, 케이던스, 기온, RPE, 메모, 랩, 고속 구간 요약, 태그, 출처, 생성/수정 시각을 가진다.
+- `RunLog`: 사용자 ID, 외부 원본 ID, 날짜, 타입, 거리, 시간, 페이스, 심박, 케이던스, 기온, RPE, 메모, 랩, 고속 구간 요약, 시간축 지표 샘플, 표시용 경로 샘플, 태그, 출처, 생성/수정 시각을 가진다.
 - `Lap`: 랩 번호, 랩 거리, 랩 페이스, 평균 심박, 케이던스를 가진다.
-- `FastSegment`: route/speed 샘플에서 계산한 짧은 고속 구간 요약이다. 시작 시각, 지속 시간, 거리, 평균/최고 페이스를 가진다. 원본 GPS 좌표는 저장하지 않는다.
+- `FastSegment`: route/speed 샘플에서 계산한 짧은 고속 구간 요약이다. 시작 시각, 지속 시간, 거리, 평균/최고 페이스를 가진다.
+- `RunMetricSample`: HealthKit/FIT에서 받은 심박, 페이스, 케이던스의 시간축 downsample 데이터다. Apple Fitness형 세부 차트와 코칭의 중간 과정 분석에 사용한다.
+- `RunRoutePoint`: 원본 route 전체가 아니라 표시를 위해 downsample한 좌표 샘플이다. 세션 상세 지도형 경로, 시작/종료 노드, 선택 구간 표시 용도다.
 - `TrainingMemory`: legacy `goal`, `goals`, `activeGoalId`, `injuryItems`, `activeInjuryItemId`, AthleteProfile, 주간 루틴, 장거리 전략, 현재 볼륨 노트, known issues, running style, heat strategy, ai notes를 가진다. `goal`은 기존 호환용이며 활성 목표 제목과 동기화한다.
 - `AdaptiveTrainingProfile`: `methodologyVersion`, `updatedAt`, `compliancePatterns`, `sessionGuides`를 가진다. AI 코칭이 반복 근거를 찾았을 때만 갱신하며, 소스 코드나 원본 RunLog를 바꾸는 용도가 아니다.
 - `TrainingKnowledgeSource`: 훈련 지식의 출처 메타데이터다. 저자, URL, 신뢰도, 라이선스 주의, 요약을 가진다.
@@ -31,6 +33,7 @@
 ## 불변식
 - 원본 운동 파일은 저장하지 않는다.
 - 원본 파일명, 파일 URL, base64 payload를 저장하지 않는다.
+- 원본 GPS route 전체는 저장하지 않는다. 세션 상세 지도형 UI를 위해 downsampled `RunRoutePoint`만 저장한다.
 - 저장소에는 구조화된 `RunLog`와 `TrainingMemory`만 저장한다.
 - 월간/주간 훈련 근거는 `coach_memory_items`가 아니라 구조화된 `run_logs`에 저장한다. `coach_memory_items`는 장기 해석 메모, 성향, 반복 패턴, 코칭에서 보존할 자연어 기억만 저장한다.
 - HealthKit, FIT, 수동 입력에서 같은 운동이 다시 들어올 수 있으므로 외부 원본 ID가 있으면 중복 방지 키로 저장한다.
@@ -45,13 +48,14 @@
 - HealthKit 동기화는 로그인된 iOS 하이브리드 앱에서 앱 기동 또는 재활성화 시 자동으로 수행한다. 사용자가 별도 “불러오기” 버튼을 누르는 흐름을 기본으로 두지 않는다.
 - HealthKit 자동 동기화는 현재 앱에 저장된 최신 `RunLog.date` 이후 후보만 저장한다. 외부 원본 ID가 일치하거나 날짜/거리/시간이 같은 후보는 중복으로 보고 저장하지 않는다.
 - HealthKit 자동 동기화는 best-effort여야 한다. 여러 후보 중 일부가 중복이면 전체 실패로 처리하지 말고 중복만 제외한 뒤 저장 가능한 기록을 계속 저장한다.
-- 이미 저장된 HealthKit `RunLog`는 자동 동기화에서 조용히 덮어쓰지 않는다. 기존 세션의 랩/케이던스/route 기반 `fastSegments` 같은 보강 데이터는 세션 상세의 명시적 HealthKit 새로고침 액션으로만 갱신한다.
+- 이미 저장된 HealthKit `RunLog`는 자동 동기화에서 조용히 덮어쓰지 않는다. 기존 세션의 랩/케이던스/route 기반 `fastSegments`, `metricSamples`, `routePoints` 같은 보강 데이터는 세션 상세의 명시적 HealthKit 새로고침 액션으로만 갱신한다.
 - 세션별 HealthKit 새로고침은 `RunLog.externalId`로 원본 `HKWorkout`을 다시 조회해 구조화 필드만 갱신한다. 사용자가 입력한 제목, RPE, 컨디션, 통증 메모, 동반주, 자유 메모는 보존한다.
 - 세션별 HealthKit 새로고침은 기존 `coach_reports`를 삭제하거나 재생성하지 않는다. 이미 받은 AI 코칭은 당시 데이터 기준의 대화 기록으로 유지하고, 보강된 데이터에 대한 재판단은 같은 세션 대화에서 추가 턴으로 이어간다.
 - iOS 하이브리드 앱을 새로 기동할 때 기능 탭 URL이 남아 있어도 기본 진입은 Home이다. 로그인/접근 차단 같은 시스템 라우트는 예외로 둔다.
-- `Easy + Strides` 자동 추론은 세션 이름보다 “대부분 쉬운 페이스 + 여러 개의 짧은 고속 구간”을 우선한다. route가 없어 `fastSegments`가 비면 보수적으로 `Easy`나 `Unknown`으로 둔다.
+- `Easy + Strides` 자동 추론은 세션 이름보다 “대부분 쉬운 페이스 + 여러 개의 짧은 고속 구간”을 우선한다. HealthKit lap이 1km 단위로 뭉개져도 route timestamp 좌표가 있으면 순간 속도 기반 `fastSegments`로 판정한다. route/속도 샘플이 없고 1km lap만 있으면 보수적으로 `Easy`나 `Unknown`으로 둔다.
 - `Easy` 자동 추론은 페이스보다 심박을 우선한다. 평균/랩 심박이 낮고 안정적이면 평균 페이스가 빠르더라도 Tempo로 단정하지 않고 Easy 가능성을 먼저 본다.
 - `Easy + Strides` 자동 추론은 요일 루틴과 route 기반 `fastSegments`를 함께 본다. 현재 기본 루틴은 10분 워밍업 + 8개의 스트라이드 가속 인터벌(20초 가속 + 1분40초 회복) + 15분 쿨다운이다. 단, HealthKit/GPS 샘플은 타이트하게 들어오지 않으므로 20초/100초를 기계적으로 요구하지 않는다. 6~45초 정도의 짧은 고속 구간이 4개 이상 반복되고 시작 간격이 대략 1~3.5분이면 Easy + Strides 패턴으로 관용적으로 본다.
+- 2026-05-26 DB 기록은 Easy + Strides 판독의 대표 샘플이다. HealthKit에서는 lap이 1km 단위로 뭉개질 수 있으므로 route 기반 `fastSegments`를 우선 보고, Workoutdoors FIT처럼 잘게 쪼개진 가속/회복 split이 들어오면 그 split도 강한 근거로 본다. 화요일 루틴, 쉬운 심박/랩 흐름, 반복되는 짧은 가속 구간이 함께 보이면 이 패턴을 회귀 테스트 기준으로 삼는다.
 - Dashboard의 다음 추천 세션은 단순 최근 강훈련 여부만으로 정하지 않는다. `TrainingMemory.weeklyPattern`, 선호 롱런 요일, 최근 실제 RunLog 날짜, 최근 토요일 10km+ 기록의 평균 페이스를 함께 본다.
 - Dashboard의 다음 추천 세션은 주간 훈련 스케줄 안내다. 항상 오늘 날짜/요일을 먼저 확인하고, 오늘 요일에 해당하는 `TrainingMemory.weeklyPattern`이 있으면 그 세션을 우선한다.
 - 최근 데이터가 주간 루틴 외 추가 Easy/Recovery라면 다음 추천 세션 산정에서 제외한다. 추가런은 맥락 문구로만 보여주고, 오늘의 Easy + Strides/Tempo 같은 예정 세션을 밀어내지 않는다.
@@ -76,7 +80,7 @@
 - 토요일 롱런 추천은 최근 토요일 10km+ 기록의 평균 페이스를 기준으로 LSD/Steady Long 강도 범위를 제안한다. 세션 타입은 참고하되, 실제 강도 판단은 페이스와 최근 흐름을 우선한다.
 - 토요일 또는 직전일 10km+ 롱런/LSD/Steady Long 뒤의 다음날은 주간 루틴의 다음 세션보다 Recovery 또는 휴식을 우선 추천한다. 특히 일요일 홈 추천은 전날 롱런 피로 회복 여부를 먼저 본다.
 - 코칭과 대시보드, 기록 목록은 현재 선택된 사용자 기준 `RunLog`와 `TrainingMemory`만 사용한다.
-- `RunLog` 상세 화면은 평균 페이스, 평균 케이던스, 평균/최고 심박, RPE, 드리프트를 명시 라벨로 보여준다. 랩 데이터가 있으면 `스플릿` 컨텐츠로 승격하고, 목록/차트 전환을 제공한다. 목록은 랩별 시간, 페이스, 심박, 케이던스를 Apple Fitness처럼 한 화면에서 비교 가능하게 보여주고, 차트는 같은 데이터의 흐름을 보여줘야 사용자가 세션 유형 자동 해석 근거를 확인할 수 있다.
+- `RunLog` 상세 화면은 평균 페이스, 평균 케이던스, 평균/최고 심박, RPE, 드리프트를 명시 라벨로 보여준다. 랩 데이터가 있으면 `스플릿` 컨텐츠로 승격하고, 목록/차트 전환을 제공한다. `metricSamples`나 `routePoints`가 있으면 Apple Fitness처럼 경로, 시작/종료 노드, 선택 구간 노드, 심박/페이스/케이던스/고도 시간축 차트를 제공해 사용자가 러닝 중간 과정과 세션 유형 자동 해석 근거를 확인할 수 있어야 한다.
 - 코칭은 `RunLog.date`를 훈련 수행 날짜로 보고, `coach_reports.created_at`은 코칭 생성 시각으로만 본다. 둘을 혼동하지 않는다.
 - 특정 `RunLog`를 선택한 AI 코칭은 세션별 대화 스레드로 다룬다. 첫 코칭 이후 같은 세션에서 추가 질문/메모를 보내면 기존 답변을 갱신하지 않고 `coach_reports`에 새 턴을 추가하며, Edge Function은 같은 세션의 이전 `coach_reports`를 컨텍스트로 넣어 이어서 답하게 한다.
 - 다른 세션의 코칭 전문을 매 요청마다 모두 넣지 않는다. 비용을 제한하기 위해 선택 세션과 타입/요일/거리/메모가 비슷한 과거 세션 코칭만 최대 5개까지 짧은 snippet으로 넣고, 장기 맥락은 `coach_memory_items`를 우선 사용한다.

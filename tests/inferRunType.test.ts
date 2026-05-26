@@ -21,7 +21,7 @@ describe('inferRunType', () => {
     })).toBe('Easy')
   })
 
-  it('detects Easy + Strides from Tuesday routine and repeated short accelerations', () => {
+  it('keeps the 2026-05-26 representative Easy + Strides pattern from Tuesday routine and repeated short accelerations', () => {
     const fastSegments: FastSegment[] = Array.from({ length: 8 }, (_, index) => ({
       index: index + 1,
       startSec: 520 + index * (95 + (index % 3) * 22),
@@ -70,6 +70,83 @@ describe('inferRunType', () => {
       ],
       fastSegments,
       weeklyPattern: ['화요일: Easy + 스트라이드', '목요일: Tempo']
+    })).toBe('Easy + Strides')
+  })
+
+  it('infers Easy + Strides from HealthKit route fast segments even when laps are 1km splits', () => {
+    const fastSegments: FastSegment[] = [
+      { index: 1, startSec: 610, durationSec: 18, distanceKm: 0.07, avgPaceSec: 257, bestPaceSec: 240 },
+      { index: 2, startSec: 728, durationSec: 21, distanceKm: 0.08, avgPaceSec: 263, bestPaceSec: 238 },
+      { index: 3, startSec: 850, durationSec: 20, distanceKm: 0.08, avgPaceSec: 250, bestPaceSec: 232 },
+      { index: 4, startSec: 970, durationSec: 19, distanceKm: 0.07, avgPaceSec: 271, bestPaceSec: 246 },
+      { index: 5, startSec: 1090, durationSec: 22, distanceKm: 0.08, avgPaceSec: 275, bestPaceSec: 248 },
+      { index: 6, startSec: 1215, durationSec: 18, distanceKm: 0.07, avgPaceSec: 257, bestPaceSec: 236 }
+    ]
+
+    expect(inferRunType({
+      date: '2026-05-26',
+      distanceKm: 5.2,
+      avgPaceSec: 470,
+      avgHeartRate: 136,
+      laps: [
+        { index: 1, distanceKm: 1, paceSec: 500, avgHeartRate: 124, cadence: 162 },
+        { index: 2, distanceKm: 1, paceSec: 455, avgHeartRate: 136, cadence: 166 },
+        { index: 3, distanceKm: 1, paceSec: 448, avgHeartRate: 141, cadence: 168 },
+        { index: 4, distanceKm: 1, paceSec: 482, avgHeartRate: 135, cadence: 163 },
+        { index: 5, distanceKm: 1.2, paceSec: 492, avgHeartRate: 131, cadence: 162 }
+      ],
+      fastSegments,
+      weeklyPattern: ['화요일: Easy + Strides', '목요일: Tempo', '토요일: LSD 또는 Steady Long']
+    })).toBe('Easy + Strides')
+  })
+
+  it('does not force Easy + Strides from HealthKit 1km splits when route fast segments are missing', () => {
+    expect(inferRunType({
+      date: '2026-05-26',
+      distanceKm: 5.2,
+      avgPaceSec: 470,
+      avgHeartRate: 136,
+      laps: [
+        { index: 1, distanceKm: 1, paceSec: 500, avgHeartRate: 124, cadence: 162 },
+        { index: 2, distanceKm: 1, paceSec: 455, avgHeartRate: 136, cadence: 166 },
+        { index: 3, distanceKm: 1, paceSec: 448, avgHeartRate: 141, cadence: 168 },
+        { index: 4, distanceKm: 1, paceSec: 482, avgHeartRate: 135, cadence: 163 },
+        { index: 5, distanceKm: 1.2, paceSec: 492, avgHeartRate: 131, cadence: 162 }
+      ],
+      fastSegments: [],
+      weeklyPattern: ['화요일: Easy + Strides', '목요일: Tempo', '토요일: LSD 또는 Steady Long']
+    })).toBe('Easy')
+  })
+
+  it('detects 2026-05-26 style Easy + Strides from workout split laps even when route fast segments are missing', () => {
+    const laps: Lap[] = [
+      { index: 1, distanceKm: 1.25, paceSec: 480, avgHeartRate: 126, cadence: 162 },
+      { index: 2, distanceKm: 0.07, paceSec: 265, avgHeartRate: 138, cadence: 184 },
+      { index: 3, distanceKm: 0.2, paceSec: 515, avgHeartRate: 134, cadence: 160 },
+      { index: 4, distanceKm: 0.08, paceSec: 255, avgHeartRate: 140, cadence: 186 },
+      { index: 5, distanceKm: 0.19, paceSec: 525, avgHeartRate: 135, cadence: 159 },
+      { index: 6, distanceKm: 0.08, paceSec: 270, avgHeartRate: 141, cadence: 184 },
+      { index: 7, distanceKm: 0.21, paceSec: 505, avgHeartRate: 136, cadence: 160 },
+      { index: 8, distanceKm: 0.07, paceSec: 275, avgHeartRate: 142, cadence: 183 },
+      { index: 9, distanceKm: 0.2, paceSec: 520, avgHeartRate: 135, cadence: 159 },
+      { index: 10, distanceKm: 0.08, paceSec: 260, avgHeartRate: 143, cadence: 185 },
+      { index: 11, distanceKm: 0.19, paceSec: 530, avgHeartRate: 136, cadence: 158 },
+      { index: 12, distanceKm: 0.07, paceSec: 280, avgHeartRate: 142, cadence: 182 },
+      { index: 13, distanceKm: 0.2, paceSec: 510, avgHeartRate: 135, cadence: 160 },
+      { index: 14, distanceKm: 0.08, paceSec: 265, avgHeartRate: 143, cadence: 184 },
+      { index: 15, distanceKm: 0.2, paceSec: 520, avgHeartRate: 136, cadence: 159 },
+      { index: 16, distanceKm: 0.07, paceSec: 275, avgHeartRate: 142, cadence: 183 },
+      { index: 17, distanceKm: 1.95, paceSec: 490, avgHeartRate: 132, cadence: 162 }
+    ]
+
+    expect(inferRunType({
+      date: '2026-05-26',
+      distanceKm: 5.19,
+      avgPaceSec: 470,
+      avgHeartRate: 136,
+      laps,
+      fastSegments: [],
+      weeklyPattern: ['화요일: Easy + Strides', '목요일: Tempo', '토요일: LSD 또는 Steady Long']
     })).toBe('Easy + Strides')
   })
 })

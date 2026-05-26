@@ -27,6 +27,20 @@ export type FastSegment = {
   bestPaceSec: number | null
 }
 
+export type RunMetricSample = {
+  offsetSec: number
+  heartRate: number | null
+  paceSec: number | null
+  cadence: number | null
+}
+
+export type RunRoutePoint = {
+  offsetSec: number
+  latitude: number
+  longitude: number
+  altitude: number | null
+}
+
 export type RunLog = {
   id: string
   userId: string
@@ -56,6 +70,8 @@ export type RunLog = {
   memo: string
   laps: Lap[]
   fastSegments: FastSegment[]
+  metricSamples: RunMetricSample[]
+  routePoints: RunRoutePoint[]
   tags: string[]
   source: 'file_import' | 'healthkit' | 'manual' | 'image_extracted'
   createdAt: string

@@ -25,6 +25,7 @@ import UnitValue from '@/shared/ui/UnitValue.vue'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 
 const LapSplitChart = defineAsyncComponent(() => import('@/shared/ui/LapSplitChart.vue'))
+const FitnessDetailCharts = defineAsyncComponent(() => import('@/shared/ui/FitnessDetailCharts.vue'))
 
 const runStore = useRunStore()
 const healthKitSyncStore = useHealthKitSyncStore()
@@ -640,6 +641,10 @@ function formatLapDuration(lap: Lap) {
               <p v-if="detailRun.workoutFeeling" class="helper">느낌: {{ detailRun.workoutFeeling }}</p>
               <p v-if="detailRun.painNote" class="helper">통증/주의: {{ detailRun.painNote }}</p>
             </SectionCard>
+            <FitnessDetailCharts
+              v-if="(detailRun.metricSamples?.length ?? 0) || (detailRun.routePoints?.length ?? 0)"
+              :run="detailRun"
+            />
             <SectionCard>
               <SectionHeader title="스플릿">
                 <small class="helper">{{ detailRun.laps.length ? `${detailRun.laps.length}개` : '데이터 부족' }}</small>

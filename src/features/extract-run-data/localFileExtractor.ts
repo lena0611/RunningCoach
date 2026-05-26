@@ -1,4 +1,4 @@
-import type { ExtractedRunData } from '@/entities/run/model'
+import type { ExtractedRunData, RunMetricSample, RunRoutePoint } from '@/entities/run/model'
 import { createSessionTitle } from '@/features/create-session-title/createSessionTitle'
 import { inferCourseType } from '@/features/infer-course-type/inferCourseType'
 import { inferRunType } from '@/features/infer-run-type/inferRunType'
@@ -56,6 +56,8 @@ async function extractFromFit(buffer: ArrayBuffer): Promise<ExtractedRunData> {
       cadence: lapCadence === null ? null : normalizeCadence(lapCadence)
     }
   })
+  const metricSamples = buildMetricSamples(records, session?.start_time ?? session?.timestamp ?? records[0]?.timestamp)
+  const routePoints = buildRoutePoints(records, session?.start_time ?? session?.timestamp ?? records[0]?.timestamp)
   const type = inferRunType({
     date,
     distanceKm: totalDistanceKm,
@@ -88,6 +90,8 @@ async function extractFromFit(buffer: ArrayBuffer): Promise<ExtractedRunData> {
     courseType: inferCourseType({ distanceKm: totalDistanceKm, elevationGainM, elevationLossM }),
     rpe,
     laps: mappedLaps,
+    metricSamples,
+    routePoints,
     memo: 'FIT 세션 요약 기반 로컬 추출. 저장 전 실제 값을 확인하세요.'
   }
 }
@@ -120,8 +124,80 @@ export function createEmptyRun(): ExtractedRunData {
     memo: '',
     laps: [],
     fastSegments: [],
+    metricSamples: [],
+    routePoints: [],
     tags: []
   }
+}
+
+function buildMetricSamples(records: any[], startValue: unknown): RunMetricSample[] {
+  const startDate = startValue instanceof Date ? startValue : new Date(String(startValue ?? ''))
+  if (!Number.isFinite(startDate.getTime())) return []
+
+  const rawSamples = records
+    .map((record: any) => {
+      const timestamp = record.timestamp instanceof Date ? record.timestamp : new Date(String(record.timestamp ?? ''))
+      if (!Number.isFinite(timestamp.getTime())) return null
+      const offsetSec = Math.max(0, Math.round((timestamp.getTime() - startDate.getTime()) / 1000))
+      const speed = numberOrNull(String(record.enhanced_speed ?? record.speed ?? ''))
+      const rawCadence = numberOrNull(String(record.cadence ?? ''))
+      const sample: RunMetricSample = {
+        offsetSec,
+        heartRate: numberOrNull(String(record.heart_rate ?? '')),
+        paceSec: speed && speed > 0 ? Math.round(1000 / speed) : null,
+        cadence: rawCadence === null ? null : normalizeCadence(rawCadence)
+      }
+      return sample.heartRate !== null || sample.paceSec !== null || sample.cadence !== null ? sample : null
+    })
+    .filter((sample): sample is RunMetricSample => Boolean(sample))
+
+  return downsampleMetricSamples(rawSamples)
+}
+
+function downsampleMetricSamples(samples: RunMetricSample[]) {
+  if (samples.length <= 120) return samples
+  const stride = Math.ceil(samples.length / 120)
+  return samples.filter((_, index) => index % stride === 0)
+}
+
+function buildRoutePoints(records: any[], startValue: unknown): RunRoutePoint[] {
+  const startDate = startValue instanceof Date ? startValue : new Date(String(startValue ?? ''))
+  if (!Number.isFinite(startDate.getTime())) return []
+
+  const rawPoints = records
+    .map((record: any) => {
+      const timestamp = record.timestamp instanceof Date ? record.timestamp : new Date(String(record.timestamp ?? ''))
+      if (!Number.isFinite(timestamp.getTime())) return null
+      const latitude = decodeCoordinate(record.position_lat ?? record.latitude)
+      const longitude = decodeCoordinate(record.position_long ?? record.longitude)
+      if (latitude === null || longitude === null) return null
+      const altitude = numberOrNull(String(record.enhanced_altitude ?? record.altitude ?? ''))
+      return {
+        offsetSec: Math.max(0, Math.round((timestamp.getTime() - startDate.getTime()) / 1000)),
+        latitude,
+        longitude,
+        altitude
+      }
+    })
+    .filter((point): point is RunRoutePoint => Boolean(point))
+
+  return downsampleRoutePoints(rawPoints)
+}
+
+function downsampleRoutePoints(points: RunRoutePoint[]) {
+  if (points.length <= 240) return points
+  const stride = Math.ceil(points.length / 240)
+  const sampled = points.filter((_, index) => index % stride === 0)
+  const last = points.at(-1)
+  if (last && sampled.at(-1) !== last) sampled.push(last)
+  return sampled
+}
+
+function decodeCoordinate(value: unknown): number | null {
+  const number = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(number)) return null
+  if (Math.abs(number) <= 180) return number
+  return (number * 180) / 2147483648
 }
 
 function toIsoDate(value: unknown): string {

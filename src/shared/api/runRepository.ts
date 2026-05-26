@@ -30,6 +30,8 @@ type RunLogRow = {
   memo: string
   laps: RunLog['laps']
   fast_segments: RunLog['fastSegments']
+  metric_samples: RunLog['metricSamples'] | null
+  route_points: RunLog['routePoints'] | null
   tags: string[]
   source: RunLog['source']
   created_at: string
@@ -97,6 +99,8 @@ export async function updateRunLog(run: RunLog): Promise<RunLog> {
       memo: rest.memo,
       laps: rest.laps,
       fast_segments: rest.fastSegments,
+      metric_samples: rest.metricSamples ?? [],
+      route_points: rest.routePoints ?? [],
       tags: rest.tags,
       source: rest.source,
       updated_at: new Date().toISOString()
@@ -141,6 +145,8 @@ function toInsertRow(data: ExtractedRunData, source: RunLog['source']) {
     memo: data.memo,
     laps: data.laps,
     fast_segments: data.fastSegments ?? [],
+    metric_samples: data.metricSamples ?? [],
+    route_points: data.routePoints ?? [],
     tags: data.tags ?? [],
     source
   }
@@ -182,6 +188,8 @@ function fromRow(row: RunLogRow): RunLog {
     memo: row.memo,
     laps: row.laps ?? [],
     fastSegments: row.fast_segments ?? [],
+    metricSamples: row.metric_samples ?? [],
+    routePoints: row.route_points ?? [],
     tags: row.tags ?? [],
     source: row.source,
     createdAt: row.created_at,

@@ -25,7 +25,7 @@
     - 가능한 경우 cadence 계열 수치
 - `HKWorkoutRoute`
   - GPS route가 허용되고 존재할 때만 보조로 조회한다.
-  - route 원본 좌표를 저장하지 않는다. 1km lap/split 계산 후보 생성에만 사용한다.
+  - route 원본 전체 좌표는 저장하지 않는다. 세션 상세의 Apple Fitness형 경로 표시를 위해 downsampled `routePoints`만 저장한다.
 
 ## 웹으로 넘길 후보 구조
 
@@ -52,6 +52,8 @@ type HealthKitRunCandidate = {
   routeAvailable: boolean
   laps: Lap[]
   fastSegments: FastSegment[]
+  metricSamples: RunMetricSample[]
+  routePoints: RunRoutePoint[]
   rawAvailability: {
     workout: boolean
     heartRate: boolean
@@ -68,6 +70,20 @@ type FastSegment = {
   distanceKm: number | null
   avgPaceSec: number | null
   bestPaceSec: number | null
+}
+
+type RunMetricSample = {
+  offsetSec: number
+  heartRate: number | null
+  paceSec: number | null
+  cadence: number | null
+}
+
+type RunRoutePoint = {
+  offsetSec: number
+  latitude: number
+  longitude: number
+  altitude: number | null
 }
 ```
 
@@ -87,7 +103,7 @@ type FastSegment = {
 - 앱 기동/재활성화 자동 동기화는 현재 저장된 최신 `RunLog.date` 이후의 새 HealthKit 러닝만 가져온다.
 - 이미 저장된 HealthKit 세션은 자동 동기화에서 갱신하지 않는다. 기존 세션 보강은 세션 상세의 새로고침 아이콘을 통해 사용자가 명시적으로 요청한다.
 - 단일 세션 갱신은 `RunLog.externalId`와 `HKWorkout.uuid`를 매칭해 같은 원본 운동만 다시 조회한다.
-- 단일 세션 갱신은 HealthKit 유래 구조화 필드(`distanceKm`, `durationSec`, `avgPaceSec`, `avgHeartRate`, `maxHeartRate`, `cadence`, `laps`, `fastSegments`, `rawAvailability`)를 새 값으로 갱신한다.
+- 단일 세션 갱신은 HealthKit 유래 구조화 필드(`distanceKm`, `durationSec`, `avgPaceSec`, `avgHeartRate`, `maxHeartRate`, `cadence`, `laps`, `fastSegments`, `metricSamples`, `routePoints`, `rawAvailability`)를 새 값으로 갱신한다.
 - 단일 세션 갱신은 사용자가 입력한 코칭 메모, RPE, 통증 메모, 동반주, 제목, 기존 AI 코칭 대화 기록을 보존한다.
 
 ## `RunLog` 매핑
@@ -105,17 +121,19 @@ type FastSegment = {
 - `elevationLossM`: route location altitude로 계산한 누적 하강이다. route나 유효 altitude가 없으면 `null`.
 - `courseType`: 웹에서 `elevationGainM`, `elevationLossM`, `distanceKm`로 사용자 수정 가능한 기본값을 추론한다. 고저 데이터가 부족하면 `Unknown`으로 둔다.
 - `rpe`: iOS 18+에서 `workoutEffortScore`가 workout에 연결되어 조회될 때만 운동강도로 채운다. 없으면 사용자가 수정할 수 있게 `null`로 둔다.
-- `laps`: HealthKit에서 route 또는 거리 샘플이 있으면 네이티브가 1km 단위 split으로 가공해 채운다. 각 lap은 거리, 페이스, 평균 심박을 우선 채우고 cadence는 가능한 경우에만 채운다.
-- `fastSegments`: route 또는 speed 샘플에서 계산한 짧은 고속 구간 요약이다. Easy + Strides 추론에 사용하며 원본 좌표나 파일을 저장하지 않는다.
+- `laps`: HealthKit에서 route 또는 거리 샘플이 있으면 네이티브가 1km 단위 split으로 가공해 채운다. 각 lap은 거리, 페이스, 평균 심박을 우선 채우고 cadence는 가능한 경우에만 채운다. HealthKit lap은 Workoutdoors FIT의 workout step split처럼 세부 가속/회복 구조를 보장하지 않는다.
+- `fastSegments`: `runningSpeed` 샘플을 우선 사용하고, 없으면 route timestamp 좌표에서 계산한 짧은 고속 구간 요약이다. HealthKit lap이 1km로 뭉개져도 `fastSegments`가 있으면 Easy + Strides 추론의 핵심 근거로 사용한다.
+- `metricSamples`: 심박/페이스/케이던스를 시간축으로 downsample한 표시/코칭용 샘플이다. Apple Fitness형 세부 차트와 중간 과정 분석에 사용한다.
+- `routePoints`: 원본 route 전체가 아니라 화면 표시를 위해 downsample한 좌표 샘플이다. 시작/종료 노드, 선택 구간 표시, 경로 미리보기에만 사용한다.
 - `source`: HealthKit 후보 저장 시 `healthkit`을 사용한다.
 
 ## 제한과 보완
 - HealthKit은 Workoutdoors의 FIT 전체 필드를 1:1로 보장하지 않는다.
 - Workoutdoors 고유 메타데이터, 일부 러닝 다이내믹스는 누락될 수 있다.
 - route가 없고 거리 샘플도 부족하면 lap은 세션 전체 1개 요약 또는 빈 배열일 수 있다.
-- route/speed 샘플이 없으면 `fastSegments`는 빈 배열일 수 있다. 이 경우 Easy + Strides 자동 판정은 보수적으로 수행한다.
-- FIT 업로드는 HealthKit 누락 지표를 보완하는 입력 채널로 유지한다.
-- Route 좌표는 민감정보이므로 기본 저장 금지다.
+- route/speed 샘플이 없으면 `fastSegments`는 빈 배열일 수 있다. 이 경우 1km lap만 보고 Easy + Strides로 단정하지 않고 자동 판정은 보수적으로 수행한다.
+- FIT 업로드는 HealthKit 누락 지표를 보완하는 입력 채널로 유지한다. Workoutdoors FIT가 짧은 가속/회복 split을 보존하면 route가 없어도 Easy + Strides 판정 근거로 사용한다.
+- Route 원본 전체 좌표와 원본 파일은 저장 금지다. 사용자가 세션 상세 지도형 표시를 요구했으므로 DB에는 downsampled `routePoints`만 저장한다.
 
 ## 구현 검증 기준
 - 같은 날짜의 Workoutdoors/Apple 기본 러닝이 HealthKit에서 `.running` workout으로 조회되는지 확인한다.

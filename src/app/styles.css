@@ -1953,6 +1953,293 @@ button.run-session-row {
   min-height: 260px;
 }
 
+.fitness-detail-card {
+  display: grid;
+  gap: 18px;
+  overflow: hidden;
+}
+
+.fitness-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fitness-detail-header h3 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.fitness-scope-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(72px, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface-3) 76%, var(--color-bg));
+}
+
+.fitness-scope-toggle button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted);
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.fitness-scope-toggle button.active {
+  background: color-mix(in srgb, var(--color-text) 18%, transparent);
+  color: var(--color-text);
+}
+
+.fitness-route-card {
+  position: relative;
+  min-height: 230px;
+  overflow: hidden;
+  border-radius: 24px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 18%, transparent), transparent 42%),
+    radial-gradient(circle at 80% 20%, color-mix(in srgb, var(--color-primary) 12%, transparent), transparent 36%),
+    linear-gradient(180deg, color-mix(in srgb, var(--color-surface-3) 88%, #000), color-mix(in srgb, var(--color-bg) 92%, #000));
+}
+
+.fitness-route-card::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  opacity: 0.2;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--color-muted) 30%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-muted) 26%, transparent) 1px, transparent 1px);
+  background-size: 46px 46px;
+  transform: rotate(-8deg) scale(1.2);
+}
+
+.fitness-route-map {
+  position: absolute;
+  inset: 8px;
+  z-index: 1;
+  width: calc(100% - 16px);
+  height: calc(100% - 16px);
+}
+
+.fitness-route-shadow,
+.fitness-route-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.fitness-route-shadow {
+  stroke: rgba(0, 0, 0, 0.48);
+  stroke-width: 5;
+}
+
+.fitness-route-line {
+  filter: url(#routeGlow);
+  stroke: #22d3ee;
+  stroke-width: 3.4;
+}
+
+.fitness-route-start,
+.fitness-route-end,
+.fitness-route-selected {
+  stroke: #fff;
+  stroke-width: 1.2;
+}
+
+.fitness-route-start {
+  fill: #22c55e;
+}
+
+.fitness-route-end {
+  fill: #ef4444;
+}
+
+.fitness-route-selected {
+  fill: #38bdf8;
+}
+
+.fitness-route-overlay {
+  position: absolute;
+  z-index: 2;
+  right: 18px;
+  bottom: 16px;
+  left: 18px;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.fitness-route-overlay strong {
+  color: #38bdf8;
+  font-size: clamp(28px, 9vw, 42px);
+  font-weight: 500;
+  line-height: 1;
+}
+
+.fitness-route-overlay strong:first-child {
+  color: #fde047;
+}
+
+.fitness-route-empty {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  color: var(--color-muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.fitness-selected-metrics {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px 12px;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--color-surface-3) 82%, var(--color-bg));
+  -webkit-overflow-scrolling: touch;
+}
+
+.fitness-selected-metrics span,
+.fitness-selected-metrics strong,
+.fitness-selected-metrics em {
+  flex: 0 0 auto;
+  font-style: normal;
+  line-height: 1;
+}
+
+.fitness-selected-metrics span {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.fitness-selected-metrics strong {
+  color: var(--color-text);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.fitness-selected-metrics em {
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.fitness-mini-chart {
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.fitness-mini-chart + .fitness-mini-chart {
+  border-top: 1px solid var(--color-border);
+  padding-top: 18px;
+}
+
+.fitness-chart-title {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 4px 12px;
+}
+
+.fitness-chart-title span {
+  grid-column: 1 / -1;
+  color: var(--color-text);
+  font-size: 19px;
+  font-weight: 500;
+}
+
+.fitness-chart-title strong {
+  color: var(--fitness-chart-color, var(--color-primary));
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.fitness-chart-title small {
+  color: var(--color-muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.fitness-bars {
+  display: flex;
+  align-items: end;
+  gap: 2px;
+  min-height: 86px;
+  padding-top: 10px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--color-border);
+  -webkit-overflow-scrolling: touch;
+}
+
+.fitness-bars button {
+  position: relative;
+  flex: 1 0 3px;
+  min-width: 3px;
+  height: 74px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.fitness-bars button::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: max(5px, var(--bar-height));
+  border-radius: 999px 999px 0 0;
+  background: var(--fitness-chart-color, var(--color-primary));
+  opacity: 0.7;
+  content: "";
+}
+
+.fitness-bars button.active::before {
+  position: absolute;
+  top: 0;
+  bottom: -2px;
+  left: 50%;
+  width: 2px;
+  background: color-mix(in srgb, var(--color-text) 72%, transparent);
+  content: "";
+  transform: translateX(-50%);
+}
+
+.fitness-bars button.active::after {
+  opacity: 1;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fitness-chart-color, var(--color-primary)) 22%, transparent);
+}
+
+.fitness-chart-elevation {
+  --fitness-chart-color: #84cc16;
+}
+
+.fitness-chart-hr {
+  --fitness-chart-color: #ef4444;
+}
+
+.fitness-chart-pace,
+.fitness-chart-cadence {
+  --fitness-chart-color: #22d3ee;
+}
+
 .run-detail-content {
   padding-bottom: 16px;
 }

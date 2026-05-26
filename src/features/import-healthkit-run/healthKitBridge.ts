@@ -1,4 +1,4 @@
-import type { ExtractedRunData, FastSegment, Lap } from '@/entities/run/model'
+import type { ExtractedRunData, FastSegment, Lap, RunMetricSample, RunRoutePoint } from '@/entities/run/model'
 import { createSessionTitle } from '@/features/create-session-title/createSessionTitle'
 import { inferCourseType } from '@/features/infer-course-type/inferCourseType'
 import { inferRunType } from '@/features/infer-run-type/inferRunType'
@@ -25,6 +25,8 @@ export type HealthKitRunCandidate = {
   routeAvailable: boolean
   laps: Lap[]
   fastSegments: FastSegment[]
+  metricSamples: RunMetricSample[]
+  routePoints: RunRoutePoint[]
   rawAvailability: {
     workout: boolean
     heartRate: boolean
@@ -153,6 +155,8 @@ export function toExtractedRunData(candidate: HealthKitRunCandidate, weeklyPatte
     memo: createMemo(candidate),
     laps: candidate.laps ?? [],
     fastSegments: candidate.fastSegments ?? [],
+    metricSamples: candidate.metricSamples ?? [],
+    routePoints: candidate.routePoints ?? [],
     tags: ['healthkit']
   }
 }
@@ -175,6 +179,8 @@ function normalizeCandidate(candidate: HealthKitRunCandidate): HealthKitRunCandi
     rpe: normalizeNumber(candidate.rpe),
     laps: candidate.laps ?? [],
     fastSegments: candidate.fastSegments ?? [],
+    metricSamples: normalizeMetricSamples(candidate.metricSamples ?? []),
+    routePoints: normalizeRoutePoints(candidate.routePoints ?? []),
     rawAvailability: {
       workout: Boolean(candidate.rawAvailability?.workout),
       heartRate: Boolean(candidate.rawAvailability?.heartRate),
@@ -183,6 +189,28 @@ function normalizeCandidate(candidate: HealthKitRunCandidate): HealthKitRunCandi
       runningDynamics: Boolean(candidate.rawAvailability?.runningDynamics)
     }
   }
+}
+
+function normalizeMetricSamples(samples: RunMetricSample[]) {
+  return samples
+    .map((sample) => ({
+      offsetSec: normalizeNumber(sample.offsetSec) ?? 0,
+      heartRate: normalizeNumber(sample.heartRate),
+      paceSec: normalizeNumber(sample.paceSec),
+      cadence: normalizeNumber(sample.cadence)
+    }))
+    .filter((sample) => Number.isFinite(sample.offsetSec) && (sample.heartRate !== null || sample.paceSec !== null || sample.cadence !== null))
+}
+
+function normalizeRoutePoints(points: RunRoutePoint[]) {
+  return points
+    .map((point) => ({
+      offsetSec: normalizeNumber(point.offsetSec) ?? 0,
+      latitude: normalizeNumber(point.latitude) ?? Number.NaN,
+      longitude: normalizeNumber(point.longitude) ?? Number.NaN,
+      altitude: normalizeNumber(point.altitude)
+    }))
+    .filter((point) => Number.isFinite(point.offsetSec) && Number.isFinite(point.latitude) && Number.isFinite(point.longitude))
 }
 
 function normalizeNumber(value: number | null): number | null {
