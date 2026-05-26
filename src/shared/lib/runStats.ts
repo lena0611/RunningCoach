@@ -92,73 +92,49 @@ export type NextSessionRecommendation = {
   title: string
   reason: string
   intensity: string
+  plannedDate: string
+  dayName: string
 }
 
 export function getNextSessionRecommendation(memory: TrainingMemory, runs: RunLog[], today = new Date()): NextSessionRecommendation {
   const sorted = [...runs].sort((a, b) => b.date.localeCompare(a.date))
   const upcoming = getNextPlannedWorkout(memory, today)
   const lastRun = sorted[0] ?? null
-  const lastRunDaysAgo = lastRun ? daysSinceRun(lastRun, today) : null
-
-  if (lastRun && lastRunDaysAgo !== null && lastRunDaysAgo <= 1 && isLongRunStress(lastRun)) {
-    return {
-      title: 'Recovery 또는 완전 휴식',
-      reason: [
-        `최근 저장 기록은 ${formatDateWithWeekday(lastRun.date)} ${lastRun.sessionTitle || lastRun.type} ${lastRun.distanceKm}km입니다.`,
-        '전날 또는 직전 롱런 뒤에는 다음 주 계획보다 회복 반응 확인이 먼저입니다.',
-        upcoming.pattern ? `다음 주간 루틴은 ${upcoming.pattern}이지만, 오늘은 회복 우선으로 둡니다.` : ''
-      ]
-        .filter(Boolean)
-        .join(' '),
-      intensity: describeRecoveryAfterLongRun(lastRun)
-    }
-  }
+  const lastRunSchedule = lastRun ? getPlannedWorkoutOnDate(memory, lastRun.date) : null
 
   if (upcoming.dayName === memory.athleteProfile.preferredLongRunDay || upcoming.pattern.includes('LSD') || upcoming.pattern.includes('Long')) {
     const recentLong = getRecentSaturdayLongRun(sorted)
     const longType = chooseNextLongRunType(recentLong)
     return {
       title: `${upcoming.dayName} ${longType}`,
+      plannedDate: upcoming.date,
+      dayName: upcoming.dayName,
       reason: [
         `주간 루틴의 다음 주요 세션은 ${upcoming.pattern || `${upcoming.dayName} 롱런`}입니다.`,
-        lastRun ? `최근 저장 기록은 ${formatDateWithWeekday(lastRun.date)} ${lastRun.sessionTitle || lastRun.type}입니다.` : '최근 저장 기록이 아직 없습니다.',
+        getLastRunContextText(lastRun, lastRunSchedule),
         recentLong ? `최근 토요일 10km+ 기록은 ${formatDateWithWeekday(recentLong.date)} ${recentLong.distanceKm}km입니다.` : '최근 토요일 10km+ 기준 기록은 아직 부족합니다.'
       ].join(' '),
       intensity: describeLongRunIntensity(longType, recentLong)
     }
   }
 
-  const recent = getRunsWithinDays(runs, 3, today)
-  const hasHard = recent.some((run) => ['Tempo', 'LSD', 'Steady Long', 'Race'].includes(run.type) || isLongRunStress(run))
   return {
-    title: hasHard ? 'Recovery 또는 5km Easy' : upcoming.workout || 'Easy + Strides',
-    reason: upcoming.pattern ? `주간 루틴상 다음 세션은 ${upcoming.pattern}입니다.` : '최근 강훈련 여부와 주간 루틴을 함께 본 추천입니다.',
-    intensity: hasHard ? '최근 3일 안에 강한 세션이 있어 회복 우선입니다.' : '무리하지 않는 기본 강도로 진행합니다.'
+    title: upcoming.workout || 'Easy + Strides',
+    plannedDate: upcoming.date,
+    dayName: upcoming.dayName,
+    reason: [
+      upcoming.pattern ? `주간 루틴상 다음 세션은 ${upcoming.pattern}입니다.` : '주간 루틴 기준 다음 세션입니다.',
+      getLastRunContextText(lastRun, lastRunSchedule)
+    ].join(' '),
+    intensity: '추천 세션 자체는 주간 훈련 스케줄을 기준으로 안내합니다. 컨디션과 통증 신호가 있으면 강도만 조절하세요.'
   }
-}
-
-function daysSinceRun(run: RunLog, today: Date): number {
-  const todayStart = new Date(today)
-  todayStart.setHours(0, 0, 0, 0)
-  const runDate = new Date(`${run.date}T00:00:00`)
-  runDate.setHours(0, 0, 0, 0)
-  return Math.round((todayStart.getTime() - runDate.getTime()) / dayMs)
-}
-
-function isLongRunStress(run: RunLog): boolean {
-  return ['LSD', 'Steady Long'].includes(run.type) || run.distanceKm >= 10
-}
-
-function describeRecoveryAfterLongRun(run: RunLog): string {
-  const basePace = run.avgPaceSec ? `직전 롱런 평균 페이스 ${formatPaceText(run.avgPaceSec)}/km 기준, ` : ''
-  return `${basePace}오늘은 20~40분 아주 편한 조깅이나 휴식이 맞습니다. 뛰더라도 대화 가능한 강도와 다리 피로 확인을 우선하세요.`
 }
 
 function round(value: number): number {
   return Math.round(value * 100) / 100
 }
 
-function getNextPlannedWorkout(memory: TrainingMemory, today: Date): { dayName: string; workout: string; pattern: string } {
+function getNextPlannedWorkout(memory: TrainingMemory, today: Date): { dayName: string; workout: string; pattern: string; date: string } {
   const days = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
   const todayIndex = today.getDay()
   const patterns = memory.weeklyPattern
@@ -182,12 +158,53 @@ function getNextPlannedWorkout(memory: TrainingMemory, today: Date): { dayName: 
     }))
     .sort((a, b) => a.offset - b.offset)[0]
 
-  if (next) return next
+  if (next) return { ...next, date: formatDateOnly(addDays(today, next.offset)) }
   return {
     dayName: memory.athleteProfile.preferredLongRunDay || '토요일',
     workout: 'LSD 또는 Steady Long',
-    pattern: `${memory.athleteProfile.preferredLongRunDay || '토요일'}: LSD 또는 Steady Long`
+    pattern: `${memory.athleteProfile.preferredLongRunDay || '토요일'}: LSD 또는 Steady Long`,
+    date: formatDateOnly(today)
   }
+}
+
+function getPlannedWorkoutOnDate(memory: TrainingMemory, dateText: string): { dayName: string; workout: string; pattern: string } | null {
+  const date = new Date(`${dateText}T00:00:00`)
+  if (!Number.isFinite(date.getTime())) return null
+  const dayName = getDayName(date)
+  const pattern = memory.weeklyPattern.find((item) => item.trim().startsWith(dayName))
+  if (!pattern) return null
+  const [, ...rest] = pattern.split(':')
+  return {
+    dayName,
+    workout: rest.join(':').trim(),
+    pattern
+  }
+}
+
+function getLastRunContextText(lastRun: RunLog | null, schedule: { pattern: string } | null): string {
+  if (!lastRun) return '최근 저장 기록은 아직 없습니다.'
+  if (!schedule) {
+    return `최근 저장 기록 ${formatDateWithWeekday(lastRun.date)} ${lastRun.sessionTitle || lastRun.type}은 주간 루틴 외 추가런으로 보고 다음 세션 추천에서는 제외합니다.`
+  }
+  return `최근 저장 기록은 ${formatDateWithWeekday(lastRun.date)} ${lastRun.sessionTitle || lastRun.type}입니다.`
+}
+
+function addDays(value: Date, days: number): Date {
+  const next = new Date(value)
+  next.setDate(next.getDate() + days)
+  return next
+}
+
+function formatDateOnly(value: Date): string {
+  return [
+    value.getFullYear(),
+    String(value.getMonth() + 1).padStart(2, '0'),
+    String(value.getDate()).padStart(2, '0')
+  ].join('-')
+}
+
+function getDayName(value: Date): string {
+  return ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'][value.getDay()]
 }
 
 function getRecentSaturdayLongRun(runs: RunLog[]): RunLog | null {

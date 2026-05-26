@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
@@ -9,7 +9,7 @@ import RunSummaryCard from '@/widgets/run-summary-card/RunSummaryCard.vue'
 import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
 import FatigueCard from '@/widgets/fatigue-card/FatigueCard.vue'
 import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
-import { averagePace, getEasyRatio, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, getVolumeWarning, sumDistance } from '@/shared/lib/runStats'
+import { getEasyRatio, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, getVolumeWarning, sumDistance } from '@/shared/lib/runStats'
 import { formatDateWithWeekday, formatPace } from '@/shared/lib/format'
 import ContentStack from '@/shared/ui/ContentStack.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
@@ -27,6 +27,7 @@ const memoryStore = useMemoryStore()
 const weatherStore = useWeatherStore()
 const router = useRouter()
 const trendMetric = ref<'month' | 'last7' | 'easy' | 'hard' | null>(null)
+const todayDate = computed(() => formatDateOnly(new Date()))
 
 onMounted(() => {
   if (!runStore.loaded && !runStore.loading) {
@@ -90,8 +91,20 @@ onBeforeUnmount(() => {
   document.body.classList.remove('memory-stack-open')
 })
 
+onBeforeRouteLeave(() => {
+  closeTrend()
+})
+
 function closeTrend() {
   trendMetric.value = null
+}
+
+function formatDateOnly(value: Date) {
+  return [
+    value.getFullYear(),
+    String(value.getMonth() + 1).padStart(2, '0'),
+    String(value.getDate()).padStart(2, '0')
+  ].join('-')
 }
 </script>
 
@@ -101,6 +114,7 @@ function closeTrend() {
       <div>
         <p class="eyebrow">훈련 요약</p>
         <h2>최근 기록과 주간 루틴으로 다음 훈련을 추천합니다.</h2>
+        <p class="helper">오늘 {{ formatDateWithWeekday(todayDate) }}</p>
       </div>
       <div class="hero-metric">
         <span>이번 주</span>
@@ -146,17 +160,19 @@ function closeTrend() {
           <SectionHeader title="다음 추천 세션" />
           <div class="recommendation-card">
             <strong>{{ nextSession.title }}</strong>
-            <span>{{ formatPace(averagePace(runs)) }}/km 평균 흐름</span>
+            <span>{{ formatDateWithWeekday(nextSession.plannedDate) }} · {{ nextSession.dayName }}</span>
           </div>
           <p>{{ nextSession.reason }}</p>
           <p class="helper">{{ nextSession.intensity }}</p>
+          <WeatherCard
+            :snapshot="weatherStore.snapshot"
+            :loading="weatherStore.loading"
+            :error="weatherStore.error"
+            :target-date="nextSession.plannedDate"
+            :session-title="nextSession.title"
+            @refresh="weatherStore.requestForecast()"
+          />
         </SectionCard>
-        <WeatherCard
-          :snapshot="weatherStore.snapshot"
-          :loading="weatherStore.loading"
-          :error="weatherStore.error"
-          @refresh="weatherStore.requestForecast()"
-        />
       </ContentStack>
     </div>
 

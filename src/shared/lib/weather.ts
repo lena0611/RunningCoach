@@ -71,7 +71,9 @@ export function getUpcomingHours(hourly: WeatherHourlyPoint[], count: number, re
 }
 
 export function getRainWindowText(hourly: WeatherHourlyPoint[]) {
-  const rainHours = getUpcomingHours(hourly, 12).filter(hasRain)
+  const upcoming = getUpcomingHours(hourly, 12)
+  let rainHours = upcoming.filter(hasRain)
+  if (!rainHours.length) rainHours = hourly.slice(0, 12).filter(hasRain)
   if (!rainHours.length) return '향후 12시간 뚜렷한 비 없음'
   const first = rainHours[0]
   const last = rainHours[rainHours.length - 1]

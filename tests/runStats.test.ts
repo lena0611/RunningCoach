@@ -22,7 +22,7 @@ describe('runStats', () => {
     expect(getEasyRatio(runs)).toBe(50)
   })
 
-  it('recommends recovery after a previous-day long run before weekly routine', () => {
+  it('keeps weekly routine after a previous-day long run', () => {
     const recommendation = getNextSessionRecommendation(
       initialTrainingMemory,
       [
@@ -37,9 +37,10 @@ describe('runStats', () => {
       new Date('2026-05-24T09:00:00+09:00')
     )
 
-    expect(recommendation.title).toBe('Recovery 또는 완전 휴식')
+    expect(recommendation.title).toBe('Easy + Strides')
+    expect(recommendation.plannedDate).toBe('2026-05-26')
     expect(recommendation.reason).toContain('2026-05-23(토)')
-    expect(recommendation.intensity).toContain('7:13')
+    expect(recommendation.intensity).toContain('주간 훈련 스케줄')
   })
 
   it('alternates the next long run type from the latest Saturday 10km+ run', () => {
@@ -77,7 +78,9 @@ describe('runStats', () => {
     )
 
     expect(recommendation.title).toBe('Easy + Strides')
+    expect(recommendation.plannedDate).toBe('2026-05-26')
     expect(recommendation.reason).toContain('화요일: Easy + Strides')
-    expect(recommendation.intensity).toContain('무리하지 않는 기본 강도')
+    expect(recommendation.reason).toContain('추가런')
+    expect(recommendation.intensity).toContain('주간 훈련 스케줄')
   })
 })
