@@ -1,34 +1,27 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
-import { runTypes, type Lap, type RunLog, type RunType } from '@/entities/run/model'
+import { runTypes, type RunLog, type RunType } from '@/entities/run/model'
 import UploadRunPage from '@/pages/upload-run/UploadRunPage.vue'
 import { fetchCoachReports, requestCoachRunStream, type CoachReport } from '@/shared/api/coachRepository'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
-import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
+import { formatDateTimeWithWeekday, formatDateWithWeekday } from '@/shared/lib/format'
 import { getRunFilterTags, hasRunFilterTag, type RunFilterTag } from '@/shared/lib/runMetaChips'
-import { estimateHeartRateDrift } from '@/shared/lib/runStats'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import CoachMessage from '@/shared/ui/CoachMessage.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
 import RunForm from '@/shared/ui/RunForm.vue'
-import RunMetaChips from '@/shared/ui/RunMetaChips.vue'
-import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
-import RunTypeIcon from '@/shared/ui/RunTypeIcon.vue'
+import RunDetailContent from '@/shared/ui/RunDetailContent.vue'
 import RunSessionList from '@/shared/ui/RunSessionList.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
 import SchedulingHelpSheet from '@/shared/ui/SchedulingHelpSheet.vue'
-import UnitValue from '@/shared/ui/UnitValue.vue'
 import { hasNativeBridge } from '@/shared/lib/runtime'
-
-const LapSplitChart = defineAsyncComponent(() => import('@/shared/ui/LapSplitChart.vue'))
-const FitnessDetailCharts = defineAsyncComponent(() => import('@/shared/ui/FitnessDetailCharts.vue'))
 
 const runStore = useRunStore()
 const memoryStore = useMemoryStore()
@@ -38,7 +31,6 @@ const route = useRoute()
 const selectedType = ref<RunType | 'All'>('All')
 const selectedMetaTag = ref('All')
 const selectedDate = ref<string | null>(null)
-const lapView = ref<'list' | 'chart'>('list')
 const visibleCount = ref(10)
 const loadMoreRef = ref<HTMLElement | null>(null)
 const observer = ref<IntersectionObserver | null>(null)
@@ -273,7 +265,6 @@ function toggleDate(date: string, hasRun: boolean) {
 
 function openDetail(run: RunLog) {
   error.value = ''
-  lapView.value = 'list'
   detailRun.value = run
   void ensureReportsLoaded()
 }
@@ -531,11 +522,6 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
   return cells
 }
 
-function formatLapDuration(lap: Lap) {
-  if (!lap.distanceKm || !lap.paceSec) return '-'
-  return formatDuration(lap.distanceKm * lap.paceSec)
-}
-
 function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
   const labels: Record<RunFilterTag['group'], string> = {
     schedule: '루틴',
@@ -616,10 +602,8 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
             </button>
           </header>
-          <main class="memory-stack-content run-detail-content">
-            <SectionCard class="run-detail-hero">
-              <div class="run-detail-topline">
-                <span class="list-row-kicker">{{ formatDateWithWeekday(detailRun.date) }}</span>
+          <RunDetailContent :run="detailRun" :weekly-pattern="memoryStore.memory.weeklyPattern">
+            <template #actions>
                 <div class="run-detail-actions" aria-label="세션 관리">
                   <button
                     v-if="canRefreshFromHealthKit(detailRun)"
@@ -653,73 +637,8 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
                     </svg>
                   </button>
                 </div>
-              </div>
-              <div class="run-detail-identity">
-                <RunTypeIcon :type="detailRun.type" size="large" />
-                <div>
-                  <h2>{{ detailRun.sessionTitle || detailRun.type }}</h2>
-                  <div class="run-session-chip-row">
-                    <RunTypeBadge :type="detailRun.type" />
-                    <RunMetaChips :run="detailRun" :weekly-pattern="memoryStore.memory.weeklyPattern" />
-                  </div>
-                </div>
-              </div>
-              <div class="run-detail-metrics">
-                <strong><UnitValue :amount="detailRun.distanceKm" unit="km" /></strong>
-                <span>{{ formatDuration(detailRun.durationSec) }}</span>
-                <span><UnitValue :amount="formatPace(detailRun.avgPaceSec)" unit="/km" /></span>
-              </div>
-            </SectionCard>
-            <SectionCard>
-              <div class="metric-grid compact-metric-grid">
-                <div class="metric"><span>평균 페이스</span><strong><UnitValue :amount="formatPace(detailRun.avgPaceSec)" unit="/km" /></strong></div>
-                <div class="metric"><span>평균 케이던스</span><strong>{{ formatInteger(detailRun.cadence) }}</strong></div>
-                <div class="metric"><span>평균 심박</span><strong>{{ formatInteger(detailRun.avgHeartRate) }}</strong></div>
-                <div class="metric"><span>최고 심박</span><strong>{{ formatInteger(detailRun.maxHeartRate) }}</strong></div>
-                <div class="metric"><span>운동강도</span><strong>{{ detailRun.rpe ?? '-' }}</strong></div>
-                <div class="metric"><span>드리프트</span><strong class="metric-text-value">{{ estimateHeartRateDrift(detailRun) }}</strong></div>
-              </div>
-            </SectionCard>
-            <SectionCard v-if="detailRun.memo || detailRun.workoutFeeling || detailRun.painNote">
-              <SectionHeader title="메모" />
-              <p v-if="detailRun.memo">{{ detailRun.memo }}</p>
-              <p v-if="detailRun.workoutFeeling" class="helper">느낌: {{ detailRun.workoutFeeling }}</p>
-              <p v-if="detailRun.painNote" class="helper">통증/주의: {{ detailRun.painNote }}</p>
-            </SectionCard>
-            <FitnessDetailCharts
-              v-if="(detailRun.metricSamples?.length ?? 0) || (detailRun.routePoints?.length ?? 0)"
-              :run="detailRun"
-            />
-            <SectionCard>
-              <SectionHeader title="스플릿">
-                <small class="helper">{{ detailRun.laps.length ? `${detailRun.laps.length}개` : '데이터 부족' }}</small>
-              </SectionHeader>
-              <div v-if="detailRun.laps.length" class="lap-content">
-                <div class="view-toggle" role="tablist" aria-label="스플릿 표시 방식">
-                  <button type="button" :class="{ active: lapView === 'list' }" role="tab" :aria-selected="lapView === 'list'" @click="lapView = 'list'">목록</button>
-                  <button type="button" :class="{ active: lapView === 'chart' }" role="tab" :aria-selected="lapView === 'chart'" @click="lapView = 'chart'">차트</button>
-                </div>
-                <div v-if="lapView === 'list'" class="lap-split-table">
-                  <div class="lap-split-head">
-                    <span></span>
-                    <span>시간</span>
-                    <span>페이스</span>
-                    <span>심박수</span>
-                    <span>케이던스</span>
-                  </div>
-                  <div v-for="lap in detailRun.laps" :key="lap.index" class="lap-split-row">
-                    <strong>{{ lap.index }}</strong>
-                    <span class="lap-time">{{ formatLapDuration(lap) }}</span>
-                    <span class="lap-pace">{{ formatPace(lap.paceSec) }}/km</span>
-                    <span class="lap-hr">{{ formatInteger(lap.avgHeartRate) }}<small>BPM</small></span>
-                    <span class="lap-cad">{{ formatInteger(lap.cadence) }}<small>SPM</small></span>
-                  </div>
-                </div>
-                <LapSplitChart v-else :laps="detailRun.laps" />
-              </div>
-              <p v-else class="helper">랩별 페이스와 심박이 있으면 자동 세션 재해석과 코칭 근거가 좋아집니다.</p>
-            </SectionCard>
-          </main>
+            </template>
+          </RunDetailContent>
           <footer class="stack-action-bar run-detail-cta">
             <button type="button" :disabled="!isSupabaseConfigured" @click="openCoach(detailRun)">
               {{ detailCoachButtonLabel(detailRun) }}

@@ -10,24 +10,20 @@ import RunSummaryCard from '@/widgets/run-summary-card/RunSummaryCard.vue'
 import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
 import FatigueCard from '@/widgets/fatigue-card/FatigueCard.vue'
 import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
-import { estimateHeartRateDrift, getEasyRatio, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, getVolumeWarning, sumDistance } from '@/shared/lib/runStats'
-import { formatDateWithWeekday, formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
+import { getEasyRatio, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, getVolumeWarning, sumDistance } from '@/shared/lib/runStats'
+import { formatDateWithWeekday, formatDuration } from '@/shared/lib/format'
 import { getRaceProjection } from '@/shared/lib/performanceProjection'
 import ContentStack from '@/shared/ui/ContentStack.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import MetricGrid from '@/shared/ui/MetricGrid.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
-import RunMetaChips from '@/shared/ui/RunMetaChips.vue'
+import RunDetailContent from '@/shared/ui/RunDetailContent.vue'
 import RunSessionList from '@/shared/ui/RunSessionList.vue'
-import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
-import RunTypeIcon from '@/shared/ui/RunTypeIcon.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
-import UnitValue from '@/shared/ui/UnitValue.vue'
 import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
 
 const TrendChart = defineAsyncComponent(() => import('@/shared/ui/TrendChart.vue'))
-const FitnessDetailCharts = defineAsyncComponent(() => import('@/shared/ui/FitnessDetailCharts.vue'))
 
 const runStore = useRunStore()
 const memoryStore = useMemoryStore()
@@ -343,48 +339,7 @@ function formatDateOnly(value: Date) {
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
               </button>
             </header>
-            <main class="memory-stack-content run-detail-content">
-              <SectionCard class="run-detail-hero">
-                <div class="run-detail-topline">
-                  <span class="list-row-kicker">{{ formatDateWithWeekday(detailRun.date) }}</span>
-                </div>
-                <div class="run-detail-identity">
-                  <RunTypeIcon :type="detailRun.type" size="large" />
-                  <div>
-                    <h2>{{ detailRun.sessionTitle || detailRun.type }}</h2>
-                    <div class="run-session-chip-row">
-                      <RunTypeBadge :type="detailRun.type" />
-                      <RunMetaChips :run="detailRun" :weekly-pattern="memoryStore.memory.weeklyPattern" />
-                    </div>
-                  </div>
-                </div>
-                <div class="run-detail-metrics">
-                  <strong><UnitValue :amount="detailRun.distanceKm" unit="km" /></strong>
-                  <span>{{ formatDuration(detailRun.durationSec) }}</span>
-                  <span><UnitValue :amount="formatPace(detailRun.avgPaceSec)" unit="/km" /></span>
-                </div>
-              </SectionCard>
-              <SectionCard>
-                <div class="metric-grid compact-metric-grid">
-                  <div class="metric"><span>평균 페이스</span><strong><UnitValue :amount="formatPace(detailRun.avgPaceSec)" unit="/km" /></strong></div>
-                  <div class="metric"><span>평균 케이던스</span><strong>{{ formatInteger(detailRun.cadence) }}</strong></div>
-                  <div class="metric"><span>평균 심박</span><strong>{{ formatInteger(detailRun.avgHeartRate) }}</strong></div>
-                  <div class="metric"><span>최고 심박</span><strong>{{ formatInteger(detailRun.maxHeartRate) }}</strong></div>
-                  <div class="metric"><span>운동강도</span><strong>{{ detailRun.rpe ?? '-' }}</strong></div>
-                  <div class="metric"><span>드리프트</span><strong class="metric-text-value">{{ estimateHeartRateDrift(detailRun) }}</strong></div>
-                </div>
-              </SectionCard>
-              <SectionCard v-if="detailRun.memo || detailRun.workoutFeeling || detailRun.painNote">
-                <SectionHeader title="메모" />
-                <p v-if="detailRun.memo">{{ detailRun.memo }}</p>
-                <p v-if="detailRun.workoutFeeling" class="helper">느낌: {{ detailRun.workoutFeeling }}</p>
-                <p v-if="detailRun.painNote" class="helper">통증/주의: {{ detailRun.painNote }}</p>
-              </SectionCard>
-              <FitnessDetailCharts
-                v-if="(detailRun.metricSamples?.length ?? 0) || (detailRun.routePoints?.length ?? 0)"
-                :run="detailRun"
-              />
-            </main>
+            <RunDetailContent :run="detailRun" :weekly-pattern="memoryStore.memory.weeklyPattern" />
             <footer class="stack-action-bar run-detail-cta">
               <button type="button" @click="openCoachForRun(detailRun)">
                 AI 코칭 받기
