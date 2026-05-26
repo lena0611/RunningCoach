@@ -52,6 +52,14 @@ const activeInjury = computed(() => getActiveInjuryItem(memoryStore.memory))
 const hardSessions = computed(() =>
   getRunsWithinDays(runs.value, 7).filter((run) => ['Tempo', 'LSD', 'Steady Long', 'Race'].includes(run.type)).length
 )
+const isNextSessionToday = computed(() => nextSession.value.plannedDate === todayDate.value)
+const heroEyebrow = computed(() => (isNextSessionToday.value ? '오늘 예정 훈련' : '다음 예정 훈련'))
+const heroTitle = computed(() =>
+  isNextSessionToday.value
+    ? `오늘은 ${nextSession.value.title} 예정일입니다.`
+    : `${formatDateWithWeekday(nextSession.value.plannedDate)} ${nextSession.value.title} 준비입니다.`
+)
+const heroHelper = computed(() => `주간 루틴 기준 · 오늘 ${formatDateWithWeekday(todayDate.value)} · 이번 주 ${weekDistance.value}km 누적`)
 
 const trendTitle = computed(() => {
   if (trendMetric.value === 'month') return '이번 달 거리 추이'
@@ -112,12 +120,12 @@ function formatDateOnly(value: Date) {
   <PageLayout variant="dashboard">
     <section class="hero-card">
       <div>
-        <p class="eyebrow">훈련 요약</p>
-        <h2>최근 기록과 주간 루틴으로 다음 훈련을 추천합니다.</h2>
-        <p class="helper">오늘 {{ formatDateWithWeekday(todayDate) }}</p>
+        <p class="eyebrow">{{ heroEyebrow }}</p>
+        <h2>{{ heroTitle }}</h2>
+        <p class="helper">{{ heroHelper }}</p>
       </div>
       <div class="hero-metric">
-        <span>이번 주</span>
+        <span>이번 주 누적</span>
         <strong>{{ weekDistance }}km</strong>
       </div>
     </section>
