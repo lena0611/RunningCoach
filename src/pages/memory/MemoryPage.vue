@@ -12,6 +12,7 @@ import FormGrid from '@/shared/ui/FormGrid.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
+import SchedulingHelpSheet from '@/shared/ui/SchedulingHelpSheet.vue'
 
 type MemoryPanel = 'overview' | 'goals' | 'goal-edit' | 'goal-new' | 'injuries' | 'injury-edit' | 'injury-new'
 
@@ -27,6 +28,7 @@ const memorySnapshot = ref(JSON.stringify(draft))
 const saving = ref(false)
 const error = ref('')
 const pendingDelete = ref<{ kind: 'goal' | 'injury'; id: string; title: string } | null>(null)
+const schedulingHelpOpen = ref(false)
 const stackTransitionName = ref('stack-slide-forward')
 const newGoal = reactive({
   title: '',
@@ -425,7 +427,10 @@ async function save() {
           <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
         </button>
 
-        <div class="form-section-title">AI 관리 훈련 루틴</div>
+        <div class="form-section-title section-title-row">
+          <span>AI 관리 훈련 루틴</span>
+          <button class="help-icon-button" type="button" aria-label="AI 스케줄링 기준 보기" @click="schedulingHelpOpen = true">?</button>
+        </div>
         <div class="sub-panel">
           <strong>주간 루틴</strong>
           <p class="helper">주간 루틴은 AI 코칭이 목표와 누적 데이터를 보고 유지하거나 수정합니다.</p>
@@ -693,7 +698,8 @@ async function save() {
             <button class="ghost" type="button" @click="pendingDelete = null">취소</button>
           </div>
           </section>
-        </div>
+      </div>
+      <SchedulingHelpSheet :open="schedulingHelpOpen" @close="schedulingHelpOpen = false" />
     </Teleport>
   </PageLayout>
 </template>

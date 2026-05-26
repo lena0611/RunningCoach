@@ -12,6 +12,7 @@ import FatigueCard from '@/widgets/fatigue-card/FatigueCard.vue'
 import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
 import { estimateHeartRateDrift, getEasyRatio, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, getVolumeWarning, sumDistance } from '@/shared/lib/runStats'
 import { formatDateWithWeekday, formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
+import { getRaceProjection } from '@/shared/lib/performanceProjection'
 import ContentStack from '@/shared/ui/ContentStack.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import MetricGrid from '@/shared/ui/MetricGrid.vue'
@@ -54,6 +55,15 @@ const easyRatio = computed(() => getEasyRatio(getRunsWithinDays(runs.value, 30))
 const nextSession = computed(() => getNextSessionRecommendation(memoryStore.memory, runs.value))
 const activeGoal = computed(() => getActiveGoal(memoryStore.memory))
 const activeInjury = computed(() => getActiveInjuryItem(memoryStore.memory))
+const raceProjection = computed(() => getRaceProjection(runs.value, activeGoal.value))
+const raceProjectionHint = computed(() => {
+  const projection = raceProjection.value
+  if (!projection) return ''
+  if (projection.deltaSec === null) return `${formatDateWithWeekday(projection.current.date)} 기준`
+  if (projection.deltaSec < 0) return `이전 대비 ${formatDuration(Math.abs(projection.deltaSec))} 단축`
+  if (projection.deltaSec > 0) return `이전 대비 ${formatDuration(projection.deltaSec)} 느림`
+  return '이전과 동일'
+})
 const hardSessions = computed(() =>
   getRunsWithinDays(runs.value, 7).filter((run) => ['Tempo', 'LSD', 'Steady Long', 'Race'].includes(run.type)).length
 )
@@ -178,6 +188,16 @@ function formatDateOnly(value: Date) {
         <div class="stat-card-data">
           <strong>{{ activeInjury?.title || '관리 항목 없음' }}</strong>
           <small>{{ activeInjury ? `${activeInjury.status}${activeInjury.severity ? ` · ${activeInjury.severity}/5` : ''}` : '코칭 제한 없음' }}</small>
+        </div>
+        <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m9 6 6 6-6 6" />
+        </svg>
+      </button>
+      <button v-if="raceProjection" class="stat-card stat-card-interactive dashboard-context-card" type="button" @click="trendMetric = 'hard'">
+        <span class="stat-card-label">목표 예상</span>
+        <div class="stat-card-data">
+          <strong>{{ formatDuration(raceProjection.current.projectedSec) }}</strong>
+          <small>{{ raceProjectionHint }}</small>
         </div>
         <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true">
           <path d="m9 6 6 6-6 6" />

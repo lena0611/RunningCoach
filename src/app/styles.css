@@ -2376,6 +2376,67 @@ button.run-session-row {
   line-height: 1;
 }
 
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.help-icon-button {
+  display: inline-grid;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-subtle);
+  color: var(--color-text);
+  box-shadow: none;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.scheduling-help-sheet {
+  max-height: min(82vh, 720px);
+}
+
+.scheduling-help-content {
+  display: grid;
+  gap: 16px;
+  max-height: calc(min(82vh, 720px) - 88px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  color: var(--color-text);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.scheduling-help-content p,
+.scheduling-help-content ol,
+.scheduling-help-content ul {
+  margin: 0;
+}
+
+.scheduling-help-content ol,
+.scheduling-help-content ul {
+  display: grid;
+  gap: 8px;
+  padding-left: 20px;
+  color: var(--color-muted);
+}
+
+.scheduling-help-content strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--color-text);
+  font-size: 17px;
+}
+
 @keyframes sheet-rise {
   from {
     transform: translateY(100%);

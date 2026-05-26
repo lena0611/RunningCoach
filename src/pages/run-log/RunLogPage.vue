@@ -20,6 +20,7 @@ import RunTypeIcon from '@/shared/ui/RunTypeIcon.vue'
 import RunSessionList from '@/shared/ui/RunSessionList.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
+import SchedulingHelpSheet from '@/shared/ui/SchedulingHelpSheet.vue'
 import UnitValue from '@/shared/ui/UnitValue.vue'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 
@@ -51,6 +52,7 @@ const deletingId = ref<string | null>(null)
 const pendingDeleteRun = ref<RunLog | null>(null)
 const error = ref('')
 const calendarMonth = ref(toMonthKey(new Date()))
+const schedulingHelpOpen = ref(false)
 
 const filterOptions = computed(() => [
   { value: 'All', label: '모든 세션 유형' },
@@ -547,6 +549,7 @@ function formatLapDuration(lap: Lap) {
             <div>
               <h2>AI 코칭</h2>
             </div>
+            <button class="stack-icon-button" type="button" aria-label="AI 스케줄링 기준 보기" @click="schedulingHelpOpen = true">?</button>
           </header>
           <main class="memory-stack-content coach-stack-content">
             <CoachMessage role="user" :text="`${formatDateWithWeekday(coachRun.date)} ${coachRun.sessionTitle || coachRun.type}`" />
@@ -618,6 +621,7 @@ function formatLapDuration(lap: Lap) {
           </div>
         </section>
       </div>
+      <SchedulingHelpSheet :open="schedulingHelpOpen" @close="schedulingHelpOpen = false" />
     </Teleport>
   </PageLayout>
 </template>

@@ -226,6 +226,7 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
   const trainingMemory = memoryRow?.memory ?? null
   const goals = getGoals(trainingMemory)
   const activeGoal = getActiveGoal(trainingMemory, goals)
+  const performanceProjection = getPerformanceProjection(runRows, activeGoal)
   const allInjuryItems = getInjuryItems(trainingMemory)
   const selectedRunDateForTemporalContext = selectedRun?.date ?? null
   const injuryItems = filterInjuryItemsForRunDate(allInjuryItems, selectedRunDateForTemporalContext)
@@ -246,9 +247,42 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
     currentWeather,
     instructionForWeatherHandling:
       'currentWeather는 iOS WeatherKit에서 받은 현재/향후 12시간 날씨이며 다음 세션 준비용이다. selectedRun이 과거 기록이면 currentWeather를 그 과거 훈련 당시 날씨로 착각하지 마라. selectedRun.date가 오늘이거나 사용자가 다음 훈련/오늘 뛸지 묻는 경우에만 체감온도, 강수확률, 강수량, 비 가능 시간대를 짧게 반영한다.',
+    routineUpdatePolicy: {
+      purpose:
+        '주간 루틴은 activeGoal 달성을 위한 처방이다. 세션별 코칭 때마다 유지/조정 여부를 확인하되, 단일 기록 하나만으로 자주 바꾸지 않는다.',
+      externalCoachingStandards:
+        '전문 코칭 기준선은 저강도 기반을 충분히 유지하고, 강훈련은 제한적으로 배치하며, 회복/적응을 훈련 일부로 보고, 목표 거리 특이성을 단계적으로 높이는 것이다. 80/20 또는 polarized/pyramidal 원칙은 절대 공식이 아니라 Easy 과소/강훈련 과다를 막는 가드레일로 사용한다.',
+      coachingDecisionBasis: [
+        '1순위: activeGoal의 목표 거리, 목표 기록, 목표일, 성공 기준, 전략 메모',
+        '2순위: 선택 세션의 실제 수행 데이터(distance, duration, pace, HR, cadence, laps, fast_segments, RPE, memo)',
+        '3순위: 최근 7/14/30일 누적 거리, Easy 비율, 강훈련 빈도, Long Run/Tempo 수행 여부',
+        '4순위: weeklyPattern 대비 실제 소화율과 누락/대체/추가런 패턴',
+        '5순위: activeInjuryItem, pain_note, workout_feeling, 회복 신호',
+        '6순위: 더위/비/바람 같은 날씨와 사용자의 더위 심박 상승 성향',
+        '7순위: 충분한 근거가 있을 때만 PB/Race/Tempo/긴 지속주 기반 예상 기록'
+      ],
+      keepRoutineWhen: [
+        '최근 7/14/30일 볼륨이 급증하지 않았고, 주간 핵심 세션(Easy + Strides, Tempo, Long Run)이 대체로 수행된다.',
+        'Tempo/Long Run 뒤 회복 반응이 안정적이고 activeInjuryItem 또는 pain_note가 악화되지 않는다.',
+        'activeGoal까지 남은 기간 대비 현재 루틴이 목표 특이성(Easy 기반, Tempo, Long Run)을 충분히 제공한다.',
+        '최근 기록의 부진이 날씨, 동반주, 회복주, 과거 기록 리뷰처럼 일시적 맥락으로 설명된다.'
+      ],
+      updateRoutineWhen: [
+        '2주 이상 핵심 세션 누락이 반복되거나 주간 루틴과 실제 수행이 계속 어긋난다.',
+        '최근 7/14일 볼륨 또는 강훈련 빈도가 과하게 증가했고 회복/통증 신호가 동반된다.',
+        'activeGoal.targetDate가 가까워졌는데 목표 특이 세션(Tempo, 목표 페이스 지속주, Long Run)이 부족하다.',
+        '같은 세션에서 심박/RPE가 반복적으로 높고 회복이 늦어 현재 강도가 맞지 않는다.',
+        '부상/주의 항목이 active/monitoring이고 restrictions에 따라 강훈련 빈도나 롱런 방식을 낮춰야 한다.'
+      ],
+      racePredictionPolicy:
+        '레이스 예상시간은 PB, 최근 Tempo/Race/긴 지속주가 충분할 때만 보조 근거로 언급한다. 데이터가 부족하면 예상시간을 단정하지 않는다. 루틴 변경은 예상시간 하나가 아니라 최근 14/30일 수행, 회복, 부상, 목표일까지 남은 기간을 함께 보고 결정한다.',
+      patchPolicy:
+        '변경 필요성이 명확할 때만 trainingMemoryPatch.weeklyPattern 전체와 activeGoalStrategyNotes를 반환한다. 유지가 맞으면 report의 루틴 업데이트 섹션에는 유지 근거를 짧게 쓰고 trainingMemoryPatch는 null로 둔다.'
+    },
     trainingMemory,
     goals,
     activeGoal,
+    performanceProjection,
     injuryItems,
     activeInjuryItem,
     injuryTemporalPolicy: selectedRun
@@ -300,6 +334,7 @@ type TrainingMemoryPatch = {
   weeklyPattern?: string[]
   longRunStrategy?: string
   currentVolumeNote?: string
+  activeGoalStrategyNotes?: string
   aiNotes?: string[]
 }
 
@@ -321,7 +356,7 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     '핵심 지표는 짧은 목록으로만 보여준다. 문장 속에 숫자를 길게 묻지 않는다.',
     '답변 우선순위는 오늘 세션의 정체, 사용자가 의도한 훈련과 맞는지, 중요한 지표 2~3개, 최근 맥락, 조심할 점, 다음 훈련 순서다.',
     '모든 데이터를 다 설명하지 말고 오늘 기록에서 가장 중요한 의미 1개를 먼저 말한다.',
-    '답변 구조는 가능한 한 다음 순서를 따른다: 반응, 핵심 지표, 오늘 해석, 조심할 점, 다음 훈련, 한 줄 요약.',
+    '답변 구조는 가능한 한 다음 순서를 따른다: 반응, 핵심 지표, 오늘 해석, 조심할 점, 다음 훈련, 루틴 업데이트, 한 줄 요약.',
     '전체 report는 기본 600~900자 안팎으로 제한한다. 한 문단은 최대 2문장으로 짧게 쓴다.',
     '각 섹션 bullet은 최대 5개로 제한한다.',
     '잘한 점은 먼저 짚고, 조심할 점은 겁주지 말고 체크포인트처럼 말한다.',
@@ -354,6 +389,9 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     '목표는 하나로 고정하지 않는다. goals 전체를 참고하되 activeGoal을 이번 코칭의 1차 기준으로 삼는다.',
     'activeGoal의 startDate, targetDate, distanceKm, targetDurationSec, successCriteria, strategyNotes를 목표 달성 판단의 기준으로 사용한다.',
     'activeGoal.targetDate가 있으면 남은 기간을 의식하고, 최근 수행 흐름이 목표 완성 날짜에 맞는지 짧게 점검한다. 목표 달성 보장은 금지한다.',
+    'activeGoal은 큰 목적이다. 필요하면 그 기간 안에서 2~6주 단위의 작은 단계 목표를 설정해 루틴 처방 근거로 삼는다.',
+    '작은 단계 목표 예: "2주간 Easy 볼륨 안정화", "Tempo를 심박 160 전후로 4~5km 유지", "토요일 Long Run을 12~15km로 안정화", "목표 10km 전 5km 테스트로 현재 위치 확인".',
+    '단계 목표를 새로 잡거나 바꿔야 하면 report의 루틴 업데이트 섹션에 짧게 말하고, trainingMemoryPatch.activeGoalStrategyNotes에 큰 목표와 단계 목표가 함께 보이도록 반영한다.',
     '다른 목표는 보조 관점으로만 활용하고, activeGoal과 충돌하면 activeGoal을 우선한다.',
     '부상관리는 knownIssues 자유 텍스트보다 injuryItems와 activeInjuryItem을 우선한다.',
     '단, injuryItems와 activeInjuryItem은 선택 세션 날짜 기준으로 시간축이 맞는 항목만 들어온다. 현재 active 부상이라도 selectedRun.date 이후에 발생한 부상은 과거 세션 평가에서 절대 언급하지 않는다.',
@@ -364,22 +402,36 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     '코칭은 해당 러닝 세션 평가에서 끝나지 않는다. 반드시 계정의 목표와 누적 데이터를 보고 현재 weeklyPattern을 유지할지 수정할지 판단한다.',
     'weeklyPattern은 사용자가 직접 세우는 고정 루틴이 아니라 AI가 목표, 최근 14/30일 누적, 강훈련 빈도, 롱런 상태, Easy + Strides 수행 여부, 회복 신호를 보고 관리하는 훈련 계획이다.',
     'AI가 제안한 세션은 사용자가 믿고 따른 처방일 수 있다. selectedRun은 단순 기록이 아니라 직전 목표/스케줄/코칭 처방의 실행 결과일 수 있으므로, 계획 의도에 맞게 수행됐는지 먼저 보고 다음 처방을 조정한다.',
-    '매 코칭 요청마다 스케줄 업데이트 필요성을 반드시 진단한다. 유지가 맞으면 "루틴은 유지"라고 짧게 말하고 trainingMemoryPatch는 null로 둔다. 조정이 필요하면 weeklyPattern 전체를 업데이트한다.',
+    '루틴 업데이트 판단은 context.routineUpdatePolicy를 기준으로 한다. 단일 세션 하나만으로 루틴을 자주 바꾸지 말고, 최근 7/14/30일 흐름과 목표일까지 남은 기간, 회복/부상 신호, 핵심 세션 수행 여부를 함께 본다.',
+    '스케줄 처방은 반드시 context.routineUpdatePolicy.coachingDecisionBasis의 우선순위에 근거한다. 단순히 "느낌상" 또는 일반론으로 루틴을 바꾸지 않는다.',
+    'AI 코치가 주간 루틴을 제안하면 사용자는 그것을 믿고 수행한다. 따라서 루틴 유지/변경 판단에는 목표, 부상상태, 실제 러닝 데이터, 루틴 소화율, 최근 누적 흐름을 종합해서 책임 있게 말한다.',
+    '전문 러닝 코칭 기준선은 context.routineUpdatePolicy.externalCoachingStandards를 따른다. Easy 기반, 제한된 강훈련, 충분한 회복, 점진적 부하, 목표 거리 특이성을 기본 원칙으로 둔다.',
+    '80/20 저강도 기반은 강제 비율이 아니라 가드레일이다. 사용자가 주 3~5회 개인 러너이므로, 강훈련이 많아지거나 Easy가 실제로 Easy가 아니면 루틴을 보수적으로 조정한다.',
+    '10km 목표라면 Easy 기반만으로 끝내지 말고 Tempo/threshold 성격의 지속주, Strides를 통한 신경근 자극, 토요일 Long Run을 목표일까지 단계적으로 연결한다.',
+    '큰 목표를 한 번에 달성하려 하지 말고, 목표일까지 남은 기간을 2~6주 단위 단계 목표로 쪼개서 루틴을 관리한다.',
+    '훈련 계획은 부하-회복-적응의 반복이다. 잘 뛴 세션 뒤에도 회복 반응이 나쁘면 다음 처방은 낮춘다. 반대로 회복이 안정되고 핵심 세션이 반복적으로 소화되면 다음 단계로 아주 조금 올린다.',
+    'report의 "## 루틴 업데이트" 섹션에는 유지/변경 결론만 쓰지 말고, 근거를 1~3개 짧게 붙인다. 예: "루틴은 유지. 최근 Easy 기반은 살아 있고, 이번 세션도 강도 과부하 신호는 없다."',
+    '근거가 부족하면 루틴을 바꾸지 않는다. 대신 "아직 루틴을 바꿀 근거는 부족하다. 다음 Tempo/Long Run 반응까지 보고 조정하자"처럼 말한다.',
+    '레이스 예상시간 시뮬레이션은 충분한 PB/Tempo/Race/긴 지속주 데이터가 있을 때만 보조 근거로 사용한다. 예상시간 하나만으로 weeklyPattern을 바꾸지 않는다.',
+    '매 코칭 요청마다 스케줄 업데이트 필요성을 반드시 진단한다. report에는 반드시 "## 루틴 업데이트" 섹션을 넣고, 이 섹션은 "## 한 줄 요약" 바로 앞에 둔다.',
+    '루틴 업데이트 섹션에서는 이대로 activeGoal을 향해 가도 되는지, 주간 루틴을 유지할지, 변경이 필요한 시점인지 한두 문장으로 말한다.',
+    '유지가 맞으면 "루틴은 유지"라고 짧게 말하고 trainingMemoryPatch는 null로 둔다. 조정이 필요하면 weeklyPattern 전체를 업데이트한다.',
     '매 코칭 요청마다 부상/주의 상태도 확인한다. pain_note, activeInjuryItem, 최근 강훈련/롱런 이후 회복 반응을 보고 다음 세션 강도에 반영하되 의료 진단처럼 말하지 않는다.',
     '루틴 변경이 필요 없으면 trainingMemoryPatch는 null로 둔다.',
     '루틴 변경이 필요하면 trainingMemoryPatch.weeklyPattern에 새 주간 루틴을 전체 배열로 넣는다. 일부만 넣지 말고 전체 주간 패턴을 반환한다.',
+    '루틴 변경이 activeGoal의 목표관리에도 반영되어야 하면 trainingMemoryPatch.activeGoalStrategyNotes에 활성 목표의 새 strategyNotes 문장을 넣는다. 이 값은 activeGoal.strategyNotes에 저장된다.',
     '롱런 전략이나 현재 볼륨 노트도 바뀌어야 하면 trainingMemoryPatch.longRunStrategy, trainingMemoryPatch.currentVolumeNote에 반영한다.',
     '루틴을 바꾼 이유는 report에 짧게 설명하고, aiNotes에는 장기적으로 기억할 계획 변경 근거만 1~3개 넣는다.',
     'trainingMemoryPatch는 RunLog 원본 값을 바꾸는 용도가 아니다. 훈련 계획과 코칭 메모리만 갱신한다.',
     '긴 문단, 같은 말 반복, 모든 맥락 나열, 의료 진단, 부상 위험 단정, 목표 달성 보장, 원본 RunLog 임의 수정은 금지한다.',
     'report는 UI가 마크다운처럼 렌더링할 수 있게 짧은 제목, bullet list, --- divider를 적절히 사용한다.',
     '이모지는 필요할 때만 0~3개 사용한다.',
-    '좋은 출력 예시의 밀도: "좋다. 이건 진짜 회복런 맞다. 어제 롱런 뒤에 강도 욕심 안 내고 아주 잘 눌렀어.\\n\\n## 핵심 지표\\n- 세션: Recovery / 와이프 동반주\\n- 거리: 5.02km\\n- 평균 페이스: 10분09초/km\\n- 평균 심박: 115\\n\\n## 오늘 해석\\n제일 좋은 건 심박이 완전히 낮게 잡혔다는 점이다.\\n\\n롱런 다음날인데 평균 115면, 몸을 더 밀어붙인 게 아니라 회복 쪽으로 잘 돌린 세션이다.\\n\\n## 조심할 점\\n체크할 건 하나다. 오른발 발바닥이 다음에도 조용한지.\\n\\n## 다음 훈련\\n- 내일: 휴식 or 5km 완전 이지\\n- 뛰면: 페이스 보지 말고 착지감만 보기\\n- 강도훈련: 발바닥이 조용해진 뒤 진행\\n\\n## 한 줄 요약\\n오늘은 더 뛴 게 아니라 잘 풀어준 날이다."',
+    '좋은 출력 예시의 밀도: "좋다. 이건 진짜 회복런 맞다. 어제 롱런 뒤에 강도 욕심 안 내고 아주 잘 눌렀어.\\n\\n## 핵심 지표\\n- 세션: Recovery / 와이프 동반주\\n- 거리: 5.02km\\n- 평균 페이스: 10분09초/km\\n- 평균 심박: 115\\n\\n## 오늘 해석\\n제일 좋은 건 심박이 완전히 낮게 잡혔다는 점이다.\\n\\n롱런 다음날인데 평균 115면, 몸을 더 밀어붙인 게 아니라 회복 쪽으로 잘 돌린 세션이다.\\n\\n## 조심할 점\\n체크할 건 하나다. 오른발 발바닥이 다음에도 조용한지.\\n\\n## 다음 훈련\\n- 내일: 휴식 or 5km 완전 이지\\n- 뛰면: 페이스 보지 말고 착지감만 보기\\n- 강도훈련: 발바닥이 조용해진 뒤 진행\\n\\n## 루틴 업데이트\\n루틴은 유지해도 된다. activeGoal 기준으로는 지금처럼 Easy 기반을 두고, 발바닥 반응만 확인하면 된다.\\n\\n## 한 줄 요약\\n오늘은 더 뛴 게 아니라 잘 풀어준 날이다."',
     'context.responseStyle이 있으면 반드시 따른다. tone=conversational_coach, firstSentence=reaction_before_analysis, avoid=report_style/medical_diagnosis/long_paragraphs를 강하게 우선한다.',
     'memoryItems는 0~3개만 반환한다. 반복 패턴, 성향, 부상/더위/회복 기준, 계획 변경처럼 다음 코칭에도 쓸 장기 기억만 넣는다.',
     'memoryItems에 단일 세션의 거리/페이스/심박, "오늘 잘했다", "다음 훈련은 휴식" 같은 일회성 코멘트를 넣지 않는다.',
     '이미 context.coachMemoryItems나 trainingMemory에 같은 의미가 있으면 memoryItems에 다시 넣지 않는다.',
-    'JSON만 반환한다. 형식: {"report":"사용자에게 보여줄 마크다운 코칭","memoryItems":["장기 기억으로 저장할 짧은 문장"],"trainingMemoryPatch":null 또는 {"weeklyPattern":["화요일: ..."],"longRunStrategy":"...","currentVolumeNote":"...","aiNotes":["..."]}}'
+    'JSON만 반환한다. 형식: {"report":"사용자에게 보여줄 마크다운 코칭","memoryItems":["장기 기억으로 저장할 짧은 문장"],"trainingMemoryPatch":null 또는 {"weeklyPattern":["화요일: ..."],"longRunStrategy":"...","currentVolumeNote":"...","activeGoalStrategyNotes":"활성 목표 전략 메모","aiNotes":["..."]}}'
   ].join('\n')
 
   const response = await fetch('https://api.openai.com/v1/responses', {
@@ -420,6 +472,9 @@ function normalizeTrainingMemoryPatch(patch: TrainingMemoryPatch | null): Traini
   if (typeof patch.currentVolumeNote === 'string' && patch.currentVolumeNote.trim()) {
     normalized.currentVolumeNote = patch.currentVolumeNote.trim().slice(0, 1000)
   }
+  if (typeof patch.activeGoalStrategyNotes === 'string' && patch.activeGoalStrategyNotes.trim()) {
+    normalized.activeGoalStrategyNotes = patch.activeGoalStrategyNotes.trim().slice(0, 1200)
+  }
   if (Array.isArray(patch.aiNotes)) {
     const aiNotes = patch.aiNotes.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()).slice(0, 12)
     if (aiNotes.length) normalized.aiNotes = aiNotes
@@ -430,8 +485,24 @@ function normalizeTrainingMemoryPatch(patch: TrainingMemoryPatch | null): Traini
 
 function mergeTrainingMemoryPatch(memory: CoachContext['trainingMemory'], patch: TrainingMemoryPatch) {
   const current = memory && typeof memory === 'object' ? memory as Record<string, unknown> : {}
+  const goals = Array.isArray(current.goals) ? current.goals : []
+  const activeGoalId = typeof current.activeGoalId === 'string' ? current.activeGoalId : ''
+  const patchedGoals = patch.activeGoalStrategyNotes
+    ? goals.map((goal) => {
+        if (!goal || typeof goal !== 'object') return goal
+        const goalRecord = goal as Record<string, unknown>
+        const isActive = activeGoalId ? goalRecord.id === activeGoalId : goal === goals[0]
+        if (!isActive) return goal
+        return {
+          ...goalRecord,
+          strategyNotes: patch.activeGoalStrategyNotes,
+          updatedAt: new Date().toISOString()
+        }
+      })
+    : goals
   return {
     ...current,
+    ...(patch.activeGoalStrategyNotes && patchedGoals.length ? { goals: patchedGoals } : {}),
     ...(patch.weeklyPattern ? { weeklyPattern: patch.weeklyPattern } : {}),
     ...(patch.longRunStrategy ? { longRunStrategy: patch.longRunStrategy } : {}),
     ...(patch.currentVolumeNote ? { currentVolumeNote: patch.currentVolumeNote } : {}),
@@ -669,6 +740,82 @@ function getActiveGoal(memory: unknown, goals: unknown[]) {
     return goal && typeof goal === 'object' && (goal as { id?: unknown }).id === activeGoalId
   })
   return activeGoal ?? goals[0] ?? null
+}
+
+function getPerformanceProjection(runs: RunLogRow[], activeGoal: unknown) {
+  const targetDistanceKm = getNullableNumber(activeGoal, 'distanceKm')
+  if (!targetDistanceKm || targetDistanceKm <= 0) return null
+  const targetDurationSec = getNullableNumber(activeGoal, 'targetDurationSec')
+  const signals = runs
+    .filter((run) => run.duration_sec && run.distance_km >= 3)
+    .map((run) => {
+      const confidence = getProjectionConfidence(run)
+      if (confidence === 'low' || !run.duration_sec) return null
+      const projectedSec = Math.round(run.duration_sec * (targetDistanceKm / run.distance_km) ** 1.06)
+      if (!Number.isFinite(projectedSec) || projectedSec <= 0) return null
+      return {
+        runId: run.id,
+        date: run.date,
+        dateDisplay: formatDateWithWeekday(run.date),
+        type: run.type,
+        distanceKm: run.distance_km,
+        durationSec: run.duration_sec,
+        projectedSec,
+        projectedText: formatDurationText(projectedSec),
+        confidence
+      }
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    .sort((a, b) => b.date.localeCompare(a.date))
+
+  if (!signals.length) {
+    return {
+      targetDistanceKm,
+      targetDurationSec,
+      status: 'insufficient_data',
+      policy: 'Race, Tempo, Steady Long 또는 RPE 7 이상 기록이 충분할 때만 예상 기록을 보조 근거로 사용한다.'
+    }
+  }
+
+  const current = signals[0]
+  const previous = signals.slice(1).find((signal) => signal.date < current.date) ?? null
+  const deltaSec = previous ? current.projectedSec - previous.projectedSec : null
+  return {
+    targetDistanceKm,
+    targetDurationSec,
+    targetText: targetDurationSec ? formatDurationText(targetDurationSec) : null,
+    status: 'available',
+    current,
+    previous,
+    deltaSec,
+    trend: deltaSec === null ? 'baseline' : deltaSec < 0 ? 'improving' : deltaSec > 0 ? 'slower' : 'flat',
+    policy:
+      'Riegel 계열 거리 환산을 참고하되 예측 하나만으로 루틴을 바꾸지 않는다. 최근 7/14/30일 흐름, 회복, 부상, 루틴 소화율과 함께 본다.'
+  }
+}
+
+function getProjectionConfidence(run: RunLogRow): 'high' | 'medium' | 'low' {
+  if (run.type === 'Race') return 'high'
+  if (run.type === 'Tempo' && run.distance_km >= 4) return 'medium'
+  if (run.type === 'Steady Long' && run.distance_km >= 8) return 'medium'
+  if (run.rpe !== null && run.rpe >= 7 && run.distance_km >= 4) return 'medium'
+  return 'low'
+}
+
+function getNullableNumber(source: unknown, key: string) {
+  if (!source || typeof source !== 'object') return null
+  const value = (source as Record<string, unknown>)[key]
+  const numeric = Number(value)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+function formatDurationText(totalSec: number) {
+  const sec = Math.max(0, Math.round(totalSec))
+  const hours = Math.floor(sec / 3600)
+  const minutes = Math.floor((sec % 3600) / 60)
+  const seconds = sec % 60
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
 function getInjuryItems(memory: unknown): unknown[] {
