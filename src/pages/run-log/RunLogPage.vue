@@ -151,7 +151,7 @@ const coachCommandQuery = computed(() => {
 const showCoachCommands = computed(() => coachCommandOpen.value || coachNote.value.trimStart().startsWith('/'))
 const visibleStreamingCoachText = computed(() => {
   if (streamingCoachText.value) return streamingCoachText.value
-  if (coachLoading.value) return `${coachThinkingSeconds.value}초째 잘 생각하는 중 >`
+  if (coachLoading.value) return `${coachThinkingSeconds.value}초째 잘 생각하는 중`
   return ''
 })
 const filteredCoachCommands = computed(() => {
@@ -717,7 +717,7 @@ function formatLapDuration(lap: Lap) {
                 <CoachMessage role="coach" :text="report.report" :meta="formatDateTimeWithWeekday(report.updatedAt || report.createdAt)" />
               </div>
             </template>
-            <CoachMessage v-if="visibleStreamingCoachText" role="coach" :text="visibleStreamingCoachText" :meta="streamingCoachMeta" :streaming="coachLoading" />
+            <CoachMessage v-if="visibleStreamingCoachText" role="coach" :text="visibleStreamingCoachText" :meta="streamingCoachMeta" :streaming="coachLoading" :thinking="coachLoading && !streamingCoachText" />
             <EmptyState v-else-if="!selectedReports.length" title="아직 이 세션의 코칭이 없습니다." description="짧은 메모를 넣고 AI 코칭을 요청하세요." />
             <p v-if="coachError" class="error">{{ coachError }}</p>
           </main>

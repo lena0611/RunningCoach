@@ -3281,20 +3281,33 @@ button.run-session-row {
   font-weight: 950;
 }
 
-.coach-message-streaming .coach-report::after {
-  display: inline-block;
-  width: 8px;
-  height: 18px;
-  margin-left: 2px;
-  border-radius: 999px;
-  background: var(--color-primary);
-  content: '';
-  animation: typing-caret 0.9s steps(2, start) infinite;
+.coach-message-thinking .coach-report {
+  color: var(--color-muted);
 }
 
-@keyframes typing-caret {
-  50% {
-    opacity: 0;
+.coach-message-thinking .coach-report p,
+.coach-message-thinking .coach-report span {
+  display: inline-block;
+  background: linear-gradient(
+    110deg,
+    color-mix(in srgb, var(--color-muted) 78%, transparent) 0%,
+    color-mix(in srgb, var(--color-text) 92%, var(--color-muted)) 42%,
+    color-mix(in srgb, var(--color-muted) 78%, transparent) 72%
+  );
+  background-size: 240% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: thinking-shimmer 1.45s ease-in-out infinite;
+}
+
+@keyframes thinking-shimmer {
+  0% {
+    background-position: 140% 0;
+  }
+
+  100% {
+    background-position: -140% 0;
   }
 }
 
