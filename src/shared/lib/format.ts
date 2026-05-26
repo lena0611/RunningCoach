@@ -31,6 +31,30 @@ export function formatDateWithWeekday(value: string | null | undefined): string 
   return `${dateText}(${weekdays[date.getDay()]})`
 }
 
+export function formatRunListDate(value: string | null | undefined, today = new Date()): string {
+  if (!value) return '-'
+  const date = parseDateOnly(value)
+  if (!date) return formatDateWithWeekday(value)
+
+  const base = new Date(today)
+  base.setHours(0, 0, 0, 0)
+  const target = new Date(date)
+  target.setHours(0, 0, 0, 0)
+  const diffDays = Math.round((base.getTime() - target.getTime()) / 86400000)
+  if (diffDays === 0) return '오늘'
+  if (diffDays === 1) return '어제'
+
+  const weekdays = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
+  const weekStart = getMonday(base)
+  const previousWeekStart = new Date(weekStart)
+  previousWeekStart.setDate(previousWeekStart.getDate() - 7)
+
+  if (target >= weekStart && target <= base) return weekdays[target.getDay()]
+  if (target >= previousWeekStart && target < weekStart) return `지난주 ${weekdays[target.getDay()]}`
+
+  return formatDateWithWeekday(value).replace(/-/g, '.')
+}
+
 export function formatDateTimeWithWeekday(value: string | null | undefined): string {
   if (!value) return '-'
   const date = new Date(value)
@@ -48,4 +72,21 @@ export function toNumberOrNull(value: string): number | null {
   if (value.trim() === '') return null
   const next = Number(value)
   return Number.isFinite(next) ? next : null
+}
+
+function parseDateOnly(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
+  if (!match) return null
+  const [, yearText, monthText, dayText] = match
+  const date = new Date(Number(yearText), Number(monthText) - 1, Number(dayText))
+  return Number.isFinite(date.getTime()) ? date : null
+}
+
+function getMonday(value: Date) {
+  const date = new Date(value)
+  const day = date.getDay()
+  const diff = day === 0 ? 6 : day - 1
+  date.setDate(date.getDate() - diff)
+  date.setHours(0, 0, 0, 0)
+  return date
 }

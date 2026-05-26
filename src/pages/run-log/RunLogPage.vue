@@ -12,13 +12,14 @@ import { estimateHeartRateDrift } from '@/shared/lib/runStats'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import CoachMessage from '@/shared/ui/CoachMessage.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
-import ListRow from '@/shared/ui/ListRow.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
 import RunForm from '@/shared/ui/RunForm.vue'
 import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
 import RunTypeIcon from '@/shared/ui/RunTypeIcon.vue'
+import RunSessionList from '@/shared/ui/RunSessionList.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
+import UnitValue from '@/shared/ui/UnitValue.vue'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 
 const LapSplitChart = defineAsyncComponent(() => import('@/shared/ui/LapSplitChart.vue'))
@@ -353,36 +354,7 @@ function formatLapDuration(lap: Lap) {
         <small class="helper">{{ filteredRuns.length }}개</small>
       </SectionHeader>
       <p v-if="runStore.loading" class="helper">Run Log를 불러오고 있습니다.</p>
-      <div v-if="visibleRuns.length" class="run-list">
-        <ListRow
-          v-for="run in visibleRuns"
-          :key="run.id"
-          class="run-list-row run-click-row"
-          :kicker="formatDateWithWeekday(run.date)"
-          :title="run.sessionTitle || run.type"
-          :detail="`HR ${formatInteger(run.avgHeartRate)} / ${formatInteger(run.maxHeartRate)} · Avg Cad ${formatInteger(run.cadence)} · ${estimateHeartRateDrift(run)}`"
-          :metric="`${run.distanceKm}km`"
-          @click="openDetail(run)"
-        >
-          <template #leading>
-            <RunTypeIcon :type="run.type" />
-          </template>
-          <template #addon>
-            <RunTypeBadge :type="run.type" />
-            <span class="run-list-chevron" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
-            </span>
-          </template>
-          <div>
-            <div class="run-row-title">
-              <strong>{{ formatDuration(run.durationSec) }} · {{ formatPace(run.avgPaceSec) }}/km</strong>
-            </div>
-            <small v-if="run.courseType !== 'Unknown' || run.rpe || run.workoutFeeling">
-              {{ run.courseType }} · RPE {{ run.rpe ?? '-' }} · {{ run.workoutFeeling || run.companion || '-' }}
-            </small>
-          </div>
-        </ListRow>
-      </div>
+      <RunSessionList v-if="visibleRuns.length" :runs="visibleRuns" interactive @select="openDetail" />
       <div ref="loadMoreRef" class="load-more-sentinel">
         <button v-if="hasMoreRuns" class="secondary full" type="button" @click="showMore">다음 10개 보기</button>
       </div>
@@ -448,14 +420,14 @@ function formatLapDuration(lap: Lap) {
                 </div>
               </div>
               <div class="run-detail-metrics">
-                <strong>{{ detailRun.distanceKm }}km</strong>
+                <strong><UnitValue :amount="detailRun.distanceKm" unit="km" /></strong>
                 <span>{{ formatDuration(detailRun.durationSec) }}</span>
-                <span>{{ formatPace(detailRun.avgPaceSec) }}/km</span>
+                <span><UnitValue :amount="formatPace(detailRun.avgPaceSec)" unit="/km" /></span>
               </div>
             </SectionCard>
             <SectionCard>
               <div class="metric-grid compact-metric-grid">
-                <div class="metric"><span>평균 페이스</span><strong>{{ formatPace(detailRun.avgPaceSec) }}/km</strong></div>
+                <div class="metric"><span>평균 페이스</span><strong><UnitValue :amount="formatPace(detailRun.avgPaceSec)" unit="/km" /></strong></div>
                 <div class="metric"><span>평균 케이던스</span><strong>{{ formatInteger(detailRun.cadence) }}</strong></div>
                 <div class="metric"><span>평균 심박</span><strong>{{ formatInteger(detailRun.avgHeartRate) }}</strong></div>
                 <div class="metric"><span>최고 심박</span><strong>{{ formatInteger(detailRun.maxHeartRate) }}</strong></div>

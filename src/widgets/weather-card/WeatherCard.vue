@@ -5,6 +5,7 @@ import { formatRainAmount, formatWeatherNumber, getRainWindowText, getRunningWea
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
 import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
+import UnitValue from '@/shared/ui/UnitValue.vue'
 
 const TrendChart = defineAsyncComponent(() => import('@/shared/ui/TrendChart.vue'))
 
@@ -60,20 +61,20 @@ function formatLocalDate(value: Date) {
       <div>
         <strong class="weather-value-inline">
           <span class="weather-symbol">{{ weatherSymbolToEmoji(snapshot.current.symbolName) }}</span>
-          {{ formatWeatherNumber(snapshot.current.temperatureC, '°') }}
+          <UnitValue :value="formatWeatherNumber(snapshot.current.temperatureC, '°')" />
         </strong>
         <small>실제 온도</small>
       </div>
       <div>
-        <strong>{{ formatWeatherNumber(snapshot.current.apparentTemperatureC, '°') }}</strong>
+        <strong><UnitValue :value="formatWeatherNumber(snapshot.current.apparentTemperatureC, '°')" /></strong>
         <small>체감 온도</small>
       </div>
       <div>
-        <strong>{{ Math.round(maxRainChance * 100) }}%</strong>
+        <strong><UnitValue :amount="Math.round(maxRainChance * 100)" unit="%" /></strong>
         <small>최대 강수확률</small>
       </div>
       <div>
-        <strong>{{ formatRainAmount(rainAmount) }}</strong>
+        <strong><UnitValue :value="formatRainAmount(rainAmount)" /></strong>
         <small>향후 12시간</small>
       </div>
     </div>
@@ -82,20 +83,20 @@ function formatLocalDate(value: Date) {
       <div>
         <strong class="weather-value-inline">
           <span class="weather-symbol">{{ weatherSymbolToEmoji(targetDaily.symbolName) }}</span>
-          {{ formatWeatherNumber(targetDaily.maxTemperatureC, '°') }}
+          <UnitValue :value="formatWeatherNumber(targetDaily.maxTemperatureC, '°')" />
         </strong>
         <small>최고 온도</small>
       </div>
       <div>
-        <strong>{{ formatWeatherNumber(targetDaily.minTemperatureC, '°') }}</strong>
+        <strong><UnitValue :value="formatWeatherNumber(targetDaily.minTemperatureC, '°')" /></strong>
         <small>최저 온도</small>
       </div>
       <div>
-        <strong>{{ Math.round((targetDaily.precipitationChance ?? 0) * 100) }}%</strong>
+        <strong><UnitValue :amount="Math.round((targetDaily.precipitationChance ?? 0) * 100)" unit="%" /></strong>
         <small>강수확률</small>
       </div>
       <div>
-        <strong>{{ formatRainAmount(targetDaily.precipitationAmountMm) }}</strong>
+        <strong><UnitValue :value="formatRainAmount(targetDaily.precipitationAmountMm)" /></strong>
         <small>예상 강수량</small>
       </div>
     </div>

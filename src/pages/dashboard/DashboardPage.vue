@@ -10,14 +10,15 @@ import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
 import FatigueCard from '@/widgets/fatigue-card/FatigueCard.vue'
 import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
 import { getEasyRatio, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, getVolumeWarning, sumDistance } from '@/shared/lib/runStats'
-import { formatDateWithWeekday, formatPace } from '@/shared/lib/format'
+import { formatDateWithWeekday } from '@/shared/lib/format'
 import ContentStack from '@/shared/ui/ContentStack.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
-import ListRow from '@/shared/ui/ListRow.vue'
 import MetricGrid from '@/shared/ui/MetricGrid.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
+import RunSessionList from '@/shared/ui/RunSessionList.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
+import UnitValue from '@/shared/ui/UnitValue.vue'
 import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
 
 const TrendChart = defineAsyncComponent(() => import('@/shared/ui/TrendChart.vue'))
@@ -126,7 +127,7 @@ function formatDateOnly(value: Date) {
       </div>
       <div class="hero-metric">
         <span>이번 주 누적</span>
-        <strong>{{ weekDistance }}km</strong>
+        <strong><UnitValue :amount="weekDistance" unit="km" /></strong>
       </div>
     </section>
 
@@ -206,15 +207,7 @@ function formatDateOnly(value: Date) {
               </SectionCard>
               <SectionCard v-if="trendRuns.length">
                 <SectionHeader title="세션" />
-                <div class="run-list">
-                  <ListRow
-                    v-for="run in trendRuns"
-                    :key="run.id"
-                    :kicker="formatDateWithWeekday(run.date)"
-                    :title="run.sessionTitle || run.type"
-                    :detail="`${run.distanceKm}km · ${formatPace(run.avgPaceSec)}/km`"
-                  />
-                </div>
+                <RunSessionList :runs="trendRuns" />
               </SectionCard>
             </main>
           </section>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import UnitValue from '@/shared/ui/UnitValue.vue'
 
 const props = defineProps<{
   label: string
@@ -31,8 +32,7 @@ const parsedValue = computed(() => {
   >
     <span>{{ label }}</span>
     <strong class="stat-card-value">
-      <span>{{ parsedValue.amount }}</span>
-      <small v-if="parsedValue.unit" class="stat-card-unit">{{ parsedValue.unit }}</small>
+      <UnitValue :amount="parsedValue.amount" :unit="parsedValue.unit" />
     </strong>
     <small v-if="hint">{{ hint }}</small>
     <svg v-if="interactive" class="card-arrow" viewBox="0 0 24 24" aria-hidden="true">

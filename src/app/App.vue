@@ -18,9 +18,9 @@ const runStore = useRunStore()
 const weatherStore = useWeatherStore()
 const router = useRouter()
 const navItems: BottomNavItem[] = [
-  { to: '/', label: 'Dashboard', shortLabel: 'Home', icon: 'home' },
-  { to: '/runs', label: 'Run Log', shortLabel: 'Log', icon: 'log' },
-  { to: '/memory', label: 'Memory', shortLabel: 'Memo', icon: 'memo' }
+  { to: '/', label: '요약', shortLabel: '요약', icon: 'home' },
+  { to: '/runs', label: '기록', shortLabel: '기록', icon: 'log' },
+  { to: '/memory', label: '기억', shortLabel: '기억', icon: 'memo' }
 ]
 const route = useRoute()
 const transitionName = ref('page-slide-forward')
