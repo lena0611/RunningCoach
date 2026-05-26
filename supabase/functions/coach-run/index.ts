@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { filterInjuryItemsForRunDate, getActiveInjuryItemForRunDate } from './injuryTemporalFilter.ts'
 
 type RunLogRow = {
   id: string
@@ -225,8 +226,10 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
   const trainingMemory = memoryRow?.memory ?? null
   const goals = getGoals(trainingMemory)
   const activeGoal = getActiveGoal(trainingMemory, goals)
-  const injuryItems = getInjuryItems(trainingMemory)
-  const activeInjuryItem = getActiveInjuryItem(trainingMemory, injuryItems)
+  const allInjuryItems = getInjuryItems(trainingMemory)
+  const selectedRunDateForTemporalContext = selectedRun?.date ?? null
+  const injuryItems = filterInjuryItemsForRunDate(allInjuryItems, selectedRunDateForTemporalContext)
+  const activeInjuryItem = getActiveInjuryItemForRunDate(trainingMemory, allInjuryItems, selectedRunDateForTemporalContext)
 
   return {
     userNote,
@@ -248,6 +251,9 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
     activeGoal,
     injuryItems,
     activeInjuryItem,
+    injuryTemporalPolicy: selectedRun
+      ? 'injuryItems와 activeInjuryItem은 selectedRun.date 이전 또는 당일에 이미 발생/등록된 항목만 포함한다. 여기에 없는 현재 active 부상은 선택 세션 당시에는 아직 발생하지 않은 것으로 보고 언급하지 마라.'
+      : '현재 흐름 코칭이므로 현재 active/monitoring 부상 항목을 사용할 수 있다.',
     coachMemoryItems: buildRelevantCoachMemoryItems(memoryRows, selectedRun, userNote),
     recentCoachReports: reportRows.slice(0, 5).map((report) => ({
       selectedRunId: report.selected_run_id,
@@ -350,7 +356,8 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     'activeGoal.targetDate가 있으면 남은 기간을 의식하고, 최근 수행 흐름이 목표 완성 날짜에 맞는지 짧게 점검한다. 목표 달성 보장은 금지한다.',
     '다른 목표는 보조 관점으로만 활용하고, activeGoal과 충돌하면 activeGoal을 우선한다.',
     '부상관리는 knownIssues 자유 텍스트보다 injuryItems와 activeInjuryItem을 우선한다.',
-    'activeInjuryItem의 triggers, restrictions, returnToRunCriteria는 다음 훈련 추천과 강도 제한 판단에 반드시 반영한다.',
+    '단, injuryItems와 activeInjuryItem은 선택 세션 날짜 기준으로 시간축이 맞는 항목만 들어온다. 현재 active 부상이라도 selectedRun.date 이후에 발생한 부상은 과거 세션 평가에서 절대 언급하지 않는다.',
+    'activeInjuryItem이 있을 때만 triggers, restrictions, returnToRunCriteria를 다음 훈련 추천과 강도 제한 판단에 반영한다.',
     'activeInjuryItem이 active 또는 monitoring이면 강훈련/롱런 뒤 회복 반응, pain_note, workout_feeling을 보수적으로 해석한다.',
     '통증/부상 메모가 있어도 의료 진단처럼 말하지 않는다. 통증은 훈련 판단 기준과 관찰 포인트로만 다룬다.',
     '통증 수치가 없으면 단정하지 않는다. 예: "통증 강도가 안 나와 있으니 크게 단정하진 말자. 다만 다음 착지감은 체크하자."',
@@ -668,19 +675,6 @@ function getInjuryItems(memory: unknown): unknown[] {
   if (!memory || typeof memory !== 'object') return []
   const injuryItems = (memory as { injuryItems?: unknown }).injuryItems
   return Array.isArray(injuryItems) ? injuryItems : []
-}
-
-function getActiveInjuryItem(memory: unknown, injuryItems: unknown[]) {
-  if (!memory || typeof memory !== 'object') return injuryItems[0] ?? null
-  const activeInjuryItemId = (memory as { activeInjuryItemId?: unknown }).activeInjuryItemId
-  const activeItem = injuryItems.find((item) => {
-    return item && typeof item === 'object' && (item as { id?: unknown }).id === activeInjuryItemId
-  })
-  return activeItem ?? injuryItems.find((item) => {
-    if (!item || typeof item !== 'object') return false
-    const status = (item as { status?: unknown }).status
-    return status === 'active' || status === 'monitoring'
-  }) ?? null
 }
 
 function inCurrentMonth(runs: RunLogRow[]) {

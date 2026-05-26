@@ -1335,6 +1335,8 @@ button.stat-card {
 
 button.run-session-row {
   cursor: pointer;
+  box-shadow: none;
+  text-shadow: none;
 }
 
 .run-session-main {
