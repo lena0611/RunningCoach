@@ -92,6 +92,15 @@
       "keywords": ["검증", "테스트", "빌드", "리뷰", "릴리스", "배포"]
     },
     {
+      "id": "training-knowledge-ops",
+      "file": ".harness/project/training-knowledge-ops.md",
+      "category": "domain",
+      "taskTypes": ["feature", "maintenance", "review", "docs"],
+      "priority": "high",
+      "appliesTo": ["TrainingKnowledge", "training_knowledge_requests", "RAG", "vector", "coach-run"],
+      "keywords": ["훈련법", "지식화", "검토 요청", "RAG", "벡터", "embedding", "training_knowledge"]
+    },
+    {
       "id": "stack-preset-rules",
       "file": ".harness/project/stack-preset-rules.md",
       "category": "stack",

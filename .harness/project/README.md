@@ -45,8 +45,9 @@
 12. [작업 흐름 규칙](./workflow-rules.md)
 13. [설정 계약](./config-contract.md)
 14. [러닝 코칭 기준](./running-coaching-standards.md)
-15. [이식 가이드](./portability-guide.md)
-16. [스택 프리셋 목록](../stacks/README.md)
+15. [훈련 지식 운영 절차](./training-knowledge-ops.md)
+16. [이식 가이드](./portability-guide.md)
+17. [스택 프리셋 목록](../stacks/README.md)
 
 ## 운영 원칙
 - 아직 비어 있는 항목은 빈 채로 두지 말고 `TBD`와 필요한 입력을 함께 적습니다.

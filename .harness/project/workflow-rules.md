@@ -6,6 +6,7 @@
 - 먼저 도메인/아키텍처 결정이 일회성인지 반복 규칙인지 판단한다.
 - 반복 규칙이면 `.harness/session/*`에만 두지 말고 `.harness/project/*` 문서로 승격한다.
 - 구현은 GitHub Pages 정적 프론트 + Supabase 백엔드 경계를 우선하며, secret이 필요한 기능은 브라우저가 아니라 Supabase Edge Function 또는 서버리스 경계로 분리한다.
+- 훈련법/문헌 지식화 요청이 많아지면 `.harness/project/training-knowledge-ops.md`의 운영 절차를 따른다. 사용자 요청 저장은 비용 없는 backlog insert로 유지하고, 조사/요약/규칙화는 별도 검토 작업으로 분리한다.
 - 모바일 반복 사용 흐름을 우선 검토한다.
 - 사용자 답변이 "추천/예상한 기본값대로"인 경우, 적용한 기본값을 `developer-input-queue.md`와 관련 project 문서에 구체적으로 남긴다.
 - 버그픽스나 로직 강화 요청을 처리할 때는 코드 수정 전에 관련 project 룰 후보를 같이 찾고, 반복 가능성이 있으면 같은 커밋 또는 후속 커밋에서 `.harness/project/*`에 반영한다.
