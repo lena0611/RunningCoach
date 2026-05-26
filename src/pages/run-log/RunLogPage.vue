@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
@@ -27,6 +28,7 @@ const LapSplitChart = defineAsyncComponent(() => import('@/shared/ui/LapSplitCha
 const runStore = useRunStore()
 const healthKitSyncStore = useHealthKitSyncStore()
 const weatherStore = useWeatherStore()
+const route = useRoute()
 const selectedType = ref<RunType | 'All'>('All')
 const selectedDate = ref<string | null>(null)
 const lapView = ref<'list' | 'chart'>('list')
@@ -89,6 +91,7 @@ onMounted(() => {
     runStore.load()
   }
   setupObserver()
+  openRouteRunIfNeeded()
 })
 
 watch(openStack, (open) => {
@@ -113,8 +116,14 @@ watch(
       editing.value = runs.find((run) => run.id === editing.value?.id) ?? editing.value
       editSnapshot.value = JSON.stringify(editing.value)
     }
+    openRouteRunIfNeeded()
   },
   { deep: true }
+)
+
+watch(
+  () => route.query.runId,
+  () => openRouteRunIfNeeded()
 )
 
 onBeforeUnmount(() => {
@@ -155,6 +164,13 @@ function openDetail(run: RunLog) {
   lapView.value = 'list'
   detailRun.value = run
   void ensureReportsLoaded()
+}
+
+function openRouteRunIfNeeded() {
+  const runId = typeof route.query.runId === 'string' ? route.query.runId : ''
+  if (!runId || detailRun.value?.id === runId) return
+  const run = runStore.runs.find((item) => item.id === runId)
+  if (run) openDetail(run)
 }
 
 function closeDetail() {

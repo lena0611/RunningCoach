@@ -108,6 +108,10 @@ function closeTrend() {
   trendMetric.value = null
 }
 
+function openRunDetail(run: { id: string }) {
+  router.push({ path: '/runs', query: { runId: run.id } })
+}
+
 function formatDateOnly(value: Date) {
   return [
     value.getFullYear(),
@@ -162,7 +166,7 @@ function formatDateOnly(value: Date) {
     </MetricGrid>
 
     <div class="two-column">
-      <RecentRuns :runs="runs.slice(0, 5)" @show-all="router.push('/runs')" />
+      <RecentRuns :runs="runs.slice(0, 5)" @show-all="router.push('/runs')" @select="openRunDetail" />
       <ContentStack>
         <FatigueCard :warning="getVolumeWarning(runs)" />
         <SectionCard>

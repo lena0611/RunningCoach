@@ -139,9 +139,23 @@ function setThemeMode(value: string) {
 
 <template>
   <header class="app-header">
-    <div>
-      <p class="eyebrow">RunContext</p>
-      <h1>러닝 기록 코치</h1>
+    <div class="app-header-brand">
+      <div class="brand-lockup" aria-label="PACELAB">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 64 64">
+            <path d="M21 17c3-5 10-6 16-3" />
+            <path d="M36 14h8" />
+            <circle cx="31" cy="20" r="5" />
+            <path d="M32 28l-5 9 9 4" />
+            <path d="M29 34l-9 1" />
+            <path d="M36 41l-5 10" />
+            <path d="M37 41l11 4" />
+            <path d="M32 29l10 2" />
+            <path d="M42 31l6-6" />
+          </svg>
+        </span>
+        <span class="brand-word">PACE<strong>LAB</strong></span>
+      </div>
     </div>
     <button v-if="isAuthenticated" class="account-chip" type="button" aria-label="계정 메뉴 열기" @click="openDrawer">
       <span>{{ accountLabel }}</span>

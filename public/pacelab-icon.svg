@@ -11,10 +11,14 @@
     </radialGradient>
   </defs>
   <rect width="1024" height="1024" rx="220" fill="url(#a)"/>
-  <rect x="176" y="176" width="672" height="672" rx="170" fill="url(#b)" stroke="#d6ff35" stroke-opacity=".24" stroke-width="8"/>
-  <circle cx="512" cy="512" r="176" fill="none" stroke="#d6ff35" stroke-width="58"/>
-  <circle cx="512" cy="512" r="92" fill="none" stroke="#d6ff35" stroke-width="44"/>
-  <circle cx="512" cy="512" r="26" fill="#d6ff35"/>
-  <path d="M512 512 650 374" fill="none" stroke="#070b12" stroke-width="34" stroke-linecap="round"/>
-  <path d="M512 512 650 374" fill="none" stroke="#d6ff35" stroke-width="18" stroke-linecap="round"/>
+  <path d="M354 312c50-76 162-100 258-48" fill="none" stroke="#d6ff35" stroke-width="58" stroke-linecap="round"/>
+  <path d="M600 260h120" fill="none" stroke="#d6ff35" stroke-width="46" stroke-linecap="round"/>
+  <circle cx="518" cy="342" r="70" fill="#d6ff35"/>
+  <path d="M528 438l-76 138 138 66" fill="none" stroke="#d6ff35" stroke-width="70" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M478 516l-126 12" fill="none" stroke="#d6ff35" stroke-width="58" stroke-linecap="round"/>
+  <path d="M574 642l-70 154" fill="none" stroke="#d6ff35" stroke-width="66" stroke-linecap="round"/>
+  <path d="M595 648l154 56" fill="none" stroke="#d6ff35" stroke-width="66" stroke-linecap="round"/>
+  <path d="M526 444l140 28" fill="none" stroke="#d6ff35" stroke-width="58" stroke-linecap="round"/>
+  <path d="M656 472l92-92" fill="none" stroke="#d6ff35" stroke-width="50" stroke-linecap="round"/>
+  <path d="M320 812c96 34 244 42 396 8" fill="none" stroke="#d6ff35" stroke-opacity=".42" stroke-width="28" stroke-linecap="round"/>
 </svg>

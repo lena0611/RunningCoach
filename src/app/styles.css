@@ -295,6 +295,61 @@ label {
   letter-spacing: 0;
 }
 
+.app-header-brand {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  color: var(--color-primary);
+}
+
+.brand-mark {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--color-primary-soft);
+}
+
+.brand-mark svg {
+  width: 18px;
+  height: 18px;
+  overflow: visible;
+}
+
+.brand-mark path {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
+}
+
+.brand-mark circle {
+  fill: currentColor;
+}
+
+.brand-word {
+  color: var(--color-text);
+  font-size: 14px;
+  font-style: italic;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.brand-word strong {
+  color: var(--color-primary);
+  font-weight: 900;
+}
+
 .eyebrow {
   margin: 0;
   color: var(--color-primary);
@@ -970,7 +1025,7 @@ button.stat-card {
 .unit-value-number {
   flex: 0 0 auto;
   font: inherit;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1;
 }
 
@@ -1606,13 +1661,13 @@ button.run-session-row {
   border-top: 1px solid var(--color-border);
   color: var(--color-text);
   font-size: 18px;
-  font-weight: 950;
+  font-weight: 400;
 }
 
 .lap-split-row strong {
   color: var(--color-muted);
   font-size: 18px;
-  font-weight: 850;
+  font-weight: 400;
 }
 
 .lap-time {
@@ -1631,7 +1686,7 @@ button.run-session-row {
 .lap-split-row small {
   margin-left: 1px;
   font-size: 11px;
-  font-weight: 950;
+  font-weight: 400;
 }
 
 .lap-split-chart {
