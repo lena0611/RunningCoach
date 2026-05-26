@@ -51,8 +51,13 @@ function formatLocalDate(value: Date) {
 <template>
   <div class="weather-card" :class="`weather-card-${advice.level}`">
     <SectionHeader title="다음 세션 날씨">
-      <button class="ghost compact-action" type="button" :disabled="loading" @click="emit('refresh')">
-        {{ loading ? '확인 중' : '새로고침' }}
+      <button class="ghost weather-refresh-button" type="button" :disabled="loading" :aria-label="loading ? '날씨 확인 중' : '날씨 새로고침'" @click="emit('refresh')">
+        <svg viewBox="0 0 24 24" aria-hidden="true" :class="{ spinning: loading }">
+          <path d="M20 11a8 8 0 0 0-14.8-4.2L3 9" />
+          <path d="M3 4v5h5" />
+          <path d="M4 13a8 8 0 0 0 14.8 4.2L21 15" />
+          <path d="M21 20v-5h-5" />
+        </svg>
       </button>
     </SectionHeader>
     <p class="weather-target">{{ targetDate }} · {{ sessionTitle || '다음 추천 세션' }}</p>

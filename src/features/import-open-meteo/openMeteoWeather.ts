@@ -40,6 +40,16 @@ type PositionLike = {
   }
 }
 
+type CachedPosition = {
+  latitude: number
+  longitude: number
+  savedAt: number
+}
+
+const positionCacheKey = 'runcontext.weather.position.v1'
+const freshPositionMaxAgeMs = 30 * 60 * 1000
+const fallbackPositionMaxAgeMs = 24 * 60 * 60 * 1000
+
 export async function requestOpenMeteoForecast(): Promise<WeatherSnapshot> {
   const position = await getCurrentPosition()
   const latitude = roundCoordinate(position.coords.latitude)
@@ -81,18 +91,60 @@ export async function requestOpenMeteoForecast(): Promise<WeatherSnapshot> {
   return toWeatherSnapshot(data)
 }
 
-function getCurrentPosition(): Promise<PositionLike> {
+async function getCurrentPosition(): Promise<PositionLike> {
   if (!navigator.geolocation) {
-    return Promise.reject(new Error('이 환경에서 위치 권한을 사용할 수 없습니다.'))
+    const cached = getCachedPosition(fallbackPositionMaxAgeMs)
+    if (cached) return toPositionLike(cached)
+    throw new Error('이 환경에서 위치 권한을 사용할 수 없습니다.')
   }
 
   return new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
+    navigator.geolocation.getCurrentPosition((position) => {
+      saveCachedPosition(position.coords.latitude, position.coords.longitude)
+      resolve(position)
+    }, (error) => {
+      const cached = getCachedPosition(fallbackPositionMaxAgeMs)
+      if (cached && (error.code === 2 || error.code === 3)) {
+        resolve(toPositionLike(cached))
+        return
+      }
+      reject(error)
+    }, {
       enableHighAccuracy: false,
-      maximumAge: 10 * 60 * 1000,
-      timeout: 12_000
+      maximumAge: freshPositionMaxAgeMs,
+      timeout: 30_000
     })
   })
+}
+
+function getCachedPosition(maxAgeMs: number): CachedPosition | null {
+  try {
+    const raw = localStorage.getItem(positionCacheKey)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as CachedPosition
+    if (!Number.isFinite(parsed.latitude) || !Number.isFinite(parsed.longitude) || !Number.isFinite(parsed.savedAt)) return null
+    if (Date.now() - parsed.savedAt > maxAgeMs) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function saveCachedPosition(latitude: number, longitude: number) {
+  try {
+    localStorage.setItem(positionCacheKey, JSON.stringify({ latitude, longitude, savedAt: Date.now() }))
+  } catch {
+    // 위치 캐시는 편의 기능이다. 저장 실패가 날씨 조회 자체를 막으면 안 된다.
+  }
+}
+
+function toPositionLike(position: CachedPosition): PositionLike {
+  return {
+    coords: {
+      latitude: position.latitude,
+      longitude: position.longitude
+    }
+  }
 }
 
 function toWeatherSnapshot(data: OpenMeteoForecastResponse): WeatherSnapshot {

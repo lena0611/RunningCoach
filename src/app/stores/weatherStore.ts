@@ -103,7 +103,7 @@ function formatWeatherError(err: unknown) {
   if (isGeolocationError(err)) {
     if (err.code === 1) return '위치 권한이 거부되어 날씨를 가져오지 못했습니다.'
     if (err.code === 2) return '현재 위치를 확인하지 못했습니다.'
-    if (err.code === 3) return '위치 확인 시간이 초과되었습니다.'
+    if (err.code === 3) return '위치 확인이 지연되고 있습니다. 잠시 후 다시 눌러 주세요.'
   }
   return err instanceof Error ? err.message : '날씨 요청 실패'
 }

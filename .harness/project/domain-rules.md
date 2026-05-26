@@ -9,7 +9,7 @@
 - `RunContextUser`: 앱에 등록된 사용자 단위다. 각 사용자는 자기 `TrainingMemory`와 목표를 가진다.
 - `FIT import`: Workoutdoors에서 export한 `.fit` 파일을 브라우저에서 로컬 파싱해 `RunLog` 후보를 만드는 흐름이다.
 - `AI Coach`: 저장 데이터와 프로그램 통계를 기반으로 OpenAI가 자연어 코칭 리포트를 생성하는 코칭 엔진이다.
-- `WeatherSnapshot`: iOS WeatherKit에서 받은 현재/시간별/일별 날씨 요약이다. 러닝 준비 판단의 체감온도, 강수확률, 강수량, 강수시간 근거로 쓴다.
+- `WeatherSnapshot`: 무료 Open-Meteo에서 받은 현재/시간별/일별 날씨 요약이다. 러닝 준비 판단의 체감온도, 강수확률, 강수량, 강수시간 근거로 쓴다.
 - `Goal`: 사용자는 여러 목표를 가질 수 있고, `activeGoalId`로 지정된 활성 목표가 코칭의 1차 판단 기준이다. 시작일, 목표일, 성공 기준, 목표 전략을 함께 가진다. 다른 목표는 보조 관점으로 참고한다.
 - `InjuryItem`: 사용자는 여러 부상/주의사항을 관리할 수 있고, `activeInjuryItemId`로 지정된 항목이 코칭의 1차 부상관리 기준이다. 악화 트리거, 훈련 제한, 복귀 기준을 함께 가지며, 의료 진단이 아니라 훈련 강도 조절과 관찰 포인트로만 사용한다.
 
@@ -81,7 +81,7 @@
 - Workoutdoors export의 기본 지원 포맷은 FIT로 제한한다.
 - Strava 연동은 장기 확장이다. Strava OAuth token exchange, refresh token 보관, webhook callback은 정적 프론트가 아니라 서버리스 백엔드가 담당해야 한다.
 - Strava 연동은 당장 구현하지 않고 확장 메모로 둔다. 모바일 FIT 업로드 불편이 커지면 MVP 이후 구현한다.
-- 날씨 연동의 기본값은 무료 Open-Meteo API다. 사용자가 위치 권한을 허용하면 웹 앱이 현재 위치를 낮은 정밀도로 반올림해 Open-Meteo forecast API를 호출하고, 체감온도/강수확률/강수량/강수시간을 홈과 AI 코칭 컨텍스트에 반영한다.
+- 날씨 연동의 기본값은 무료 Open-Meteo API다. iOS 하이브리드 앱은 네이티브 CoreLocation으로 위치를 잡고 Open-Meteo를 호출해 웹에 `WeatherSnapshot`을 전달한다. 일반 브라우저/localhost는 웹 geolocation으로 현재 위치를 낮은 정밀도로 반올림해 Open-Meteo forecast API를 호출한다.
 - WeatherKit은 현재 보류한다. GitHub Pages 일반 브라우저에서는 직접 WeatherKit을 호출하지 않으며, Personal Team 빌드에서는 WeatherKit capability를 켜지 않는다.
 
 ## 금지되는 도메인 처리

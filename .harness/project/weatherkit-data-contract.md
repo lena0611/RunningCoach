@@ -14,7 +14,8 @@
   - `hourly`: temperature, apparent temperature, precipitation probability/amount/intensity, weather code
   - `daily`: min/max temperature, precipitation probability/amount, weather code
 - 위치:
-  - 브라우저/WKWebView `navigator.geolocation`을 사용한다.
+  - 일반 브라우저/localhost는 `navigator.geolocation`을 사용한다.
+  - iOS 하이브리드 앱은 네이티브 브리지에서 CoreLocation으로 위치를 잡고 무료 Open-Meteo를 호출한다. WKWebView geolocation은 기동 직후 타임아웃이 흔하므로 기본 경로로 쓰지 않는다.
   - 위치 권한이 거부되면 웹은 날씨 없이 기존 추천을 유지한다.
   - API 요청 좌표는 소수 둘째 자리 수준으로 반올림한다.
 
@@ -62,15 +63,17 @@ type WeatherDailyPoint = {
 ```
 
 ## 웹 호출 흐름
-- 웹 -> 위치 권한 요청 -> Open-Meteo forecast API 호출 -> `WeatherSnapshot`으로 변환한다.
+- iOS 앱: 웹 -> `runContextWeatherKit` 브리지 요청 -> 네이티브 CoreLocation -> Open-Meteo forecast API 호출 -> `WeatherSnapshot`으로 변환해 웹에 전달한다.
+- 일반 브라우저/localhost: 웹 -> 위치 권한 요청 -> Open-Meteo forecast API 호출 -> `WeatherSnapshot`으로 변환한다.
 - 앱 기동/활성화 시 로그인 상태이고 15분 캐시가 만료됐으면 자동 갱신한다.
-- 사용자가 홈의 날씨 카드에서 새로고침을 누르면 즉시 다시 요청한다.
+- 사용자가 홈의 날씨 카드에서 새로고침 아이콘을 누르면 화면 전체가 아니라 날씨 데이터만 다시 요청한다.
 
-## 보류된 WeatherKit 브리지
-- 장기적으로 WeatherKit을 다시 켤 경우 아래 브리지 계약을 사용한다.
-  - 웹 -> 네이티브: `window.webkit.messageHandlers.runContextWeatherKit.postMessage({ type: 'requestWeatherForecast', hours: 24, days: 7 })`
-  - 네이티브 -> 웹 성공: `window.RunContextWeatherKit.receiveForecast(snapshot)`
-  - 네이티브 -> 웹 실패: `window.RunContextWeatherKit.receiveError(message)`
+## iOS 날씨 브리지
+- 호환을 위해 브리지 이름은 `runContextWeatherKit`을 유지하지만, 현재 구현은 WeatherKit이 아니라 무료 Open-Meteo다.
+- 웹 -> 네이티브: `window.webkit.messageHandlers.runContextWeatherKit.postMessage({ type: 'requestWeatherForecast', hours: 24, days: 7 })`
+- 네이티브 -> 웹 성공: `window.RunContextWeatherKit.receiveForecast(snapshot)`
+- 네이티브 -> 웹 실패: `window.RunContextWeatherKit.receiveError(message)`
+- 장기적으로 유료 Apple Developer Program 전환 후 WeatherKit을 다시 켤 수 있지만, Personal Team 빌드에서는 capability를 추가하지 않는다.
 
 ## 단위 변환
 - 온도: 섭씨 `°C`
@@ -96,7 +99,7 @@ type WeatherDailyPoint = {
 ## iOS 빌드 체크리스트
 - 현재 Personal Team 빌드에서는 Xcode target에 WeatherKit capability를 추가하지 않는다. Personal Team은 WeatherKit provisioning을 지원하지 않아 iPhone 빌드가 실패한다.
 - WeatherKit capability는 유료 Apple Developer Program 전환 뒤에만 다시 검토한다.
-- Open-Meteo 방식에서도 WKWebView의 HTML5 geolocation 권한을 위해 위치 권한 설명을 `Info.plist`에 유지한다.
+- Open-Meteo 방식에서도 네이티브 CoreLocation 권한을 위해 위치 권한 설명을 `Info.plist`에 유지한다.
 
 ## 구현 검증 기준
 - iOS 앱 기동 후 홈에 `다음 세션 날씨` 카드가 채워진다.

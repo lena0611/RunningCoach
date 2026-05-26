@@ -19,7 +19,7 @@
 
 ## 공개 API 경계
 - 현재 웹 앱은 GitHub Pages 정적 프론트이며, 백엔드/Auth/DB/AI 경계는 Supabase를 사용한다.
-- iOS 확장 방향은 하이브리드 앱이다. Vue 화면은 WebView 또는 로컬 번들로 유지하고, 네이티브 iOS 레이어는 HealthKit/WeatherKit 권한 및 조회와 웹-네이티브 브리지만 담당한다.
+- iOS 확장 방향은 하이브리드 앱이다. Vue 화면은 WebView 또는 로컬 번들로 유지하고, 네이티브 iOS 레이어는 HealthKit 조회, 날씨용 CoreLocation/Open-Meteo 조회, 웹-네이티브 브리지만 담당한다.
 - 현재 로컬 iOS 네이티브 프로젝트 경로는 `/Users/smart-tn-083/practice/RunningCoach/RunningCoach/RunningCoach.xcodeproj`다. Swift 소스는 `/Users/smart-tn-083/practice/RunningCoach/RunningCoach/RunningCoach` 아래에 있다. 네이티브 Git 저장소는 `https://github.com/lena0611/RunningCoach-Native-Swift`이며, 웹 repo 밖에 있으므로 네이티브 변경 시 이 경로와 저장소를 함께 확인한다.
 - iOS Bundle Identifier는 계정 이메일에서 추론하지 않고 `com.lena0611.RunningCoach`로 고정한다. iPhone의 Apple ID가 `lenas0611@gmail.com`이고 Apple Developer 계정이 `lena0611@gmail.com`이어도 Bundle ID는 개발자 계정 문자열이 아니라 앱 식별자이므로 `lenas0611`로 바꾸지 않는다.
 - 현재 사용자는 Personal Team으로 iPhone 빌드한다. Personal Team은 WeatherKit capability를 지원하지 않으므로 네이티브 타깃에 WeatherKit entitlement/capability를 켜면 안 된다. WeatherKit을 다시 켜려면 유료 Apple Developer Program 전환 또는 다른 날씨 API/서버리스 대안을 먼저 결정한다.
@@ -30,7 +30,7 @@
 ## 데이터 흐름
 - FIT 파일 선택 -> 브라우저 로컬 파싱 -> 사용자가 확인/수정 -> Supabase `run_logs` 저장 -> 대시보드/AI Coach 컨텍스트 계산
 - iOS 하이브리드 확장: Workoutdoors/Apple Fitness -> Apple 건강 앱/HealthKit 저장 -> 네이티브 iOS HealthKit 조회 -> 웹 앱에 `RunLog` 후보 전달 -> 앱 기동/재활성화 시 최신 저장일 이후 후보 자동 저장
-- 날씨 확장 기본값: 브라우저/WKWebView 위치 권한 -> 무료 Open-Meteo forecast API 호출 -> `WeatherSnapshot` 변환 -> 홈의 다음 세션 준비 카드에서 체감온도/강수확률/강수량/강수시간 표시
+- 날씨 확장 기본값: iOS 앱은 네이티브 CoreLocation -> 무료 Open-Meteo forecast API 호출 -> `WeatherSnapshot` 전달, 일반 브라우저/localhost는 웹 geolocation -> 무료 Open-Meteo 호출 -> 홈의 다음 세션 준비 카드에서 체감온도/강수확률/강수량/강수시간 표시
 - `TrainingMemory` 수정 -> Supabase `training_memory` 저장 -> AI Coach 컨텍스트 생성에 반영
 - AI 코칭 요청 -> Supabase Edge Function -> DB에서 `TrainingMemory`, `RunLog`, `coach_memory_items` 조회 -> OpenAI 호출 -> `coach_reports`, 새 `coach_memory_items`, 필요한 경우 갱신된 `training_memory.memory.weeklyPattern` 저장
 - AI 코칭 컨텍스트는 비용을 통제한다. 같은 세션 대화 thread는 이어서 넣되, 다른 세션 대화는 전체 전문이 아니라 유사 세션 snippet과 `coach_memory_items` 중심으로 주입한다.
@@ -51,7 +51,7 @@
 
 ## 날씨 계약
 - 날씨 데이터 구조와 웹 전달 구조는 `.harness/project/weatherkit-data-contract.md`를 기준으로 하되, 현재 구현 기본값은 WeatherKit이 아니라 Open-Meteo다.
-- Open-Meteo는 API key 없이 호출하며, 현재 위치 좌표는 낮은 정밀도로 반올림해 요청한다.
+- Open-Meteo는 API key 없이 호출하며, 현재 위치 좌표는 낮은 정밀도로 반올림해 요청한다. 홈의 새로고침 아이콘은 전체 화면 리로드가 아니라 날씨 데이터만 다시 패치한다.
 - 웹 앱의 날씨 자동 갱신 트리거는 앱 루트 전역 스토어에서 담당한다.
 - 날씨 조회가 실패해도 RunLog 저장, HealthKit 동기화, AI 코칭은 계속 동작해야 한다.
 
@@ -59,7 +59,7 @@
 - 새 파일 import 포맷을 추가하기 전에 FIT 단일 포맷으로 해결할 수 없는 이유를 `decision-log.md`에 남긴다.
 - 새 코칭 규칙은 근거와 입력 데이터, 출력 영향을 함께 기록한다.
 - 외부 API 연동은 secret 보관이 필요한지 먼저 판단하고, 필요하면 정적 프론트가 아니라 서버리스 경계로 분리한다.
-- HealthKit 연동은 서버리스나 웹 브라우저 코드가 아니라 iOS 네이티브 타깃에서 구현한다. 날씨는 무료 Open-Meteo 웹 호출을 기본값으로 사용한다.
+- HealthKit 연동은 서버리스나 웹 브라우저 코드가 아니라 iOS 네이티브 타깃에서 구현한다. iOS 앱의 날씨도 안정성을 위해 네이티브 CoreLocation + 무료 Open-Meteo 호출을 기본값으로 사용한다.
 
 ## 변경 규칙
 - 아키텍처 경계 변경은 `decision-log.md`에 이유를 남깁니다.
