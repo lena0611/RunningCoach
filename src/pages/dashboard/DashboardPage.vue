@@ -284,7 +284,7 @@ function formatDateOnly(value: Date) {
               </SectionCard>
               <SectionCard v-if="trendRuns.length">
                 <SectionHeader title="세션" />
-                <RunSessionList :runs="trendRuns" :weekly-pattern="memoryStore.memory.weeklyPattern" />
+                <RunSessionList :runs="trendRuns" :weekly-pattern="memoryStore.memory.weeklyPattern" interactive @select="openRunDetail" />
               </SectionCard>
             </main>
           </section>
