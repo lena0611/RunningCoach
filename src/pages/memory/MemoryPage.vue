@@ -660,7 +660,8 @@ async function save() {
             <button type="button" :disabled="saving || !isDirty" @click="save">{{ saving ? '저장 중' : isDirty ? '변경사항 저장' : '저장됨' }}</button>
           </footer>
         </section>
-      </div>
+        </div>
+      </Transition>
 
       <div v-if="pendingDelete" class="bottom-sheet-layer confirm-layer" role="presentation" @click.self="pendingDelete = null">
         <section class="bottom-sheet confirm-sheet" role="dialog" aria-modal="true" aria-label="삭제 확인">
@@ -673,7 +674,6 @@ async function save() {
           </div>
           </section>
         </div>
-      </Transition>
     </Teleport>
   </PageLayout>
 </template>
