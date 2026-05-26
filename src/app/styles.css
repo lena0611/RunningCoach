@@ -260,6 +260,18 @@ textarea {
   line-height: 1.6;
 }
 
+.clearable-field {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.clearable-field input,
+.clearable-field textarea {
+  padding-right: 46px;
+}
+
 label {
   display: grid;
   gap: 8px;
@@ -1296,7 +1308,9 @@ button.stat-card {
 
 .run-session-list {
   display: grid;
-  gap: 10px;
+  overflow: hidden;
+  border-radius: 22px;
+  background: var(--color-subtle);
 }
 
 .run-session-row {
@@ -1309,10 +1323,14 @@ button.stat-card {
   min-height: 92px;
   padding: 14px;
   border: 0;
-  border-radius: 22px;
-  background: var(--color-subtle);
+  border-radius: 0;
+  background: transparent;
   color: inherit;
   text-align: left;
+}
+
+.run-session-row + .run-session-row {
+  border-top: 1px solid var(--color-border);
 }
 
 button.run-session-row {
@@ -1898,6 +1916,15 @@ button.run-session-row {
   box-shadow: none;
   transform: translateY(-50%);
   text-shadow: none;
+}
+
+.clearable-field .input-clear-button {
+  right: 12px;
+}
+
+.chat-input-wrap .input-clear-button {
+  top: 21px;
+  right: 10px;
 }
 
 .input-clear-button svg {

@@ -8,6 +8,7 @@ import { getActiveGoal, getActiveInjuryItem, type PersonalBest, type TrainingMem
 import { formatDateWithWeekday } from '@/shared/lib/format'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
+import ClearableField from '@/shared/ui/ClearableField.vue'
 import FormGrid from '@/shared/ui/FormGrid.vue'
 
 defineProps<{ isAuthenticated: boolean }>()
@@ -241,32 +242,33 @@ function goDashboard() {
           <FormGrid as="form" @submit.prevent="saveProfile">
             <label class="full">
               계정 표시 이름
-              <input v-model="draftName" autocomplete="name" />
+              <ClearableField v-model="draftName" autocomplete="name" />
             </label>
             <label>
               출생연도
-              <input v-model.number="draft.athleteProfile.birthYear" type="number" inputmode="numeric" placeholder="예: 1989" />
+              <ClearableField v-model="draft.athleteProfile.birthYear" type="number" inputmode="numeric" placeholder="예: 1989" number />
             </label>
             <BottomSheetSelect v-model="draft.athleteProfile.sex" label="성별" :options="sexOptions" />
             <label>
               러닝 경력(개월)
-              <input v-model.number="draft.athleteProfile.runningExperienceMonths" type="number" inputmode="numeric" placeholder="예: 18" />
+              <ClearableField v-model="draft.athleteProfile.runningExperienceMonths" type="number" inputmode="numeric" placeholder="예: 18" number />
             </label>
             <label>
               목표 주간 러닝 횟수
-              <input v-model.number="draft.athleteProfile.weeklyRunDaysTarget" type="number" inputmode="numeric" min="1" max="7" />
+              <ClearableField v-model="draft.athleteProfile.weeklyRunDaysTarget" type="number" inputmode="numeric" min="1" max="7" number />
             </label>
             <label class="full">
               선호 롱런 요일
-              <input v-model="draft.athleteProfile.preferredLongRunDay" />
+              <ClearableField v-model="draft.athleteProfile.preferredLongRunDay" />
             </label>
             <label class="full">
               거리별 PB
-              <textarea
-                :value="formatPersonalBests()"
+              <ClearableField
+                :model-value="formatPersonalBests()"
+                as="textarea"
                 rows="4"
                 placeholder="5, 28:30, 2026-05-01, race"
-                @input="draft.athleteProfile.personalBests = parsePersonalBests(($event.target as HTMLTextAreaElement).value)"
+                @update:model-value="draft.athleteProfile.personalBests = parsePersonalBests(String($event ?? ''))"
               />
             </label>
             <button class="full" type="submit" :disabled="saving">{{ saving ? '저장 중' : '저장' }}</button>

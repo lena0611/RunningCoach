@@ -10,6 +10,7 @@ import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, forma
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import CoachMessage from '@/shared/ui/CoachMessage.vue'
+import ClearableField from '@/shared/ui/ClearableField.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
@@ -90,7 +91,7 @@ async function coach() {
       </section>
       <label>
         오늘 메모
-        <textarea v-model="userNote" rows="3" placeholder="예: 오늘 목요일 템포. 후반 3.5km는 와이프랑 9분대 회복 조깅." />
+        <ClearableField v-model="userNote" as="textarea" rows="3" placeholder="예: 오늘 목요일 템포. 후반 3.5km는 와이프랑 9분대 회복 조깅." />
       </label>
       <ActionGroup>
         <button type="button" :disabled="loading || !isSupabaseConfigured" @click="coach">{{ loading ? '분석 중' : 'AI 코칭 요청' }}</button>

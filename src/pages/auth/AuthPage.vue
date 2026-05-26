@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/app/stores/authStore'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
+import ClearableField from '@/shared/ui/ClearableField.vue'
 import FormGrid from '@/shared/ui/FormGrid.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
@@ -33,7 +34,7 @@ async function verify() {
       <FormGrid v-if="!sent" as="form" @submit.prevent="submit">
         <label class="full">
           이메일
-          <input v-model="email" type="email" autocomplete="email" placeholder="you@example.com" required />
+          <ClearableField v-model="email" type="email" autocomplete="email" placeholder="you@example.com" required />
         </label>
         <ActionGroup full>
           <button type="submit" :disabled="authStore.loading">{{ authStore.loading ? '전송 중' : '인증 코드 받기' }}</button>
@@ -42,7 +43,7 @@ async function verify() {
       <FormGrid v-else as="form" @submit.prevent="verify">
         <label class="full">
           인증 코드
-          <input
+          <ClearableField
             v-model="token"
             inputmode="numeric"
             autocomplete="one-time-code"

@@ -2,8 +2,8 @@
 import { computed } from 'vue'
 import { courseTypes, runTypes, type ExtractedRunData } from '@/entities/run/model'
 import { inferCourseType } from '@/features/infer-course-type/inferCourseType'
-import { toNumberOrNull } from '@/shared/lib/format'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
+import ClearableField from '@/shared/ui/ClearableField.vue'
 import DateField from '@/shared/ui/DateField.vue'
 
 const model = defineModel<ExtractedRunData>({ required: true })
@@ -31,13 +31,6 @@ const paceText = computed({
   }
 })
 
-function updateNumber(key: keyof ExtractedRunData, value: string) {
-  ;(model.value[key] as number | null) = toNumberOrNull(value)
-  if (key === 'distanceKm' || key === 'elevationGainM' || key === 'elevationLossM') {
-    maybeInferCourseType()
-  }
-}
-
 function maybeInferCourseType() {
   if (model.value.courseType !== 'Unknown') return
   model.value.courseType = inferCourseType({
@@ -46,13 +39,20 @@ function maybeInferCourseType() {
     elevationLossM: model.value.elevationLossM
   })
 }
+
+function setNumber(key: keyof ExtractedRunData, value: string | number | null) {
+  ;(model.value[key] as number | null) = value === null ? null : Number(value)
+  if (key === 'distanceKm' || key === 'elevationGainM' || key === 'elevationLossM') {
+    maybeInferCourseType()
+  }
+}
 </script>
 
 <template>
   <form class="form-grid">
     <label class="full">
       세션 제목
-      <input v-model="model.sessionTitle" placeholder="예: 오늘 목요일 템포" />
+      <ClearableField v-model="model.sessionTitle" placeholder="예: 오늘 목요일 템포" />
     </label>
     <DateField v-model="model.date" label="날짜" />
     <BottomSheetSelect
@@ -62,39 +62,39 @@ function maybeInferCourseType() {
     />
     <label>
       거리 km
-      <input :value="model.distanceKm" type="number" step="0.01" @input="updateNumber('distanceKm', ($event.target as HTMLInputElement).value)" />
+      <ClearableField :model-value="model.distanceKm" type="number" step="0.01" number @update:model-value="setNumber('distanceKm', $event)" />
     </label>
     <label>
       시간 분
-      <input v-model.number="durationMin" type="number" />
+      <ClearableField v-model="durationMin" type="number" number />
     </label>
     <label>
       평균 페이스
-      <input v-model="paceText" placeholder="7:36" />
+      <ClearableField v-model="paceText" placeholder="7:36" />
     </label>
     <label>
       평균 심박
-      <input :value="model.avgHeartRate ?? ''" type="number" @input="updateNumber('avgHeartRate', ($event.target as HTMLInputElement).value)" />
+      <ClearableField :model-value="model.avgHeartRate" type="number" number @update:model-value="setNumber('avgHeartRate', $event)" />
     </label>
     <label>
       최대 심박
-      <input :value="model.maxHeartRate ?? ''" type="number" @input="updateNumber('maxHeartRate', ($event.target as HTMLInputElement).value)" />
+      <ClearableField :model-value="model.maxHeartRate" type="number" number @update:model-value="setNumber('maxHeartRate', $event)" />
     </label>
     <label>
       케이던스
-      <input :value="model.cadence ?? ''" type="number" @input="updateNumber('cadence', ($event.target as HTMLInputElement).value)" />
+      <ClearableField :model-value="model.cadence" type="number" number @update:model-value="setNumber('cadence', $event)" />
     </label>
     <label>
       기온
-      <input :value="model.temperature ?? ''" type="number" @input="updateNumber('temperature', ($event.target as HTMLInputElement).value)" />
+      <ClearableField :model-value="model.temperature" type="number" number @update:model-value="setNumber('temperature', $event)" />
     </label>
     <label>
       습도 %
-      <input :value="model.humidity ?? ''" type="number" min="0" max="100" @input="updateNumber('humidity', ($event.target as HTMLInputElement).value)" />
+      <ClearableField :model-value="model.humidity" type="number" inputmode="numeric" min="0" max="100" number @update:model-value="setNumber('humidity', $event)" />
     </label>
     <label>
       바람 m/s
-      <input :value="model.windMps ?? ''" type="number" step="0.1" @input="updateNumber('windMps', ($event.target as HTMLInputElement).value)" />
+      <ClearableField :model-value="model.windMps" type="number" step="0.1" number @update:model-value="setNumber('windMps', $event)" />
     </label>
     <BottomSheetSelect
       v-model="model.courseType"
@@ -103,43 +103,43 @@ function maybeInferCourseType() {
     />
     <label>
       누적 상승 m
-      <input :value="model.elevationGainM ?? ''" type="number" @input="updateNumber('elevationGainM', ($event.target as HTMLInputElement).value)" />
+      <ClearableField :model-value="model.elevationGainM" type="number" number @update:model-value="setNumber('elevationGainM', $event)" />
     </label>
     <label>
       누적 하강 m
-      <input :value="model.elevationLossM ?? ''" type="number" @input="updateNumber('elevationLossM', ($event.target as HTMLInputElement).value)" />
+      <ClearableField :model-value="model.elevationLossM" type="number" number @update:model-value="setNumber('elevationLossM', $event)" />
     </label>
     <label>
       운동강도
-      <input :value="model.rpe ?? ''" type="number" min="1" max="10" @input="updateNumber('rpe', ($event.target as HTMLInputElement).value)" />
+      <ClearableField :model-value="model.rpe" type="number" min="1" max="10" number @update:model-value="setNumber('rpe', $event)" />
     </label>
     <label>
       수면 점수
-      <input :value="model.sleepQuality ?? ''" type="number" min="1" max="10" @input="updateNumber('sleepQuality', ($event.target as HTMLInputElement).value)" />
+      <ClearableField :model-value="model.sleepQuality" type="number" min="1" max="10" number @update:model-value="setNumber('sleepQuality', $event)" />
     </label>
     <label>
       컨디션 점수
-      <input :value="model.conditionScore ?? ''" type="number" min="1" max="10" @input="updateNumber('conditionScore', ($event.target as HTMLInputElement).value)" />
+      <ClearableField :model-value="model.conditionScore" type="number" min="1" max="10" number @update:model-value="setNumber('conditionScore', $event)" />
     </label>
     <label>
       스트레스
-      <input :value="model.stressLevel ?? ''" type="number" min="1" max="10" @input="updateNumber('stressLevel', ($event.target as HTMLInputElement).value)" />
+      <ClearableField :model-value="model.stressLevel" type="number" min="1" max="10" number @update:model-value="setNumber('stressLevel', $event)" />
     </label>
     <label class="full">
       동행/상황
-      <input v-model="model.companion" placeholder="예: 배우자 회복런, 혼자, 그룹런" />
+      <ClearableField v-model="model.companion" placeholder="예: 배우자 회복런, 혼자, 그룹런" />
     </label>
     <label class="full">
       운동 후 느낌
-      <textarea v-model="model.workoutFeeling" rows="2" placeholder="예: 템포 후 9분대 조깅은 회복 느낌이었음" />
+      <ClearableField v-model="model.workoutFeeling" as="textarea" rows="2" placeholder="예: 템포 후 9분대 조깅은 회복 느낌이었음" />
     </label>
     <label class="full">
       통증/불편
-      <textarea v-model="model.painNote" rows="2" placeholder="예: 좌측 햄스트링 이상 없음" />
+      <ClearableField v-model="model.painNote" as="textarea" rows="2" placeholder="예: 좌측 햄스트링 이상 없음" />
     </label>
     <label class="full">
       메모
-      <textarea v-model="model.memo" rows="3" />
+      <ClearableField v-model="model.memo" as="textarea" rows="3" />
     </label>
   </form>
 </template>

@@ -6,6 +6,7 @@ import type { TrainingGoal, TrainingInjuryItem, TrainingMemory } from '@/entitie
 import { formatDateWithWeekday } from '@/shared/lib/format'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
+import ClearableField from '@/shared/ui/ClearableField.vue'
 import DateField from '@/shared/ui/DateField.vue'
 import FormGrid from '@/shared/ui/FormGrid.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
@@ -435,28 +436,28 @@ async function save() {
         <FormGrid>
           <label class="full">
             장거리 전략
-            <textarea v-model="draft.longRunStrategy" rows="3" />
+            <ClearableField v-model="draft.longRunStrategy" as="textarea" rows="3" />
           </label>
           <label class="full">
             현재 볼륨 노트
-            <textarea v-model="draft.currentVolumeNote" rows="3" />
+            <ClearableField v-model="draft.currentVolumeNote" as="textarea" rows="3" />
           </label>
           <div class="form-section-title full">개인화 메모</div>
           <label class="full">
             기타 주의사항
-            <textarea :value="join(draft.knownIssues)" rows="5" @input="draft.knownIssues = split(($event.target as HTMLTextAreaElement).value)" />
+            <ClearableField :model-value="join(draft.knownIssues)" as="textarea" rows="5" @update:model-value="draft.knownIssues = split(String($event ?? ''))" />
           </label>
           <label class="full">
             러닝 스타일
-            <textarea :value="join(draft.runningStyle)" rows="6" @input="draft.runningStyle = split(($event.target as HTMLTextAreaElement).value)" />
+            <ClearableField :model-value="join(draft.runningStyle)" as="textarea" rows="6" @update:model-value="draft.runningStyle = split(String($event ?? ''))" />
           </label>
           <label class="full">
             여름 전략
-            <textarea :value="join(draft.heatStrategy)" rows="5" @input="draft.heatStrategy = split(($event.target as HTMLTextAreaElement).value)" />
+            <ClearableField :model-value="join(draft.heatStrategy)" as="textarea" rows="5" @update:model-value="draft.heatStrategy = split(String($event ?? ''))" />
           </label>
           <label class="full">
             코칭 메모
-            <textarea :value="join(draft.aiNotes)" rows="5" @input="draft.aiNotes = split(($event.target as HTMLTextAreaElement).value)" />
+            <ClearableField :model-value="join(draft.aiNotes)" as="textarea" rows="5" @update:model-value="draft.aiNotes = split(String($event ?? ''))" />
           </label>
         </FormGrid>
       </div>
@@ -500,34 +501,34 @@ async function save() {
               <div class="form-section-title full">새 목표 생성</div>
               <label class="full">
                 목표명
-                <input v-model="newGoal.title" placeholder="예: 2026년 11월 10km 59:59" />
+                <ClearableField v-model="newGoal.title" placeholder="예: 2026년 11월 10km 59:59" />
               </label>
               <BottomSheetSelect v-model="newGoal.category" label="목표 유형" :options="goalCategoryOptions" />
               <DateField v-model="newGoal.startDate" label="시작일" />
               <DateField v-model="newGoal.targetDate" label="목표 날짜" />
               <label>
                 목표 거리(km)
-                <input v-model.number="newGoal.distanceKm" type="number" inputmode="decimal" placeholder="예: 10" />
+                <ClearableField v-model="newGoal.distanceKm" type="number" inputmode="decimal" placeholder="예: 10" number />
               </label>
               <label>
                 목표 기록(초)
-                <input v-model.number="newGoal.targetDurationSec" type="number" inputmode="numeric" placeholder="예: 3599" />
+                <ClearableField v-model="newGoal.targetDurationSec" type="number" inputmode="numeric" placeholder="예: 3599" number />
               </label>
               <label>
                 우선순위
-                <input v-model.number="newGoal.priority" type="number" inputmode="numeric" min="1" />
+                <ClearableField v-model="newGoal.priority" type="number" inputmode="numeric" min="1" number />
               </label>
               <label class="full">
                 성공 기준
-                <textarea v-model="newGoal.successCriteria" rows="3" placeholder="예: 10km를 59:59 이내로 완주" />
+                <ClearableField v-model="newGoal.successCriteria" as="textarea" rows="3" placeholder="예: 10km를 59:59 이내로 완주" />
               </label>
               <label class="full">
                 목표 전략
-                <textarea v-model="newGoal.strategyNotes" rows="3" placeholder="예: Easy 기반 + 목요일 Tempo + 토요일 격주 롱런" />
+                <ClearableField v-model="newGoal.strategyNotes" as="textarea" rows="3" placeholder="예: Easy 기반 + 목요일 Tempo + 토요일 격주 롱런" />
               </label>
               <label class="full">
                 목표 메모
-                <textarea v-model="newGoal.notes" rows="3" />
+                <ClearableField v-model="newGoal.notes" as="textarea" rows="3" />
               </label>
               <ActionGroup full>
                 <button type="button" @click="addGoal">생성</button>
@@ -538,7 +539,7 @@ async function save() {
               <div class="form-section-title full">목표 편집</div>
               <label class="full">
                 목표명
-                <input v-model="editingGoal.title" @input="updateGoal(editingGoal)" />
+                <ClearableField v-model="editingGoal.title" @update:model-value="updateGoal(editingGoal)" />
               </label>
               <BottomSheetSelect v-model="editingGoal.category" label="목표 유형" :options="goalCategoryOptions" @update:model-value="updateGoal(editingGoal)" />
               <BottomSheetSelect v-model="editingGoal.status" label="상태" :options="goalStatusOptions" @update:model-value="updateGoal(editingGoal)" />
@@ -546,27 +547,27 @@ async function save() {
               <DateField v-model="editingGoal.targetDate" label="목표 날짜" @update:model-value="updateGoal(editingGoal)" />
               <label>
                 목표 거리(km)
-                <input v-model.number="editingGoal.distanceKm" type="number" inputmode="decimal" placeholder="예: 10" @input="updateGoal(editingGoal)" />
+                <ClearableField v-model="editingGoal.distanceKm" type="number" inputmode="decimal" placeholder="예: 10" number @update:model-value="updateGoal(editingGoal)" />
               </label>
               <label>
                 목표 기록(초)
-                <input v-model.number="editingGoal.targetDurationSec" type="number" inputmode="numeric" placeholder="예: 3599" @input="updateGoal(editingGoal)" />
+                <ClearableField v-model="editingGoal.targetDurationSec" type="number" inputmode="numeric" placeholder="예: 3599" number @update:model-value="updateGoal(editingGoal)" />
               </label>
               <label>
                 우선순위
-                <input v-model.number="editingGoal.priority" type="number" inputmode="numeric" min="1" @input="updateGoal(editingGoal)" />
+                <ClearableField v-model="editingGoal.priority" type="number" inputmode="numeric" min="1" number @update:model-value="updateGoal(editingGoal)" />
               </label>
               <label class="full">
                 성공 기준
-                <textarea v-model="editingGoal.successCriteria" rows="3" placeholder="예: 10km를 59:59 이내로 완주" @input="updateGoal(editingGoal)" />
+                <ClearableField v-model="editingGoal.successCriteria" as="textarea" rows="3" placeholder="예: 10km를 59:59 이내로 완주" @update:model-value="updateGoal(editingGoal)" />
               </label>
               <label class="full">
                 목표 전략
-                <textarea v-model="editingGoal.strategyNotes" rows="3" placeholder="예: Easy 기반 + 목요일 Tempo + 토요일 격주 롱런" @input="updateGoal(editingGoal)" />
+                <ClearableField v-model="editingGoal.strategyNotes" as="textarea" rows="3" placeholder="예: Easy 기반 + 목요일 Tempo + 토요일 격주 롱런" @update:model-value="updateGoal(editingGoal)" />
               </label>
               <label class="full">
                 목표 메모
-                <textarea v-model="editingGoal.notes" rows="3" @input="updateGoal(editingGoal)" />
+                <ClearableField v-model="editingGoal.notes" as="textarea" rows="3" @update:model-value="updateGoal(editingGoal)" />
               </label>
               <ActionGroup full>
                 <button class="ghost" type="button" @click="setActiveGoal(editingGoal.id)">활성 목표로 지정</button>
@@ -591,38 +592,38 @@ async function save() {
               <div class="form-section-title full">새 부상/주의사항 생성</div>
               <label class="full">
                 항목명
-                <input v-model="newInjury.title" placeholder="예: 오른쪽 무릎 바깥쪽 불편감" />
+                <ClearableField v-model="newInjury.title" placeholder="예: 오른쪽 무릎 바깥쪽 불편감" />
               </label>
               <label>
                 부위
-                <input v-model="newInjury.area" placeholder="예: 좌측 햄스트링" />
+                <ClearableField v-model="newInjury.area" placeholder="예: 좌측 햄스트링" />
               </label>
               <BottomSheetSelect v-model="newInjury.status" label="상태" :options="injuryStatusOptions" />
               <label>
                 심각도(1~5)
-                <input v-model.number="newInjury.severity" type="number" inputmode="numeric" min="1" max="5" placeholder="미입력" />
+                <ClearableField v-model="newInjury.severity" type="number" inputmode="numeric" min="1" max="5" placeholder="미입력" number />
               </label>
               <DateField v-model="newInjury.onsetDate" label="시작일" />
               <DateField v-model="newInjury.lastFlareDate" label="최근 신호일" />
               <label class="full">
                 악화 트리거
-                <textarea :value="join(newInjury.triggers)" rows="3" placeholder="예: 템포 다음날 뻣뻣함&#10;볼륨 급증" @input="newInjury.triggers = split(($event.target as HTMLTextAreaElement).value)" />
+                <ClearableField :model-value="join(newInjury.triggers)" as="textarea" rows="3" placeholder="예: 템포 다음날 뻣뻣함&#10;볼륨 급증" @update:model-value="newInjury.triggers = split(String($event ?? ''))" />
               </label>
               <label class="full">
                 훈련 제한
-                <textarea :value="join(newInjury.restrictions)" rows="3" placeholder="예: 통증이 있으면 스트라이드 생략&#10;롱런 후 하루 회복 우선" @input="newInjury.restrictions = split(($event.target as HTMLTextAreaElement).value)" />
+                <ClearableField :model-value="join(newInjury.restrictions)" as="textarea" rows="3" placeholder="예: 통증이 있으면 스트라이드 생략&#10;롱런 후 하루 회복 우선" @update:model-value="newInjury.restrictions = split(String($event ?? ''))" />
               </label>
               <label class="full">
                 복귀 기준
-                <textarea v-model="newInjury.returnToRunCriteria" rows="3" placeholder="예: 다음날 뻣뻣함 없이 Easy가 편할 때 강도 복귀" />
+                <ClearableField v-model="newInjury.returnToRunCriteria" as="textarea" rows="3" placeholder="예: 다음날 뻣뻣함 없이 Easy가 편할 때 강도 복귀" />
               </label>
               <label class="full">
                 메모
-                <textarea v-model="newInjury.notes" rows="3" placeholder="예: 템포 다음날 뻣뻣함 확인 필요" />
+                <ClearableField v-model="newInjury.notes" as="textarea" rows="3" placeholder="예: 템포 다음날 뻣뻣함 확인 필요" />
               </label>
               <label class="full">
                 관리 계획
-                <textarea v-model="newInjury.managementPlan" rows="3" placeholder="예: 통증 단정 없이 강훈련 후 반응 확인" />
+                <ClearableField v-model="newInjury.managementPlan" as="textarea" rows="3" placeholder="예: 통증 단정 없이 강훈련 후 반응 확인" />
               </label>
               <ActionGroup full>
                 <button type="button" @click="addInjury">생성</button>
@@ -633,38 +634,38 @@ async function save() {
               <div class="form-section-title full">부상/주의사항 편집</div>
               <label class="full">
                 항목명
-                <input v-model="editingInjury.title" placeholder="예: 좌측 햄스트링" @input="updateInjury(editingInjury)" />
+                <ClearableField v-model="editingInjury.title" placeholder="예: 좌측 햄스트링" @update:model-value="updateInjury(editingInjury)" />
               </label>
               <label>
                 부위
-                <input v-model="editingInjury.area" placeholder="예: 좌측 햄스트링" @input="updateInjury(editingInjury)" />
+                <ClearableField v-model="editingInjury.area" placeholder="예: 좌측 햄스트링" @update:model-value="updateInjury(editingInjury)" />
               </label>
               <BottomSheetSelect v-model="editingInjury.status" label="상태" :options="injuryStatusOptions" @update:model-value="updateInjury(editingInjury)" />
               <label>
                 심각도(1~5)
-                <input v-model.number="editingInjury.severity" type="number" inputmode="numeric" min="1" max="5" placeholder="미입력" @input="updateInjury(editingInjury)" />
+                <ClearableField v-model="editingInjury.severity" type="number" inputmode="numeric" min="1" max="5" placeholder="미입력" number @update:model-value="updateInjury(editingInjury)" />
               </label>
               <DateField v-model="editingInjury.onsetDate" label="시작일" @update:model-value="updateInjury(editingInjury)" />
               <DateField v-model="editingInjury.lastFlareDate" label="최근 신호일" @update:model-value="updateInjury(editingInjury)" />
               <label class="full">
                 악화 트리거
-                <textarea :value="join(editingInjury.triggers)" rows="3" placeholder="예: 템포 다음날 뻣뻣함&#10;볼륨 급증" @input="editingInjury.triggers = split(($event.target as HTMLTextAreaElement).value); updateInjury(editingInjury)" />
+                <ClearableField :model-value="join(editingInjury.triggers)" as="textarea" rows="3" placeholder="예: 템포 다음날 뻣뻣함&#10;볼륨 급증" @update:model-value="editingInjury.triggers = split(String($event ?? '')); updateInjury(editingInjury)" />
               </label>
               <label class="full">
                 훈련 제한
-                <textarea :value="join(editingInjury.restrictions)" rows="3" placeholder="예: 통증이 있으면 스트라이드 생략&#10;롱런 후 하루 회복 우선" @input="editingInjury.restrictions = split(($event.target as HTMLTextAreaElement).value); updateInjury(editingInjury)" />
+                <ClearableField :model-value="join(editingInjury.restrictions)" as="textarea" rows="3" placeholder="예: 통증이 있으면 스트라이드 생략&#10;롱런 후 하루 회복 우선" @update:model-value="editingInjury.restrictions = split(String($event ?? '')); updateInjury(editingInjury)" />
               </label>
               <label class="full">
                 복귀 기준
-                <textarea v-model="editingInjury.returnToRunCriteria" rows="3" placeholder="예: 다음날 뻣뻣함 없이 Easy가 편할 때 강도 복귀" @input="updateInjury(editingInjury)" />
+                <ClearableField v-model="editingInjury.returnToRunCriteria" as="textarea" rows="3" placeholder="예: 다음날 뻣뻣함 없이 Easy가 편할 때 강도 복귀" @update:model-value="updateInjury(editingInjury)" />
               </label>
               <label class="full">
                 메모
-                <textarea v-model="editingInjury.notes" rows="3" placeholder="예: 템포 다음날 뻣뻣함 확인 필요" @input="updateInjury(editingInjury)" />
+                <ClearableField v-model="editingInjury.notes" as="textarea" rows="3" placeholder="예: 템포 다음날 뻣뻣함 확인 필요" @update:model-value="updateInjury(editingInjury)" />
               </label>
               <label class="full">
                 관리 계획
-                <textarea v-model="editingInjury.managementPlan" rows="3" placeholder="예: 통증 단정 없이 강훈련 후 반응 확인" @input="updateInjury(editingInjury)" />
+                <ClearableField v-model="editingInjury.managementPlan" as="textarea" rows="3" placeholder="예: 통증 단정 없이 강훈련 후 반응 확인" @update:model-value="updateInjury(editingInjury)" />
               </label>
               <ActionGroup full>
                 <button class="ghost" type="button" @click="setActiveInjury(editingInjury.id)">현재 기준으로 지정</button>
