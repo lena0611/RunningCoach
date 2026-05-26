@@ -13,8 +13,10 @@ import './app/styles.css'
 const pinia = createPinia()
 const app = createApp(App)
 app.use(pinia)
+const isE2ERouteSmoke = import.meta.env.DEV && import.meta.env.VITE_E2E_ROUTE_SMOKE === 'true'
 
 useSettingsStore().initTheme()
+await cleanupLegacyWebCaches().catch(() => undefined)
 
 const authStore = useAuthStore()
 await withTimeout(authStore.init(), 4000, '인증 초기화 시간이 초과되었습니다.').catch((error) => {
@@ -23,14 +25,30 @@ await withTimeout(authStore.init(), 4000, '인증 초기화 시간이 초과되�
 })
 
 router.beforeEach((to) => {
-  if (!canUseAppFeatures() && to.path !== '/access') return '/access'
-  if (canUseAppFeatures() && to.path === '/access') return '/'
-  if (!isSupabaseConfigured && to.path !== '/auth') return '/auth'
-  if (isSupabaseConfigured && !authStore.isAuthenticated && to.path !== '/auth') return '/auth'
+  if (isE2ERouteSmoke && (to.path === '/auth' || to.path === '/access')) return '/'
+  if (!isE2ERouteSmoke && !canUseAppFeatures() && to.path !== '/access') return '/access'
+  if (!isE2ERouteSmoke && canUseAppFeatures() && to.path === '/access') return '/'
+  if (!isE2ERouteSmoke && !isSupabaseConfigured && to.path !== '/auth') return '/auth'
+  if (!isE2ERouteSmoke && isSupabaseConfigured && !authStore.isAuthenticated && to.path !== '/auth') return '/auth'
   if (authStore.isAuthenticated && to.path === '/auth') return '/'
 })
 
 app.use(router)
+router.onError((error) => {
+  const message = error instanceof Error ? error.message : String(error)
+  const isChunkLoadFailure = [
+    'Failed to fetch dynamically imported module',
+    'error loading dynamically imported module',
+    'Importing a module script failed',
+    'Unable to preload CSS'
+  ].some((keyword) => message.includes(keyword))
+
+  if (!isChunkLoadFailure) return
+  if (window.sessionStorage.getItem('runcontext:chunk-reload-attempted') === '1') return
+
+  window.sessionStorage.setItem('runcontext:chunk-reload-attempted', '1')
+  window.location.reload()
+})
 await router.isReady()
 app.mount('#app')
 
@@ -54,4 +72,16 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
       }
     )
   })
+}
+
+async function cleanupLegacyWebCaches() {
+  if ('serviceWorker' in navigator) {
+    const registrations = await navigator.serviceWorker.getRegistrations()
+    await Promise.all(registrations.map((registration) => registration.unregister()))
+  }
+
+  if ('caches' in window) {
+    const cacheNames = await window.caches.keys()
+    await Promise.all(cacheNames.map((cacheName) => window.caches.delete(cacheName)))
+  }
 }

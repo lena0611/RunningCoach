@@ -124,6 +124,7 @@ src/
 - PWA를 사용하는 프로젝트는 update prompt, cache glob, maximum file size를 명시합니다.
 - 서비스 워커 갱신은 사용자 작업 손실을 만들 수 있으므로 즉시 강제 reload보다 확인 흐름을 둡니다.
 - PWA plugin은 빌드 결과와 운영 배포 정책을 함께 검토합니다.
+- PWA를 제거했거나 GitHub Pages 정적 배포를 iOS WebView에서 여는 앱은 이전 배포의 Workbox/service worker가 남아 lazy route chunk 로딩을 막을 수 있습니다. 앱 부팅 시 기존 service worker와 Cache Storage를 정리하고, 동적 import 실패는 1회 reload로 복구합니다.
 
 ---
 
