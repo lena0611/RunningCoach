@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1290 2796">
+  <defs>
+    <radialGradient id="bg1" cx="72%" cy="18%" r="62%">
+      <stop offset="0" stop-color="#1b2a20"/>
+      <stop offset=".46" stop-color="#101820"/>
+      <stop offset="1" stop-color="#070b12"/>
+    </radialGradient>
+    <radialGradient id="bg2" cx="15%" cy="94%" r="45%">
+      <stop offset="0" stop-color="#312e81" stop-opacity=".2"/>
+      <stop offset="1" stop-color="#312e81" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1290" height="2796" fill="url(#bg1)"/>
+  <rect width="1290" height="2796" fill="url(#bg2)"/>
+  <g transform="translate(495 925)">
+    <rect width="300" height="300" rx="74" fill="#d6ff35" fill-opacity=".08" stroke="#d6ff35" stroke-opacity=".32" stroke-width="4"/>
+    <g transform="translate(62 52) scale(2.75)">
+      <circle cx="32" cy="32" r="19" fill="none" stroke="#d6ff35" stroke-width="6"/>
+      <circle cx="32" cy="32" r="10" fill="none" stroke="#d6ff35" stroke-width="5"/>
+      <circle cx="32" cy="32" r="3" fill="#d6ff35"/>
+      <path d="M32 32 47 17" fill="none" stroke="#070b12" stroke-width="4" stroke-linecap="round"/>
+      <path d="M32 32 47 17" fill="none" stroke="#d6ff35" stroke-width="2" stroke-linecap="round"/>
+    </g>
+  </g>
+  <text x="645" y="1355" text-anchor="middle" fill="#fff" font-family="Arial, Helvetica, sans-serif" font-size="104" font-style="italic" font-weight="900">PACE<tspan fill="#d6ff35">LAB</tspan></text>
+  <text x="645" y="1440" text-anchor="middle" fill="#94a3b8" font-family="Arial, Helvetica, sans-serif" font-size="31" font-weight="800" letter-spacing="12">AI POWERED TRAINING LAB</text>
+</svg>

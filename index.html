@@ -7,8 +7,68 @@
     <meta name="theme-color" content="#f3f6f4" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0b0f14" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="RunContext" />
+    <meta name="apple-mobile-web-app-title" content="PACELAB" />
+    <link rel="icon" type="image/svg+xml" href="/pacelab-icon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <style>
+      #app {
+        min-height: 100vh;
+        min-height: 100dvh;
+      }
+
+      .pacelab-boot {
+        box-sizing: border-box;
+        display: grid;
+        min-height: 100vh;
+        min-height: 100dvh;
+        place-items: center;
+        padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+        color: #f8fafc;
+        background:
+          radial-gradient(circle at 74% 14%, rgba(208, 255, 54, 0.12), transparent 26%),
+          radial-gradient(circle at 14% 94%, rgba(99, 102, 241, 0.1), transparent 24%),
+          linear-gradient(180deg, #070b12 0%, #0b0f14 100%);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .pacelab-boot__content {
+        display: grid;
+        justify-items: center;
+        gap: 22px;
+        text-align: center;
+      }
+
+      .pacelab-boot__mark {
+        display: grid;
+        width: 86px;
+        height: 86px;
+        place-items: center;
+        border: 1px solid rgba(208, 255, 54, 0.3);
+        border-radius: 24px;
+        background: rgba(208, 255, 54, 0.08);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.36);
+      }
+
+      .pacelab-boot__brand {
+        font-size: 34px;
+        font-style: italic;
+        font-weight: 900;
+        letter-spacing: 0;
+      }
+
+      .pacelab-boot__brand span {
+        color: #d6ff35;
+      }
+
+      .pacelab-boot__tagline {
+        margin: -10px 0 0;
+        color: #94a3b8;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.32em;
+      }
+    </style>
     <script>
       ;(() => {
         try {
@@ -25,10 +85,28 @@
         }
       })()
     </script>
-    <title>RunContext</title>
+    <title>PACELAB</title>
   </head>
   <body>
-    <div id="app">RunContext 로딩 중...</div>
+    <div id="app">
+      <div class="pacelab-boot" aria-label="PACELAB 로딩 중">
+        <div class="pacelab-boot__content">
+          <div class="pacelab-boot__mark">
+            <svg width="54" height="54" viewBox="0 0 64 64" aria-hidden="true">
+              <circle cx="32" cy="32" r="19" fill="none" stroke="#d6ff35" stroke-width="6" />
+              <circle cx="32" cy="32" r="10" fill="none" stroke="#d6ff35" stroke-width="5" />
+              <circle cx="32" cy="32" r="3" fill="#d6ff35" />
+              <path d="M32 32 47 17" fill="none" stroke="#0b0f14" stroke-width="4" stroke-linecap="round" />
+              <path d="M32 32 47 17" fill="none" stroke="#d6ff35" stroke-width="2" stroke-linecap="round" />
+            </svg>
+          </div>
+          <div>
+            <div class="pacelab-boot__brand">PACE<span>LAB</span></div>
+            <p class="pacelab-boot__tagline">AI POWERED TRAINING LAB</p>
+          </div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
