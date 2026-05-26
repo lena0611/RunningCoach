@@ -1906,7 +1906,7 @@ button.run-session-row {
 }
 
 .coach-stack-content {
-  padding-bottom: 190px;
+  padding-bottom: 230px;
 }
 
 .coach-input-bar {
@@ -1915,6 +1915,86 @@ button.run-session-row {
   align-items: end;
   gap: 8px;
   background: color-mix(in srgb, var(--color-surface-2) 78%, var(--color-bg));
+}
+
+.coach-command-menu {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0;
+  max-height: min(52vh, 360px);
+  overflow-y: auto;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--color-surface-3) 72%, var(--color-surface));
+  box-shadow: var(--shadow-float);
+}
+
+.coach-command-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text);
+  box-shadow: none;
+  text-align: left;
+}
+
+.coach-command-item + .coach-command-item {
+  border-top: 1px solid var(--color-border);
+}
+
+.coach-command-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.coach-command-item span:nth-child(2) {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.coach-command-item strong {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coach-command-item small {
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coach-command-item code {
+  color: var(--color-muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.coach-command-empty {
+  margin: 0;
+  padding: 18px;
+  color: var(--color-muted);
+  font-size: 14px;
 }
 
 .chat-input-wrap {

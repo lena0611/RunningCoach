@@ -53,6 +53,56 @@ const pendingDeleteRun = ref<RunLog | null>(null)
 const error = ref('')
 const calendarMonth = ref(toMonthKey(new Date()))
 const schedulingHelpOpen = ref(false)
+const coachCommandItems = [
+  {
+    id: 'session',
+    command: '/세션분석',
+    title: '세션 분석',
+    description: '이 기록이 의도한 훈련과 맞는지 짧게 평가',
+    prompt: '이 세션이 의도한 훈련과 맞았는지 핵심만 분석해줘.',
+    icon: '↗'
+  },
+  {
+    id: 'routine',
+    command: '/루틴점검',
+    title: '루틴 점검',
+    description: '현재 주간 루틴을 유지할지, 올릴지, 낮출지 판단',
+    prompt: '현재 active 목표 기준으로 루틴을 유지할지, 상향/하향 조정할지 근거와 함께 판단해줘.',
+    icon: '◎'
+  },
+  {
+    id: 'quality',
+    command: '/품질평가',
+    title: '훈련 품질',
+    description: 'Easy, Tempo, Long Run, Strides 품질 게이트 확인',
+    prompt: '이 세션의 훈련 품질이 다음 단계로 올릴 만큼 충분했는지 품질 게이트 기준으로 봐줘.',
+    icon: '◆'
+  },
+  {
+    id: 'goal',
+    command: '/목표예상',
+    title: '목표 예상',
+    description: '목표 기록 예상과 최근 변화 방향 확인',
+    prompt: '현재 목표 예상 기록과 최근 변화 방향을 보고 목표 달성 흐름이 좋아지는지 봐줘.',
+    icon: '⌁'
+  },
+  {
+    id: 'recovery',
+    command: '/회복체크',
+    title: '회복/부상 체크',
+    description: '통증, 피로, 다음 훈련 강도 제한 판단',
+    prompt: '부상관리와 회복 반응 기준으로 다음 훈련 강도를 어떻게 가져가야 할지 봐줘.',
+    icon: '♡'
+  },
+  {
+    id: 'next',
+    command: '/다음훈련',
+    title: '다음 훈련',
+    description: '이번 세션 이후 다음 세션을 어떻게 가져갈지 제안',
+    prompt: '이 세션 이후 다음 훈련을 주간 루틴과 회복 상태 기준으로 제안해줘.',
+    icon: '➜'
+  }
+]
 
 const filterOptions = computed(() => [
   { value: 'All', label: '모든 세션 유형' },
@@ -87,6 +137,19 @@ const selectedReports = computed(() => {
   return reports.value
     .filter((report) => report.selectedRunId === coachRun.value?.id)
     .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
+})
+const coachCommandQuery = computed(() => {
+  const text = coachNote.value.trimStart()
+  return text.startsWith('/') ? text.slice(1).trim().toLowerCase() : ''
+})
+const showCoachCommands = computed(() => coachNote.value.trimStart().startsWith('/'))
+const filteredCoachCommands = computed(() => {
+  if (!showCoachCommands.value) return []
+  const query = coachCommandQuery.value
+  if (!query) return coachCommandItems
+  return coachCommandItems.filter((item) => {
+    return [item.command, item.title, item.description].some((value) => value.toLowerCase().includes(query))
+  })
 })
 
 onMounted(() => {
@@ -293,6 +356,14 @@ function closeCoach() {
 function clearCoachNote() {
   coachNote.value = ''
   void nextTick(resizeCoachNoteInput)
+}
+
+function selectCoachCommand(prompt: string) {
+  coachNote.value = prompt
+  void nextTick(() => {
+    resizeCoachNoteInput()
+    coachNoteInput.value?.focus()
+  })
 }
 
 function resizeCoachNoteInput() {
@@ -563,6 +634,23 @@ function formatLapDuration(lap: Lap) {
             <p v-if="coachError" class="error">{{ coachError }}</p>
           </main>
           <footer class="stack-action-bar coach-input-bar">
+            <div v-if="showCoachCommands" class="coach-command-menu">
+              <button
+                v-for="item in filteredCoachCommands"
+                :key="item.id"
+                class="coach-command-item"
+                type="button"
+                @click="selectCoachCommand(item.prompt)"
+              >
+                <span class="coach-command-icon">{{ item.icon }}</span>
+                <span>
+                  <strong>{{ item.title }}</strong>
+                  <small>{{ item.description }}</small>
+                </span>
+                <code>{{ item.command }}</code>
+              </button>
+              <p v-if="!filteredCoachCommands.length" class="coach-command-empty">맞는 코칭 명령이 없습니다.</p>
+            </div>
             <div class="chat-input-wrap">
               <textarea
                 ref="coachNoteInput"
