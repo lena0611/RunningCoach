@@ -24,6 +24,8 @@ struct HealthKitRunCandidate: Codable {
     let routeAvailable: Bool
     let laps: [HealthKitLap]
     let fastSegments: [HealthKitFastSegment]
+    let metricSamples: [HealthKitMetricSample]
+    let routePoints: [HealthKitRoutePoint]
     let rawAvailability: HealthKitAvailability
 }
 
@@ -42,6 +44,20 @@ struct HealthKitFastSegment: Codable {
     let distanceKm: Double?
     let avgPaceSec: Double?
     let bestPaceSec: Double?
+}
+
+struct HealthKitMetricSample: Codable {
+    let offsetSec: Double
+    let heartRate: Double?
+    let paceSec: Double?
+    let cadence: Double?
+}
+
+struct HealthKitRoutePoint: Codable {
+    let offsetSec: Double
+    let latitude: Double
+    let longitude: Double
+    let altitude: Double?
 }
 
 struct HealthKitAvailability: Codable {
@@ -69,6 +85,12 @@ final class HealthKitRunImporter {
         let startDate: Date
         let endDate: Date
         let count: Double
+    }
+
+    private struct SpeedPoint {
+        let startDate: Date
+        let endDate: Date
+        let metersPerSecond: Double
     }
 
     func fetchRecentRunningWorkouts(days: Int, completion: @escaping (Result<[HealthKitRunCandidate], Error>) -> Void) {
@@ -227,6 +249,7 @@ final class HealthKitRunImporter {
         var routeLocations: [CLLocation] = []
         var distancePoints: [DistancePoint] = []
         var stepPoints: [StepPoint] = []
+        var speedPoints: [SpeedPoint] = []
         var rpe: Double?
 
         let group = DispatchGroup()
@@ -268,6 +291,14 @@ final class HealthKitRunImporter {
             }
         }
 
+        if let speedType = HKQuantityType.quantityType(forIdentifier: .runningSpeed) {
+            group.enter()
+            querySpeedSamples(for: workout, speedType: speedType) { points in
+                speedPoints = points
+                group.leave()
+            }
+        }
+
         if #available(iOS 18.0, *),
            let effortType = HKQuantityType.quantityType(forIdentifier: .workoutEffortScore) {
             group.enter()
@@ -293,7 +324,15 @@ final class HealthKitRunImporter {
                 fallbackDistanceKm: distanceKm,
                 fallbackDurationSec: durationSec
             )
-            let fastSegments = self.buildFastSegments(workout: workout, routeLocations: routeLocations)
+            let fastSegments = self.buildFastSegments(workout: workout, speedPoints: speedPoints, routeLocations: routeLocations)
+            let metricSamples = self.buildMetricSamples(
+                workout: workout,
+                heartRatePoints: heartRatePoints,
+                speedPoints: speedPoints,
+                stepPoints: stepPoints,
+                routeLocations: routeLocations
+            )
+            let routePoints = self.buildRoutePoints(workout: workout, routeLocations: routeLocations)
             let avgCadence = self.averageCadence(stepPoints, from: workout.startDate, to: workout.endDate)
 
             completion(
@@ -319,12 +358,14 @@ final class HealthKitRunImporter {
                     routeAvailable: !routeLocations.isEmpty,
                     laps: laps,
                     fastSegments: fastSegments,
+                    metricSamples: metricSamples,
+                    routePoints: routePoints,
                     rawAvailability: HealthKitAvailability(
                         workout: true,
                         heartRate: avgHeartRate != nil || maxHeartRate != nil,
                         route: !routeLocations.isEmpty,
                         cadence: avgCadence != nil,
-                        runningDynamics: avgCadence != nil || !fastSegments.isEmpty
+                        runningDynamics: avgCadence != nil || !speedPoints.isEmpty || !fastSegments.isEmpty
                     )
                 )
             )
@@ -400,6 +441,21 @@ final class HealthKitRunImporter {
                     endDate: $0.endDate,
                     count: $0.quantity.doubleValue(for: .count())
                 )
+            }
+            completion(points)
+        }
+        healthStore.execute(query)
+    }
+
+    private func querySpeedSamples(for workout: HKWorkout, speedType: HKQuantityType, completion: @escaping ([SpeedPoint]) -> Void) {
+        let predicate = HKQuery.predicateForObjects(from: workout)
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+        let query = HKSampleQuery(sampleType: speedType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, _ in
+            let unit = HKUnit.meter().unitDivided(by: .second())
+            let points = (samples as? [HKQuantitySample] ?? []).compactMap { sample -> SpeedPoint? in
+                let speed = sample.quantity.doubleValue(for: unit)
+                guard speed.isFinite, speed > 0 else { return nil }
+                return SpeedPoint(startDate: sample.startDate, endDate: sample.endDate, metersPerSecond: speed)
             }
             completion(points)
         }
@@ -616,9 +672,7 @@ final class HealthKitRunImporter {
         return laps
     }
 
-    private func buildFastSegments(workout: HKWorkout, routeLocations: [CLLocation]) -> [HealthKitFastSegment] {
-        guard routeLocations.count >= 2 else { return [] }
-
+    private func buildFastSegments(workout: HKWorkout, speedPoints: [SpeedPoint], routeLocations: [CLLocation]) -> [HealthKitFastSegment] {
         struct WorkingSegment {
             var startDate: Date
             var endDate: Date
@@ -630,8 +684,20 @@ final class HealthKitRunImporter {
         var segments: [HealthKitFastSegment] = []
         var current: WorkingSegment?
         let fastPaceThreshold = 345.0
+        let gracePaceThreshold = 420.0
+        let maxGraceDuration = 8.0
         let minimumFastSegmentDuration = 6.0
         let minimumFastSegmentDistanceMeter = 20.0
+
+        func appendToCurrent(endDate: Date, distanceMeter: Double, duration: Double, paceSec: Double) {
+            if var segment = current {
+                segment.endDate = endDate
+                segment.distanceMeter += distanceMeter
+                segment.durationSec += duration
+                segment.bestPaceSec = min(segment.bestPaceSec, paceSec)
+                current = segment
+            }
+        }
 
         func closeCurrent() {
             guard let segment = current else { return }
@@ -652,43 +718,174 @@ final class HealthKitRunImporter {
             )
         }
 
-        for index in 1..<routeLocations.count {
-            let previous = routeLocations[index - 1]
-            let currentLocation = routeLocations[index]
-            let duration = currentLocation.timestamp.timeIntervalSince(previous.timestamp)
+        func handleMotionSegment(startDate: Date, endDate: Date, distanceMeter: Double, duration: Double, paceSec: Double) {
             guard duration > 0, duration <= 30 else {
                 closeCurrent()
-                continue
+                return
             }
-
-            let distanceMeter = max(currentLocation.distance(from: previous), 0)
-            guard distanceMeter >= 5 else { continue }
-            let paceSec = duration / (distanceMeter / 1000)
-            guard paceSec.isFinite else { continue }
+            guard distanceMeter >= 5, paceSec.isFinite else { return }
 
             if paceSec <= fastPaceThreshold {
                 if var segment = current {
-                    segment.endDate = currentLocation.timestamp
+                    segment.endDate = endDate
                     segment.distanceMeter += distanceMeter
                     segment.durationSec += duration
                     segment.bestPaceSec = min(segment.bestPaceSec, paceSec)
                     current = segment
                 } else {
                     current = WorkingSegment(
-                        startDate: previous.timestamp,
-                        endDate: currentLocation.timestamp,
+                        startDate: startDate,
+                        endDate: endDate,
                         distanceMeter: distanceMeter,
                         durationSec: duration,
                         bestPaceSec: paceSec
                     )
                 }
+            } else if current != nil && duration <= maxGraceDuration && paceSec <= gracePaceThreshold {
+                appendToCurrent(
+                    endDate: endDate,
+                    distanceMeter: distanceMeter,
+                    duration: duration,
+                    paceSec: paceSec
+                )
             } else {
                 closeCurrent()
             }
         }
 
+        if !speedPoints.isEmpty {
+            for point in speedPoints {
+                let duration = point.endDate.timeIntervalSince(point.startDate)
+                let distanceMeter = point.metersPerSecond * duration
+                let paceSec = 1000 / point.metersPerSecond
+                handleMotionSegment(
+                    startDate: point.startDate,
+                    endDate: point.endDate,
+                    distanceMeter: distanceMeter,
+                    duration: duration,
+                    paceSec: paceSec
+                )
+            }
+
+            closeCurrent()
+            if !segments.isEmpty {
+                return Array(segments.prefix(12))
+            }
+            current = nil
+        }
+
+        guard routeLocations.count >= 2 else { return [] }
+
+        for index in 1..<routeLocations.count {
+            let previous = routeLocations[index - 1]
+            let currentLocation = routeLocations[index]
+            let duration = currentLocation.timestamp.timeIntervalSince(previous.timestamp)
+            let distanceMeter = max(currentLocation.distance(from: previous), 0)
+            let paceSec = distanceMeter > 0 ? duration / (distanceMeter / 1000) : Double.infinity
+            handleMotionSegment(
+                startDate: previous.timestamp,
+                endDate: currentLocation.timestamp,
+                distanceMeter: distanceMeter,
+                duration: duration,
+                paceSec: paceSec
+            )
+        }
+
         closeCurrent()
         return Array(segments.prefix(12))
+    }
+
+    private func buildMetricSamples(
+        workout: HKWorkout,
+        heartRatePoints: [HeartRatePoint],
+        speedPoints: [SpeedPoint],
+        stepPoints: [StepPoint],
+        routeLocations: [CLLocation]
+    ) -> [HealthKitMetricSample] {
+        let durationSec = max(workout.endDate.timeIntervalSince(workout.startDate), 1)
+        let bucketSec = max(15.0, ceil(durationSec / 80.0))
+        let routeSpeedPoints = speedPoints.isEmpty ? buildRouteSpeedPoints(locations: routeLocations) : []
+        let speedSource = speedPoints.isEmpty ? routeSpeedPoints : speedPoints
+        var samples: [HealthKitMetricSample] = []
+        var offset = 0.0
+
+        while offset < durationSec {
+            let start = workout.startDate.addingTimeInterval(offset)
+            let end = workout.startDate.addingTimeInterval(min(offset + bucketSec, durationSec))
+            let heartRate = averageHeartRate(heartRatePoints, from: start, to: end)
+            let cadence = averageCadence(stepPoints, from: start, to: end)
+            let pace = averagePace(speedSource, from: start, to: end)
+
+            if heartRate != nil || pace != nil || cadence != nil {
+                samples.append(
+                    HealthKitMetricSample(
+                        offsetSec: Self.rounded(offset),
+                        heartRate: heartRate,
+                        paceSec: pace,
+                        cadence: cadence
+                    )
+                )
+            }
+
+            offset += bucketSec
+        }
+
+        return Array(samples.prefix(120))
+    }
+
+    private func buildRoutePoints(workout: HKWorkout, routeLocations: [CLLocation]) -> [HealthKitRoutePoint] {
+        guard !routeLocations.isEmpty else { return [] }
+        let sorted = routeLocations.sorted { $0.timestamp < $1.timestamp }
+        let sampled = downsampleLocations(sorted, maxCount: 240)
+        return sampled.map { location in
+            HealthKitRoutePoint(
+                offsetSec: Self.rounded(max(location.timestamp.timeIntervalSince(workout.startDate), 0)),
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude,
+                altitude: location.verticalAccuracy >= 0 ? Self.rounded(location.altitude) : nil
+            )
+        }
+    }
+
+    private func downsampleLocations(_ locations: [CLLocation], maxCount: Int) -> [CLLocation] {
+        guard locations.count > maxCount, maxCount > 2 else { return locations }
+        let stride = Int(ceil(Double(locations.count) / Double(maxCount)))
+        var sampled = locations.enumerated().compactMap { index, location in
+            index % stride == 0 ? location : nil
+        }
+        if let last = locations.last, sampled.last?.timestamp != last.timestamp {
+            sampled.append(last)
+        }
+        return sampled
+    }
+
+    private func buildRouteSpeedPoints(locations: [CLLocation]) -> [SpeedPoint] {
+        guard locations.count >= 2 else { return [] }
+        var points: [SpeedPoint] = []
+
+        for index in 1..<locations.count {
+            let previous = locations[index - 1]
+            let current = locations[index]
+            let duration = current.timestamp.timeIntervalSince(previous.timestamp)
+            guard duration > 0, duration <= 30 else { continue }
+            let distanceMeter = max(current.distance(from: previous), 0)
+            guard distanceMeter >= 2 else { continue }
+            let speed = distanceMeter / duration
+            guard speed.isFinite, speed > 0 else { continue }
+            points.append(SpeedPoint(startDate: previous.timestamp, endDate: current.timestamp, metersPerSecond: speed))
+        }
+
+        return points
+    }
+
+    private func averagePace(_ points: [SpeedPoint], from start: Date, to end: Date) -> Double? {
+        let values = points
+            .filter { $0.endDate >= start && $0.startDate <= end }
+            .map(\.metersPerSecond)
+            .filter { $0.isFinite && $0 > 0 }
+        guard !values.isEmpty else { return nil }
+        let speed = values.reduce(0, +) / Double(values.count)
+        return Self.rounded(1000 / speed)
     }
 
     private func averageHeartRate(_ points: [HeartRatePoint], from start: Date, to end: Date) -> Double? {
