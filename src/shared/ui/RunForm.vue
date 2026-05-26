@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { courseTypes, runTypes, type ExtractedRunData } from '@/entities/run/model'
+import { inferCourseType } from '@/features/infer-course-type/inferCourseType'
 import { toNumberOrNull } from '@/shared/lib/format'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import DateField from '@/shared/ui/DateField.vue'
@@ -32,6 +33,18 @@ const paceText = computed({
 
 function updateNumber(key: keyof ExtractedRunData, value: string) {
   ;(model.value[key] as number | null) = toNumberOrNull(value)
+  if (key === 'distanceKm' || key === 'elevationGainM' || key === 'elevationLossM') {
+    maybeInferCourseType()
+  }
+}
+
+function maybeInferCourseType() {
+  if (model.value.courseType !== 'Unknown') return
+  model.value.courseType = inferCourseType({
+    distanceKm: model.value.distanceKm,
+    elevationGainM: model.value.elevationGainM,
+    elevationLossM: model.value.elevationLossM
+  })
 }
 </script>
 

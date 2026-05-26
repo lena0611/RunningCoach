@@ -1844,6 +1844,7 @@ button.run-session-row {
   grid-template-columns: minmax(0, 1fr) 42px;
   align-items: end;
   gap: 8px;
+  background: color-mix(in srgb, var(--color-surface-2) 78%, var(--color-bg));
 }
 
 .chat-input-wrap {
@@ -1855,7 +1856,7 @@ button.run-session-row {
   display: block;
   min-height: 42px;
   max-height: 90px;
-  padding: 10px 42px 10px 14px;
+  padding: 10px 46px 10px 14px;
   resize: none;
   line-height: 22px;
   overflow-y: auto;
@@ -1865,21 +1866,31 @@ button.run-session-row {
 .input-clear-button {
   position: absolute;
   top: 50%;
-  right: 8px;
+  right: 10px;
   display: grid;
-  width: 28px;
-  height: 28px;
-  min-height: 28px;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
   place-items: center;
   padding: 0;
   border-radius: 999px;
-  background: var(--pressable-bg);
-  color: var(--color-muted);
+  background: var(--color-surface-3);
+  color: var(--color-text);
   box-shadow: none;
   transform: translateY(-50%);
+  text-shadow: none;
 }
 
-.input-clear-button svg,
+.input-clear-button svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.6;
+}
+
 .chat-send-button svg {
   width: 18px;
   height: 18px;
@@ -1899,6 +1910,10 @@ button.run-session-row {
   place-items: center;
   padding: 0;
   border-radius: 999px;
+  background: var(--color-text);
+  color: var(--color-bg);
+  box-shadow: none;
+  text-shadow: none;
 }
 
 .danger-text {

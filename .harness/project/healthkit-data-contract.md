@@ -44,6 +44,11 @@ type HealthKitRunCandidate = {
   cadence: number | null
   activeEnergyKcal: number | null
   temperature: number | null
+  humidity: number | null
+  windMps: number | null
+  elevationGainM: number | null
+  elevationLossM: number | null
+  rpe: number | null
   routeAvailable: boolean
   laps: Lap[]
   fastSegments: FastSegment[]
@@ -93,7 +98,13 @@ type FastSegment = {
 - `avgHeartRate`: workout 기간 내 heart rate 평균
 - `maxHeartRate`: workout 기간 내 heart rate 최대
 - `cadence`: HealthKit에서 cadence 계열 지표가 있을 때만 사용한다. 없으면 `null`.
-- `temperature`: HealthKit 기본 러닝 workout에서 안정적으로 기대하지 않는다. 없으면 `null`.
+- `temperature`: `HKMetadataKeyWeatherTemperature`가 있으면 섭씨로 채운다. 없으면 `null`.
+- `humidity`: `HKMetadataKeyWeatherHumidity`가 있으면 0~100 퍼센트로 채운다. 없으면 `null`.
+- `windMps`: HealthKit workout metadata에서 안정적으로 기대하지 않는다. 없으면 `null`.
+- `elevationGainM`: route location altitude로 계산한 누적 상승이다. route나 유효 altitude가 없으면 `null`.
+- `elevationLossM`: route location altitude로 계산한 누적 하강이다. route나 유효 altitude가 없으면 `null`.
+- `courseType`: 웹에서 `elevationGainM`, `elevationLossM`, `distanceKm`로 사용자 수정 가능한 기본값을 추론한다. 고저 데이터가 부족하면 `Unknown`으로 둔다.
+- `rpe`: iOS 18+에서 `workoutEffortScore`가 workout에 연결되어 조회될 때만 운동강도로 채운다. 없으면 사용자가 수정할 수 있게 `null`로 둔다.
 - `laps`: HealthKit에서 route 또는 거리 샘플이 있으면 네이티브가 1km 단위 split으로 가공해 채운다. 각 lap은 거리, 페이스, 평균 심박을 우선 채우고 cadence는 가능한 경우에만 채운다.
 - `fastSegments`: route 또는 speed 샘플에서 계산한 짧은 고속 구간 요약이다. Easy + Strides 추론에 사용하며 원본 좌표나 파일을 저장하지 않는다.
 - `source`: HealthKit 후보 저장 시 `healthkit`을 사용한다.

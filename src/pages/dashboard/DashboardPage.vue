@@ -146,10 +146,6 @@ function formatDateOnly(value: Date) {
         <h2>{{ heroTitle }}</h2>
         <p class="helper">{{ heroHelper }}</p>
       </div>
-      <div class="hero-metric">
-        <span>이번 주 누적</span>
-        <strong><UnitValue :amount="weekDistance" unit="km" /></strong>
-      </div>
     </section>
 
     <SectionCard v-if="runStore.loading || runStore.error">

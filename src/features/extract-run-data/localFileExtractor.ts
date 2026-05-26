@@ -1,4 +1,7 @@
 import type { ExtractedRunData } from '@/entities/run/model'
+import { createSessionTitle } from '@/features/create-session-title/createSessionTitle'
+import { inferCourseType } from '@/features/infer-course-type/inferCourseType'
+import { inferRunType } from '@/features/infer-run-type/inferRunType'
 
 export async function extractRunDataFromFile(file: File): Promise<ExtractedRunData> {
   const lowerName = file.name.toLowerCase()
@@ -34,28 +37,57 @@ async function extractFromFit(buffer: ArrayBuffer): Promise<ExtractedRunData> {
   const totalDistanceKm = session?.total_distance ? round(session.total_distance / 1000) : round((records.at(-1)?.distance ?? 0) / 1000)
   const durationSec = Math.round(session?.total_timer_time ?? session?.total_moving_time ?? session?.total_elapsed_time ?? 0)
   const rawCadence = numberOrNull(String(session?.avg_cadence ?? ''))
+  const elevationGainM = numberOrNull(String(session?.total_ascent ?? session?.total_elevation_gain ?? session?.enhanced_total_ascent ?? ''))
+  const elevationLossM = numberOrNull(String(session?.total_descent ?? session?.total_elevation_loss ?? session?.enhanced_total_descent ?? ''))
+  const temperature = numberOrNull(String(session?.avg_temperature ?? session?.temperature ?? session?.max_temperature ?? ''))
+  const humidity = numberOrNull(String(session?.avg_humidity ?? session?.humidity ?? ''))
+  const windMps = numberOrNull(String(session?.avg_wind_speed ?? session?.wind_speed ?? ''))
+  const rpe = normalizeRpe(numberOrNull(String(session?.perceived_exertion ?? session?.workout_effort_score ?? '')))
+  const date = toIsoDate(session?.start_time ?? session?.timestamp ?? records[0]?.timestamp)
+  const mappedLaps = laps.map((lap: any, index: number) => {
+    const distanceKm = numberOrNull(String(lap.total_distance ?? ''))
+    const lapDurationSec = numberOrNull(String(lap.total_timer_time ?? lap.total_moving_time ?? lap.total_elapsed_time ?? ''))
+    const lapCadence = numberOrNull(String(lap.avg_cadence ?? ''))
+    return {
+      index: index + 1,
+      distanceKm: distanceKm === null ? null : round(distanceKm / 1000),
+      paceSec: distanceKm && lapDurationSec ? Math.round(lapDurationSec / (distanceKm / 1000)) : null,
+      avgHeartRate: numberOrNull(String(lap.avg_heart_rate ?? '')),
+      cadence: lapCadence === null ? null : normalizeCadence(lapCadence)
+    }
+  })
+  const type = inferRunType({
+    date,
+    distanceKm: totalDistanceKm,
+    avgPaceSec: totalDistanceKm > 0 && durationSec ? Math.round(durationSec / totalDistanceKm) : null,
+    avgHeartRate: numberOrNull(String(session?.avg_heart_rate ?? '')),
+    laps: mappedLaps,
+    fastSegments: []
+  })
 
   return {
     ...createEmptyRun(),
-    date: toIsoDate(session?.start_time ?? session?.timestamp ?? records[0]?.timestamp),
+    sessionTitle: createSessionTitle({
+      date,
+      startAt: toIsoDateTime(session?.start_time ?? session?.timestamp ?? records[0]?.timestamp),
+      type
+    }),
+    date,
+    type,
     distanceKm: totalDistanceKm,
     durationSec: durationSec || null,
     avgPaceSec: totalDistanceKm > 0 && durationSec ? Math.round(durationSec / totalDistanceKm) : null,
     avgHeartRate: numberOrNull(String(session?.avg_heart_rate ?? '')),
     maxHeartRate: numberOrNull(String(session?.max_heart_rate ?? '')),
     cadence: rawCadence === null ? null : normalizeCadence(rawCadence),
-    laps: laps.map((lap: any, index: number) => {
-      const distanceKm = numberOrNull(String(lap.total_distance ?? ''))
-      const lapDurationSec = numberOrNull(String(lap.total_timer_time ?? lap.total_moving_time ?? lap.total_elapsed_time ?? ''))
-      const lapCadence = numberOrNull(String(lap.avg_cadence ?? ''))
-      return {
-        index: index + 1,
-        distanceKm: distanceKm === null ? null : round(distanceKm / 1000),
-        paceSec: distanceKm && lapDurationSec ? Math.round(lapDurationSec / (distanceKm / 1000)) : null,
-        avgHeartRate: numberOrNull(String(lap.avg_heart_rate ?? '')),
-        cadence: lapCadence === null ? null : normalizeCadence(lapCadence)
-      }
-    }),
+    temperature,
+    humidity,
+    windMps,
+    elevationGainM,
+    elevationLossM,
+    courseType: inferCourseType({ distanceKm: totalDistanceKm, elevationGainM, elevationLossM }),
+    rpe,
+    laps: mappedLaps,
     memo: 'FIT 세션 요약 기반 로컬 추출. 저장 전 실제 값을 확인하세요.'
   }
 }
@@ -97,9 +129,20 @@ function toIsoDate(value: unknown): string {
   return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
 }
 
+function toIsoDateTime(value: unknown): string | null {
+  const date = value instanceof Date ? value : new Date(String(value ?? ''))
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null
+}
+
 function numberOrNull(value: string): number | null {
+  if (value.trim() === '') return null
   const number = Number(value)
   return Number.isFinite(number) ? number : null
+}
+
+function normalizeRpe(value: number | null) {
+  if (value === null || value <= 0) return null
+  return Math.max(1, Math.min(10, Math.round(value)))
 }
 
 function normalizeCadence(value: number): number {

@@ -1,4 +1,6 @@
 import type { ExtractedRunData, FastSegment, Lap } from '@/entities/run/model'
+import { createSessionTitle } from '@/features/create-session-title/createSessionTitle'
+import { inferCourseType } from '@/features/infer-course-type/inferCourseType'
 import { inferRunType } from '@/features/infer-run-type/inferRunType'
 
 export type HealthKitRunCandidate = {
@@ -15,6 +17,11 @@ export type HealthKitRunCandidate = {
   cadence: number | null
   activeEnergyKcal: number | null
   temperature: number | null
+  humidity: number | null
+  windMps: number | null
+  elevationGainM: number | null
+  elevationLossM: number | null
+  rpe: number | null
   routeAvailable: boolean
   laps: Lap[]
   fastSegments: FastSegment[]
@@ -103,19 +110,27 @@ export function requestHealthKitRunUpdate(externalId: string) {
 export function toExtractedRunData(candidate: HealthKitRunCandidate, weeklyPattern: string[] = []): ExtractedRunData {
   const distanceKm = candidate.distanceKm ?? 0
   const durationSec = candidate.durationSec
+  const type = inferRunType({
+    distanceKm,
+    avgPaceSec: candidate.avgPaceSec ?? (distanceKm > 0 && durationSec ? Math.round(durationSec / distanceKm) : null),
+    avgHeartRate: candidate.avgHeartRate,
+    laps: candidate.laps ?? [],
+    fastSegments: candidate.fastSegments ?? [],
+    weeklyPattern,
+    date: candidate.date
+  })
+  const elevationGainM = candidate.elevationGainM
+  const elevationLossM = candidate.elevationLossM
   return {
     externalId: candidate.externalId,
-    sessionTitle: '',
-    date: candidate.date || new Date().toISOString().slice(0, 10),
-    type: inferRunType({
-      distanceKm,
-      avgPaceSec: candidate.avgPaceSec ?? (distanceKm > 0 && durationSec ? Math.round(durationSec / distanceKm) : null),
-      avgHeartRate: candidate.avgHeartRate,
-      laps: candidate.laps ?? [],
-      fastSegments: candidate.fastSegments ?? [],
-      weeklyPattern,
-      date: candidate.date
+    sessionTitle: createSessionTitle({
+      date: candidate.date || new Date().toISOString().slice(0, 10),
+      startAt: candidate.startAt,
+      type,
+      weeklyPattern
     }),
+    date: candidate.date || new Date().toISOString().slice(0, 10),
+    type,
     distanceKm,
     durationSec,
     avgPaceSec: candidate.avgPaceSec ?? (distanceKm > 0 && durationSec ? Math.round(durationSec / distanceKm) : null),
@@ -123,12 +138,12 @@ export function toExtractedRunData(candidate: HealthKitRunCandidate, weeklyPatte
     maxHeartRate: candidate.maxHeartRate,
     cadence: candidate.cadence,
     temperature: candidate.temperature,
-    humidity: null,
-    windMps: null,
-    elevationGainM: null,
-    elevationLossM: null,
-    courseType: candidate.routeAvailable ? 'Mixed' : 'Unknown',
-    rpe: null,
+    humidity: candidate.humidity,
+    windMps: candidate.windMps,
+    elevationGainM,
+    elevationLossM,
+    courseType: inferCourseType({ distanceKm, elevationGainM, elevationLossM }),
+    rpe: candidate.rpe,
     workoutFeeling: '',
     painNote: '',
     sleepQuality: null,
@@ -153,6 +168,11 @@ function normalizeCandidate(candidate: HealthKitRunCandidate): HealthKitRunCandi
     cadence: normalizeNumber(candidate.cadence),
     activeEnergyKcal: normalizeNumber(candidate.activeEnergyKcal),
     temperature: normalizeNumber(candidate.temperature),
+    humidity: normalizeNumber(candidate.humidity),
+    windMps: normalizeNumber(candidate.windMps),
+    elevationGainM: normalizeNumber(candidate.elevationGainM),
+    elevationLossM: normalizeNumber(candidate.elevationLossM),
+    rpe: normalizeNumber(candidate.rpe),
     laps: candidate.laps ?? [],
     fastSegments: candidate.fastSegments ?? [],
     rawAvailability: {
