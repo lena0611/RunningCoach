@@ -99,6 +99,23 @@ watch([filteredRuns, selectedType, selectedDate], () => {
   nextTick(setupObserver)
 })
 
+watch(
+  () => runStore.runs,
+  (runs) => {
+    if (detailRun.value) {
+      detailRun.value = runs.find((run) => run.id === detailRun.value?.id) ?? detailRun.value
+    }
+    if (coachRun.value) {
+      coachRun.value = runs.find((run) => run.id === coachRun.value?.id) ?? coachRun.value
+    }
+    if (editing.value && !isEditDirty.value) {
+      editing.value = runs.find((run) => run.id === editing.value?.id) ?? editing.value
+      editSnapshot.value = JSON.stringify(editing.value)
+    }
+  },
+  { deep: true }
+)
+
 onBeforeUnmount(() => {
   document.body.classList.remove('memory-stack-open')
   observer.value?.disconnect()
