@@ -2017,10 +2017,49 @@ button.run-session-row {
   font-weight: 400;
 }
 
-.lap-split-chart {
+.lap-chart-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.lap-metric-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--color-surface-2) 68%, transparent);
+}
+
+.lap-metric-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lap-metric-header div {
+  display: grid;
+  gap: 3px;
+}
+
+.lap-metric-header span,
+.lap-metric-header small {
+  color: var(--color-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.lap-metric-header strong {
+  color: var(--color-text);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.lap-metric-chart {
   width: 100%;
-  height: 300px;
-  min-height: 260px;
+  height: 150px;
+  min-height: 140px;
 }
 
 .fitness-detail-card {
