@@ -249,6 +249,9 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
   const selectedRunDateForTemporalContext = selectedRun?.date ?? null
   const injuryItems = filterInjuryItemsForRunDate(allInjuryItems, selectedRunDateForTemporalContext)
   const activeInjuryItem = getActiveInjuryItemForRunDate(trainingMemory, allInjuryItems, selectedRunDateForTemporalContext)
+  const selectedRunLapAnalysis = buildLapProgressionAnalysis(selectedRun)
+  const selectedRunExecutionGuide = buildSessionExecutionGuide(selectedRun, activeGoal)
+  const recentPrescriptionComplianceSignals = buildPrescriptionComplianceSignals(recent14)
 
   return {
     userNote,
@@ -273,6 +276,7 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
       coachingDecisionBasis: [
         '1순위: activeGoal의 목표 거리, 목표 기록, 목표일, 성공 기준, 전략 메모',
         '2순위: 선택 세션의 실제 수행 데이터(distance, duration, pace, HR, cadence, laps, fast_segments, RPE, memo)',
+        '2.5순위: selectedRunExecutionGuide 대비 실제 수행 일치도. 처방된 심박/페이스/패턴 경계를 지켰는지, 경계를 넘었다면 어느 랩부터 왜 넘었는지',
         '3순위: 최근 7/14/30일 누적 거리, Easy 비율, 강훈련 빈도, Long Run/Tempo 수행 여부',
         '4순위: weeklyPattern 대비 실제 소화율과 누락/대체/추가런 패턴',
         '5순위: activeInjuryItem, pain_note, workout_feeling, 회복 신호',
@@ -302,7 +306,7 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
       racePredictionPolicy:
         '레이스 예상시간은 PB, 최근 Tempo/Race/긴 지속주가 충분할 때만 보조 근거로 언급한다. 데이터가 부족하면 예상시간을 단정하지 않는다. 루틴 변경은 예상시간 하나가 아니라 최근 14/30일 수행, 회복, 부상, 목표일까지 남은 기간을 함께 보고 결정한다.',
       patchPolicy:
-        '변경 필요성이 명확할 때만 trainingMemoryPatch.weeklyPattern 전체와 activeGoalStrategyNotes를 반환한다. 유지가 맞으면 report의 루틴 업데이트 섹션에는 유지 근거를 짧게 쓰고 trainingMemoryPatch는 null로 둔다.'
+        '변경 필요성이 명확할 때만 trainingMemoryPatch.weeklyPattern 전체와 activeGoalStrategyNotes를 반환한다. 유지가 맞으면 report의 루틴 업데이트 섹션에는 유지 근거를 짧게 쓰고 trainingMemoryPatch는 null로 둔다. 처방 경계 자체를 조정해야 하면 activeGoalStrategyNotes 또는 aiNotes에 새 기준을 명확히 남긴다.'
     },
     trainingMemory,
     goals,
@@ -334,6 +338,15 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
           }))
       : [],
     selectedRun: decorateRunDate(selectedRun),
+    selectedRunLapAnalysis,
+    selectedRunExecutionGuide,
+    lapAnalysisInstruction:
+      'selectedRunLapAnalysis와 selectedRunExecutionGuide가 있으면 반드시 코칭에 반영한다. 핵심 지표에는 페이스 흐름과 심박 흐름을 화살표로 짧게 보여주고, 오늘 해석에는 초반 오버페이스 여부, 심박이 터졌는지/잘 눌렸는지, 세션 유형별 심박/페이스 경계 초과 여부, 후반 페이스-심박 품질을 짚는다. 랩 데이터가 없을 때만 평균값 중심으로 말한다.',
+    prescriptionAdjustmentInstruction:
+      '선택 세션을 단순 기록이 아니라 이전 처방을 수행한 결과로 본다. selectedRunExecutionGuide에 맞게 훈련했는지 먼저 평가하고, 잘 지켰으면 유지 또는 소폭 상향 조건을 말한다. 경계를 반복적으로 넘었거나 회복/부상 신호가 있으면 다음 처방을 낮추거나 기준을 바꾼다. 조정 필요성이 명확하면 trainingMemoryPatch에 반영한다.',
+    recentPrescriptionComplianceSignals,
+    prescriptionMemoryInstruction:
+      'recentPrescriptionComplianceSignals는 최근 세션들이 각 유형별 처방 기준을 얼마나 지켰는지 보는 신호다. 단일 세션 결과를 장기기억으로 저장하지 말고, 최근 여러 세션에서 반복되는 준수/이탈 패턴만 memoryItems에 저장한다. 예: "최근 Tempo는 165 상한을 대체로 지키지만 후반 1~2랩에서 흔들린다", "Recovery는 심박을 잘 누르는 편이다".',
     runsAfterSelectedRun: runsAfterSelected.slice(0, 20).map(decorateRunDate),
     recent14: recent14.map(decorateRunDate),
     summaryStats: {
@@ -406,6 +419,18 @@ function buildCoachInstructions() {
     'similarPastCoachSnippets는 사용자의 반복 패턴과 이전 해석 톤을 떠올리는 데만 사용한다. 현재 선택 세션의 숫자와 날짜보다 우선하지 않는다.',
     '숫자는 근거로 쓰되, 사람처럼 해석한다.',
     '핵심 지표는 짧은 목록으로만 보여준다. 문장 속에 숫자를 길게 묻지 않는다.',
+    'selectedRunLapAnalysis가 있으면 "## 핵심 지표"에 랩 진행에 따른 페이스 흐름과 심박 흐름을 반드시 넣는다. 예: "- 페이스: 10분44초 → 10분05초 → 10분29초 → 9분57초 → 9분28초", "- 심박: 108 → 116 → 114 → 118 → 121", "- 케이던스: 159~164".',
+    'selectedRunLapAnalysis가 있으면 평균 페이스/평균 심박만 말하고 끝내지 않는다. 러닝 중간 과정, 즉 초반을 서둘렀는지, 심박이 먼저 터졌는지, 잘 눌러 시작했는지, 후반에 페이스를 올려도 심박 품질이 유지됐는지 분석한다.',
+    'selectedRunExecutionGuide가 있으면 세션 유형별 처방 경계를 사용한다. Easy/Recovery는 심박 상한과 RPE를 우선하고, Tempo는 목표 심박 범위와 상한, Long Run은 후반 심박 드리프트, Easy + Strides는 가속/회복 반복과 회복 구간 심박 안정성을 본다.',
+    '선택 세션은 단순 사후 기록이 아니라 이전 코칭/주간 루틴/처방 가이드의 실행 결과로 본다. 반드시 "처방 가이드에 맞게 임했는지"를 확인하고, 그 결과에 따라 사후 처방을 유지/상향/하향/보류 중 하나로 정리한다.',
+    '처방 가이드에 맞게 잘 수행했으면 칭찬으로 끝내지 말고 다음 처방 기준을 유지할지, 더 나은 품질로 소폭 올릴지 조건을 말한다. 예: "다음 템포도 165 상한은 유지하되, 160 전후 유지 구간을 1km만 늘려보자."',
+    '처방 가이드를 넘겼으면 비난하지 말고 어느 랩부터 심박/페이스 경계가 흔들렸는지 말하고, 다음 처방에서 무엇을 낮출지 또는 어떤 체크포인트를 둘지 제안한다.',
+    'Tempo 또는 품질훈련에서는 selectedRunExecutionGuide.boundaries.heartRateCeilingBpm을 확인한다. lapHeartRatesOverTempoCeiling이 있거나 경계를 넘은 랩이 있으면 몇 번째 랩부터 넘었는지 짧게 말하고, 없으면 "상한 165는 넘기지 않았다"처럼 훈련 품질 근거로 쓴다.',
+    '세션 유형별 랩당 페이스/심박 경계 가이드가 현재 사용자에게 맞지 않아 보이면 "## 루틴 업데이트"에서 유지/조정 여부를 말한다. 조정이 필요할 때는 trainingMemoryPatch.activeGoalStrategyNotes 또는 aiNotes에 새 기준을 저장한다.',
+    'recentPrescriptionComplianceSignals를 보고 최근 여러 세션에서 처방 준수율 패턴이 있는지 활용한다. 반복적으로 잘 지키는 기준은 다음 처방 상향 근거가 되고, 반복적으로 넘는 기준은 처방 하향/보류 근거가 된다.',
+    'memoryItems에는 단일 세션의 준수 여부를 넣지 말고 반복 패턴만 넣는다. 예: "최근 Recovery는 심박을 130 이하로 잘 누르는 편이다", "최근 Tempo는 후반 랩에서 165 상한 근처까지 올라가므로 초반 진입을 보수적으로 잡아야 한다".',
+    'Easy/Recovery에서는 페이스보다 심박 흐름을 우선한다. 후반 페이스가 빨라졌더라도 심박이 낮게 유지되면 잘 눌렀다고 본다.',
+    'Long Run/LSD/Steady Long에서는 후반 페이스 급락, 심박 드리프트, 전후반 심박 차이를 보고 지속성과 품질을 말한다.',
     '답변 우선순위는 오늘 세션의 정체, 사용자가 의도한 훈련과 맞는지, 중요한 지표 2~3개, 최근 맥락, 조심할 점, 다음 훈련 순서다.',
     '모든 데이터를 다 설명하지 말고 오늘 기록에서 가장 중요한 의미 1개를 먼저 말한다.',
     '답변 구조는 가능한 한 다음 순서를 따른다: 반응, 핵심 지표, 오늘 해석, 조심할 점, 다음 훈련, 루틴 업데이트, 한 줄 요약.',
@@ -1084,6 +1109,303 @@ function decorateRunDate<T extends RunLogRow | null>(run: T): T extends RunLogRo
   } as T extends RunLogRow ? RunLogRow & { dateDisplay: string } : null
 }
 
+type LapMetric = {
+  index: number
+  distanceKm: number | null
+  paceSec: number | null
+  paceDisplay: string | null
+  avgHeartRate: number | null
+  cadence: number | null
+}
+
+function buildLapProgressionAnalysis(run: RunLogRow | null) {
+  if (!run) return null
+  const laps = normalizeLapMetrics(run.laps)
+  if (!laps.length) {
+    return {
+      available: false,
+      reason: '랩 데이터가 없어 평균 페이스/평균 심박 중심으로만 볼 수 있다.'
+    }
+  }
+
+  const paceLaps = laps.filter((lap) => lap.paceSec !== null)
+  const heartRateLaps = laps.filter((lap) => lap.avgHeartRate !== null)
+  const cadenceLaps = laps.filter((lap) => lap.cadence !== null)
+  const firstHalf = laps.slice(0, Math.ceil(laps.length / 2))
+  const secondHalf = laps.slice(Math.ceil(laps.length / 2))
+  const firstHalfPaceSec = weightedLapPace(firstHalf)
+  const secondHalfPaceSec = weightedLapPace(secondHalf)
+  const firstHalfHeartRate = averageLapValue(firstHalf, 'avgHeartRate')
+  const secondHalfHeartRate = averageLapValue(secondHalf, 'avgHeartRate')
+  const heartRateDriftBpm = firstHalfHeartRate !== null && secondHalfHeartRate !== null
+    ? Math.round(secondHalfHeartRate - firstHalfHeartRate)
+    : null
+  const paceDeltaSec = firstHalfPaceSec !== null && secondHalfPaceSec !== null
+    ? Math.round(secondHalfPaceSec - firstHalfPaceSec)
+    : null
+  const maxLapHeartRate = heartRateLaps.reduce<number | null>((max, lap) => {
+    if (lap.avgHeartRate === null) return max
+    return max === null ? lap.avgHeartRate : Math.max(max, lap.avgHeartRate)
+  }, null)
+  const tempoHeartRateCeilingBpm = 165
+  const lapsOverTempoCeiling = heartRateLaps
+    .filter((lap) => (lap.avgHeartRate ?? 0) > tempoHeartRateCeilingBpm)
+    .map((lap) => ({ index: lap.index, avgHeartRate: lap.avgHeartRate }))
+  const cadenceValues = cadenceLaps.map((lap) => lap.cadence).filter((value): value is number => value !== null)
+
+  return {
+    available: true,
+    lapCount: laps.length,
+    laps,
+    paceFlowDisplay: buildFlow(paceLaps.map((lap) => lap.paceDisplay).filter((value): value is string => Boolean(value))),
+    heartRateFlowDisplay: buildFlow(heartRateLaps.map((lap) => lap.avgHeartRate).filter((value): value is number => value !== null).map(String)),
+    cadenceRangeDisplay: cadenceValues.length ? `${Math.min(...cadenceValues)}~${Math.max(...cadenceValues)}` : null,
+    firstHalf: {
+      avgPaceSec: firstHalfPaceSec,
+      avgPaceDisplay: formatPaceForCoach(firstHalfPaceSec),
+      avgHeartRate: firstHalfHeartRate === null ? null : Math.round(firstHalfHeartRate)
+    },
+    secondHalf: {
+      avgPaceSec: secondHalfPaceSec,
+      avgPaceDisplay: formatPaceForCoach(secondHalfPaceSec),
+      avgHeartRate: secondHalfHeartRate === null ? null : Math.round(secondHalfHeartRate)
+    },
+    paceDeltaSecSecondHalfMinusFirstHalf: paceDeltaSec,
+    heartRateDriftBpmSecondHalfMinusFirstHalf: heartRateDriftBpm,
+    paceTrend: describePaceTrend(paceDeltaSec),
+    heartRateQuality: describeHeartRateQuality(heartRateDriftBpm),
+    maxLapHeartRate,
+    tempoHeartRateCeilingBpm,
+    lapHeartRatesOverTempoCeiling: lapsOverTempoCeiling,
+    startControlHint: describeStartControl(laps, run.avg_pace_sec),
+    interpretationHints: [
+      'paceFlowDisplay와 heartRateFlowDisplay를 함께 보고 페이스 상승이 심박 폭발로 이어졌는지 확인한다.',
+      '초반 랩이 평균보다 과하게 빠르고 심박도 빠르게 오르면 서둘러 시작한 것으로 본다.',
+      '후반 페이스가 빨라져도 심박 상승이 작으면 잘 눌러 시작해 품질이 좋은 흐름으로 본다.',
+      '템포/품질훈련은 tempoHeartRateCeilingBpm 초과 랩이 있는지 확인한다.'
+    ]
+  }
+}
+
+function buildSessionExecutionGuide(run: RunLogRow | null, activeGoal: unknown) {
+  if (!run) return null
+  const type = run.type
+  const targetPaceSec = getGoalPaceSec(activeGoal)
+  const common = {
+    runType: type,
+    purpose: '선택 세션을 평가할 때 랩별 페이스/심박 경계를 보는 기준이다. 사용자의 목표와 누적 반응에 따라 코칭에서 유지/조정될 수 있다.',
+    updateRule:
+      '같은 유형의 세션이 2~3주 이상 안정적으로 소화되고 회복/부상 신호가 좋으면 경계를 소폭 상향할 수 있다. 반대로 심박/RPE/통증이 반복적으로 높으면 경계를 낮춘다.'
+  }
+
+  if (type === 'Tempo') {
+    return {
+      ...common,
+      primaryMetric: 'heart_rate_then_pace',
+      boundaries: {
+        targetHeartRateRangeBpm: '158~165',
+        heartRateCeilingBpm: 165,
+        targetPaceSecPerKm: targetPaceSec,
+        targetPaceDisplay: formatPaceForCoach(targetPaceSec),
+        allowedLapInterpretation:
+          '템포 랩은 165bpm 상한을 넘기지 않고 160 전후에서 유지되는지 본다. 후반 페이스가 빨라져도 심박이 165를 넘지 않으면 품질이 좋다.'
+      }
+    }
+  }
+
+  if (type === 'Easy' || type === 'Recovery') {
+    return {
+      ...common,
+      primaryMetric: 'heart_rate',
+      boundaries: {
+        easyHeartRateCeilingBpm: type === 'Recovery' ? 130 : 145,
+        recoveryHeartRateCeilingBpm: 130,
+        paceRule: '페이스는 보조 지표다. 심박이 낮고 RPE가 낮으면 페이스가 조금 빨라져도 Easy/Recovery로 볼 수 있다.',
+        allowedLapInterpretation:
+          '후반 페이스 상승보다 심박 안정성을 우선한다. 심박이 낮게 유지되면 잘 눌렀다고 본다.'
+      }
+    }
+  }
+
+  if (type === 'Easy + Strides') {
+    return {
+      ...common,
+      primaryMetric: 'pattern_then_recovery_heart_rate',
+      boundaries: {
+        pattern: '10분 워밍업 + 짧은 가속 4~8회 + 회복 조깅 + 쿨다운',
+        accelerationDurationToleranceSec: '6~45',
+        recoveryWindowToleranceSec: '60~210',
+        recoveryHeartRateRule: '가속 뒤 회복 구간에서 심박과 호흡이 내려오는지 본다.',
+        allowedLapInterpretation:
+          '랩 단위가 1km라면 스트라이드가 뭉개져 보일 수 있으므로 fast_segments와 심박 회복을 함께 본다.'
+      }
+    }
+  }
+
+  if (type === 'LSD' || type === 'Steady Long') {
+    return {
+      ...common,
+      primaryMetric: 'heart_rate_drift_and_late_pace',
+      boundaries: {
+        heartRateDriftGoodBpm: '<= 8',
+        heartRateDriftCautionBpm: '>= 12',
+        paceRule: 'LSD는 페이스보다 낮은 심박 지속, Steady Long은 후반 steady 구간을 보되 심박 드리프트가 과하면 강도를 낮춘다.',
+        allowedLapInterpretation:
+          '후반 급락 없이 유지되고 심박 드리프트가 작으면 품질이 좋다. 후반 페이스를 올렸는데 심박이 크게 튀면 무리한 steady로 본다.'
+      }
+    }
+  }
+
+  return {
+    ...common,
+    primaryMetric: 'context_dependent',
+    boundaries: {
+      rule: '저장된 타입이 Unknown이면 랩 페이스, 심박, 요일 루틴, 메모로 실제 세션 성격을 먼저 재해석한다.'
+    }
+  }
+}
+
+function buildPrescriptionComplianceSignals(runs: RunLogRow[]) {
+  return runs.slice(0, 14).map((run) => {
+    const analysis = buildLapProgressionAnalysis(run)
+    const guide = buildSessionExecutionGuide(run, null)
+    return {
+      id: run.id,
+      date: run.date,
+      dateDisplay: formatDateWithWeekday(run.date),
+      type: run.type,
+      distanceKm: run.distance_km,
+      avgHeartRate: run.avg_heart_rate,
+      maxHeartRate: run.max_heart_rate,
+      rpe: run.rpe,
+      compliance: classifyPrescriptionCompliance(run, analysis),
+      paceTrend: analysis?.available ? analysis.paceTrend : 'unknown',
+      heartRateQuality: analysis?.available ? analysis.heartRateQuality : 'unknown',
+      heartRateDriftBpm: analysis?.available ? analysis.heartRateDriftBpmSecondHalfMinusFirstHalf : null,
+      executionBoundary: guide?.boundaries ?? null
+    }
+  })
+}
+
+function classifyPrescriptionCompliance(run: RunLogRow, analysis: ReturnType<typeof buildLapProgressionAnalysis>) {
+  const type = run.type
+  if (type === 'Tempo') {
+    const overCeiling = analysis?.available ? analysis.lapHeartRatesOverTempoCeiling.length : 0
+    if (overCeiling > 1 || (run.max_heart_rate ?? 0) > 168) return 'missed_high_heart_rate'
+    if (overCeiling === 1 || (run.max_heart_rate ?? 0) > 165) return 'partial_late_heart_rate_rise'
+    return 'met_heart_rate_ceiling'
+  }
+
+  if (type === 'Easy' || type === 'Recovery') {
+    const ceiling = type === 'Recovery' ? 130 : 145
+    const heartRate = run.avg_heart_rate
+    if (heartRate === null) return 'unknown_no_heart_rate'
+    if (heartRate <= ceiling) return 'met_easy_heart_rate'
+    if (heartRate <= ceiling + 8) return 'partial_easy_heart_rate'
+    return 'missed_too_hard_for_easy'
+  }
+
+  if (type === 'LSD' || type === 'Steady Long') {
+    const drift = analysis?.available ? analysis.heartRateDriftBpmSecondHalfMinusFirstHalf : null
+    if (drift === null) return 'unknown_no_lap_drift'
+    if (drift <= 8) return 'met_long_run_stability'
+    if (drift <= 12) return 'partial_long_run_drift'
+    return 'missed_large_long_run_drift'
+  }
+
+  if (type === 'Easy + Strides') {
+    const fastSegments = Array.isArray(run.fast_segments) ? run.fast_segments.length : 0
+    if (fastSegments >= 4) return 'met_stride_pattern_signal'
+    return 'unknown_or_weak_stride_signal'
+  }
+
+  return 'unknown'
+}
+
+function normalizeLapMetrics(value: unknown): LapMetric[] {
+  const laps = Array.isArray(value) ? value : []
+  return laps
+    .map((lap, index) => {
+      const item = lap as { index?: unknown; distanceKm?: unknown; paceSec?: unknown; avgHeartRate?: unknown; cadence?: unknown }
+      const distanceKm = nullablePositiveNumber(item.distanceKm)
+      const paceSec = nullablePositiveNumber(item.paceSec)
+      const avgHeartRate = nullablePositiveNumber(item.avgHeartRate)
+      const cadence = nullablePositiveNumber(item.cadence)
+      return {
+        index: Number.isFinite(Number(item.index)) ? Number(item.index) : index + 1,
+        distanceKm,
+        paceSec,
+        paceDisplay: formatPaceForCoach(paceSec),
+        avgHeartRate: avgHeartRate === null ? null : Math.round(avgHeartRate),
+        cadence: cadence === null ? null : Math.round(cadence)
+      }
+    })
+    .filter((lap) => lap.paceSec !== null || lap.avgHeartRate !== null || lap.cadence !== null)
+    .slice(0, 20)
+}
+
+function getGoalPaceSec(activeGoal: unknown) {
+  const goal = activeGoal as { distanceKm?: unknown; targetDurationSec?: unknown } | null
+  const distanceKm = Number(goal?.distanceKm)
+  const durationSec = Number(goal?.targetDurationSec)
+  if (!Number.isFinite(distanceKm) || distanceKm <= 0 || !Number.isFinite(durationSec) || durationSec <= 0) return null
+  return Math.round(durationSec / distanceKm)
+}
+
+function buildFlow(values: string[]) {
+  if (!values.length) return null
+  if (values.length <= 8) return values.join(' → ')
+  return [...values.slice(0, 4), '...', ...values.slice(-3)].join(' → ')
+}
+
+function weightedLapPace(laps: LapMetric[]) {
+  const valid = laps.filter((lap) => lap.paceSec !== null)
+  if (!valid.length) return null
+  const weightedDistance = valid
+    .filter((lap) => lap.distanceKm !== null && (lap.distanceKm ?? 0) > 0)
+    .reduce((sum, lap) => sum + (lap.distanceKm ?? 0), 0)
+  if (weightedDistance > 0) {
+    const weightedSeconds = valid.reduce((sum, lap) => sum + (lap.paceSec ?? 0) * (lap.distanceKm ?? 0), 0)
+    return Math.round(weightedSeconds / weightedDistance)
+  }
+  return Math.round(valid.reduce((sum, lap) => sum + (lap.paceSec ?? 0), 0) / valid.length)
+}
+
+function averageLapValue(laps: LapMetric[], key: 'avgHeartRate' | 'cadence') {
+  const values = laps.map((lap) => lap[key]).filter((value): value is number => value !== null)
+  if (!values.length) return null
+  return values.reduce((sum, value) => sum + value, 0) / values.length
+}
+
+function describePaceTrend(paceDeltaSec: number | null) {
+  if (paceDeltaSec === null) return 'unknown'
+  if (paceDeltaSec <= -12) return 'negative_split'
+  if (paceDeltaSec >= 18) return 'late_fade'
+  return 'even_or_controlled'
+}
+
+function describeHeartRateQuality(heartRateDriftBpm: number | null) {
+  if (heartRateDriftBpm === null) return 'unknown'
+  if (heartRateDriftBpm <= 4) return 'stable'
+  if (heartRateDriftBpm <= 10) return 'moderate_rise'
+  return 'large_drift'
+}
+
+function describeStartControl(laps: LapMetric[], avgPaceSec: number | null) {
+  const first = laps.find((lap) => lap.paceSec !== null)
+  if (!first?.paceSec || !avgPaceSec) return 'unknown'
+  if (first.paceSec >= avgPaceSec + 20) return 'controlled_start'
+  if (first.paceSec <= avgPaceSec - 20) return 'fast_start'
+  return 'near_average_start'
+}
+
+function formatPaceForCoach(value: number | null) {
+  if (!value || !Number.isFinite(value)) return null
+  const minutes = Math.floor(value / 60)
+  const seconds = Math.round(value % 60)
+  return `${minutes}분${String(seconds).padStart(2, '0')}초`
+}
+
 function formatDateWithWeekday(value: string | null | undefined) {
   if (!value) return '-'
   const dateText = value.slice(0, 10)
@@ -1171,6 +1493,11 @@ function safeJson(value: string) {
 function nullableNumber(value: unknown): number | null {
   const number = Number(value)
   return Number.isFinite(number) ? number : null
+}
+
+function nullablePositiveNumber(value: unknown): number | null {
+  const number = nullableNumber(value)
+  return number !== null && number > 0 ? number : null
 }
 
 function clampNumber(value: unknown, min: number, max: number, fallback: number) {
