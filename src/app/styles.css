@@ -369,9 +369,9 @@ label {
 .account-menu-button {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
-  max-width: min(48vw, 230px);
+  max-width: none;
   min-height: 36px;
   padding: 0;
   background: transparent;
@@ -411,7 +411,7 @@ label {
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 2.3;
-  color: var(--color-primary);
+  color: var(--color-text);
 }
 
 .side-drawer-layer {
@@ -1053,16 +1053,19 @@ button.stat-card {
 .unit-value-unit {
   flex: 0 0 auto;
   color: currentColor;
-  font-size: 0.42em;
+  font-size: 0.58em;
   font-weight: 650;
   line-height: 1;
   white-space: nowrap;
 }
 
 .stat-card-value .unit-value-unit,
-.metric strong .unit-value-unit,
+.metric strong .unit-value-unit {
+  font-size: 0.52em;
+}
+
 .run-session-distance .unit-value-unit {
-  font-size: 0.38em;
+  font-size: 0.5em;
 }
 
 .two-column {
@@ -1406,6 +1409,13 @@ button.run-session-row {
   gap: 14px;
 }
 
+.run-log-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
 .calendar-header {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr) 44px;
@@ -1417,6 +1427,30 @@ button.run-session-row {
   color: var(--color-text);
   font-size: 24px;
   text-align: center;
+}
+
+.calendar-arrow-button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text);
+  box-shadow: none;
+}
+
+.calendar-arrow-button svg {
+  width: 26px;
+  height: 26px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.4;
 }
 
 .run-calendar-weekdays,
@@ -1444,14 +1478,14 @@ button.run-session-row {
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--color-muted);
+  color: var(--color-text);
   box-shadow: none;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 900;
 }
 
 .run-calendar-day:disabled {
-  opacity: 0.4;
+  opacity: 0.55;
 }
 
 .run-calendar-day.has-run {
@@ -1468,7 +1502,7 @@ button.run-session-row {
 
 .run-calendar-day.has-run span {
   background: var(--color-primary-soft);
-  color: var(--color-text);
+  color: var(--color-primary);
 }
 
 .run-calendar-day.selected span {
@@ -1478,25 +1512,25 @@ button.run-session-row {
 
 .run-calendar-day small {
   position: absolute;
-  right: 0;
-  top: 1px;
+  right: 1px;
+  top: 2px;
   display: grid;
   place-items: center;
   min-width: 16px;
   height: 16px;
   padding: 0 4px;
   border-radius: 999px;
-  background: var(--color-primary);
-  color: var(--color-bg);
+  background: var(--color-subtle);
+  color: var(--color-muted);
   font-size: 10px;
-  font-weight: 950;
+  font-weight: 800;
   line-height: 1;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+  box-shadow: none;
 }
 
 .run-calendar-day.selected small {
-  background: var(--color-surface);
-  color: var(--color-primary);
+  background: var(--color-surface-2);
+  color: var(--color-muted);
 }
 
 .run-log-heading-actions {
@@ -1588,6 +1622,12 @@ button.run-session-row {
 .compact-metric-grid .metric strong {
   font-size: clamp(22px, 6vw, 30px);
   overflow-wrap: anywhere;
+}
+
+.compact-metric-grid .metric strong.metric-text-value {
+  font-size: clamp(15px, 4vw, 18px);
+  line-height: 1.25;
+  word-break: keep-all;
 }
 
 .lap-list {

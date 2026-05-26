@@ -159,7 +159,6 @@ function setThemeMode(value: string) {
     </div>
     <button v-if="isAuthenticated" class="account-menu-button" type="button" aria-label="계정 메뉴 열기" @click="openDrawer">
       <span class="account-avatar-mini" aria-hidden="true">{{ accountLabel.slice(0, 1).toUpperCase() }}</span>
-      <span class="account-menu-name">{{ accountLabel }}</span>
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M4 7h16" />
         <path d="M4 12h16" />

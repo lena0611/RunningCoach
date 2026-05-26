@@ -5,17 +5,20 @@ import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
+import type { RunLog } from '@/entities/run/model'
 import RunSummaryCard from '@/widgets/run-summary-card/RunSummaryCard.vue'
 import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
 import FatigueCard from '@/widgets/fatigue-card/FatigueCard.vue'
 import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
-import { getEasyRatio, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, getVolumeWarning, sumDistance } from '@/shared/lib/runStats'
-import { formatDateWithWeekday } from '@/shared/lib/format'
+import { estimateHeartRateDrift, getEasyRatio, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, getVolumeWarning, sumDistance } from '@/shared/lib/runStats'
+import { formatDateWithWeekday, formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
 import ContentStack from '@/shared/ui/ContentStack.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import MetricGrid from '@/shared/ui/MetricGrid.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
 import RunSessionList from '@/shared/ui/RunSessionList.vue'
+import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
+import RunTypeIcon from '@/shared/ui/RunTypeIcon.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
 import UnitValue from '@/shared/ui/UnitValue.vue'
@@ -28,6 +31,7 @@ const memoryStore = useMemoryStore()
 const weatherStore = useWeatherStore()
 const router = useRouter()
 const trendMetric = ref<'month' | 'last7' | 'easy' | 'hard' | null>(null)
+const detailRun = ref<RunLog | null>(null)
 const todayDate = computed(() => formatDateOnly(new Date()))
 
 onMounted(() => {
@@ -90,7 +94,7 @@ const trendChartPoints = computed<TrendChartPoint[]>(() => {
 })
 
 watch(
-  () => Boolean(trendMetric.value),
+  () => Boolean(trendMetric.value || detailRun.value),
   (open) => {
     document.body.classList.toggle('memory-stack-open', open)
   }
@@ -102,14 +106,19 @@ onBeforeUnmount(() => {
 
 onBeforeRouteLeave(() => {
   closeTrend()
+  closeRunDetail()
 })
 
 function closeTrend() {
   trendMetric.value = null
 }
 
-function openRunDetail(run: { id: string }) {
-  router.push({ path: '/runs', query: { runId: run.id } })
+function openRunDetail(run: RunLog) {
+  detailRun.value = run
+}
+
+function closeRunDetail() {
+  detailRun.value = null
 }
 
 function formatDateOnly(value: Date) {
@@ -212,6 +221,56 @@ function formatDateOnly(value: Date) {
               <SectionCard v-if="trendRuns.length">
                 <SectionHeader title="세션" />
                 <RunSessionList :runs="trendRuns" />
+              </SectionCard>
+            </main>
+          </section>
+        </div>
+      </Transition>
+
+      <Transition name="stack-page">
+        <div v-if="detailRun" class="memory-stack-layer" data-no-swipe>
+          <section class="memory-stack-page">
+            <header class="memory-stack-header">
+              <div>
+                <h2>세션 상세</h2>
+              </div>
+              <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeRunDetail">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+              </button>
+            </header>
+            <main class="memory-stack-content run-detail-content">
+              <SectionCard class="run-detail-hero">
+                <div class="run-detail-topline">
+                  <span class="list-row-kicker">{{ formatDateWithWeekday(detailRun.date) }}</span>
+                </div>
+                <div class="run-detail-identity">
+                  <RunTypeIcon :type="detailRun.type" size="large" />
+                  <div>
+                    <h2>{{ detailRun.sessionTitle || detailRun.type }}</h2>
+                    <RunTypeBadge :type="detailRun.type" />
+                  </div>
+                </div>
+                <div class="run-detail-metrics">
+                  <strong><UnitValue :amount="detailRun.distanceKm" unit="km" /></strong>
+                  <span>{{ formatDuration(detailRun.durationSec) }}</span>
+                  <span><UnitValue :amount="formatPace(detailRun.avgPaceSec)" unit="/km" /></span>
+                </div>
+              </SectionCard>
+              <SectionCard>
+                <div class="metric-grid compact-metric-grid">
+                  <div class="metric"><span>평균 페이스</span><strong><UnitValue :amount="formatPace(detailRun.avgPaceSec)" unit="/km" /></strong></div>
+                  <div class="metric"><span>평균 케이던스</span><strong>{{ formatInteger(detailRun.cadence) }}</strong></div>
+                  <div class="metric"><span>평균 심박</span><strong>{{ formatInteger(detailRun.avgHeartRate) }}</strong></div>
+                  <div class="metric"><span>최고 심박</span><strong>{{ formatInteger(detailRun.maxHeartRate) }}</strong></div>
+                  <div class="metric"><span>RPE</span><strong>{{ detailRun.rpe ?? '-' }}</strong></div>
+                  <div class="metric"><span>드리프트</span><strong class="metric-text-value">{{ estimateHeartRateDrift(detailRun) }}</strong></div>
+                </div>
+              </SectionCard>
+              <SectionCard v-if="detailRun.memo || detailRun.workoutFeeling || detailRun.painNote">
+                <SectionHeader title="메모" />
+                <p v-if="detailRun.memo">{{ detailRun.memo }}</p>
+                <p v-if="detailRun.workoutFeeling" class="helper">느낌: {{ detailRun.workoutFeeling }}</p>
+                <p v-if="detailRun.painNote" class="helper">통증/주의: {{ detailRun.painNote }}</p>
               </SectionCard>
             </main>
           </section>

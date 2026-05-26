@@ -76,7 +76,7 @@ const runsByDate = computed(() => {
 })
 const calendarTitle = computed(() => {
   const [year, month] = calendarMonth.value.split('-')
-  return `${year}. ${Number(month)}.`
+  return `${year}.${month}.`
 })
 const calendarCells = computed(() => buildCalendarCells(calendarMonth.value, runsByDate.value))
 const selectedReports = computed(() => {
@@ -326,20 +326,18 @@ function formatLapDuration(lap: Lap) {
 <template>
   <PageLayout variant="run-log">
     <SectionCard class="calendar-card">
-      <SectionHeader title="Run Log">
-        <div class="run-log-heading-actions">
-          <button class="icon-link-button" type="button" aria-label="기록 추가" @click="openAddRun">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
-          </button>
-          <BottomSheetSelect v-model="selectedType" label="세션 타입" :options="filterOptions" compact />
-        </div>
-      </SectionHeader>
+      <div class="run-log-toolbar">
+        <button class="icon-link-button" type="button" aria-label="기록 추가" @click="openAddRun">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
+        </button>
+        <BottomSheetSelect v-model="selectedType" label="세션 타입" :options="filterOptions" compact />
+      </div>
       <div class="calendar-header">
-        <button class="icon-only-button" type="button" aria-label="이전 달" @click="previousMonth">
+        <button class="calendar-arrow-button" type="button" aria-label="이전 달" @click="previousMonth">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
         </button>
         <strong>{{ calendarTitle }}</strong>
-        <button class="icon-only-button" type="button" aria-label="다음 달" @click="nextMonth">
+        <button class="calendar-arrow-button" type="button" aria-label="다음 달" @click="nextMonth">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
         </button>
       </div>
@@ -448,7 +446,7 @@ function formatLapDuration(lap: Lap) {
                 <div class="metric"><span>평균 심박</span><strong>{{ formatInteger(detailRun.avgHeartRate) }}</strong></div>
                 <div class="metric"><span>최고 심박</span><strong>{{ formatInteger(detailRun.maxHeartRate) }}</strong></div>
                 <div class="metric"><span>RPE</span><strong>{{ detailRun.rpe ?? '-' }}</strong></div>
-                <div class="metric"><span>드리프트</span><strong>{{ estimateHeartRateDrift(detailRun) }}</strong></div>
+                <div class="metric"><span>드리프트</span><strong class="metric-text-value">{{ estimateHeartRateDrift(detailRun) }}</strong></div>
               </div>
             </SectionCard>
             <SectionCard v-if="detailRun.memo || detailRun.workoutFeeling || detailRun.painNote">
