@@ -1006,10 +1006,11 @@ label {
 .stat-card,
 .metric {
   position: relative;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 0;
   min-height: 128px;
-  align-content: start;
+  justify-content: space-between;
   background: linear-gradient(180deg, var(--color-surface), var(--color-surface-2));
   border: 0;
   border-radius: var(--radius-card);
@@ -1047,9 +1048,21 @@ button.stat-card {
   color: var(--color-muted);
 }
 
+.stat-card-label {
+  display: block;
+  padding-right: 28px;
+}
+
+.stat-card-data {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 .stat-card strong,
 .metric strong {
-  margin-top: 10px;
   color: var(--color-text);
   font-size: var(--text-metric-size);
   font-weight: 700;
@@ -1074,25 +1087,20 @@ button.stat-card {
 }
 
 .stat-card small {
-  margin-top: 8px;
   font-size: 12px;
   font-weight: 400;
   line-height: 1.35;
 }
 
 .dashboard-context-card {
-  align-content: start;
-}
-
-.dashboard-context-card > span {
-  margin-bottom: 0;
+  justify-content: space-between;
 }
 
 .dashboard-context-card strong {
   display: -webkit-box;
   overflow: hidden;
   color: var(--color-text);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1.28;
   -webkit-box-orient: vertical;
@@ -1100,7 +1108,6 @@ button.stat-card {
 }
 
 .dashboard-context-card small {
-  margin-top: 8px;
   font-size: 11px;
   font-weight: 400;
   line-height: 1.35;

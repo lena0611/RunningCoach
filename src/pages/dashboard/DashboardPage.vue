@@ -164,17 +164,21 @@ function formatDateOnly(value: Date) {
       <RunSummaryCard label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 · 랩/페이스 기준" interactive @click="trendMetric = 'easy'" />
       <RunSummaryCard label="강훈련" :value="`${hardSessions}회`" hint="최근 7일" interactive @click="trendMetric = 'hard'" />
       <button class="stat-card stat-card-interactive dashboard-context-card" type="button" @click="openMemoryPanel('goals')">
-        <span>활성 목표</span>
-        <strong>{{ activeGoal.title }}</strong>
-        <small>{{ activeGoal.targetDate ? `${formatDateWithWeekday(activeGoal.targetDate)}까지` : '목표일 미정' }}</small>
+        <span class="stat-card-label">활성 목표</span>
+        <div class="stat-card-data">
+          <strong>{{ activeGoal.title }}</strong>
+          <small>{{ activeGoal.targetDate ? `${formatDateWithWeekday(activeGoal.targetDate)}까지` : '목표일 미정' }}</small>
+        </div>
         <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true">
           <path d="m9 6 6 6-6 6" />
         </svg>
       </button>
       <button class="stat-card stat-card-interactive dashboard-context-card" type="button" @click="openMemoryPanel('injuries')">
-        <span>부상 기준</span>
-        <strong>{{ activeInjury?.title || '관리 항목 없음' }}</strong>
-        <small>{{ activeInjury ? `${activeInjury.status}${activeInjury.severity ? ` · ${activeInjury.severity}/5` : ''}` : '코칭 제한 없음' }}</small>
+        <span class="stat-card-label">부상 기준</span>
+        <div class="stat-card-data">
+          <strong>{{ activeInjury?.title || '관리 항목 없음' }}</strong>
+          <small>{{ activeInjury ? `${activeInjury.status}${activeInjury.severity ? ` · ${activeInjury.severity}/5` : ''}` : '코칭 제한 없음' }}</small>
+        </div>
         <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true">
           <path d="m9 6 6 6-6 6" />
         </svg>

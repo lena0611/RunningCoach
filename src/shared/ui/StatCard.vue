@@ -30,11 +30,13 @@ const parsedValue = computed(() => {
     :type="interactive ? 'button' : undefined"
     @click="interactive && emit('click')"
   >
-    <span>{{ label }}</span>
-    <strong class="stat-card-value">
-      <UnitValue :amount="parsedValue.amount" :unit="parsedValue.unit" />
-    </strong>
-    <small v-if="hint">{{ hint }}</small>
+    <span class="stat-card-label">{{ label }}</span>
+    <div class="stat-card-data">
+      <strong class="stat-card-value">
+        <UnitValue :amount="parsedValue.amount" :unit="parsedValue.unit" />
+      </strong>
+      <small v-if="hint">{{ hint }}</small>
+    </div>
     <svg v-if="interactive" class="card-arrow" viewBox="0 0 24 24" aria-hidden="true">
       <path d="m9 6 6 6-6 6" />
     </svg>
