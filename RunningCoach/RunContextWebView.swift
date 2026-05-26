@@ -29,6 +29,12 @@ struct RunContextWebView: UIViewRepresentable {
         let webView = WKWebView(frame: .zero, configuration: configuration)
         context.coordinator.webView = webView
         webView.navigationDelegate = context.coordinator
+        webView.isOpaque = false
+        webView.backgroundColor = .clear
+        webView.scrollView.backgroundColor = .clear
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.scrollView.contentInset = .zero
+        webView.scrollView.scrollIndicatorInsets = .zero
         if #available(iOS 16.4, *) {
             webView.isInspectable = true
         }
