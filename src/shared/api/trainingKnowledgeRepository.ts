@@ -95,6 +95,7 @@ export async function fetchTrainingKnowledgeCatalog(): Promise<TrainingKnowledge
 export async function createTrainingKnowledgeRequest(input: TrainingKnowledgeRequestInput): Promise<TrainingKnowledgeRequest> {
   const title = input.title.trim()
   if (!title) throw new Error('훈련법 이름을 입력하세요.')
+  // This is intentionally only a backlog insert. Knowledge review/AI summarization must be an explicit admin/Codex action.
   const { data, error } = await requireSupabase()
     .from('training_knowledge_requests')
     .insert({

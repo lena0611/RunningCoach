@@ -7,7 +7,7 @@
 - `TrainingMemory`: 목표 목록, 활성 목표, 부상관리 항목, 활성 부상관리 항목, 주간 패턴, 장거리 전략, 부상/더위 이슈, 러닝 스타일 같은 장기 맥락이다.
 - `AdaptiveTrainingProfile`: 문헌 기반 코칭 기준선 위에 얹는 사용자별 개인화 보정값이다. 반복 처방 준수 패턴과 세션별 경계 조정 가이드를 저장한다.
 - `TrainingKnowledge`: 승인된 훈련법, 문헌 출처, 처방 규칙, RAG용 chunk를 구조화한 지식 보관소다. AI가 처방할 때 activeGoal과 세션 타입에 맞는 규칙만 검색해 사용한다.
-- `TrainingKnowledgeRequest`: 사용자가 새 훈련법이나 출처를 등록 요청하는 단위다. 요청 상태는 `requested/reviewing/approved/rejected`로 관리하며 승인 전에는 처방에 사용하지 않는다.
+- `TrainingKnowledgeRequest`: 사용자가 새 훈련법이나 출처를 지식화 검토 요청으로 저장하는 단위다. 요청 상태는 `requested/reviewing/approved/rejected`로 관리하며 승인 전에는 처방에 사용하지 않는다.
 - `AthleteProfile`: 나이, 성별, 러닝 경력, 주간 목표 러닝 횟수, 선호 롱런 요일, 거리별 PB 같은 개인화 입력이다.
 - `RunContextUser`: 앱에 등록된 사용자 단위다. 각 사용자는 자기 `TrainingMemory`와 목표를 가진다.
 - `FIT import`: Workoutdoors에서 export한 `.fit` 파일을 브라우저에서 로컬 파싱해 `RunLog` 후보를 만드는 흐름이다.
@@ -67,7 +67,7 @@
 - 날씨, 동반주, 과거 기록 리뷰, 데이터 부족 같은 일시적 요인은 개인화 경계 변경 근거로 쓰지 않는다.
 - 훈련 지식 보관소는 원문 전문을 저장하지 않는다. 책/유료 콘텐츠/웹 문서를 그대로 복사하지 않고, 출처 메타데이터와 PaceLAB 처방에 필요한 짧은 요약/구조화 규칙만 저장한다.
 - AI 코칭은 `TrainingKnowledge`에서 activeGoal 거리와 selectedRun 세션 타입에 맞는 승인된 규칙을 먼저 검색하고, 그 위에 `adaptiveTrainingProfile`을 얹어 개인화한다.
-- 사용자가 등록 요청한 훈련법은 승인 전에는 처방에 사용하지 않는다. 향후 RAG/벡터 검색은 `training_knowledge_chunks`의 승인된 chunk만 대상으로 한다.
+- 사용자가 등록 요청한 훈련법은 승인 전에는 처방에 사용하지 않는다. 등록 요청 저장은 OpenAI API를 호출하지 않는 backlog insert여야 하며, AI 조사/요약/구조화는 사용자가 별도로 승인한 검토 작업에서만 실행한다. 향후 RAG/벡터 검색은 `training_knowledge_chunks`의 승인된 chunk만 대상으로 한다.
 - AI 코칭과 홈 요약은 활성 목표와 활성 부상관리 항목을 명시적으로 보여줘야 한다. 추천/분석의 기준이 사용자에게 보이지 않으면 코칭 신뢰도가 떨어진다.
 - 토요일 롱런 추천은 최근 토요일 10km+ 기록의 평균 페이스를 기준으로 LSD/Steady Long 강도 범위를 제안한다. 세션 타입은 참고하되, 실제 강도 판단은 페이스와 최근 흐름을 우선한다.
 - 토요일 또는 직전일 10km+ 롱런/LSD/Steady Long 뒤의 다음날은 주간 루틴의 다음 세션보다 Recovery 또는 휴식을 우선 추천한다. 특히 일요일 홈 추천은 전날 롱런 피로 회복 여부를 먼저 본다.

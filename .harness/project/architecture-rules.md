@@ -10,6 +10,7 @@
 - `src/entities`: `RunLog`, `Lap`, `TrainingMemory` 같은 도메인 타입과 상수를 담당한다.
 - `TrainingMemory` normalization은 `src/entities/training-memory/model.ts`의 `normalizeTrainingMemory`를 기준으로 통일한다. legacy `goal` 문자열은 active goal title로 변환해 호환한다.
 - 훈련법/문헌 기반 지식은 `TrainingMemory`에 직접 섞지 않고 Supabase `training_knowledge_*` 테이블에 분리한다. `TrainingMemory`는 사용자별 상태와 개인화 보정값, `TrainingKnowledge`는 승인된 공통 지식이다.
+- `training_knowledge_requests` 저장은 사용자 backlog 등록만 담당한다. 프론트에서 요청을 저장할 때 OpenAI Edge Function을 호출하지 않고, 비용이 드는 조사/요약/구조화는 별도 관리 작업으로 분리한다.
 - AI 처방 컨텍스트는 `TrainingKnowledge`의 구조화 rule을 먼저 검색하고, 이후 `adaptiveTrainingProfile`으로 사용자별 보정을 적용한다. 지식 검색은 activeGoal 거리, 세션 타입, 훈련 단계, 부상/주의 조건을 기준으로 좁혀야 한다.
 - RAG/벡터 검색은 `training_knowledge_chunks`의 승인된 요약 chunk만 대상으로 한다. 책/유료 콘텐츠 원문 전문이나 긴 발췌를 저장하지 않는다.
 - legacy `knownIssues`는 자유 텍스트 주의사항으로 유지하고, 구조화된 부상관리는 `injuryItems`와 `activeInjuryItemId`를 기준으로 한다.

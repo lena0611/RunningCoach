@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import type { TrainingGoal, TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
-import type { TrainingKnowledgeCatalog, TrainingMethod } from '@/entities/training-knowledge/model'
+import type { TrainingKnowledgeCatalog, TrainingKnowledgeRequest, TrainingMethod } from '@/entities/training-knowledge/model'
 import { formatDateWithWeekday } from '@/shared/lib/format'
 import { createTrainingKnowledgeRequest, fetchTrainingKnowledgeCatalog } from '@/shared/api/trainingKnowledgeRepository'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
@@ -122,7 +122,7 @@ const stackTitle = computed(() => {
     case 'knowledge':
       return '훈련 지식'
     case 'knowledge-request':
-      return '훈련법 등록 요청'
+      return '지식화 검토 요청'
     default:
       return '코칭 메모리'
   }
@@ -316,7 +316,7 @@ async function submitKnowledgeRequest() {
     replaceTopPanel('knowledge')
     void loadKnowledge()
   } catch (err) {
-    knowledgeError.value = err instanceof Error ? err.message : '훈련법 등록 요청을 저장하지 못했습니다.'
+    knowledgeError.value = err instanceof Error ? err.message : '지식화 검토 요청을 저장하지 못했습니다.'
   } finally {
     knowledgeLoading.value = false
   }
@@ -326,6 +326,21 @@ function methodMeta(method: TrainingMethod) {
   const distances = method.targetDistances.length ? method.targetDistances.join(', ') : '거리 미지정'
   const days = method.weeklyDaysMin && method.weeklyDaysMax ? `주 ${method.weeklyDaysMin}~${method.weeklyDaysMax}회` : '주간 횟수 미지정'
   return `${distances} · ${days}`
+}
+
+function requestStatusLabel(status: TrainingKnowledgeRequest['status']) {
+  switch (status) {
+    case 'requested':
+      return '검토 대기'
+    case 'reviewing':
+      return '검토 중'
+    case 'approved':
+      return '승인됨'
+    case 'rejected':
+      return '반려됨'
+    default:
+      return status
+  }
 }
 
 function openInjuryEdit(itemId: string) {
@@ -763,12 +778,15 @@ async function save() {
 
                 <div v-else-if="panel === 'knowledge'" class="memory-stack">
                   <SectionHeader title="지식 보관소" compact>
-                    <button type="button" @click="openKnowledgeRequest">등록 요청</button>
+                    <button type="button" @click="openKnowledgeRequest">검토 요청</button>
                   </SectionHeader>
                   <p class="helper">
                     승인된 훈련법과 처방 규칙만 AI 코칭에 들어갑니다. 원문 전체가 아니라 출처, 적용 조건, 처방 규칙만 저장합니다.
                   </p>
-                  <p v-if="knowledgeRequestSaved" class="success">훈련법 등록 요청을 저장했습니다. 검토 후 승인된 규칙만 처방에 반영됩니다.</p>
+                  <p class="helper">
+                    검토 요청은 OpenAI API를 호출하지 않고 Supabase 대기 목록에만 저장됩니다.
+                  </p>
+                  <p v-if="knowledgeRequestSaved" class="success">지식화 검토 요청을 저장했습니다. 비용이 발생하는 AI 조사는 자동 실행하지 않습니다.</p>
                   <p v-if="knowledgeError" class="error">{{ knowledgeError }}</p>
                   <p v-if="knowledgeLoading" class="helper">훈련 지식을 불러오는 중입니다.</p>
 
@@ -792,19 +810,22 @@ async function save() {
                   </article>
 
                   <div v-if="knowledge.requests.length" class="sub-panel">
-                    <strong>내 등록 요청</strong>
+                    <strong>내 검토 요청</strong>
                     <ul class="memory-list">
                       <li v-for="request in knowledge.requests" :key="request.id">
-                        {{ request.title }} · {{ request.status }}
+                        {{ request.title }} · {{ requestStatusLabel(request.status) }}
                       </li>
                     </ul>
                   </div>
                 </div>
 
                 <FormGrid v-else-if="panel === 'knowledge-request'">
-                  <div class="form-section-title full">훈련법 등록 요청</div>
+                  <div class="form-section-title full">지식화 검토 요청</div>
                   <p class="helper full">
-                    예: MAF 훈련법, Daniels 10K 템포 기준, Hanson Marathon Method. 출처 URL이나 네가 참고한 내용을 넣으면 이후 검토해서 구조화 지식으로 승인합니다.
+                    예: MAF 훈련법, Daniels 10K 템포 기준, Hanson Marathon Method. 이 화면은 요청만 저장하며 OpenAI API를 호출하지 않습니다.
+                  </p>
+                  <p class="helper full">
+                    출처 URL이나 네가 참고한 내용을 넣으면 이후 코덱스 검토를 거쳐 구조화 지식으로 승인합니다.
                   </p>
                   <p v-if="knowledgeError" class="error full">{{ knowledgeError }}</p>
                   <label class="full">
@@ -826,7 +847,7 @@ async function save() {
                   </label>
                   <ActionGroup full>
                     <button type="button" :disabled="knowledgeLoading || !newKnowledgeRequest.title.trim()" @click="submitKnowledgeRequest">
-                      {{ knowledgeLoading ? '저장 중' : '등록 요청 저장' }}
+                      {{ knowledgeLoading ? '저장 중' : '검토 요청 저장' }}
                     </button>
                   </ActionGroup>
                 </FormGrid>
