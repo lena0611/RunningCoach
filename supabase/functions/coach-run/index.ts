@@ -93,9 +93,30 @@ Deno.serve(async (req) => {
     const userNote = typeof body.userNote === 'string' ? body.userNote.slice(0, 2000) : ''
     const currentWeather = normalizeCurrentWeather(body.currentWeather)
     const responseStyle = normalizeResponseStyle(body.responseStyle)
+    const shouldStream = body.stream === true
 
     const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather)
+    if (shouldStream) {
+      return streamCoachRun(admin, userId, selectedRunId, userNote, openaiKey, model, context)
+    }
+
     const ai = await callOpenAI(openaiKey, model, context)
+    const result = await persistCoachResult(admin, userId, selectedRunId, userNote, context, ai)
+
+    return json(result)
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500)
+  }
+})
+
+async function persistCoachResult(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  selectedRunId: string | null,
+  userNote: string,
+  context: CoachContext,
+  ai: { report: string; memoryItems: string[]; trainingMemoryPatch: TrainingMemoryPatch | null }
+) {
     const durableMemoryItems = normalizeMemoryItems(ai.memoryItems, context.coachMemoryItems)
     const memoryPatch = normalizeTrainingMemoryPatch(ai.trainingMemoryPatch)
     const updatedMemory = memoryPatch ? mergeTrainingMemoryPatch(context.trainingMemory, memoryPatch) : null
@@ -131,7 +152,7 @@ Deno.serve(async (req) => {
       if (error) throw error
     }
 
-    return json({
+    return {
       report: {
         id: reportRow.id,
         selectedRunId: reportRow.selected_run_id,
@@ -143,11 +164,8 @@ Deno.serve(async (req) => {
       },
       trainingMemoryUpdated: Boolean(updatedMemory),
       trainingMemoryPatch: memoryPatch
-    })
-  } catch (error) {
-    return json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500)
-  }
-})
+    }
+}
 
 type ResponseStyle = {
   tone: 'conversational_coach'
@@ -346,7 +364,34 @@ type TrainingMemoryPatch = {
 }
 
 async function callOpenAI(apiKey: string, model: string, context: unknown): Promise<{ report: string; memoryItems: string[]; trainingMemoryPatch: TrainingMemoryPatch | null }> {
-  const instructions = [
+  const instructions = buildCoachInstructions()
+
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model,
+      instructions,
+      input: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context, null, 2)}`
+    })
+  })
+
+  if (!response.ok) throw new Error(`OpenAI API failed: ${response.status}`)
+  const payload = await response.json()
+  const text = payload.output_text ?? payload.output?.flatMap((item: any) => item.content ?? []).map((content: any) => content.text ?? '').join('\n') ?? ''
+  const parsed = safeJson(text)
+  return {
+    report: typeof parsed.report === 'string' ? parsed.report : text,
+    memoryItems: Array.isArray(parsed.memoryItems) ? parsed.memoryItems.filter((item: unknown) => typeof item === 'string').slice(0, 8) : [],
+    trainingMemoryPatch: parsed.trainingMemoryPatch && typeof parsed.trainingMemoryPatch === 'object' ? parsed.trainingMemoryPatch as TrainingMemoryPatch : null
+  }
+}
+
+function buildCoachInstructions() {
+  return [
     '너는 사용자를 오래 봐온 한국어 러닝 코치다.',
     '너는 훈련 리포트를 작성하는 분석기가 아니다. 사용자의 러닝을 오래 봐온 AI 코치처럼 대화한다.',
     '답변은 보고서가 아니라 대화처럼 느껴져야 한다.',
@@ -444,30 +489,205 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     'memoryItems는 0~3개만 반환한다. 반복 패턴, 성향, 부상/더위/회복 기준, 계획 변경처럼 다음 코칭에도 쓸 장기 기억만 넣는다.',
     'memoryItems에 단일 세션의 거리/페이스/심박, "오늘 잘했다", "다음 훈련은 휴식" 같은 일회성 코멘트를 넣지 않는다.',
     '이미 context.coachMemoryItems나 trainingMemory에 같은 의미가 있으면 memoryItems에 다시 넣지 않는다.',
+    '스트리밍 UI가 report를 먼저 표시하므로 JSON 객체의 키 순서는 반드시 report, memoryItems, trainingMemoryPatch 순서로 둔다.',
     'JSON만 반환한다. 형식: {"report":"사용자에게 보여줄 마크다운 코칭","memoryItems":["장기 기억으로 저장할 짧은 문장"],"trainingMemoryPatch":null 또는 {"weeklyPattern":["화요일: ..."],"longRunStrategy":"...","currentVolumeNote":"...","activeGoalStrategyNotes":"활성 목표 전략 메모","aiNotes":["..."]}}'
   ].join('\n')
 
-  const response = await fetch('https://api.openai.com/v1/responses', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model,
-      instructions,
-      input: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context, null, 2)}`
-    })
+}
+
+function streamCoachRun(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  selectedRunId: string | null,
+  userNote: string,
+  apiKey: string,
+  model: string,
+  context: CoachContext
+) {
+  const encoder = new TextEncoder()
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: string, data: unknown) => {
+        controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
+      }
+
+      try {
+        const response = await fetch('https://api.openai.com/v1/responses', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model,
+            instructions: buildCoachInstructions(),
+            input: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context, null, 2)}`,
+            stream: true
+          })
+        })
+
+        if (!response.ok || !response.body) {
+          throw new Error(`OpenAI API failed: ${response.status}`)
+        }
+
+        const decoder = new TextDecoder()
+        const reader = response.body.getReader()
+        const reportExtractor = createReportStreamExtractor()
+        let sseBuffer = ''
+        let fullText = ''
+        let streamedReport = ''
+
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          sseBuffer += decoder.decode(value, { stream: true })
+          const parsed = drainOpenAISseBuffer(sseBuffer)
+          sseBuffer = parsed.rest
+
+          for (const event of parsed.events) {
+            const delta = getOpenAITextDelta(event)
+            if (!delta) continue
+            fullText += delta
+            const reportDelta = reportExtractor.push(delta)
+            if (reportDelta) {
+              streamedReport += reportDelta
+              send('delta', { delta: reportDelta })
+            }
+          }
+        }
+
+        const parsed = safeJson(fullText)
+        const ai = {
+          report: typeof parsed.report === 'string' ? parsed.report : streamedReport || fullText,
+          memoryItems: Array.isArray(parsed.memoryItems) ? parsed.memoryItems.filter((item: unknown) => typeof item === 'string').slice(0, 8) : [],
+          trainingMemoryPatch: parsed.trainingMemoryPatch && typeof parsed.trainingMemoryPatch === 'object' ? parsed.trainingMemoryPatch as TrainingMemoryPatch : null
+        }
+
+        if (ai.report && ai.report !== streamedReport) {
+          const missing = ai.report.slice(streamedReport.length)
+          if (missing) send('delta', { delta: missing })
+        }
+
+        const result = await persistCoachResult(admin, userId, selectedRunId, userNote, context, ai)
+        send('done', result)
+        controller.close()
+      } catch (error) {
+        send('error', { error: error instanceof Error ? error.message : 'AI 코칭 스트리밍 실패' })
+        controller.close()
+      }
+    }
   })
 
-  if (!response.ok) throw new Error(`OpenAI API failed: ${response.status}`)
-  const payload = await response.json()
-  const text = payload.output_text ?? payload.output?.flatMap((item: any) => item.content ?? []).map((content: any) => content.text ?? '').join('\n') ?? ''
-  const parsed = safeJson(text)
+  return new Response(stream, {
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive'
+    }
+  })
+}
+
+function drainOpenAISseBuffer(buffer: string) {
+  const events: unknown[] = []
+  const chunks = buffer.split('\n\n')
+  const rest = chunks.pop() ?? ''
+
+  for (const chunk of chunks) {
+    const dataLines = chunk
+      .split('\n')
+      .filter((line) => line.startsWith('data:'))
+      .map((line) => line.slice(5).trim())
+    if (!dataLines.length) continue
+    const data = dataLines.join('\n')
+    if (!data || data === '[DONE]') continue
+    try {
+      events.push(JSON.parse(data))
+    } catch {
+      // OpenAI SSE can include non-JSON keepalive chunks. Ignore them.
+    }
+  }
+
+  return { events, rest }
+}
+
+function getOpenAITextDelta(event: unknown) {
+  if (!event || typeof event !== 'object') return ''
+  const item = event as Record<string, unknown>
+  if (typeof item.delta === 'string') return item.delta
+  if (typeof item.text === 'string' && String(item.type).includes('delta')) return item.text
+  if (typeof item.output_text === 'string' && String(item.type).includes('delta')) return item.output_text
+  return ''
+}
+
+function createReportStreamExtractor() {
+  let buffer = ''
+  let cursor = 0
+  let inReport = false
+  let escaped = false
+  let unicodeBuffer: string | null = null
+
+  function appendChar(char: string) {
+    if (unicodeBuffer !== null) {
+      unicodeBuffer += char
+      if (unicodeBuffer.length === 4) {
+        const codePoint = Number.parseInt(unicodeBuffer, 16)
+        unicodeBuffer = null
+        return Number.isFinite(codePoint) ? String.fromCharCode(codePoint) : ''
+      }
+      return ''
+    }
+
+    if (escaped) {
+      escaped = false
+      if (char === 'n') return '\n'
+      if (char === 'r') return '\r'
+      if (char === 't') return '\t'
+      if (char === 'b') return '\b'
+      if (char === 'f') return '\f'
+      if (char === 'u') {
+        unicodeBuffer = ''
+        return ''
+      }
+      return char
+    }
+
+    if (char === '\\') {
+      escaped = true
+      return ''
+    }
+    if (char === '"') {
+      inReport = false
+      return ''
+    }
+    return char
+  }
+
   return {
-    report: typeof parsed.report === 'string' ? parsed.report : text,
-    memoryItems: Array.isArray(parsed.memoryItems) ? parsed.memoryItems.filter((item: unknown) => typeof item === 'string').slice(0, 8) : [],
-    trainingMemoryPatch: parsed.trainingMemoryPatch && typeof parsed.trainingMemoryPatch === 'object' ? parsed.trainingMemoryPatch as TrainingMemoryPatch : null
+    push(delta: string) {
+      buffer += delta
+      let output = ''
+
+      while (cursor < buffer.length) {
+        if (!inReport) {
+          const match = buffer.slice(cursor).match(/"report"\s*:\s*"/)
+          if (!match || match.index === undefined) {
+            cursor = Math.max(0, buffer.length - 20)
+            break
+          }
+          cursor += match.index + match[0].length
+          inReport = true
+        }
+
+        while (inReport && cursor < buffer.length) {
+          output += appendChar(buffer[cursor])
+          cursor += 1
+        }
+      }
+
+      return output
+    }
   }
 }
 

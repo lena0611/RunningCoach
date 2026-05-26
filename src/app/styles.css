@@ -2103,6 +2103,11 @@ button.run-session-row {
   stroke-width: 2.5;
 }
 
+.chat-send-button .stop-icon rect {
+  fill: currentColor;
+  stroke: none;
+}
+
 .coach-input-bar .chat-send-button {
   display: grid;
   width: 42px;
@@ -3273,6 +3278,23 @@ button.run-session-row {
 .coach-report strong {
   color: var(--color-strong);
   font-weight: 950;
+}
+
+.coach-message-streaming .coach-report::after {
+  display: inline-block;
+  width: 8px;
+  height: 18px;
+  margin-left: 2px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  content: '';
+  animation: typing-caret 0.9s steps(2, start) infinite;
+}
+
+@keyframes typing-caret {
+  50% {
+    opacity: 0;
+  }
 }
 
 .coach-turn {

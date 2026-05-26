@@ -21,3 +21,17 @@ export function requireSupabase() {
   }
   return supabase
 }
+
+export function getSupabaseFunctionUrl(functionName: string) {
+  if (!supabaseUrl) {
+    throw new Error('Supabase URL이 설정되지 않았습니다.')
+  }
+  return `${supabaseUrl.replace(/\/$/, '')}/functions/v1/${functionName}`
+}
+
+export function getSupabaseAnonKey() {
+  if (!supabaseAnonKey) {
+    throw new Error('Supabase anon key가 설정되지 않았습니다.')
+  }
+  return supabaseAnonKey
+}

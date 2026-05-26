@@ -5,6 +5,7 @@ const props = defineProps<{
   role: 'user' | 'coach'
   text: string
   meta?: string
+  streaming?: boolean
 }>()
 
 type CoachBlock =
@@ -124,7 +125,7 @@ function parseInlineMarkdown(text: string): InlineSegment[] {
 </script>
 
 <template>
-  <article class="coach-message" :class="role === 'user' ? 'coach-message-user' : 'coach-message-ai'">
+  <article class="coach-message" :class="[role === 'user' ? 'coach-message-user' : 'coach-message-ai', { 'coach-message-streaming': streaming }]">
     <small v-if="meta">{{ meta }}</small>
     <div class="coach-report">
       <template v-for="(block, index) in blocks" :key="index">

@@ -6,7 +6,7 @@ import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import { runTypes, type Lap, type RunLog, type RunType } from '@/entities/run/model'
 import UploadRunPage from '@/pages/upload-run/UploadRunPage.vue'
-import { fetchCoachReports, requestCoachRun, type CoachReport } from '@/shared/api/coachRepository'
+import { fetchCoachReports, requestCoachRunStream, type CoachReport } from '@/shared/api/coachRepository'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
 import { estimateHeartRateDrift } from '@/shared/lib/runStats'
@@ -45,6 +45,9 @@ const coachNote = ref('')
 const coachNoteInput = ref<HTMLTextAreaElement | null>(null)
 const coachLoading = ref(false)
 const coachError = ref('')
+const streamingCoachText = ref('')
+const streamingCoachMeta = ref('')
+const coachAbortController = ref<AbortController | null>(null)
 const reports = ref<CoachReport[]>([])
 const reportsLoaded = ref(false)
 const saving = ref(false)
@@ -348,9 +351,12 @@ function canRefreshFromHealthKit(run: RunLog) {
 }
 
 function closeCoach() {
+  stopCoachStream()
   coachRun.value = null
   coachNote.value = ''
   coachError.value = ''
+  streamingCoachText.value = ''
+  streamingCoachMeta.value = ''
 }
 
 function clearCoachNote() {
@@ -377,17 +383,49 @@ function resizeCoachNoteInput() {
 
 async function requestCoach() {
   if (!coachRun.value) return
+  if (coachLoading.value) {
+    stopCoachStream()
+    return
+  }
   coachLoading.value = true
   coachError.value = ''
+  streamingCoachText.value = ''
+  streamingCoachMeta.value = 'AI 코치가 답변 중'
+  const controller = new AbortController()
+  coachAbortController.value = controller
+  const note = coachNote.value
   try {
-    const report = await requestCoachRun(coachRun.value.id, coachNote.value, weatherStore.snapshot)
+    const report = await requestCoachRunStream(coachRun.value.id, note, weatherStore.snapshot, {
+      signal: controller.signal,
+      onDelta: (delta) => {
+        streamingCoachText.value += delta
+      }
+    })
     reports.value = [report, ...reports.value.filter((item) => item.id !== report.id)]
     coachNote.value = ''
+    streamingCoachText.value = ''
+    streamingCoachMeta.value = ''
     reportsLoaded.value = true
   } catch (err) {
-    coachError.value = err instanceof Error ? err.message : 'AI 코칭 요청 실패'
+    if (err instanceof Error && err.name === 'AbortError') {
+      streamingCoachMeta.value = '생성 중단됨 · 저장되지 않음'
+    } else {
+      coachError.value = err instanceof Error ? err.message : 'AI 코칭 요청 실패'
+      streamingCoachText.value = ''
+      streamingCoachMeta.value = ''
+    }
   } finally {
     coachLoading.value = false
+    if (coachAbortController.value === controller) coachAbortController.value = null
+  }
+}
+
+function stopCoachStream() {
+  coachAbortController.value?.abort()
+  coachAbortController.value = null
+  coachLoading.value = false
+  if (streamingCoachText.value) {
+    streamingCoachMeta.value = '생성 중단됨 · 저장되지 않음'
   }
 }
 
@@ -630,7 +668,8 @@ function formatLapDuration(lap: Lap) {
                 <CoachMessage role="coach" :text="report.report" :meta="formatDateTimeWithWeekday(report.updatedAt || report.createdAt)" />
               </div>
             </template>
-            <EmptyState v-else title="아직 이 세션의 코칭이 없습니다." description="짧은 메모를 넣고 AI 코칭을 요청하세요." />
+            <CoachMessage v-if="streamingCoachText" role="coach" :text="streamingCoachText" :meta="streamingCoachMeta" :streaming="coachLoading" />
+            <EmptyState v-else-if="!selectedReports.length" title="아직 이 세션의 코칭이 없습니다." description="짧은 메모를 넣고 AI 코칭을 요청하세요." />
             <p v-if="coachError" class="error">{{ coachError }}</p>
           </main>
           <footer class="stack-action-bar coach-input-bar">
@@ -663,8 +702,9 @@ function formatLapDuration(lap: Lap) {
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
               </button>
             </div>
-            <button class="chat-send-button" type="button" :disabled="coachLoading || !isSupabaseConfigured" :aria-label="selectedReports.length ? '추가 대화 보내기' : 'AI 코칭 요청 보내기'" @click="requestCoach">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5" /><path d="m5 12 7-7 7 7" /></svg>
+            <button class="chat-send-button" type="button" :disabled="!coachLoading && !isSupabaseConfigured" :aria-label="coachLoading ? 'AI 코칭 생성 중단' : selectedReports.length ? '추가 대화 보내기' : 'AI 코칭 요청 보내기'" @click="requestCoach">
+              <svg v-if="coachLoading" viewBox="0 0 24 24" aria-hidden="true" class="stop-icon"><rect x="8" y="8" width="8" height="8" rx="1.5" /></svg>
+              <svg v-else viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5" /><path d="m5 12 7-7 7 7" /></svg>
             </button>
           </footer>
         </section>
