@@ -3,7 +3,9 @@ import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import type { TrainingGoal, TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
+import type { TrainingKnowledgeCatalog, TrainingMethod } from '@/entities/training-knowledge/model'
 import { formatDateWithWeekday } from '@/shared/lib/format'
+import { createTrainingKnowledgeRequest, fetchTrainingKnowledgeCatalog } from '@/shared/api/trainingKnowledgeRepository'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import ClearableField from '@/shared/ui/ClearableField.vue'
@@ -14,7 +16,7 @@ import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
 import SchedulingHelpSheet from '@/shared/ui/SchedulingHelpSheet.vue'
 
-type MemoryPanel = 'overview' | 'goals' | 'goal-edit' | 'goal-new' | 'injuries' | 'injury-edit' | 'injury-new'
+type MemoryPanel = 'overview' | 'goals' | 'goal-edit' | 'goal-new' | 'injuries' | 'injury-edit' | 'injury-new' | 'knowledge' | 'knowledge-request'
 
 const memoryStore = useMemoryStore()
 const route = useRoute()
@@ -30,6 +32,10 @@ const error = ref('')
 const pendingDelete = ref<{ kind: 'goal' | 'injury'; id: string; title: string } | null>(null)
 const schedulingHelpOpen = ref(false)
 const stackTransitionName = ref('stack-slide-forward')
+const knowledge = ref<TrainingKnowledgeCatalog>({ sources: [], methods: [], rules: [], requests: [] })
+const knowledgeLoading = ref(false)
+const knowledgeError = ref('')
+const knowledgeRequestSaved = ref(false)
 const newGoal = reactive({
   title: '',
   category: 'race' as TrainingGoal['category'],
@@ -54,6 +60,11 @@ const newInjury = reactive({
   triggers: [] as string[],
   restrictions: [] as string[],
   returnToRunCriteria: ''
+})
+const newKnowledgeRequest = reactive({
+  title: '',
+  sourceUrl: '',
+  inputText: ''
 })
 
 const goalCategoryOptions = [
@@ -108,9 +119,21 @@ const stackTitle = computed(() => {
       return '새 부상/주의사항'
     case 'injury-edit':
       return '부상/주의사항 편집'
+    case 'knowledge':
+      return '훈련 지식'
+    case 'knowledge-request':
+      return '훈련법 등록 요청'
     default:
       return '코칭 메모리'
   }
+})
+const rulesByMethod = computed(() => {
+  const groups = new Map<string, typeof knowledge.value.rules>()
+  for (const rule of knowledge.value.rules) {
+    if (!rule.methodId) continue
+    groups.set(rule.methodId, [...(groups.get(rule.methodId) ?? []), rule])
+  }
+  return groups
 })
 
 watch(
@@ -250,6 +273,59 @@ function askRemoveGoal(goal: TrainingGoal) {
 
 function openInjuries() {
   pushPanel('injuries')
+}
+
+function openKnowledge() {
+  pushPanel('knowledge')
+  void loadKnowledge()
+}
+
+function openKnowledgeRequest() {
+  knowledgeRequestSaved.value = false
+  Object.assign(newKnowledgeRequest, {
+    title: '',
+    sourceUrl: '',
+    inputText: ''
+  })
+  pushPanel('knowledge-request')
+}
+
+async function loadKnowledge() {
+  knowledgeLoading.value = true
+  knowledgeError.value = ''
+  try {
+    knowledge.value = await fetchTrainingKnowledgeCatalog()
+  } catch (err) {
+    knowledgeError.value = err instanceof Error ? err.message : '훈련 지식을 불러오지 못했습니다.'
+  } finally {
+    knowledgeLoading.value = false
+  }
+}
+
+async function submitKnowledgeRequest() {
+  knowledgeLoading.value = true
+  knowledgeError.value = ''
+  knowledgeRequestSaved.value = false
+  try {
+    const request = await createTrainingKnowledgeRequest(newKnowledgeRequest)
+    knowledge.value = {
+      ...knowledge.value,
+      requests: [request, ...knowledge.value.requests].slice(0, 20)
+    }
+    knowledgeRequestSaved.value = true
+    replaceTopPanel('knowledge')
+    void loadKnowledge()
+  } catch (err) {
+    knowledgeError.value = err instanceof Error ? err.message : '훈련법 등록 요청을 저장하지 못했습니다.'
+  } finally {
+    knowledgeLoading.value = false
+  }
+}
+
+function methodMeta(method: TrainingMethod) {
+  const distances = method.targetDistances.length ? method.targetDistances.join(', ') : '거리 미지정'
+  const days = method.weeklyDaysMin && method.weeklyDaysMax ? `주 ${method.weeklyDaysMin}~${method.weeklyDaysMax}회` : '주간 횟수 미지정'
+  return `${distances} · ${days}`
 }
 
 function openInjuryEdit(itemId: string) {
@@ -423,6 +499,13 @@ async function save() {
           <span>
             <strong>부상 관리</strong>
             <small>{{ activeInjury?.title || '관리 항목 없음' }}</small>
+          </span>
+          <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
+        </button>
+        <button class="memory-nav-card" type="button" @click="openKnowledge">
+          <span>
+            <strong>훈련 지식 보관소</strong>
+            <small>MAF, 10K, 회복 기준 같은 승인된 처방 근거</small>
           </span>
           <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
         </button>
@@ -676,6 +759,76 @@ async function save() {
                 <button class="ghost" type="button" @click="setActiveInjury(editingInjury.id)">현재 기준으로 지정</button>
                 <button class="danger" type="button" @click="askRemoveInjury(editingInjury)">삭제</button>
               </ActionGroup>
+                </FormGrid>
+
+                <div v-else-if="panel === 'knowledge'" class="memory-stack">
+                  <SectionHeader title="지식 보관소" compact>
+                    <button type="button" @click="openKnowledgeRequest">등록 요청</button>
+                  </SectionHeader>
+                  <p class="helper">
+                    승인된 훈련법과 처방 규칙만 AI 코칭에 들어갑니다. 원문 전체가 아니라 출처, 적용 조건, 처방 규칙만 저장합니다.
+                  </p>
+                  <p v-if="knowledgeRequestSaved" class="success">훈련법 등록 요청을 저장했습니다. 검토 후 승인된 규칙만 처방에 반영됩니다.</p>
+                  <p v-if="knowledgeError" class="error">{{ knowledgeError }}</p>
+                  <p v-if="knowledgeLoading" class="helper">훈련 지식을 불러오는 중입니다.</p>
+
+                  <article v-for="method in knowledge.methods" :key="method.id" class="knowledge-card">
+                    <div class="knowledge-card-header">
+                      <span class="context-chip">{{ method.family }}</span>
+                      <strong>{{ method.name }}</strong>
+                      <small>{{ methodMeta(method) }}</small>
+                    </div>
+                    <p>{{ method.summary }}</p>
+                    <p v-if="method.cautionNotes" class="helper">{{ method.cautionNotes }}</p>
+                    <div v-if="rulesByMethod.get(method.id)?.length" class="knowledge-rule-list">
+                      <strong>처방 규칙</strong>
+                      <ul>
+                        <li v-for="rule in rulesByMethod.get(method.id)?.slice(0, 3)" :key="rule.id">
+                          <span>{{ rule.sessionType }} · {{ rule.metric }}</span>
+                          <small>{{ rule.prescription }}</small>
+                        </li>
+                      </ul>
+                    </div>
+                  </article>
+
+                  <div v-if="knowledge.requests.length" class="sub-panel">
+                    <strong>내 등록 요청</strong>
+                    <ul class="memory-list">
+                      <li v-for="request in knowledge.requests" :key="request.id">
+                        {{ request.title }} · {{ request.status }}
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                <FormGrid v-else-if="panel === 'knowledge-request'">
+                  <div class="form-section-title full">훈련법 등록 요청</div>
+                  <p class="helper full">
+                    예: MAF 훈련법, Daniels 10K 템포 기준, Hanson Marathon Method. 출처 URL이나 네가 참고한 내용을 넣으면 이후 검토해서 구조화 지식으로 승인합니다.
+                  </p>
+                  <p v-if="knowledgeError" class="error full">{{ knowledgeError }}</p>
+                  <label class="full">
+                    훈련법 이름
+                    <ClearableField v-model="newKnowledgeRequest.title" placeholder="예: MAF 훈련법" />
+                  </label>
+                  <label class="full">
+                    출처 URL
+                    <ClearableField v-model="newKnowledgeRequest.sourceUrl" type="url" inputmode="url" placeholder="예: https://philmaffetone.com/180-formula/" />
+                  </label>
+                  <label class="full">
+                    참고 내용
+                    <ClearableField
+                      v-model="newKnowledgeRequest.inputText"
+                      as="textarea"
+                      rows="8"
+                      placeholder="훈련법 이름, 궁금한 적용 방식, 네가 알고 있는 내용, 목표 거리 등을 적어주세요."
+                    />
+                  </label>
+                  <ActionGroup full>
+                    <button type="button" :disabled="knowledgeLoading || !newKnowledgeRequest.title.trim()" @click="submitKnowledgeRequest">
+                      {{ knowledgeLoading ? '저장 중' : '등록 요청 저장' }}
+                    </button>
+                  </ActionGroup>
                 </FormGrid>
               </div>
             </Transition>

@@ -45,6 +45,47 @@ type CoachMemoryItemRow = {
   created_at: string
 }
 
+type TrainingKnowledgeSourceRow = {
+  id: string
+  title: string
+  author: string
+  source_type: string
+  url: string | null
+  reliability: string
+  summary: string
+}
+
+type TrainingMethodRow = {
+  id: string
+  source_id: string | null
+  name: string
+  slug: string
+  family: string
+  summary: string
+  target_distances: string[]
+  suitable_levels: string[]
+  weekly_days_min: number | null
+  weekly_days_max: number | null
+  caution_notes: string
+}
+
+type TrainingPrescriptionRuleRow = {
+  id: string
+  method_id: string | null
+  source_id: string | null
+  goal_distance: string
+  phase: string
+  session_type: string
+  rule_type: string
+  metric: string
+  prescription: string
+  raise_condition: string
+  lower_condition: string
+  contraindications: string[]
+  evidence_summary: string
+  priority: number
+}
+
 type CurrentWeatherContext = {
   source: 'ios_weatherkit'
   observedAt: string
@@ -221,15 +262,29 @@ function normalizeCurrentWeather(value: unknown): CurrentWeatherContext | null {
 }
 
 async function buildContext(admin: ReturnType<typeof createClient>, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null) {
-  const [{ data: memoryRow }, { data: runs }, { data: memoryItems }, { data: reports }] = await Promise.all([
+  const [
+    { data: memoryRow },
+    { data: runs },
+    { data: memoryItems },
+    { data: reports },
+    { data: knowledgeSources },
+    { data: trainingMethods },
+    { data: prescriptionRules }
+  ] = await Promise.all([
     admin.from('training_memory').select('memory').eq('user_id', userId).maybeSingle(),
     admin.from('run_logs').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(120),
     admin.from('coach_memory_items').select('content, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(80),
-    admin.from('coach_reports').select('selected_run_id, user_note, report, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(80)
+    admin.from('coach_reports').select('selected_run_id, user_note, report, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(80),
+    admin.from('training_knowledge_sources').select('id, title, author, source_type, url, reliability, summary').eq('approved', true),
+    admin.from('training_methods').select('id, source_id, name, slug, family, summary, target_distances, suitable_levels, weekly_days_min, weekly_days_max, caution_notes').eq('approved', true),
+    admin.from('training_prescription_rules').select('id, method_id, source_id, goal_distance, phase, session_type, rule_type, metric, prescription, raise_condition, lower_condition, contraindications, evidence_summary, priority').eq('approved', true).order('priority')
   ])
   const runRows = (runs ?? []) as RunLogRow[]
   const reportRows = (reports ?? []) as CoachReportRow[]
   const memoryRows = (memoryItems ?? []) as CoachMemoryItemRow[]
+  const knowledgeSourceRows = (knowledgeSources ?? []) as TrainingKnowledgeSourceRow[]
+  const trainingMethodRows = (trainingMethods ?? []) as TrainingMethodRow[]
+  const prescriptionRuleRows = (prescriptionRules ?? []) as TrainingPrescriptionRuleRow[]
   const selectedRun = selectedRunId ? runRows.find((run) => run.id === selectedRunId) ?? null : null
   const currentDate = currentDateInSeoul()
   const anchorDate = selectedRun?.date ?? currentDate
@@ -254,6 +309,7 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
   const recentPrescriptionComplianceSignals = buildPrescriptionComplianceSignals(recent14)
   const prescriptionComplianceSummary = summarizePrescriptionCompliance(recentPrescriptionComplianceSignals)
   const adaptiveTrainingProfile = getAdaptiveTrainingProfile(trainingMemory)
+  const trainingKnowledge = buildRelevantTrainingKnowledge(knowledgeSourceRows, trainingMethodRows, prescriptionRuleRows, activeGoal, selectedRun)
 
   return {
     userNote,
@@ -312,6 +368,7 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
     },
     trainingMemory,
     trainingMethodology: buildTrainingMethodologyAlgorithm(),
+    trainingKnowledge,
     adaptiveTrainingProfile,
     adaptiveAlgorithmPolicy: {
       principle:
@@ -468,6 +525,9 @@ function buildCoachInstructions() {
     '세션 유형별 랩당 페이스/심박 경계 가이드가 현재 사용자에게 맞지 않아 보이면 "## 루틴 업데이트"에서 유지/조정 여부를 말한다. 조정이 필요할 때는 trainingMemoryPatch.activeGoalStrategyNotes 또는 aiNotes에 새 기준을 저장한다.',
     'recentPrescriptionComplianceSignals를 보고 최근 여러 세션에서 처방 준수율 패턴이 있는지 활용한다. 반복적으로 잘 지키는 기준은 다음 처방 상향 근거가 되고, 반복적으로 넘는 기준은 처방 하향/보류 근거가 된다.',
     'context.trainingMethodology는 외부 러닝/지구력 훈련 문헌을 앱 기준선으로 압축한 것이다. 이 기준선을 무시하지 말고, Easy 기반, 제한된 강훈련, 점진적 과부하, 목표 특이성, 회복 게이트를 기본 알고리즘으로 삼는다.',
+    'context.trainingKnowledge는 Supabase 지식 보관소에서 activeGoal과 selectedRun에 맞춰 검색한 승인된 훈련법/처방 규칙이다. 일반 모델 지식보다 이 승인된 규칙을 우선한다.',
+    'trainingKnowledge.prescriptionRules가 있으면 세션 평가와 루틴 업데이트에서 해당 규칙의 prescription, raiseCondition, lowerCondition, contraindications를 반영한다.',
+    'trainingKnowledge는 원문 전문이 아니라 저작권 문제를 피한 구조화 요약이다. 답변에서는 출처명을 짧게 언급할 수 있지만 원문 문구를 길게 재현하지 않는다.',
     'context.adaptiveTrainingProfile은 사용자 데이터와 대화로 누적된 개인화 레이어다. 문헌 기준선 위에 얹는 보정값이며, 단일 세션을 보고 즉흥적으로 덮어쓰지 않는다.',
     '알고리즘이 스스로 더 나아진다는 뜻은 소스 코드가 바뀐다는 뜻이 아니다. 반복되는 수행 패턴, 처방 준수율, 사용자 피드백을 trainingMemory.adaptiveTrainingProfile에 저장해 다음 판단에 반영한다는 뜻이다.',
     'adaptiveTrainingProfile을 업데이트할 때는 최근 2~3회 이상 같은 세션 유형에서 같은 준수/이탈 패턴이 반복되거나, 사용자가 강도/회복/통증에 대해 명시 피드백을 준 경우만 사용한다.',
@@ -821,6 +881,94 @@ function buildTrainingMethodologyAlgorithm() {
       '개인화 진화는 trainingMemory.adaptiveTrainingProfile 저장에 한정한다.'
     ]
   }
+}
+
+function buildRelevantTrainingKnowledge(
+  sources: TrainingKnowledgeSourceRow[],
+  methods: TrainingMethodRow[],
+  rules: TrainingPrescriptionRuleRow[],
+  activeGoal: unknown,
+  selectedRun: RunLogRow | null
+) {
+  const distanceScopes = getGoalDistanceScopes(activeGoal)
+  const selectedType = selectedRun?.type ?? null
+  const sourceById = new Map(sources.map((source) => [source.id, source]))
+  const relevantRules = rules
+    .filter((rule) => {
+      const distanceMatches = distanceScopes.includes(rule.goal_distance) || rule.goal_distance === 'all'
+      const sessionMatches = !selectedType || rule.session_type === 'Any' || rule.session_type === selectedType
+      return distanceMatches && sessionMatches
+    })
+    .sort((a, b) => a.priority - b.priority)
+    .slice(0, 12)
+  const relevantMethodIds = new Set(relevantRules.map((rule) => rule.method_id).filter((id): id is string => Boolean(id)))
+  const relevantMethods = methods
+    .filter((method) => {
+      if (relevantMethodIds.has(method.id)) return true
+      return method.target_distances.some((distance) => distanceScopes.includes(distance) || distance === 'all')
+    })
+    .slice(0, 6)
+  const relevantSourceIds = new Set<string>()
+  for (const method of relevantMethods) if (method.source_id) relevantSourceIds.add(method.source_id)
+  for (const rule of relevantRules) if (rule.source_id) relevantSourceIds.add(rule.source_id)
+
+  return {
+    purpose:
+      '승인된 훈련 지식 보관소에서 목표 거리/세션 타입에 맞는 처방 근거만 추린 것이다. 구조화 rule을 처방 판단의 1차 근거로 쓰고, adaptiveTrainingProfile로 개인화한다.',
+    targetDistanceScopes: distanceScopes,
+    selectedSessionType: selectedType,
+    methods: relevantMethods.map((method) => ({
+      id: method.id,
+      name: method.name,
+      slug: method.slug,
+      family: method.family,
+      summary: method.summary,
+      targetDistances: method.target_distances,
+      suitableLevels: method.suitable_levels,
+      weeklyDaysRange: method.weekly_days_min && method.weekly_days_max ? `${method.weekly_days_min}~${method.weekly_days_max}` : null,
+      cautionNotes: method.caution_notes,
+      sourceTitle: method.source_id ? sourceById.get(method.source_id)?.title ?? null : null
+    })),
+    prescriptionRules: relevantRules.map((rule) => ({
+      id: rule.id,
+      methodId: rule.method_id,
+      methodName: rule.method_id ? methods.find((method) => method.id === rule.method_id)?.name ?? null : null,
+      goalDistance: rule.goal_distance,
+      phase: rule.phase,
+      sessionType: rule.session_type,
+      ruleType: rule.rule_type,
+      metric: rule.metric,
+      prescription: rule.prescription,
+      raiseCondition: rule.raise_condition,
+      lowerCondition: rule.lower_condition,
+      contraindications: rule.contraindications,
+      evidenceSummary: rule.evidence_summary,
+      sourceTitle: rule.source_id ? sourceById.get(rule.source_id)?.title ?? null : null
+    })),
+    sources: [...relevantSourceIds].map((id) => {
+      const source = sourceById.get(id)
+      if (!source) return null
+      return {
+        title: source.title,
+        author: source.author,
+        sourceType: source.source_type,
+        url: source.url,
+        reliability: source.reliability,
+        summary: source.summary
+      }
+    }).filter(Boolean)
+  }
+}
+
+function getGoalDistanceScopes(activeGoal: unknown) {
+  const distanceKm = getNullableNumber(activeGoal, 'distanceKm')
+  const scopes = ['all']
+  if (!distanceKm) return scopes
+  if (distanceKm <= 5.5) scopes.push('5K')
+  else if (distanceKm <= 11) scopes.push('10K')
+  else if (distanceKm <= 22) scopes.push('Half')
+  else scopes.push('Marathon')
+  return scopes
 }
 
 function getAdaptiveTrainingProfile(memory: unknown) {
