@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { onBeforeRouteLeave, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
@@ -32,32 +32,54 @@ const runStore = useRunStore()
 const memoryStore = useMemoryStore()
 const weatherStore = useWeatherStore()
 const router = useRouter()
+const route = useRoute()
 const trendMetric = ref<'month' | 'last7' | 'easy' | 'hard' | null>(null)
 const detailRun = ref<RunLog | null>(null)
 const projectionDetailOpen = ref(false)
-const todayDate = computed(() => formatDateOnly(new Date()))
+const today = ref(new Date())
+const todayDate = computed(() => formatDateOnly(today.value))
 
 onMounted(() => {
-  if (!runStore.loaded && !runStore.loading) {
-    runStore.load()
-  }
-  if (!memoryStore.loading) {
-    memoryStore.load()
-  }
-  weatherStore.init()
-  void weatherStore.refreshAfterActivation()
+  refreshDashboardContext()
+  window.addEventListener('focus', refreshDashboardContext)
+  window.addEventListener('pageshow', refreshDashboardContext)
+  document.addEventListener('visibilitychange', refreshDashboardContextWhenVisible)
 })
 
 const runs = computed(() => runStore.sortedRuns)
-const weekDistance = computed(() => sumDistance(getThisWeekRuns(runs.value)))
-const monthDistance = computed(() => sumDistance(getThisMonthRuns(runs.value)))
-const last7 = computed(() => sumDistance(getRunsWithinDays(runs.value, 7)))
-const last14 = computed(() => sumDistance(getRunsWithinDays(runs.value, 14)))
-const easyRatio = computed(() => getEasyRatio(getRunsWithinDays(runs.value, 30)))
-const nextSession = computed(() => getNextSessionRecommendation(memoryStore.memory, runs.value))
+const weekDistance = computed(() => sumDistance(getThisWeekRuns(runs.value, today.value)))
+const monthDistance = computed(() => sumDistance(getThisMonthRuns(runs.value, today.value)))
+const last7 = computed(() => sumDistance(getRunsWithinDays(runs.value, 7, today.value)))
+const last14 = computed(() => sumDistance(getRunsWithinDays(runs.value, 14, today.value)))
+const easyRatio = computed(() => getEasyRatio(getRunsWithinDays(runs.value, 30, today.value)))
+const nextSession = computed(() => getNextSessionRecommendation(memoryStore.memory, runs.value, today.value))
 const activeGoal = computed(() => getActiveGoal(memoryStore.memory))
 const activeInjury = computed(() => getActiveInjuryItem(memoryStore.memory))
 const raceProjection = computed(() => getRaceProjection(runs.value, activeGoal.value))
+
+watch(
+  () => route.path,
+  (path) => {
+    if (path === '/') refreshDashboardContext()
+  },
+  { immediate: true }
+)
+
+function refreshDashboardContext() {
+  today.value = new Date()
+  if (!runStore.loaded && !runStore.loading) {
+    void runStore.load()
+  }
+  if (!memoryStore.loading) {
+    void memoryStore.load()
+  }
+  weatherStore.init()
+  void weatherStore.refreshAfterActivation()
+}
+
+function refreshDashboardContextWhenVisible() {
+  if (document.visibilityState === 'visible') refreshDashboardContext()
+}
 const raceProjectionHint = computed(() => {
   const projection = raceProjection.value
   if (!projection) return ''
@@ -67,7 +89,7 @@ const raceProjectionHint = computed(() => {
   return '이전과 동일'
 })
 const hardSessions = computed(() =>
-  getRunsWithinDays(runs.value, 7).filter((run) => ['Tempo', 'LSD', 'Steady Long', 'Race'].includes(run.type)).length
+  getRunsWithinDays(runs.value, 7, today.value).filter((run) => ['Tempo', 'LSD', 'Steady Long', 'Race'].includes(run.type)).length
 )
 const isNextSessionToday = computed(() => nextSession.value.plannedDate === todayDate.value)
 const heroEyebrow = computed(() => (isNextSessionToday.value ? '오늘 예정 훈련' : '다음 예정 훈련'))
@@ -87,10 +109,10 @@ const trendTitle = computed(() => {
 })
 
 const trendRuns = computed(() => {
-  if (trendMetric.value === 'month') return getThisMonthRuns(runs.value)
-  if (trendMetric.value === 'last7') return getRunsWithinDays(runs.value, 7)
-  if (trendMetric.value === 'easy') return getRunsWithinDays(runs.value, 30)
-  if (trendMetric.value === 'hard') return getRunsWithinDays(runs.value, 7).filter((run) => ['Tempo', 'LSD', 'Steady Long', 'Race'].includes(run.type))
+  if (trendMetric.value === 'month') return getThisMonthRuns(runs.value, today.value)
+  if (trendMetric.value === 'last7') return getRunsWithinDays(runs.value, 7, today.value)
+  if (trendMetric.value === 'easy') return getRunsWithinDays(runs.value, 30, today.value)
+  if (trendMetric.value === 'hard') return getRunsWithinDays(runs.value, 7, today.value).filter((run) => ['Tempo', 'LSD', 'Steady Long', 'Race'].includes(run.type))
   return []
 })
 
@@ -114,6 +136,9 @@ watch(
 
 onBeforeUnmount(() => {
   document.body.classList.remove('memory-stack-open')
+  window.removeEventListener('focus', refreshDashboardContext)
+  window.removeEventListener('pageshow', refreshDashboardContext)
+  document.removeEventListener('visibilitychange', refreshDashboardContextWhenVisible)
 })
 
 onBeforeRouteLeave(() => {
@@ -219,7 +244,7 @@ function formatDateOnly(value: Date) {
     <div class="two-column">
       <RecentRuns :runs="runs.slice(0, 5)" @show-all="router.push('/runs')" @select="openRunDetail" />
       <ContentStack>
-        <FatigueCard :warning="getVolumeWarning(runs)" />
+        <FatigueCard :warning="getVolumeWarning(runs, today)" />
         <SectionCard>
           <SectionHeader title="다음 추천 세션" />
           <div class="recommendation-card">

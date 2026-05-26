@@ -76,9 +76,10 @@ export function estimateHeartRateDrift(run: RunLog): string {
   return '경미한 상승'
 }
 
-export function getVolumeWarning(runs: RunLog[]): string {
-  const last7 = sumDistance(getRunsWithinDays(runs, 7))
-  const prev7 = sumDistance(getRunsWithinDays(runs, 14).filter((run) => !getRunsWithinDays(runs, 7).some((recent) => recent.id === run.id)))
+export function getVolumeWarning(runs: RunLog[], today = new Date()): string {
+  const recent7Runs = getRunsWithinDays(runs, 7, today)
+  const last7 = sumDistance(recent7Runs)
+  const prev7 = sumDistance(getRunsWithinDays(runs, 14, today).filter((run) => !recent7Runs.some((recent) => recent.id === run.id)))
   if (last7 >= 20 && prev7 > 0 && last7 / prev7 >= 1.35) return '최근 7일 볼륨이 이전 7일 대비 35% 이상 증가했습니다.'
   if (last7 >= 35) return '최근 7일 볼륨이 높습니다. 회복 주간을 고려하세요.'
   return '급격한 볼륨 증가는 보이지 않습니다.'
