@@ -15,6 +15,7 @@ import ListRow from '@/shared/ui/ListRow.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
 import RunForm from '@/shared/ui/RunForm.vue'
 import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
+import RunTypeIcon from '@/shared/ui/RunTypeIcon.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
 
@@ -339,6 +340,9 @@ function formatLapDuration(lap: Lap) {
           :metric="`${run.distanceKm}km`"
           @click="openDetail(run)"
         >
+          <template #leading>
+            <RunTypeIcon :type="run.type" />
+          </template>
           <template #addon>
             <RunTypeBadge :type="run.type" />
             <span class="run-list-chevron" aria-hidden="true">
@@ -396,13 +400,18 @@ function formatLapDuration(lap: Lap) {
                   </button>
                 </div>
               </div>
-              <h2>{{ detailRun.sessionTitle || detailRun.type }}</h2>
+              <div class="run-detail-identity">
+                <RunTypeIcon :type="detailRun.type" size="large" />
+                <div>
+                  <h2>{{ detailRun.sessionTitle || detailRun.type }}</h2>
+                  <RunTypeBadge :type="detailRun.type" />
+                </div>
+              </div>
               <div class="run-detail-metrics">
                 <strong>{{ detailRun.distanceKm }}km</strong>
                 <span>{{ formatDuration(detailRun.durationSec) }}</span>
                 <span>{{ formatPace(detailRun.avgPaceSec) }}/km</span>
               </div>
-              <RunTypeBadge :type="detailRun.type" />
             </SectionCard>
             <SectionCard>
               <div class="metric-grid compact-metric-grid">

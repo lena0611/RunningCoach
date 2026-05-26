@@ -994,6 +994,16 @@ button.stat-card {
   box-shadow: inset 0 -1px 0 var(--color-hairline);
 }
 
+.list-row-has-leading {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.list-row-leading {
+  display: grid;
+  place-items: center;
+  align-self: center;
+}
+
 .list-row-primary {
   background: color-mix(in srgb, var(--color-primary-soft) 34%, var(--color-surface));
   border-color: color-mix(in srgb, var(--color-primary) 22%, var(--color-border));
@@ -1343,6 +1353,20 @@ button.stat-card {
   border-radius: 14px;
 }
 
+.run-detail-identity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.run-detail-identity > div {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  min-width: 0;
+}
+
 .run-detail-hero h2 {
   margin: 0;
   color: var(--color-text);
@@ -1602,6 +1626,94 @@ button.stat-card {
 .run-type-recovery {
   background: rgba(167, 139, 250, 0.14);
   color: var(--color-recovery-text);
+}
+
+.run-type-icon {
+  --run-icon-bg: var(--color-subtle-2);
+  --run-icon-fg: var(--color-muted);
+  --run-icon-glow: transparent;
+  display: inline-grid;
+  place-items: center;
+  width: 50px;
+  min-width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.2), transparent 34px),
+    var(--run-icon-bg);
+  color: var(--run-icon-fg);
+  box-shadow: 0 10px 22px var(--run-icon-glow);
+}
+
+.run-type-icon-large {
+  width: 62px;
+  min-width: 62px;
+  height: 62px;
+}
+
+.run-type-icon svg {
+  width: 66%;
+  height: 66%;
+  overflow: visible;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.run-type-icon .run-icon-mark,
+.run-type-icon .run-icon-flag,
+.run-type-icon .run-icon-leaf {
+  fill: currentColor;
+  stroke: none;
+}
+
+.run-type-icon .run-icon-speed,
+.run-type-icon .run-icon-route {
+  opacity: 0.72;
+}
+
+.run-type-icon.run-type-easy {
+  --run-icon-bg: color-mix(in srgb, var(--color-primary) 18%, var(--color-surface-2));
+  --run-icon-fg: var(--color-primary);
+  --run-icon-glow: rgba(74, 222, 128, 0.14);
+}
+
+.run-type-icon.run-type-easy-plus-strides {
+  --run-icon-bg: color-mix(in srgb, var(--color-accent) 18%, var(--color-surface-2));
+  --run-icon-fg: var(--color-accent);
+  --run-icon-glow: rgba(56, 189, 248, 0.13);
+}
+
+.run-type-icon.run-type-tempo {
+  --run-icon-bg: color-mix(in srgb, var(--color-warning) 20%, var(--color-surface-2));
+  --run-icon-fg: var(--color-warning-text);
+  --run-icon-glow: rgba(245, 158, 11, 0.14);
+}
+
+.run-type-icon.run-type-lsd,
+.run-type-icon.run-type-steady-long {
+  --run-icon-bg: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface-2));
+  --run-icon-fg: var(--color-accent);
+  --run-icon-glow: rgba(56, 189, 248, 0.12);
+}
+
+.run-type-icon.run-type-recovery {
+  --run-icon-bg: color-mix(in srgb, #a78bfa 18%, var(--color-surface-2));
+  --run-icon-fg: var(--color-recovery-text);
+  --run-icon-glow: rgba(167, 139, 250, 0.13);
+}
+
+.run-type-icon.run-type-race {
+  --run-icon-bg: color-mix(in srgb, var(--color-danger) 26%, var(--color-surface-2));
+  --run-icon-fg: var(--color-danger-text);
+  --run-icon-glow: rgba(239, 68, 68, 0.13);
+}
+
+.run-type-icon.run-type-unknown {
+  --run-icon-bg: var(--color-subtle-2);
+  --run-icon-fg: var(--color-muted);
 }
 
 .form-grid {
@@ -2558,12 +2670,20 @@ button.stat-card {
     grid-template-columns: 1fr;
   }
 
+  .list-row-has-leading {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
   .list-row-addon {
     display: flex;
     align-items: center;
     justify-content: space-between;
     justify-items: stretch;
     width: 100%;
+  }
+
+  .list-row-has-leading .list-row-addon {
+    grid-column: 2;
   }
 
   .run-list-row .row-actions {

@@ -9,7 +9,10 @@ defineProps<{
 </script>
 
 <template>
-  <article class="list-row" :class="[`list-row-${tone || 'default'}`]">
+  <article class="list-row" :class="[`list-row-${tone || 'default'}`, { 'list-row-has-leading': $slots.leading }]">
+    <div v-if="$slots.leading" class="list-row-leading">
+      <slot name="leading" />
+    </div>
     <div class="list-row-main">
       <span v-if="kicker" class="list-row-kicker">{{ kicker }}</span>
       <strong class="list-row-title">{{ title }}</strong>
