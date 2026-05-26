@@ -53,7 +53,7 @@ const error = ref('')
 const calendarMonth = ref(toMonthKey(new Date()))
 
 const filterOptions = computed(() => [
-  { value: 'All', label: 'All' },
+  { value: 'All', label: '모든 세션 유형' },
   ...runTypes.map((type) => ({ value: type, label: type }))
 ])
 
