@@ -47,6 +47,8 @@ const coachLoading = ref(false)
 const coachError = ref('')
 const streamingCoachText = ref('')
 const streamingCoachMeta = ref('')
+const coachThinkingSeconds = ref(1)
+const coachThinkingTimer = ref<number | null>(null)
 const coachAbortController = ref<AbortController | null>(null)
 const reports = ref<CoachReport[]>([])
 const reportsLoaded = ref(false)
@@ -146,6 +148,11 @@ const coachCommandQuery = computed(() => {
   return text.startsWith('/') ? text.slice(1).trim().toLowerCase() : ''
 })
 const showCoachCommands = computed(() => coachNote.value.trimStart().startsWith('/'))
+const visibleStreamingCoachText = computed(() => {
+  if (streamingCoachText.value) return streamingCoachText.value
+  if (coachLoading.value) return `${coachThinkingSeconds.value}초째 잘 생각하는 중 >`
+  return ''
+})
 const filteredCoachCommands = computed(() => {
   if (!showCoachCommands.value) return []
   const query = coachCommandQuery.value
@@ -202,6 +209,8 @@ watch(coachNote, () => {
 onBeforeUnmount(() => {
   document.body.classList.remove('memory-stack-open')
   observer.value?.disconnect()
+  stopCoachThinkingTimer()
+  coachAbortController.value?.abort()
 })
 
 function setupObserver() {
@@ -394,10 +403,12 @@ async function requestCoach() {
   const controller = new AbortController()
   coachAbortController.value = controller
   const note = coachNote.value
+  startCoachThinkingTimer()
   try {
     const report = await requestCoachRunStream(coachRun.value.id, note, weatherStore.snapshot, {
       signal: controller.signal,
       onDelta: (delta) => {
+        if (!streamingCoachText.value) stopCoachThinkingTimer()
         streamingCoachText.value += delta
       }
     })
@@ -415,6 +426,7 @@ async function requestCoach() {
       streamingCoachMeta.value = ''
     }
   } finally {
+    stopCoachThinkingTimer()
     coachLoading.value = false
     if (coachAbortController.value === controller) coachAbortController.value = null
   }
@@ -424,9 +436,27 @@ function stopCoachStream() {
   coachAbortController.value?.abort()
   coachAbortController.value = null
   coachLoading.value = false
+  stopCoachThinkingTimer()
   if (streamingCoachText.value) {
     streamingCoachMeta.value = '생성 중단됨 · 저장되지 않음'
+  } else if (streamingCoachMeta.value) {
+    streamingCoachText.value = `${coachThinkingSeconds.value}초까지 생각하다가 멈췄습니다.`
+    streamingCoachMeta.value = '생성 중단됨 · 저장되지 않음'
   }
+}
+
+function startCoachThinkingTimer() {
+  stopCoachThinkingTimer()
+  coachThinkingSeconds.value = 1
+  coachThinkingTimer.value = window.setInterval(() => {
+    coachThinkingSeconds.value += 1
+  }, 1000)
+}
+
+function stopCoachThinkingTimer() {
+  if (coachThinkingTimer.value === null) return
+  window.clearInterval(coachThinkingTimer.value)
+  coachThinkingTimer.value = null
 }
 
 function toMonthKey(date: Date) {
@@ -668,7 +698,7 @@ function formatLapDuration(lap: Lap) {
                 <CoachMessage role="coach" :text="report.report" :meta="formatDateTimeWithWeekday(report.updatedAt || report.createdAt)" />
               </div>
             </template>
-            <CoachMessage v-if="streamingCoachText" role="coach" :text="streamingCoachText" :meta="streamingCoachMeta" :streaming="coachLoading" />
+            <CoachMessage v-if="visibleStreamingCoachText" role="coach" :text="visibleStreamingCoachText" :meta="streamingCoachMeta" :streaming="coachLoading" />
             <EmptyState v-else-if="!selectedReports.length" title="아직 이 세션의 코칭이 없습니다." description="짧은 메모를 넣고 AI 코칭을 요청하세요." />
             <p v-if="coachError" class="error">{{ coachError }}</p>
           </main>
