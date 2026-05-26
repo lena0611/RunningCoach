@@ -1129,6 +1129,32 @@ button.stat-card {
   line-height: 1.35;
 }
 
+.dashboard-projection-card strong {
+  display: block;
+  font-size: var(--text-metric-size);
+  font-weight: 700;
+  line-height: 1;
+  -webkit-line-clamp: unset;
+}
+
+.projection-detail-metric {
+  display: grid;
+  gap: 8px;
+}
+
+.projection-detail-metric strong {
+  color: var(--color-text);
+  font-size: clamp(40px, 12vw, 58px);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.projection-detail-metric span {
+  color: var(--color-muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .unit-value {
   display: inline-flex;
   align-items: baseline;

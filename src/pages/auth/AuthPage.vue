@@ -30,7 +30,7 @@ async function verify() {
   <PageLayout variant="narrow">
     <SectionCard>
       <SectionHeader title="로그인" />
-      <p>RunContext 데이터와 AI 코칭은 Supabase 계정으로 보호됩니다.</p>
+      <p>PaceLAB 데이터와 AI 코칭은 Supabase 계정으로 보호됩니다.</p>
       <FormGrid v-if="!sent" as="form" @submit.prevent="submit">
         <label class="full">
           이메일

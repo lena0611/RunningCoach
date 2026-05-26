@@ -33,6 +33,7 @@ const weatherStore = useWeatherStore()
 const router = useRouter()
 const trendMetric = ref<'month' | 'last7' | 'easy' | 'hard' | null>(null)
 const detailRun = ref<RunLog | null>(null)
+const projectionDetailOpen = ref(false)
 const todayDate = computed(() => formatDateOnly(new Date()))
 
 onMounted(() => {
@@ -104,7 +105,7 @@ const trendChartPoints = computed<TrendChartPoint[]>(() => {
 })
 
 watch(
-  () => Boolean(trendMetric.value || detailRun.value),
+  () => Boolean(trendMetric.value || detailRun.value || projectionDetailOpen.value),
   (open) => {
     document.body.classList.toggle('memory-stack-open', open)
   }
@@ -117,6 +118,7 @@ onBeforeUnmount(() => {
 onBeforeRouteLeave(() => {
   closeTrend()
   closeRunDetail()
+  closeProjectionDetail()
 })
 
 function closeTrend() {
@@ -129,6 +131,14 @@ function openRunDetail(run: RunLog) {
 
 function closeRunDetail() {
   detailRun.value = null
+}
+
+function openProjectionDetail() {
+  projectionDetailOpen.value = true
+}
+
+function closeProjectionDetail() {
+  projectionDetailOpen.value = false
 }
 
 function openCoachForRun(run: RunLog) {
@@ -193,7 +203,7 @@ function formatDateOnly(value: Date) {
           <path d="m9 6 6 6-6 6" />
         </svg>
       </button>
-      <button v-if="raceProjection" class="stat-card stat-card-interactive dashboard-context-card" type="button" @click="trendMetric = 'hard'">
+      <button v-if="raceProjection" class="stat-card stat-card-interactive dashboard-context-card dashboard-projection-card" type="button" @click="openProjectionDetail">
         <span class="stat-card-label">목표 예상</span>
         <div class="stat-card-data">
           <strong>{{ formatDuration(raceProjection.current.projectedSec) }}</strong>
@@ -252,6 +262,43 @@ function formatDateOnly(value: Date) {
               <SectionCard v-if="trendRuns.length">
                 <SectionHeader title="세션" />
                 <RunSessionList :runs="trendRuns" />
+              </SectionCard>
+            </main>
+          </section>
+        </div>
+      </Transition>
+
+      <Transition name="stack-page">
+        <div v-if="projectionDetailOpen && raceProjection" class="memory-stack-layer" data-no-swipe>
+          <section class="memory-stack-page">
+            <header class="memory-stack-header">
+              <div>
+                <h2>목표 예상</h2>
+              </div>
+              <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeProjectionDetail">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+              </button>
+            </header>
+            <main class="memory-stack-content">
+              <SectionCard>
+                <SectionHeader title="현재 예상" />
+                <div class="projection-detail-metric">
+                  <strong>{{ formatDuration(raceProjection.current.projectedSec) }}</strong>
+                  <span>{{ raceProjection.targetDistanceKm }}km 기준</span>
+                </div>
+                <p class="helper">
+                  {{ formatDateWithWeekday(raceProjection.current.date) }} {{ raceProjection.current.type }}
+                  {{ raceProjection.current.distanceKm.toFixed(2) }}km 기록을 목표 거리로 환산한 값입니다.
+                </p>
+              </SectionCard>
+              <SectionCard>
+                <SectionHeader title="변화" />
+                <p v-if="raceProjection.deltaSec === null" class="helper">
+                  아직 비교할 이전 품질 세션이 부족합니다. Tempo, Race, Steady Long 기록이 쌓이면 변화 방향을 보여줍니다.
+                </p>
+                <p v-else class="helper">
+                  {{ raceProjectionHint }}입니다. 이 값은 루틴 상향/유지 판단의 보조 근거로만 사용합니다.
+                </p>
               </SectionCard>
             </main>
           </section>

@@ -104,7 +104,7 @@ async function coach() {
       <SectionHeader title="코칭 리포트" />
       <div v-for="report in reports" :key="report.id" class="coach-thread-item">
         <CoachMessage v-if="report.userNote" role="user" :text="report.userNote" :meta="formatDateTimeWithWeekday(report.updatedAt || report.createdAt)" />
-        <CoachMessage role="coach" :text="report.report" meta="RunContext Coach" />
+        <CoachMessage role="coach" :text="report.report" meta="PaceLAB Coach" />
         <p v-if="report.trainingMemoryUpdated" class="helper">AI가 목표와 누적 기록을 기준으로 코칭 메모리의 주간 루틴을 갱신했습니다.</p>
       </div>
       <EmptyState v-if="!reports.length" title="아직 코칭 리포트가 없습니다." description="RunLog를 고르고 오늘 메모를 짧게 적으면 코치가 맥락을 붙여 해석합니다." />

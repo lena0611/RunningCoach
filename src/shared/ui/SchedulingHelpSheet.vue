@@ -35,7 +35,7 @@ onBeforeUnmount(() => {
 
         <div class="scheduling-help-content">
           <p>
-            RunContext는 단일 기록 하나로 루틴을 바꾸지 않습니다. 목표, 부상상태, 최근 러닝 흐름,
+            PaceLAB은 단일 기록 하나로 루틴을 바꾸지 않습니다. 목표, 부상상태, 최근 러닝 흐름,
             루틴 소화율을 같이 보고 유지 또는 변경을 판단합니다.
           </p>
 
@@ -64,10 +64,23 @@ onBeforeUnmount(() => {
           <div>
             <strong>루틴을 바꾸는 경우</strong>
             <ul>
+              <li>2~3주간 핵심 세션을 잘 소화하고 훈련 품질 기준을 넘는다.</li>
+              <li>예상 기록이 좋아지고 회복/통증 신호도 안정적이다.</li>
+              <li>Tempo 지속 시간, Long Run 후반 steady, Strides 품질 중 하나를 소폭 올릴 수 있다.</li>
               <li>2주 이상 핵심 세션 누락이 반복된다.</li>
               <li>강훈련 뒤 회복이 늦거나 통증 신호가 커진다.</li>
               <li>목표일이 가까운데 Tempo/Long Run 같은 목표 특이 세션이 부족하다.</li>
               <li>최근 누적이 급증해서 부상 위험을 낮춰야 한다.</li>
+            </ul>
+          </div>
+
+          <div>
+            <strong>훈련 품질 기준</strong>
+            <ul>
+              <li>Easy: 심박/RPE가 낮고 다음날 피로가 남지 않는다.</li>
+              <li>Tempo: 목표 강도에서 후반까지 무너지지 않는다.</li>
+              <li>Long Run: 후반 급락 없이 지속되고 다음날 회복 가능하다.</li>
+              <li>Strides: 짧고 선명하게 가속하고 회복 구간에서 안정된다.</li>
             </ul>
           </div>
 

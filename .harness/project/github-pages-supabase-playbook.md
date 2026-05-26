@@ -1,6 +1,6 @@
 # GitHub Pages + Supabase 운영 플레이북
 
-이 문서는 RunContext에서 검증한 GitHub Pages 정적 프론트, Supabase Auth/DB/Edge Function, iOS WebView 하이브리드 구조를 이후 개인 프로젝트에서 재사용하기 위한 기준이다.
+이 문서는 PaceLAB에서 검증한 GitHub Pages 정적 프론트, Supabase Auth/DB/Edge Function, iOS WebView 하이브리드 구조를 이후 개인 프로젝트에서 재사용하기 위한 기준이다.
 
 ## 기본 구조
 - 프론트엔드는 GitHub Pages에서 정적 파일로 배포한다.
@@ -90,7 +90,7 @@
   - `Build and deployment` 섹션에서 `Source`를 `GitHub Actions`로 변경한다.
   - 저장 버튼이 있으면 저장한다.
 - Repository Settings > Secrets and variables > Actions > Variables에 프론트 공개 변수를 등록한다.
-- RunContext 기준 필수 변수:
+- PaceLAB 기준 필수 변수:
   - `VITE_SUPABASE_URL`: Supabase Project URL
   - `VITE_SUPABASE_ANON_KEY`: Supabase publishable key
 - 사용하지 않는 변수는 workflow에서 제거한다. OTP 방식에서는 `VITE_AUTH_REDIRECT_URL`이 필요 없다.
@@ -113,7 +113,7 @@
 - Email OTP 코드 입력 방식을 쓰려면 Authentication > Emails > Magic Link 템플릿을 수정한다.
   - 기본 템플릿은 Sign-In Link 문구와 링크 중심일 수 있다.
   - 앱에서 인증 코드를 입력받으려면 이메일 본문에 `{{ .Token }}`을 포함해야 한다.
-  - 예: `RunContext 로그인 인증 코드: {{ .Token }}`
+  - 예: `PaceLAB 로그인 인증 코드: {{ .Token }}`
   - 사용자는 메일의 링크를 누르지 않고 인증 코드만 앱에 입력한다.
 - Magic link/OAuth를 쓰는 경우 Authentication > URL Configuration에서 Site URL과 Redirect URL을 설정한다.
 - OTP 코드 입력 방식은 redirect URL을 핵심 경로로 쓰지 않지만, 나중에 magic link/OAuth로 전환할 수 있으니 GitHub Pages와 localhost URL을 정상 값으로 유지한다.
@@ -159,7 +159,7 @@
 - Email OTP:
   - 장점: 앱 WebView 안에서 인증 코드 입력으로 세션을 만들 수 있어 redirect 문제가 적다.
   - 단점: 이메일 발송 제한은 magic link와 동일하게 적용된다.
-  - RunContext MVP의 기본값이다.
+  - PaceLAB MVP의 기본값이다.
 - OAuth:
   - 장점: 익숙한 로그인 UX.
   - 단점: redirect/deep link 설계가 필요하고 iOS WebView에서 세션 연결을 별도로 검증해야 한다.

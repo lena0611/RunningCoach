@@ -10,7 +10,7 @@ export function buildCoachContext(memory: TrainingMemory, runs: RunLog[], select
   const latestTempo = getLatestByTypes(runs, ['Tempo'])
 
   return [
-    '# RunContext',
+    '# PaceLAB',
     '규칙 기반 코칭은 단일 기록만으로 판단하지 말고 아래 누적 맥락을 함께 본다.',
     '',
     '## TrainingMemory',

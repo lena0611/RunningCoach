@@ -294,7 +294,7 @@ function goDashboard() {
             <div class="settings-row">
               <div>
                 <strong>iOS 테마 자동 따라가기</strong>
-                <span>기기 appearance가 바뀌면 RunContext도 같이 바뀝니다.</span>
+                <span>기기 appearance가 바뀌면 PaceLAB도 같이 바뀝니다.</span>
               </div>
               <button
                 class="switch-control"
