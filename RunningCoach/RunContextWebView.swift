@@ -1,0 +1,155 @@
+import SwiftUI
+import WebKit
+
+struct RunContextWebView: UIViewRepresentable {
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let contentController = WKUserContentController()
+        contentController.add(context.coordinator, name: "runContextHealthKit")
+        contentController.add(context.coordinator, name: "runContextLog")
+        contentController.addUserScript(WKUserScript(
+            source: """
+            window.addEventListener('error', function(event) {
+              window.webkit.messageHandlers.runContextLog.postMessage('JS error: ' + event.message + ' at ' + event.filename + ':' + event.lineno);
+            });
+            window.addEventListener('unhandledrejection', function(event) {
+              window.webkit.messageHandlers.runContextLog.postMessage('JS rejection: ' + String(event.reason));
+            });
+            """,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        ))
+
+        let configuration = WKWebViewConfiguration()
+        configuration.userContentController = contentController
+
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        context.coordinator.webView = webView
+        webView.navigationDelegate = context.coordinator
+        if #available(iOS 16.4, *) {
+            webView.isInspectable = true
+        }
+        loadWebApp(in: webView)
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {}
+
+    private func loadWebApp(in webView: WKWebView) {
+        webView.load(URLRequest(url: webAppURL))
+    }
+
+    private var webAppURL: URL {
+        URL(string: "https://lena0611.github.io/RunningCoach/#/")!
+    }
+
+    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
+        weak var webView: WKWebView?
+        private let importer = HealthKitRunImporter()
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            if message.name == "runContextLog" {
+                print("[RunContext WebView]", message.body)
+                return
+            }
+
+            guard message.name == "runContextHealthKit" else { return }
+            guard let body = message.body as? [String: Any],
+                  let type = body["type"] as? String,
+                  type == "requestRecentRunningWorkouts" else {
+                sendError("지원하지 않는 HealthKit 요청입니다.")
+                return
+            }
+
+            let days = body["days"] as? Int ?? 14
+            print("[RunContext HealthKit] requestRecentRunningWorkouts days=\(days)")
+            importer.fetchRecentRunningWorkouts(days: days) { [weak self] result in
+                DispatchQueue.main.async {
+                    switch result {
+                    case .success(let candidates):
+                        print("[RunContext HealthKit] fetched candidates=\(candidates.count)")
+                        self?.sendRuns(candidates)
+                    case .failure(let error):
+                        print("[RunContext HealthKit] failed:", error.localizedDescription)
+                        self?.sendError(error.localizedDescription)
+                    }
+                }
+            }
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self, weak webView] in
+                guard let webView else { return }
+                webView.evaluateJavaScript("document.body.innerText.trim().length") { result, error in
+                    if let error {
+                        print("[RunContext WebView] inspect failed:", error.localizedDescription)
+                        return
+                    }
+
+                    if let length = result as? Int, length == 0 {
+                        self?.loadDiagnosticPage(in: webView, reason: "Vue 화면이 렌더링되지 않았습니다.")
+                    }
+                }
+            }
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            loadDiagnosticPage(in: webView, reason: "페이지 로딩 실패: \(error.localizedDescription)")
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            loadDiagnosticPage(in: webView, reason: "초기 페이지 로딩 실패: \(error.localizedDescription)")
+        }
+
+        private func sendRuns(_ candidates: [HealthKitRunCandidate]) {
+            guard let webView else { return }
+            do {
+                let data = try JSONEncoder().encode(candidates)
+                let json = String(data: data, encoding: .utf8) ?? "[]"
+                webView.evaluateJavaScript("window.RunContextHealthKit?.receiveRuns(\(json));")
+            } catch {
+                sendError("HealthKit 응답 직렬화 실패")
+            }
+        }
+
+        private func sendError(_ message: String) {
+            guard let webView else { return }
+            let escaped = message
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "'", with: "\\'")
+                .replacingOccurrences(of: "\n", with: "\\n")
+            webView.evaluateJavaScript("window.RunContextHealthKit?.receiveError('\(escaped)');")
+        }
+
+        private func loadDiagnosticPage(in webView: WKWebView, reason: String) {
+            let resources = Bundle.main.urls(forResourcesWithExtension: nil, subdirectory: nil)?
+                .map { $0.lastPathComponent }
+                .sorted()
+                .joined(separator: "<br>") ?? "리소스 목록을 읽을 수 없습니다."
+            let html = """
+            <!doctype html>
+            <html lang="ko">
+            <head>
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 24px; line-height: 1.45; color: #111827; }
+                h1 { font-size: 20px; }
+                code { background: #f3f4f6; padding: 2px 4px; border-radius: 4px; }
+                .box { border: 1px solid #d1d5db; border-radius: 8px; padding: 12px; margin-top: 12px; font-size: 13px; overflow-wrap: anywhere; }
+              </style>
+            </head>
+            <body>
+              <h1>RunContext 로딩 진단</h1>
+              <p>\(reason)</p>
+              <p>Xcode 콘솔의 <code>[RunContext WebView]</code> 로그를 확인하세요.</p>
+              <div class="box">\(resources)</div>
+            </body>
+            </html>
+            """
+            webView.loadHTMLString(html, baseURL: nil)
+        }
+    }
+}
