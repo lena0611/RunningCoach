@@ -44,6 +44,8 @@ onMounted(() => {
 })
 
 const runs = computed(() => runStore.sortedRuns)
+const runDataLoading = computed(() => runStore.loading || (!runStore.loaded && !runStore.error))
+const memoryDataLoading = computed(() => memoryStore.loading)
 const weekDistance = computed(() => sumDistance(getThisWeekRuns(runs.value, today.value)))
 const monthDistance = computed(() => sumDistance(getThisMonthRuns(runs.value, today.value)))
 const last7 = computed(() => sumDistance(getRunsWithinDays(runs.value, 7, today.value)))
@@ -202,13 +204,17 @@ function formatDateOnly(value: Date) {
     </SectionCard>
 
     <MetricGrid>
-      <RunSummaryCard label="이번 달" :value="`${monthDistance}km`" interactive @click="trendMetric = 'month'" />
-      <RunSummaryCard label="최근 7일" :value="`${last7}km`" interactive @click="trendMetric = 'last7'" />
-      <RunSummaryCard label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 · 랩/페이스 기준" interactive @click="trendMetric = 'easy'" />
-      <RunSummaryCard label="강훈련" :value="`${hardSessions}회`" hint="최근 7일" interactive @click="trendMetric = 'hard'" />
+      <RunSummaryCard label="이번 달" :value="`${monthDistance}km`" :loading="runDataLoading" interactive @click="trendMetric = 'month'" />
+      <RunSummaryCard label="최근 7일" :value="`${last7}km`" :loading="runDataLoading" interactive @click="trendMetric = 'last7'" />
+      <RunSummaryCard label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 · 랩/페이스 기준" :loading="runDataLoading" interactive @click="trendMetric = 'easy'" />
+      <RunSummaryCard label="강훈련" :value="`${hardSessions}회`" hint="최근 7일" :loading="runDataLoading" interactive @click="trendMetric = 'hard'" />
       <button class="stat-card stat-card-interactive dashboard-context-card" type="button" @click="openMemoryPanel('goals')">
         <span class="stat-card-label">활성 목표</span>
-        <div class="stat-card-data">
+        <div v-if="memoryDataLoading" class="stat-card-data stat-card-skeleton" aria-hidden="true">
+          <span class="skeleton-line skeleton-line-title" />
+          <span class="skeleton-line skeleton-line-hint" />
+        </div>
+        <div v-else class="stat-card-data">
           <strong>{{ activeGoal.title }}</strong>
           <small>{{ activeGoal.targetDate ? `${formatDateWithWeekday(activeGoal.targetDate)}까지` : '목표일 미정' }}</small>
         </div>
@@ -218,7 +224,11 @@ function formatDateOnly(value: Date) {
       </button>
       <button class="stat-card stat-card-interactive dashboard-context-card" type="button" @click="openMemoryPanel('injuries')">
         <span class="stat-card-label">부상 기준</span>
-        <div class="stat-card-data">
+        <div v-if="memoryDataLoading" class="stat-card-data stat-card-skeleton" aria-hidden="true">
+          <span class="skeleton-line skeleton-line-title" />
+          <span class="skeleton-line skeleton-line-hint" />
+        </div>
+        <div v-else class="stat-card-data">
           <strong>{{ activeInjury?.title || '관리 항목 없음' }}</strong>
           <small>{{ activeInjury ? `${activeInjury.status}${activeInjury.severity ? ` · ${activeInjury.severity}/5` : ''}` : '코칭 제한 없음' }}</small>
         </div>
@@ -226,9 +236,13 @@ function formatDateOnly(value: Date) {
           <path d="m9 6 6 6-6 6" />
         </svg>
       </button>
-      <button v-if="raceProjection" class="stat-card stat-card-interactive dashboard-context-card dashboard-projection-card" type="button" @click="openProjectionDetail">
+      <button v-if="runDataLoading || raceProjection" class="stat-card stat-card-interactive dashboard-context-card dashboard-projection-card" type="button" @click="openProjectionDetail">
         <span class="stat-card-label">목표 예상</span>
-        <div class="stat-card-data">
+        <div v-if="runDataLoading" class="stat-card-data stat-card-skeleton" aria-hidden="true">
+          <span class="skeleton-line skeleton-line-value" />
+          <span class="skeleton-line skeleton-line-hint" />
+        </div>
+        <div v-else-if="raceProjection" class="stat-card-data">
           <strong>{{ formatDuration(raceProjection.current.projectedSec) }}</strong>
           <small>{{ raceProjectionHint }}</small>
         </div>

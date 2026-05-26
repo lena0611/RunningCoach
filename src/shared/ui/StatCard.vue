@@ -8,6 +8,7 @@ const props = defineProps<{
   hint?: string
   tone?: 'primary' | 'accent' | 'warning'
   interactive?: boolean
+  loading?: boolean
 }>()
 
 const emit = defineEmits<{ click: [] }>()
@@ -31,7 +32,11 @@ const parsedValue = computed(() => {
     @click="interactive && emit('click')"
   >
     <span class="stat-card-label">{{ label }}</span>
-    <div class="stat-card-data">
+    <div v-if="loading" class="stat-card-data stat-card-skeleton" aria-hidden="true">
+      <span class="skeleton-line skeleton-line-value" />
+      <span v-if="hint" class="skeleton-line skeleton-line-hint" />
+    </div>
+    <div v-else class="stat-card-data">
       <strong class="stat-card-value">
         <UnitValue :amount="parsedValue.amount" :unit="parsedValue.unit" />
       </strong>

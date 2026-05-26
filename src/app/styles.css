@@ -1169,6 +1169,49 @@ button.stat-card {
   line-height: 1.35;
 }
 
+.stat-card-skeleton {
+  width: 100%;
+}
+
+.skeleton-line {
+  display: block;
+  overflow: hidden;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--color-muted) 14%, transparent),
+      color-mix(in srgb, var(--color-muted) 26%, transparent),
+      color-mix(in srgb, var(--color-muted) 14%, transparent)
+    );
+  background-size: 220% 100%;
+  animation: skeleton-shimmer 1.35s ease-in-out infinite;
+}
+
+.skeleton-line-value {
+  width: min(128px, 76%);
+  height: 34px;
+}
+
+.skeleton-line-title {
+  width: min(132px, 82%);
+  height: 18px;
+}
+
+.skeleton-line-hint {
+  width: min(104px, 64%);
+  height: 12px;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+
 .dashboard-context-card {
   justify-content: space-between;
 }
