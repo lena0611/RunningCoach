@@ -91,7 +91,8 @@ type WeatherDailyPoint = {
 - 비 예보가 높으면 미끄러운 노면, 신발 젖음, 훈련 강도 조정 포인트를 보여준다.
 
 ## iOS 빌드 체크리스트
-- Xcode target에 WeatherKit capability를 추가한다.
+- 현재 Personal Team 빌드에서는 Xcode target에 WeatherKit capability를 추가하지 않는다. Personal Team은 WeatherKit provisioning을 지원하지 않아 iPhone 빌드가 실패한다.
+- WeatherKit capability는 유료 Apple Developer Program 전환 또는 다른 날씨 API/서버리스 대안을 결정한 뒤에만 다시 검토한다.
 - 위치 권한 설명을 `Info.plist`에 추가한다.
 - `WKUserContentController`에 `runContextWeatherKit` script message handler를 추가한다.
 - 요청 payload의 `type === "requestWeatherForecast"`를 처리한다.
