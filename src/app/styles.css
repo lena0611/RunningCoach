@@ -3048,6 +3048,256 @@ button.run-session-row {
   box-shadow: none;
 }
 
+.injury-body-selector {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.injury-selector-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.injury-selector-head .form-section-title {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.injury-body-layout {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(0, 1.1fr);
+  gap: 14px;
+}
+
+.body-view-card,
+.injury-area-list,
+.injury-pain-panel,
+.strength-plan-card {
+  border-radius: 20px;
+  background: var(--color-surface);
+  padding: 14px;
+}
+
+.body-view-card {
+  display: grid;
+  gap: 12px;
+}
+
+.body-view-toolbar {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 34px;
+  gap: 8px;
+  align-items: center;
+}
+
+.body-view-toolbar > button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  min-height: 34px;
+  border-radius: 999px;
+  background: var(--color-subtle-2);
+  box-shadow: none;
+}
+
+.body-view-toolbar svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+}
+
+.body-view-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-field);
+}
+
+.body-view-tabs button {
+  min-height: 30px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 11px;
+  box-shadow: none;
+}
+
+.body-view-tabs button.active {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.body-silhouette-stage {
+  position: relative;
+  min-height: 310px;
+  overflow: hidden;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 50% 24%, rgba(74, 222, 128, 0.14), transparent 32%),
+    linear-gradient(180deg, var(--color-field), var(--color-surface-2));
+  touch-action: pan-y;
+}
+
+.body-silhouette {
+  width: 100%;
+  height: 100%;
+  min-height: 310px;
+}
+
+.body-base {
+  fill: var(--color-surface-2);
+  stroke: var(--color-border);
+  stroke-width: 1;
+}
+
+.body-guide {
+  fill: none;
+  stroke: var(--color-border);
+  stroke-dasharray: 3 4;
+  stroke-width: 0.8;
+  opacity: 0.6;
+}
+
+.body-area-zone {
+  cursor: pointer;
+  outline: none;
+}
+
+.body-area-zone rect {
+  fill: rgba(56, 189, 248, 0.24);
+  stroke: rgba(56, 189, 248, 0.58);
+  stroke-width: 1;
+  transition: fill 160ms ease, stroke 160ms ease, filter 160ms ease;
+}
+
+.body-area-zone:hover rect,
+.body-area-zone:focus-visible rect {
+  fill: rgba(56, 189, 248, 0.42);
+}
+
+.body-area-zone.selected rect {
+  fill: rgba(74, 222, 128, 0.58);
+  stroke: rgba(74, 222, 128, 0.95);
+  filter: drop-shadow(0 0 8px rgba(74, 222, 128, 0.32));
+}
+
+.body-view-label {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--color-text);
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.injury-area-list {
+  display: grid;
+  gap: 13px;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.injury-area-list article {
+  display: grid;
+  gap: 8px;
+}
+
+.injury-group-head {
+  display: grid;
+  gap: 3px;
+}
+
+.injury-group-head strong,
+.injury-pain-panel > strong,
+.strength-plan-card > strong {
+  color: var(--color-text);
+  font-size: 15px;
+}
+
+.injury-group-head small,
+.strength-plan-card small {
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.injury-area-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.injury-area-chip-grid button {
+  display: grid;
+  gap: 2px;
+  justify-items: start;
+  min-height: 48px;
+  padding: 9px 10px;
+  border-radius: 14px;
+  background: var(--color-field);
+  color: var(--color-text);
+  box-shadow: none;
+}
+
+.injury-area-chip-grid button.selected {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.injury-area-chip-grid span {
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.injury-area-chip-grid small {
+  color: currentColor;
+  font-size: 10px;
+  font-weight: 750;
+  opacity: 0.72;
+}
+
+.injury-pain-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.strength-plan-card {
+  display: grid;
+  gap: 8px;
+}
+
+.strength-plan-card ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+@media (max-width: 520px) {
+  .injury-body-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .body-silhouette-stage,
+  .body-silhouette {
+    min-height: 280px;
+  }
+}
+
 .chat-input-wrap .input-clear-button {
   top: 21px;
   right: 10px;

@@ -3,6 +3,15 @@ import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import type { TrainingGoal, TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
+import {
+  createConservativeStrengthPlan,
+  createInjuryManagementPlan,
+  createReturnToRunCriteria,
+  createInjuryRestrictions,
+  deriveInjurySeverity,
+  summarizeInjuryAreas,
+  type InjuryAreaSelection
+} from '@/entities/training-memory/injuryAreas'
 import type { TrainingKnowledgeCatalog, TrainingKnowledgeRequest, TrainingMethod } from '@/entities/training-knowledge/model'
 import { formatDateWithWeekday } from '@/shared/lib/format'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
@@ -12,8 +21,8 @@ import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import ClearableField from '@/shared/ui/ClearableField.vue'
 import DateField from '@/shared/ui/DateField.vue'
 import FormGrid from '@/shared/ui/FormGrid.vue'
+import InjuryBodySelector from '@/shared/ui/InjuryBodySelector.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
-import ScaleSlider from '@/shared/ui/ScaleSlider.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
 import SchedulingHelpSheet from '@/shared/ui/SchedulingHelpSheet.vue'
@@ -53,6 +62,7 @@ const newGoal = reactive({
 const newInjury = reactive({
   title: '',
   area: '',
+  normalizedAreas: [] as InjuryAreaSelection[],
   status: 'monitoring' as TrainingInjuryItem['status'],
   severity: null as number | null,
   onsetDate: null as string | null,
@@ -61,7 +71,8 @@ const newInjury = reactive({
   managementPlan: '',
   triggers: [] as string[],
   restrictions: [] as string[],
-  returnToRunCriteria: ''
+  returnToRunCriteria: '',
+  strengthPlan: [] as string[]
 })
 const newKnowledgeRequest = reactive({
   title: '',
@@ -185,6 +196,11 @@ function injuryDateMeta(item: TrainingInjuryItem) {
   if (item.lastFlareDate) return ` · 최근 ${formatDateWithWeekday(item.lastFlareDate)}`
   if (item.onsetDate) return ` · 시작 ${formatDateWithWeekday(item.onsetDate)}`
   return ''
+}
+
+function injuryAreaMeta(item: TrainingInjuryItem) {
+  if (item.normalizedAreas?.length) return summarizeInjuryAreas(item.normalizedAreas)
+  return item.area || '부위 미지정'
 }
 
 function split(value: string) {
@@ -432,6 +448,7 @@ function openInjuryNew() {
   Object.assign(newInjury, {
     title: '',
     area: '',
+    normalizedAreas: [],
     status: 'monitoring',
     severity: null,
     onsetDate: null,
@@ -440,19 +457,32 @@ function openInjuryNew() {
     managementPlan: '',
     triggers: [],
     restrictions: [],
-    returnToRunCriteria: ''
+    returnToRunCriteria: '',
+    strengthPlan: []
   })
   pushPanel('injury-new')
+}
+
+function applyNewInjuryAreas(value: InjuryAreaSelection[]) {
+  newInjury.normalizedAreas = value
+  newInjury.area = summarizeInjuryAreas(value)
+  newInjury.severity = deriveInjurySeverity(value, newInjury.severity)
+  newInjury.strengthPlan = createConservativeStrengthPlan(value)
+  if (!newInjury.managementPlan.trim()) newInjury.managementPlan = createInjuryManagementPlan(value)
+  if (!newInjury.restrictions.length) newInjury.restrictions = createInjuryRestrictions(value)
+  if (!newInjury.returnToRunCriteria.trim()) newInjury.returnToRunCriteria = createReturnToRunCriteria(value)
 }
 
 function addInjury() {
   const title = newInjury.title.trim()
   if (!title) return
+  applyNewInjuryAreas(newInjury.normalizedAreas)
   const now = new Date().toISOString()
   const item: TrainingInjuryItem = {
     id: crypto.randomUUID(),
     title,
     area: newInjury.area,
+    normalizedAreas: newInjury.normalizedAreas,
     status: newInjury.status,
     severity: newInjury.severity,
     onsetDate: newInjury.onsetDate || null,
@@ -462,6 +492,7 @@ function addInjury() {
     triggers: newInjury.triggers,
     restrictions: newInjury.restrictions,
     returnToRunCriteria: newInjury.returnToRunCriteria,
+    strengthPlan: newInjury.strengthPlan,
     createdAt: now,
     updatedAt: now
   }
@@ -473,6 +504,17 @@ function addInjury() {
 
 function updateInjury(item: TrainingInjuryItem) {
   item.updatedAt = new Date().toISOString()
+}
+
+function updateInjuryAreas(item: TrainingInjuryItem, value: InjuryAreaSelection[]) {
+  item.normalizedAreas = value
+  item.area = summarizeInjuryAreas(value)
+  item.severity = deriveInjurySeverity(value, item.severity)
+  item.strengthPlan = createConservativeStrengthPlan(value)
+  item.managementPlan = item.managementPlan.trim() ? item.managementPlan : createInjuryManagementPlan(value)
+  item.restrictions = item.restrictions.length ? item.restrictions : createInjuryRestrictions(value)
+  item.returnToRunCriteria = item.returnToRunCriteria.trim() ? item.returnToRunCriteria : createReturnToRunCriteria(value)
+  updateInjury(item)
 }
 
 function setActiveInjury(itemId: string) {
@@ -807,6 +849,7 @@ async function save() {
                 <span>
                   <strong>{{ item.title }}</strong>
                   <small>{{ item.id === draft.activeInjuryItemId ? '현재 기준 · ' : '' }}{{ item.status }}{{ item.severity ? ` · ${item.severity}/5` : '' }}{{ injuryDateMeta(item) }}</small>
+                  <small>{{ injuryAreaMeta(item) }}</small>
                 </span>
                 <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
               </button>
@@ -818,14 +861,17 @@ async function save() {
                 항목명
                 <ClearableField v-model="newInjury.title" placeholder="예: 오른쪽 무릎 바깥쪽 불편감" />
               </label>
-              <label>
-                부위
-                <ClearableField v-model="newInjury.area" placeholder="예: 좌측 햄스트링" />
-              </label>
+              <InjuryBodySelector :model-value="newInjury.normalizedAreas" @update:model-value="applyNewInjuryAreas" />
               <BottomSheetSelect v-model="newInjury.status" label="상태" :options="injuryStatusOptions" />
-              <ScaleSlider v-model="newInjury.severity" label="심각도" :min="1" :max="5" min-label="가벼움" max-label="강함" />
               <DateField v-model="newInjury.onsetDate" label="시작일" />
               <DateField v-model="newInjury.lastFlareDate" label="최근 신호일" />
+              <div v-if="newInjury.strengthPlan.length" class="strength-plan-card full">
+                <strong>보강운동 처방</strong>
+                <small>보수적 기본값입니다. 통증이 커지면 강도를 낮추거나 생략하세요.</small>
+                <ul>
+                  <li v-for="plan in newInjury.strengthPlan" :key="plan">{{ plan }}</li>
+                </ul>
+              </div>
               <label class="full">
                 악화 트리거
                 <ClearableField :model-value="join(newInjury.triggers)" as="textarea" rows="3" placeholder="예: 템포 다음날 뻣뻣함&#10;볼륨 급증" @update:model-value="newInjury.triggers = split(String($event ?? ''))" />
@@ -857,22 +903,17 @@ async function save() {
                 항목명
                 <ClearableField v-model="editingInjury.title" placeholder="예: 좌측 햄스트링" @update:model-value="updateInjury(editingInjury)" />
               </label>
-              <label>
-                부위
-                <ClearableField v-model="editingInjury.area" placeholder="예: 좌측 햄스트링" @update:model-value="updateInjury(editingInjury)" />
-              </label>
+              <InjuryBodySelector :model-value="editingInjury.normalizedAreas" @update:model-value="updateInjuryAreas(editingInjury, $event)" />
               <BottomSheetSelect v-model="editingInjury.status" label="상태" :options="injuryStatusOptions" @update:model-value="updateInjury(editingInjury)" />
-              <ScaleSlider
-                v-model="editingInjury.severity"
-                label="심각도"
-                :min="1"
-                :max="5"
-                min-label="가벼움"
-                max-label="강함"
-                @update:model-value="updateInjury(editingInjury)"
-              />
               <DateField v-model="editingInjury.onsetDate" label="시작일" @update:model-value="updateInjury(editingInjury)" />
               <DateField v-model="editingInjury.lastFlareDate" label="최근 신호일" @update:model-value="updateInjury(editingInjury)" />
+              <div v-if="editingInjury.strengthPlan.length" class="strength-plan-card full">
+                <strong>보강운동 처방</strong>
+                <small>부위와 통증 레벨을 기준으로 만든 보수적 처방입니다.</small>
+                <ul>
+                  <li v-for="plan in editingInjury.strengthPlan" :key="plan">{{ plan }}</li>
+                </ul>
+              </div>
               <label class="full">
                 악화 트리거
                 <ClearableField :model-value="join(editingInjury.triggers)" as="textarea" rows="3" placeholder="예: 템포 다음날 뻣뻣함&#10;볼륨 급증" @update:model-value="editingInjury.triggers = split(String($event ?? '')); updateInjury(editingInjury)" />

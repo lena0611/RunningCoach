@@ -1,5 +1,5 @@
 import type { RunLog } from '@/entities/run/model'
-import type { TrainingGoal } from '@/entities/training-memory/model'
+import type { TrainingGoal, TrainingInjuryItem } from '@/entities/training-memory/model'
 
 export type RaceProjectionSignal = {
   runId: string
@@ -12,7 +12,7 @@ export type RaceProjectionSignal = {
 }
 
 export type ProjectionReadinessFactor = {
-  key: 'performance' | 'threshold' | 'aerobicBase' | 'longRun' | 'consistency'
+  key: 'performance' | 'threshold' | 'aerobicBase' | 'longRun' | 'consistency' | 'injuryRecovery'
   label: string
   score: number
   status: 'good' | 'watch' | 'weak'
@@ -36,7 +36,12 @@ const dayMs = 24 * 60 * 60 * 1000
 const lowHeartRateCeiling = 145
 const thresholdHeartRateCeiling = 165
 
-export function getRaceProjection(runs: RunLog[], activeGoal: TrainingGoal | null | undefined, today = new Date()): RaceProjection | null {
+export function getRaceProjection(
+  runs: RunLog[],
+  activeGoal: TrainingGoal | null | undefined,
+  today = new Date(),
+  activeInjury?: TrainingInjuryItem | null
+): RaceProjection | null {
   const targetDistanceKm = activeGoal?.distanceKm
   if (!targetDistanceKm || targetDistanceKm <= 0) return null
 
@@ -51,7 +56,7 @@ export function getRaceProjection(runs: RunLog[], activeGoal: TrainingGoal | nul
 
   const current = chooseCurrentSignal(signals, activeGoal?.targetDurationSec ?? null)
   const previous = signals.filter((signal) => signal.runId !== current.runId).find((signal) => signal.date < current.date) ?? null
-  const factors = buildReadinessFactors(runs, targetDistanceKm, activeGoal?.targetDurationSec ?? null, current, today)
+  const factors = buildReadinessFactors(runs, targetDistanceKm, activeGoal?.targetDurationSec ?? null, current, today, activeInjury ?? null)
   const readinessScore = weightedReadinessScore(factors)
   const readinessLevel = getReadinessLevel(readinessScore)
 
@@ -90,7 +95,8 @@ function buildReadinessFactors(
   targetDistanceKm: number,
   targetDurationSec: number | null,
   current: RaceProjectionSignal,
-  today: Date
+  today: Date,
+  activeInjury: TrainingInjuryItem | null
 ): ProjectionReadinessFactor[] {
   const recent7 = runsWithinDays(runs, 7, today)
   const recent14 = runsWithinDays(runs, 14, today)
@@ -102,7 +108,8 @@ function buildReadinessFactors(
     getThresholdFactor(recent30),
     getAerobicBaseFactor(recent30, targetDistanceKm),
     getLongRunFactor(recent42, targetDistanceKm, today),
-    getConsistencyFactor(recent30, recent14, recent7)
+    getConsistencyFactor(recent30, recent14, recent7),
+    getInjuryRecoveryFactor(activeInjury, recent14)
   ]
 }
 
@@ -200,6 +207,23 @@ function getConsistencyFactor(recent30: RunLog[], recent14: RunLog[], recent7: R
   )
 }
 
+function getInjuryRecoveryFactor(activeInjury: TrainingInjuryItem | null, recent14: RunLog[]): ProjectionReadinessFactor {
+  if (!activeInjury || activeInjury.status === 'resolved' || activeInjury.status === 'archived') {
+    return factor('injuryRecovery', '부상/회복 게이트', 85, '활성 제한 없음', '현재 활성 부상 제한이 없으면 목표 예상의 회복 게이트는 크게 막지 않습니다.')
+  }
+  const severity = activeInjury.severity ?? 2
+  const painMentions = recent14.filter((run) => run.painNote.trim()).length
+  const score = clamp(92 - severity * 12 - Math.min(20, painMentions * 5), 20, 82)
+  const area = activeInjury.area || '관리 부위'
+  return factor(
+    'injuryRecovery',
+    '부상/회복 게이트',
+    score,
+    `${area} · ${activeInjury.status}${activeInjury.severity ? ` · ${activeInjury.severity}/5` : ''}`,
+    '활성 부상이나 통증 메모가 있으면 예측 기록을 그대로 믿지 않고 강도 상향과 목표 준비도를 보수적으로 낮춥니다.'
+  )
+}
+
 function factor(key: ProjectionReadinessFactor['key'], label: string, score: number, summary: string, detail: string): ProjectionReadinessFactor {
   const normalizedScore = clamp(Math.round(score), 0, 100)
   return {
@@ -214,11 +238,12 @@ function factor(key: ProjectionReadinessFactor['key'], label: string, score: num
 
 function weightedReadinessScore(factors: ProjectionReadinessFactor[]): number {
   const weights: Record<ProjectionReadinessFactor['key'], number> = {
-    performance: 0.3,
-    threshold: 0.22,
-    aerobicBase: 0.22,
-    longRun: 0.16,
-    consistency: 0.1
+    performance: 0.27,
+    threshold: 0.2,
+    aerobicBase: 0.2,
+    longRun: 0.15,
+    consistency: 0.08,
+    injuryRecovery: 0.1
   }
   const total = factors.reduce((sum, item) => sum + item.score * weights[item.key], 0)
   return clamp(Math.round(total), 0, 100)

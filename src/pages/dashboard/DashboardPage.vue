@@ -58,7 +58,7 @@ const easyRatio = computed(() => getEasyRatio(getRunsWithinDays(runs.value, 30, 
 const nextSession = computed(() => getNextSessionRecommendation(memoryStore.memory, runs.value, today.value))
 const activeGoal = computed(() => getActiveGoal(memoryStore.memory))
 const activeInjury = computed(() => getActiveInjuryItem(memoryStore.memory))
-const raceProjection = computed(() => getRaceProjection(runs.value, activeGoal.value))
+const raceProjection = computed(() => getRaceProjection(runs.value, activeGoal.value, today.value, activeInjury.value))
 
 watch(
   () => route.path,

@@ -40,7 +40,8 @@ describe('performanceProjection', () => {
       'threshold',
       'aerobicBase',
       'longRun',
-      'consistency'
+      'consistency',
+      'injuryRecovery'
     ])
     expect(projection?.readinessScore).toBeGreaterThan(50)
     expect(projection?.factors.find((factor) => factor.key === 'threshold')?.summary).toContain('3회')

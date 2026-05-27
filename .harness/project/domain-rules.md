@@ -15,6 +15,7 @@
 - `WeatherSnapshot`: 무료 Open-Meteo에서 받은 현재/시간별/일별 날씨 요약이다. 러닝 준비 판단의 체감온도, 강수확률, 강수량, 강수시간 근거로 쓴다.
 - `Goal`: 사용자는 여러 목표를 가질 수 있고, `activeGoalId`로 지정된 활성 목표가 코칭의 1차 판단 기준이다. 시작일, 목표일, 성공 기준, 목표 전략을 함께 가진다. 다른 목표는 보조 관점으로 참고한다.
 - `InjuryItem`: 사용자는 여러 부상/주의사항을 관리할 수 있고, `activeInjuryItemId`로 지정된 항목이 코칭의 1차 부상관리 기준이다. 악화 트리거, 훈련 제한, 복귀 기준을 함께 가지며, 의료 진단이 아니라 훈련 강도 조절과 관찰 포인트로만 사용한다.
+- `InjuryArea`: 부상 부위는 자유 텍스트가 아니라 정규화된 근육/힘줄/인대/근막/관절/뼈 단위 선택값이다. 러너에게 중요한 기본 축은 햄스트링, 대퇴사두근, IT 밴드, 무릎, 정강이, 종아리, 아킬레스건, 발목 인대, 족저근막, 고관절, 허리다.
 
 ## 핵심 엔티티
 - `RunLog`: 사용자 ID, 외부 원본 ID, 날짜, 타입, 거리, 시간, 페이스, 심박, 케이던스, 활동 칼로리, 기온, RPE, 메모, 랩, 고속 구간 요약, 시간축 지표 샘플, 표시용 경로 샘플, 태그, 출처, 생성/수정 시각을 가진다.
@@ -28,7 +29,7 @@
 - `TrainingMethod`: MAF, Daniels, Hanson 같은 훈련법 단위다. 적용 거리, 러너 수준, 주간 훈련 가능 횟수, 주의사항을 가진다.
 - `TrainingPrescriptionRule`: 거리/단계/세션 타입별 처방 규칙이다. 처방 기준, 상향 조건, 하향 조건, 금기 조건, 근거 요약을 가진다.
 - `TrainingGoal`: title/category/status 외에 startDate, targetDate, distanceKm, targetDurationSec, successCriteria, strategyNotes를 가진다. AI는 active goal의 성공 기준과 전략을 우선 기준으로 삼는다.
-- `TrainingInjuryItem`: title/area/status/severity 외에 triggers, restrictions, returnToRunCriteria를 가진다. AI는 active injury의 제한 조건을 다음 훈련 추천에 반영한다.
+- `TrainingInjuryItem`: title/area/status/severity 외에 `normalizedAreas`, triggers, restrictions, returnToRunCriteria, strengthPlan을 가진다. `area`는 레거시/표시용 요약이며, AI는 normalizedAreas의 부위별 painLevel과 active injury의 제한 조건을 다음 훈련 추천에 반영한다.
 
 ## 불변식
 - 원본 운동 파일은 저장하지 않는다.
@@ -79,6 +80,9 @@
 - 목표는 완성 날짜(`TrainingGoal.targetDate`)를 가질 수 있다. AI 코칭은 매 요청마다 활성 목표의 남은 기간, 최근 수행 흐름, Easy + Strides/Tempo/Long Run 수행 여부를 확인하고, 목표 달성에 맞춰 스케줄 유지/수정 필요성을 놓치지 않는다.
 - AI 코칭 입력에서 “7:00/km로 Zone 2가 되고 싶다”처럼 장기 목표나 보조 목표로 보이는 문장이 감지되면, 즉시 대화로 되묻지 않고 바텀시트로 저장 여부를 확인한다. 저장 시 활성 목표를 바꾸지 않고 보조 `TrainingGoal`과 `aiNotes`에 남겨 이후 코칭 기준으로 사용한다.
 - 부상/주의사항은 별도 이벤트가 아니라 스케줄 관리의 핵심 제약이다. AI 코칭은 매 요청마다 `activeInjuryItem`, `painNote`, 최근 강훈련/롱런 이후 회복 반응을 확인하고, 의료 진단 없이 훈련 강도와 다음 세션 배치에 반영한다.
+- 부상 부위 입력은 자유 텍스트에 의존하지 않는다. UI는 회전 가능한 인체 모델과 상체/하체/발 목록을 함께 제공하고, 사용자는 복수 부위를 선택한 뒤 부위별 통증 레벨을 1~5 게이지로 입력한다.
+- 보강운동 처방은 `TrainingInjuryItem.strengthPlan`에 저장한다. 보강운동은 항상 보수적으로 제안하며, 통증 0~2/5 범위에서만 수행하고 다음날 악화되면 세트 수나 강도를 낮춘다. 진단/치료 보장을 암시하지 않는다.
+- 수면질은 부상 범주에 넣지 않는다. 수면은 회복/컨디션 신호로 분리하고, 훈련 강도/목표 예상/회복 판단에 반영한다. 수면이 나쁘다는 이유로 특정 부위 부상처럼 처리하지 않는다.
 - 코칭 알고리즘은 문헌 기반 기준선을 먼저 적용하고, 사용자 데이터와 대화로 확인된 반복 패턴만 `adaptiveTrainingProfile`에 저장해 개인화한다. “스스로 진화”는 소스 코드 수정이 아니라 이 구조화된 개인화 프로필 갱신을 의미한다.
 - `adaptiveTrainingProfile`은 `trainingPhase`, `progressionCriteria`, `prescriptionTemplates`, `compliancePatterns`, `sessionGuides`로 구성한다. 훈련 단계는 현재 블록, 승급 조건은 상향/유지/하향 판단 게이트, 처방 템플릿은 사용자가 Workoutdoors에 옮겨 실행할 세부 지침이다.
 - `adaptiveTrainingProfile`은 단일 세션으로 크게 바꾸지 않는다. 같은 유형 2~3회 이상의 반복 준수/이탈, 또는 사용자의 명시 피드백이 있을 때만 갱신한다.
@@ -113,7 +117,7 @@
   - Riegel 예측식: Race 또는 Tempo처럼 수행능력 신호가 있는 기록에 한해 목표 가능성 참고 지표로만 쓴다.
   - AthleteProfile: 나이, 러닝 경력, 주간 목표 러닝 횟수, 거리별 PB는 회복 보수성, 목표 가능성, 당일 평가 문구에 반영한다.
   - 더위와 사용자의 known issues: 30도 이상에서는 페이스보다 심박과 체감강도 우선 경고를 낸다.
-- Dashboard의 목표 예상은 단일 환산 기록만으로 판단하지 않는다. 목표 예상은 `수행능력 신호`, `역치/템포 훈련`, `유산소 베이스`, `LSD/롱런 기반`, `일관성/회복 여유`를 각각 점수화하고 가중 평균한 준비도와 함께 보여준다. Riegel 환산은 “현재 기록 신호”일 뿐이며, Tempo/Threshold 자극, 최근 30일 저강도 볼륨, 목표 거리 이상의 롱런, 최근 주차별 일관성이 부족하면 준비도를 낮춘다.
+- Dashboard의 목표 예상은 단일 환산 기록만으로 판단하지 않는다. 목표 예상은 `수행능력 신호`, `역치/템포 훈련`, `유산소 베이스`, `LSD/롱런 기반`, `일관성/회복 여유`, `부상/회복 게이트`를 각각 점수화하고 가중 평균한 준비도와 함께 보여준다. Riegel 환산은 “현재 기록 신호”일 뿐이며, Tempo/Threshold 자극, 최근 30일 저강도 볼륨, 목표 거리 이상의 롱런, 최근 주차별 일관성, 활성 부상 제한이 부족하면 준비도를 낮춘다.
 
 ## 외부 시스템 계약
 - Workoutdoors export의 기본 지원 포맷은 FIT로 제한한다.

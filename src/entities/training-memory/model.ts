@@ -1,3 +1,14 @@
+import {
+  createConservativeStrengthPlan,
+  createInjuryManagementPlan,
+  createReturnToRunCriteria,
+  createInjuryRestrictions,
+  deriveInjurySeverity,
+  normalizeInjuryAreaSelections,
+  summarizeInjuryAreas,
+  type InjuryAreaSelection
+} from './injuryAreas'
+
 export type TrainingMemory = {
   goal: string
   goals: TrainingGoal[]
@@ -36,6 +47,7 @@ export type TrainingInjuryItem = {
   id: string
   title: string
   area: string
+  normalizedAreas: InjuryAreaSelection[]
   status: 'active' | 'monitoring' | 'resolved' | 'archived'
   severity: number | null
   onsetDate: string | null
@@ -45,6 +57,7 @@ export type TrainingInjuryItem = {
   triggers: string[]
   restrictions: string[]
   returnToRunCriteria: string
+  strengthPlan: string[]
   createdAt: string
   updatedAt: string
 }
@@ -275,6 +288,7 @@ export const initialTrainingMemory: TrainingMemory = {
       id: defaultInjuryItemId,
       title: '좌측 근위부 햄스트링 이슈',
       area: '좌측 햄스트링',
+      normalizedAreas: [{ areaId: 'left-hamstring', painLevel: null }],
       status: 'monitoring',
       severity: null,
       onsetDate: null,
@@ -284,6 +298,7 @@ export const initialTrainingMemory: TrainingMemory = {
       triggers: ['템포/롱런 다음날 뻣뻣함', '볼륨 급증'],
       restrictions: ['통증이 있으면 스트라이드와 템포를 줄인다', '롱런 후 회복 반응을 먼저 확인한다'],
       returnToRunCriteria: '다음날 뻣뻣함이나 통증 신호 없이 Easy 조깅이 편하게 느껴질 때 강도를 올린다.',
+      strengthPlan: ['둔근 브리지 8~10회 x 2세트', '힙힌지 패턴 연습', '통증이 있으면 빠른 가속/스트라이드 생략'],
       createdAt: '2026-05-24T00:00:00.000Z',
       updatedAt: '2026-05-24T00:00:00.000Z'
     }
@@ -562,19 +577,25 @@ function normalizeInjuryItems(memory: Partial<TrainingMemory> | null | undefined
 function normalizeInjuryItem(item: Partial<TrainingInjuryItem>, index: number, now: string): TrainingInjuryItem | null {
   const title = typeof item.title === 'string' ? item.title.trim() : ''
   if (!title) return null
+  const legacyArea = typeof item.area === 'string' ? item.area : ''
+  const normalizedAreas = normalizeInjuryAreaSelections(item.normalizedAreas, legacyArea)
+  const area = summarizeInjuryAreas(normalizedAreas) || legacyArea
+  const strengthPlan = normalizeStringArray(item.strengthPlan)
   return {
     id: typeof item.id === 'string' && item.id ? item.id : `injury-${index + 1}`,
     title,
-    area: typeof item.area === 'string' ? item.area : '',
+    area,
+    normalizedAreas,
     status: normalizeInjuryStatus(item.status),
-    severity: normalizeSeverity(item.severity),
+    severity: deriveInjurySeverity(normalizedAreas, item.severity),
     onsetDate: typeof item.onsetDate === 'string' && item.onsetDate ? item.onsetDate : null,
     lastFlareDate: typeof item.lastFlareDate === 'string' && item.lastFlareDate ? item.lastFlareDate : null,
     notes: typeof item.notes === 'string' ? item.notes : '',
-    managementPlan: typeof item.managementPlan === 'string' ? item.managementPlan : '',
+    managementPlan: typeof item.managementPlan === 'string' && item.managementPlan.trim() ? item.managementPlan : createInjuryManagementPlan(normalizedAreas),
     triggers: normalizeStringArray(item.triggers),
-    restrictions: normalizeStringArray(item.restrictions),
-    returnToRunCriteria: typeof item.returnToRunCriteria === 'string' ? item.returnToRunCriteria : '',
+    restrictions: normalizeStringArray(item.restrictions).length ? normalizeStringArray(item.restrictions) : createInjuryRestrictions(normalizedAreas),
+    returnToRunCriteria: typeof item.returnToRunCriteria === 'string' && item.returnToRunCriteria.trim() ? item.returnToRunCriteria : createReturnToRunCriteria(normalizedAreas),
+    strengthPlan: strengthPlan.length ? strengthPlan : createConservativeStrengthPlan(normalizedAreas),
     createdAt: typeof item.createdAt === 'string' ? item.createdAt : now,
     updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : now
   }
@@ -582,12 +603,6 @@ function normalizeInjuryItem(item: Partial<TrainingInjuryItem>, index: number, n
 
 function normalizeInjuryStatus(value: unknown): TrainingInjuryItem['status'] {
   return value === 'active' || value === 'resolved' || value === 'archived' || value === 'monitoring' ? value : 'monitoring'
-}
-
-function normalizeSeverity(value: unknown): number | null {
-  const numberValue = Number(value)
-  if (!Number.isFinite(numberValue)) return null
-  return Math.min(5, Math.max(1, Math.round(numberValue)))
 }
 
 function normalizeNullableNumber(value: unknown): number | null {
