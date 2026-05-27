@@ -144,6 +144,9 @@ const weeklyRoutineGuides = computed(() => draft.weeklyPattern.map((item) => ({
   item,
   ...getWeeklyRoutineGuide(item)
 })))
+const trainingPhase = computed(() => draft.adaptiveTrainingProfile.trainingPhase)
+const progressionCriteria = computed(() => draft.adaptiveTrainingProfile.progressionCriteria)
+const prescriptionTemplates = computed(() => draft.adaptiveTrainingProfile.prescriptionTemplates)
 
 watch(
   () => memoryStore.selectedUserId,
@@ -606,6 +609,39 @@ async function save() {
           <button class="help-icon-button" type="button" aria-label="AI 스케줄링 기준 보기" @click="schedulingHelpOpen = true">?</button>
         </div>
         <div class="sub-panel">
+          <div class="training-phase-card">
+            <span class="context-chip">현재 단계</span>
+            <strong>{{ trainingPhase.currentPhase }} · {{ trainingPhase.goal }}</strong>
+            <small>다음 후보: {{ trainingPhase.nextPhase || '미정' }} · 검토: {{ trainingPhase.reviewAfter }}</small>
+            <div class="phase-focus-list">
+              <span v-for="focus in trainingPhase.focus" :key="focus">{{ focus }}</span>
+            </div>
+          </div>
+
+          <strong>승급 조건</strong>
+          <ul class="progression-criteria-list">
+            <li v-for="criterion in progressionCriteria" :key="criterion.id">
+              <div>
+                <span class="context-chip" :class="`criterion-${criterion.status}`">{{ criterion.status }}</span>
+                <strong>{{ criterion.label }}</strong>
+              </div>
+              <small>{{ criterion.evidence }}</small>
+              <p>{{ criterion.action }}</p>
+            </li>
+          </ul>
+
+          <strong>처방 템플릿</strong>
+          <div class="prescription-template-list">
+            <article v-for="template in prescriptionTemplates.slice(0, 6)" :key="template.id">
+              <span class="context-chip">{{ template.phase }}</span>
+              <strong>{{ template.name }}</strong>
+              <small>{{ template.sessionType }} · {{ template.purpose }}</small>
+              <ul>
+                <li v-for="step in template.workout.slice(0, 3)" :key="step">{{ step }}</li>
+              </ul>
+            </article>
+          </div>
+
           <strong>주간 루틴</strong>
           <p class="helper">아래는 현재 처방 기준입니다. AI 코칭은 목표와 누적 데이터를 보고 유지하거나 숫자를 조정합니다.</p>
           <ul class="routine-guide-list">

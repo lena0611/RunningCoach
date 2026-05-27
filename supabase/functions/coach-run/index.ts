@@ -466,8 +466,40 @@ type TrainingMemoryPatch = {
 type AdaptiveTrainingProfilePatch = {
   methodologyVersion?: string
   updatedAt?: string
+  trainingPhase?: TrainingPhasePatch
+  progressionCriteria?: ProgressionCriterionPatch[]
+  prescriptionTemplates?: PrescriptionTemplatePatch[]
   compliancePatterns?: string[]
   sessionGuides?: AdaptiveSessionGuidePatch[]
+}
+
+type TrainingPhasePatch = {
+  currentPhase?: 'Base' | 'Build' | 'Threshold' | 'Race Specific' | 'Taper' | 'Recovery'
+  startedAt?: string | null
+  goal?: string
+  focus?: string[]
+  nextPhase?: 'Base' | 'Build' | 'Threshold' | 'Race Specific' | 'Taper' | 'Recovery' | null
+  reviewAfter?: string
+}
+
+type ProgressionCriterionPatch = {
+  id?: string
+  label?: string
+  status?: 'ready' | 'watch' | 'blocked'
+  evidence?: string
+  action?: string
+}
+
+type PrescriptionTemplatePatch = {
+  id?: string
+  name?: string
+  phase?: 'Any' | 'Base' | 'Build' | 'Threshold' | 'Race Specific' | 'Taper' | 'Recovery'
+  sessionType?: string
+  purpose?: string
+  workout?: string[]
+  useWhen?: string[]
+  avoidWhen?: string[]
+  progressionTrigger?: string
 }
 
 type AdaptiveSessionGuidePatch = {
@@ -538,6 +570,11 @@ function buildCoachInstructions() {
     'trainingKnowledge.prescriptionRules가 있으면 세션 평가와 루틴 업데이트에서 해당 규칙의 prescription, raiseCondition, lowerCondition, contraindications를 반영한다.',
     'trainingKnowledge는 원문 전문이 아니라 저작권 문제를 피한 구조화 요약이다. 답변에서는 출처명을 짧게 언급할 수 있지만 원문 문구를 길게 재현하지 않는다.',
     'context.adaptiveTrainingProfile은 사용자 데이터와 대화로 누적된 개인화 레이어다. 문헌 기준선 위에 얹는 보정값이며, 단일 세션을 보고 즉흥적으로 덮어쓰지 않는다.',
+    'adaptiveTrainingProfile.trainingPhase는 현재 훈련 블록이다. Base/Build/Threshold/Race Specific/Taper/Recovery 중 하나로 보고, activeGoal까지 남은 기간과 최근 수행 품질에 맞춰 다음 단계 후보를 판단한다.',
+    'adaptiveTrainingProfile.progressionCriteria는 승급 조건이다. Easy 심박 안정, Tempo 상한 준수, Long Run 지속성, 부상/회복 게이트 같은 조건을 보고 유지/상향/하향/보류를 결정한다.',
+    'adaptiveTrainingProfile.prescriptionTemplates는 사용자가 Workoutdoors에 옮겨 실행할 수 있는 처방 템플릿이다. 다음 훈련을 제안할 때 이 템플릿을 우선 보고, 조건이 맞지 않으면 새 훈련을 즉흥적으로 만들지 않는다.',
+    '5km TT, 10km TT, 진짜 인터벌/크루즈 인터벌 같은 상위 품질 훈련은 progressionCriteria가 ready이고 부상/회복 게이트가 막히지 않을 때만 제안한다.',
+    '훈련 단계, 승급 조건, 처방 템플릿을 바꿔야 하면 trainingMemoryPatch.adaptiveTrainingProfile.trainingPhase/progressionCriteria/prescriptionTemplates에 전체 구조를 반환한다. 단일 세션만 보고 바꾸지 말고 반복 근거가 있을 때만 한다.',
     '알고리즘이 스스로 더 나아진다는 뜻은 소스 코드가 바뀐다는 뜻이 아니다. 반복되는 수행 패턴, 처방 준수율, 사용자 피드백을 trainingMemory.adaptiveTrainingProfile에 저장해 다음 판단에 반영한다는 뜻이다.',
     'adaptiveTrainingProfile을 업데이트할 때는 최근 2~3회 이상 같은 세션 유형에서 같은 준수/이탈 패턴이 반복되거나, 사용자가 강도/회복/통증에 대해 명시 피드백을 준 경우만 사용한다.',
     '날씨, 동반주, 과거 기록 리뷰, 데이터 부족처럼 일시적 이유로 설명되는 결과는 adaptiveTrainingProfile을 바꾸지 않는다.',
@@ -631,7 +668,7 @@ function buildCoachInstructions() {
     'memoryItems에 단일 세션의 거리/페이스/심박, "오늘 잘했다", "다음 훈련은 휴식" 같은 일회성 코멘트를 넣지 않는다.',
     '이미 context.coachMemoryItems나 trainingMemory에 같은 의미가 있으면 memoryItems에 다시 넣지 않는다.',
     '스트리밍 UI가 report를 먼저 표시하므로 JSON 객체의 키 순서는 반드시 report, memoryItems, trainingMemoryPatch 순서로 둔다.',
-    'JSON만 반환한다. 형식: {"report":"사용자에게 보여줄 마크다운 코칭","memoryItems":["장기 기억으로 저장할 짧은 문장"],"trainingMemoryPatch":null 또는 {"weeklyPattern":["화요일: ..."],"longRunStrategy":"...","currentVolumeNote":"...","activeGoalStrategyNotes":"활성 목표 전략 메모","aiNotes":["..."],"adaptiveTrainingProfile":{"compliancePatterns":["반복 패턴"],"sessionGuides":[{"type":"Tempo","boundary":"현재 사용자에게 맞는 처방 경계","adjustment":"maintain","evidence":"반복 근거","nextCheck":"다음 확인 기준"}]}}}'
+    'JSON만 반환한다. 형식: {"report":"사용자에게 보여줄 마크다운 코칭","memoryItems":["장기 기억으로 저장할 짧은 문장"],"trainingMemoryPatch":null 또는 {"weeklyPattern":["화요일: ..."],"longRunStrategy":"...","currentVolumeNote":"...","activeGoalStrategyNotes":"활성 목표 전략 메모","aiNotes":["..."],"adaptiveTrainingProfile":{"trainingPhase":{"currentPhase":"Base","startedAt":null,"goal":"...","focus":["..."],"nextPhase":"Build","reviewAfter":"..."},"progressionCriteria":[{"id":"easy-hr-stability","label":"Easy 심박 안정","status":"watch","evidence":"...","action":"..."}],"prescriptionTemplates":[{"id":"tempo-ceiling-165","name":"Tempo 상한주","phase":"Build","sessionType":"Tempo","purpose":"...","workout":["..."],"useWhen":["..."],"avoidWhen":["..."],"progressionTrigger":"..."}],"compliancePatterns":["반복 패턴"],"sessionGuides":[{"type":"Tempo","boundary":"현재 사용자에게 맞는 처방 경계","adjustment":"maintain","evidence":"반복 근거","nextCheck":"다음 확인 기준"}]}}}'
   ].join('\n')
 
 }
@@ -993,9 +1030,197 @@ function normalizeAdaptiveTrainingProfile(value: unknown) {
       ? raw.methodologyVersion.trim().slice(0, 80)
       : 'pacelab-2026-05-v1',
     updatedAt: typeof raw.updatedAt === 'string' && raw.updatedAt.trim() ? raw.updatedAt.trim().slice(0, 80) : null,
+    trainingPhase: normalizeTrainingPhase(raw.trainingPhase),
+    progressionCriteria: normalizeProgressionCriteria(raw.progressionCriteria),
+    prescriptionTemplates: normalizePrescriptionTemplates(raw.prescriptionTemplates),
     compliancePatterns: normalizeStringArray(raw.compliancePatterns, 20, 240),
     sessionGuides: normalizeAdaptiveSessionGuides(raw.sessionGuides)
   }
+}
+
+function defaultTrainingPhase(): Required<TrainingPhasePatch> {
+  return {
+    currentPhase: 'Base',
+    startedAt: null,
+    goal: '10km 60분 목표를 위한 유산소 기반과 주간 루틴 안정화',
+    focus: ['Easy 심박 안정', 'Easy + Strides 신경근 자극', 'Tempo 상한 준수', '격주 Long Run 지속성'],
+    nextPhase: 'Build',
+    reviewAfter: '핵심 세션 2~3주 안정 수행 후'
+  }
+}
+
+function defaultProgressionCriteria(): Required<ProgressionCriterionPatch>[] {
+  return [
+    {
+      id: 'easy-hr-stability',
+      label: 'Easy 심박 안정',
+      status: 'watch',
+      evidence: 'Easy는 페이스보다 심박을 우선하며 145bpm 이하 유지가 기준이다.',
+      action: '2~3회 연속 안정되면 Easy 볼륨 또는 Strides 품질 상향 후보로 본다.'
+    },
+    {
+      id: 'tempo-ceiling-quality',
+      label: 'Tempo 상한 준수',
+      status: 'watch',
+      evidence: 'Tempo는 최대 심박 165bpm을 넘기지 않고 후반 급락이 없어야 한다.',
+      action: '2회 이상 안정되면 지속 시간 소폭 증가 또는 구간형 Tempo를 검토한다.'
+    },
+    {
+      id: 'long-run-durability',
+      label: 'Long Run 지속성',
+      status: 'watch',
+      evidence: '10km 이상 세션은 후반 페이스 급락, 심박 드리프트, 다음날 회복 반응을 함께 본다.',
+      action: '회복이 안정되면 격주 Steady Long 비중을 조금 올린다.'
+    },
+    {
+      id: 'injury-recovery-gate',
+      label: '부상/회복 게이트',
+      status: 'watch',
+      evidence: 'active 또는 monitoring 부상, 통증 메모, 피로 반응이 있으면 승급을 보류한다.',
+      action: '착지감과 다음날 반응이 조용할 때만 강도나 거리 상향을 검토한다.'
+    }
+  ]
+}
+
+function defaultPrescriptionTemplates(): Required<PrescriptionTemplatePatch>[] {
+  return [
+    {
+      id: 'easy-base',
+      name: 'Easy 기반주',
+      phase: 'Any',
+      sessionType: 'Easy',
+      purpose: '유산소 기반 유지와 회복 가능한 볼륨 확보',
+      workout: ['대화 가능한 강도', '심박 145bpm 이하 우선', '페이스는 컨디션과 날씨에 맡김'],
+      useWhen: ['주간 루틴의 기본 볼륨일 때', '강훈련 전후 연결 조깅이 필요할 때'],
+      avoidWhen: ['통증이 뛰면서 커질 때', '더위로 심박이 쉽게 튈 때는 거리보다 시간으로 축소'],
+      progressionTrigger: '심박 145 이하로 2~3회 안정되고 다음날 피로가 낮으면 거리나 시간을 소폭 증가'
+    },
+    {
+      id: 'easy-strides-8x',
+      name: 'Easy + Strides',
+      phase: 'Base',
+      sessionType: 'Easy + Strides',
+      purpose: '낮은 심박 기반에 짧은 신경근 자극 추가',
+      workout: ['워밍업 10분', '20초 가속 + 1분40초 회복 x 8', '쿨다운 15분'],
+      useWhen: ['화요일 루틴', 'Easy 기반은 유지하면서 다리 회전을 깨우고 싶을 때'],
+      avoidWhen: ['햄스트링/발바닥 신호가 active일 때', '가속 회복 구간에서 호흡이 내려오지 않을 때'],
+      progressionTrigger: '가속이 선명하고 회복 구간 심박이 안정되면 횟수보다 질을 유지하고 Tempo 품질로 연결'
+    },
+    {
+      id: 'tempo-ceiling-165',
+      name: 'Tempo 상한주',
+      phase: 'Build',
+      sessionType: 'Tempo',
+      purpose: '10km 목표를 위한 역치 지속력 확보',
+      workout: ['워밍업 후 Tempo', '최대 심박 165bpm 넘기지 않기', '후반 페이스 급락 없이 마무리'],
+      useWhen: ['목요일 루틴', '최근 Easy/Long Run 회복이 안정적일 때'],
+      avoidWhen: ['최근 7일 강훈련이 많을 때', 'Tempo 중반 전에 165를 넘길 때', '통증 신호가 있을 때'],
+      progressionTrigger: '2회 이상 165 이하로 안정되면 Tempo 지속 시간을 소폭 늘리거나 구간형 Tempo 검토'
+    },
+    {
+      id: 'steady-long',
+      name: 'Steady Long',
+      phase: 'Build',
+      sessionType: 'Steady Long',
+      purpose: '롱런 안에서 목표 지속력과 후반 효율 확보',
+      workout: ['초반 Easy', '후반 자연스러운 Steady', '무리한 레이스 페이스 금지'],
+      useWhen: ['토요일 Steady Long 주차', 'LSD와 회복이 안정된 뒤'],
+      avoidWhen: ['최근 Tempo가 흔들렸을 때', '회복/부상 게이트가 watch 이상일 때'],
+      progressionTrigger: '후반 효율과 다음날 회복이 안정되면 Steady 구간을 아주 조금 확장'
+    },
+    {
+      id: '5k-check',
+      name: '5km TT 체크',
+      phase: 'Threshold',
+      sessionType: 'Race',
+      purpose: '10km 예측과 훈련 단계 점검',
+      workout: ['충분한 워밍업', '5km 지속 가능한 최고 노력', '회복 주간 안에서 배치'],
+      useWhen: ['2~3주 이상 루틴 소화와 회복이 안정적일 때', '목표 예상 업데이트 근거가 필요할 때'],
+      avoidWhen: ['통증/피로 신호가 있을 때', '최근 강훈련이 누적됐을 때'],
+      progressionTrigger: '예상 기록과 회복 반응을 보고 Tempo/Long Run 처방을 재조정'
+    }
+  ]
+}
+
+function normalizeTrainingPhase(value: unknown): Required<TrainingPhasePatch> {
+  const base = defaultTrainingPhase()
+  const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  return {
+    currentPhase: normalizeTrainingPhaseName(raw.currentPhase, base.currentPhase),
+    startedAt: typeof raw.startedAt === 'string' && raw.startedAt.trim() ? raw.startedAt.trim().slice(0, 80) : null,
+    goal: typeof raw.goal === 'string' && raw.goal.trim() ? raw.goal.trim().slice(0, 300) : base.goal,
+    focus: normalizeStringArray(raw.focus, 8, 120).length ? normalizeStringArray(raw.focus, 8, 120) : base.focus,
+    nextPhase: normalizeTrainingPhaseName(raw.nextPhase, base.nextPhase),
+    reviewAfter: typeof raw.reviewAfter === 'string' && raw.reviewAfter.trim() ? raw.reviewAfter.trim().slice(0, 180) : base.reviewAfter
+  }
+}
+
+function normalizeTrainingPhaseName(value: unknown, fallback: Required<TrainingPhasePatch>['currentPhase'] | null) {
+  return value === 'Base' || value === 'Build' || value === 'Threshold' || value === 'Race Specific' || value === 'Taper' || value === 'Recovery'
+    ? value
+    : fallback
+}
+
+function normalizeProgressionCriteria(value: unknown): Required<ProgressionCriterionPatch>[] {
+  if (!Array.isArray(value)) return defaultProgressionCriteria()
+  const items = value
+    .map((item, index) => normalizeProgressionCriterion(item, index))
+    .filter((item): item is Required<ProgressionCriterionPatch> => Boolean(item))
+    .slice(0, 12)
+  return items.length ? items : defaultProgressionCriteria()
+}
+
+function normalizeProgressionCriterion(value: unknown, index: number): Required<ProgressionCriterionPatch> | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Record<string, unknown>
+  const label = typeof raw.label === 'string' ? raw.label.trim().slice(0, 80) : ''
+  const evidence = typeof raw.evidence === 'string' ? raw.evidence.trim().slice(0, 360) : ''
+  const action = typeof raw.action === 'string' ? raw.action.trim().slice(0, 360) : ''
+  if (!label || !evidence || !action) return null
+  return {
+    id: typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim().slice(0, 80) : `criterion-${index + 1}`,
+    label,
+    status: normalizeProgressionStatus(raw.status),
+    evidence,
+    action
+  }
+}
+
+function normalizeProgressionStatus(value: unknown): Required<ProgressionCriterionPatch>['status'] {
+  return value === 'ready' || value === 'blocked' || value === 'watch' ? value : 'watch'
+}
+
+function normalizePrescriptionTemplates(value: unknown): Required<PrescriptionTemplatePatch>[] {
+  if (!Array.isArray(value)) return defaultPrescriptionTemplates()
+  const items = value
+    .map((item, index) => normalizePrescriptionTemplate(item, index))
+    .filter((item): item is Required<PrescriptionTemplatePatch> => Boolean(item))
+    .slice(0, 20)
+  return items.length ? items : defaultPrescriptionTemplates()
+}
+
+function normalizePrescriptionTemplate(value: unknown, index: number): Required<PrescriptionTemplatePatch> | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Record<string, unknown>
+  const name = typeof raw.name === 'string' ? raw.name.trim().slice(0, 80) : ''
+  const sessionType = typeof raw.sessionType === 'string' ? raw.sessionType.trim().slice(0, 40) : ''
+  const purpose = typeof raw.purpose === 'string' ? raw.purpose.trim().slice(0, 240) : ''
+  if (!name || !sessionType || !purpose) return null
+  return {
+    id: typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim().slice(0, 80) : `template-${index + 1}`,
+    name,
+    phase: normalizePrescriptionTemplatePhase(raw.phase),
+    sessionType,
+    purpose,
+    workout: normalizeStringArray(raw.workout, 8, 160),
+    useWhen: normalizeStringArray(raw.useWhen, 8, 160),
+    avoidWhen: normalizeStringArray(raw.avoidWhen, 8, 160),
+    progressionTrigger: typeof raw.progressionTrigger === 'string' ? raw.progressionTrigger.trim().slice(0, 240) : ''
+  }
+}
+
+function normalizePrescriptionTemplatePhase(value: unknown): Required<PrescriptionTemplatePatch>['phase'] {
+  return value === 'Any' ? value : normalizeTrainingPhaseName(value, 'Base') ?? 'Base'
 }
 
 function normalizeAdaptiveSessionGuides(value: unknown) {
@@ -1015,6 +1240,16 @@ function normalizeAdaptiveTrainingProfilePatch(value: unknown): AdaptiveTraining
   }
   if (typeof raw.updatedAt === 'string' && raw.updatedAt.trim()) {
     normalized.updatedAt = raw.updatedAt.trim().slice(0, 80)
+  }
+
+  if (raw.trainingPhase) {
+    normalized.trainingPhase = normalizeTrainingPhase(raw.trainingPhase)
+  }
+  if (raw.progressionCriteria) {
+    normalized.progressionCriteria = normalizeProgressionCriteria(raw.progressionCriteria)
+  }
+  if (raw.prescriptionTemplates) {
+    normalized.prescriptionTemplates = normalizePrescriptionTemplates(raw.prescriptionTemplates)
   }
 
   const compliancePatterns = normalizeStringArray(raw.compliancePatterns, 8, 240)
@@ -1178,6 +1413,9 @@ function mergeAdaptiveTrainingProfile(current: unknown, patch: AdaptiveTrainingP
   return {
     methodologyVersion: patch.methodologyVersion ?? base.methodologyVersion,
     updatedAt: patch.updatedAt ?? new Date().toISOString(),
+    trainingPhase: patch.trainingPhase ? normalizeTrainingPhase(patch.trainingPhase) : base.trainingPhase,
+    progressionCriteria: patch.progressionCriteria ? normalizeProgressionCriteria(patch.progressionCriteria) : base.progressionCriteria,
+    prescriptionTemplates: patch.prescriptionTemplates ? normalizePrescriptionTemplates(patch.prescriptionTemplates) : base.prescriptionTemplates,
     compliancePatterns: mergeStringLists(patch.compliancePatterns ?? [], base.compliancePatterns, 20),
     sessionGuides: [...patchGuides, ...[...guidesByType.values()].filter((guide) => !patchGuides.some((next) => next.type === guide.type))].slice(0, 12)
   }

@@ -29,18 +29,22 @@ PaceLAB 코칭 알고리즘은 세 겹으로 동작한다.
    - MAF, Daniels, Hanson 같은 훈련법은 원문이 아니라 적용 조건/처방 규칙/주의 조건으로 구조화한다.
    - 사용자 지식화 검토 요청은 비용 없는 backlog insert다. OpenAI를 써서 조사/요약/규칙화하는 작업은 별도 검토 단계에서만 수행한다.
 4. 개인화 적응 프로필
-   - `trainingMemory.adaptiveTrainingProfile`에 반복 패턴과 세션별 보정 가이드를 저장한다.
+   - `trainingMemory.adaptiveTrainingProfile`에 훈련 단계, 승급 조건, 처방 템플릿, 반복 패턴, 세션별 보정 가이드를 저장한다.
    - 소스 코드가 스스로 바뀌는 구조가 아니다. 누적 데이터와 사용자 피드백으로 검증된 개인화 기준만 저장된다.
 
 ## 개인화 진화 규칙
 
-- 업데이트 대상은 `adaptiveTrainingProfile.compliancePatterns`와 `adaptiveTrainingProfile.sessionGuides`다.
+- 업데이트 대상은 `adaptiveTrainingProfile.trainingPhase`, `adaptiveTrainingProfile.progressionCriteria`, `adaptiveTrainingProfile.prescriptionTemplates`, `adaptiveTrainingProfile.compliancePatterns`, `adaptiveTrainingProfile.sessionGuides`다.
+- `trainingPhase`는 Base/Build/Threshold/Race Specific/Taper/Recovery 중 하나로 현재 훈련 블록을 나타낸다.
+- `progressionCriteria`는 Easy 심박 안정, Tempo 상한 준수, Long Run 지속성, 부상/회복 게이트처럼 승급/유지/하향 판단 기준을 구조화한다.
+- `prescriptionTemplates`는 Easy, Recovery, Easy + Strides, Tempo, LSD, Steady Long, TT, interval 같은 실행 가능한 훈련 처방을 저장한다.
 - 같은 세션 유형에서 최근 2~3회 이상 같은 준수/이탈 패턴이 반복될 때만 갱신한다.
 - 사용자가 “너무 쉽다”, “다음날 피로가 크다”, “발바닥이 조용했다”, “템포가 버거웠다”처럼 명시 피드백을 주면 갱신 근거로 쓴다.
 - 날씨, 동반주, 과거 기록 리뷰, 데이터 부족처럼 일시적 요인이 크면 `watch`로 두고 갱신하지 않는다.
 - 상향 조정은 `raise`, 유지 관찰은 `maintain` 또는 `watch`, 강도 하향은 `lower`로 기록한다.
 - 단일 세션 결과로 처방 기준을 크게 바꾸지 않는다.
 - 개인화 프로필은 문헌 기준선을 대체하지 않고 그 위에 얹는 보정값이다.
+- TT와 interval 처방은 목표 예상 개선만으로 추가하지 않는다. `progressionCriteria`의 품질 게이트가 ready이고 부상/회복 게이트가 막히지 않을 때만 단계적으로 제안한다.
 
 ## 루틴 유지 기준
 

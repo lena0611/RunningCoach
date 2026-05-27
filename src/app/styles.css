@@ -3765,6 +3765,110 @@ button.run-session-row {
   line-height: 1.45;
 }
 
+.training-phase-card,
+.progression-criteria-list > li,
+.prescription-template-list > article {
+  display: grid;
+  gap: 8px;
+  border-radius: 16px;
+  background: var(--color-surface-2);
+}
+
+.training-phase-card {
+  margin-bottom: 14px;
+  padding: 16px;
+}
+
+.training-phase-card strong {
+  color: var(--color-text);
+  font-size: 17px;
+  line-height: 1.28;
+}
+
+.training-phase-card small,
+.progression-criteria-list small,
+.prescription-template-list small {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.phase-focus-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.phase-focus-list span {
+  border-radius: 999px;
+  background: var(--color-subtle);
+  color: var(--color-text);
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.progression-criteria-list,
+.prescription-template-list {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.progression-criteria-list > li,
+.prescription-template-list > article {
+  padding: 14px;
+}
+
+.progression-criteria-list li > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.progression-criteria-list strong,
+.prescription-template-list strong {
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.progression-criteria-list p {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.criterion-ready {
+  background: rgba(74, 222, 128, 0.14);
+  color: var(--color-primary);
+}
+
+.criterion-watch {
+  background: rgba(245, 158, 11, 0.14);
+  color: var(--color-warning);
+}
+
+.criterion-blocked {
+  background: rgba(239, 68, 68, 0.14);
+  color: var(--color-danger);
+}
+
+.prescription-template-list ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .memory-stack {
   display: grid;
   gap: 14px;

@@ -68,8 +68,42 @@ export type PersonalBest = {
 export type AdaptiveTrainingProfile = {
   methodologyVersion: string
   updatedAt: string | null
+  trainingPhase: TrainingPhasePlan
+  progressionCriteria: ProgressionCriterion[]
+  prescriptionTemplates: PrescriptionTemplate[]
   compliancePatterns: string[]
   sessionGuides: AdaptiveSessionGuide[]
+}
+
+export type TrainingPhaseName = 'Base' | 'Build' | 'Threshold' | 'Race Specific' | 'Taper' | 'Recovery'
+
+export type TrainingPhasePlan = {
+  currentPhase: TrainingPhaseName
+  startedAt: string | null
+  goal: string
+  focus: string[]
+  nextPhase: TrainingPhaseName | null
+  reviewAfter: string
+}
+
+export type ProgressionCriterion = {
+  id: string
+  label: string
+  status: 'ready' | 'watch' | 'blocked'
+  evidence: string
+  action: string
+}
+
+export type PrescriptionTemplate = {
+  id: string
+  name: string
+  phase: TrainingPhaseName | 'Any'
+  sessionType: string
+  purpose: string
+  workout: string[]
+  useWhen: string[]
+  avoidWhen: string[]
+  progressionTrigger: string
 }
 
 export type AdaptiveSessionGuide = {
@@ -82,6 +116,137 @@ export type AdaptiveSessionGuide = {
 
 export const defaultGoalId = 'goal-10k-60'
 export const defaultInjuryItemId = 'injury-left-hamstring'
+
+export const defaultTrainingPhase: TrainingPhasePlan = {
+  currentPhase: 'Base',
+  startedAt: null,
+  goal: '10km 60분 목표를 위한 유산소 기반과 주간 루틴 안정화',
+  focus: ['Easy 심박 안정', 'Easy + Strides 신경근 자극', 'Tempo 상한 준수', '격주 Long Run 지속성'],
+  nextPhase: 'Build',
+  reviewAfter: '핵심 세션 2~3주 안정 수행 후'
+}
+
+export const defaultProgressionCriteria: ProgressionCriterion[] = [
+  {
+    id: 'easy-hr-stability',
+    label: 'Easy 심박 안정',
+    status: 'watch',
+    evidence: 'Easy는 페이스보다 심박을 우선하며 145bpm 이하 유지가 기준이다.',
+    action: '2~3회 연속 안정되면 Easy 볼륨 또는 Strides 품질 상향 후보로 본다.'
+  },
+  {
+    id: 'tempo-ceiling-quality',
+    label: 'Tempo 상한 준수',
+    status: 'watch',
+    evidence: 'Tempo는 최대 심박 165bpm을 넘기지 않고 후반 급락이 없어야 한다.',
+    action: '2회 이상 안정되면 지속 시간 소폭 증가 또는 구간형 Tempo를 검토한다.'
+  },
+  {
+    id: 'long-run-durability',
+    label: 'Long Run 지속성',
+    status: 'watch',
+    evidence: '10km 이상 세션은 후반 페이스 급락, 심박 드리프트, 다음날 회복 반응을 함께 본다.',
+    action: '회복이 안정되면 격주 Steady Long 비중을 조금 올린다.'
+  },
+  {
+    id: 'injury-recovery-gate',
+    label: '부상/회복 게이트',
+    status: 'watch',
+    evidence: 'active 또는 monitoring 부상, 통증 메모, 피로 반응이 있으면 승급을 보류한다.',
+    action: '착지감과 다음날 반응이 조용할 때만 강도나 거리 상향을 검토한다.'
+  }
+]
+
+export const defaultPrescriptionTemplates: PrescriptionTemplate[] = [
+  {
+    id: 'easy-base',
+    name: 'Easy 기반주',
+    phase: 'Any',
+    sessionType: 'Easy',
+    purpose: '유산소 기반 유지와 회복 가능한 볼륨 확보',
+    workout: ['대화 가능한 강도', '심박 145bpm 이하 우선', '페이스는 컨디션과 날씨에 맡김'],
+    useWhen: ['주간 루틴의 기본 볼륨일 때', '강훈련 전후 연결 조깅이 필요할 때'],
+    avoidWhen: ['통증이 뛰면서 커질 때', '더위로 심박이 쉽게 튈 때는 거리보다 시간으로 축소'],
+    progressionTrigger: '심박 145 이하로 2~3회 안정되고 다음날 피로가 낮으면 거리나 시간을 소폭 증가'
+  },
+  {
+    id: 'recovery-reset',
+    name: 'Recovery 회복주',
+    phase: 'Any',
+    sessionType: 'Recovery',
+    purpose: '롱런/템포 다음날 혈류 회복과 피로 확인',
+    workout: ['심박 130bpm 전후', 'RPE 1~2', '거리 욕심 없이 착지감 확인'],
+    useWhen: ['롱런 또는 템포 다음날', '부상/피로 신호를 확인해야 할 때'],
+    avoidWhen: ['통증이 달리며 커질 때', '회복주가 Easy 강도로 올라갈 때'],
+    progressionTrigger: '반복적으로 회복주 심박이 낮고 통증이 없으면 다음 핵심 세션 정상 진행'
+  },
+  {
+    id: 'easy-strides-8x',
+    name: 'Easy + Strides',
+    phase: 'Base',
+    sessionType: 'Easy + Strides',
+    purpose: '낮은 심박 기반에 짧은 신경근 자극 추가',
+    workout: ['워밍업 10분', '20초 가속 + 1분40초 회복 x 8', '쿨다운 15분'],
+    useWhen: ['화요일 루틴', 'Easy 기반은 유지하면서 다리 회전을 깨우고 싶을 때'],
+    avoidWhen: ['햄스트링/발바닥 신호가 active일 때', '가속 회복 구간에서 호흡이 내려오지 않을 때'],
+    progressionTrigger: '가속이 선명하고 회복 구간 심박이 안정되면 횟수보다 질을 유지하고 Tempo 품질로 연결'
+  },
+  {
+    id: 'tempo-ceiling-165',
+    name: 'Tempo 상한주',
+    phase: 'Build',
+    sessionType: 'Tempo',
+    purpose: '10km 목표를 위한 역치 지속력 확보',
+    workout: ['워밍업 후 Tempo', '최대 심박 165bpm 넘기지 않기', '후반 페이스 급락 없이 마무리'],
+    useWhen: ['목요일 루틴', '최근 Easy/Long Run 회복이 안정적일 때'],
+    avoidWhen: ['최근 7일 강훈련이 많을 때', 'Tempo 중반 전에 165를 넘길 때', '통증 신호가 있을 때'],
+    progressionTrigger: '2회 이상 165 이하로 안정되면 Tempo 지속 시간을 소폭 늘리거나 구간형 Tempo 검토'
+  },
+  {
+    id: 'lsd-easy-long',
+    name: 'Easy LSD',
+    phase: 'Base',
+    sessionType: 'LSD',
+    purpose: '긴 시간 움직이는 기반과 지방대사/지속성 확보',
+    workout: ['초반 억제', '대화 가능한 강도', '후반 심박 드리프트 관찰'],
+    useWhen: ['토요일 Easy LSD 주차', '최근 강훈련 뒤 회복이 필요할 때'],
+    avoidWhen: ['전날/당일 통증 신호', '더위로 심박이 쉽게 오를 때'],
+    progressionTrigger: '후반 급락 없이 마치고 다음날 회복주가 잘 눌리면 거리 소폭 증가'
+  },
+  {
+    id: 'steady-long',
+    name: 'Steady Long',
+    phase: 'Build',
+    sessionType: 'Steady Long',
+    purpose: '롱런 안에서 목표 지속력과 후반 효율 확보',
+    workout: ['초반 Easy', '후반 자연스러운 Steady', '무리한 레이스 페이스 금지'],
+    useWhen: ['토요일 Steady Long 주차', 'LSD와 회복이 안정된 뒤'],
+    avoidWhen: ['최근 Tempo가 흔들렸을 때', '회복/부상 게이트가 watch 이상일 때'],
+    progressionTrigger: '후반 효율과 다음날 회복이 안정되면 Steady 구간을 아주 조금 확장'
+  },
+  {
+    id: '5k-check',
+    name: '5km TT 체크',
+    phase: 'Threshold',
+    sessionType: 'Race',
+    purpose: '10km 예측과 훈련 단계 점검',
+    workout: ['충분한 워밍업', '5km 지속 가능한 최고 노력', '회복 주간 안에서 배치'],
+    useWhen: ['2~3주 이상 루틴 소화와 회복이 안정적일 때', '목표 예상 업데이트 근거가 필요할 때'],
+    avoidWhen: ['통증/피로 신호가 있을 때', '최근 강훈련이 누적됐을 때'],
+    progressionTrigger: '예상 기록과 회복 반응을 보고 Tempo/Long Run 처방을 재조정'
+  },
+  {
+    id: 'cruise-interval',
+    name: 'Cruise Interval',
+    phase: 'Threshold',
+    sessionType: 'Tempo',
+    purpose: '연속 Tempo 전 단계 또는 Tempo 품질 상향',
+    workout: ['짧은 Tempo 반복', '반복 사이 짧은 회복', '심박 상한 165 유지'],
+    useWhen: ['연속 Tempo가 안정됐지만 더 긴 지속주가 부담될 때'],
+    avoidWhen: ['초반부터 심박이 튈 때', '회복이 충분하지 않을 때'],
+    progressionTrigger: '반복별 심박 상한과 페이스 안정성이 확인되면 연속 Tempo 지속 시간으로 연결'
+  }
+]
 
 export const initialTrainingMemory: TrainingMemory = {
   goal: '10km 60분 달성',
@@ -134,6 +299,9 @@ export const initialTrainingMemory: TrainingMemory = {
   adaptiveTrainingProfile: {
     methodologyVersion: 'pacelab-2026-05-v1',
     updatedAt: null,
+    trainingPhase: defaultTrainingPhase,
+    progressionCriteria: defaultProgressionCriteria,
+    prescriptionTemplates: defaultPrescriptionTemplates,
     compliancePatterns: [],
     sessionGuides: []
   },
@@ -219,11 +387,91 @@ function normalizeAdaptiveTrainingProfile(value: unknown): AdaptiveTrainingProfi
   return {
     methodologyVersion: typeof raw.methodologyVersion === 'string' && raw.methodologyVersion ? raw.methodologyVersion : 'pacelab-2026-05-v1',
     updatedAt: typeof raw.updatedAt === 'string' && raw.updatedAt ? raw.updatedAt : null,
+    trainingPhase: normalizeTrainingPhase(raw.trainingPhase),
+    progressionCriteria: normalizeProgressionCriteria(raw.progressionCriteria),
+    prescriptionTemplates: normalizePrescriptionTemplates(raw.prescriptionTemplates),
     compliancePatterns: Array.isArray(raw.compliancePatterns)
       ? raw.compliancePatterns.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()).slice(0, 20)
       : [],
     sessionGuides
   }
+}
+
+function normalizeTrainingPhase(value: unknown): TrainingPhasePlan {
+  const raw = value && typeof value === 'object' ? value as Partial<TrainingPhasePlan> : {}
+  const currentPhase = normalizeTrainingPhaseName(raw.currentPhase, defaultTrainingPhase.currentPhase) ?? defaultTrainingPhase.currentPhase
+  return {
+    currentPhase,
+    startedAt: typeof raw.startedAt === 'string' && raw.startedAt ? raw.startedAt : null,
+    goal: typeof raw.goal === 'string' && raw.goal.trim() ? raw.goal.trim() : defaultTrainingPhase.goal,
+    focus: normalizeStringArray(raw.focus).slice(0, 8).length ? normalizeStringArray(raw.focus).slice(0, 8) : [...defaultTrainingPhase.focus],
+    nextPhase: normalizeTrainingPhaseName(raw.nextPhase, defaultTrainingPhase.nextPhase),
+    reviewAfter: typeof raw.reviewAfter === 'string' && raw.reviewAfter.trim() ? raw.reviewAfter.trim() : defaultTrainingPhase.reviewAfter
+  }
+}
+
+function normalizeTrainingPhaseName(value: unknown, fallback: TrainingPhaseName | null): TrainingPhaseName | null {
+  return value === 'Base' || value === 'Build' || value === 'Threshold' || value === 'Race Specific' || value === 'Taper' || value === 'Recovery'
+    ? value
+    : fallback
+}
+
+function normalizeProgressionCriteria(value: unknown): ProgressionCriterion[] {
+  if (!Array.isArray(value)) return cloneMemory(defaultProgressionCriteria)
+  const items = value
+    .map((item, index) => normalizeProgressionCriterion(item as Partial<ProgressionCriterion>, index))
+    .filter((item): item is ProgressionCriterion => Boolean(item))
+    .slice(0, 12)
+  return items.length ? items : cloneMemory(defaultProgressionCriteria)
+}
+
+function normalizeProgressionCriterion(value: Partial<ProgressionCriterion>, index: number): ProgressionCriterion | null {
+  const label = typeof value.label === 'string' ? value.label.trim() : ''
+  const evidence = typeof value.evidence === 'string' ? value.evidence.trim() : ''
+  const action = typeof value.action === 'string' ? value.action.trim() : ''
+  if (!label || !evidence || !action) return null
+  return {
+    id: typeof value.id === 'string' && value.id.trim() ? value.id.trim() : `criterion-${index + 1}`,
+    label,
+    status: normalizeProgressionStatus(value.status),
+    evidence,
+    action
+  }
+}
+
+function normalizeProgressionStatus(value: unknown): ProgressionCriterion['status'] {
+  return value === 'ready' || value === 'blocked' || value === 'watch' ? value : 'watch'
+}
+
+function normalizePrescriptionTemplates(value: unknown): PrescriptionTemplate[] {
+  if (!Array.isArray(value)) return cloneMemory(defaultPrescriptionTemplates)
+  const items = value
+    .map((item, index) => normalizePrescriptionTemplate(item as Partial<PrescriptionTemplate>, index))
+    .filter((item): item is PrescriptionTemplate => Boolean(item))
+    .slice(0, 20)
+  return items.length ? items : cloneMemory(defaultPrescriptionTemplates)
+}
+
+function normalizePrescriptionTemplate(value: Partial<PrescriptionTemplate>, index: number): PrescriptionTemplate | null {
+  const name = typeof value.name === 'string' ? value.name.trim() : ''
+  const sessionType = typeof value.sessionType === 'string' ? value.sessionType.trim() : ''
+  const purpose = typeof value.purpose === 'string' ? value.purpose.trim() : ''
+  if (!name || !sessionType || !purpose) return null
+  return {
+    id: typeof value.id === 'string' && value.id.trim() ? value.id.trim() : `template-${index + 1}`,
+    name,
+    phase: normalizePrescriptionTemplatePhase(value.phase),
+    sessionType,
+    purpose,
+    workout: normalizeStringArray(value.workout).slice(0, 8),
+    useWhen: normalizeStringArray(value.useWhen).slice(0, 8),
+    avoidWhen: normalizeStringArray(value.avoidWhen).slice(0, 8),
+    progressionTrigger: typeof value.progressionTrigger === 'string' ? value.progressionTrigger.trim() : ''
+  }
+}
+
+function normalizePrescriptionTemplatePhase(value: unknown): PrescriptionTemplate['phase'] {
+  return value === 'Any' ? value : normalizeTrainingPhaseName(value, 'Base') ?? 'Base'
 }
 
 function normalizeAdaptiveSessionGuide(value: Partial<AdaptiveSessionGuide>): AdaptiveSessionGuide | null {

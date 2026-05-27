@@ -79,7 +79,10 @@
 - AI 코칭 입력에서 “7:00/km로 Zone 2가 되고 싶다”처럼 장기 목표나 보조 목표로 보이는 문장이 감지되면, 즉시 대화로 되묻지 않고 바텀시트로 저장 여부를 확인한다. 저장 시 활성 목표를 바꾸지 않고 보조 `TrainingGoal`과 `aiNotes`에 남겨 이후 코칭 기준으로 사용한다.
 - 부상/주의사항은 별도 이벤트가 아니라 스케줄 관리의 핵심 제약이다. AI 코칭은 매 요청마다 `activeInjuryItem`, `painNote`, 최근 강훈련/롱런 이후 회복 반응을 확인하고, 의료 진단 없이 훈련 강도와 다음 세션 배치에 반영한다.
 - 코칭 알고리즘은 문헌 기반 기준선을 먼저 적용하고, 사용자 데이터와 대화로 확인된 반복 패턴만 `adaptiveTrainingProfile`에 저장해 개인화한다. “스스로 진화”는 소스 코드 수정이 아니라 이 구조화된 개인화 프로필 갱신을 의미한다.
+- `adaptiveTrainingProfile`은 `trainingPhase`, `progressionCriteria`, `prescriptionTemplates`, `compliancePatterns`, `sessionGuides`로 구성한다. 훈련 단계는 현재 블록, 승급 조건은 상향/유지/하향 판단 게이트, 처방 템플릿은 사용자가 Workoutdoors에 옮겨 실행할 세부 지침이다.
 - `adaptiveTrainingProfile`은 단일 세션으로 크게 바꾸지 않는다. 같은 유형 2~3회 이상의 반복 준수/이탈, 또는 사용자의 명시 피드백이 있을 때만 갱신한다.
+- 5km TT, 10km TT, 크루즈 인터벌, 진짜 인터벌 같은 상위 품질 훈련은 `progressionCriteria`가 ready이고 active injury/회복 게이트가 막히지 않을 때만 처방한다.
+- 처방 템플릿이 바뀌면 `trainingPhase`와 `progressionCriteria`도 함께 검토한다. 새로운 템플릿만 추가하고 승급 근거를 남기지 않는 변경은 금지한다.
 - 날씨, 동반주, 과거 기록 리뷰, 데이터 부족 같은 일시적 요인은 개인화 경계 변경 근거로 쓰지 않는다.
 - 훈련 지식 보관소는 원문 전문을 저장하지 않는다. 책/유료 콘텐츠/웹 문서를 그대로 복사하지 않고, 출처 메타데이터와 PaceLAB 처방에 필요한 짧은 요약/구조화 규칙만 저장한다.
 - AI 코칭은 `TrainingKnowledge`에서 activeGoal 거리와 selectedRun 세션 타입에 맞는 승인된 규칙을 먼저 검색하고, 그 위에 `adaptiveTrainingProfile`을 얹어 개인화한다.

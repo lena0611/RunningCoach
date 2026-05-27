@@ -113,6 +113,13 @@ function formatMetric(value: number) {
   return `${formatInteger(value)}SPM`
 }
 
+function shouldShowYAxisLabel(value: number) {
+  const currentDomain = domain.value
+  if (!currentDomain?.interval || (props.type !== 'pace' && props.type !== 'heartRate')) return true
+  const tickIndex = Math.round((value - currentDomain.min) / currentDomain.interval)
+  return tickIndex % 3 === 0
+}
+
 function renderChart() {
   if (!chart) return
   const text = getColor('--color-text') || '#f4f7fb'
@@ -155,6 +162,7 @@ function renderChart() {
         color: muted,
         fontWeight: 700,
         formatter: (value: number) => {
+          if (!shouldShowYAxisLabel(value)) return ''
           if (props.type === 'pace') return formatPace(value)
           return formatInteger(value)
         }
