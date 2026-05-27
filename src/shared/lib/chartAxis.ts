@@ -15,6 +15,8 @@ export type ChartDomain = {
   max: number
   dataMin: number
   dataMax: number
+  displayMin: number
+  displayMax: number
 }
 
 const presets: Record<ChartMetricKind, { paddingRatio: number; minSpan: number; step: number; clampMin?: number; clampMax?: number }> = {
@@ -37,11 +39,11 @@ export function getChartDomain(values: Array<number | null | undefined>, kind: C
   const dataMin = Math.min(...numbers)
   const dataMax = Math.max(...numbers)
   if (kind === 'percent') {
-    return { min: 0, max: 100, dataMin, dataMax }
+    return { min: 0, max: 100, dataMin, dataMax, displayMin: dataMin, displayMax: dataMax }
   }
 
   const preset = presets[kind]
-  const domainNumbers = kind === 'pace' && numbers.length >= 12 ? trimOutliers(numbers, 0.08) : numbers
+  const domainNumbers = kind === 'pace' && numbers.length >= 12 ? trimExtremePaceOutliers(numbers) : numbers
   const displayMin = Math.min(...domainNumbers)
   const displayMax = Math.max(...domainNumbers)
   const rawSpan = Math.max(displayMax - displayMin, 0)
@@ -62,7 +64,7 @@ export function getChartDomain(values: Array<number | null | undefined>, kind: C
     max = min + preset.minSpan
   }
 
-  return { min, max, dataMin, dataMax }
+  return { min, max, dataMin, dataMax, displayMin, displayMax }
 }
 
 export function inferChartMetricKind(unit: string | undefined): ChartMetricKind {
@@ -81,9 +83,18 @@ function roundUp(value: number, step: number) {
   return Math.ceil(value / step) * step
 }
 
-function trimOutliers(values: number[], ratio: number) {
+function trimExtremePaceOutliers(values: number[]) {
   if (values.length < 12) return values
   const sorted = [...values].sort((a, b) => a - b)
-  const trimCount = Math.min(Math.floor(sorted.length * ratio), Math.floor((sorted.length - 2) / 2))
-  return sorted.slice(trimCount, sorted.length - trimCount)
+  const dataMin = sorted[0]
+  const dataMax = sorted[sorted.length - 1]
+  const lowerProbe = sorted[Math.floor((sorted.length - 1) * 0.08)]
+  const upperProbe = sorted[Math.ceil((sorted.length - 1) * 0.92)]
+  const stableSpan = Math.max(upperProbe - lowerProbe, 1)
+  const fastOutlierGap = Math.max(45, stableSpan * 0.8)
+  const slowOutlierGap = Math.max(75, stableSpan * 1.0)
+  const displayMin = dataMin < lowerProbe - fastOutlierGap ? lowerProbe : dataMin
+  const displayMax = dataMax > upperProbe + slowOutlierGap ? upperProbe : dataMax
+
+  return values.filter((value) => value >= displayMin && value <= displayMax)
 }

@@ -26,9 +26,20 @@ describe('chartAxis', () => {
     ]
     const domain = getChartDomain(values, 'pace')
 
-    expect(domain).toEqual(expect.objectContaining({ dataMin: 353, dataMax: 698 }))
+    expect(domain).toEqual(expect.objectContaining({ dataMin: 353, dataMax: 698, displayMin: 433, displayMax: 447 }))
     expect(domain?.min).toBeGreaterThan(330)
     expect(domain?.max).toBeLessThan(520)
+  })
+
+  it('keeps moderate pace variation inside the display domain', () => {
+    const values = [
+      361, 402, 420, 432, 438, 441, 444, 449, 453, 458, 466, 482, 510, 546
+    ]
+    const domain = getChartDomain(values, 'pace')
+
+    expect(domain).toEqual(expect.objectContaining({ dataMin: 361, dataMax: 546, displayMin: 361, displayMax: 546 }))
+    expect(domain?.min).toBeLessThanOrEqual(360)
+    expect(domain?.max).toBeGreaterThanOrEqual(555)
   })
 
   it('gives constant cadence values a non-flat domain', () => {
@@ -39,7 +50,14 @@ describe('chartAxis', () => {
   })
 
   it('uses fixed percent scale for probability-like values', () => {
-    expect(getChartDomain([75, 90], 'percent')).toEqual({ min: 0, max: 100, dataMin: 75, dataMax: 90 })
+    expect(getChartDomain([75, 90], 'percent')).toEqual({
+      min: 0,
+      max: 100,
+      dataMin: 75,
+      dataMax: 90,
+      displayMin: 75,
+      displayMax: 90
+    })
   })
 
   it('infers known metric kinds from display units', () => {

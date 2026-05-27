@@ -46,6 +46,9 @@ const summary = computed(() => {
 const range = computed(() => {
   const currentDomain = domain.value
   if (!currentDomain) return '-'
+  if (props.type === 'pace') {
+    return `${formatMetric(currentDomain.displayMin)}~${formatMetric(currentDomain.displayMax)}`
+  }
   return `${formatMetric(currentDomain.dataMin)}~${formatMetric(currentDomain.dataMax)}`
 })
 
