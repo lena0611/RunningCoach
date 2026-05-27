@@ -7,10 +7,15 @@ import LapMetricChart from '@/shared/ui/LapMetricChart.vue'
 const props = defineProps<{
   laps: Lap[]
   metricSamples: RunMetricSample[]
+  selectedOffsetSec?: number | null
+}>()
+const emit = defineEmits<{
+  'select-offset': [offsetSec: number]
 }>()
 
 type SplitChartPoint = {
   label: string
+  offsetSec: number
   paceSec: number | null
   heartRate: number | null
   cadence: number | null
@@ -21,27 +26,49 @@ const samplePoints = computed<SplitChartPoint[]>(() =>
     .filter((sample) => sample.paceSec || sample.heartRate || sample.cadence)
     .map((sample) => ({
       label: formatDuration(sample.offsetSec),
+      offsetSec: sample.offsetSec,
       paceSec: sample.paceSec,
       heartRate: sample.heartRate,
       cadence: sample.cadence
     }))
 )
 
-const lapPoints = computed<SplitChartPoint[]>(() =>
-  props.laps
+const lapPoints = computed<SplitChartPoint[]>(() => {
+  let offsetSec = 0
+  return props.laps
     .filter((lap) => lap.paceSec || lap.avgHeartRate || lap.cadence)
-    .map((lap) => ({
-      label: String(lap.index),
-      paceSec: lap.paceSec,
-      heartRate: lap.avgHeartRate,
-      cadence: lap.cadence
-    }))
-)
+    .map((lap) => {
+      const durationSec = lap.distanceKm && lap.paceSec ? lap.distanceKm * lap.paceSec : 0
+      offsetSec += durationSec
+      return {
+        label: String(lap.index),
+        offsetSec,
+        paceSec: lap.paceSec,
+        heartRate: lap.avgHeartRate,
+        cadence: lap.cadence
+      }
+    })
+})
 
 const useSampleAxis = computed(() => samplePoints.value.length >= Math.max(6, lapPoints.value.length + 2))
 const chartPoints = computed(() => useSampleAxis.value ? samplePoints.value : lapPoints.value)
 const labels = computed(() => chartPoints.value.map((point) => point.label))
 const axisName = computed(() => useSampleAxis.value ? '시간' : '랩')
+const selectedIndex = computed(() => {
+  const points = chartPoints.value
+  if (!points.length || props.selectedOffsetSec === null || props.selectedOffsetSec === undefined) return null
+  return points.reduce((nearestIndex, point, index) => {
+    return Math.abs(point.offsetSec - props.selectedOffsetSec!) < Math.abs(points[nearestIndex].offsetSec - props.selectedOffsetSec!)
+      ? index
+      : nearestIndex
+  }, 0)
+})
+
+function selectIndex(index: number) {
+  const point = chartPoints.value[index]
+  if (!point) return
+  emit('select-offset', point.offsetSec)
+}
 </script>
 
 <template>
@@ -58,6 +85,8 @@ const axisName = computed(() => useSampleAxis.value ? '시간' : '랩')
       :axis-name="axisName"
       :labels="labels"
       :values="chartPoints.map((point) => point.paceSec)"
+      :selected-index="selectedIndex"
+      @select-index="selectIndex"
     />
     <LapMetricChart
       title="심박수"
@@ -68,6 +97,8 @@ const axisName = computed(() => useSampleAxis.value ? '시간' : '랩')
       :axis-name="axisName"
       :labels="labels"
       :values="chartPoints.map((point) => point.heartRate)"
+      :selected-index="selectedIndex"
+      @select-index="selectIndex"
     />
     <LapMetricChart
       title="케이던스"
@@ -78,6 +109,8 @@ const axisName = computed(() => useSampleAxis.value ? '시간' : '랩')
       :axis-name="axisName"
       :labels="labels"
       :values="chartPoints.map((point) => point.cadence)"
+      :selected-index="selectedIndex"
+      @select-index="selectIndex"
     />
   </div>
 </template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import type { RunLog } from '@/entities/run/model'
 import { estimateHeartRateDrift } from '@/shared/lib/runStats'
 import { formatDateWithWeekday, formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
@@ -15,6 +16,8 @@ defineProps<{
   run: RunLog
   weeklyPattern?: string[]
 }>()
+
+const selectedOffsetSec = ref<number | null>(null)
 </script>
 
 <template>
@@ -49,6 +52,8 @@ defineProps<{
         <div class="metric"><span>최고 심박</span><strong>{{ formatInteger(run.maxHeartRate) }}</strong></div>
         <div class="metric"><span>운동강도</span><strong>{{ run.rpe ?? '-' }}</strong></div>
         <div class="metric"><span>드리프트</span><strong class="metric-text-value">{{ estimateHeartRateDrift(run) }}</strong></div>
+        <div class="metric"><span>누적 상승</span><strong><UnitValue :amount="formatInteger(run.elevationGainM)" unit="m" /></strong></div>
+        <div class="metric"><span>누적 하강</span><strong><UnitValue :amount="formatInteger(run.elevationLossM)" unit="m" /></strong></div>
       </div>
     </SectionCard>
 
@@ -62,7 +67,14 @@ defineProps<{
     <FitnessDetailCharts
       v-if="(run.metricSamples?.length ?? 0) || (run.routePoints?.length ?? 0)"
       :run="run"
+      :selected-offset-sec="selectedOffsetSec"
+      @select-offset="selectedOffsetSec = $event"
     />
-    <RunSplitSection :laps="run.laps" :metric-samples="run.metricSamples" />
+    <RunSplitSection
+      :laps="run.laps"
+      :metric-samples="run.metricSamples"
+      :selected-offset-sec="selectedOffsetSec"
+      @select-offset="selectedOffsetSec = $event"
+    />
   </main>
 </template>

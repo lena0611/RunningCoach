@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { BarChart, LineChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent } from 'echarts/components'
+import { GridComponent, MarkLineComponent, TooltipComponent } from 'echarts/components'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -9,7 +9,7 @@ import { init } from 'echarts/core'
 import { getChartDomain, type ChartMetricKind } from '@/shared/lib/chartAxis'
 import { formatInteger, formatPace } from '@/shared/lib/format'
 
-use([BarChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer])
+use([BarChart, LineChart, GridComponent, MarkLineComponent, TooltipComponent, CanvasRenderer])
 
 type MetricType = 'pace' | 'heartRate' | 'cadence'
 
@@ -23,11 +23,17 @@ const props = defineProps<{
   domainKind: ChartMetricKind
   inverse?: boolean
   axisName?: string
+  selectedIndex?: number | null
+}>()
+const emit = defineEmits<{
+  'select-index': [index: number]
 }>()
 
 const chartRef = ref<HTMLElement | null>(null)
 let chart: ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
+let dragging = false
+let lastEmittedIndex = -1
 
 const numbers = computed(() => props.values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value)))
 const domain = computed(() => getChartDomain(props.values, props.domainKind))
@@ -52,7 +58,7 @@ onMounted(async () => {
 })
 
 watch(
-  () => [props.labels, props.values, props.type, props.color, props.chartType, props.domainKind, props.inverse],
+  () => [props.labels, props.values, props.type, props.color, props.chartType, props.domainKind, props.inverse, props.selectedIndex],
   () => renderChart(),
   { deep: true }
 )
@@ -62,6 +68,36 @@ onBeforeUnmount(() => {
   chart?.dispose()
   chart = null
 })
+
+function selectByPointer(event: PointerEvent) {
+  if (!chartRef.value || !props.labels.length) return
+  const rect = chartRef.value.getBoundingClientRect()
+  const ratio = Math.min(Math.max((event.clientX - rect.left) / Math.max(rect.width, 1), 0), 1)
+  const index = Math.round(ratio * (props.labels.length - 1))
+  if (index === lastEmittedIndex) return
+  lastEmittedIndex = index
+  emit('select-index', index)
+  if ('vibrate' in navigator) {
+    navigator.vibrate(8)
+  }
+}
+
+function startPointerSelection(event: PointerEvent) {
+  dragging = true
+  chartRef.value?.setPointerCapture(event.pointerId)
+  selectByPointer(event)
+}
+
+function movePointerSelection(event: PointerEvent) {
+  if (!dragging) return
+  event.preventDefault()
+  selectByPointer(event)
+}
+
+function stopPointerSelection(event: PointerEvent) {
+  dragging = false
+  chartRef.value?.releasePointerCapture(event.pointerId)
+}
 
 function getColor(name: string) {
   if (!chartRef.value) return ''
@@ -138,6 +174,19 @@ function renderChart() {
       }
     ]
   }
+  if (typeof props.selectedIndex === 'number' && props.labels[props.selectedIndex]) {
+    const series = option.series as Array<Record<string, unknown>>
+    series[0].markLine = {
+      symbol: 'none',
+      silent: true,
+      lineStyle: {
+        color: text,
+        opacity: 0.62,
+        width: 2
+      },
+      data: [{ xAxis: props.labels[props.selectedIndex] }]
+    }
+  }
   chart.setOption(option, true)
 }
 </script>
@@ -151,6 +200,17 @@ function renderChart() {
       </div>
       <small>{{ range }}</small>
     </header>
-    <div ref="chartRef" class="lap-metric-chart" role="img" :aria-label="`랩별 ${title} 차트`" />
+    <div
+      ref="chartRef"
+      class="lap-metric-chart"
+      role="img"
+      data-no-swipe
+      :aria-label="`랩별 ${title} 차트`"
+      @pointerdown="startPointerSelection"
+      @pointermove="movePointerSelection"
+      @pointerup="stopPointerSelection"
+      @pointercancel="stopPointerSelection"
+      @lostpointercapture="dragging = false"
+    />
   </article>
 </template>

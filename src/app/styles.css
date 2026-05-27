@@ -2144,11 +2144,12 @@ button.run-session-row {
   width: 100%;
   height: 150px;
   min-height: 140px;
+  touch-action: pan-y;
 }
 
 .fitness-detail-card {
   display: grid;
-  gap: 18px;
+  gap: 14px;
   min-width: 0;
   overflow: visible;
 }
@@ -2194,7 +2195,7 @@ button.run-session-row {
 
 .fitness-route-card {
   position: relative;
-  min-height: 230px;
+  min-height: 238px;
   overflow: hidden;
   border-radius: 24px;
   background:
@@ -2207,20 +2208,23 @@ button.run-session-row {
   position: absolute;
   inset: 0;
   content: "";
-  opacity: 0.2;
-  background-image:
-    linear-gradient(color-mix(in srgb, var(--color-muted) 30%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--color-muted) 26%, transparent) 1px, transparent 1px);
-  background-size: 46px 46px;
-  transform: rotate(-8deg) scale(1.2);
+  z-index: 1;
+  background:
+    linear-gradient(180deg, rgba(2, 6, 12, 0.08), rgba(2, 6, 12, 0.38)),
+    radial-gradient(circle at center, transparent 0%, rgba(2, 6, 12, 0.24) 74%);
+  pointer-events: none;
 }
 
 .fitness-route-map {
   position: absolute;
-  inset: 8px;
-  z-index: 1;
-  width: calc(100% - 16px);
-  height: calc(100% - 16px);
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.fitness-route-dim {
+  fill: rgba(2, 6, 12, 0.18);
 }
 
 .fitness-route-shadow,
@@ -2232,13 +2236,13 @@ button.run-session-row {
 
 .fitness-route-shadow {
   stroke: rgba(0, 0, 0, 0.48);
-  stroke-width: 5;
+  stroke-width: 18;
 }
 
 .fitness-route-line {
   filter: url(#routeGlow);
   stroke: #22d3ee;
-  stroke-width: 3.4;
+  stroke-width: 10;
 }
 
 .fitness-route-start,
@@ -2258,6 +2262,21 @@ button.run-session-row {
 
 .fitness-route-selected {
   fill: #38bdf8;
+}
+
+.fitness-route-attribution {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  z-index: 3;
+  border-radius: 999px;
+  padding: 4px 7px;
+  background: rgba(2, 6, 12, 0.56);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 10px;
+  font-weight: 700;
+  text-decoration: none;
+  backdrop-filter: blur(10px);
 }
 
 .fitness-route-overlay {

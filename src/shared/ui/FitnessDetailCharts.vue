@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { RunLog, RunMetricSample, RunRoutePoint } from '@/entities/run/model'
-import { getChartDomain } from '@/shared/lib/chartAxis'
+import type { RunLog, RunRoutePoint } from '@/entities/run/model'
 import { formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import UnitValue from '@/shared/ui/UnitValue.vue'
 
 const props = defineProps<{
   run: RunLog
+  selectedOffsetSec?: number | null
+}>()
+const emit = defineEmits<{
+  'select-offset': [offsetSec: number]
 }>()
 
 const scope = ref<'all' | '15m'>('all')
@@ -27,39 +30,49 @@ const scopedRoutePoints = computed(() => {
 
 const safeSelectedIndex = computed(() => Math.min(Math.max(selectedIndex.value, 0), Math.max(scopedSamples.value.length - 1, 0)))
 const selectedSample = computed(() => scopedSamples.value[safeSelectedIndex.value] ?? null)
+const selectedExternalSample = computed(() => {
+  const samples = scopedSamples.value
+  if (!samples.length || props.selectedOffsetSec === null || props.selectedOffsetSec === undefined) return null
+  return nearestSample(samples, props.selectedOffsetSec)
+})
+const activeSample = computed(() => selectedExternalSample.value ?? selectedSample.value)
 const selectedRoutePoint = computed(() => {
   const points = scopedRoutePoints.value
-  const sample = selectedSample.value
+  const sample = activeSample.value
   if (!points.length) return null
   if (!sample) return points[0]
   return nearestRoutePoint(points, sample.offsetSec)
 })
-const routeBounds = computed(() => getRouteBounds(scopedRoutePoints.value))
-const routePath = computed(() => pointsToPolyline(scopedRoutePoints.value, routeBounds.value))
-const selectedRoutePosition = computed(() => selectedRoutePoint.value ? pointToPosition(selectedRoutePoint.value, routeBounds.value) : null)
-const startPointPosition = computed(() => scopedRoutePoints.value[0] ? pointToPosition(scopedRoutePoints.value[0], routeBounds.value) : null)
-const endPointPosition = computed(() => scopedRoutePoints.value.at(-1) ? pointToPosition(scopedRoutePoints.value.at(-1)!, routeBounds.value) : null)
+const routeMap = computed(() => buildRouteMap(scopedRoutePoints.value))
+const selectedRoutePosition = computed(() => selectedRoutePoint.value && routeMap.value ? pointToMapPosition(selectedRoutePoint.value, routeMap.value.zoom) : null)
+const startPointPosition = computed(() => scopedRoutePoints.value[0] && routeMap.value ? pointToMapPosition(scopedRoutePoints.value[0], routeMap.value.zoom) : null)
+const endPointPosition = computed(() => scopedRoutePoints.value.at(-1) && routeMap.value ? pointToMapPosition(scopedRoutePoints.value.at(-1)!, routeMap.value.zoom) : null)
 const selectedDistanceKm = computed(() => {
   const samples = scopedSamples.value
   if (!samples.length || !props.run.distanceKm) return props.run.distanceKm
   const lastOffset = Math.max(samples.at(-1)?.offsetSec ?? 1, 1)
-  const ratio = Math.min(Math.max((selectedSample.value?.offsetSec ?? lastOffset) / lastOffset, 0), 1)
+  const ratio = Math.min(Math.max((activeSample.value?.offsetSec ?? lastOffset) / lastOffset, 0), 1)
   return Math.round(props.run.distanceKm * ratio * 100) / 100
 })
 
-const heartRateStats = computed(() => getStats(scopedSamples.value.map((sample) => sample.heartRate)))
-const paceStats = computed(() => getStats(scopedSamples.value.map((sample) => sample.paceSec)))
-const cadenceStats = computed(() => getStats(scopedSamples.value.map((sample) => sample.cadence)))
 const elevationStats = computed(() => getStats(scopedRoutePoints.value.map((point) => point.altitude)))
-const heartRateDomain = computed(() => getChartDomain(scopedSamples.value.map((sample) => sample.heartRate), 'heartRate'))
-const paceDomain = computed(() => getChartDomain(scopedSamples.value.map((sample) => sample.paceSec), 'pace'))
-const cadenceDomain = computed(() => getChartDomain(scopedSamples.value.map((sample) => sample.cadence), 'cadence'))
-const elevationDomain = computed(() => getChartDomain(scopedRoutePoints.value.map((point) => point.altitude), 'elevation'))
 
-const hasDetailData = computed(() => scopedSamples.value.length > 0 || scopedRoutePoints.value.length > 1)
+const hasDetailData = computed(() => scopedRoutePoints.value.length > 1)
 
 function selectSample(index: number) {
   selectedIndex.value = index
+  const sample = scopedSamples.value[index]
+  if (sample) emit('select-offset', sample.offsetSec)
+}
+
+function selectOffset(offsetSec: number) {
+  const sample = nearestSample(scopedSamples.value, offsetSec)
+  if (sample) {
+    selectedIndex.value = Math.max(0, scopedSamples.value.findIndex((item) => item.offsetSec === sample.offsetSec))
+    emit('select-offset', sample.offsetSec)
+    return
+  }
+  emit('select-offset', offsetSec)
 }
 
 function setScope(value: 'all' | '15m') {
@@ -67,24 +80,22 @@ function setScope(value: 'all' | '15m') {
   selectedIndex.value = 0
 }
 
-function barHeight(sample: RunMetricSample, key: 'heartRate' | 'paceSec' | 'cadence') {
-  const domain = key === 'heartRate' ? heartRateDomain.value : key === 'paceSec' ? paceDomain.value : cadenceDomain.value
-  const value = sample[key]
-  if (value === null || !domain) return 0.16
-  const range = Math.max(domain.max - domain.min, 1)
-  const normalized = key === 'paceSec' ? (domain.max - value) / range : (value - domain.min) / range
-  return 0.12 + Math.min(Math.max(normalized, 0), 1) * 0.76
-}
-
 function elevationHeight(point: RunRoutePoint) {
-  const domain = elevationDomain.value
-  if (point.altitude === null || !domain) return 0.16
-  const range = Math.max(domain.max - domain.min, 1)
-  const normalized = (point.altitude - domain.min) / range
+  const stats = elevationStats.value
+  if (point.altitude === null || !stats) return 0.16
+  const range = Math.max(stats.max - stats.min, 1)
+  const normalized = (point.altitude - stats.min) / range
   return 0.12 + Math.min(Math.max(normalized, 0), 1) * 0.76
 }
 
 function nearestRoutePoint(points: RunRoutePoint[], offsetSec: number) {
+  return points.reduce((nearest, point) => {
+    return Math.abs(point.offsetSec - offsetSec) < Math.abs(nearest.offsetSec - offsetSec) ? point : nearest
+  }, points[0])
+}
+
+function nearestSample<T extends { offsetSec: number }>(points: T[], offsetSec: number) {
+  if (!points.length) return null
   return points.reduce((nearest, point) => {
     return Math.abs(point.offsetSec - offsetSec) < Math.abs(nearest.offsetSec - offsetSec) ? point : nearest
   }, points[0])
@@ -102,42 +113,89 @@ function getStats(values: Array<number | null>) {
   }
 }
 
-function getRouteBounds(points: RunRoutePoint[]) {
-  if (!points.length) {
-    return { minLat: 0, maxLat: 1, minLon: 0, maxLon: 1 }
+function buildRouteMap(points: RunRoutePoint[]) {
+  if (points.length < 2) return null
+  const zoom = estimateRouteZoom(points)
+  const projectedPoints = points.map((point) => pointToMapPosition(point, zoom))
+  const xs = projectedPoints.map((point) => point.x)
+  const ys = projectedPoints.map((point) => point.y)
+  let minX = Math.min(...xs)
+  let maxX = Math.max(...xs)
+  let minY = Math.min(...ys)
+  let maxY = Math.max(...ys)
+  const padding = 64
+  minX -= padding
+  maxX += padding
+  minY -= padding
+  maxY += padding
+
+  const desiredAspect = 1.58
+  const width = Math.max(maxX - minX, 1)
+  const height = Math.max(maxY - minY, 1)
+  if (width / height > desiredAspect) {
+    const nextHeight = width / desiredAspect
+    const delta = (nextHeight - height) / 2
+    minY -= delta
+    maxY += delta
+  } else {
+    const nextWidth = height * desiredAspect
+    const delta = (nextWidth - width) / 2
+    minX -= delta
+    maxX += delta
   }
+
+  const minTileX = Math.floor(minX / 256)
+  const maxTileX = Math.floor(maxX / 256)
+  const minTileY = Math.floor(minY / 256)
+  const maxTileY = Math.floor(maxY / 256)
+  const tileLimit = 2 ** zoom
+  const tiles = []
+  for (let x = minTileX; x <= maxTileX; x += 1) {
+    for (let y = minTileY; y <= maxTileY; y += 1) {
+      if (x < 0 || y < 0 || x >= tileLimit || y >= tileLimit) continue
+      tiles.push({
+        x,
+        y,
+        href: `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`
+      })
+    }
+  }
+
+  return {
+    zoom,
+    viewBox: `${minX} ${minY} ${maxX - minX} ${maxY - minY}`,
+    path: projectedPoints.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' '),
+    tiles
+  }
+}
+
+function estimateRouteZoom(points: RunRoutePoint[]) {
   const latitudes = points.map((point) => point.latitude)
   const longitudes = points.map((point) => point.longitude)
-  const minLat = Math.min(...latitudes)
-  const maxLat = Math.max(...latitudes)
-  const minLon = Math.min(...longitudes)
-  const maxLon = Math.max(...longitudes)
-  return {
-    minLat,
-    maxLat: maxLat === minLat ? maxLat + 0.001 : maxLat,
-    minLon,
-    maxLon: maxLon === minLon ? maxLon + 0.001 : maxLon
-  }
+  const span = Math.max(
+    Math.max(...latitudes) - Math.min(...latitudes),
+    Math.max(...longitudes) - Math.min(...longitudes)
+  )
+  if (span < 0.006) return 16
+  if (span < 0.018) return 15
+  if (span < 0.045) return 14
+  if (span < 0.09) return 13
+  return 12
 }
 
-function pointToPosition(point: RunRoutePoint, bounds: ReturnType<typeof getRouteBounds>) {
-  const x = ((point.longitude - bounds.minLon) / (bounds.maxLon - bounds.minLon)) * 88 + 6
-  const y = (1 - (point.latitude - bounds.minLat) / (bounds.maxLat - bounds.minLat)) * 78 + 10
+function pointToMapPosition(point: RunRoutePoint, zoom: number) {
+  const scale = 256 * 2 ** zoom
+  const sinLat = Math.sin((Math.max(Math.min(point.latitude, 85.05112878), -85.05112878) * Math.PI) / 180)
+  const x = ((point.longitude + 180) / 360) * scale
+  const y = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * scale
   return { x, y }
-}
-
-function pointsToPolyline(points: RunRoutePoint[], bounds: ReturnType<typeof getRouteBounds>) {
-  return points
-    .map((point) => pointToPosition(point, bounds))
-    .map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`)
-    .join(' ')
 }
 </script>
 
 <template>
   <SectionCard v-if="hasDetailData" class="fitness-detail-card">
     <div class="fitness-detail-header">
-      <h3>운동 세부사항</h3>
+      <h3>경로</h3>
       <div class="fitness-scope-toggle" role="tablist" aria-label="세부사항 범위">
         <button type="button" :class="{ active: scope === '15m' }" @click="setScope('15m')">15분</button>
         <button type="button" :class="{ active: scope === 'all' }" @click="setScope('all')">전체</button>
@@ -145,7 +203,7 @@ function pointsToPolyline(points: RunRoutePoint[], bounds: ReturnType<typeof get
     </div>
 
     <div class="fitness-route-card">
-      <svg v-if="routePath" class="fitness-route-map" viewBox="0 0 100 100" role="img" aria-label="러닝 경로">
+      <svg v-if="routeMap" class="fitness-route-map" :viewBox="routeMap.viewBox" role="img" aria-label="러닝 경로">
         <defs>
           <filter id="routeGlow" x="-20%" y="-20%" width="140%" height="140%">
             <feGaussianBlur stdDeviation="1.8" result="blur" />
@@ -155,25 +213,45 @@ function pointsToPolyline(points: RunRoutePoint[], bounds: ReturnType<typeof get
             </feMerge>
           </filter>
         </defs>
-        <polyline class="fitness-route-shadow" :points="routePath" />
-        <polyline class="fitness-route-line" :points="routePath" />
-        <circle v-if="startPointPosition" class="fitness-route-start" :cx="startPointPosition.x" :cy="startPointPosition.y" r="2.7" />
-        <circle v-if="endPointPosition" class="fitness-route-end" :cx="endPointPosition.x" :cy="endPointPosition.y" r="2.7" />
-        <circle v-if="selectedRoutePosition" class="fitness-route-selected" :cx="selectedRoutePosition.x" :cy="selectedRoutePosition.y" r="2.6" />
+        <image
+          v-for="tile in routeMap.tiles"
+          :key="`${tile.x}-${tile.y}`"
+          :href="tile.href"
+          :x="tile.x * 256"
+          :y="tile.y * 256"
+          width="256"
+          height="256"
+          preserveAspectRatio="none"
+        />
+        <rect class="fitness-route-dim" x="-100000" y="-100000" width="200000" height="200000" />
+        <polyline class="fitness-route-shadow" :points="routeMap.path" />
+        <polyline class="fitness-route-line" :points="routeMap.path" />
+        <circle v-if="startPointPosition" class="fitness-route-start" :cx="startPointPosition.x" :cy="startPointPosition.y" r="14" />
+        <circle v-if="endPointPosition" class="fitness-route-end" :cx="endPointPosition.x" :cy="endPointPosition.y" r="14" />
+        <circle v-if="selectedRoutePosition" class="fitness-route-selected" :cx="selectedRoutePosition.x" :cy="selectedRoutePosition.y" r="12" />
       </svg>
       <div v-else class="fitness-route-empty">표시할 경로 데이터가 없습니다.</div>
+      <a
+        v-if="routeMap"
+        class="fitness-route-attribution"
+        href="https://www.openstreetmap.org/copyright"
+        target="_blank"
+        rel="noreferrer"
+      >
+        © OpenStreetMap
+      </a>
       <div class="fitness-route-overlay">
-        <strong>{{ formatDuration(selectedSample?.offsetSec ?? run.durationSec) }}</strong>
+        <strong>{{ formatDuration(activeSample?.offsetSec ?? run.durationSec) }}</strong>
         <strong><UnitValue :amount="selectedDistanceKm" unit="km" /></strong>
       </div>
     </div>
 
-    <div v-if="selectedSample" class="fitness-selected-metrics">
+    <div v-if="activeSample" class="fitness-selected-metrics">
       <span>선택 구간</span>
-      <strong>{{ formatDuration(selectedSample.offsetSec) }}</strong>
-      <em>{{ formatPace(selectedSample.paceSec) }}/km</em>
-      <em>{{ formatInteger(selectedSample.heartRate) }}BPM</em>
-      <em>{{ formatInteger(selectedSample.cadence) }}SPM</em>
+      <strong>{{ formatDuration(activeSample.offsetSec) }}</strong>
+      <em>{{ formatPace(activeSample.paceSec) }}/km</em>
+      <em>{{ formatInteger(activeSample.heartRate) }}BPM</em>
+      <em>{{ formatInteger(activeSample.cadence) }}SPM</em>
     </div>
 
     <div v-if="elevationStats" class="fitness-mini-chart fitness-chart-elevation">
@@ -189,61 +267,7 @@ function pointsToPolyline(points: RunRoutePoint[], bounds: ReturnType<typeof get
           type="button"
           :class="{ active: selectedRoutePoint?.offsetSec === point.offsetSec }"
           :style="{ '--bar-height': `${elevationHeight(point) * 100}%` }"
-          @click="selectSample(Math.max(0, scopedSamples.findIndex((sample) => sample.offsetSec >= point.offsetSec)))"
-        />
-      </div>
-    </div>
-
-    <div v-if="scopedSamples.length" class="fitness-mini-chart fitness-chart-hr">
-      <div class="fitness-chart-title">
-        <span>심박수</span>
-        <strong>평균: {{ formatInteger(heartRateStats?.average ?? null) }}BPM</strong>
-        <small>{{ formatInteger(heartRateStats?.min ?? null) }}~{{ formatInteger(heartRateStats?.max ?? null) }}BPM</small>
-      </div>
-      <div class="fitness-bars" aria-hidden="true">
-        <button
-          v-for="(sample, index) in scopedSamples"
-          :key="`hr-${sample.offsetSec}-${index}`"
-          type="button"
-          :class="{ active: index === safeSelectedIndex }"
-          :style="{ '--bar-height': `${barHeight(sample, 'heartRate') * 100}%` }"
-          @click="selectSample(index)"
-        />
-      </div>
-    </div>
-
-    <div v-if="scopedSamples.length" class="fitness-mini-chart fitness-chart-pace">
-      <div class="fitness-chart-title">
-        <span>페이스</span>
-        <strong>평균: {{ formatPace(run.avgPaceSec) }}/km</strong>
-        <small>{{ formatPace(paceStats?.max ?? null) }}~{{ formatPace(paceStats?.min ?? null) }}/km</small>
-      </div>
-      <div class="fitness-bars" aria-hidden="true">
-        <button
-          v-for="(sample, index) in scopedSamples"
-          :key="`pace-${sample.offsetSec}-${index}`"
-          type="button"
-          :class="{ active: index === safeSelectedIndex }"
-          :style="{ '--bar-height': `${barHeight(sample, 'paceSec') * 100}%` }"
-          @click="selectSample(index)"
-        />
-      </div>
-    </div>
-
-    <div v-if="scopedSamples.length" class="fitness-mini-chart fitness-chart-cadence">
-      <div class="fitness-chart-title">
-        <span>케이던스</span>
-        <strong>평균: {{ formatInteger(cadenceStats?.average ?? null) }}SPM</strong>
-        <small>{{ formatInteger(cadenceStats?.min ?? null) }}~{{ formatInteger(cadenceStats?.max ?? null) }}SPM</small>
-      </div>
-      <div class="fitness-bars" aria-hidden="true">
-        <button
-          v-for="(sample, index) in scopedSamples"
-          :key="`cad-${sample.offsetSec}-${index}`"
-          type="button"
-          :class="{ active: index === safeSelectedIndex }"
-          :style="{ '--bar-height': `${barHeight(sample, 'cadence') * 100}%` }"
-          @click="selectSample(index)"
+          @click="selectOffset(point.offsetSec)"
         />
       </div>
     </div>
