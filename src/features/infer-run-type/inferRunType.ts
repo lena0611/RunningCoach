@@ -1,4 +1,4 @@
-import type { FastSegment, Lap, RunType } from '@/entities/run/model'
+import type { FastSegment, Lap, RunMetricSample, RunType } from '@/entities/run/model'
 
 type InferRunTypeInput = {
   date: string
@@ -7,6 +7,7 @@ type InferRunTypeInput = {
   avgHeartRate: number | null
   laps: Lap[]
   fastSegments: FastSegment[]
+  metricSamples?: RunMetricSample[]
   weeklyPattern?: string[]
 }
 
@@ -26,6 +27,7 @@ export function inferRunType(input: InferRunTypeInput): RunType {
   const easyRatio = getEasyRatio(input.laps, distanceKm, avgPaceSec, input.avgHeartRate)
   const fastSegmentCount = countUsefulFastSegments(input.fastSegments)
   const hasStridesPattern = hasStrideIntervalPattern(input.fastSegments)
+  const hasMetricStridesPattern = hasStrideMetricPattern(input.metricSamples ?? [], avgPaceSec, input.avgHeartRate)
   const hasStrideSplitsPattern = hasStrideLapPattern(input.laps)
   const tempoDistanceKm = getSustainedTempoDistance(input.laps, distanceKm, avgPaceSec)
   const isSaturday = getWeekday(input.date) === 6
@@ -39,7 +41,7 @@ export function inferRunType(input: InferRunTypeInput): RunType {
     }
   }
 
-  if (distanceKm <= 10 && easyRatio >= 0.45 && (hasStridesPattern || hasStrideSplitsPattern || (fastSegmentCount >= 4 && isScheduledStrides(scheduledWorkout)))) {
+  if (distanceKm <= 10 && easyRatio >= 0.45 && (hasStridesPattern || hasMetricStridesPattern || hasStrideSplitsPattern || (fastSegmentCount >= 4 && isScheduledStrides(scheduledWorkout)))) {
     return 'Easy + Strides'
   }
 
@@ -129,6 +131,62 @@ function hasStrideIntervalPattern(segments: FastSegment[]) {
   return hasWorkoutWarmup && intervalLikeGaps >= Math.min(4, gaps.length)
 }
 
+function hasStrideMetricPattern(samples: RunMetricSample[], avgPaceSec: number | null, avgHeartRate: number | null) {
+  const clean = samples
+    .filter((sample) => Number.isFinite(sample.offsetSec) && (isUsablePace(sample.paceSec) || isUsableCadence(sample.cadence)))
+    .sort((a, b) => a.offsetSec - b.offsetSec)
+  if (clean.length < 12) return false
+
+  const paceValues = clean.map((sample) => sample.paceSec).filter(isUsablePace)
+  const cadenceValues = clean.map((sample) => sample.cadence).filter(isUsableCadence)
+  const medianPace = median(paceValues)
+  const medianCadence = median(cadenceValues)
+  const paceThreshold = medianPace === null
+    ? 360
+    : Math.min(365, Math.max(300, medianPace - 35))
+  const cadenceThreshold = medianCadence === null
+    ? 182
+    : Math.max(180, medianCadence + 10)
+
+  const fastSamples = clean.filter((sample) => {
+    const paceFast = isUsablePace(sample.paceSec) && sample.paceSec <= paceThreshold
+    const cadenceFast = isUsableCadence(sample.cadence) && sample.cadence >= cadenceThreshold
+    const heartRateOk = sample.heartRate === null || sample.heartRate <= easyHeartRateCeiling + 12
+    return heartRateOk && (paceFast || cadenceFast)
+  })
+  if (fastSamples.length < 4) return false
+
+  const clusters = clusterFastSamples(fastSamples)
+  if (clusters.length < 4) return false
+
+  const firstStart = clusters[0].startSec
+  const starts = clusters.map((cluster) => cluster.startSec)
+  const gaps = starts.slice(1).map((start, index) => start - starts[index])
+  const intervalLikeGaps = gaps.filter((gap) => gap >= 40 && gap <= 260).length
+  const hasWarmup = firstStart >= strideTimingTolerance.minWarmupSec
+  const notTempo = avgHeartRate === null || avgHeartRate <= easyHeartRateCeiling
+  const easyAveragePace = avgPaceSec === null || avgPaceSec >= 390
+
+  return hasWarmup && notTempo && easyAveragePace && intervalLikeGaps >= Math.min(4, gaps.length)
+}
+
+function clusterFastSamples(samples: RunMetricSample[]) {
+  const clusters: Array<{ startSec: number; endSec: number; count: number }> = []
+  for (const sample of samples) {
+    const last = clusters.at(-1)
+    if (last && sample.offsetSec - last.endSec <= 55) {
+      last.endSec = sample.offsetSec
+      last.count += 1
+    } else {
+      clusters.push({ startSec: sample.offsetSec, endSec: sample.offsetSec, count: 1 })
+    }
+  }
+  return clusters.filter((cluster) => {
+    const duration = cluster.endSec - cluster.startSec
+    return duration <= 80 || cluster.count <= 3
+  })
+}
+
 function hasStrideLapPattern(laps: Lap[]) {
   const segments = getLapSegments(laps)
     .map((lap) => ({
@@ -203,6 +261,21 @@ function getLapSegments(laps: Lap[]) {
       avgHeartRate: typeof lap.avgHeartRate === 'number' && Number.isFinite(lap.avgHeartRate) ? lap.avgHeartRate : null
     }))
     .filter((lap) => Number.isFinite(lap.distanceKm) && lap.distanceKm > 0 && Number.isFinite(lap.paceSec))
+}
+
+function isUsablePace(value: number | null): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 180 && value <= 900
+}
+
+function isUsableCadence(value: number | null): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 120 && value <= 230
+}
+
+function median(values: number[]) {
+  if (!values.length) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
 }
 
 function weightedPace(laps: Array<{ distanceKm: number; paceSec: number }>) {

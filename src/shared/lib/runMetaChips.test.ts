@@ -3,7 +3,7 @@ import type { RunLog } from '@/entities/run/model'
 import { getRunFilterTags, getRunMetaChips, hasRunFilterTag } from './runMetaChips'
 
 describe('getRunMetaChips', () => {
-  it('adds schedule, period, and weather chips when matched', () => {
+  it('adds schedule, period, and weather value chips when matched', () => {
     const run = createRun({
       date: '2026-05-26',
       sessionTitle: '화요일 밤 러닝',
@@ -14,8 +14,13 @@ describe('getRunMetaChips', () => {
     expect(getRunMetaChips(run, ['화요일: Easy + Strides'])).toEqual([
       { label: '스케줄', tone: 'schedule' },
       { label: '밤', tone: 'period' },
-      { label: '날씨', tone: 'weather' }
+      { label: '기온 23°', tone: 'weather' }
     ])
+  })
+
+  it('uses humidity or wind when temperature is not available', () => {
+    expect(getRunMetaChips(createRun({ humidity: 71 })).at(-1)).toEqual({ label: '습도 71%', tone: 'weather' })
+    expect(getRunMetaChips(createRun({ windMps: 2.4 })).at(-1)).toEqual({ label: '바람 2.4m/s', tone: 'weather' })
   })
 
   it('marks non-routine runs as extra', () => {

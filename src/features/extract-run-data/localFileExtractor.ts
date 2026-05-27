@@ -64,7 +64,8 @@ async function extractFromFit(buffer: ArrayBuffer): Promise<ExtractedRunData> {
     avgPaceSec: totalDistanceKm > 0 && durationSec ? Math.round(durationSec / totalDistanceKm) : null,
     avgHeartRate: numberOrNull(String(session?.avg_heart_rate ?? '')),
     laps: mappedLaps,
-    fastSegments: []
+    fastSegments: [],
+    metricSamples
   })
 
   return {

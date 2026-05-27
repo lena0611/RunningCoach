@@ -118,6 +118,7 @@ export function toExtractedRunData(candidate: HealthKitRunCandidate, weeklyPatte
     avgHeartRate: candidate.avgHeartRate,
     laps: candidate.laps ?? [],
     fastSegments: candidate.fastSegments ?? [],
+    metricSamples: candidate.metricSamples ?? [],
     weeklyPattern,
     date: candidate.date
   })

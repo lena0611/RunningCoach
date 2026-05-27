@@ -30,7 +30,8 @@ export function getRunMetaChips(run: RunLog, weeklyPattern: string[] = []): RunM
 
   const period = getRunPeriod(run)
   if (period) chips.push({ label: period, tone: 'period' })
-  if (hasWeatherData(run)) chips.push({ label: '날씨', tone: 'weather' })
+  const weatherLabel = getWeatherChipLabel(run)
+  if (weatherLabel) chips.push({ label: weatherLabel, tone: 'weather' })
 
   return chips
 }
@@ -96,6 +97,17 @@ function getRunPeriod(run: RunLog) {
 
 function hasWeatherData(run: RunLog) {
   return run.temperature !== null || run.humidity !== null || run.windMps !== null
+}
+
+function getWeatherChipLabel(run: RunLog) {
+  if (run.temperature !== null) return `기온 ${Math.round(run.temperature)}°`
+  if (run.humidity !== null) return `습도 ${Math.round(run.humidity)}%`
+  if (run.windMps !== null) return `바람 ${round(run.windMps)}m/s`
+  return ''
+}
+
+function round(value: number) {
+  return Math.round(value * 10) / 10
 }
 
 function uniqueTags(tags: RunFilterTag[]) {
