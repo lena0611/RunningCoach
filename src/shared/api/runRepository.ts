@@ -14,6 +14,7 @@ type RunLogRow = {
   avg_heart_rate: number | null
   max_heart_rate: number | null
   cadence: number | null
+  active_energy_kcal: number | null
   temperature: number | null
   humidity: number | null
   wind_mps: number | null
@@ -83,6 +84,7 @@ export async function updateRunLog(run: RunLog): Promise<RunLog> {
       avg_heart_rate: rest.avgHeartRate,
       max_heart_rate: rest.maxHeartRate,
       cadence: rest.cadence,
+      active_energy_kcal: rest.activeEnergyKcal,
       temperature: rest.temperature,
       humidity: rest.humidity,
       wind_mps: rest.windMps,
@@ -129,6 +131,7 @@ function toInsertRow(data: ExtractedRunData, source: RunLog['source']) {
     avg_heart_rate: data.avgHeartRate,
     max_heart_rate: data.maxHeartRate,
     cadence: data.cadence,
+    active_energy_kcal: data.activeEnergyKcal,
     temperature: data.temperature,
     humidity: data.humidity,
     wind_mps: data.windMps,
@@ -172,6 +175,7 @@ function fromRow(row: RunLogRow): RunLog {
     avgHeartRate: row.avg_heart_rate,
     maxHeartRate: row.max_heart_rate,
     cadence: row.cadence,
+    activeEnergyKcal: row.active_energy_kcal,
     temperature: row.temperature,
     humidity: row.humidity,
     windMps: row.wind_mps,

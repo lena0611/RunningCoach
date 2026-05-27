@@ -86,6 +86,10 @@ function setNumber(key: keyof ExtractedRunData, value: string | number | null) {
       <ClearableField :model-value="model.cadence" type="number" number @update:model-value="setNumber('cadence', $event)" />
     </label>
     <label>
+      활동 칼로리 kcal
+      <ClearableField :model-value="model.activeEnergyKcal" type="number" inputmode="numeric" number @update:model-value="setNumber('activeEnergyKcal', $event)" />
+    </label>
+    <label>
       기온
       <ClearableField :model-value="model.temperature" type="number" number @update:model-value="setNumber('temperature', $event)" />
     </label>

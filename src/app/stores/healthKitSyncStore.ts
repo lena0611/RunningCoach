@@ -167,6 +167,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
           avgHeartRate: extracted.avgHeartRate,
           maxHeartRate: extracted.maxHeartRate,
           cadence: extracted.cadence,
+          activeEnergyKcal: extracted.activeEnergyKcal,
           temperature: extracted.temperature,
           humidity: extracted.humidity,
           windMps: extracted.windMps,

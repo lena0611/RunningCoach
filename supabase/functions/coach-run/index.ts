@@ -13,6 +13,7 @@ type RunLogRow = {
   avg_heart_rate: number | null
   max_heart_rate: number | null
   cadence: number | null
+  active_energy_kcal: number | null
   temperature: number | null
   humidity: number | null
   wind_mps: number | null

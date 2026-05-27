@@ -53,6 +53,7 @@
 - HealthKit 데이터 구조와 `RunLog` 매핑은 `.harness/project/healthkit-data-contract.md`를 기준으로 한다.
 - 네이티브는 `HKWorkout` 러닝 세션과 관련 quantity samples를 구조화된 후보로 변환한다.
 - 웹 앱은 HealthKit 원본 객체를 직접 다루지 않고 `HealthKitRunCandidate` 같은 plain JSON 후보만 받는다.
+- 네이티브 후보에 새 구조화 필드가 추가되면 웹 `RunLog` 타입, HealthKit 변환기, Supabase migration/repository, 세션 새로고침 병합, 수정 폼, 상세 표시까지 한 번에 연결한다. 브리지 타입에만 추가하고 저장 모델에서 버리면 안 된다.
 - 웹 앱의 HealthKit 브리지 등록과 자동 동기화 트리거는 앱 루트 전역 스토어에서 담당한다. 개별 페이지가 브리지를 직접 등록/해제하지 않는다.
 
 ## 날씨 계약

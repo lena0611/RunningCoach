@@ -130,6 +130,7 @@ function loadRuns(): RunLog[] {
           ...run,
           userId: run.userId ?? 'default',
           externalId: run.externalId ?? null,
+          activeEnergyKcal: run.activeEnergyKcal ?? null,
           fastSegments: run.fastSegments ?? [],
           metricSamples: run.metricSamples ?? [],
           routePoints: run.routePoints ?? []

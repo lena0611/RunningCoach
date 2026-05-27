@@ -39,6 +39,7 @@ async function extractFromFit(buffer: ArrayBuffer): Promise<ExtractedRunData> {
   const rawCadence = numberOrNull(String(session?.avg_cadence ?? ''))
   const elevationGainM = numberOrNull(String(session?.total_ascent ?? session?.total_elevation_gain ?? session?.enhanced_total_ascent ?? ''))
   const elevationLossM = numberOrNull(String(session?.total_descent ?? session?.total_elevation_loss ?? session?.enhanced_total_descent ?? ''))
+  const activeEnergyKcal = numberOrNull(String(session?.total_calories ?? session?.active_calories ?? session?.total_energy ?? ''))
   const temperature = numberOrNull(String(session?.avg_temperature ?? session?.temperature ?? session?.max_temperature ?? ''))
   const humidity = numberOrNull(String(session?.avg_humidity ?? session?.humidity ?? ''))
   const windMps = numberOrNull(String(session?.avg_wind_speed ?? session?.wind_speed ?? ''))
@@ -84,6 +85,7 @@ async function extractFromFit(buffer: ArrayBuffer): Promise<ExtractedRunData> {
     avgHeartRate: numberOrNull(String(session?.avg_heart_rate ?? '')),
     maxHeartRate: numberOrNull(String(session?.max_heart_rate ?? '')),
     cadence: rawCadence === null ? null : normalizeCadence(rawCadence),
+    activeEnergyKcal,
     temperature,
     humidity,
     windMps,
@@ -110,6 +112,7 @@ export function createEmptyRun(): ExtractedRunData {
     avgHeartRate: null,
     maxHeartRate: null,
     cadence: null,
+    activeEnergyKcal: null,
     temperature: null,
     humidity: null,
     windMps: null,

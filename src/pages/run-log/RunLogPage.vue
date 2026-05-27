@@ -154,6 +154,7 @@ const filteredRuns = computed(() => {
 })
 
 const visibleRuns = computed(() => filteredRuns.value.slice(0, visibleCount.value))
+const visibleRunGroups = computed(() => groupRunsByMonth(visibleRuns.value))
 const hasMoreRuns = computed(() => visibleCount.value < filteredRuns.value.length)
 const isEditDirty = computed(() => Boolean(editing.value) && JSON.stringify(editing.value) !== editSnapshot.value)
 const openStack = computed(() => Boolean(detailRun.value || addingRun.value || editing.value || coachRun.value))
@@ -275,6 +276,25 @@ function setupObserver() {
 
 function showMore() {
   if (hasMoreRuns.value) visibleCount.value += 10
+}
+
+function groupRunsByMonth(runs: RunLog[]) {
+  const groups: Array<{ key: string; title: string; runs: RunLog[] }> = []
+  for (const run of runs) {
+    const key = run.date.slice(0, 7)
+    let group = groups.find((item) => item.key === key)
+    if (!group) {
+      group = { key, title: formatMonthHeading(key), runs: [] }
+      groups.push(group)
+    }
+    group.runs.push(run)
+  }
+  return groups
+}
+
+function formatMonthHeading(monthKey: string) {
+  const [year, month] = monthKey.split('-')
+  return `${year}년 ${Number(month)}월`
 }
 
 function previousMonth() {
@@ -759,7 +779,21 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
         <small class="helper">{{ filteredRuns.length }}개</small>
       </SectionHeader>
       <p v-if="runStore.loading" class="helper">Run Log를 불러오고 있습니다.</p>
-      <RunSessionList v-if="visibleRuns.length" :runs="visibleRuns" :weekly-pattern="memoryStore.memory.weeklyPattern" interactive @select="openDetail" />
+      <template v-if="visibleRuns.length">
+        <RunSessionList
+          v-if="selectedDate"
+          :runs="visibleRuns"
+          :weekly-pattern="memoryStore.memory.weeklyPattern"
+          interactive
+          @select="openDetail"
+        />
+        <div v-else class="run-month-groups">
+          <section v-for="group in visibleRunGroups" :key="group.key" class="run-month-group">
+            <h3 class="run-month-heading">{{ group.title }}</h3>
+            <RunSessionList :runs="group.runs" :weekly-pattern="memoryStore.memory.weeklyPattern" interactive @select="openDetail" />
+          </section>
+        </div>
+      </template>
       <div ref="loadMoreRef" class="load-more-sentinel">
         <button v-if="hasMoreRuns" class="secondary full" type="button" @click="showMore">다음 10개 보기</button>
       </div>

@@ -55,6 +55,7 @@ export type RunLog = {
   avgHeartRate: number | null
   maxHeartRate: number | null
   cadence: number | null
+  activeEnergyKcal: number | null
   temperature: number | null
   humidity: number | null
   windMps: number | null

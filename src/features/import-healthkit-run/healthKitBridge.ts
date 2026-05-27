@@ -143,6 +143,7 @@ export function toExtractedRunData(candidate: HealthKitRunCandidate, weeklyPatte
     avgHeartRate: candidate.avgHeartRate,
     maxHeartRate: candidate.maxHeartRate,
     cadence: candidate.cadence,
+    activeEnergyKcal: candidate.activeEnergyKcal,
     temperature: candidate.temperature,
     humidity: candidate.humidity,
     windMps: candidate.windMps,

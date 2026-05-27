@@ -50,6 +50,13 @@ const selectedOffsetSec = ref<number | null>(null)
         <div class="metric"><span>평균 케이던스</span><strong>{{ formatInteger(run.cadence) }}</strong></div>
         <div class="metric"><span>평균 심박</span><strong>{{ formatInteger(run.avgHeartRate) }}</strong></div>
         <div class="metric"><span>최고 심박</span><strong>{{ formatInteger(run.maxHeartRate) }}</strong></div>
+        <div class="metric">
+          <span>활동 칼로리</span>
+          <strong>
+            <UnitValue v-if="run.activeEnergyKcal !== null" :amount="formatInteger(run.activeEnergyKcal)" unit="kcal" />
+            <span v-else>-</span>
+          </strong>
+        </div>
         <div class="metric"><span>운동강도</span><strong>{{ run.rpe ?? '-' }}</strong></div>
         <div class="metric"><span>드리프트</span><strong class="metric-text-value">{{ estimateHeartRateDrift(run) }}</strong></div>
         <div class="metric"><span>누적 상승</span><strong><UnitValue :amount="formatInteger(run.elevationGainM)" unit="m" /></strong></div>

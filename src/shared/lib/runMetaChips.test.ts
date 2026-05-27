@@ -93,6 +93,7 @@ function createRun(input: Partial<RunLog>): RunLog {
     avgHeartRate: null,
     maxHeartRate: null,
     cadence: null,
+    activeEnergyKcal: null,
     temperature: null,
     humidity: null,
     windMps: null,

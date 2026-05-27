@@ -1470,6 +1470,25 @@ button.stat-card {
   background: var(--color-subtle);
 }
 
+.run-month-groups {
+  display: grid;
+  gap: 24px;
+}
+
+.run-month-group {
+  display: grid;
+  gap: 10px;
+}
+
+.run-month-heading {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
 .run-session-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) minmax(64px, auto);
@@ -2160,9 +2179,10 @@ button.run-session-row {
 
 .fitness-detail-card {
   display: grid;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
   overflow: visible;
+  padding: 14px 12px;
 }
 
 .fitness-detail-header {
@@ -2175,7 +2195,7 @@ button.run-session-row {
 .fitness-detail-header h3 {
   margin: 0;
   color: var(--color-text);
-  font-size: 24px;
+  font-size: 21px;
   line-height: 1.1;
 }
 
@@ -2189,7 +2209,7 @@ button.run-session-row {
 }
 
 .fitness-scope-toggle button {
-  min-height: 34px;
+  min-height: 30px;
   border: 0;
   border-radius: 999px;
   background: transparent;
@@ -2206,9 +2226,9 @@ button.run-session-row {
 
 .fitness-route-card {
   position: relative;
-  min-height: 238px;
+  min-height: 214px;
   overflow: hidden;
-  border-radius: 24px;
+  border-radius: 20px;
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 18%, transparent), transparent 42%),
     radial-gradient(circle at 80% 20%, color-mix(in srgb, var(--color-primary) 12%, transparent), transparent 36%),
@@ -2347,8 +2367,8 @@ button.run-session-row {
   align-items: center;
   gap: 8px;
   overflow-x: auto;
-  padding: 10px 12px;
-  border-radius: 18px;
+  padding: 8px 10px;
+  border-radius: 16px;
   background: color-mix(in srgb, var(--color-surface-3) 82%, var(--color-bg));
   -webkit-overflow-scrolling: touch;
 }
@@ -2369,7 +2389,7 @@ button.run-session-row {
 
 .fitness-selected-metrics strong {
   color: var(--color-text);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
 }
 

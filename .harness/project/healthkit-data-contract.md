@@ -187,7 +187,7 @@ type FastSegment = {
 - 앱 기동/재활성화 자동 동기화는 현재 저장된 최신 `RunLog.date` 이후의 새 HealthKit 러닝만 가져온다.
 - 이미 저장된 HealthKit 세션은 자동 동기화에서 갱신하지 않는다. 기존 세션 보강은 세션 상세의 새로고침 아이콘을 통해 사용자가 명시적으로 요청한다.
 - 단일 세션 갱신은 `RunLog.externalId`와 `HKWorkout.uuid`를 매칭해 같은 원본 운동만 다시 조회한다.
-- 단일 세션 갱신은 HealthKit 유래 구조화 필드(`distanceKm`, `durationSec`, `avgPaceSec`, `avgHeartRate`, `maxHeartRate`, `cadence`, `laps`, `fastSegments`, `metricSamples`, `routePoints`, `rawAvailability`)를 새 값으로 갱신한다.
+- 단일 세션 갱신은 HealthKit 유래 구조화 필드(`distanceKm`, `durationSec`, `avgPaceSec`, `avgHeartRate`, `maxHeartRate`, `cadence`, `activeEnergyKcal`, `laps`, `fastSegments`, `metricSamples`, `routePoints`, `rawAvailability`)를 새 값으로 갱신한다.
 - 단일 세션 갱신은 사용자가 입력한 코칭 메모, RPE, 통증 메모, 동반주, 제목, 기존 AI 코칭 대화 기록을 보존한다.
 
 ## `RunLog` 매핑
@@ -198,6 +198,7 @@ type FastSegment = {
 - `avgHeartRate`: workout 기간 내 heart rate 평균
 - `maxHeartRate`: workout 기간 내 heart rate 최대
 - `cadence`: HealthKit에서 cadence 계열 지표가 있을 때만 사용한다. 없으면 `null`.
+- `activeEnergyKcal`: `activeEnergyBurned` statistics가 있으면 활동 칼로리(kcal)로 채운다. Apple Fitness의 “활동 킬로칼로리”에 해당하며, 총 칼로리와 혼동하지 않는다. 없으면 `null`.
 - `temperature`: `HKMetadataKeyWeatherTemperature`가 있으면 섭씨로 채운다. 없으면 `null`.
 - `humidity`: `HKMetadataKeyWeatherHumidity`가 있으면 0~100 퍼센트로 채운다. 없으면 `null`.
 - `windMps`: HealthKit workout metadata에서 안정적으로 기대하지 않는다. 없으면 `null`.
