@@ -53,6 +53,7 @@ async function extractFromFit(buffer: ArrayBuffer): Promise<ExtractedRunData> {
       distanceKm: distanceKm === null ? null : round(distanceKm / 1000),
       paceSec: distanceKm && lapDurationSec ? Math.round(lapDurationSec / (distanceKm / 1000)) : null,
       avgHeartRate: numberOrNull(String(lap.avg_heart_rate ?? '')),
+      maxHeartRate: numberOrNull(String(lap.max_heart_rate ?? '')),
       cadence: lapCadence === null ? null : normalizeCadence(lapCadence)
     }
   })

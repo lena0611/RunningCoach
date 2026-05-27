@@ -2049,7 +2049,7 @@ button.run-session-row {
 .lap-split-head,
 .lap-split-row {
   display: grid;
-  grid-template-columns: 24px minmax(48px, 0.8fr) minmax(72px, 1fr) minmax(56px, 0.85fr) minmax(62px, 0.85fr);
+  grid-template-columns: 24px minmax(48px, 0.8fr) minmax(66px, 1fr) minmax(64px, 0.9fr) minmax(54px, 0.8fr);
   align-items: center;
   min-width: 328px;
   column-gap: 4px;
@@ -2060,6 +2060,20 @@ button.run-session-row {
   color: var(--color-muted);
   font-size: 12px;
   font-weight: 850;
+}
+
+.lap-split-head span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.15;
+}
+
+.lap-split-head small {
+  color: var(--color-muted);
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.78;
 }
 
 .lap-split-row {
@@ -2087,12 +2101,6 @@ button.run-session-row {
 
 .lap-hr {
   color: var(--color-danger);
-}
-
-.lap-split-row small {
-  margin-left: 1px;
-  font-size: 8px;
-  font-weight: 400;
 }
 
 .lap-chart-stack {

@@ -83,7 +83,7 @@ function getElevationAtOffset(offsetSec: number) {
 </script>
 
 <template>
-  <div class="lap-chart-stack" aria-label="랩별 페이스 심박 케이던스 차트">
+  <div class="lap-chart-stack" aria-label="구간별 페이스 심박 케이던스 고도 차트">
     <p v-if="useSampleAxis" class="helper compact-helper">차트는 세부 샘플 {{ samplePoints.length }}개 기준입니다.</p>
     <p v-else class="helper compact-helper">세부 샘플이 부족해 랩 기준으로 표시합니다.</p>
     <LapMetricChart

@@ -15,6 +15,7 @@ export type Lap = {
   distanceKm: number | null
   paceSec: number | null
   avgHeartRate: number | null
+  maxHeartRate?: number | null
   cadence: number | null
 }
 

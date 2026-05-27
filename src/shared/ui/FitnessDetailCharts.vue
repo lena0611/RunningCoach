@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, defineAsyncComponent, ref } from 'vue'
 import type { RunLog, RunRoutePoint } from '@/entities/run/model'
 import { formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
 import SectionCard from '@/shared/ui/SectionCard.vue'
@@ -9,7 +9,11 @@ const props = defineProps<{
   run: RunLog
   selectedOffsetSec?: number | null
 }>()
+const emit = defineEmits<{
+  'select-offset': [offsetSec: number]
+}>()
 
+const LapSplitChart = defineAsyncComponent(() => import('@/shared/ui/LapSplitChart.vue'))
 const scope = ref<'all' | '15m'>('all')
 const selectedIndex = ref(0)
 
@@ -52,11 +56,21 @@ const selectedDistanceKm = computed(() => {
   return Math.round(props.run.distanceKm * ratio * 100) / 100
 })
 
-const hasDetailData = computed(() => scopedRoutePoints.value.length > 1)
+const hasDetailData = computed(() => scopedRoutePoints.value.length > 1 || scopedSamples.value.length > 1)
 
 function setScope(value: 'all' | '15m') {
   scope.value = value
   selectedIndex.value = 0
+}
+
+function selectOffset(offsetSec: number) {
+  const sample = nearestSample(scopedSamples.value, offsetSec)
+  if (sample) {
+    selectedIndex.value = Math.max(0, scopedSamples.value.findIndex((item) => item.offsetSec === sample.offsetSec))
+    emit('select-offset', sample.offsetSec)
+    return
+  }
+  emit('select-offset', offsetSec)
 }
 
 function nearestRoutePoint(points: RunRoutePoint[], offsetSec: number) {
@@ -154,15 +168,15 @@ function pointToMapPosition(point: RunRoutePoint, zoom: number) {
 <template>
   <SectionCard v-if="hasDetailData" class="fitness-detail-card">
     <div class="fitness-detail-header">
-      <h3>경로</h3>
+      <h3>경로 상세</h3>
       <div class="fitness-scope-toggle" role="tablist" aria-label="세부사항 범위">
         <button type="button" :class="{ active: scope === '15m' }" @click="setScope('15m')">15분</button>
         <button type="button" :class="{ active: scope === 'all' }" @click="setScope('all')">전체</button>
       </div>
     </div>
 
-    <div class="fitness-route-card">
-      <svg v-if="routeMap" class="fitness-route-map" :viewBox="routeMap.viewBox" role="img" aria-label="러닝 경로">
+    <div v-if="routeMap" class="fitness-route-card">
+      <svg class="fitness-route-map" :viewBox="routeMap.viewBox" role="img" aria-label="러닝 경로">
         <defs>
           <filter id="routeGlow" x="-20%" y="-20%" width="140%" height="140%">
             <feGaussianBlur stdDeviation="1.8" result="blur" />
@@ -189,9 +203,7 @@ function pointToMapPosition(point: RunRoutePoint, zoom: number) {
         <circle v-if="endPointPosition" class="fitness-route-end" :cx="endPointPosition.x" :cy="endPointPosition.y" r="9" />
         <circle v-if="selectedRoutePosition" class="fitness-route-selected" :cx="selectedRoutePosition.x" :cy="selectedRoutePosition.y" r="8" />
       </svg>
-      <div v-else class="fitness-route-empty">표시할 경로 데이터가 없습니다.</div>
       <a
-        v-if="routeMap"
         class="fitness-route-attribution"
         href="https://www.openstreetmap.org/copyright"
         target="_blank"
@@ -213,5 +225,12 @@ function pointToMapPosition(point: RunRoutePoint, zoom: number) {
       <em>{{ formatInteger(activeSample.cadence) }}SPM</em>
     </div>
 
+    <LapSplitChart
+      :laps="run.laps"
+      :metric-samples="scopedSamples"
+      :route-points="scopedRoutePoints"
+      :selected-offset-sec="selectedOffsetSec"
+      @select-offset="selectOffset"
+    />
   </SectionCard>
 </template>
