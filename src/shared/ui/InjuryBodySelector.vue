@@ -16,7 +16,15 @@ type BodyPartSpec = {
   position: [number, number, number]
   scale: [number, number, number]
   rotation?: [number, number, number]
+  model: BodyModelId
 }
+
+type BasePartSpec = Omit<BodyPartSpec, 'areaId' | 'model'> & {
+  model: BodyModelId
+  tone?: 'bone' | 'shadow'
+}
+
+type BodyModelId = 'upper' | 'lower' | 'foot'
 
 const props = withDefaults(
   defineProps<{
@@ -37,10 +45,12 @@ const selectedPart = ref('')
 const hoveredPart = ref('')
 const dragStart = ref<{ x: number; y: number; rotation: number; moved: boolean } | null>(null)
 const rotationY = ref(0)
+const activeModel = ref<BodyModelId>('lower')
 
 const selectedIds = computed(() => new Set((props.modelValue ?? []).map((item) => item.areaId)))
 const selectedAreas = computed(() => (props.modelValue ?? []).map((item) => ({ ...item, definition: getInjuryArea(item.areaId) })).filter((item) => item.definition))
 const selectedLabel = computed(() => selectedPart.value ? getInjuryAreaLabel(selectedPart.value) : '부위를 터치하세요')
+const activeModelLabel = computed(() => bodyModelOptions.find((item) => item.id === activeModel.value)?.label ?? '하체')
 const viewLabel = computed(() => {
   const normalized = ((rotationY.value % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)
   if (normalized < Math.PI / 4 || normalized >= Math.PI * 7 / 4) return '전면'
@@ -62,28 +72,71 @@ const partMeshes = new Map<string, THREE.Mesh>()
 const raycaster = new THREE.Raycaster()
 const pointer = new THREE.Vector2()
 
+const bodyModelOptions: Array<{ id: BodyModelId; label: string; description: string }> = [
+  { id: 'upper', label: '상체/허리', description: '허리, 골반 주변' },
+  { id: 'lower', label: '하체', description: '대퇴, 무릎, 정강이, 종아리' },
+  { id: 'foot', label: '발/발목', description: '발목, 아킬레스, 족저' }
+]
+
+const modelViewConfig: Record<BodyModelId, { scale: number; y: number; cameraZ: number; floorY: number }> = {
+  upper: { scale: 1.48, y: -0.2, cameraZ: 5.8, floorY: -0.56 },
+  lower: { scale: 1.28, y: 0.28, cameraZ: 6.1, floorY: -1.6 },
+  foot: { scale: 1.9, y: -0.18, cameraZ: 5.1, floorY: -0.52 }
+}
+
+const baseParts: BasePartSpec[] = [
+  { model: 'upper', shape: 'sphere', position: [0, 1.32, 0], scale: [0.18, 0.18, 0.18] },
+  { model: 'upper', shape: 'capsule', position: [0, 0.55, 0], scale: [0.62, 0.92, 0.38] },
+  { model: 'upper', shape: 'sphere', position: [0, -0.04, 0], scale: [0.82, 0.26, 0.5] },
+  { model: 'upper', shape: 'capsule', position: [-0.52, 0.44, 0], scale: [0.08, 0.64, 0.08], rotation: [0, 0, -0.1] },
+  { model: 'upper', shape: 'capsule', position: [0.52, 0.44, 0], scale: [0.08, 0.64, 0.08], rotation: [0, 0, 0.1] },
+
+  { model: 'lower', shape: 'sphere', position: [0, 0.95, 0], scale: [0.72, 0.24, 0.44] },
+  { model: 'lower', shape: 'capsule', position: [-0.28, 0.18, 0], scale: [0.13, 0.78, 0.13] },
+  { model: 'lower', shape: 'capsule', position: [0.28, 0.18, 0], scale: [0.13, 0.78, 0.13] },
+  { model: 'lower', shape: 'sphere', position: [-0.28, -0.42, 0.02], scale: [0.14, 0.12, 0.14] },
+  { model: 'lower', shape: 'sphere', position: [0.28, -0.42, 0.02], scale: [0.14, 0.12, 0.14] },
+  { model: 'lower', shape: 'capsule', position: [-0.28, -1.02, 0], scale: [0.11, 0.7, 0.11] },
+  { model: 'lower', shape: 'capsule', position: [0.28, -1.02, 0], scale: [0.11, 0.7, 0.11] },
+
+  { model: 'foot', shape: 'capsule', position: [-0.28, 0.68, 0], scale: [0.12, 0.78, 0.12] },
+  { model: 'foot', shape: 'capsule', position: [0.28, 0.68, 0], scale: [0.12, 0.78, 0.12] },
+  { model: 'foot', shape: 'sphere', position: [-0.28, 0.04, 0.02], scale: [0.18, 0.14, 0.18] },
+  { model: 'foot', shape: 'sphere', position: [0.28, 0.04, 0.02], scale: [0.18, 0.14, 0.18] },
+  { model: 'foot', shape: 'box', position: [-0.28, -0.18, 0.28], scale: [0.38, 0.13, 0.72] },
+  { model: 'foot', shape: 'box', position: [0.28, -0.18, 0.28], scale: [0.38, 0.13, 0.72] }
+]
+
 const bodyParts: BodyPartSpec[] = [
-  { areaId: 'lower-back', shape: 'box', position: [0, 0.78, -0.28], scale: [0.58, 0.36, 0.1] },
-  { areaId: 'left-hip', shape: 'sphere', position: [-0.28, 0.42, 0], scale: [0.3, 0.24, 0.25] },
-  { areaId: 'right-hip', shape: 'sphere', position: [0.28, 0.42, 0], scale: [0.3, 0.24, 0.25] },
-  { areaId: 'left-quadriceps', shape: 'capsule', position: [-0.25, -0.18, 0.16], scale: [0.18, 0.84, 0.18] },
-  { areaId: 'right-quadriceps', shape: 'capsule', position: [0.25, -0.18, 0.16], scale: [0.18, 0.84, 0.18] },
-  { areaId: 'left-hamstring', shape: 'capsule', position: [-0.25, -0.18, -0.16], scale: [0.18, 0.84, 0.18] },
-  { areaId: 'right-hamstring', shape: 'capsule', position: [0.25, -0.18, -0.16], scale: [0.18, 0.84, 0.18] },
-  { areaId: 'left-it-band', shape: 'capsule', position: [-0.46, -0.18, 0], scale: [0.09, 0.9, 0.11] },
-  { areaId: 'right-it-band', shape: 'capsule', position: [0.46, -0.18, 0], scale: [0.09, 0.9, 0.11] },
-  { areaId: 'left-knee', shape: 'sphere', position: [-0.25, -0.72, 0.06], scale: [0.2, 0.16, 0.18] },
-  { areaId: 'right-knee', shape: 'sphere', position: [0.25, -0.72, 0.06], scale: [0.2, 0.16, 0.18] },
-  { areaId: 'left-shin', shape: 'capsule', position: [-0.25, -1.28, 0.12], scale: [0.14, 0.78, 0.14] },
-  { areaId: 'right-shin', shape: 'capsule', position: [0.25, -1.28, 0.12], scale: [0.14, 0.78, 0.14] },
-  { areaId: 'left-calf', shape: 'capsule', position: [-0.25, -1.28, -0.13], scale: [0.16, 0.78, 0.16] },
-  { areaId: 'right-calf', shape: 'capsule', position: [0.25, -1.28, -0.13], scale: [0.16, 0.78, 0.16] },
-  { areaId: 'left-achilles', shape: 'capsule', position: [-0.25, -1.82, -0.17], scale: [0.08, 0.34, 0.08] },
-  { areaId: 'right-achilles', shape: 'capsule', position: [0.25, -1.82, -0.17], scale: [0.08, 0.34, 0.08] },
-  { areaId: 'left-ankle', shape: 'sphere', position: [-0.25, -1.98, 0.02], scale: [0.15, 0.12, 0.15] },
-  { areaId: 'right-ankle', shape: 'sphere', position: [0.25, -1.98, 0.02], scale: [0.15, 0.12, 0.15] },
-  { areaId: 'left-plantar-fascia', shape: 'box', position: [-0.25, -2.1, 0.18], scale: [0.33, 0.1, 0.46] },
-  { areaId: 'right-plantar-fascia', shape: 'box', position: [0.25, -2.1, 0.18], scale: [0.33, 0.1, 0.46] }
+  { model: 'upper', areaId: 'lower-back', shape: 'box', position: [0, 0.42, -0.29], scale: [0.62, 0.42, 0.08] },
+  { model: 'upper', areaId: 'left-hip', shape: 'sphere', position: [-0.34, -0.08, -0.04], scale: [0.24, 0.2, 0.24] },
+  { model: 'upper', areaId: 'right-hip', shape: 'sphere', position: [0.34, -0.08, -0.04], scale: [0.24, 0.2, 0.24] },
+
+  { model: 'lower', areaId: 'left-hip', shape: 'sphere', position: [-0.32, 0.86, 0], scale: [0.24, 0.2, 0.24] },
+  { model: 'lower', areaId: 'right-hip', shape: 'sphere', position: [0.32, 0.86, 0], scale: [0.24, 0.2, 0.24] },
+  { model: 'lower', areaId: 'left-quadriceps', shape: 'capsule', position: [-0.25, 0.24, 0.17], scale: [0.14, 0.62, 0.12] },
+  { model: 'lower', areaId: 'left-quadriceps', shape: 'capsule', position: [-0.38, 0.18, 0.12], scale: [0.11, 0.56, 0.1], rotation: [0, 0, -0.08] },
+  { model: 'lower', areaId: 'right-quadriceps', shape: 'capsule', position: [0.25, 0.24, 0.17], scale: [0.14, 0.62, 0.12] },
+  { model: 'lower', areaId: 'right-quadriceps', shape: 'capsule', position: [0.38, 0.18, 0.12], scale: [0.11, 0.56, 0.1], rotation: [0, 0, 0.08] },
+  { model: 'lower', areaId: 'left-hamstring', shape: 'capsule', position: [-0.24, 0.22, -0.18], scale: [0.15, 0.64, 0.13] },
+  { model: 'lower', areaId: 'right-hamstring', shape: 'capsule', position: [0.24, 0.22, -0.18], scale: [0.15, 0.64, 0.13] },
+  { model: 'lower', areaId: 'left-it-band', shape: 'capsule', position: [-0.48, 0.08, 0], scale: [0.055, 0.86, 0.075] },
+  { model: 'lower', areaId: 'right-it-band', shape: 'capsule', position: [0.48, 0.08, 0], scale: [0.055, 0.86, 0.075] },
+  { model: 'lower', areaId: 'left-knee', shape: 'sphere', position: [-0.28, -0.42, 0.06], scale: [0.19, 0.14, 0.17] },
+  { model: 'lower', areaId: 'right-knee', shape: 'sphere', position: [0.28, -0.42, 0.06], scale: [0.19, 0.14, 0.17] },
+  { model: 'lower', areaId: 'left-shin', shape: 'capsule', position: [-0.28, -1.02, 0.13], scale: [0.1, 0.68, 0.1] },
+  { model: 'lower', areaId: 'right-shin', shape: 'capsule', position: [0.28, -1.02, 0.13], scale: [0.1, 0.68, 0.1] },
+  { model: 'lower', areaId: 'left-calf', shape: 'capsule', position: [-0.28, -1.02, -0.14], scale: [0.14, 0.64, 0.13] },
+  { model: 'lower', areaId: 'right-calf', shape: 'capsule', position: [0.28, -1.02, -0.14], scale: [0.14, 0.64, 0.13] },
+
+  { model: 'foot', areaId: 'left-calf', shape: 'capsule', position: [-0.28, 0.64, -0.12], scale: [0.13, 0.55, 0.12] },
+  { model: 'foot', areaId: 'right-calf', shape: 'capsule', position: [0.28, 0.64, -0.12], scale: [0.13, 0.55, 0.12] },
+  { model: 'foot', areaId: 'left-achilles', shape: 'capsule', position: [-0.28, 0.1, -0.18], scale: [0.055, 0.44, 0.055] },
+  { model: 'foot', areaId: 'right-achilles', shape: 'capsule', position: [0.28, 0.1, -0.18], scale: [0.055, 0.44, 0.055] },
+  { model: 'foot', areaId: 'left-ankle', shape: 'sphere', position: [-0.28, -0.1, 0.02], scale: [0.18, 0.13, 0.18] },
+  { model: 'foot', areaId: 'right-ankle', shape: 'sphere', position: [0.28, -0.1, 0.02], scale: [0.18, 0.13, 0.18] },
+  { model: 'foot', areaId: 'left-plantar-fascia', shape: 'box', position: [-0.28, -0.34, 0.32], scale: [0.38, 0.08, 0.62] },
+  { model: 'foot', areaId: 'right-plantar-fascia', shape: 'box', position: [0.28, -0.34, 0.32], scale: [0.38, 0.08, 0.62] }
 ]
 
 function toggleArea(areaId: string) {
@@ -109,6 +162,12 @@ function rotateTo(angle: number) {
 
 function rotateBy(delta: number) {
   rotateTo(rotationY.value + delta)
+}
+
+function setActiveModel(model: BodyModelId) {
+  activeModel.value = model
+  selectedPart.value = ''
+  hoveredPart.value = ''
 }
 
 function onPointerDown(event: PointerEvent) {
@@ -164,7 +223,7 @@ function createScene() {
   scene = new THREE.Scene()
   scene.background = null
   camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100)
-  camera.position.set(0, -0.02, 6.7)
+  camera.position.set(0, -0.02, modelViewConfig[activeModel.value].cameraZ)
 
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
@@ -191,6 +250,7 @@ function createScene() {
 
 function buildBody() {
   if (!bodyGroup) return
+  clearModelMeshes()
   const baseMaterial = new THREE.MeshStandardMaterial({
     color: 0x17202c,
     roughness: 0.72,
@@ -204,25 +264,39 @@ function buildBody() {
     opacity: 0.22
   })
 
-  addBaseMesh(new THREE.CircleGeometry(1.25, 64), [0, -2.24, -0.06], [1.1, 0.24, 1], shadowMaterial, [-Math.PI / 2, 0, 0])
+  const config = modelViewConfig[activeModel.value]
+  bodyGroup.scale.setScalar(config.scale)
+  bodyGroup.position.set(0, config.y, 0)
+  bodyGroup.rotation.y = rotationY.value
+  if (camera) camera.position.z = config.cameraZ
 
-  addBaseMesh(new THREE.SphereGeometry(0.28, 32, 20), [0, 1.98, 0], [1, 1.04, 0.92], baseMaterial)
-  addBaseMesh(new THREE.CapsuleGeometry(0.42, 0.98, 10, 24), [0, 0.95, 0], [0.82, 1, 0.54], baseMaterial)
-  addBaseMesh(new THREE.SphereGeometry(0.34, 24, 16), [0, 0.36, 0], [1.42, 0.48, 0.76], baseMaterial)
-  addBaseMesh(new THREE.CapsuleGeometry(0.11, 0.9, 8, 18), [-0.61, 0.83, 0], [1, 1, 1], baseMaterial, [0, 0, -0.18])
-  addBaseMesh(new THREE.CapsuleGeometry(0.11, 0.9, 8, 18), [0.61, 0.83, 0], [1, 1, 1], baseMaterial, [0, 0, 0.18])
-  addBaseMesh(new THREE.CapsuleGeometry(0.1, 0.95, 8, 18), [-0.25, -0.22, 0], [1, 1, 1], baseMaterial)
-  addBaseMesh(new THREE.CapsuleGeometry(0.1, 0.95, 8, 18), [0.25, -0.22, 0], [1, 1, 1], baseMaterial)
-  addBaseMesh(new THREE.CapsuleGeometry(0.085, 0.98, 8, 18), [-0.25, -1.34, 0], [1, 1, 1], baseMaterial)
-  addBaseMesh(new THREE.CapsuleGeometry(0.085, 0.98, 8, 18), [0.25, -1.34, 0], [1, 1, 1], baseMaterial)
+  addBaseMesh(new THREE.CircleGeometry(1.18, 64), [0, config.floorY, -0.08], [1.08, 0.24, 1], shadowMaterial, [-Math.PI / 2, 0, 0])
 
-  for (const spec of bodyParts) {
+  for (const spec of baseParts.filter((item) => item.model === activeModel.value)) {
+    addBaseMesh(createGeometry(spec), spec.position, spec.scale, baseMaterial, spec.rotation)
+  }
+
+  for (const spec of bodyParts.filter((item) => item.model === activeModel.value)) {
     const mesh = createBodyPartMesh(spec)
     clickableMeshes.push(mesh)
     partMeshes.set(spec.areaId, mesh)
     bodyGroup.add(mesh)
   }
   updateMaterials()
+}
+
+function clearModelMeshes() {
+  if (!bodyGroup) return
+  for (const mesh of [...clickableMeshes, ...baseMeshes]) {
+    bodyGroup.remove(mesh)
+    mesh.geometry.dispose()
+    const material = mesh.material
+    if (Array.isArray(material)) material.forEach((item) => item.dispose())
+    else material.dispose()
+  }
+  clickableMeshes.length = 0
+  baseMeshes.length = 0
+  partMeshes.clear()
 }
 
 function addBaseMesh(
@@ -261,7 +335,7 @@ function createBodyPartMesh(spec: BodyPartSpec) {
   return mesh
 }
 
-function createGeometry(spec: BodyPartSpec) {
+function createGeometry(spec: Pick<BodyPartSpec, 'shape'>) {
   if (spec.shape === 'sphere') return new THREE.SphereGeometry(1, 24, 16)
   if (spec.shape === 'box') return new THREE.BoxGeometry(1, 1, 1, 2, 2, 2)
   return new THREE.CapsuleGeometry(1, 1.8, 8, 18)
@@ -302,6 +376,10 @@ function animate() {
 }
 
 watch(selectedIds, updateMaterials)
+watch(activeModel, () => {
+  if (!bodyGroup) return
+  buildBody()
+})
 
 onMounted(() => {
   nextTick(createScene)
@@ -335,12 +413,27 @@ onBeforeUnmount(() => {
 
     <div class="injury-body-layout">
       <section class="body-view-card" aria-label="3D 인체 부위 선택">
+        <div class="body-model-tabs" role="tablist" aria-label="인체 모델 범위">
+          <button
+            v-for="model in bodyModelOptions"
+            :key="model.id"
+            type="button"
+            role="tab"
+            :aria-selected="activeModel === model.id"
+            :class="{ active: activeModel === model.id }"
+            @click="setActiveModel(model.id)"
+          >
+            <span>{{ model.label }}</span>
+            <small>{{ model.description }}</small>
+          </button>
+        </div>
+
         <div class="body-view-toolbar body-view-toolbar-3d">
           <button type="button" aria-label="왼쪽으로 회전" @click="rotateBy(-Math.PI / 2)">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
           </button>
           <div class="body-view-status">
-            <strong>3D Around View · {{ viewLabel }}</strong>
+            <strong>{{ activeModelLabel }} · {{ viewLabel }}</strong>
             <small>{{ selectedLabel }}</small>
           </div>
           <button type="button" aria-label="오른쪽으로 회전" @click="rotateBy(Math.PI / 2)">
@@ -358,7 +451,7 @@ onBeforeUnmount(() => {
             @pointerup="onPointerUp"
             @pointercancel="dragStart = null"
           />
-          <div class="body-view-label">{{ viewLabel }} · 드래그 회전 · 터치 선택</div>
+          <div class="body-view-label">{{ activeModelLabel }} · {{ viewLabel }} · 드래그 회전</div>
           <div class="body-3d-glow" aria-hidden="true"></div>
         </div>
       </section>

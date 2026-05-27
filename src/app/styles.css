@@ -3086,6 +3086,45 @@ button.run-session-row {
   gap: 12px;
 }
 
+.body-model-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 5px;
+  border-radius: 18px;
+  background: var(--color-field);
+}
+
+.body-model-tabs button {
+  display: grid;
+  gap: 2px;
+  min-height: 46px;
+  padding: 8px 6px;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--color-muted);
+  box-shadow: none;
+}
+
+.body-model-tabs button.active {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.body-model-tabs span {
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.body-model-tabs small {
+  overflow: hidden;
+  font-size: 9px;
+  font-weight: 700;
+  opacity: 0.72;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .body-view-toolbar {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) 34px;
@@ -3135,7 +3174,7 @@ button.run-session-row {
 
 .body-3d-stage {
   position: relative;
-  min-height: 330px;
+  min-height: 360px;
   overflow: hidden;
   border-radius: 22px;
   background:
@@ -3354,7 +3393,7 @@ button.run-session-row {
   .body-3d-stage,
   .body-silhouette-stage,
   .body-silhouette {
-    min-height: 280px;
+    min-height: 330px;
   }
 }
 
