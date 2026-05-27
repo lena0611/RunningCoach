@@ -637,6 +637,29 @@ function runDiagnostics(opts) {
   }
 }
 
+function printConsumerCommandGuide() {
+  console.log(`
+소비자 명령 빠른 안내:
+  - 현재 상태 가이드 열기
+       npm run harness:guide -- --open
+  - 프로젝트 구조와 로컬룰 후보 다시 스캔
+       npm run harness:scan
+  - 설치/업데이트 후 인수인계 요약 다시 생성
+       npm run harness:handoff
+  - 큰 작업 전 읽을 문서와 스킬 좁히기
+       npm run harness:context -- "<작업 설명>"
+  - 운영 업무 시작(Claude Code)
+       /운영업무
+  - 작업 완료 전 검증
+       npm run harness:check
+  - 업데이트 후보 확인 및 적용
+       npm run harness:outdated
+       npm run harness:update
+  - git commit/push 전 자동 검증 연결
+       npm run hooks:install
+`)
+}
+
 async function main() {
   const opts = parseArgs(process.argv)
 
@@ -691,6 +714,7 @@ async function main() {
   4) 작업 중간에 다시 검사
        npm run harness:check
 `)
+  printConsumerCommandGuide()
 }
 
 await main()

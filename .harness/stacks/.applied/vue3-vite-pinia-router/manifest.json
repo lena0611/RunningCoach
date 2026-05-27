@@ -4,12 +4,12 @@
   "version": 1,
   "stackHarness": {
     "repo": "https://git.smartscore.kr/ai-standard/harnesses/vue3-vite-pinia-router.git",
-    "ref": "v0.1.23"
+    "ref": "v0.1.26"
   },
   "baseHarness": {
     "repo": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git",
-    "ref": "v0.2.40",
-    "minVersion": "0.2.40"
+    "ref": "v0.2.43",
+    "minVersion": "0.2.43"
   },
   "compatibility": {
     "allowEmptyProject": true,

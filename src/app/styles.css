@@ -3381,8 +3381,10 @@ button.run-session-row {
 }
 
 .bottom-sheet {
+  display: flex;
+  flex-direction: column;
   max-height: min(72vh, 680px);
-  padding: 10px 16px calc(env(safe-area-inset-bottom) + 16px);
+  padding: 10px 16px calc(env(safe-area-inset-bottom, 0px) + 24px);
   border: 0;
   border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
   background: linear-gradient(180deg, var(--color-surface-2), var(--color-surface));
@@ -3391,6 +3393,7 @@ button.run-session-row {
   transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
   will-change: transform;
   touch-action: pan-y;
+  overflow: hidden;
 }
 
 .bottom-sheet-dragging {
@@ -3456,7 +3459,9 @@ button.run-session-row {
 
 .bottom-sheet-options {
   display: grid;
-  max-height: calc(min(72vh, 680px) - 96px);
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
   overflow-y: auto;
   overscroll-behavior: contain;
   border: 0;
@@ -3466,7 +3471,7 @@ button.run-session-row {
 }
 
 .bottom-sheet-options-multiple {
-  max-height: calc(min(72vh, 680px) - 184px);
+  max-height: none;
 }
 
 .bottom-sheet-option {
@@ -3522,8 +3527,10 @@ button.run-session-row {
 }
 
 .bottom-sheet-confirm {
+  flex: 0 0 auto;
   width: 100%;
   margin-top: 12px;
+  margin-bottom: 2px;
 }
 
 .section-title-row {

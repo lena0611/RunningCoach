@@ -38,60 +38,6 @@
       "keywords": ["아키텍처", "구조", "모듈", "의존", "router", "store", "api"]
     },
     {
-      "id": "healthkit-data-contract",
-      "file": ".harness/project/healthkit-data-contract.md",
-      "category": "external-system",
-      "taskTypes": ["feature", "bugfix", "review"],
-      "priority": "high",
-      "appliesTo": ["ios", "HealthKit", "native-bridge", "RunLog"],
-      "keywords": ["HealthKit", "HKWorkout", "iOS", "네이티브", "브리지", "RunLog"]
-    },
-    {
-      "id": "weatherkit-data-contract",
-      "file": ".harness/project/weatherkit-data-contract.md",
-      "category": "external-system",
-      "taskTypes": ["feature", "bugfix", "review"],
-      "priority": "high",
-      "appliesTo": ["ios", "WeatherKit", "native-bridge", "Dashboard", "weather"],
-      "keywords": ["WeatherKit", "날씨", "체감온도", "강수", "iOS", "네이티브", "브리지"]
-    },
-    {
-      "id": "ai-coaching-goal",
-      "file": ".harness/project/ai-coaching-goal.md",
-      "category": "domain",
-      "taskTypes": ["feature", "bugfix", "review"],
-      "priority": "high",
-      "appliesTo": ["coach", "OpenAI", "AI", "TrainingMemory"],
-      "keywords": ["AI", "코칭", "OpenAI", "TrainingMemory", "coach", "memory"]
-    },
-    {
-      "id": "github-pages-supabase-playbook",
-      "file": ".harness/project/github-pages-supabase-playbook.md",
-      "category": "external-system",
-      "taskTypes": ["feature", "bugfix", "docs", "maintenance", "review"],
-      "priority": "high",
-      "appliesTo": ["GitHub Pages", "Supabase", "Auth", "Edge Function", "secrets", "iOS WebView"],
-      "keywords": ["GitHub Pages", "Supabase", "인증", "OTP", "secret", "variables", "WebView", "배포"]
-    },
-    {
-      "id": "ui-guidelines",
-      "file": ".harness/project/ui-guidelines.md",
-      "category": "ui",
-      "taskTypes": ["feature", "bugfix", "refactor", "review"],
-      "priority": "high",
-      "appliesTo": ["src/app/styles.css", "src/pages/**", "src/widgets/**", "src/shared/ui/**"],
-      "keywords": ["UI", "UX", "모바일", "다크모드", "카드", "대시보드", "코칭"]
-    },
-    {
-      "id": "ui-system-contract",
-      "file": ".harness/project/ui-system-contract.md",
-      "category": "ui",
-      "taskTypes": ["feature", "bugfix", "refactor", "review"],
-      "priority": "high",
-      "appliesTo": ["src/app/styles.css", "src/pages/**", "src/widgets/**", "src/shared/ui/**"],
-      "keywords": ["디자인시스템", "디자인 토큰", "공통 컴포넌트", "재사용", "통일성", "UI"]
-    },
-    {
       "id": "workflow-rules",
       "file": ".harness/project/workflow-rules.md",
       "category": "workflow",
@@ -99,15 +45,6 @@
       "priority": "medium",
       "appliesTo": ["package.json", "test", "build", "ci", "release"],
       "keywords": ["검증", "테스트", "빌드", "리뷰", "릴리스", "배포"]
-    },
-    {
-      "id": "training-knowledge-ops",
-      "file": ".harness/project/training-knowledge-ops.md",
-      "category": "domain",
-      "taskTypes": ["feature", "maintenance", "review", "docs"],
-      "priority": "high",
-      "appliesTo": ["TrainingKnowledge", "training_knowledge_requests", "RAG", "vector", "coach-run"],
-      "keywords": ["훈련법", "지식화", "검토 요청", "RAG", "벡터", "embedding", "training_knowledge"]
     },
     {
       "id": "stack-preset-rules",

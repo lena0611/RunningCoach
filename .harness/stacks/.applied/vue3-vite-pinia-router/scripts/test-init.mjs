@@ -100,7 +100,7 @@ function stackInitInstallsBaseHarnessAndAppliesRules() {
   assert(status.includes(`stack: vue3-vite-pinia-router ${stackPackage.version} (${stackManifest.stackHarness.ref})`), 'stack status should show stack harness version')
 
   const updatePlan = run('npm', ['run', 'harness:update', '--', '--dry-run'], { cwd: target })
-  assert(updatePlan.includes('npx -y git+https://git.smartscore.kr/ai-standard/harnesses/vue3-vite-pinia-router.git#semver:^0.1.23 init'), 'harness update should plan compatible stack update')
+  assert(updatePlan.includes('npx -y git+https://git.smartscore.kr/ai-standard/harnesses/vue3-vite-pinia-router.git#semver:^0.1.26 init'), 'harness update should plan compatible stack update')
 }
 
 function stackInitUpdatesSameStack() {

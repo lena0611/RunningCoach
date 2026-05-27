@@ -21,6 +21,8 @@
         ".claude/commands/harness-scan.md",
         ".claude/commands/memory.md",
         ".claude/commands/reminder.md",
+        ".claude/commands/운영업무.md",
+        ".claude/commands/업무요약.md",
         ".claude/agents/code-reviewer.md",
         ".claude/agents/debug-detective.md",
         ".claude/agents/test-writer.md",
@@ -38,7 +40,8 @@
         ".harness/session/project-memory.md",
         ".harness/session/active-context.md",
         ".harness/session/decision-log.md",
-        ".harness/session/developer-input-queue.md"
+        ".harness/session/developer-input-queue.md",
+        ".harness/session/manual-actions.md"
       ]
     },
     {
@@ -57,15 +60,8 @@
         ".harness/project/template-contract.md",
         ".harness/project/domain-rules.md",
         ".harness/project/architecture-rules.md",
-        ".harness/project/healthkit-data-contract.md",
-        ".harness/project/weatherkit-data-contract.md",
-        ".harness/project/ai-coaching-goal.md",
-        ".harness/project/running-coaching-standards.md",
-        ".harness/project/training-knowledge-ops.md",
-        ".harness/project/github-pages-supabase-playbook.md",
-        ".harness/project/ui-guidelines.md",
-        ".harness/project/ui-system-contract.md",
         ".harness/project/workflow-rules.md",
+        ".harness/project/critical-paths.md",
         ".harness/project/portability-guide.md",
         ".harness/project/bootstrap.md"
       ]
@@ -106,6 +102,11 @@
       "children": [
         ".harness/skills/registry.json"
       ]
+    },
+    {
+      "id": "maintenance-harness",
+      "index": ".harness/maintenance/README.md",
+      "children": []
     },
     {
       "id": "style-harness",
