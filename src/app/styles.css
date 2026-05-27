@@ -1759,6 +1759,7 @@ button.run-session-row {
   grid-template-columns: 44px minmax(0, 1fr) 44px;
   align-items: center;
   gap: 10px;
+  margin-block: 8px 12px;
 }
 
 .calendar-header strong {
@@ -1799,7 +1800,8 @@ button.run-session-row {
 }
 
 .run-calendar-weekdays {
-  margin-top: 6px;
+  margin-top: 10px;
+  margin-bottom: 4px;
 }
 
 .run-calendar-weekdays span {
@@ -2988,6 +2990,24 @@ button.run-session-row {
   background: linear-gradient(180deg, var(--color-surface-2), var(--color-surface));
   box-shadow: var(--shadow-float);
   animation: sheet-rise 160ms ease-out;
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
+  touch-action: pan-y;
+}
+
+.bottom-sheet-dragging {
+  transition: none;
+}
+
+.bottom-sheet-drag-zone {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.bottom-sheet-dragging .bottom-sheet-drag-zone {
+  cursor: grabbing;
 }
 
 .bottom-sheet-handle {

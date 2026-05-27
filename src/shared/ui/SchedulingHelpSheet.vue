@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, watch } from 'vue'
+import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 
 const props = defineProps<{
   open: boolean
@@ -8,6 +9,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
 }>()
+
+const drag = useBottomSheetDrag(() => emit('close'))
 
 watch(
   () => props.open,
@@ -24,11 +27,11 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <div v-if="open" class="bottom-sheet-layer" role="presentation" @click.self="emit('close')">
-      <section class="bottom-sheet scheduling-help-sheet" role="dialog" aria-modal="true" aria-label="AI 스케줄링 기준">
-        <div class="bottom-sheet-handle" />
-        <div class="bottom-sheet-heading">
+      <section class="bottom-sheet scheduling-help-sheet" :class="{ 'bottom-sheet-dragging': drag.dragging.value }" :style="drag.sheetStyle.value" role="dialog" aria-modal="true" aria-label="AI 스케줄링 기준">
+        <div class="bottom-sheet-handle bottom-sheet-drag-zone" @pointerdown="drag.startDrag" />
+        <div class="bottom-sheet-heading bottom-sheet-drag-zone" @pointerdown="drag.startDrag">
           <h2>AI 스케줄링 기준</h2>
-          <button class="stack-icon-button sheet-close" type="button" aria-label="닫기" @click="emit('close')">
+          <button class="stack-icon-button sheet-close" type="button" aria-label="닫기" @pointerdown.stop @click="emit('close')">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
           </button>
         </div>

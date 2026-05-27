@@ -24,6 +24,7 @@ import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
 import SchedulingHelpSheet from '@/shared/ui/SchedulingHelpSheet.vue'
 import { hasNativeBridge } from '@/shared/lib/runtime'
+import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 
 const runStore = useRunStore()
 const memoryStore = useMemoryStore()
@@ -67,6 +68,10 @@ const savingGoalProposal = ref(false)
 const error = ref('')
 const calendarMonth = ref(toMonthKey(new Date()))
 const schedulingHelpOpen = ref(false)
+const deleteSheetDrag = useBottomSheetDrag(() => {
+  pendingDeleteRun.value = null
+})
+const goalSheetDrag = useBottomSheetDrag(closeGoalProposal)
 const coachCommandItems = [
   {
     id: 'session',
@@ -741,7 +746,7 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
           @click="toggleDate(cell.date, Boolean(cell.runs.length))"
         >
           <span v-if="cell.day">{{ cell.day }}</span>
-          <small v-if="cell.runs.length">{{ cell.runs.length }}</small>
+          <small v-if="cell.runs.length >= 2">{{ cell.runs.length }}</small>
         </button>
       </div>
       <button v-if="selectedDate" class="ghost full compact-action" type="button" @click="selectedDate = null">
@@ -946,8 +951,8 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
       </Transition>
 
       <div v-if="pendingDeleteRun" class="bottom-sheet-layer confirm-layer" role="presentation" @click.self="pendingDeleteRun = null">
-        <section class="bottom-sheet confirm-sheet" role="dialog" aria-modal="true" aria-label="삭제 확인">
-          <div class="bottom-sheet-handle" />
+        <section class="bottom-sheet confirm-sheet" :class="{ 'bottom-sheet-dragging': deleteSheetDrag.dragging.value }" :style="deleteSheetDrag.sheetStyle.value" role="dialog" aria-modal="true" aria-label="삭제 확인">
+          <div class="bottom-sheet-handle bottom-sheet-drag-zone" @pointerdown="deleteSheetDrag.startDrag" />
           <h2>러닝 기록을 삭제할까요?</h2>
           <p>{{ formatDateWithWeekday(pendingDeleteRun.date) }} · {{ pendingDeleteRun.distanceKm }}km 기록이 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</p>
           <div class="confirm-actions">
@@ -959,8 +964,8 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
         </section>
       </div>
       <div v-if="pendingGoalProposal" class="bottom-sheet-layer confirm-layer" role="presentation" @click.self="closeGoalProposal">
-        <section class="bottom-sheet confirm-sheet goal-intent-sheet" role="dialog" aria-modal="true" aria-label="목표 후보 등록 확인">
-          <div class="bottom-sheet-handle" />
+        <section class="bottom-sheet confirm-sheet goal-intent-sheet" :class="{ 'bottom-sheet-dragging': goalSheetDrag.dragging.value }" :style="goalSheetDrag.sheetStyle.value" role="dialog" aria-modal="true" aria-label="목표 후보 등록 확인">
+          <div class="bottom-sheet-handle bottom-sheet-drag-zone" @pointerdown="goalSheetDrag.startDrag" />
           <h2>목표로 저장할까요?</h2>
           <p>입력한 문장이 앞으로도 코칭 기준으로 쓸 목표처럼 보입니다. 저장하면 다음 코칭부터 이 기준도 함께 봅니다.</p>
           <div class="goal-intent-card">

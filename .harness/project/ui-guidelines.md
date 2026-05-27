@@ -78,6 +78,7 @@ Use a screen stack when the user is drilling into a deeper flow without changing
 - Coach: chat-like user and coach messages, markdown rendered as readable headings, paragraphs, lists, code blocks, and dividers.
 - Streaming coach answers should auto-follow the latest text line while the user is at the bottom. If the user intentionally scrolls upward, stop auto-following and show a centered down-arrow button above the input bar that smoothly returns to the latest message.
 - User-facing dates must include the weekday, e.g. `2026-05-24(일)`. Store raw ISO dates in data, but format every displayed date through the shared formatter.
+- Calendar run-count shoulder chips are exception indicators, not the main signal. Show them only for dates with two or more sessions; single-run days should rely on the highlighted date circle alone.
 - Metric values with units must use `UnitValue` or an equivalent shared pattern. Units are inline flow content, never absolutely positioned, and must stay smaller than the number without overlapping at mobile widths.
 - Toast messages must use the shared toast store and `ToastHost` component. Feature stores/pages should call the shared toast API instead of keeping one-off toast state or rendering inline toast markup. Default placement is bottom with a rise animation. System/background events such as HealthKit sync use top placement with a drop animation and stronger success/error colors.
 - HealthKit sync toasts must distinguish state by tone: new records saved uses success/primary, no change uses neutral/subtle, and sync failure uses error/red.
@@ -122,6 +123,7 @@ Charts should use `TrendChart` and ECharts unless there is a specific reason to 
 - TDS-inspired tone should prefer grey-scale surfaces, weak/filled action hierarchy, and hairline-level dividers over visible boxed borders. Use background, spacing, typography, and subtle shadows to separate sections before adding borders.
 - `TextField`: Use box-style inputs with persistent labels. iOS zoom prevention requires 16px or larger input text.
 - `BottomSheet`: Use for selection and delete confirmation. It must be Teleported or root-hosted above all stacks.
+- Bottom sheets must support drag-to-dismiss from the handle/header area. The drag gesture should only start from the sheet chrome so scrolling long sheet content remains stable.
 - Selection bottom sheets should render options as compact rows inside one grouped surface with dividers. Avoid separate card styling for every option unless the option contains rich multi-line content.
 - `Toast`: Bottom is default. Top is reserved for system/background events such as HealthKit sync.
 - Top system toasts triggered during app startup or activation should use a small display delay so the page has painted before the drop animation starts.

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, watch, ref } from 'vue'
+import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 
 export type BottomSheetSelectOption = {
   value: string
@@ -17,6 +18,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 const open = ref(false)
+const drag = useBottomSheetDrag(closeSheet)
 
 const selectedOption = computed(() => props.options.find((option) => option.value === props.modelValue))
 const displayText = computed(() => selectedOption.value?.label || props.placeholder || '선택')
@@ -31,11 +33,15 @@ onBeforeUnmount(() => {
 
 function choose(value: string) {
   emit('update:modelValue', value)
-  open.value = false
+  closeSheet()
 }
 
 function openSheet() {
   open.value = true
+}
+
+function closeSheet() {
+  open.value = false
 }
 </script>
 
@@ -51,11 +57,11 @@ function openSheet() {
 
     <Teleport to="body">
       <div v-if="open" class="bottom-sheet-layer" role="presentation" @pointerdown.stop @click.self="open = false">
-        <section class="bottom-sheet" role="dialog" aria-modal="true" :aria-label="label" @click.stop>
-          <div class="bottom-sheet-handle" />
-          <div class="bottom-sheet-heading">
+        <section class="bottom-sheet" :class="{ 'bottom-sheet-dragging': drag.dragging.value }" :style="drag.sheetStyle.value" role="dialog" aria-modal="true" :aria-label="label" @click.stop>
+          <div class="bottom-sheet-handle bottom-sheet-drag-zone" @pointerdown="drag.startDrag" />
+          <div class="bottom-sheet-heading bottom-sheet-drag-zone" @pointerdown="drag.startDrag">
             <h2>{{ label }}</h2>
-            <button class="stack-icon-button sheet-close" type="button" aria-label="닫기" @click="open = false">
+            <button class="stack-icon-button sheet-close" type="button" aria-label="닫기" @pointerdown.stop @click="closeSheet">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
             </button>
           </div>
