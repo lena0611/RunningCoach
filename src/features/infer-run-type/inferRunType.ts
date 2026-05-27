@@ -40,7 +40,7 @@ export function inferRunType(input: InferRunTypeInput): RunType {
 
   if (distanceKm >= 10) {
     if (isSaturday || distanceKm >= 12) {
-      return isSteadyLong(input.laps, avgPaceSec) ? 'Steady Long' : 'LSD'
+      return isSteadyLong(input.laps, avgPaceSec, input.avgHeartRate) ? 'Steady Long' : 'LSD'
     }
   }
 
@@ -312,21 +312,54 @@ function getSustainedTempoDistance(laps: Lap[], distanceKm: number, avgPaceSec: 
   return best
 }
 
-function isSteadyLong(laps: Lap[], avgPaceSec: number | null) {
+function isSteadyLong(laps: Lap[], avgPaceSec: number | null, avgHeartRate: number | null) {
   const segments = getLapSegments(laps)
-  if (!segments.length) return avgPaceSec !== null && avgPaceSec <= 420
+  if (!segments.length) {
+    if (avgHeartRate !== null) {
+      if (avgHeartRate >= easyHeartRateCeiling + 5) return true
+      if (isHeartRateEasy(avgHeartRate)) return false
+    }
+    return avgPaceSec !== null && avgPaceSec <= 400
+  }
 
-  const steadyDistance = segments
-    .filter((lap) => lap.paceSec <= 420)
-    .reduce((sum, lap) => sum + lap.distanceKm, 0)
   const total = segments.reduce((sum, lap) => sum + lap.distanceKm, 0)
-  if (total > 0 && steadyDistance / total >= 0.45) return true
-
   const firstHalf = segments.slice(0, Math.ceil(segments.length / 2))
   const secondHalf = segments.slice(Math.floor(segments.length / 2))
   const firstPace = weightedPace(firstHalf)
   const secondPace = weightedPace(secondHalf)
-  return firstPace !== null && secondPace !== null && secondPace + 10 < firstPace
+  const paceGainSec = firstPace !== null && secondPace !== null ? firstPace - secondPace : 0
+  const firstHeartRate = weightedHeartRate(firstHalf)
+  const secondHeartRate = weightedHeartRate(secondHalf)
+  const heartRateDrift = firstHeartRate !== null && secondHeartRate !== null ? secondHeartRate - firstHeartRate : 0
+  const sessionHeartRate = weightedHeartRate(segments) ?? avgHeartRate
+  const z3PlusRatio = total > 0
+    ? segments
+      .filter((lap) => (lap.avgHeartRate ?? sessionHeartRate ?? 0) >= easyHeartRateCeiling + 1)
+      .reduce((sum, lap) => sum + lap.distanceKm, 0) / total
+    : 0
+  const z4PlusRatio = total > 0
+    ? segments
+      .filter((lap) => (lap.avgHeartRate ?? sessionHeartRate ?? 0) >= 156)
+      .reduce((sum, lap) => sum + lap.distanceKm, 0) / total
+    : 0
+  const steadyPaceRatio = total > 0
+    ? segments
+      .filter((lap) => lap.paceSec <= 420)
+      .reduce((sum, lap) => sum + lap.distanceKm, 0) / total
+    : 0
+
+  if (sessionHeartRate !== null && sessionHeartRate <= easyHeartRateCeiling && z3PlusRatio < 0.25 && heartRateDrift <= 8) {
+    return false
+  }
+
+  if (z4PlusRatio >= 0.15) return true
+  if (z3PlusRatio >= 0.45) return true
+  if (sessionHeartRate !== null && sessionHeartRate >= easyHeartRateCeiling + 4 && paceGainSec >= 8) return true
+  if (heartRateDrift >= 10 && paceGainSec >= 8) return true
+
+  if (sessionHeartRate === null && steadyPaceRatio >= 0.55 && paceGainSec >= 15) return true
+
+  return false
 }
 
 function getLapSegments(laps: Lap[]) {
@@ -359,6 +392,13 @@ function weightedPace(laps: Array<{ distanceKm: number; paceSec: number }>) {
   if (!totalDistance) return null
   const totalSeconds = laps.reduce((sum, lap) => sum + lap.distanceKm * lap.paceSec, 0)
   return totalSeconds / totalDistance
+}
+
+function weightedHeartRate(laps: Array<{ distanceKm: number; avgHeartRate: number | null }>) {
+  const heartRateLaps = laps.filter((lap) => lap.avgHeartRate !== null)
+  const totalDistance = heartRateLaps.reduce((sum, lap) => sum + lap.distanceKm, 0)
+  if (!totalDistance) return null
+  return heartRateLaps.reduce((sum, lap) => sum + lap.distanceKm * Number(lap.avgHeartRate), 0) / totalDistance
 }
 
 function getWeekday(date: string) {

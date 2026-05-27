@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { inferRunType } from './inferRunType'
-import type { RunMetricSample } from '@/entities/run/model'
+import type { Lap, RunMetricSample } from '@/entities/run/model'
 
 describe('inferRunType', () => {
   it('infers Easy + Strides from easy heart rate and repeated pace/cadence spikes', () => {
@@ -83,6 +83,59 @@ describe('inferRunType', () => {
       weeklyPattern: ['화요일: Easy + Strides']
     })).toBe('Easy')
   })
+
+  it('keeps an easy-heart-rate Saturday long run as LSD even with a natural negative split', () => {
+    expect(inferRunType({
+      date: '2026-05-02',
+      distanceKm: 13.06,
+      avgPaceSec: 452,
+      avgHeartRate: 139,
+      laps: buildLongRunLaps([
+        [500, 132],
+        [480, 136],
+        [465, 138],
+        [455, 140],
+        [445, 142],
+        [438, 143],
+        [432, 143],
+        [428, 144],
+        [425, 144],
+        [422, 145],
+        [420, 144],
+        [418, 145],
+        [416, 145]
+      ]),
+      fastSegments: [],
+      metricSamples: [],
+      weeklyPattern: ['토요일: LSD 또는 Steady Long']
+    })).toBe('LSD')
+  })
+
+  it('infers Steady Long when a long run spends meaningful distance in Z3 with a faster second half', () => {
+    expect(inferRunType({
+      date: '2026-05-09',
+      distanceKm: 12.5,
+      avgPaceSec: 418,
+      avgHeartRate: 149,
+      laps: buildLongRunLaps([
+        [445, 140],
+        [435, 143],
+        [425, 146],
+        [418, 148],
+        [410, 150],
+        [405, 151],
+        [398, 152],
+        [392, 153],
+        [388, 154],
+        [385, 154],
+        [382, 155],
+        [380, 155]
+      ]),
+      fastSegments: [],
+      metricSamples: [],
+      weeklyPattern: ['토요일: LSD 또는 Steady Long']
+    })).toBe('Steady Long')
+  })
 })
 
 function buildStrideSamples(): RunMetricSample[] {
@@ -98,4 +151,14 @@ function buildStrideSamples(): RunMetricSample[] {
     })
   }
   return samples
+}
+
+function buildLongRunLaps(values: Array<[paceSec: number, avgHeartRate: number]>): Lap[] {
+  return values.map(([paceSec, avgHeartRate], index) => ({
+    index: index + 1,
+    distanceKm: 1,
+    paceSec,
+    avgHeartRate,
+    cadence: 166
+  }))
 }
