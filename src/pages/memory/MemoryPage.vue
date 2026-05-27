@@ -13,6 +13,7 @@ import ClearableField from '@/shared/ui/ClearableField.vue'
 import DateField from '@/shared/ui/DateField.vue'
 import FormGrid from '@/shared/ui/FormGrid.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
+import ScaleSlider from '@/shared/ui/ScaleSlider.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
 import SchedulingHelpSheet from '@/shared/ui/SchedulingHelpSheet.vue'
@@ -786,10 +787,7 @@ async function save() {
                 <ClearableField v-model="newInjury.area" placeholder="예: 좌측 햄스트링" />
               </label>
               <BottomSheetSelect v-model="newInjury.status" label="상태" :options="injuryStatusOptions" />
-              <label>
-                심각도(1~5)
-                <ClearableField v-model="newInjury.severity" type="number" inputmode="numeric" min="1" max="5" placeholder="미입력" number />
-              </label>
+              <ScaleSlider v-model="newInjury.severity" label="심각도" :min="1" :max="5" min-label="가벼움" max-label="강함" />
               <DateField v-model="newInjury.onsetDate" label="시작일" />
               <DateField v-model="newInjury.lastFlareDate" label="최근 신호일" />
               <label class="full">
@@ -828,10 +826,15 @@ async function save() {
                 <ClearableField v-model="editingInjury.area" placeholder="예: 좌측 햄스트링" @update:model-value="updateInjury(editingInjury)" />
               </label>
               <BottomSheetSelect v-model="editingInjury.status" label="상태" :options="injuryStatusOptions" @update:model-value="updateInjury(editingInjury)" />
-              <label>
-                심각도(1~5)
-                <ClearableField v-model="editingInjury.severity" type="number" inputmode="numeric" min="1" max="5" placeholder="미입력" number @update:model-value="updateInjury(editingInjury)" />
-              </label>
+              <ScaleSlider
+                v-model="editingInjury.severity"
+                label="심각도"
+                :min="1"
+                :max="5"
+                min-label="가벼움"
+                max-label="강함"
+                @update:model-value="updateInjury(editingInjury)"
+              />
               <DateField v-model="editingInjury.onsetDate" label="시작일" @update:model-value="updateInjury(editingInjury)" />
               <DateField v-model="editingInjury.lastFlareDate" label="최근 신호일" @update:model-value="updateInjury(editingInjury)" />
               <label class="full">

@@ -179,7 +179,7 @@ function openRunAction(run: RunLog, action: 'edit' | 'delete') {
 }
 
 function canRefreshFromHealthKit(run: RunLog) {
-  return hasNativeBridge() && run.source === 'healthkit' && Boolean(run.externalId)
+  return hasNativeBridge() && Boolean(run.externalId)
 }
 
 function openMemoryPanel(panel: 'goals' | 'injuries') {

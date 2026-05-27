@@ -5,6 +5,7 @@ import { inferCourseType } from '@/features/infer-course-type/inferCourseType'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import ClearableField from '@/shared/ui/ClearableField.vue'
 import DateField from '@/shared/ui/DateField.vue'
+import ScaleSlider from '@/shared/ui/ScaleSlider.vue'
 
 const model = defineModel<ExtractedRunData>({ required: true })
 
@@ -114,22 +115,10 @@ function setNumber(key: keyof ExtractedRunData, value: string | number | null) {
       누적 하강 m
       <ClearableField :model-value="model.elevationLossM" type="number" number @update:model-value="setNumber('elevationLossM', $event)" />
     </label>
-    <label>
-      운동강도
-      <ClearableField :model-value="model.rpe" type="number" min="1" max="10" number @update:model-value="setNumber('rpe', $event)" />
-    </label>
-    <label>
-      수면 점수
-      <ClearableField :model-value="model.sleepQuality" type="number" min="1" max="10" number @update:model-value="setNumber('sleepQuality', $event)" />
-    </label>
-    <label>
-      컨디션 점수
-      <ClearableField :model-value="model.conditionScore" type="number" min="1" max="10" number @update:model-value="setNumber('conditionScore', $event)" />
-    </label>
-    <label>
-      스트레스
-      <ClearableField :model-value="model.stressLevel" type="number" min="1" max="10" number @update:model-value="setNumber('stressLevel', $event)" />
-    </label>
+    <ScaleSlider v-model="model.rpe" label="운동강도" :min="1" :max="10" min-label="편함" max-label="매우 힘듦" />
+    <ScaleSlider v-model="model.sleepQuality" label="수면 점수" :min="1" :max="10" min-label="나쁨" max-label="좋음" />
+    <ScaleSlider v-model="model.conditionScore" label="컨디션 점수" :min="1" :max="10" min-label="나쁨" max-label="좋음" />
+    <ScaleSlider v-model="model.stressLevel" label="스트레스" :min="1" :max="10" min-label="낮음" max-label="높음" />
     <label class="full">
       동행/상황
       <ClearableField v-model="model.companion" placeholder="예: 배우자 회복런, 혼자, 그룹런" />

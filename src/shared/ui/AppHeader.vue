@@ -34,6 +34,29 @@ const themeModeOptions = [
   { value: 'light', label: '라이트', description: '밝은 배경과 선명한 텍스트를 사용합니다.' },
   { value: 'dark', label: '다크', description: '어두운 배경과 낮은 눈부심을 사용합니다.' }
 ]
+const weekdayOptions = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'].map((day) => ({ value: day, label: day }))
+const birthYearOptions = [
+  { value: '', label: '미입력' },
+  ...Array.from({ length: 81 }, (_, index) => {
+    const year = new Date().getFullYear() - 10 - index
+    return { value: String(year), label: String(year) }
+  })
+]
+const runningExperienceOptions = [
+  { value: '', label: '미입력' },
+  { value: '0', label: '1년 미만' },
+  ...Array.from({ length: 30 }, (_, index) => {
+    const years = index + 1
+    return { value: String(years * 12), label: `${years}년` }
+  })
+]
+const weeklyRunDaysTargetOptions = [
+  { value: '', label: '미입력' },
+  ...Array.from({ length: 14 }, (_, index) => {
+    const count = index + 1
+    return { value: String(count), label: `${count}회` }
+  })
+]
 
 const accountLabel = computed(() => {
   return memoryStore.selectedUser.name || authStore.user?.email || '계정'
@@ -42,6 +65,27 @@ const accountLabel = computed(() => {
 const accountEmail = computed(() => authStore.user?.email || '로그인 정보 없음')
 const activeGoalTitle = computed(() => getActiveGoal(memoryStore.memory).title)
 const activeInjuryTitle = computed(() => getActiveInjuryItem(memoryStore.memory)?.title ?? '관리 항목 없음')
+const birthYearValue = computed({
+  get: () => draft.athleteProfile.birthYear === null ? '' : String(draft.athleteProfile.birthYear),
+  set: (value: string | string[]) => {
+    if (Array.isArray(value)) return
+    draft.athleteProfile.birthYear = value ? Number(value) : null
+  }
+})
+const runningExperienceValue = computed({
+  get: () => draft.athleteProfile.runningExperienceMonths === null ? '' : String(draft.athleteProfile.runningExperienceMonths),
+  set: (value: string | string[]) => {
+    if (Array.isArray(value)) return
+    draft.athleteProfile.runningExperienceMonths = value === '' ? null : Number(value)
+  }
+})
+const weeklyRunDaysTargetValue = computed({
+  get: () => draft.athleteProfile.weeklyRunDaysTarget === null ? '' : String(draft.athleteProfile.weeklyRunDaysTarget),
+  set: (value: string | string[]) => {
+    if (Array.isArray(value)) return
+    draft.athleteProfile.weeklyRunDaysTarget = value === '' ? null : Number(value)
+  }
+})
 
 watch(
   () => [memoryStore.selectedUserId, memoryStore.selectedUser.updatedAt],
@@ -114,6 +158,13 @@ function formatDuration(seconds: number) {
   const rest = seconds % 60
   if (hours) return `${hours}:${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`
   return `${minutes}:${String(rest).padStart(2, '0')}`
+}
+
+function formatExperience(months: number | null) {
+  if (months === null) return '미입력'
+  if (months < 12) return '1년 미만'
+  const years = Math.floor(months / 12)
+  return `${years}년`
 }
 
 async function saveProfile() {
@@ -211,7 +262,7 @@ function goDashboard() {
             </div>
             <div>
               <dt>러닝 경력</dt>
-              <dd>{{ memoryStore.memory.athleteProfile.runningExperienceMonths ?? '미입력' }}개월</dd>
+              <dd>{{ formatExperience(memoryStore.memory.athleteProfile.runningExperienceMonths) }}</dd>
             </div>
             <div>
               <dt>선호 롱런</dt>
@@ -245,23 +296,11 @@ function goDashboard() {
               계정 표시 이름
               <ClearableField v-model="draftName" autocomplete="name" />
             </label>
-            <label>
-              출생연도
-              <ClearableField v-model="draft.athleteProfile.birthYear" type="number" inputmode="numeric" placeholder="예: 1989" number />
-            </label>
+            <BottomSheetSelect v-model="birthYearValue" label="출생연도" :options="birthYearOptions" />
             <BottomSheetSelect v-model="draft.athleteProfile.sex" label="성별" :options="sexOptions" />
-            <label>
-              러닝 경력(개월)
-              <ClearableField v-model="draft.athleteProfile.runningExperienceMonths" type="number" inputmode="numeric" placeholder="예: 18" number />
-            </label>
-            <label>
-              목표 주간 러닝 횟수
-              <ClearableField v-model="draft.athleteProfile.weeklyRunDaysTarget" type="number" inputmode="numeric" min="1" max="7" number />
-            </label>
-            <label class="full">
-              선호 롱런 요일
-              <ClearableField v-model="draft.athleteProfile.preferredLongRunDay" />
-            </label>
+            <BottomSheetSelect v-model="runningExperienceValue" label="러닝 경력" :options="runningExperienceOptions" />
+            <BottomSheetSelect v-model="weeklyRunDaysTargetValue" label="목표 주간 러닝 횟수" :options="weeklyRunDaysTargetOptions" />
+            <BottomSheetSelect v-model="draft.athleteProfile.preferredLongRunDay" label="선호 롱런 요일" :options="weekdayOptions" />
             <label class="full">
               거리별 PB
               <ClearableField

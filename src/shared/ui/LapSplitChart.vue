@@ -54,22 +54,45 @@ const lapPoints = computed<SplitChartPoint[]>(() => {
 const useSampleAxis = computed(() => samplePoints.value.length >= Math.max(6, lapPoints.value.length + 2))
 const chartPoints = computed(() => useSampleAxis.value ? samplePoints.value : lapPoints.value)
 const labels = computed(() => chartPoints.value.map((point) => point.label))
+const paceChartPoints = computed(() => {
+  const valid = chartPoints.value.filter((point) => isUsablePace(point.paceSec))
+  if (valid.length >= 2) return valid
+  const validLaps = lapPoints.value.filter((point) => isUsablePace(point.paceSec))
+  return validLaps.length >= 2 ? validLaps : valid
+})
+const paceLabels = computed(() => paceChartPoints.value.map((point) => point.label))
 const axisName = computed(() => useSampleAxis.value ? '시간' : '랩')
 const elevationValues = computed(() => chartPoints.value.map((point) => getElevationAtOffset(point.offsetSec)))
 const selectedIndex = computed(() => {
   const points = chartPoints.value
   if (!points.length || props.selectedOffsetSec === null || props.selectedOffsetSec === undefined) return null
-  return points.reduce((nearestIndex, point, index) => {
-    return Math.abs(point.offsetSec - props.selectedOffsetSec!) < Math.abs(points[nearestIndex].offsetSec - props.selectedOffsetSec!)
-      ? index
-      : nearestIndex
-  }, 0)
+  return getNearestIndex(points, props.selectedOffsetSec)
 })
+const selectedPaceIndex = computed(() => getNearestIndex(paceChartPoints.value, props.selectedOffsetSec))
 
 function selectIndex(index: number) {
   const point = chartPoints.value[index]
   if (!point) return
   emit('select-offset', point.offsetSec)
+}
+
+function selectPaceIndex(index: number) {
+  const point = paceChartPoints.value[index]
+  if (!point) return
+  emit('select-offset', point.offsetSec)
+}
+
+function getNearestIndex(points: SplitChartPoint[], offsetSec: number | null | undefined) {
+  if (!points.length || offsetSec === null || offsetSec === undefined) return null
+  return points.reduce((nearestIndex, point, index) => {
+    return Math.abs(point.offsetSec - offsetSec) < Math.abs(points[nearestIndex].offsetSec - offsetSec)
+      ? index
+      : nearestIndex
+  }, 0)
+}
+
+function isUsablePace(value: number | null) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 120 && value <= 1800
 }
 
 function getElevationAtOffset(offsetSec: number) {
@@ -92,10 +115,10 @@ function getElevationAtOffset(offsetSec: number) {
       color="#22d3ee"
       inverse
       :axis-name="axisName"
-      :labels="labels"
-      :values="chartPoints.map((point) => point.paceSec)"
-      :selected-index="selectedIndex"
-      @select-index="selectIndex"
+      :labels="paceLabels"
+      :values="paceChartPoints.map((point) => point.paceSec)"
+      :selected-index="selectedPaceIndex"
+      @select-index="selectPaceIndex"
     />
     <LapMetricChart
       title="심박수"

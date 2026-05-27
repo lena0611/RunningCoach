@@ -1,4 +1,5 @@
 import type { FastSegment, Lap, RunMetricSample, RunType } from '@/entities/run/model'
+import { isHeartRateAtOrBelowZone2, isRecoveryHeartRateZone } from '@/shared/lib/heartRateZones'
 
 type InferRunTypeInput = {
   date: string
@@ -98,11 +99,11 @@ function isLapEasy(lap: { paceSec: number; avgHeartRate: number | null }, fallba
 }
 
 function isHeartRateEasy(value: number | null) {
-  return typeof value === 'number' && Number.isFinite(value) && value <= easyHeartRateCeiling
+  return isHeartRateAtOrBelowZone2(value)
 }
 
 function isRecoveryHeartRate(value: number | null) {
-  return typeof value === 'number' && Number.isFinite(value) && value <= recoveryHeartRateCeiling
+  return isRecoveryHeartRateZone(value)
 }
 
 function hasStrideIntervalPattern(segments: FastSegment[]) {
@@ -138,21 +139,17 @@ function hasStrideMetricPattern(samples: RunMetricSample[], avgPaceSec: number |
   if (clean.length < 12) return false
 
   const paceValues = clean.map((sample) => sample.paceSec).filter(isUsablePace)
-  const cadenceValues = clean.map((sample) => sample.cadence).filter(isUsableCadence)
+  if (paceValues.length < Math.max(8, clean.length * 0.25)) return false
+
   const medianPace = median(paceValues)
-  const medianCadence = median(cadenceValues)
   const paceThreshold = medianPace === null
     ? 360
     : Math.min(365, Math.max(300, medianPace - 35))
-  const cadenceThreshold = medianCadence === null
-    ? 182
-    : Math.max(180, medianCadence + 10)
 
   const fastSamples = clean.filter((sample) => {
     const paceFast = isUsablePace(sample.paceSec) && sample.paceSec <= paceThreshold
-    const cadenceFast = isUsableCadence(sample.cadence) && sample.cadence >= cadenceThreshold
     const heartRateOk = sample.heartRate === null || sample.heartRate <= easyHeartRateCeiling + 12
-    return heartRateOk && (paceFast || cadenceFast)
+    return heartRateOk && paceFast
   })
   if (fastSamples.length < 4) return false
 

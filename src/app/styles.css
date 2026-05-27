@@ -2849,6 +2849,59 @@ button.run-session-row {
   right: 12px;
 }
 
+.scale-slider {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border-radius: var(--radius-field);
+  background: var(--color-field);
+  padding: 13px 14px;
+}
+
+.scale-slider-head,
+.scale-slider-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.scale-slider-head span {
+  color: var(--color-muted);
+  font-size: 13px;
+  font-weight: var(--font-weight-bold);
+}
+
+.scale-slider-head strong {
+  color: var(--color-text);
+  font-size: 20px;
+  font-weight: var(--font-weight-bold);
+}
+
+.scale-slider input[type="range"] {
+  width: 100%;
+  min-height: 28px;
+  padding: 0;
+  accent-color: var(--color-primary);
+  background: transparent;
+}
+
+.scale-slider-meta small {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+}
+
+.scale-slider-meta button {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-pill);
+  background: var(--color-subtle-2);
+  color: var(--color-muted);
+  font-size: 12px;
+  box-shadow: none;
+}
+
 .chat-input-wrap .input-clear-button {
   top: 21px;
   right: 10px;

@@ -37,6 +37,52 @@ describe('inferRunType', () => {
       weeklyPattern: ['화요일: Easy + Strides']
     })).toBe('Easy')
   })
+
+  it('does not infer Easy + Strides from cadence spikes alone when pace stays easy', () => {
+    const metricSamples = Array.from({ length: 50 }, (_, index) => {
+      const spike = [12, 16, 20, 24, 28, 32].includes(index)
+      return {
+        offsetSec: index * 45,
+        paceSec: spike ? 435 : 460 + (index % 5) * 6,
+        heartRate: Math.min(142, 112 + Math.floor(index / 2)),
+        cadence: spike ? 184 + (index % 4) : 164 + (index % 4)
+      }
+    })
+
+    expect(inferRunType({
+      date: '2026-05-25',
+      distanceKm: 6.05,
+      avgPaceSec: 468,
+      avgHeartRate: 139,
+      laps: [],
+      fastSegments: [],
+      metricSamples,
+      weeklyPattern: ['화요일: Easy + Strides']
+    })).toBe('Easy')
+  })
+
+  it('does not infer Easy + Strides from cadence spikes when pace samples are missing', () => {
+    const metricSamples = Array.from({ length: 50 }, (_, index) => {
+      const spike = [12, 16, 20, 24, 28, 32].includes(index)
+      return {
+        offsetSec: index * 45,
+        paceSec: null,
+        heartRate: Math.min(142, 112 + Math.floor(index / 2)),
+        cadence: spike ? 188 + (index % 4) : 165 + (index % 3)
+      }
+    })
+
+    expect(inferRunType({
+      date: '2026-05-25',
+      distanceKm: 6.05,
+      avgPaceSec: 468,
+      avgHeartRate: 139,
+      laps: [],
+      fastSegments: [],
+      metricSamples,
+      weeklyPattern: ['화요일: Easy + Strides']
+    })).toBe('Easy')
+  })
 })
 
 function buildStrideSamples(): RunMetricSample[] {
