@@ -86,6 +86,7 @@ function refreshDashboardContextWhenVisible() {
 const raceProjectionHint = computed(() => {
   const projection = raceProjection.value
   if (!projection) return ''
+  if (projection.readinessLevel) return `준비도 ${projection.readinessScore}점 · ${projection.readinessLevel}`
   if (projection.deltaSec === null) return `${formatDateWithWeekday(projection.current.date)} 기준`
   if (projection.deltaSec < 0) return `이전 대비 ${formatDuration(Math.abs(projection.deltaSec))} 단축`
   if (projection.deltaSec > 0) return `이전 대비 ${formatDuration(projection.deltaSec)} 느림`
@@ -222,16 +223,6 @@ function formatDateOnly(value: Date) {
       <RunSummaryCard label="강훈련" :value="`${hardSessions}회`" hint="최근 7일" :loading="runDataLoading" interactive @click="trendMetric = 'hard'" />
       <StatCard
         class="dashboard-context-card"
-        label="활성 목표"
-        :value="activeGoal.title"
-        :hint="activeGoal.targetDate ? `${formatDateWithWeekday(activeGoal.targetDate)}까지` : '목표일 미정'"
-        value-kind="text"
-        :loading="memoryDataLoading"
-        interactive
-        @click="openMemoryPanel('goals')"
-      />
-      <StatCard
-        class="dashboard-context-card"
         label="부상 기준"
         :value="activeInjury?.title || '관리 항목 없음'"
         :hint="activeInjury ? `${activeInjury.status}${activeInjury.severity ? ` · ${activeInjury.severity}/5` : ''}` : '코칭 제한 없음'"
@@ -242,10 +233,10 @@ function formatDateOnly(value: Date) {
       />
       <StatCard
         v-if="runDataLoading || raceProjection"
-        class="dashboard-context-card dashboard-projection-card"
+        class="dashboard-context-card dashboard-projection-card dashboard-projection-card-wide"
         label="목표 예상"
         :value="raceProjection ? formatDuration(raceProjection.current.projectedSec) : ''"
-        :hint="raceProjection ? raceProjectionHint : ''"
+        :hint="raceProjection ? `${activeGoal.title} · ${raceProjectionHint}` : ''"
         value-kind="text"
         :loading="runDataLoading"
         interactive
@@ -328,6 +319,32 @@ function formatDateOnly(value: Date) {
                   {{ formatDateWithWeekday(raceProjection.current.date) }} {{ raceProjection.current.type }}
                   {{ raceProjection.current.distanceKm.toFixed(2) }}km 기록을 목표 거리로 환산한 값입니다.
                 </p>
+              </SectionCard>
+              <SectionCard>
+                <SectionHeader title="목표 준비도" />
+                <div class="projection-score">
+                  <strong>{{ raceProjection.readinessScore }}</strong>
+                  <span>/100 · {{ raceProjection.readinessLevel }}</span>
+                </div>
+                <p class="helper">{{ raceProjection.readinessSummary }}</p>
+              </SectionCard>
+              <SectionCard>
+                <SectionHeader title="판단 근거" />
+                <div class="projection-factor-list">
+                  <article
+                    v-for="factor in raceProjection.factors"
+                    :key="factor.key"
+                    class="projection-factor"
+                    :class="`projection-factor-${factor.status}`"
+                  >
+                    <div>
+                      <strong>{{ factor.label }}</strong>
+                      <small>{{ factor.summary }}</small>
+                    </div>
+                    <span>{{ factor.score }}</span>
+                    <p>{{ factor.detail }}</p>
+                  </article>
+                </div>
               </SectionCard>
               <SectionCard>
                 <SectionHeader title="변화" />

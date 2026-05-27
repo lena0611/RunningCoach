@@ -1380,6 +1380,20 @@ button.stat-card {
   -webkit-line-clamp: unset;
 }
 
+.dashboard-projection-card-wide {
+  grid-column: span 2;
+  min-height: 148px;
+}
+
+.dashboard-projection-card-wide strong {
+  margin-top: 10px;
+  font-size: clamp(42px, 12vw, 58px);
+}
+
+.dashboard-projection-card-wide small {
+  max-width: 78%;
+}
+
 .projection-detail-metric {
   display: grid;
   gap: 8px;
@@ -1396,6 +1410,92 @@ button.stat-card {
   color: var(--color-muted);
   font-size: 14px;
   font-weight: 600;
+}
+
+.projection-score {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.projection-score strong {
+  color: var(--color-primary);
+  font-size: clamp(44px, 13vw, 62px);
+  font-weight: 700;
+  line-height: 0.95;
+}
+
+.projection-score span {
+  color: var(--color-muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.projection-factor-list {
+  display: grid;
+  gap: 10px;
+}
+
+.projection-factor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 12px;
+  padding: 14px;
+  border-radius: 18px;
+  background: var(--color-surface-2);
+}
+
+.projection-factor > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.projection-factor strong {
+  color: var(--color-text);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.projection-factor small,
+.projection-factor p {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.projection-factor p {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+}
+
+.projection-factor > span {
+  align-self: start;
+  min-width: 42px;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.projection-factor-good > span {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.projection-factor-watch > span {
+  background: rgba(245, 158, 11, 0.14);
+  color: var(--color-warning);
+}
+
+.projection-factor-weak > span {
+  background: rgba(239, 68, 68, 0.14);
+  color: var(--color-danger);
 }
 
 .unit-value {
