@@ -89,8 +89,8 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
       this.init()
       const authStore = useAuthStore()
       if (!authStore.isAuthenticated || !hasNativeBridge()) return
-      if (!run.externalId) {
-        this.error = 'HealthKit 원본 ID가 없는 세션입니다.'
+      if (!canRequestHealthKitRefresh(run)) {
+        this.error = 'HealthKit으로 갱신할 수 있는 세션 정보가 부족합니다.'
         showSyncToast('error', this.error, 3600)
         return
       }
@@ -100,7 +100,14 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
       this.status = 'HealthKit 세션 갱신 중'
 
       try {
-        requestHealthKitRunUpdate(run.externalId)
+        requestHealthKitRunUpdate({
+          externalId: run.externalId,
+          date: run.date,
+          startAt: null,
+          endAt: null,
+          distanceKm: run.distanceKm,
+          durationSec: run.durationSec
+        })
       } catch (err) {
         this.refreshingRunId = ''
         this.status = ''
@@ -183,6 +190,11 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
     }
   }
 })
+
+function canRequestHealthKitRefresh(run: RunLog) {
+  if (run.externalId) return true
+  return run.source === 'healthkit' && Boolean(run.date) && run.distanceKm > 0
+}
 
 function showSyncToast(tone: 'neutral' | 'success' | 'error', message: string, durationMs: number) {
   const toastStore = useToastStore()

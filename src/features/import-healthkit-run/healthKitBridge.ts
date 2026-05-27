@@ -36,6 +36,15 @@ export type HealthKitRunCandidate = {
   }
 }
 
+export type HealthKitRunUpdateRequest = {
+  externalId: string | null
+  date: string
+  startAt: string | null
+  endAt: string | null
+  distanceKm: number
+  durationSec: number | null
+}
+
 type HealthKitBridgeHandlers = {
   onRuns: (runs: HealthKitRunCandidate[]) => void
   onRunUpdate: (run: HealthKitRunCandidate) => void
@@ -100,7 +109,7 @@ export function requestHealthKitRuns(days = 14) {
   })
 }
 
-export function requestHealthKitRunUpdate(externalId: string) {
+export function requestHealthKitRunUpdate(run: HealthKitRunUpdateRequest) {
   const handler = window.webkit?.messageHandlers?.runContextHealthKit
   if (!handler) {
     throw new Error('iOS HealthKit 브리지가 연결되어 있지 않습니다. 웹에서는 FIT 업로드를 사용하세요.')
@@ -108,7 +117,12 @@ export function requestHealthKitRunUpdate(externalId: string) {
 
   handler.postMessage({
     type: 'requestRunningWorkoutByExternalId',
-    externalId
+    externalId: run.externalId || null,
+    date: run.date,
+    startAt: run.startAt || null,
+    endAt: run.endAt || null,
+    distanceKm: run.distanceKm,
+    durationSec: run.durationSec
   })
 }
 
