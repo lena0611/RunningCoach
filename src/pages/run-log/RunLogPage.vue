@@ -6,6 +6,8 @@ import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import { runTypes, type RunLog, type RunType } from '@/entities/run/model'
+import type { TrainingGoal, TrainingMemory } from '@/entities/training-memory/model'
+import { detectGoalIntent, type GoalIntentProposal } from '@/features/detect-goal-intent/detectGoalIntent'
 import UploadRunPage from '@/pages/upload-run/UploadRunPage.vue'
 import { fetchCoachReports, requestCoachRunStream, type CoachReport } from '@/shared/api/coachRepository'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
@@ -55,6 +57,9 @@ const reportsLoading = ref(false)
 const saving = ref(false)
 const deletingId = ref<string | null>(null)
 const pendingDeleteRun = ref<RunLog | null>(null)
+const pendingGoalProposal = ref<GoalIntentProposal | null>(null)
+const pendingGoalCoachNote = ref('')
+const savingGoalProposal = ref(false)
 const error = ref('')
 const calendarMonth = ref(toMonthKey(new Date()))
 const schedulingHelpOpen = ref(false)
@@ -446,6 +451,19 @@ async function requestCoach() {
     stopCoachStream()
     return
   }
+  const note = coachNote.value
+  const proposal = detectGoalIntent(note, memoryStore.memory)
+  if (proposal) {
+    pendingGoalProposal.value = proposal
+    pendingGoalCoachNote.value = note
+    coachCommandOpen.value = false
+    return
+  }
+  await sendCoachRequest(note)
+}
+
+async function sendCoachRequest(note: string) {
+  if (!coachRun.value) return
   coachLoading.value = true
   coachError.value = ''
   coachCommandOpen.value = false
@@ -453,7 +471,6 @@ async function requestCoach() {
   streamingCoachMeta.value = 'AI 코치가 답변 중'
   const controller = new AbortController()
   coachAbortController.value = controller
-  const note = coachNote.value
   startCoachThinkingTimer()
   try {
     const report = await requestCoachRunStream(coachRun.value.id, note, weatherStore.snapshot, {
@@ -482,6 +499,82 @@ async function requestCoach() {
     coachLoading.value = false
     if (coachAbortController.value === controller) coachAbortController.value = null
   }
+}
+
+async function confirmGoalProposal() {
+  if (!pendingGoalProposal.value) return
+  savingGoalProposal.value = true
+  coachError.value = ''
+  const proposal = pendingGoalProposal.value
+  const note = pendingGoalCoachNote.value
+  try {
+    await saveGoalProposal(proposal)
+    closeGoalProposal()
+    await sendCoachRequest(note)
+  } catch (err) {
+    coachError.value = err instanceof Error ? err.message : '목표 저장 실패'
+  } finally {
+    savingGoalProposal.value = false
+  }
+}
+
+async function skipGoalProposal() {
+  const note = pendingGoalCoachNote.value
+  closeGoalProposal()
+  await sendCoachRequest(note)
+}
+
+function closeGoalProposal() {
+  pendingGoalProposal.value = null
+  pendingGoalCoachNote.value = ''
+}
+
+async function saveGoalProposal(proposal: GoalIntentProposal) {
+  const now = new Date().toISOString()
+  const memory = JSON.parse(JSON.stringify(memoryStore.memory)) as TrainingMemory
+  const activeGoalTitle = memory.goals.find((goal) => goal.id === memory.activeGoalId)?.title ?? memory.goal
+
+  if (proposal.duplicateGoalId) {
+    memory.goals = memory.goals.map((goal) => goal.id === proposal.duplicateGoalId
+      ? {
+          ...goal,
+          successCriteria: proposal.successCriteria || goal.successCriteria,
+          strategyNotes: proposal.strategyNotes || goal.strategyNotes,
+          notes: mergeGoalNotes(goal.notes, proposal.notes),
+          updatedAt: now
+        }
+      : goal)
+  } else {
+    const goal: TrainingGoal = {
+      id: `goal-${crypto.randomUUID()}`,
+      title: proposal.title,
+      category: 'fitness',
+      startDate: new Date().toISOString().slice(0, 10),
+      targetDate: null,
+      distanceKm: null,
+      targetDurationSec: null,
+      priority: memory.goals.length + 1,
+      status: 'active',
+      successCriteria: proposal.successCriteria,
+      strategyNotes: proposal.strategyNotes,
+      notes: proposal.notes,
+      createdAt: now,
+      updatedAt: now
+    }
+    memory.goals.push(goal)
+  }
+
+  const note = `보조 목표 감지: ${proposal.title} (${activeGoalTitle} 보조). 코칭 시 Easy/회복 세션의 심박 안정성과 페이스 여유를 함께 본다.`
+  if (!memory.aiNotes.some((item) => item.includes(proposal.title))) {
+    memory.aiNotes = [note, ...memory.aiNotes].slice(0, 30)
+  }
+  await memoryStore.update(memory)
+}
+
+function mergeGoalNotes(current: string, next: string) {
+  if (!current) return next
+  if (current.includes(next)) return current
+  return `${current}\n${next}`
 }
 
 function stopCoachStream() {
@@ -793,6 +886,24 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
               {{ deletingId === pendingDeleteRun.id ? '삭제 중' : '삭제' }}
             </button>
             <button class="ghost" type="button" :disabled="Boolean(deletingId)" @click="pendingDeleteRun = null">취소</button>
+          </div>
+        </section>
+      </div>
+      <div v-if="pendingGoalProposal" class="bottom-sheet-layer confirm-layer" role="presentation" @click.self="closeGoalProposal">
+        <section class="bottom-sheet confirm-sheet goal-intent-sheet" role="dialog" aria-modal="true" aria-label="목표 후보 등록 확인">
+          <div class="bottom-sheet-handle" />
+          <h2>목표로 저장할까요?</h2>
+          <p>입력한 문장이 앞으로도 코칭 기준으로 쓸 목표처럼 보입니다. 저장하면 다음 코칭부터 이 기준도 함께 봅니다.</p>
+          <div class="goal-intent-card">
+            <small>감지된 목표</small>
+            <strong>{{ pendingGoalProposal.title }}</strong>
+            <span>{{ pendingGoalProposal.successCriteria }}</span>
+          </div>
+          <div class="confirm-actions">
+            <button type="button" :disabled="savingGoalProposal" @click="confirmGoalProposal">
+              {{ savingGoalProposal ? '저장 중' : pendingGoalProposal.duplicateGoalId ? '목표 갱신하고 코칭' : '목표 저장하고 코칭' }}
+            </button>
+            <button class="ghost" type="button" :disabled="savingGoalProposal" @click="skipGoalProposal">이번만 코칭</button>
           </div>
         </section>
       </div>

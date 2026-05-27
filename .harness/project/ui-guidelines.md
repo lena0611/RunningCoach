@@ -58,6 +58,7 @@ Use a screen stack when the user is drilling into a deeper flow without changing
 - Stack and drawer headers must use icon-only Back/Close buttons with accessible `aria-label`; do not show literal text buttons such as "뒤로" or "닫기" in header chrome.
 - Edit/create stack pages use a fixed full-width bottom action bar for saving. Save is disabled until dirty state is detected.
 - Destructive actions ask for confirmation in a bottom sheet, not `window.confirm`.
+- User consent for app-state changes such as saving detected goals, routine updates, or coaching-basis changes must use a bottom sheet confirmation. Do not ask the user to confirm those changes as ordinary chat text.
 - Use stacks for account/profile editing, run detail/edit flows, and focused settings. Do not use a stack for ordinary tab-to-tab navigation.
 - The bottom navigation remains a root-level control. Stack overlays sit above it when modal, or keep it visually stable when inline.
 - Horizontal page slide transitions are for root tab movement. Deeper stack screens use their own right-to-left stack transition.

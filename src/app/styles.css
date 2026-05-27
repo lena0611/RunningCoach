@@ -3445,6 +3445,36 @@ button.run-session-row {
   gap: 10px;
 }
 
+.goal-intent-sheet .confirm-actions {
+  grid-template-columns: 1fr;
+}
+
+.goal-intent-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 18px;
+  background: var(--color-surface-2);
+}
+
+.goal-intent-card small {
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.goal-intent-card strong {
+  color: var(--color-text);
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.goal-intent-card span {
+  color: var(--color-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
 .stack-page-enter-active,
 .stack-page-leave-active {
   transition:
