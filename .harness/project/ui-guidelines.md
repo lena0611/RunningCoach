@@ -85,6 +85,8 @@ Use a screen stack when the user is drilling into a deeper flow without changing
 
 ## Component Rules
 
+Detailed token/component enforcement lives in `.harness/project/ui-system-contract.md`. Treat that contract as the first reference when creating or refactoring UI.
+
 Prefer shared UI components in `src/shared/ui`:
 
 - `AppShell`
@@ -112,6 +114,8 @@ Prefer shared UI components in `src/shared/ui`:
 New page work should reuse these before adding page-specific layout.
 
 Common display components should not decide how much page space they receive. Page-level spacing, grids, stacks, section headers, action rows, and forms must be owned by layout components such as `PageLayout`, `ContentStack`, `SectionHeader`, `ActionGroup`, and `FormGrid`.
+
+If a page needs a new button, card, input, select, toast, bottom sheet, list row, metric card, date display, or stack header, first extend an existing shared component. Add page-specific markup only when the pattern is truly one-off and document why if it is likely to repeat.
 
 Charts should use `TrendChart` and ECharts unless there is a specific reason to add another chart primitive. Keep chart libraries lazy-loaded or page-split so the root app chunk does not grow unnecessarily. Chart y-axis domains must go through the shared metric-domain helper rather than raw `dataMin`/`dataMax`; heart rate, pace, cadence, elevation, temperature, distance, percent, and count charts need metric-specific padding and minimum spans so normal variation is not visually exaggerated. Do not overlay unrelated units such as pace, heart rate, and cadence in one plot on mobile; split them into separate compact charts unless the comparison itself is the primary task.
 

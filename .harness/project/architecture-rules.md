@@ -15,6 +15,7 @@
 - RAG/벡터 검색은 `training_knowledge_chunks`의 승인된 요약 chunk만 대상으로 한다. 책/유료 콘텐츠 원문 전문이나 긴 발췌를 저장하지 않는다.
 - legacy `knownIssues`는 자유 텍스트 주의사항으로 유지하고, 구조화된 부상관리는 `injuryItems`와 `activeInjuryItemId`를 기준으로 한다.
 - `src/shared`: 포맷터, 통계 계산, 공통 UI, 외부 라이브러리 타입 선언을 담당한다.
+- `src/shared/ui`: PaceLAB 자체 UI 시스템의 구현 위치다. 외부 UI 라이브러리 전면 도입 대신 `.harness/project/ui-system-contract.md`의 토큰/컴포넌트 계약을 따른다.
 
 ## 의존 방향
 - 상위 레이어는 하위 레이어를 사용할 수 있지만, 하위 레이어가 pages/widgets에 의존하지 않는다.

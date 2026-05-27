@@ -83,6 +83,15 @@
       "keywords": ["UI", "UX", "모바일", "다크모드", "카드", "대시보드", "코칭"]
     },
     {
+      "id": "ui-system-contract",
+      "file": ".harness/project/ui-system-contract.md",
+      "category": "ui",
+      "taskTypes": ["feature", "bugfix", "refactor", "review"],
+      "priority": "high",
+      "appliesTo": ["src/app/styles.css", "src/pages/**", "src/widgets/**", "src/shared/ui/**"],
+      "keywords": ["디자인시스템", "디자인 토큰", "공통 컴포넌트", "재사용", "통일성", "UI"]
+    },
+    {
       "id": "workflow-rules",
       "file": ".harness/project/workflow-rules.md",
       "category": "workflow",

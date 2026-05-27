@@ -22,6 +22,7 @@ import RunDetailContent from '@/shared/ui/RunDetailContent.vue'
 import RunSessionList from '@/shared/ui/RunSessionList.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
+import StatCard from '@/shared/ui/StatCard.vue'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
 
@@ -219,48 +220,37 @@ function formatDateOnly(value: Date) {
       <RunSummaryCard label="최근 7일" :value="`${last7}km`" :loading="runDataLoading" interactive @click="trendMetric = 'last7'" />
       <RunSummaryCard label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 · 랩/페이스 기준" :loading="runDataLoading" interactive @click="trendMetric = 'easy'" />
       <RunSummaryCard label="강훈련" :value="`${hardSessions}회`" hint="최근 7일" :loading="runDataLoading" interactive @click="trendMetric = 'hard'" />
-      <button class="stat-card stat-card-interactive dashboard-context-card" type="button" @click="openMemoryPanel('goals')">
-        <span class="stat-card-label">활성 목표</span>
-        <div v-if="memoryDataLoading" class="stat-card-data stat-card-skeleton" aria-hidden="true">
-          <span class="skeleton-line skeleton-line-title" />
-          <span class="skeleton-line skeleton-line-hint" />
-        </div>
-        <div v-else class="stat-card-data">
-          <strong>{{ activeGoal.title }}</strong>
-          <small>{{ activeGoal.targetDate ? `${formatDateWithWeekday(activeGoal.targetDate)}까지` : '목표일 미정' }}</small>
-        </div>
-        <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="m9 6 6 6-6 6" />
-        </svg>
-      </button>
-      <button class="stat-card stat-card-interactive dashboard-context-card" type="button" @click="openMemoryPanel('injuries')">
-        <span class="stat-card-label">부상 기준</span>
-        <div v-if="memoryDataLoading" class="stat-card-data stat-card-skeleton" aria-hidden="true">
-          <span class="skeleton-line skeleton-line-title" />
-          <span class="skeleton-line skeleton-line-hint" />
-        </div>
-        <div v-else class="stat-card-data">
-          <strong>{{ activeInjury?.title || '관리 항목 없음' }}</strong>
-          <small>{{ activeInjury ? `${activeInjury.status}${activeInjury.severity ? ` · ${activeInjury.severity}/5` : ''}` : '코칭 제한 없음' }}</small>
-        </div>
-        <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="m9 6 6 6-6 6" />
-        </svg>
-      </button>
-      <button v-if="runDataLoading || raceProjection" class="stat-card stat-card-interactive dashboard-context-card dashboard-projection-card" type="button" @click="openProjectionDetail">
-        <span class="stat-card-label">목표 예상</span>
-        <div v-if="runDataLoading" class="stat-card-data stat-card-skeleton" aria-hidden="true">
-          <span class="skeleton-line skeleton-line-value" />
-          <span class="skeleton-line skeleton-line-hint" />
-        </div>
-        <div v-else-if="raceProjection" class="stat-card-data">
-          <strong>{{ formatDuration(raceProjection.current.projectedSec) }}</strong>
-          <small>{{ raceProjectionHint }}</small>
-        </div>
-        <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="m9 6 6 6-6 6" />
-        </svg>
-      </button>
+      <StatCard
+        class="dashboard-context-card"
+        label="활성 목표"
+        :value="activeGoal.title"
+        :hint="activeGoal.targetDate ? `${formatDateWithWeekday(activeGoal.targetDate)}까지` : '목표일 미정'"
+        value-kind="text"
+        :loading="memoryDataLoading"
+        interactive
+        @click="openMemoryPanel('goals')"
+      />
+      <StatCard
+        class="dashboard-context-card"
+        label="부상 기준"
+        :value="activeInjury?.title || '관리 항목 없음'"
+        :hint="activeInjury ? `${activeInjury.status}${activeInjury.severity ? ` · ${activeInjury.severity}/5` : ''}` : '코칭 제한 없음'"
+        value-kind="text"
+        :loading="memoryDataLoading"
+        interactive
+        @click="openMemoryPanel('injuries')"
+      />
+      <StatCard
+        v-if="runDataLoading || raceProjection"
+        class="dashboard-context-card dashboard-projection-card"
+        label="목표 예상"
+        :value="raceProjection ? formatDuration(raceProjection.current.projectedSec) : ''"
+        :hint="raceProjection ? raceProjectionHint : ''"
+        value-kind="text"
+        :loading="runDataLoading"
+        interactive
+        @click="openProjectionDetail"
+      />
     </MetricGrid>
 
     <div class="two-column">

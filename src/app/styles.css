@@ -53,9 +53,26 @@
   --color-danger-text: #fecaca;
   --color-danger-soft: rgba(239, 68, 68, 0.12);
   --color-recovery-text: #c4b5fd;
+  --color-surface-card: linear-gradient(180deg, var(--color-surface), var(--color-surface-2));
+  --color-surface-panel: linear-gradient(180deg, var(--color-surface-gradient-start), var(--color-surface-gradient-end));
+  --color-state-selected: var(--color-primary-soft);
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
   --radius-card: 20px;
   --radius-button: 14px;
   --radius-field: 14px;
+  --radius-sheet: 28px;
+  --radius-pill: 999px;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 650;
+  --font-weight-bold: 700;
+  --font-weight-heavy: 850;
   --text-display-size: clamp(30px, 8vw, 42px);
   --text-display-line: 1.08;
   --text-title-size: 22px;
@@ -65,6 +82,10 @@
   --text-caption-size: 13px;
   --text-caption-line: 1.45;
   --text-metric-size: clamp(28px, 7.8vw, 38px);
+  --z-toast: 90;
+  --z-bottom-sheet: 1000;
+  --z-stack: 860;
+  --z-confirm-sheet: 1100;
   --run-calendar-count-bg: #000000;
   --run-calendar-count-text: #ffffff;
   --pressable-bg: var(--color-subtle-2);
@@ -120,6 +141,8 @@
     --color-danger-text: #b91c1c;
     --color-danger-soft: rgba(220, 38, 38, 0.1);
     --color-recovery-text: #6d28d9;
+    --color-surface-card: linear-gradient(180deg, var(--color-surface), var(--color-surface-2));
+    --color-surface-panel: linear-gradient(180deg, var(--color-surface-gradient-start), var(--color-surface-gradient-end));
     --run-calendar-count-bg: rgba(15, 23, 42, 0.12);
     --run-calendar-count-text: var(--tds-grey-700);
     --shadow-card: 0 10px 28px rgba(0, 29, 58, 0.07);
@@ -185,7 +208,7 @@ button {
   color: var(--color-on-primary);
   min-height: 48px;
   padding: 0 18px;
-  font-weight: 850;
+  font-weight: var(--font-weight-heavy);
   cursor: pointer;
   box-shadow: var(--shadow-button);
   text-shadow: var(--shadow-on-primary-text);
@@ -820,7 +843,7 @@ label {
   position: fixed;
   left: 16px;
   right: 16px;
-  z-index: 90;
+  z-index: var(--z-toast);
   max-width: 680px;
   margin: 0 auto;
   padding: 13px 15px;
@@ -984,14 +1007,14 @@ label {
 
 .page {
   display: grid;
-  gap: 18px;
+  gap: var(--space-5);
   max-width: 1080px;
   margin: 0 auto;
 }
 
 .upload-page {
   display: grid;
-  gap: 18px;
+  gap: var(--space-5);
 }
 
 .page-slide-forward-enter-active,
@@ -1036,11 +1059,23 @@ label {
 
 .section-card,
 .panel {
-  background: linear-gradient(180deg, var(--color-surface-gradient-start), var(--color-surface-gradient-end));
+  background: var(--color-surface-panel);
   border: 0;
   border-radius: var(--radius-card);
-  padding: 18px;
+  padding: var(--space-5);
   box-shadow: var(--shadow-card);
+}
+
+.section-card-subtle {
+  background: var(--color-surface-card);
+  box-shadow: none;
+}
+
+.section-card-flat {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .section-heading {
@@ -1165,7 +1200,7 @@ label {
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: var(--space-3);
 }
 
 .stat-card,
@@ -1176,10 +1211,10 @@ label {
   gap: 0;
   min-height: 128px;
   justify-content: space-between;
-  background: linear-gradient(180deg, var(--color-surface), var(--color-surface-2));
+  background: var(--color-surface-card);
   border: 0;
   border-radius: var(--radius-card);
-  padding: 16px;
+  padding: var(--space-4);
   box-shadow: var(--shadow-card);
 }
 
@@ -1230,8 +1265,14 @@ button.stat-card {
 .metric strong {
   color: var(--color-text);
   font-size: var(--text-metric-size);
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
   line-height: 1;
+}
+
+.stat-card-text-value {
+  font-size: clamp(17px, 4.8vw, 22px);
+  line-height: 1.18;
+  white-space: normal;
 }
 
 .stat-card-value {
@@ -1745,15 +1786,15 @@ button.run-session-row {
 
 .content-stack {
   display: grid;
-  gap: 14px;
+  gap: var(--space-4);
 }
 
 .content-stack-compact {
-  gap: 10px;
+  gap: var(--space-2);
 }
 
 .content-stack-loose {
-  gap: 20px;
+  gap: var(--space-6);
 }
 
 .icon-only-button {
@@ -3157,7 +3198,7 @@ button.run-session-row {
 .bottom-sheet-layer {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: var(--z-bottom-sheet);
   display: grid;
   align-items: end;
   background: var(--color-backdrop);
@@ -3168,7 +3209,7 @@ button.run-session-row {
   max-height: min(72vh, 680px);
   padding: 10px 16px calc(env(safe-area-inset-bottom) + 16px);
   border: 0;
-  border-radius: 28px 28px 0 0;
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
   background: linear-gradient(180deg, var(--color-surface-2), var(--color-surface));
   box-shadow: var(--shadow-float);
   animation: sheet-rise 160ms ease-out;
@@ -3564,7 +3605,7 @@ button.run-session-row {
 .memory-stack-layer {
   position: fixed;
   inset: 0;
-  z-index: 115;
+  z-index: var(--z-stack);
   background: var(--color-bg);
 }
 
@@ -3703,7 +3744,7 @@ button.run-session-row {
 }
 
 .confirm-layer {
-  z-index: 1010;
+  z-index: var(--z-confirm-sheet);
 }
 
 .confirm-sheet {

@@ -1,0 +1,76 @@
+# PaceLAB UI System Contract
+
+PaceLAB은 외부 UI 라이브러리를 전면 도입하지 않는다. 대신 자체 디자인 토큰과 `src/shared/ui` 공통 컴포넌트를 제품 디자인시스템으로 취급한다.
+
+## 목적
+
+- 화면별 즉흥 CSS와 일회성 마크업을 줄인다.
+- 모바일 앱형 UI의 톤앤매너를 유지한다.
+- 새로운 UI를 만들 때 재사용 가능한 컴포넌트로 승격할지 먼저 판단한다.
+- 색상, spacing, typography, radius, shadow, z-index를 토큰으로 통제한다.
+
+## 토큰 계층
+
+전역 토큰은 `src/app/styles.css`의 `:root`와 `.theme-light`에서 관리한다.
+
+- 색상: `--color-*`
+- 표면: `--color-surface-card`, `--color-surface-panel`, `--color-field`
+- 상태: `--color-state-selected`, `--color-primary-soft`, `--color-danger-soft`
+- spacing: `--space-1`부터 `--space-7`
+- radius: `--radius-card`, `--radius-button`, `--radius-field`, `--radius-sheet`, `--radius-pill`
+- typography: `--text-*`, `--font-weight-*`
+- elevation: `--shadow-card`, `--shadow-float`, `--shadow-button`
+- layer: `--z-toast`, `--z-bottom-sheet`, `--z-stack`, `--z-confirm-sheet`
+
+새 색상이나 고정 수치가 필요하면 먼저 토큰으로 승격할 수 있는지 검토한다. 화면 CSS에 hex, 임의 shadow, 임의 z-index를 새로 흩뿌리지 않는다.
+
+## 공통 컴포넌트 계약
+
+새 UI를 만들기 전에 다음 컴포넌트를 우선 검토한다.
+
+- 화면 골격: `PageLayout`, `ContentStack`, `SectionCard`, `SectionHeader`
+- 액션: `ActionGroup`, `PrimaryButton`, `SecondaryButton`, icon-only button 패턴
+- 입력: `ClearableField`, `DateField`, `BottomSheetSelect`, `FormGrid`
+- 지표: `StatCard`, `MetricGrid`, `UnitValue`
+- 목록: `ListRow`, `RunSessionList`, `RunTypeBadge`, `RunTypeIcon`, `RunMetaChips`
+- 피드백: `ToastHost`, bottom sheet confirm 패턴
+- 코칭/차트: `CoachMessage`, `TrendChart`, `LapMetricChart`, `LapSplitChart`
+
+공통 컴포넌트가 80% 이상 맞으면 컴포넌트를 확장한다. 화면 전용 CSS로 별도 구현하는 것은 마지막 선택이다.
+
+## 승격 기준
+
+아래 중 하나라도 해당하면 `src/shared/ui` 공통 컴포넌트 승격을 먼저 검토한다.
+
+- 같은 UI 구조가 두 화면 이상에서 쓰인다.
+- 모바일 safe area, z-index, stack, bottom sheet, toast, 입력 clearing 같은 상호작용 안정성이 필요하다.
+- 숫자+단위, 날짜+요일, 세션 유형, 메타 칩처럼 도메인 포맷 규칙이 있다.
+- 라이트/다크 테마 양쪽에서 일관된 대비가 필요하다.
+- 이후 사용자 필터, 통계, 코칭 화면에서 재사용될 가능성이 있다.
+
+## 화면 CSS 허용 범위
+
+페이지 파일 전용 CSS는 다음 수준만 허용한다.
+
+- 공통 컴포넌트를 배치하는 grid/flex 조합
+- 해당 화면에만 존재하는 시각화 영역의 local layout
+- 공통 컴포넌트 variant로 표현하기 어려운 도메인 시각화
+
+반대로 버튼, 카드, 리스트, 입력, 셀렉트, 날짜, 토스트, 바텀시트, 스택 헤더를 페이지마다 새로 만들지 않는다.
+
+## 리뷰 체크리스트
+
+UI 변경 리뷰 시 아래를 확인한다.
+
+- 새 UI가 기존 공통 컴포넌트를 우선 사용했는가?
+- 새 색상/spacing/z-index/font-weight가 토큰 없이 추가되지 않았는가?
+- 다크/라이트 테마 양쪽에서 의미와 대비가 유지되는가?
+- 모바일 폭에서 텍스트와 단위가 겹치지 않는가?
+- stack, bottom sheet, toast, fixed CTA가 서로 z-index 충돌하지 않는가?
+- 반복될 가능성이 있는 패턴을 하네스 문서나 공통 컴포넌트로 승격했는가?
+
+## 현재 결정
+
+- PrimeVue, Vuetify, Element Plus, Naive UI 같은 외부 UI 라이브러리는 전면 도입하지 않는다.
+- TDS Mobile은 참고 자료로 유지하되, PaceLAB의 자체 토큰과 컴포넌트로 구현한다.
+- `BottomSheetSelect`처럼 상호작용이 까다로운 컴포넌트는 공통 컴포넌트에서 기능을 확장하고 테스트를 추가한다.

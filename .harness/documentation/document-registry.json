@@ -64,6 +64,7 @@
         ".harness/project/training-knowledge-ops.md",
         ".harness/project/github-pages-supabase-playbook.md",
         ".harness/project/ui-guidelines.md",
+        ".harness/project/ui-system-contract.md",
         ".harness/project/workflow-rules.md",
         ".harness/project/portability-guide.md",
         ".harness/project/bootstrap.md"
