@@ -36,7 +36,8 @@ function maybeInferCourseType() {
   model.value.courseType = inferCourseType({
     distanceKm: model.value.distanceKm,
     elevationGainM: model.value.elevationGainM,
-    elevationLossM: model.value.elevationLossM
+    elevationLossM: model.value.elevationLossM,
+    routePoints: model.value.routePoints
   })
 }
 

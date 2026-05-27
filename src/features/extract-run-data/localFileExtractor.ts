@@ -88,7 +88,7 @@ async function extractFromFit(buffer: ArrayBuffer): Promise<ExtractedRunData> {
     windMps,
     elevationGainM,
     elevationLossM,
-    courseType: inferCourseType({ distanceKm: totalDistanceKm, elevationGainM, elevationLossM }),
+    courseType: inferCourseType({ distanceKm: totalDistanceKm, elevationGainM, elevationLossM, routePoints }),
     rpe,
     laps: mappedLaps,
     metricSamples,

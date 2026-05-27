@@ -145,7 +145,7 @@ export function toExtractedRunData(candidate: HealthKitRunCandidate, weeklyPatte
     windMps: candidate.windMps,
     elevationGainM,
     elevationLossM,
-    courseType: inferCourseType({ distanceKm, elevationGainM, elevationLossM }),
+    courseType: inferCourseType({ distanceKm, elevationGainM, elevationLossM, routePoints: candidate.routePoints ?? [] }),
     rpe: candidate.rpe,
     workoutFeeling: '',
     painNote: '',
