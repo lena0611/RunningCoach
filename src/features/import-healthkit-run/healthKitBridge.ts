@@ -59,6 +59,9 @@ declare global {
         runContextWeatherKit?: {
           postMessage: (message: unknown) => void
         }
+        runContextHaptics?: {
+          postMessage: (message: unknown) => void
+        }
       }
     }
   }

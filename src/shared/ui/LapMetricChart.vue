@@ -8,6 +8,7 @@ import type { ECharts, EChartsOption } from 'echarts'
 import { init } from 'echarts/core'
 import { getChartDomain, type ChartMetricKind } from '@/shared/lib/chartAxis'
 import { formatInteger, formatPace } from '@/shared/lib/format'
+import { triggerSelectionHaptic } from '@/shared/lib/haptics'
 
 use([BarChart, LineChart, GridComponent, MarkLineComponent, MarkPointComponent, TooltipComponent, CanvasRenderer])
 
@@ -77,9 +78,7 @@ function selectByPointer(event: PointerEvent) {
   if (index === lastEmittedIndex) return
   lastEmittedIndex = index
   emit('select-index', index)
-  if ('vibrate' in navigator) {
-    navigator.vibrate(8)
-  }
+  triggerSelectionHaptic()
 }
 
 function startPointerSelection(event: PointerEvent) {
@@ -163,9 +162,9 @@ function renderChart() {
         type: props.chartType,
         data: props.values,
         smooth: props.chartType === 'line',
-        symbolSize: props.chartType === 'line' ? 6 : 0,
+        symbolSize: props.chartType === 'line' ? 4 : 0,
         barMaxWidth: 16,
-        lineStyle: { width: 3, color: props.color },
+        lineStyle: { width: 2, color: props.color },
         itemStyle: {
           color: props.color,
           opacity: props.chartType === 'bar' ? 0.7 : 1,
@@ -184,20 +183,20 @@ function renderChart() {
       lineStyle: {
         color: text,
         opacity: 0.88,
-        width: 3
+        width: 2
       },
       data: [{ xAxis: props.labels[props.selectedIndex] }]
     }
     if (typeof selectedValue === 'number' && Number.isFinite(selectedValue)) {
       series[0].markPoint = {
         symbol: 'circle',
-        symbolSize: 16,
+        symbolSize: 10,
         silent: true,
         itemStyle: {
           color: '#f8fafc',
           borderColor: props.color,
-          borderWidth: 4,
-          shadowBlur: 18,
+          borderWidth: 3,
+          shadowBlur: 12,
           shadowColor: props.color
         },
         data: [{ coord: [props.labels[props.selectedIndex], selectedValue] }]
