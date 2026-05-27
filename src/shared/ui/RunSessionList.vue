@@ -29,12 +29,14 @@ const emit = defineEmits<{ select: [run: RunLog] }>()
       <div class="run-session-main">
         <div class="run-session-chip-row">
           <RunTypeBadge :type="run.type" />
-          <RunMetaChips :run="run" :weekly-pattern="weeklyPattern" :limit="1" />
+          <RunMetaChips :run="run" :weekly-pattern="weeklyPattern" />
         </div>
-        <strong class="run-session-distance"><UnitValue :amount="run.distanceKm" unit="km" /></strong>
+        <div class="run-session-bottom">
+          <strong class="run-session-distance"><UnitValue :amount="run.distanceKm" unit="km" /></strong>
+          <span class="run-session-date">{{ formatRunListDate(run.date) }}</span>
+        </div>
       </div>
-      <div class="run-session-meta">
-        <span>{{ formatRunListDate(run.date) }}</span>
+      <div v-if="interactive" class="run-session-action" aria-hidden="true">
         <svg v-if="interactive" class="run-session-chevron" viewBox="0 0 24 24" aria-hidden="true">
           <path d="m9 6 6 6-6 6" />
         </svg>
