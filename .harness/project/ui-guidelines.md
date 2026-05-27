@@ -27,6 +27,7 @@ PaceLAB is a personal running coach app, not an admin dashboard.
 - Supporting labels and metadata are smaller and muted.
 - Cards should have generous spacing, soft borders, and `--radius-card`.
 - Repeated list content should prefer a ListRow pattern over mini cards: primary title, muted detail, optional right metric/addon, and a clear press/action target.
+- Run session lists are compact previews. Show only the run type plus one highest-priority meta chip so rows never clip text at mobile widths; show the full metadata only in session detail.
 - Compact repeated rows such as Run Log must use icon-only edit/delete actions with accessible labels. Do not use text buttons when the row has limited horizontal space.
 - Primary actions use green emphasis; destructive actions are subdued red, not loud.
 - Keep bottom navigation usable with one hand on mobile.
@@ -60,6 +61,7 @@ Use a screen stack when the user is drilling into a deeper flow without changing
 - Destructive actions ask for confirmation in a bottom sheet, not `window.confirm`.
 - User consent for app-state changes such as saving detected goals, routine updates, or coaching-basis changes must use a bottom sheet confirmation. Do not ask the user to confirm those changes as ordinary chat text.
 - Use stacks for account/profile editing, run detail/edit flows, and focused settings. Do not use a stack for ordinary tab-to-tab navigation.
+- Session detail must expose the same management affordances from every entry path: HealthKit refresh when available, edit, delete, and AI coaching. Entry pages may route the actual edit/delete flow to the canonical Run Log stack, but the user must see the actions on the detail surface.
 - The bottom navigation remains a root-level control. Stack overlays sit above it when modal, or keep it visually stable when inline.
 - Horizontal page slide transitions are for root tab movement. Deeper stack screens use their own right-to-left stack transition.
 

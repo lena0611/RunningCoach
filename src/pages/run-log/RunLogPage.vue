@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
@@ -30,6 +30,7 @@ const memoryStore = useMemoryStore()
 const healthKitSyncStore = useHealthKitSyncStore()
 const weatherStore = useWeatherStore()
 const route = useRoute()
+const router = useRouter()
 const selectedType = ref<RunType | 'All'>('All')
 const selectedMetaTag = ref('All')
 const selectedDate = ref<string | null>(null)
@@ -293,12 +294,28 @@ function openDetail(run: RunLog) {
 function openRouteRunIfNeeded() {
   const runId = typeof route.query.runId === 'string' ? route.query.runId : ''
   const shouldOpenCoach = route.query.coach === '1'
+  const action = typeof route.query.action === 'string' ? route.query.action : ''
   if (!runId) return
   const run = runStore.runs.find((item) => item.id === runId)
   if (!run) return
   if (detailRun.value?.id !== runId) openDetail(run)
   if (shouldOpenCoach && coachRun.value?.id !== runId) {
     void openCoach(run)
+  }
+  if (action === 'edit' && editing.value?.id !== runId) {
+    startEdit(run)
+  }
+  if (action === 'delete' && pendingDeleteRun.value?.id !== runId) {
+    askRemove(run)
+  }
+  if (action) {
+    void router.replace({
+      path: '/runs',
+      query: {
+        runId,
+        ...(shouldOpenCoach ? { coach: '1' } : {})
+      }
+    })
   }
 }
 

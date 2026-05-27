@@ -29,7 +29,7 @@ const emit = defineEmits<{ select: [run: RunLog] }>()
       <div class="run-session-main">
         <div class="run-session-chip-row">
           <RunTypeBadge :type="run.type" />
-          <RunMetaChips :run="run" :weekly-pattern="weeklyPattern" />
+          <RunMetaChips :run="run" :weekly-pattern="weeklyPattern" :limit="1" />
         </div>
         <strong class="run-session-distance"><UnitValue :amount="run.distanceKm" unit="km" /></strong>
       </div>
