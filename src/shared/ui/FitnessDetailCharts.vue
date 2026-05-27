@@ -201,6 +201,7 @@ function pointToMapPosition(point: RunRoutePoint, zoom: number) {
         <polyline class="fitness-route-line" :points="routeMap.path" />
         <circle v-if="startPointPosition" class="fitness-route-start" :cx="startPointPosition.x" :cy="startPointPosition.y" r="9" />
         <circle v-if="endPointPosition" class="fitness-route-end" :cx="endPointPosition.x" :cy="endPointPosition.y" r="9" />
+        <circle v-if="selectedRoutePosition" class="fitness-route-selected-ring" :cx="selectedRoutePosition.x" :cy="selectedRoutePosition.y" r="16" />
         <circle v-if="selectedRoutePosition" class="fitness-route-selected" :cx="selectedRoutePosition.x" :cy="selectedRoutePosition.y" r="8" />
       </svg>
       <a

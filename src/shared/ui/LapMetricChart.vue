@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { BarChart, LineChart } from 'echarts/charts'
-import { GridComponent, MarkLineComponent, TooltipComponent } from 'echarts/components'
+import { GridComponent, MarkLineComponent, MarkPointComponent, TooltipComponent } from 'echarts/components'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -9,7 +9,7 @@ import { init } from 'echarts/core'
 import { getChartDomain, type ChartMetricKind } from '@/shared/lib/chartAxis'
 import { formatInteger, formatPace } from '@/shared/lib/format'
 
-use([BarChart, LineChart, GridComponent, MarkLineComponent, TooltipComponent, CanvasRenderer])
+use([BarChart, LineChart, GridComponent, MarkLineComponent, MarkPointComponent, TooltipComponent, CanvasRenderer])
 
 type MetricType = 'pace' | 'heartRate' | 'cadence' | 'elevation'
 
@@ -177,15 +177,31 @@ function renderChart() {
   }
   if (typeof props.selectedIndex === 'number' && props.labels[props.selectedIndex]) {
     const series = option.series as Array<Record<string, unknown>>
+    const selectedValue = props.values[props.selectedIndex]
     series[0].markLine = {
       symbol: 'none',
       silent: true,
       lineStyle: {
         color: text,
-        opacity: 0.62,
-        width: 2
+        opacity: 0.88,
+        width: 3
       },
       data: [{ xAxis: props.labels[props.selectedIndex] }]
+    }
+    if (typeof selectedValue === 'number' && Number.isFinite(selectedValue)) {
+      series[0].markPoint = {
+        symbol: 'circle',
+        symbolSize: 16,
+        silent: true,
+        itemStyle: {
+          color: '#f8fafc',
+          borderColor: props.color,
+          borderWidth: 4,
+          shadowBlur: 18,
+          shadowColor: props.color
+        },
+        data: [{ coord: [props.labels[props.selectedIndex], selectedValue] }]
+      }
     }
   }
   chart.setOption(option, true)

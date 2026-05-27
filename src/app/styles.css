@@ -2255,7 +2255,8 @@ button.run-session-row {
 
 .fitness-route-start,
 .fitness-route-end,
-.fitness-route-selected {
+.fitness-route-selected,
+.fitness-route-selected-ring {
   stroke: #fff;
   stroke-width: 1.2;
 }
@@ -2270,6 +2271,15 @@ button.run-session-row {
 
 .fitness-route-selected {
   fill: #38bdf8;
+  stroke-width: 2.4;
+  filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.95));
+}
+
+.fitness-route-selected-ring {
+  fill: rgba(56, 189, 248, 0.22);
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-width: 2.8;
+  filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.9));
 }
 
 .fitness-route-attribution {
