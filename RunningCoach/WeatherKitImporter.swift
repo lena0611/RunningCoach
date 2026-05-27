@@ -73,11 +73,6 @@ final class OpenMeteoWeatherImporter: NSObject, CLLocationManagerDelegate {
     }
 
     private func requestLocation(completion: @escaping (Result<CLLocation, Error>) -> Void) {
-        guard CLLocationManager.locationServicesEnabled() else {
-            completion(.failure(OpenMeteoWeatherError.locationUnavailable))
-            return
-        }
-
         if let cached = lastLocation, abs(cached.timestamp.timeIntervalSinceNow) < 30 * 60 {
             completion(.success(cached))
             return
@@ -90,11 +85,7 @@ final class OpenMeteoWeatherImporter: NSObject, CLLocationManagerDelegate {
         case .notDetermined:
             locationManager.requestWhenInUseAuthorization()
         case .authorizedAlways, .authorizedWhenInUse:
-            if let cached = locationManager.location, abs(cached.timestamp.timeIntervalSinceNow) < 30 * 60 {
-                finishLocation(.success(cached))
-            } else {
-                locationManager.requestLocation()
-            }
+            requestCurrentLocation()
         case .denied, .restricted:
             finishLocation(.failure(OpenMeteoWeatherError.authorizationDenied))
         @unknown default:
@@ -105,11 +96,7 @@ final class OpenMeteoWeatherImporter: NSObject, CLLocationManagerDelegate {
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         switch manager.authorizationStatus {
         case .authorizedAlways, .authorizedWhenInUse:
-            if let cached = manager.location, abs(cached.timestamp.timeIntervalSinceNow) < 30 * 60 {
-                finishLocation(.success(cached))
-            } else {
-                manager.requestLocation()
-            }
+            requestCurrentLocation()
         case .denied, .restricted:
             finishLocation(.failure(OpenMeteoWeatherError.authorizationDenied))
         case .notDetermined:
@@ -156,6 +143,14 @@ final class OpenMeteoWeatherImporter: NSObject, CLLocationManagerDelegate {
         locationTimeout = nil
         locationCompletion = nil
         completion(result)
+    }
+
+    private func requestCurrentLocation() {
+        if let cached = locationManager.location, abs(cached.timestamp.timeIntervalSinceNow) < 30 * 60 {
+            finishLocation(.success(cached))
+            return
+        }
+        locationManager.requestLocation()
     }
 
     private func fetchOpenMeteoForecast(for location: CLLocation) async throws -> RunContextWeatherSnapshot {
