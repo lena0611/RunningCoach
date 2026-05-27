@@ -87,6 +87,90 @@ type RunRoutePoint = {
 }
 ```
 
+## 세부 데이터 배열 구조
+
+HealthKit 후보는 세션 요약만이 아니라 `laps`, `fastSegments`, `metricSamples`, `routePoints` 네 가지 세부 배열을 함께 넘긴다. 각 배열은 목적이 다르므로 UI와 AI 코칭에서 섞어 쓰지 않는다.
+
+### `laps`
+
+```ts
+type Lap = {
+  index: number
+  distanceKm: number | null
+  paceSec: number | null
+  avgHeartRate: number | null
+  maxHeartRate?: number | null
+  cadence: number | null
+}
+```
+
+- 네이티브 HealthKit 구현의 기본 lap은 Workoutdoors FIT step이 아니라 1km 전후의 거리 기반 split이다.
+- 생성 우선순위:
+  1. route location이 있으면 GPS 거리 누적으로 1km 단위 split 생성
+  2. route가 없고 distance sample이 있으면 거리 샘플 누적으로 1km 단위 split 생성
+  3. 둘 다 부족하면 세션 전체 1개 lap 또는 빈 배열
+- `paceSec`: 해당 lap의 `durationSec / distanceKm`
+- `avgHeartRate`: 해당 lap 시간 구간의 평균 심박
+- `cadence`: 해당 lap 시간 구간의 평균 케이던스
+- `maxHeartRate`: 현재 네이티브 HealthKit lap 구조에는 직접 포함되지 않는다. FIT import에서 lap `max_heart_rate`가 있으면 저장될 수 있고, HealthKit 세션 상세 UI는 `metricSamples`를 같은 lap 시간 구간으로 잘라 화면에서 최대심박을 보정 표시한다.
+- HealthKit lap은 20초 가속/1분40초 회복 같은 Workoutdoors workout step 구조를 보장하지 않는다. Easy + Strides 판정은 `laps`보다 `metricSamples`, `fastSegments`, 필요 시 FIT import split을 더 중요하게 본다.
+
+### `metricSamples`
+
+```ts
+type RunMetricSample = {
+  offsetSec: number
+  heartRate: number | null
+  paceSec: number | null
+  cadence: number | null
+}
+```
+
+- 러닝 중간 과정을 복기하기 위한 시간축 샘플이다.
+- 네이티브는 세션 길이를 기준으로 bucket을 만들고, bucket 크기는 `max(15초, durationSec / 80 올림)`이다.
+- 최대 120개까지만 웹으로 넘긴다.
+- `heartRate`: bucket 내 평균 심박
+- `paceSec`: `runningSpeed`가 있으면 그것을 우선 사용하고, 없으면 route timestamp 좌표로 계산한 속도를 사용한다.
+- `cadence`: step/count 기반 cadence 계열 데이터를 bucket 평균으로 계산한다.
+- 이 배열은 Apple Fitness형 페이스/심박수/케이던스/고도 차트의 x축 기준이 된다.
+- 이 배열은 랩별 최대심박 보정에도 사용한다. 단, 현재 값은 raw instantaneous max가 아니라 bucket 평균들의 최대값이므로 “실제 순간 최고심박”과는 다를 수 있다.
+
+### `routePoints`
+
+```ts
+type RunRoutePoint = {
+  offsetSec: number
+  latitude: number
+  longitude: number
+  altitude: number | null
+}
+```
+
+- 지도 경로와 고도 차트, 코스 타입 추론에 쓰는 downsampled route다.
+- 원본 route 전체 좌표를 저장하지 않는다.
+- `offsetSec`: workout 시작 시각 기준 route point의 경과 초
+- `latitude`, `longitude`: 지도 경로 표시용 좌표
+- `altitude`: 고도 차트와 누적 상승/하강, Flat/Mixed/Hilly/Trail 추론에 사용한다.
+- route가 없으면 지도 경로, 고도 차트, 고도 기반 코스 타입 추론은 제한된다.
+
+### `fastSegments`
+
+```ts
+type FastSegment = {
+  index: number
+  startSec: number | null
+  durationSec: number | null
+  distanceKm: number | null
+  avgPaceSec: number | null
+  bestPaceSec: number | null
+}
+```
+
+- 짧은 가속 구간을 감지하기 위한 요약 배열이다.
+- 네이티브는 `runningSpeed` 샘플을 우선 사용하고, 없으면 route timestamp 좌표 기반 속도에서 후보를 만든다.
+- 최대 12개까지만 유지한다.
+- Easy + Strides처럼 1km lap으로는 뭉개지는 세션 유형을 추론할 때 핵심 근거다.
+
 ## 웹-네이티브 브리지
 - 웹 -> 네이티브 요청:
   - `window.webkit.messageHandlers.runContextHealthKit.postMessage({ type: 'requestRecentRunningWorkouts', days: 14 })`
@@ -121,7 +205,7 @@ type RunRoutePoint = {
 - `elevationLossM`: route location altitude로 계산한 누적 하강이다. route나 유효 altitude가 없으면 `null`.
 - `courseType`: 웹에서 `elevationGainM`, `elevationLossM`, `distanceKm`, `routePoints.altitude`로 사용자 수정 가능한 기본값을 추론한다. 고저 데이터가 부족하면 `Unknown`으로 둔다. 고도 기반 자동 추론은 Flat/Mixed/Hilly/Trail까지만 수행하고, Track/Treadmill은 고도만으로 단정하지 않는다.
 - `rpe`: iOS 18+에서 `workoutEffortScore`가 workout에 연결되어 조회될 때만 운동강도로 채운다. 없으면 사용자가 수정할 수 있게 `null`로 둔다.
-- `laps`: HealthKit에서 route 또는 거리 샘플이 있으면 네이티브가 1km 단위 split으로 가공해 채운다. 각 lap은 거리, 페이스, 평균 심박을 우선 채우고 cadence는 가능한 경우에만 채운다. HealthKit lap은 Workoutdoors FIT의 workout step split처럼 세부 가속/회복 구조를 보장하지 않는다.
+- `laps`: HealthKit에서 route 또는 거리 샘플이 있으면 네이티브가 1km 단위 split으로 가공해 채운다. 각 lap은 거리, 페이스, 평균 심박을 우선 채우고 cadence는 가능한 경우에만 채운다. HealthKit lap은 Workoutdoors FIT의 workout step split처럼 세부 가속/회복 구조를 보장하지 않는다. 랩 최대심박은 HealthKit 후보 원본에 없을 수 있으며, 웹 UI는 `metricSamples`를 lap 시간 구간으로 잘라 보정 표시한다.
 - `fastSegments`: `runningSpeed` 샘플을 우선 사용하고, 없으면 route timestamp 좌표에서 계산한 짧은 고속 구간 요약이다. HealthKit lap이 1km로 뭉개져도 `fastSegments`가 있으면 Easy + Strides 추론의 핵심 근거로 사용한다.
 - `metricSamples`: 심박/페이스/케이던스를 시간축으로 downsample한 표시/코칭용 샘플이다. Apple Fitness형 세부 차트와 중간 과정 분석에 사용한다.
 - `routePoints`: 원본 route 전체가 아니라 화면 표시를 위해 downsample한 좌표 샘플이다. 시작/종료 노드, 선택 구간 표시, 경로 미리보기에만 사용한다.

@@ -11,6 +11,7 @@
 - 사용자 답변이 "추천/예상한 기본값대로"인 경우, 적용한 기본값을 `developer-input-queue.md`와 관련 project 문서에 구체적으로 남긴다.
 - 버그픽스나 로직 강화 요청을 처리할 때는 코드 수정 전에 관련 project 룰 후보를 같이 찾고, 반복 가능성이 있으면 같은 커밋 또는 후속 커밋에서 `.harness/project/*`에 반영한다.
 - `harness:check`의 “Project rule candidate check”는 통과 메시지가 아니라 실제 검토 요청으로 취급한다. 같은 종류의 버그가 재발 가능하면 룰을 업데이트한다.
+- HealthKit/세션 상세/스플릿/경로 차트/자동 동기화/세션별 새로고침을 수정할 때는 구현 전에 `.harness/project/healthkit-data-contract.md`를 먼저 확인한다. 네이티브 후보 구조, 웹 `RunLog` 매핑, 샘플/랩/라우트 배열 의미를 추측하지 않는다.
 
 ## 리뷰 기준
 - 원본 파일 또는 secret이 브라우저 저장소에 남지 않는지 확인한다.
@@ -19,6 +20,7 @@
 - Supabase 스키마 변경은 migration, repository 매핑, RLS/중복 방지, Edge Function 컨텍스트를 함께 확인한다.
 - Vue 앱 부트스트랩은 인증/DB/HealthKit 같은 외부 I/O가 완료될 때까지 mount를 막지 않는다. 초기 인증은 짧은 timeout으로 제한하고, RunLog/Memory 동기화는 화면 mount 이후 store error 상태로 처리한다.
 - HealthKit 자동 동기화 변경 시 `runStore` 로딩 완료 대기, 중복 외부 ID 처리, 일부 후보 실패 시 부분 성공 처리, 사용자 토스트 메시지를 함께 확인한다.
+- HealthKit 데이터 표시나 추론 변경 시 `.harness/project/healthkit-data-contract.md`와 실제 타입(`HealthKitRunCandidate`, `Lap`, `RunMetricSample`, `RunRoutePoint`)이 일치하는지 확인한다. 특히 lap은 Workoutdoors step이 아니라 1km 전후 split일 수 있고, 랩 최대심박은 원본에 없으면 `metricSamples` 기반 보정 표시라는 점을 리뷰한다.
 - 코칭 규칙 변경은 사용자 목표, 최근 기록, 부상/더위 제약과 충돌하지 않는지 확인한다.
 - AI 코칭 변경은 선택 기록 날짜와 코칭 생성 시각을 혼동하지 않는지 확인한다.
 - RunLog 기반 화면 변경은 Dashboard, Run Log, Coach가 같은 저장소 데이터를 일관되게 읽는지 확인한다.
