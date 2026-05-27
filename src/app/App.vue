@@ -39,6 +39,7 @@ const swipeLocked = ref<'pending' | 'horizontal' | 'vertical' | null>(null)
 const isTabDragging = ref(false)
 const suppressNextTabClick = ref(false)
 let activePanelObserver: ResizeObserver | null = null
+let keyboardInsetCleanup: (() => void) | null = null
 
 function getNavIndex(path: string) {
   return navItems.findIndex((item) => item.to === path)
@@ -83,6 +84,7 @@ watch(
 )
 
 onMounted(() => {
+  attachKeyboardInsetTracking()
   healthKitSyncStore.init()
   healthKitSyncStore.attachActivationListeners()
   weatherStore.init()
@@ -96,9 +98,38 @@ onMounted(() => {
 onBeforeUnmount(() => {
   healthKitSyncStore.dispose()
   weatherStore.dispose()
+  keyboardInsetCleanup?.()
+  keyboardInsetCleanup = null
   activePanelObserver?.disconnect()
   document.body.classList.remove('tab-swiping')
 })
+
+function attachKeyboardInsetTracking() {
+  const updateKeyboardInset = () => {
+    const viewport = window.visualViewport
+    if (!viewport) {
+      document.documentElement.style.setProperty('--keyboard-inset-bottom', '0px')
+      return
+    }
+
+    const viewportBottom = viewport.offsetTop + viewport.height
+    const rawInset = Math.max(0, window.innerHeight - viewportBottom)
+    const keyboardInset = rawInset > 80 ? Math.round(rawInset) : 0
+    document.documentElement.style.setProperty('--keyboard-inset-bottom', `${keyboardInset}px`)
+  }
+
+  updateKeyboardInset()
+  window.visualViewport?.addEventListener('resize', updateKeyboardInset)
+  window.visualViewport?.addEventListener('scroll', updateKeyboardInset)
+  window.addEventListener('orientationchange', updateKeyboardInset)
+
+  keyboardInsetCleanup = () => {
+    window.visualViewport?.removeEventListener('resize', updateKeyboardInset)
+    window.visualViewport?.removeEventListener('scroll', updateKeyboardInset)
+    window.removeEventListener('orientationchange', updateKeyboardInset)
+    document.documentElement.style.setProperty('--keyboard-inset-bottom', '0px')
+  }
+}
 
 async function resetNativeStartupRoute() {
   await router.isReady()

@@ -17,7 +17,7 @@ import { hasNativeBridge } from '@/shared/lib/runtime'
 const defaultLookbackDays = 90
 const maxLookbackDays = 365
 const minSyncIntervalMs = 30_000
-const syncToastDelayMs = 280
+const syncToastDelayMs = 900
 let listenersAttached = false
 
 export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
