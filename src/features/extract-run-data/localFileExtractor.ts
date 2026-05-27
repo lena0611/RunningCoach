@@ -67,7 +67,8 @@ async function extractFromFit(buffer: ArrayBuffer): Promise<ExtractedRunData> {
     avgHeartRate: numberOrNull(String(session?.avg_heart_rate ?? '')),
     laps: mappedLaps,
     fastSegments: [],
-    metricSamples
+    metricSamples,
+    routePoints
   })
 
   return {

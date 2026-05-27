@@ -55,7 +55,7 @@
 - 세션별 HealthKit 새로고침은 `type:user` 태그가 있는 사용자 확정 유형을 덮어쓰지 않는다. 반대로 HealthKit/FIT에서 만들어진 자동판정 유형(`type:auto` 또는 legacy 자동판정으로 간주되는 값)은 추론 로직 개선 후 재동기화하면 새 후보 유형으로 갱신될 수 있어야 한다. 2026-05-26 Easy + Strides 같은 대표 샘플은 개선 로직으로 다시 판정했을 때 Easy + Strides가 되어야 하며, 사용자가 수동으로 유형을 바꾸면 `type:user`로 잠근다.
 - 세션별 HealthKit 새로고침은 기존 `coach_reports`를 삭제하거나 재생성하지 않는다. 이미 받은 AI 코칭은 당시 데이터 기준의 대화 기록으로 유지하고, 보강된 데이터에 대한 재판단은 같은 세션 대화에서 추가 턴으로 이어간다.
 - iOS 하이브리드 앱을 새로 기동할 때 기능 탭 URL이 남아 있어도 기본 진입은 Home이다. 로그인/접근 차단 같은 시스템 라우트는 예외로 둔다.
-- `Easy + Strides` 자동 추론은 세션 이름보다 “대부분 쉬운 페이스 + 여러 개의 짧은 고속 구간”을 우선한다. HealthKit lap이 1km 단위로 뭉개져도 route timestamp 좌표가 있으면 순간 속도 기반 `fastSegments`로 판정한다. route/속도 샘플이 없고 1km lap만 있으면 보수적으로 `Easy`나 `Unknown`으로 둔다.
+- `Easy + Strides` 자동 추론은 세션 이름보다 “대부분 쉬운 페이스 + 여러 개의 짧은 고속 구간”을 우선한다. HealthKit lap이 1km 단위로 뭉개져도 route timestamp 좌표가 있으면 routePoints에서 짧은 고속 구간을 파생해 판정한다. route/속도 샘플이 없고 1km lap만 있으면 보수적으로 `Easy`나 `Unknown`으로 둔다.
 - HealthKit에서 route 기반 `fastSegments`가 없더라도 `metricSamples`의 페이스/케이던스 시간축에 짧은 반복 피크가 있으면 Easy + Strides 근거로 사용한다. 단, 평균 심박과 평균 페이스가 Easy 범위이고 4개 이상의 반복 가속 클러스터가 워밍업 이후에 보여야 한다.
 - `Easy` 자동 추론은 페이스보다 심박을 우선한다. 평균/랩 심박이 낮고 안정적이면 평균 페이스가 빠르더라도 Tempo로 단정하지 않고 Easy 가능성을 먼저 본다.
 - `Easy + Strides` 자동 추론은 요일 루틴과 route 기반 `fastSegments`를 함께 본다. 현재 기본 루틴은 10분 워밍업 + 8개의 스트라이드 가속 인터벌(20초 가속 + 1분40초 회복) + 15분 쿨다운이다. 단, HealthKit/GPS 샘플은 타이트하게 들어오지 않으므로 20초/100초를 기계적으로 요구하지 않는다. 6~45초 정도의 짧은 고속 구간이 4개 이상 반복되고 시작 간격이 대략 1~3.5분이면 Easy + Strides 패턴으로 관용적으로 본다.

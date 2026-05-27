@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { inferRunType } from '@/features/infer-run-type/inferRunType'
-import type { FastSegment, Lap } from '@/entities/run/model'
+import type { FastSegment, Lap, RunRoutePoint } from '@/entities/run/model'
 
 describe('inferRunType', () => {
   it('treats low-heart-rate running as Easy before pace-based Tempo', () => {
@@ -149,4 +149,64 @@ describe('inferRunType', () => {
       weeklyPattern: ['화요일: Easy + Strides', '목요일: Tempo', '토요일: LSD 또는 Steady Long']
     })).toBe('Easy + Strides')
   })
+
+  it('detects 2026-05-26 style Easy + Strides from route points when HealthKit does not provide fastSegments', () => {
+    expect(inferRunType({
+      date: '2026-05-26',
+      distanceKm: 5.37,
+      avgPaceSec: 460,
+      avgHeartRate: 135,
+      laps: [
+        { index: 1, distanceKm: 1, paceSec: 500, avgHeartRate: 124, cadence: 162 },
+        { index: 2, distanceKm: 1, paceSec: 455, avgHeartRate: 136, cadence: 166 },
+        { index: 3, distanceKm: 1, paceSec: 448, avgHeartRate: 141, cadence: 168 },
+        { index: 4, distanceKm: 1, paceSec: 482, avgHeartRate: 135, cadence: 163 },
+        { index: 5, distanceKm: 1.37, paceSec: 492, avgHeartRate: 131, cadence: 162 }
+      ],
+      fastSegments: [],
+      routePoints: buildRoutePointsWithStrides(),
+      weeklyPattern: ['화요일: Easy + Strides', '목요일: Tempo', '토요일: LSD 또는 Steady Long']
+    })).toBe('Easy + Strides')
+  })
+
+  it('keeps steady route point data as Easy when repeated route accelerations are missing', () => {
+    expect(inferRunType({
+      date: '2026-05-26',
+      distanceKm: 5.3,
+      avgPaceSec: 470,
+      avgHeartRate: 136,
+      laps: [],
+      fastSegments: [],
+      routePoints: buildSteadyRoutePoints(),
+      weeklyPattern: ['화요일: Easy + Strides', '목요일: Tempo']
+    })).toBe('Easy')
+  })
 })
+
+function buildRoutePointsWithStrides(): RunRoutePoint[] {
+  return buildRoutePoints((offsetSec) => {
+    const strideStarts = [660, 780, 900, 1020, 1140, 1260, 1380, 1500]
+    const inStride = strideStarts.some((start) => offsetSec >= start && offsetSec < start + 20)
+    return inStride ? 305 : 475 + (offsetSec % 80)
+  })
+}
+
+function buildSteadyRoutePoints(): RunRoutePoint[] {
+  return buildRoutePoints((offsetSec) => 462 + (offsetSec % 70))
+}
+
+function buildRoutePoints(paceAt: (offsetSec: number) => number): RunRoutePoint[] {
+  const points: RunRoutePoint[] = []
+  let latitude = 37.45
+  const longitude = 126.88
+  points.push({ offsetSec: 0, latitude, longitude, altitude: null })
+
+  for (let offsetSec = 10; offsetSec <= 2460; offsetSec += 10) {
+    const paceSec = paceAt(offsetSec - 10)
+    const distanceM = (10 / paceSec) * 1000
+    latitude += distanceM / 111111
+    points.push({ offsetSec, latitude, longitude, altitude: null })
+  }
+
+  return points
+}

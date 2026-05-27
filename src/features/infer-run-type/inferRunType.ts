@@ -1,4 +1,4 @@
-import type { FastSegment, Lap, RunMetricSample, RunType } from '@/entities/run/model'
+import type { FastSegment, Lap, RunMetricSample, RunRoutePoint, RunType } from '@/entities/run/model'
 import { isHeartRateAtOrBelowZone2, isRecoveryHeartRateZone } from '@/shared/lib/heartRateZones'
 
 type InferRunTypeInput = {
@@ -9,6 +9,7 @@ type InferRunTypeInput = {
   laps: Lap[]
   fastSegments: FastSegment[]
   metricSamples?: RunMetricSample[]
+  routePoints?: RunRoutePoint[]
   weeklyPattern?: string[]
 }
 
@@ -26,8 +27,9 @@ export function inferRunType(input: InferRunTypeInput): RunType {
   const distanceKm = Number(input.distanceKm || 0)
   const avgPaceSec = input.avgPaceSec
   const easyRatio = getEasyRatio(input.laps, distanceKm, avgPaceSec, input.avgHeartRate)
-  const fastSegmentCount = countUsefulFastSegments(input.fastSegments)
-  const hasStridesPattern = hasStrideIntervalPattern(input.fastSegments)
+  const fastSegments = [...input.fastSegments, ...deriveRouteFastSegments(input.routePoints ?? [])]
+  const fastSegmentCount = countUsefulFastSegments(fastSegments)
+  const hasStridesPattern = hasStrideIntervalPattern(fastSegments)
   const hasMetricStridesPattern = hasStrideMetricPattern(input.metricSamples ?? [], avgPaceSec, input.avgHeartRate)
   const hasStrideSplitsPattern = hasStrideLapPattern(input.laps)
   const tempoDistanceKm = getSustainedTempoDistance(input.laps, distanceKm, avgPaceSec)
@@ -214,6 +216,83 @@ function hasStrideLapPattern(laps: Lap[]) {
   }).length
 
   return hasEasyBookends && alternatingRecoveries >= Math.min(4, shortFastIndexes.length)
+}
+
+function deriveRouteFastSegments(points: RunRoutePoint[]): FastSegment[] {
+  const sorted = points
+    .filter((point) => Number.isFinite(point.offsetSec) && Number.isFinite(point.latitude) && Number.isFinite(point.longitude))
+    .sort((a, b) => a.offsetSec - b.offsetSec)
+  if (sorted.length < 8) return []
+
+  const paceSamples: Array<{ startSec: number; endSec: number; distanceKm: number; paceSec: number }> = []
+  for (let index = 1; index < sorted.length; index += 1) {
+    const previous = sorted[index - 1]
+    const point = sorted[index]
+    const deltaSec = point.offsetSec - previous.offsetSec
+    if (deltaSec < 5 || deltaSec > 35) continue
+    const distanceKm = distanceMeters(previous.latitude, previous.longitude, point.latitude, point.longitude) / 1000
+    if (distanceKm < 0.015) continue
+    const paceSec = deltaSec / distanceKm
+    if (!isUsablePace(paceSec)) continue
+    paceSamples.push({
+      startSec: previous.offsetSec,
+      endSec: point.offsetSec,
+      distanceKm,
+      paceSec
+    })
+  }
+
+  if (paceSamples.length < 12) return []
+  const medianPace = median(paceSamples.map((sample) => sample.paceSec))
+  if (medianPace === null) return []
+  const fastThreshold = Math.min(350, Math.max(285, medianPace - 55))
+  const fastSamples = paceSamples.filter((sample) => sample.paceSec <= fastThreshold)
+  if (fastSamples.length < 4) return []
+
+  const clusters: Array<{ startSec: number; endSec: number; distanceKm: number; weightedSec: number; bestPaceSec: number }> = []
+  for (const sample of fastSamples) {
+    const last = clusters.at(-1)
+    if (last && sample.startSec - last.endSec <= 30) {
+      last.endSec = sample.endSec
+      last.distanceKm += sample.distanceKm
+      last.weightedSec += sample.distanceKm * sample.paceSec
+      last.bestPaceSec = Math.min(last.bestPaceSec, sample.paceSec)
+    } else {
+      clusters.push({
+        startSec: sample.startSec,
+        endSec: sample.endSec,
+        distanceKm: sample.distanceKm,
+        weightedSec: sample.distanceKm * sample.paceSec,
+        bestPaceSec: sample.paceSec
+      })
+    }
+  }
+
+  return clusters
+    .map((cluster, index) => {
+      const durationSec = cluster.endSec - cluster.startSec
+      return {
+        index: index + 1,
+        startSec: Math.round(cluster.startSec),
+        durationSec: Math.round(durationSec),
+        distanceKm: Math.round(cluster.distanceKm * 1000) / 1000,
+        avgPaceSec: cluster.distanceKm > 0 ? Math.round(cluster.weightedSec / cluster.distanceKm) : null,
+        bestPaceSec: Math.round(cluster.bestPaceSec)
+      }
+    })
+    .filter((segment) => {
+      const durationSec = Number(segment.durationSec)
+      return durationSec >= strideTimingTolerance.minDurationSec && durationSec <= strideTimingTolerance.maxDurationSec
+    })
+}
+
+function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const radiusM = 6371000
+  const toRad = (value: number) => (value * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLon = toRad(lon2 - lon1)
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
+  return radiusM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
 function getSustainedTempoDistance(laps: Lap[], distanceKm: number, avgPaceSec: number | null) {
