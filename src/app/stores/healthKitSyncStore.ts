@@ -82,6 +82,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         this.syncing = false
         this.status = ''
         this.error = err instanceof Error ? err.message : 'HealthKit 동기화 요청 실패'
+        showSyncToast('error', this.error, 4200)
       }
     },
     async requestRunRefresh(run: RunLog) {
@@ -128,9 +129,9 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
           showSyncToast('success', this.status, 3600)
         } else {
           this.status = latestDate
-            ? `HealthKit 동기화 완료 · ${latestDate} 이후 새 러닝 없음`
-            : 'HealthKit 동기화 완료 · 새 러닝 없음'
-          showSyncToast('success', this.status, 3200)
+            ? `HealthKit 변화 없음 · ${latestDate} 이후 새 러닝 없음`
+            : 'HealthKit 변화 없음 · 새 러닝 없음'
+          showSyncToast('neutral', this.status, 2600)
         }
         this.error = ''
         this.lastCompletedAt = Date.now()
@@ -203,9 +204,9 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
   }
 })
 
-function showSyncToast(tone: 'success' | 'error', message: string, durationMs: number) {
+function showSyncToast(tone: 'neutral' | 'success' | 'error', message: string, durationMs: number) {
   const toastStore = useToastStore()
-  toastStore[tone](message, {
+  toastStore.show(message, tone, {
     durationMs,
     placement: 'top',
     delayMs: syncToastDelayMs

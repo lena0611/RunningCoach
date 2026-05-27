@@ -74,9 +74,11 @@ Use a screen stack when the user is drilling into a deeper flow without changing
 - Memory goal and injury management must use separated flows: overview card -> list -> edit or new item screen. Do not place active selection, edit fields, creation fields, and full lists in one long mixed form.
 - Memory overview should summarize the current coaching basis first, then provide drill-in cards for goal and injury management. Deep edit fields belong only on focused edit/create screens.
 - Coach: chat-like user and coach messages, markdown rendered as readable headings, paragraphs, lists, code blocks, and dividers.
+- Streaming coach answers should auto-follow the latest text line while the user is at the bottom. If the user intentionally scrolls upward, stop auto-following and show a centered down-arrow button above the input bar that smoothly returns to the latest message.
 - User-facing dates must include the weekday, e.g. `2026-05-24(일)`. Store raw ISO dates in data, but format every displayed date through the shared formatter.
 - Metric values with units must use `UnitValue` or an equivalent shared pattern. Units are inline flow content, never absolutely positioned, and must stay smaller than the number without overlapping at mobile widths.
 - Toast messages must use the shared toast store and `ToastHost` component. Feature stores/pages should call the shared toast API instead of keeping one-off toast state or rendering inline toast markup. Default placement is bottom with a rise animation. System/background events such as HealthKit sync use top placement with a drop animation and stronger success/error colors.
+- HealthKit sync toasts must distinguish state by tone: new records saved uses success/primary, no change uses neutral/subtle, and sync failure uses error/red.
 
 ## Component Rules
 

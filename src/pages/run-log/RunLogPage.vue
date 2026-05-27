@@ -43,6 +43,9 @@ const editSnapshot = ref('')
 const coachRun = ref<RunLog | null>(null)
 const coachNote = ref('')
 const coachNoteInput = ref<HTMLTextAreaElement | null>(null)
+const coachScrollContainer = ref<HTMLElement | null>(null)
+const coachAutoScroll = ref(true)
+const showCoachScrollButton = ref(false)
 const coachLoading = ref(false)
 const coachError = ref('')
 const coachCommandOpen = ref(false)
@@ -237,6 +240,15 @@ watch(coachNote, () => {
   void nextTick(resizeCoachNoteInput)
 })
 
+watch(visibleStreamingCoachText, () => {
+  void nextTick(followCoachStream)
+})
+
+watch(selectedReports, () => {
+  if (!coachRun.value) return
+  void nextTick(() => scrollCoachToBottom('auto'))
+})
+
 onBeforeUnmount(() => {
   document.body.classList.remove('memory-stack-open')
   observer.value?.disconnect()
@@ -361,8 +373,12 @@ async function confirmRemove() {
 async function openCoach(run: RunLog) {
   coachRun.value = run
   coachError.value = ''
+  coachAutoScroll.value = true
+  showCoachScrollButton.value = false
   void nextTick(resizeCoachNoteInput)
   await ensureReportsLoaded()
+  await nextTick()
+  scrollCoachToBottom('auto')
 }
 
 async function ensureReportsLoaded() {
@@ -406,6 +422,8 @@ function closeCoach() {
   coachCommandOpen.value = false
   streamingCoachText.value = ''
   streamingCoachMeta.value = ''
+  coachAutoScroll.value = true
+  showCoachScrollButton.value = false
 }
 
 function clearCoachNote() {
@@ -443,6 +461,37 @@ function resizeCoachNoteInput() {
   const lineHeight = Number.parseFloat(getComputedStyle(input).lineHeight) || 22
   const maxHeight = lineHeight * 3 + 24
   input.style.height = `${Math.min(input.scrollHeight, maxHeight)}px`
+}
+
+function onCoachScroll() {
+  const nearBottom = isCoachNearBottom()
+  showCoachScrollButton.value = !nearBottom
+  coachAutoScroll.value = nearBottom
+}
+
+function followCoachStream() {
+  if (coachAutoScroll.value) {
+    scrollCoachToBottom('auto')
+    return
+  }
+  showCoachScrollButton.value = true
+}
+
+function scrollCoachToBottom(behavior: ScrollBehavior = 'smooth') {
+  const container = coachScrollContainer.value
+  if (!container) return
+  container.scrollTo({
+    top: container.scrollHeight,
+    behavior
+  })
+  coachAutoScroll.value = true
+  showCoachScrollButton.value = false
+}
+
+function isCoachNearBottom(threshold = 96) {
+  const container = coachScrollContainer.value
+  if (!container) return true
+  return container.scrollHeight - container.scrollTop - container.clientHeight <= threshold
 }
 
 async function requestCoach() {
@@ -784,7 +833,7 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
             </div>
             <button class="stack-icon-button" type="button" aria-label="AI 스케줄링 기준 보기" @click="schedulingHelpOpen = true">?</button>
           </header>
-          <main class="memory-stack-content coach-stack-content">
+          <main ref="coachScrollContainer" class="memory-stack-content coach-stack-content" @scroll="onCoachScroll">
             <CoachMessage role="user" :text="`${formatDateWithWeekday(coachRun.date)} ${coachRun.sessionTitle || coachRun.type}`" />
             <div v-if="coachHistoryLoading" class="coach-history-skeleton" aria-label="기존 AI 코칭 대화 불러오는 중">
               <div class="coach-skeleton-user" aria-hidden="true">
@@ -809,6 +858,9 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
             </template>
             <p v-if="coachError" class="error">{{ coachError }}</p>
           </main>
+          <button v-if="showCoachScrollButton" class="coach-scroll-bottom-button" type="button" aria-label="대화 맨 아래로 이동" @click="scrollCoachToBottom('smooth')">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14" /><path d="m19 12-7 7-7-7" /></svg>
+          </button>
           <footer class="stack-action-bar coach-input-bar">
             <div v-if="showCoachCommands" class="coach-command-menu">
               <button
