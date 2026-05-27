@@ -3172,7 +3172,7 @@ button.run-session-row {
   white-space: nowrap;
 }
 
-.body-3d-stage {
+.body-stillcut-stage {
   position: relative;
   min-height: 360px;
   overflow: hidden;
@@ -3185,26 +3185,80 @@ button.run-session-row {
   touch-action: none;
 }
 
-.body-3d-canvas {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
+.body-stillcut {
   width: 100%;
   height: 100%;
-  cursor: grab;
+  min-height: 360px;
+  user-select: none;
 }
 
-.body-3d-canvas:active {
-  cursor: grabbing;
+.body-still-shadow ellipse {
+  fill: rgba(0, 0, 0, 0.34);
 }
 
-.body-3d-glow {
-  position: absolute;
-  inset: auto 18% 8% 18%;
-  height: 48px;
-  border-radius: 999px;
-  background: radial-gradient(ellipse, rgba(74, 222, 128, 0.22), transparent 68%);
-  filter: blur(8px);
+.body-surface {
+  fill: url("#bodyShade");
+  stroke: rgba(226, 232, 240, 0.26);
+  stroke-width: 0.75;
+}
+
+.body-side-limb,
+.body-leg-left,
+.body-leg-right,
+.body-lower-left,
+.body-lower-right {
+  fill: url("#skinTone");
+}
+
+.body-cutline,
+.body-muscle-line {
+  fill: none;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.body-cutline {
+  stroke: rgba(15, 23, 42, 0.38);
+  stroke-width: 0.72;
+}
+
+.body-muscle-line {
+  stroke: rgba(255, 255, 255, 0.22);
+  stroke-width: 0.62;
+}
+
+.body-zone {
+  cursor: pointer;
+  outline: none;
+}
+
+.body-zone-shape {
+  fill: rgba(255, 255, 255, 0.001);
+  stroke: rgba(148, 163, 184, 0.82);
+  stroke-dasharray: 3 2;
+  stroke-width: 0.82;
+  transition: fill 150ms ease, stroke 150ms ease, filter 150ms ease;
+}
+
+.body-zone:hover .body-zone-shape,
+.body-zone:focus-visible .body-zone-shape {
+  fill: rgba(56, 189, 248, 0.18);
+  stroke: rgba(125, 211, 252, 0.95);
+}
+
+.body-zone.selected .body-zone-shape {
+  fill: rgba(56, 189, 248, 0.42);
+  stroke: rgba(103, 232, 249, 0.98);
+  stroke-dasharray: none;
+  filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.35));
+}
+
+.body-zone-text {
+  fill: var(--color-text);
+  font-size: 5px;
+  font-weight: 850;
+  text-anchor: middle;
+  dominant-baseline: middle;
   pointer-events: none;
 }
 
@@ -3230,6 +3284,10 @@ button.run-session-row {
 .body-view-tabs button.active {
   background: var(--color-primary-soft);
   color: var(--color-primary);
+}
+
+.body-view-angle-tabs {
+  grid-template-columns: repeat(auto-fit, minmax(42px, 1fr));
 }
 
 .body-silhouette-stage {
@@ -3390,7 +3448,8 @@ button.run-session-row {
     grid-template-columns: 1fr;
   }
 
-  .body-3d-stage,
+  .body-stillcut-stage,
+  .body-stillcut,
   .body-silhouette-stage,
   .body-silhouette {
     min-height: 330px;
