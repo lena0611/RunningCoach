@@ -1,25 +1,63 @@
 <script setup lang="ts">
-import type { Lap } from '@/entities/run/model'
+import { computed } from 'vue'
+import type { Lap, RunMetricSample } from '@/entities/run/model'
 import { formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
 
-defineProps<{
+const props = defineProps<{
   laps: Lap[]
+  metricSamples?: RunMetricSample[]
 }>()
 
-function formatLapDuration(lap: Lap) {
-  if (!lap.distanceKm || !lap.paceSec) return '-'
-  return formatDuration(lap.distanceKm * lap.paceSec)
+type LapDisplayRow = {
+  lap: Lap
+  maxHeartRate: number | null
 }
 
-function formatLapHeartRate(lap: Lap) {
+const lapRows = computed<LapDisplayRow[]>(() => {
+  let startSec = 0
+  return props.laps.map((lap) => {
+    const durationSec = getLapDurationSec(lap)
+    const endSec = startSec + durationSec
+    const maxHeartRate = lap.maxHeartRate ?? getMaxHeartRateInRange(startSec, endSec)
+    startSec = endSec
+    return {
+      lap,
+      maxHeartRate
+    }
+  })
+})
+
+function formatLapDuration(lap: Lap) {
+  const durationSec = getLapDurationSec(lap)
+  if (!durationSec) return '-'
+  return formatDuration(durationSec)
+}
+
+function formatLapHeartRate(row: LapDisplayRow) {
+  const lap = row.lap
   const average = formatInteger(lap.avgHeartRate)
-  const max = formatInteger(lap.maxHeartRate ?? null)
+  const max = formatInteger(row.maxHeartRate)
   if (average === '-' && max === '-') return '-'
   if (max === '-' || average === max) return average
   if (average === '-') return max
   return `${average}/${max}`
+}
+
+function getLapDurationSec(lap: Lap) {
+  if (!lap.distanceKm || !lap.paceSec) return 0
+  return lap.distanceKm * lap.paceSec
+}
+
+function getMaxHeartRateInRange(startSec: number, endSec: number) {
+  if (!props.metricSamples?.length || endSec <= startSec) return null
+  const values = props.metricSamples
+    .filter((sample) => sample.offsetSec > startSec && sample.offsetSec <= endSec)
+    .map((sample) => sample.heartRate)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+  if (!values.length) return null
+  return Math.max(...values)
 }
 </script>
 
@@ -37,12 +75,12 @@ function formatLapHeartRate(lap: Lap) {
           <span>심박수<small>평균/최대</small></span>
           <span>케이던스<small>(SPM)</small></span>
         </div>
-        <div v-for="lap in laps" :key="lap.index" class="lap-split-row">
-          <strong>{{ lap.index }}</strong>
-          <span class="lap-time">{{ formatLapDuration(lap) }}</span>
-          <span class="lap-pace">{{ formatPace(lap.paceSec) }}</span>
-          <span class="lap-hr">{{ formatLapHeartRate(lap) }}</span>
-          <span class="lap-cad">{{ formatInteger(lap.cadence) }}</span>
+        <div v-for="row in lapRows" :key="row.lap.index" class="lap-split-row">
+          <strong>{{ row.lap.index }}</strong>
+          <span class="lap-time">{{ formatLapDuration(row.lap) }}</span>
+          <span class="lap-pace">{{ formatPace(row.lap.paceSec) }}</span>
+          <span class="lap-hr">{{ formatLapHeartRate(row) }}</span>
+          <span class="lap-cad">{{ formatInteger(row.lap.cadence) }}</span>
         </div>
       </div>
     </div>

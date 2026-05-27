@@ -72,6 +72,7 @@ const selectedOffsetSec = ref<number | null>(null)
     />
     <RunSplitSection
       :laps="run.laps"
+      :metric-samples="run.metricSamples"
     />
   </main>
 </template>
