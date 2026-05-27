@@ -9,9 +9,6 @@ const props = defineProps<{
   run: RunLog
   selectedOffsetSec?: number | null
 }>()
-const emit = defineEmits<{
-  'select-offset': [offsetSec: number]
-}>()
 
 const scope = ref<'all' | '15m'>('all')
 const selectedIndex = ref(0)
@@ -55,37 +52,11 @@ const selectedDistanceKm = computed(() => {
   return Math.round(props.run.distanceKm * ratio * 100) / 100
 })
 
-const elevationStats = computed(() => getStats(scopedRoutePoints.value.map((point) => point.altitude)))
-
 const hasDetailData = computed(() => scopedRoutePoints.value.length > 1)
-
-function selectSample(index: number) {
-  selectedIndex.value = index
-  const sample = scopedSamples.value[index]
-  if (sample) emit('select-offset', sample.offsetSec)
-}
-
-function selectOffset(offsetSec: number) {
-  const sample = nearestSample(scopedSamples.value, offsetSec)
-  if (sample) {
-    selectedIndex.value = Math.max(0, scopedSamples.value.findIndex((item) => item.offsetSec === sample.offsetSec))
-    emit('select-offset', sample.offsetSec)
-    return
-  }
-  emit('select-offset', offsetSec)
-}
 
 function setScope(value: 'all' | '15m') {
   scope.value = value
   selectedIndex.value = 0
-}
-
-function elevationHeight(point: RunRoutePoint) {
-  const stats = elevationStats.value
-  if (point.altitude === null || !stats) return 0.16
-  const range = Math.max(stats.max - stats.min, 1)
-  const normalized = (point.altitude - stats.min) / range
-  return 0.12 + Math.min(Math.max(normalized, 0), 1) * 0.76
 }
 
 function nearestRoutePoint(points: RunRoutePoint[], offsetSec: number) {
@@ -99,18 +70,6 @@ function nearestSample<T extends { offsetSec: number }>(points: T[], offsetSec: 
   return points.reduce((nearest, point) => {
     return Math.abs(point.offsetSec - offsetSec) < Math.abs(nearest.offsetSec - offsetSec) ? point : nearest
   }, points[0])
-}
-
-function getStats(values: Array<number | null>) {
-  const numbers = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
-  if (!numbers.length) return null
-  const min = Math.min(...numbers)
-  const max = Math.max(...numbers)
-  return {
-    min,
-    max,
-    average: numbers.reduce((sum, value) => sum + value, 0) / numbers.length
-  }
 }
 
 function buildRouteMap(points: RunRoutePoint[]) {
@@ -226,9 +185,9 @@ function pointToMapPosition(point: RunRoutePoint, zoom: number) {
         <rect class="fitness-route-dim" x="-100000" y="-100000" width="200000" height="200000" />
         <polyline class="fitness-route-shadow" :points="routeMap.path" />
         <polyline class="fitness-route-line" :points="routeMap.path" />
-        <circle v-if="startPointPosition" class="fitness-route-start" :cx="startPointPosition.x" :cy="startPointPosition.y" r="14" />
-        <circle v-if="endPointPosition" class="fitness-route-end" :cx="endPointPosition.x" :cy="endPointPosition.y" r="14" />
-        <circle v-if="selectedRoutePosition" class="fitness-route-selected" :cx="selectedRoutePosition.x" :cy="selectedRoutePosition.y" r="12" />
+        <circle v-if="startPointPosition" class="fitness-route-start" :cx="startPointPosition.x" :cy="startPointPosition.y" r="9" />
+        <circle v-if="endPointPosition" class="fitness-route-end" :cx="endPointPosition.x" :cy="endPointPosition.y" r="9" />
+        <circle v-if="selectedRoutePosition" class="fitness-route-selected" :cx="selectedRoutePosition.x" :cy="selectedRoutePosition.y" r="8" />
       </svg>
       <div v-else class="fitness-route-empty">표시할 경로 데이터가 없습니다.</div>
       <a
@@ -254,22 +213,5 @@ function pointToMapPosition(point: RunRoutePoint, zoom: number) {
       <em>{{ formatInteger(activeSample.cadence) }}SPM</em>
     </div>
 
-    <div v-if="elevationStats" class="fitness-mini-chart fitness-chart-elevation">
-      <div class="fitness-chart-title">
-        <span>고도</span>
-        <strong>등반: {{ formatInteger(run.elevationGainM) }}M</strong>
-        <small>{{ formatInteger(elevationStats.min) }}~{{ formatInteger(elevationStats.max) }}M</small>
-      </div>
-      <div class="fitness-bars" aria-hidden="true">
-        <button
-          v-for="(point, index) in scopedRoutePoints"
-          :key="`${point.offsetSec}-${index}`"
-          type="button"
-          :class="{ active: selectedRoutePoint?.offsetSec === point.offsetSec }"
-          :style="{ '--bar-height': `${elevationHeight(point) * 100}%` }"
-          @click="selectOffset(point.offsetSec)"
-        />
-      </div>
-    </div>
   </SectionCard>
 </template>

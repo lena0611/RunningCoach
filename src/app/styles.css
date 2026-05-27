@@ -2236,13 +2236,13 @@ button.run-session-row {
 
 .fitness-route-shadow {
   stroke: rgba(0, 0, 0, 0.48);
-  stroke-width: 18;
+  stroke-width: 10;
 }
 
 .fitness-route-line {
   filter: url(#routeGlow);
   stroke: #22d3ee;
-  stroke-width: 10;
+  stroke-width: 5;
 }
 
 .fitness-route-start,

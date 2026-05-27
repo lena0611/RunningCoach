@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { defineAsyncComponent, ref } from 'vue'
-import type { Lap, RunMetricSample } from '@/entities/run/model'
+import type { Lap, RunMetricSample, RunRoutePoint } from '@/entities/run/model'
 import { formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
@@ -8,6 +8,7 @@ import SectionHeader from '@/shared/ui/SectionHeader.vue'
 defineProps<{
   laps: Lap[]
   metricSamples?: RunMetricSample[]
+  routePoints?: RunRoutePoint[]
   selectedOffsetSec?: number | null
 }>()
 defineEmits<{
@@ -53,6 +54,7 @@ function formatLapDuration(lap: Lap) {
         v-else
         :laps="laps"
         :metric-samples="metricSamples ?? []"
+        :route-points="routePoints ?? []"
         :selected-offset-sec="selectedOffsetSec"
         @select-offset="$emit('select-offset', $event)"
       />

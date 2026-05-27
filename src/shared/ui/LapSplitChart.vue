@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { Lap, RunMetricSample } from '@/entities/run/model'
+import type { Lap, RunMetricSample, RunRoutePoint } from '@/entities/run/model'
 import { formatDuration } from '@/shared/lib/format'
 import LapMetricChart from '@/shared/ui/LapMetricChart.vue'
 
 const props = defineProps<{
   laps: Lap[]
   metricSamples: RunMetricSample[]
+  routePoints: RunRoutePoint[]
   selectedOffsetSec?: number | null
 }>()
 const emit = defineEmits<{
@@ -54,6 +55,7 @@ const useSampleAxis = computed(() => samplePoints.value.length >= Math.max(6, la
 const chartPoints = computed(() => useSampleAxis.value ? samplePoints.value : lapPoints.value)
 const labels = computed(() => chartPoints.value.map((point) => point.label))
 const axisName = computed(() => useSampleAxis.value ? '시간' : '랩')
+const elevationValues = computed(() => chartPoints.value.map((point) => getElevationAtOffset(point.offsetSec)))
 const selectedIndex = computed(() => {
   const points = chartPoints.value
   if (!points.length || props.selectedOffsetSec === null || props.selectedOffsetSec === undefined) return null
@@ -68,6 +70,15 @@ function selectIndex(index: number) {
   const point = chartPoints.value[index]
   if (!point) return
   emit('select-offset', point.offsetSec)
+}
+
+function getElevationAtOffset(offsetSec: number) {
+  const points = props.routePoints.filter((point) => point.altitude !== null)
+  if (!points.length) return null
+  const nearest = points.reduce((current, point) => {
+    return Math.abs(point.offsetSec - offsetSec) < Math.abs(current.offsetSec - offsetSec) ? point : current
+  }, points[0])
+  return nearest.altitude
 }
 </script>
 
@@ -109,6 +120,19 @@ function selectIndex(index: number) {
       :axis-name="axisName"
       :labels="labels"
       :values="chartPoints.map((point) => point.cadence)"
+      :selected-index="selectedIndex"
+      @select-index="selectIndex"
+    />
+    <LapMetricChart
+      v-if="elevationValues.some((value) => value !== null)"
+      title="고도"
+      type="elevation"
+      chart-type="bar"
+      domain-kind="elevation"
+      color="#84cc16"
+      :axis-name="axisName"
+      :labels="labels"
+      :values="elevationValues"
       :selected-index="selectedIndex"
       @select-index="selectIndex"
     />

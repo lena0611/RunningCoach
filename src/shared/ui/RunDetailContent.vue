@@ -73,6 +73,7 @@ const selectedOffsetSec = ref<number | null>(null)
     <RunSplitSection
       :laps="run.laps"
       :metric-samples="run.metricSamples"
+      :route-points="run.routePoints"
       :selected-offset-sec="selectedOffsetSec"
       @select-offset="selectedOffsetSec = $event"
     />

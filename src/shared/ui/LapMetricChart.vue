@@ -11,7 +11,7 @@ import { formatInteger, formatPace } from '@/shared/lib/format'
 
 use([BarChart, LineChart, GridComponent, MarkLineComponent, TooltipComponent, CanvasRenderer])
 
-type MetricType = 'pace' | 'heartRate' | 'cadence'
+type MetricType = 'pace' | 'heartRate' | 'cadence' | 'elevation'
 
 const props = defineProps<{
   labels: string[]
@@ -107,6 +107,7 @@ function getColor(name: string) {
 function formatMetric(value: number) {
   if (props.type === 'pace') return `${formatPace(value)}/km`
   if (props.type === 'heartRate') return `${formatInteger(value)}BPM`
+  if (props.type === 'elevation') return `${formatInteger(value)}M`
   return `${formatInteger(value)}SPM`
 }
 
