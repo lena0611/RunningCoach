@@ -517,6 +517,16 @@ function closeCoachCommands() {
   }, 120)
 }
 
+function dismissCoachKeyboardOnOutsideTap(event: PointerEvent) {
+  const input = coachNoteInput.value
+  if (!input || document.activeElement !== input) return
+  const target = event.target
+  if (!(target instanceof Element)) return
+  if (target.closest('.coach-input-bar')) return
+  input.blur()
+  coachCommandOpen.value = false
+}
+
 function resizeCoachNoteInput() {
   const input = coachNoteInput.value
   if (!input) return
@@ -917,7 +927,7 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
       </Transition>
 
       <Transition name="stack-page">
-        <div v-if="coachRun" class="memory-stack-layer stack-layer-top" data-no-swipe>
+        <div v-if="coachRun" class="memory-stack-layer stack-layer-top" data-no-swipe @pointerdown.capture="dismissCoachKeyboardOnOutsideTap">
         <section class="memory-stack-page">
           <header class="memory-stack-header">
             <button class="stack-icon-button" type="button" aria-label="뒤로" @click="closeCoach">
