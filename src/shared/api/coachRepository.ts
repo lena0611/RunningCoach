@@ -30,6 +30,7 @@ export async function requestCoachRun(selectedRunId: string | null, userNote: st
         tone: 'conversational_coach',
         format: 'sectioned_markdown',
         avoid: ['report_style', 'medical_diagnosis', 'long_paragraphs'],
+        emojiPolicy: 'contextual_0_to_3',
         firstSentence: 'reaction_before_analysis',
         maxParagraphSentences: 2,
         maxBulletsPerSection: 5
@@ -71,6 +72,7 @@ export async function requestCoachRunStream(
         tone: 'conversational_coach',
         format: 'sectioned_markdown',
         avoid: ['report_style', 'medical_diagnosis', 'long_paragraphs'],
+        emojiPolicy: 'contextual_0_to_3',
         firstSentence: 'reaction_before_analysis',
         maxParagraphSentences: 2,
         maxBulletsPerSection: 5
