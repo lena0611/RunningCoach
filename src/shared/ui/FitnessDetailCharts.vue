@@ -108,7 +108,7 @@ function buildRouteMap(points: RunRoutePoint[]) {
   let maxX = Math.max(...xs)
   let minY = Math.min(...ys)
   let maxY = Math.max(...ys)
-  const padding = 72
+  const padding = 34
   minX -= padding
   maxX += padding
   minY -= padding
