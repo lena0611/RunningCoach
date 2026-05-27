@@ -3111,6 +3111,64 @@ button.run-session-row {
   stroke-width: 2.4;
 }
 
+.body-view-status {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  text-align: center;
+}
+
+.body-view-status strong {
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.body-view-status small {
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.body-3d-stage {
+  position: relative;
+  min-height: 330px;
+  overflow: hidden;
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 50% 24%, rgba(74, 222, 128, 0.18), transparent 31%),
+    radial-gradient(circle at 50% 68%, rgba(56, 189, 248, 0.14), transparent 44%),
+    linear-gradient(180deg, var(--color-field), var(--color-surface-2));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  touch-action: none;
+}
+
+.body-3d-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+.body-3d-canvas:active {
+  cursor: grabbing;
+}
+
+.body-3d-glow {
+  position: absolute;
+  inset: auto 18% 8% 18%;
+  height: 48px;
+  border-radius: 999px;
+  background: radial-gradient(ellipse, rgba(74, 222, 128, 0.22), transparent 68%);
+  filter: blur(8px);
+  pointer-events: none;
+}
+
 .body-view-tabs {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -3191,6 +3249,7 @@ button.run-session-row {
 
 .body-view-label {
   position: absolute;
+  z-index: 2;
   right: 12px;
   bottom: 12px;
   border-radius: 999px;
@@ -3292,6 +3351,7 @@ button.run-session-row {
     grid-template-columns: 1fr;
   }
 
+  .body-3d-stage,
   .body-silhouette-stage,
   .body-silhouette {
     min-height: 280px;
