@@ -315,6 +315,33 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
   const prescriptionComplianceSummary = summarizePrescriptionCompliance(recentPrescriptionComplianceSignals)
   const adaptiveTrainingProfile = getAdaptiveTrainingProfile(trainingMemory)
   const trainingKnowledge = buildRelevantTrainingKnowledge(knowledgeSourceRows, trainingMethodRows, prescriptionRuleRows, activeGoal, selectedRun)
+  const summaryStats = {
+    recent7DistanceKm: sumDistance(withinDaysFromAnchor(runRows, 7, anchorDate)),
+    recent14DistanceKm: sumDistance(recent14),
+    recent30DistanceKm: sumDistance(recent30),
+    recent30EasyRatio: easyRatio(recent30),
+    currentMonthRunCount: currentMonth.length,
+    currentMonthDistanceKm: sumDistance(currentMonth),
+    currentMonthEasyRatio: easyRatio(currentMonth),
+    currentMonthHardSessions: currentMonth.filter((run) => ['Tempo', 'Steady Long', 'Race'].includes(run.type)).length,
+    hardSessionsLast7: withinDaysFromAnchor(runRows, 7, anchorDate).filter((run) => ['Tempo', 'Steady Long', 'Race'].includes(run.type)).length,
+    runsAfterSelectedRunCount: runsAfterSelected.length,
+    latestTempo: decorateRunDate(latestTempo),
+    latestLong: decorateRunDate(latestLong)
+  }
+  const coachingDecisionBoard = buildCoachingDecisionBoard({
+    selectedRun,
+    selectedRunLapAnalysis,
+    selectedRunExecutionGuide,
+    recentPrescriptionComplianceSignals,
+    prescriptionComplianceSummary,
+    performanceProjection,
+    summaryStats,
+    activeGoal,
+    activeInjuryItem,
+    trainingKnowledge,
+    adaptiveTrainingProfile
+  })
 
   return {
     userNote,
@@ -397,6 +424,9 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
     goals,
     activeGoal,
     performanceProjection,
+    coachingDecisionBoard,
+    coachingDecisionBoardInstruction:
+      'coachingDecisionBoard는 이번 답변의 판단 보드다. 답변 전에 selectedRunEvidence, lapProcess, prescriptionCompliance, goalProjectionCheck, routineUpdateCheck를 먼저 확인하고, 핵심 지표/오늘 해석/루틴 업데이트에 그 근거를 반영한다. 이 보드와 원본 RunLog가 충돌하면 원본 RunLog를 우선하되, 보드는 설명 구조를 잡는 데 사용한다.',
     injuryItems,
     activeInjuryItem,
     injuryTemporalPolicy: selectedRun
@@ -435,20 +465,7 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
       'recentPrescriptionComplianceSignals는 최근 세션들이 각 유형별 처방 기준을 얼마나 지켰는지 보는 신호다. 단일 세션 결과를 장기기억으로 저장하지 말고, 최근 여러 세션에서 반복되는 준수/이탈 패턴만 memoryItems에 저장한다. 예: "최근 Tempo는 165 상한을 대체로 지키지만 후반 1~2랩에서 흔들린다", "Recovery는 심박을 잘 누르는 편이다".',
     runsAfterSelectedRun: runsAfterSelected.slice(0, 20).map(decorateRunDate),
     recent14: recent14.map(decorateRunDate),
-    summaryStats: {
-      recent7DistanceKm: sumDistance(withinDaysFromAnchor(runRows, 7, anchorDate)),
-      recent14DistanceKm: sumDistance(recent14),
-      recent30DistanceKm: sumDistance(recent30),
-      recent30EasyRatio: easyRatio(recent30),
-      currentMonthRunCount: currentMonth.length,
-      currentMonthDistanceKm: sumDistance(currentMonth),
-      currentMonthEasyRatio: easyRatio(currentMonth),
-      currentMonthHardSessions: currentMonth.filter((run) => ['Tempo', 'Steady Long', 'Race'].includes(run.type)).length,
-      hardSessionsLast7: withinDaysFromAnchor(runRows, 7, anchorDate).filter((run) => ['Tempo', 'Steady Long', 'Race'].includes(run.type)).length,
-      runsAfterSelectedRunCount: runsAfterSelected.length,
-      latestTempo: decorateRunDate(latestTempo),
-      latestLong: decorateRunDate(latestLong)
-    }
+    summaryStats
   }
 }
 
@@ -553,6 +570,11 @@ function buildCoachInstructions() {
     'similarPastCoachSnippets는 사용자의 반복 패턴과 이전 해석 톤을 떠올리는 데만 사용한다. 현재 선택 세션의 숫자와 날짜보다 우선하지 않는다.',
     '숫자는 근거로 쓰되, 사람처럼 해석한다.',
     '핵심 지표는 짧은 목록으로만 보여준다. 문장 속에 숫자를 길게 묻지 않는다.',
+    'context.coachingDecisionBoard는 이번 답변의 판단 보드다. 답변 전에 selectedRunEvidence, lapProcess, prescriptionCompliance, goalProjectionCheck, routineUpdateCheck를 먼저 확인한다.',
+    'coachingDecisionBoard.lapProcess가 있으면 평균값만 반복하지 말고, 페이스 흐름/심박 흐름/전후반 변화/초반 통제 여부를 핵심 지표와 오늘 해석에 넣는다.',
+    'coachingDecisionBoard.prescriptionCompliance는 세션별 처방 준수 판정이다. "잘했다/아쉽다"가 아니라 어떤 경계를 지켰거나 넘겼는지 말한다.',
+    'coachingDecisionBoard.goalProjectionCheck는 목표 예상과 루틴 상향 가능성을 보는 보조 근거다. 예측값 하나만 믿지 말고 역치훈련, Easy 기반, Long Run 지속성, 회복/부상 게이트와 함께 본다.',
+    'coachingDecisionBoard.routineUpdateCheck는 루틴 유지/상향/하향/보류 결론의 초안이다. "## 루틴 업데이트"에서는 이 결론과 근거를 1~3개만 짧게 말한다.',
     'selectedRunLapAnalysis가 있으면 "## 핵심 지표"에 랩 진행에 따른 페이스 흐름과 심박 흐름을 반드시 넣는다. 예: "- 페이스: 10분44초 → 10분05초 → 10분29초 → 9분57초 → 9분28초", "- 심박: 108 → 116 → 114 → 118 → 121", "- 케이던스: 159~164".',
     'selectedRunLapAnalysis가 있으면 평균 페이스/평균 심박만 말하고 끝내지 않는다. 러닝 중간 과정, 즉 초반을 서둘렀는지, 심박이 먼저 터졌는지, 잘 눌러 시작했는지, 후반에 페이스를 올려도 심박 품질이 유지됐는지 분석한다.',
     'selectedRunExecutionGuide가 있으면 세션 유형별 처방 경계를 사용한다. Easy는 145bpm 상한, Recovery는 130bpm 상한, Tempo는 최대 심박 165bpm 상한, Long Run은 후반 심박 드리프트, Easy + Strides는 10분 워밍업 + 8회 가속/회복 + 15분 쿨다운 구조를 본다.',
@@ -1347,6 +1369,356 @@ function suggestAdaptiveAdjustment(group: { total: number; met: number; partial:
   if (pattern === 'repeated_boundary_miss') return 'lower_or_recover'
   if (pattern === 'watch_boundary_pressure') return 'watch'
   return 'maintain'
+}
+
+type SummaryStatsForCoaching = {
+  recent7DistanceKm: number
+  recent14DistanceKm: number
+  recent30DistanceKm: number
+  recent30EasyRatio: number
+  currentMonthRunCount: number
+  currentMonthDistanceKm: number
+  currentMonthEasyRatio: number
+  currentMonthHardSessions: number
+  hardSessionsLast7: number
+  runsAfterSelectedRunCount: number
+  latestTempo: (RunLogRow & { dateDisplay: string }) | null
+  latestLong: (RunLogRow & { dateDisplay: string }) | null
+}
+
+function buildCoachingDecisionBoard(args: {
+  selectedRun: RunLogRow | null
+  selectedRunLapAnalysis: ReturnType<typeof buildLapProgressionAnalysis>
+  selectedRunExecutionGuide: ReturnType<typeof buildSessionExecutionGuide>
+  recentPrescriptionComplianceSignals: ReturnType<typeof buildPrescriptionComplianceSignals>
+  prescriptionComplianceSummary: ReturnType<typeof summarizePrescriptionCompliance>
+  performanceProjection: ReturnType<typeof getPerformanceProjection>
+  summaryStats: SummaryStatsForCoaching
+  activeGoal: unknown
+  activeInjuryItem: unknown
+  trainingKnowledge: ReturnType<typeof buildRelevantTrainingKnowledge>
+  adaptiveTrainingProfile: unknown
+}) {
+  const selectedCompliance = args.selectedRun
+    ? classifyPrescriptionCompliance(args.selectedRun, args.selectedRunLapAnalysis)
+    : 'no_selected_run'
+
+  return {
+    purpose:
+      'AI가 코칭 답변을 작성하기 전 확인해야 하는 압축 판단 보드다. 평균값 요약이 아니라 실행 과정, 처방 준수, 목표 전망, 루틴 조정 근거를 함께 보게 한다.',
+    selectedRunEvidence: buildSelectedRunEvidence(args.selectedRun),
+    lapProcess: buildLapProcessEvidence(args.selectedRunLapAnalysis),
+    prescriptionCompliance: buildPrescriptionComplianceEvidence(
+      args.selectedRun,
+      args.selectedRunLapAnalysis,
+      args.selectedRunExecutionGuide,
+      selectedCompliance
+    ),
+    goalProjectionCheck: buildGoalProjectionEvidence(args.performanceProjection, args.selectedRun, args.activeGoal),
+    routineUpdateCheck: buildRoutineUpdateEvidence({
+      selectedRun: args.selectedRun,
+      selectedCompliance,
+      prescriptionComplianceSummary: args.prescriptionComplianceSummary,
+      recentPrescriptionComplianceSignals: args.recentPrescriptionComplianceSignals,
+      performanceProjection: args.performanceProjection,
+      summaryStats: args.summaryStats,
+      activeInjuryItem: args.activeInjuryItem
+    }),
+    knowledgeCheck: {
+      relevantMethodNames: args.trainingKnowledge.methods.map((method) => method.name).slice(0, 4),
+      relevantRuleCount: args.trainingKnowledge.prescriptionRules.length,
+      adaptiveProfilePresent: Boolean(args.adaptiveTrainingProfile),
+      instruction:
+        'trainingKnowledge의 승인 규칙과 adaptiveTrainingProfile의 개인화 경계를 함께 보되, 단일 세션만으로 큰 변경을 하지 않는다.'
+    },
+    responseChecklist: [
+      '핵심 지표에 랩/샘플 흐름을 넣는다.',
+      '처방 기준을 지켰는지 먼저 말한다.',
+      '목표 예상은 보조 근거로만 쓰고 확정처럼 말하지 않는다.',
+      '루틴 업데이트 섹션에 유지/상향/하향/보류 결론과 근거 1~3개를 넣는다.',
+      '장기기억은 반복 패턴만 저장한다.'
+    ]
+  }
+}
+
+function buildSelectedRunEvidence(run: RunLogRow | null) {
+  if (!run) {
+    return {
+      available: false,
+      instruction: '선택 세션이 없으면 최근 흐름과 activeGoal 중심으로만 답한다.'
+    }
+  }
+
+  return {
+    available: true,
+    id: run.id,
+    date: run.date,
+    dateDisplay: formatDateWithWeekday(run.date),
+    storedType: run.type,
+    title: run.session_title,
+    source: run.source,
+    distanceKm: run.distance_km,
+    durationText: run.duration_sec ? formatDurationText(run.duration_sec) : null,
+    avgPaceDisplay: formatPaceForCoach(run.avg_pace_sec),
+    avgHeartRate: run.avg_heart_rate,
+    maxHeartRate: run.max_heart_rate,
+    cadence: run.cadence,
+    rpe: run.rpe,
+    feeling: run.workout_feeling,
+    painNote: run.pain_note,
+    courseType: run.course_type,
+    elevationGainM: run.elevation_gain_m,
+    elevationLossM: run.elevation_loss_m,
+    tags: run.tags,
+    memo: truncateText(run.memo, 180),
+    instruction:
+      'storedType은 출발점일 뿐이다. 메모, 요일, 랩/샘플 흐름, 심박 경계, fast_segments로 실제 세션 성격을 재해석한다.'
+  }
+}
+
+function buildLapProcessEvidence(analysis: ReturnType<typeof buildLapProgressionAnalysis>) {
+  if (!hasAvailableLapAnalysis(analysis)) {
+    return {
+      available: false,
+      reason: analysis?.reason ?? '랩/샘플 데이터가 부족하다.',
+      instruction: '랩 데이터가 없을 때만 평균값 중심으로 말한다.'
+    }
+  }
+
+  return {
+    available: true,
+    source: analysis.source,
+    sampleCount: analysis.lapCount,
+    paceFlow: analysis.paceFlowDisplay,
+    heartRateFlow: analysis.heartRateFlowDisplay,
+    cadenceRange: analysis.cadenceRangeDisplay,
+    firstHalf: analysis.firstHalf,
+    secondHalf: analysis.secondHalf,
+    paceDeltaSecSecondHalfMinusFirstHalf: analysis.paceDeltaSecSecondHalfMinusFirstHalf,
+    heartRateDriftBpmSecondHalfMinusFirstHalf: analysis.heartRateDriftBpmSecondHalfMinusFirstHalf,
+    paceTrend: analysis.paceTrend,
+    heartRateQuality: analysis.heartRateQuality,
+    maxLapHeartRate: analysis.maxLapHeartRate,
+    lapHeartRatesOverTempoCeiling: analysis.lapHeartRatesOverTempoCeiling,
+    startControlHint: analysis.startControlHint,
+    coachingFocus: buildLapCoachingFocus(analysis)
+  }
+}
+
+function buildLapCoachingFocus(analysis: AvailableLapAnalysis) {
+  const focus: string[] = []
+  if (analysis.startControlHint === 'fast_start') {
+    focus.push('초반이 평균보다 빨랐다. 심박도 같이 올랐는지 확인한다.')
+  } else if (analysis.startControlHint === 'controlled_start') {
+    focus.push('초반을 눌러 시작한 흐름이다. 후반 품질과 연결해서 말한다.')
+  }
+
+  if (analysis.paceTrend === 'negative_split' && analysis.heartRateQuality === 'stable') {
+    focus.push('후반 페이스가 좋아졌는데 심박 상승이 작다. 품질 좋은 자연 네거티브 가능성이 높다.')
+  } else if (analysis.paceTrend === 'negative_split' && analysis.heartRateQuality === 'large_drift') {
+    focus.push('후반 페이스 상승이 심박 드리프트를 크게 만들었다. 무리한 가속 가능성을 본다.')
+  } else if (analysis.paceTrend === 'late_fade') {
+    focus.push('후반 페이스가 떨어졌다. 장거리 지속성/초반 오버페이스/보급/날씨를 확인한다.')
+  }
+
+  if (analysis.lapHeartRatesOverTempoCeiling.length > 0) {
+    focus.push(`템포 상한 165를 넘긴 구간이 ${analysis.lapHeartRatesOverTempoCeiling.length}개 있다.`)
+  }
+
+  return focus.length ? focus : ['페이스 흐름과 심박 흐름을 함께 보고 세션 품질을 짧게 해석한다.']
+}
+
+function buildPrescriptionComplianceEvidence(
+  run: RunLogRow | null,
+  analysis: ReturnType<typeof buildLapProgressionAnalysis>,
+  guide: ReturnType<typeof buildSessionExecutionGuide>,
+  selectedCompliance: string
+) {
+  if (!run) {
+    return {
+      available: false,
+      verdict: 'no_selected_run',
+      instruction: '선택 세션이 없으므로 최근 루틴 준수 흐름만 본다.'
+    }
+  }
+
+  return {
+    available: true,
+    storedType: run.type,
+    primaryMetric: guide?.primaryMetric ?? 'context_dependent',
+    boundary: guide?.boundaries ?? null,
+    verdict: selectedCompliance,
+    verdictLabel: describeComplianceVerdict(selectedCompliance),
+    evidence: buildComplianceEvidenceBullets(run, analysis, selectedCompliance),
+    postPrescriptionAction: suggestPostPrescriptionAction(selectedCompliance)
+  }
+}
+
+function buildComplianceEvidenceBullets(
+  run: RunLogRow,
+  analysis: ReturnType<typeof buildLapProgressionAnalysis>,
+  selectedCompliance: string
+) {
+  const bullets: string[] = []
+  if (run.type === 'Tempo') {
+    bullets.push(`Tempo 처방 핵심은 max HR 165 이하. 세션 max HR ${run.max_heart_rate ?? '-'}.`)
+    if (hasAvailableLapAnalysis(analysis)) {
+      const over = analysis.lapHeartRatesOverTempoCeiling.map((lap) => `${lap.index}번 ${lap.avgHeartRate}`)
+      bullets.push(over.length ? `165 초과 랩: ${over.join(', ')}` : '랩 평균 기준으로 165 초과 구간은 없다.')
+    }
+  } else if (run.type === 'Easy' || run.type === 'Recovery') {
+    const ceiling = run.type === 'Recovery' ? 130 : 145
+    bullets.push(`${run.type} 처방 핵심은 페이스보다 HR ${ceiling} 이하 유지.`)
+    bullets.push(`세션 HR ${run.avg_heart_rate ?? '-'}/${run.max_heart_rate ?? '-'}${selectedCompliance.startsWith('met_') ? '로 기준 안쪽.' : '로 기준 확인 필요.'}`)
+  } else if (run.type === 'LSD' || run.type === 'Steady Long') {
+    if (hasAvailableLapAnalysis(analysis)) {
+      bullets.push(`전후반 심박 드리프트 ${analysis.heartRateDriftBpmSecondHalfMinusFirstHalf ?? '-'}bpm.`)
+      bullets.push(`페이스 흐름은 ${analysis.paceTrend}, 심박 품질은 ${analysis.heartRateQuality}.`)
+    } else {
+      bullets.push('랩 드리프트 근거가 부족해 장거리 품질 판정은 보수적으로 한다.')
+    }
+  } else if (run.type === 'Easy + Strides') {
+    const count = Array.isArray(run.fast_segments) ? run.fast_segments.length : 0
+    bullets.push(`Easy + Strides는 짧은 가속 반복과 회복 안정이 핵심. fast segment ${count}개.`)
+    bullets.push('케이던스 급상승만으로 스트라이드로 단정하지 않는다.')
+  }
+
+  if (hasAvailableLapAnalysis(analysis) && bullets.length < 4) {
+    bullets.push(`페이스: ${analysis.paceFlowDisplay ?? '-'}`)
+    bullets.push(`심박: ${analysis.heartRateFlowDisplay ?? '-'}`)
+  }
+
+  return bullets.slice(0, 5)
+}
+
+function describeComplianceVerdict(verdict: string) {
+  if (verdict.startsWith('met_')) return '처방 기준을 대체로 지켰다.'
+  if (verdict.startsWith('partial_')) return '큰 실패는 아니지만 경계 압력이 있었다.'
+  if (verdict.startsWith('missed_')) return '현재 처방보다 강도가 높았거나 기준을 넘겼다.'
+  return '데이터가 부족해 준수 여부는 보수적으로 본다.'
+}
+
+function suggestPostPrescriptionAction(verdict: string) {
+  if (verdict.startsWith('met_')) return 'maintain_or_consider_small_raise_if_repeated'
+  if (verdict.startsWith('partial_')) return 'maintain_with_next_check'
+  if (verdict.startsWith('missed_')) return 'lower_or_add_recovery_gate'
+  return 'watch_until_more_data'
+}
+
+function buildGoalProjectionEvidence(
+  projection: ReturnType<typeof getPerformanceProjection>,
+  selectedRun: RunLogRow | null,
+  activeGoal: unknown
+) {
+  const goalDistanceKm = getNullableNumber(activeGoal, 'distanceKm')
+  const goalDurationSec = getNullableNumber(activeGoal, 'targetDurationSec')
+  const goalText = goalDistanceKm
+    ? `${goalDistanceKm}km${goalDurationSec ? ` ${formatDurationText(goalDurationSec)}` : ''}`
+    : null
+
+  if (!projection || projection.status !== 'available') {
+    return {
+      available: false,
+      activeGoal: goalText,
+      reason: projection?.status === 'insufficient_data'
+        ? 'Race/Tempo/Steady Long/RPE 높은 기록이 부족해 예측은 보조 근거로도 약하다.'
+        : '활성 목표 또는 예측 근거가 부족하다.',
+      instruction: '예상 기록을 단정하지 말고 훈련 품질/루틴 소화율 중심으로 말한다.'
+    }
+  }
+
+  const selectedRunProjection = selectedRun && selectedRun.duration_sec && selectedRun.distance_km >= 3 && goalDistanceKm
+    ? {
+        projectedSec: Math.round(selectedRun.duration_sec * (goalDistanceKm / selectedRun.distance_km) ** 1.06),
+        projectedText: formatDurationText(Math.round(selectedRun.duration_sec * (goalDistanceKm / selectedRun.distance_km) ** 1.06)),
+        confidence: getProjectionConfidence(selectedRun)
+      }
+    : null
+
+  return {
+    available: true,
+    activeGoal: goalText,
+    currentProjection: projection.current,
+    previousProjection: projection.previous,
+    trend: projection.trend,
+    deltaSec: projection.deltaSec,
+    selectedRunProjection,
+    confidencePolicy:
+      '예상 기록은 Riegel 계열 환산 기반 보조 신호다. 루틴 변경은 역치훈련, 유산소 베이스, Long Run 지속성, 회복/부상 게이트를 함께 보고 판단한다.',
+    interpretation:
+      projection.trend === 'improving'
+        ? '예측은 개선 방향이지만 상향 조정은 처방 준수와 회복 안정이 같이 있어야 한다.'
+        : projection.trend === 'slower'
+          ? '예측이 느려졌더라도 날씨/동반주/회복주/세션 목적을 확인해야 한다.'
+          : '예측은 기준선 수준이다. 단일 예측값보다 반복 흐름이 중요하다.'
+  }
+}
+
+function buildRoutineUpdateEvidence(args: {
+  selectedRun: RunLogRow | null
+  selectedCompliance: string
+  prescriptionComplianceSummary: ReturnType<typeof summarizePrescriptionCompliance>
+  recentPrescriptionComplianceSignals: ReturnType<typeof buildPrescriptionComplianceSignals>
+  performanceProjection: ReturnType<typeof getPerformanceProjection>
+  summaryStats: SummaryStatsForCoaching
+  activeInjuryItem: unknown
+}) {
+  const stableGroups = args.prescriptionComplianceSummary.filter((group) => group.dominantPattern === 'stable_compliance')
+  const pressureGroups = args.prescriptionComplianceSummary.filter((group) => group.dominantPattern === 'watch_boundary_pressure' || group.dominantPattern === 'repeated_boundary_miss')
+  const selectedSignal = args.selectedRun
+    ? args.recentPrescriptionComplianceSignals.find((signal) => signal.id === args.selectedRun?.id) ?? null
+    : null
+  const hasActiveInjury = Boolean(args.activeInjuryItem)
+  const projection = args.performanceProjection
+  const projectionImproving = Boolean(projection && projection.status === 'available' && projection.trend === 'improving')
+  const hardSessionPressure = args.summaryStats.hardSessionsLast7 >= 3 || args.summaryStats.currentMonthHardSessions >= 8
+
+  const evidence = [
+    `최근 7/14/30일 거리: ${args.summaryStats.recent7DistanceKm}km / ${args.summaryStats.recent14DistanceKm}km / ${args.summaryStats.recent30DistanceKm}km`,
+    `최근 30일 Easy 비율: ${args.summaryStats.recent30EasyRatio}%`,
+    `최근 7일 강훈련: ${args.summaryStats.hardSessionsLast7}회`,
+    selectedSignal ? `선택 세션 준수: ${selectedSignal.compliance}` : '선택 세션 준수: 선택 세션 없음',
+    `반복 준수 그룹: ${stableGroups.map((group) => group.type).join(', ') || '-'}`,
+    `경계 압력 그룹: ${pressureGroups.map((group) => group.type).join(', ') || '-'}`
+  ]
+
+  let decision = 'maintain'
+  let reason = '루틴을 바꿀 반복 근거가 아직 부족하다.'
+
+  if (hasActiveInjury) {
+    decision = 'watch_or_lower'
+    reason = '부상/주의 항목이 있어 상향보다 회복 반응 확인이 먼저다.'
+  } else if (args.selectedCompliance.startsWith('missed_') || pressureGroups.some((group) => group.dominantPattern === 'repeated_boundary_miss')) {
+    decision = 'consider_lower_or_recovery_gate'
+    reason = '처방 경계 초과가 있어 다음 처방을 보수적으로 보거나 회복 게이트를 둔다.'
+  } else if (hardSessionPressure) {
+    decision = 'watch_load'
+    reason = '최근 강훈련 빈도가 높아 루틴 상향보다 부하 관리가 우선이다.'
+  } else if (projectionImproving && stableGroups.length >= 2) {
+    decision = 'consider_small_raise'
+    reason = '예측 흐름과 처방 준수 반복 근거가 있어 한 변수만 소폭 상향을 검토할 수 있다.'
+  } else if (args.selectedCompliance.startsWith('met_') && stableGroups.length >= 1) {
+    decision = 'maintain_with_next_raise_condition'
+    reason = '현재 처방은 맞아 보인다. 다음 상향 조건을 제시하는 정도가 적절하다.'
+  }
+
+  return {
+    decision,
+    reason,
+    evidence,
+    requiredReportSection:
+      '## 루틴 업데이트 섹션에서 이 decision을 자연어로 풀어 말한다. 유지면 유지 근거와 다음 상향 조건을, 변경이면 변경 이유와 새 처방을 말한다.',
+    patchGuidance:
+      decision === 'consider_small_raise' || decision === 'consider_lower_or_recovery_gate' || decision === 'watch_or_lower'
+        ? '반복 근거가 충분하고 실제 루틴을 바꿔야 한다면 trainingMemoryPatch를 반환한다. 단일 세션만 근거라면 report에 보류/다음 확인 조건만 말한다.'
+        : 'trainingMemoryPatch는 null로 둔다.'
+  }
+}
+
+type AvailableLapAnalysis = NonNullable<ReturnType<typeof buildLapProgressionAnalysis>> & { available: true }
+
+function hasAvailableLapAnalysis(analysis: ReturnType<typeof buildLapProgressionAnalysis>): analysis is AvailableLapAnalysis {
+  return Boolean(analysis && analysis.available)
 }
 
 function normalizeTrainingMemoryPatch(patch: TrainingMemoryPatch | null): TrainingMemoryPatch | null {
