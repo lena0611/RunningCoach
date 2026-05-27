@@ -46,11 +46,11 @@ const selectedOffsetSec = ref<number | null>(null)
 
     <SectionCard>
       <div class="metric-grid compact-metric-grid">
-        <div class="metric"><span>평균 페이스</span><strong><UnitValue :amount="formatPace(run.avgPaceSec)" unit="/km" /></strong></div>
+        <div class="metric metric-monochrome-value"><span>평균 페이스</span><strong><UnitValue :amount="formatPace(run.avgPaceSec)" unit="/km" /></strong></div>
         <div class="metric"><span>평균 케이던스</span><strong>{{ formatInteger(run.cadence) }}</strong></div>
         <div class="metric"><span>평균 심박</span><strong>{{ formatInteger(run.avgHeartRate) }}</strong></div>
         <div class="metric"><span>최고 심박</span><strong>{{ formatInteger(run.maxHeartRate) }}</strong></div>
-        <div class="metric">
+        <div class="metric metric-monochrome-value">
           <span>활동 칼로리</span>
           <strong>
             <UnitValue v-if="run.activeEnergyKcal !== null" :amount="formatInteger(run.activeEnergyKcal)" unit="kcal" />
@@ -59,8 +59,8 @@ const selectedOffsetSec = ref<number | null>(null)
         </div>
         <div class="metric"><span>운동강도</span><strong>{{ run.rpe ?? '-' }}</strong></div>
         <div class="metric"><span>드리프트</span><strong class="metric-text-value">{{ estimateHeartRateDrift(run) }}</strong></div>
-        <div class="metric"><span>누적 상승</span><strong><UnitValue :amount="formatInteger(run.elevationGainM)" unit="m" /></strong></div>
-        <div class="metric"><span>누적 하강</span><strong><UnitValue :amount="formatInteger(run.elevationLossM)" unit="m" /></strong></div>
+        <div class="metric metric-monochrome-value"><span>누적 상승</span><strong><UnitValue :amount="formatInteger(run.elevationGainM)" unit="m" /></strong></div>
+        <div class="metric metric-monochrome-value"><span>누적 하강</span><strong><UnitValue :amount="formatInteger(run.elevationLossM)" unit="m" /></strong></div>
       </div>
     </SectionCard>
 

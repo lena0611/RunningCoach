@@ -2,7 +2,6 @@
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import type { RunLog, RunRoutePoint } from '@/entities/run/model'
 import { formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
-import SectionCard from '@/shared/ui/SectionCard.vue'
 import UnitValue from '@/shared/ui/UnitValue.vue'
 
 const props = defineProps<{
@@ -235,7 +234,7 @@ function writeCachedLocationName(key: string, value: string) {
 </script>
 
 <template>
-  <SectionCard v-if="hasDetailData" class="fitness-detail-card">
+  <section v-if="hasDetailData" class="fitness-detail-section">
     <div class="fitness-detail-header">
       <h3>경로 상세</h3>
       <div class="fitness-scope-toggle" role="tablist" aria-label="세부사항 범위">
@@ -295,5 +294,5 @@ function writeCachedLocationName(key: string, value: string) {
       :selected-offset-sec="selectedOffsetSec"
       @select-offset="selectOffset"
     />
-  </SectionCard>
+  </section>
 </template>
