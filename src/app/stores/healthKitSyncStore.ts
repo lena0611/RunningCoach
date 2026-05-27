@@ -164,7 +164,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
       const runStore = useRunStore()
       try {
         await ensureRunStoreLoaded()
-        const target = runStore.runs.find((run) => run.externalId === candidate.externalId)
+        const target = findRefreshTargetRun(candidate, this.refreshingRunId)
         if (!target) throw new Error('갱신할 RunLog를 찾지 못했습니다.')
 
         const memoryStore = useMemoryStore()
@@ -194,6 +194,15 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
 function canRequestHealthKitRefresh(run: RunLog) {
   if (run.externalId) return true
   return run.source === 'healthkit' && Boolean(run.date) && run.distanceKm > 0
+}
+
+function findRefreshTargetRun(candidate: HealthKitRunCandidate, refreshingRunId: string) {
+  const runStore = useRunStore()
+  if (refreshingRunId) {
+    const target = runStore.runs.find((run) => run.id === refreshingRunId)
+    if (target) return target
+  }
+  return runStore.runs.find((run) => run.externalId === candidate.externalId) ?? null
 }
 
 function showSyncToast(tone: 'neutral' | 'success' | 'error', message: string, durationMs: number) {
