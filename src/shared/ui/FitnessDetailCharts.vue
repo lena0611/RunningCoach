@@ -248,6 +248,7 @@ function writeCachedLocationName(key: string, value: string) {
         <image
           v-for="tile in routeMap.tiles"
           :key="`${tile.x}-${tile.y}`"
+          class="fitness-route-tile"
           :href="tile.href"
           :x="tile.x * 256"
           :y="tile.y * 256"

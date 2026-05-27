@@ -23,7 +23,7 @@ const presets: Record<ChartMetricKind, { paddingRatio: number; minSpan: number; 
   elevation: { paddingRatio: 0.18, minSpan: 10, step: 5 },
   heartRate: { paddingRatio: 0.14, minSpan: 24, step: 5, clampMin: 40 },
   heartCadence: { paddingRatio: 0.14, minSpan: 32, step: 5, clampMin: 0 },
-  pace: { paddingRatio: 0.16, minSpan: 75, step: 15, clampMin: 60 },
+  pace: { paddingRatio: 0.24, minSpan: 105, step: 15, clampMin: 60 },
   cadence: { paddingRatio: 0.14, minSpan: 24, step: 5, clampMin: 0 },
   percent: { paddingRatio: 0.08, minSpan: 20, step: 10, clampMin: 0, clampMax: 100 },
   count: { paddingRatio: 0.16, minSpan: 4, step: 1, clampMin: 0 },
