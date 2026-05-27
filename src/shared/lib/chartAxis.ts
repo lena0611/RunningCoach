@@ -41,13 +41,16 @@ export function getChartDomain(values: Array<number | null | undefined>, kind: C
   }
 
   const preset = presets[kind]
-  const rawSpan = Math.max(dataMax - dataMin, 0)
+  const domainNumbers = kind === 'pace' && numbers.length >= 12 ? trimOutliers(numbers, 0.08) : numbers
+  const displayMin = Math.min(...domainNumbers)
+  const displayMax = Math.max(...domainNumbers)
+  const rawSpan = Math.max(displayMax - displayMin, 0)
   const span = Math.max(rawSpan, preset.minSpan)
-  const center = (dataMin + dataMax) / 2
+  const center = (displayMin + displayMax) / 2
   const half = span / 2
   const padding = span * preset.paddingRatio
-  let min = rawSpan === 0 ? center - half - padding : dataMin - padding
-  let max = rawSpan === 0 ? center + half + padding : dataMax + padding
+  let min = rawSpan === 0 ? center - half - padding : displayMin - padding
+  let max = rawSpan === 0 ? center + half + padding : displayMax + padding
 
   min = roundDown(min, preset.step)
   max = roundUp(max, preset.step)
@@ -76,4 +79,11 @@ function roundDown(value: number, step: number) {
 
 function roundUp(value: number, step: number) {
   return Math.ceil(value / step) * step
+}
+
+function trimOutliers(values: number[], ratio: number) {
+  if (values.length < 12) return values
+  const sorted = [...values].sort((a, b) => a - b)
+  const trimCount = Math.min(Math.floor(sorted.length * ratio), Math.floor((sorted.length - 2) / 2))
+  return sorted.slice(trimCount, sorted.length - trimCount)
 }

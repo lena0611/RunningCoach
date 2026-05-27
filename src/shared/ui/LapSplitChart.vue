@@ -62,9 +62,9 @@ const routePacePoints = computed<SplitChartPoint[]>(() => {
   for (let index = 1; index < points.length; index += 1) {
     const point = points[index]
     const deltaSec = point.offsetSec - anchor.offsetSec
-    if (deltaSec < 18) continue
+    if (deltaSec < 45) continue
     const distanceM = distanceMeters(anchor.latitude, anchor.longitude, point.latitude, point.longitude)
-    const paceSec = distanceM > 8 ? deltaSec / (distanceM / 1000) : null
+    const paceSec = distanceM > 45 ? deltaSec / (distanceM / 1000) : null
     if (isUsablePace(paceSec)) {
       samples.push({
         label: formatDuration(point.offsetSec),

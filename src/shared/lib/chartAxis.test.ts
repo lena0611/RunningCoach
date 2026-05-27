@@ -19,6 +19,18 @@ describe('chartAxis', () => {
     expect((domain?.max ?? 0) % 15).toBe(0)
   })
 
+  it('uses a robust display range for pace charts with GPS outliers', () => {
+    const values = [
+      433, 435, 436, 438, 439, 441, 442, 443, 444, 445, 446, 447,
+      353, 698
+    ]
+    const domain = getChartDomain(values, 'pace')
+
+    expect(domain).toEqual(expect.objectContaining({ dataMin: 353, dataMax: 698 }))
+    expect(domain?.min).toBeGreaterThan(330)
+    expect(domain?.max).toBeLessThan(520)
+  })
+
   it('gives constant cadence values a non-flat domain', () => {
     const domain = getChartDomain([164, 164, 164], 'cadence')
 
