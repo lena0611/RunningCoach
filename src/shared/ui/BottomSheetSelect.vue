@@ -9,19 +9,38 @@ export type BottomSheetSelectOption = {
 }
 
 const props = defineProps<{
-  modelValue: string
+  modelValue: string | string[]
   label: string
   options: BottomSheetSelectOption[]
   placeholder?: string
   compact?: boolean
+  multiple?: boolean
+  allLabel?: string
+  confirmLabel?: string
 }>()
 
-const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
+const emit = defineEmits<{ 'update:modelValue': [value: string | string[]] }>()
 const open = ref(false)
+const draftValues = ref<string[]>([])
 const drag = useBottomSheetDrag(closeSheet)
 
-const selectedOption = computed(() => props.options.find((option) => option.value === props.modelValue))
-const displayText = computed(() => selectedOption.value?.label || props.placeholder || '선택')
+const selectedValues = computed(() => {
+  if (Array.isArray(props.modelValue)) return props.modelValue
+  return props.modelValue ? [props.modelValue] : []
+})
+const activeValues = computed(() => props.multiple && open.value ? draftValues.value : selectedValues.value)
+const singleValue = computed(() => Array.isArray(props.modelValue) ? '' : props.modelValue)
+const selectedOption = computed(() => props.options.find((option) => option.value === singleValue.value))
+const allSelected = computed(() => props.options.length > 0 && selectedValues.value.length === props.options.length)
+const displayText = computed(() => {
+  if (!props.multiple) return selectedOption.value?.label || props.placeholder || '선택'
+  if (!selectedValues.value.length) return props.placeholder || '선택 안 함'
+  if (allSelected.value) return props.allLabel || props.placeholder || '전체'
+  if (selectedValues.value.length === 1) {
+    return props.options.find((option) => option.value === selectedValues.value[0])?.label || props.placeholder || '선택'
+  }
+  return `${selectedValues.value.length}개 선택`
+})
 
 watch(open, (isOpen) => {
   document.body.classList.toggle('sheet-open', isOpen)
@@ -32,16 +51,44 @@ onBeforeUnmount(() => {
 })
 
 function choose(value: string) {
+  if (props.multiple) {
+    toggleDraftValue(value)
+    return
+  }
   emit('update:modelValue', value)
   closeSheet()
 }
 
 function openSheet() {
+  draftValues.value = selectedValues.value.filter((value) => props.options.some((option) => option.value === value))
   open.value = true
 }
 
 function closeSheet() {
   open.value = false
+}
+
+function isActive(value: string) {
+  return activeValues.value.includes(value)
+}
+
+function toggleDraftValue(value: string) {
+  draftValues.value = draftValues.value.includes(value)
+    ? draftValues.value.filter((item) => item !== value)
+    : [...draftValues.value, value]
+}
+
+function selectAll() {
+  draftValues.value = props.options.map((option) => option.value)
+}
+
+function clearAll() {
+  draftValues.value = []
+}
+
+function confirmMultiple() {
+  emit('update:modelValue', draftValues.value)
+  closeSheet()
 }
 </script>
 
@@ -65,12 +112,16 @@ function closeSheet() {
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
             </button>
           </div>
-          <div class="bottom-sheet-options">
+          <div v-if="multiple" class="bottom-sheet-select-tools">
+            <button type="button" @click="selectAll">전체선택</button>
+            <button type="button" @click="clearAll">전체해제</button>
+          </div>
+          <div class="bottom-sheet-options" :class="{ 'bottom-sheet-options-multiple': multiple }">
             <button
               v-for="option in options"
               :key="option.value"
               class="bottom-sheet-option"
-              :class="{ selected: option.value === modelValue }"
+              :class="{ selected: isActive(option.value) }"
               type="button"
               @click="choose(option.value)"
             >
@@ -78,9 +129,12 @@ function closeSheet() {
                 <strong>{{ option.label }}</strong>
                 <small v-if="option.description">{{ option.description }}</small>
               </span>
-              <span v-if="option.value === modelValue" class="option-check" aria-hidden="true">✓</span>
+              <span v-if="isActive(option.value)" class="option-check" aria-hidden="true">✓</span>
             </button>
           </div>
+          <button v-if="multiple" class="bottom-sheet-confirm primary" type="button" @click="confirmMultiple">
+            {{ confirmLabel || '확인' }}
+          </button>
         </section>
       </div>
     </Teleport>

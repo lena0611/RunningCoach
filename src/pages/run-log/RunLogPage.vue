@@ -32,8 +32,9 @@ const healthKitSyncStore = useHealthKitSyncStore()
 const weatherStore = useWeatherStore()
 const route = useRoute()
 const router = useRouter()
-const selectedType = ref<RunType | 'All'>('All')
-const selectedMetaTag = ref('All')
+const selectedTypes = ref<RunType[]>([...runTypes])
+const selectedMetaTags = ref<string[]>([])
+const metaAllSelected = ref(true)
 const selectedDate = ref<string | null>(null)
 const visibleCount = ref(10)
 const loadMoreRef = ref<HTMLElement | null>(null)
@@ -124,7 +125,6 @@ const coachCommandItems = [
 ]
 
 const filterOptions = computed(() => [
-  { value: 'All', label: '모든 세션 유형' },
   ...runTypes.map((type) => ({ value: type, label: type }))
 ])
 
@@ -139,17 +139,32 @@ const metaFilterOptions = computed(() => {
       })
     }
   }
-  return [
-    { value: 'All', label: '모든 메타 태그' },
-    ...Array.from(tagMap.values()).sort((a, b) => `${a.description ?? ''}${a.label}`.localeCompare(`${b.description ?? ''}${b.label}`, 'ko'))
-  ]
+  return Array.from(tagMap.values()).sort((a, b) => `${a.description ?? ''}${a.label}`.localeCompare(`${b.description ?? ''}${b.label}`, 'ko'))
+})
+
+const metaFilterValues = computed(() => metaFilterOptions.value.map((option) => option.value))
+const selectedMetaFilterValues = computed({
+  get: () => {
+    if (metaAllSelected.value) return metaFilterValues.value
+    const available = new Set(metaFilterValues.value)
+    return selectedMetaTags.value.filter((value) => available.has(value))
+  },
+  set: (values: string[]) => {
+    const available = new Set(metaFilterValues.value)
+    const nextValues = values.filter((value) => available.has(value))
+    metaAllSelected.value = nextValues.length === metaFilterValues.value.length
+    selectedMetaTags.value = nextValues
+  }
 })
 
 const filteredRuns = computed(() => {
-  const byType = selectedType.value === 'All' ? runStore.sortedRuns : runStore.sortedRuns.filter((run) => run.type === selectedType.value)
-  const byMeta = selectedMetaTag.value === 'All'
+  const byType = selectedTypes.value.length === runTypes.length
+    ? runStore.sortedRuns
+    : runStore.sortedRuns.filter((run) => selectedTypes.value.includes(run.type))
+  const activeMetaTags = selectedMetaFilterValues.value
+  const byMeta = activeMetaTags.length === metaFilterValues.value.length
     ? byType
-    : byType.filter((run) => hasRunFilterTag(run, selectedMetaTag.value, memoryStore.memory.weeklyPattern))
+    : byType.filter((run) => activeMetaTags.some((tag) => hasRunFilterTag(run, tag, memoryStore.memory.weeklyPattern)))
   return selectedDate.value ? byMeta.filter((run) => run.date === selectedDate.value) : byMeta
 })
 
@@ -215,9 +230,15 @@ watch(openStack, (open) => {
   document.body.classList.toggle('memory-stack-open', open)
 })
 
-watch([filteredRuns, selectedType, selectedMetaTag, selectedDate], () => {
+watch([filteredRuns, selectedTypes, selectedMetaFilterValues, selectedDate], () => {
   visibleCount.value = 10
   nextTick(setupObserver)
+})
+
+watch(metaFilterValues, (values) => {
+  if (metaAllSelected.value) return
+  const available = new Set(values)
+  selectedMetaTags.value = selectedMetaTags.value.filter((value) => available.has(value))
 })
 
 watch(
@@ -740,8 +761,26 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
         <button class="icon-link-button" type="button" aria-label="기록 추가" @click="openAddRun">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14" /><path d="M5 12h14" /></svg>
         </button>
-        <BottomSheetSelect v-model="selectedType" label="세션 타입" :options="filterOptions" compact />
-        <BottomSheetSelect v-model="selectedMetaTag" label="메타 태그" :options="metaFilterOptions" compact />
+        <BottomSheetSelect
+          v-model="selectedTypes"
+          label="세션 타입"
+          :options="filterOptions"
+          compact
+          multiple
+          all-label="모든 세션 유형"
+          placeholder="모든 세션 유형"
+          confirm-label="선택 적용"
+        />
+        <BottomSheetSelect
+          v-model="selectedMetaFilterValues"
+          label="메타 태그"
+          :options="metaFilterOptions"
+          compact
+          multiple
+          all-label="모든 메타 태그"
+          placeholder="모든 메타 태그"
+          confirm-label="선택 적용"
+        />
       </div>
       <div class="calendar-header">
         <button class="calendar-arrow-button" type="button" aria-label="이전 달" @click="previousMonth">

@@ -135,7 +135,8 @@ function signOutAndClose() {
   emit('signOut')
 }
 
-function setThemeMode(value: string) {
+function setThemeMode(value: string | string[]) {
+  if (Array.isArray(value)) return
   if (value === 'light' || value === 'dark') settingsStore.setManualTheme(value as ManualThemeMode)
 }
 
