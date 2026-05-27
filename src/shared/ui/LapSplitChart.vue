@@ -84,8 +84,6 @@ function getElevationAtOffset(offsetSec: number) {
 
 <template>
   <div class="lap-chart-stack" aria-label="구간별 페이스 심박 케이던스 고도 차트">
-    <p v-if="useSampleAxis" class="helper compact-helper">차트는 세부 샘플 {{ samplePoints.length }}개 기준입니다.</p>
-    <p v-else class="helper compact-helper">세부 샘플이 부족해 랩 기준으로 표시합니다.</p>
     <LapMetricChart
       title="페이스"
       type="pace"
@@ -136,5 +134,7 @@ function getElevationAtOffset(offsetSec: number) {
       :selected-index="selectedIndex"
       @select-index="selectIndex"
     />
+    <p v-if="useSampleAxis" class="helper compact-helper">차트는 세부 샘플 {{ samplePoints.length }}개 기준입니다.</p>
+    <p v-else class="helper compact-helper">세부 샘플이 부족해 랩 기준으로 표시합니다.</p>
   </div>
 </template>

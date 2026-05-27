@@ -48,8 +48,8 @@ const glyph = computed(() => {
         <path class="run-icon-fill" d="M16 25.2 7.8 17.8c-3.1-2.8-2.8-7.4.7-9.3 2.1-1.1 4.7-.6 6.2 1.2L16 11.2l1.3-1.5c1.5-1.8 4.1-2.3 6.2-1.2 3.5 1.9 3.8 6.5.7 9.3L16 25.2Z" />
       </template>
       <template v-else-if="glyph === 'strides'">
-        <path class="run-icon-fill" d="M9 8.5 17.5 16 9 23.5v-15Z" />
-        <path class="run-icon-fill" d="M18 8.5 26.5 16 18 23.5v-15Z" opacity="0.72" />
+        <path class="run-icon-fill" d="M8.5 8.2 20 16 8.5 23.8V8.2Z" />
+        <path class="run-icon-stride-line" d="M21.5 10h3.5M23 16h3.5M21.5 22h3.5" />
       </template>
       <template v-else-if="glyph === 'tempo'">
         <path class="run-icon-fill" d="M7 8.5 15.5 16 7 23.5v-15Z" />

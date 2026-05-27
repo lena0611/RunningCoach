@@ -42,7 +42,7 @@ function formatLapHeartRate(row: LapDisplayRow) {
   if (average === '-' && max === '-') return '-'
   if (max === '-' || average === max) return average
   if (average === '-') return max
-  return `${average}/${max}`
+  return `${average} / ${max}`
 }
 
 function getLapDurationSec(lap: Lap) {
@@ -72,7 +72,7 @@ function getMaxHeartRateInRange(startSec: number, endSec: number) {
           <span></span>
           <span>시간<small>(분:초)</small></span>
           <span>페이스<small>(분/km)</small></span>
-          <span>심박수<small>평균/최대</small></span>
+          <span>심박수<small>(평균/최대 BPM)</small></span>
           <span>케이던스<small>(SPM)</small></span>
         </div>
         <div v-for="row in lapRows" :key="row.lap.index" class="lap-split-row">

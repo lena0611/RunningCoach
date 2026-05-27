@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import type { RunLog, RunRoutePoint } from '@/entities/run/model'
 import { formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
 import SectionCard from '@/shared/ui/SectionCard.vue'
@@ -45,6 +45,8 @@ const selectedRoutePoint = computed(() => {
   return nearestRoutePoint(points, sample.offsetSec)
 })
 const routeMap = computed(() => buildRouteMap(scopedRoutePoints.value))
+const routeCenter = computed(() => getRouteCenter(scopedRoutePoints.value))
+const routeLocationName = ref('')
 const selectedRoutePosition = computed(() => selectedRoutePoint.value && routeMap.value ? pointToMapPosition(selectedRoutePoint.value, routeMap.value.zoom) : null)
 const startPointPosition = computed(() => scopedRoutePoints.value[0] && routeMap.value ? pointToMapPosition(scopedRoutePoints.value[0], routeMap.value.zoom) : null)
 const endPointPosition = computed(() => scopedRoutePoints.value.at(-1) && routeMap.value ? pointToMapPosition(scopedRoutePoints.value.at(-1)!, routeMap.value.zoom) : null)
@@ -57,6 +59,16 @@ const selectedDistanceKm = computed(() => {
 })
 
 const hasDetailData = computed(() => scopedRoutePoints.value.length > 1 || scopedSamples.value.length > 1)
+
+watch(
+  routeCenter,
+  async (center) => {
+    routeLocationName.value = ''
+    if (!center) return
+    routeLocationName.value = await resolveRouteLocationName(center.latitude, center.longitude)
+  },
+  { immediate: true }
+)
 
 function setScope(value: 'all' | '15m') {
   scope.value = value
@@ -96,7 +108,7 @@ function buildRouteMap(points: RunRoutePoint[]) {
   let maxX = Math.max(...xs)
   let minY = Math.min(...ys)
   let maxY = Math.max(...ys)
-  const padding = 64
+  const padding = 72
   minX -= padding
   maxX += padding
   minY -= padding
@@ -142,6 +154,16 @@ function buildRouteMap(points: RunRoutePoint[]) {
   }
 }
 
+function getRouteCenter(points: RunRoutePoint[]) {
+  if (!points.length) return null
+  const latitudes = points.map((point) => point.latitude)
+  const longitudes = points.map((point) => point.longitude)
+  return {
+    latitude: (Math.min(...latitudes) + Math.max(...latitudes)) / 2,
+    longitude: (Math.min(...longitudes) + Math.max(...longitudes)) / 2
+  }
+}
+
 function estimateRouteZoom(points: RunRoutePoint[]) {
   const latitudes = points.map((point) => point.latitude)
   const longitudes = points.map((point) => point.longitude)
@@ -163,6 +185,53 @@ function pointToMapPosition(point: RunRoutePoint, zoom: number) {
   const y = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * scale
   return { x, y }
 }
+
+async function resolveRouteLocationName(latitude: number, longitude: number) {
+  const key = `pacelab-route-location:${latitude.toFixed(3)},${longitude.toFixed(3)}`
+  const cached = readCachedLocationName(key)
+  if (cached) return cached
+
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}&zoom=10&addressdetails=1&accept-language=ko`
+    )
+    if (!response.ok) return ''
+    const data = await response.json() as { address?: Record<string, string> }
+    const label = formatLocationAddress(data.address ?? {})
+    if (label) writeCachedLocationName(key, label)
+    return label
+  } catch {
+    return ''
+  }
+}
+
+function formatLocationAddress(address: Record<string, string>) {
+  const province = address.province || address.state || address.region || ''
+  const city = address.city || address.county || address.town || address.municipality || ''
+  const district = address.borough || address.suburb || ''
+  const parts = [province, city || district].filter(Boolean)
+  return [...new Set(parts)].join(' ')
+}
+
+function readCachedLocationName(key: string) {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return ''
+    const parsed = JSON.parse(raw) as { value?: string; savedAt?: number }
+    if (!parsed.value || !parsed.savedAt || Date.now() - parsed.savedAt > 1000 * 60 * 60 * 24 * 30) return ''
+    return parsed.value
+  } catch {
+    return ''
+  }
+}
+
+function writeCachedLocationName(key: string, value: string) {
+  try {
+    localStorage.setItem(key, JSON.stringify({ value, savedAt: Date.now() }))
+  } catch {
+    // 위치 라벨 캐시는 실패해도 기능에 영향이 없어 무시한다.
+  }
+}
 </script>
 
 <template>
@@ -177,15 +246,6 @@ function pointToMapPosition(point: RunRoutePoint, zoom: number) {
 
     <div v-if="routeMap" class="fitness-route-card">
       <svg class="fitness-route-map" :viewBox="routeMap.viewBox" role="img" aria-label="러닝 경로">
-        <defs>
-          <filter id="routeGlow" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="1.8" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
         <image
           v-for="tile in routeMap.tiles"
           :key="`${tile.x}-${tile.y}`"
@@ -197,7 +257,6 @@ function pointToMapPosition(point: RunRoutePoint, zoom: number) {
           preserveAspectRatio="none"
         />
         <rect class="fitness-route-dim" x="-100000" y="-100000" width="200000" height="200000" />
-        <polyline class="fitness-route-shadow" :points="routeMap.path" />
         <polyline class="fitness-route-line" :points="routeMap.path" />
         <circle v-if="startPointPosition" class="fitness-route-start" :cx="startPointPosition.x" :cy="startPointPosition.y" r="9" />
         <circle v-if="endPointPosition" class="fitness-route-end" :cx="endPointPosition.x" :cy="endPointPosition.y" r="9" />
@@ -215,6 +274,9 @@ function pointToMapPosition(point: RunRoutePoint, zoom: number) {
       <div class="fitness-route-overlay">
         <strong>{{ formatDuration(activeSample?.offsetSec ?? run.durationSec) }}</strong>
         <strong><UnitValue :amount="selectedDistanceKm" unit="km" /></strong>
+      </div>
+      <div v-if="routeLocationName" class="fitness-route-location">
+        {{ routeLocationName }}
       </div>
     </div>
 
