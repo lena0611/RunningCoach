@@ -12,7 +12,7 @@ import ScaleSlider from './ScaleSlider.vue'
 
 type BodyPartSpec = {
   areaId: string
-  shape: 'capsule' | 'sphere' | 'box'
+  shape: BodyShape
   position: [number, number, number]
   scale: [number, number, number]
   rotation?: [number, number, number]
@@ -25,6 +25,7 @@ type BasePartSpec = Omit<BodyPartSpec, 'areaId' | 'model'> & {
 }
 
 type BodyModelId = 'upper' | 'lower' | 'foot'
+type BodyShape = 'capsule' | 'sphere' | 'box' | 'muscle' | 'torso' | 'limb' | 'footSurface'
 
 const props = withDefaults(
   defineProps<{
@@ -68,6 +69,7 @@ let animationId = 0
 
 const clickableMeshes: THREE.Mesh[] = []
 const baseMeshes: THREE.Mesh[] = []
+const outlineSegments: THREE.LineSegments[] = []
 const partMeshes = new Map<string, THREE.Mesh>()
 const raycaster = new THREE.Raycaster()
 const pointer = new THREE.Vector2()
@@ -85,58 +87,58 @@ const modelViewConfig: Record<BodyModelId, { scale: number; y: number; cameraZ: 
 }
 
 const baseParts: BasePartSpec[] = [
-  { model: 'upper', shape: 'sphere', position: [0, 1.32, 0], scale: [0.18, 0.18, 0.18] },
-  { model: 'upper', shape: 'capsule', position: [0, 0.55, 0], scale: [0.62, 0.92, 0.38] },
-  { model: 'upper', shape: 'sphere', position: [0, -0.04, 0], scale: [0.82, 0.26, 0.5] },
-  { model: 'upper', shape: 'capsule', position: [-0.52, 0.44, 0], scale: [0.08, 0.64, 0.08], rotation: [0, 0, -0.1] },
-  { model: 'upper', shape: 'capsule', position: [0.52, 0.44, 0], scale: [0.08, 0.64, 0.08], rotation: [0, 0, 0.1] },
+  { model: 'upper', shape: 'sphere', position: [0, 1.32, 0], scale: [0.18, 0.18, 0.16] },
+  { model: 'upper', shape: 'torso', position: [0, 0.55, 0], scale: [0.86, 0.92, 0.52] },
+  { model: 'upper', shape: 'sphere', position: [0, -0.04, 0], scale: [0.74, 0.22, 0.44] },
+  { model: 'upper', shape: 'limb', position: [-0.58, 0.42, 0], scale: [0.15, 0.54, 0.12], rotation: [0, 0, -0.12] },
+  { model: 'upper', shape: 'limb', position: [0.58, 0.42, 0], scale: [0.15, 0.54, 0.12], rotation: [0, 0, 0.12] },
 
-  { model: 'lower', shape: 'sphere', position: [0, 0.95, 0], scale: [0.72, 0.24, 0.44] },
-  { model: 'lower', shape: 'capsule', position: [-0.28, 0.18, 0], scale: [0.13, 0.78, 0.13] },
-  { model: 'lower', shape: 'capsule', position: [0.28, 0.18, 0], scale: [0.13, 0.78, 0.13] },
+  { model: 'lower', shape: 'sphere', position: [0, 0.95, 0], scale: [0.64, 0.22, 0.38] },
+  { model: 'lower', shape: 'limb', position: [-0.28, 0.18, 0], scale: [0.2, 0.66, 0.15] },
+  { model: 'lower', shape: 'limb', position: [0.28, 0.18, 0], scale: [0.2, 0.66, 0.15] },
   { model: 'lower', shape: 'sphere', position: [-0.28, -0.42, 0.02], scale: [0.14, 0.12, 0.14] },
   { model: 'lower', shape: 'sphere', position: [0.28, -0.42, 0.02], scale: [0.14, 0.12, 0.14] },
-  { model: 'lower', shape: 'capsule', position: [-0.28, -1.02, 0], scale: [0.11, 0.7, 0.11] },
-  { model: 'lower', shape: 'capsule', position: [0.28, -1.02, 0], scale: [0.11, 0.7, 0.11] },
+  { model: 'lower', shape: 'limb', position: [-0.28, -1.02, 0], scale: [0.14, 0.56, 0.1] },
+  { model: 'lower', shape: 'limb', position: [0.28, -1.02, 0], scale: [0.14, 0.56, 0.1] },
 
-  { model: 'foot', shape: 'capsule', position: [-0.28, 0.68, 0], scale: [0.12, 0.78, 0.12] },
-  { model: 'foot', shape: 'capsule', position: [0.28, 0.68, 0], scale: [0.12, 0.78, 0.12] },
+  { model: 'foot', shape: 'limb', position: [-0.28, 0.68, 0], scale: [0.14, 0.58, 0.1] },
+  { model: 'foot', shape: 'limb', position: [0.28, 0.68, 0], scale: [0.14, 0.58, 0.1] },
   { model: 'foot', shape: 'sphere', position: [-0.28, 0.04, 0.02], scale: [0.18, 0.14, 0.18] },
   { model: 'foot', shape: 'sphere', position: [0.28, 0.04, 0.02], scale: [0.18, 0.14, 0.18] },
-  { model: 'foot', shape: 'box', position: [-0.28, -0.18, 0.28], scale: [0.38, 0.13, 0.72] },
-  { model: 'foot', shape: 'box', position: [0.28, -0.18, 0.28], scale: [0.38, 0.13, 0.72] }
+  { model: 'foot', shape: 'footSurface', position: [-0.28, -0.18, 0.28], scale: [0.36, 0.1, 0.66] },
+  { model: 'foot', shape: 'footSurface', position: [0.28, -0.18, 0.28], scale: [0.36, 0.1, 0.66] }
 ]
 
 const bodyParts: BodyPartSpec[] = [
-  { model: 'upper', areaId: 'lower-back', shape: 'box', position: [0, 0.42, -0.29], scale: [0.62, 0.42, 0.08] },
+  { model: 'upper', areaId: 'lower-back', shape: 'box', position: [0, 0.42, -0.29], scale: [0.54, 0.34, 0.06] },
   { model: 'upper', areaId: 'left-hip', shape: 'sphere', position: [-0.34, -0.08, -0.04], scale: [0.24, 0.2, 0.24] },
   { model: 'upper', areaId: 'right-hip', shape: 'sphere', position: [0.34, -0.08, -0.04], scale: [0.24, 0.2, 0.24] },
 
   { model: 'lower', areaId: 'left-hip', shape: 'sphere', position: [-0.32, 0.86, 0], scale: [0.24, 0.2, 0.24] },
   { model: 'lower', areaId: 'right-hip', shape: 'sphere', position: [0.32, 0.86, 0], scale: [0.24, 0.2, 0.24] },
-  { model: 'lower', areaId: 'left-quadriceps', shape: 'capsule', position: [-0.25, 0.24, 0.17], scale: [0.14, 0.62, 0.12] },
-  { model: 'lower', areaId: 'left-quadriceps', shape: 'capsule', position: [-0.38, 0.18, 0.12], scale: [0.11, 0.56, 0.1], rotation: [0, 0, -0.08] },
-  { model: 'lower', areaId: 'right-quadriceps', shape: 'capsule', position: [0.25, 0.24, 0.17], scale: [0.14, 0.62, 0.12] },
-  { model: 'lower', areaId: 'right-quadriceps', shape: 'capsule', position: [0.38, 0.18, 0.12], scale: [0.11, 0.56, 0.1], rotation: [0, 0, 0.08] },
-  { model: 'lower', areaId: 'left-hamstring', shape: 'capsule', position: [-0.24, 0.22, -0.18], scale: [0.15, 0.64, 0.13] },
-  { model: 'lower', areaId: 'right-hamstring', shape: 'capsule', position: [0.24, 0.22, -0.18], scale: [0.15, 0.64, 0.13] },
-  { model: 'lower', areaId: 'left-it-band', shape: 'capsule', position: [-0.48, 0.08, 0], scale: [0.055, 0.86, 0.075] },
-  { model: 'lower', areaId: 'right-it-band', shape: 'capsule', position: [0.48, 0.08, 0], scale: [0.055, 0.86, 0.075] },
+  { model: 'lower', areaId: 'left-quadriceps', shape: 'muscle', position: [-0.25, 0.24, 0.17], scale: [0.15, 0.48, 0.09] },
+  { model: 'lower', areaId: 'left-quadriceps', shape: 'muscle', position: [-0.39, 0.17, 0.09], scale: [0.1, 0.42, 0.075], rotation: [0, 0, -0.08] },
+  { model: 'lower', areaId: 'right-quadriceps', shape: 'muscle', position: [0.25, 0.24, 0.17], scale: [0.15, 0.48, 0.09] },
+  { model: 'lower', areaId: 'right-quadriceps', shape: 'muscle', position: [0.39, 0.17, 0.09], scale: [0.1, 0.42, 0.075], rotation: [0, 0, 0.08] },
+  { model: 'lower', areaId: 'left-hamstring', shape: 'muscle', position: [-0.24, 0.2, -0.16], scale: [0.14, 0.5, 0.1] },
+  { model: 'lower', areaId: 'right-hamstring', shape: 'muscle', position: [0.24, 0.2, -0.16], scale: [0.14, 0.5, 0.1] },
+  { model: 'lower', areaId: 'left-it-band', shape: 'capsule', position: [-0.47, 0.08, 0.02], scale: [0.035, 0.68, 0.045] },
+  { model: 'lower', areaId: 'right-it-band', shape: 'capsule', position: [0.47, 0.08, 0.02], scale: [0.035, 0.68, 0.045] },
   { model: 'lower', areaId: 'left-knee', shape: 'sphere', position: [-0.28, -0.42, 0.06], scale: [0.19, 0.14, 0.17] },
   { model: 'lower', areaId: 'right-knee', shape: 'sphere', position: [0.28, -0.42, 0.06], scale: [0.19, 0.14, 0.17] },
-  { model: 'lower', areaId: 'left-shin', shape: 'capsule', position: [-0.28, -1.02, 0.13], scale: [0.1, 0.68, 0.1] },
-  { model: 'lower', areaId: 'right-shin', shape: 'capsule', position: [0.28, -1.02, 0.13], scale: [0.1, 0.68, 0.1] },
-  { model: 'lower', areaId: 'left-calf', shape: 'capsule', position: [-0.28, -1.02, -0.14], scale: [0.14, 0.64, 0.13] },
-  { model: 'lower', areaId: 'right-calf', shape: 'capsule', position: [0.28, -1.02, -0.14], scale: [0.14, 0.64, 0.13] },
+  { model: 'lower', areaId: 'left-shin', shape: 'capsule', position: [-0.28, -1.02, 0.13], scale: [0.055, 0.55, 0.045] },
+  { model: 'lower', areaId: 'right-shin', shape: 'capsule', position: [0.28, -1.02, 0.13], scale: [0.055, 0.55, 0.045] },
+  { model: 'lower', areaId: 'left-calf', shape: 'muscle', position: [-0.28, -1.02, -0.13], scale: [0.13, 0.48, 0.1] },
+  { model: 'lower', areaId: 'right-calf', shape: 'muscle', position: [0.28, -1.02, -0.13], scale: [0.13, 0.48, 0.1] },
 
-  { model: 'foot', areaId: 'left-calf', shape: 'capsule', position: [-0.28, 0.64, -0.12], scale: [0.13, 0.55, 0.12] },
-  { model: 'foot', areaId: 'right-calf', shape: 'capsule', position: [0.28, 0.64, -0.12], scale: [0.13, 0.55, 0.12] },
-  { model: 'foot', areaId: 'left-achilles', shape: 'capsule', position: [-0.28, 0.1, -0.18], scale: [0.055, 0.44, 0.055] },
-  { model: 'foot', areaId: 'right-achilles', shape: 'capsule', position: [0.28, 0.1, -0.18], scale: [0.055, 0.44, 0.055] },
+  { model: 'foot', areaId: 'left-calf', shape: 'muscle', position: [-0.28, 0.64, -0.12], scale: [0.12, 0.42, 0.09] },
+  { model: 'foot', areaId: 'right-calf', shape: 'muscle', position: [0.28, 0.64, -0.12], scale: [0.12, 0.42, 0.09] },
+  { model: 'foot', areaId: 'left-achilles', shape: 'capsule', position: [-0.28, 0.1, -0.18], scale: [0.04, 0.36, 0.04] },
+  { model: 'foot', areaId: 'right-achilles', shape: 'capsule', position: [0.28, 0.1, -0.18], scale: [0.04, 0.36, 0.04] },
   { model: 'foot', areaId: 'left-ankle', shape: 'sphere', position: [-0.28, -0.1, 0.02], scale: [0.18, 0.13, 0.18] },
   { model: 'foot', areaId: 'right-ankle', shape: 'sphere', position: [0.28, -0.1, 0.02], scale: [0.18, 0.13, 0.18] },
-  { model: 'foot', areaId: 'left-plantar-fascia', shape: 'box', position: [-0.28, -0.34, 0.32], scale: [0.38, 0.08, 0.62] },
-  { model: 'foot', areaId: 'right-plantar-fascia', shape: 'box', position: [0.28, -0.34, 0.32], scale: [0.38, 0.08, 0.62] }
+  { model: 'foot', areaId: 'left-plantar-fascia', shape: 'box', position: [-0.28, -0.34, 0.32], scale: [0.34, 0.045, 0.58] },
+  { model: 'foot', areaId: 'right-plantar-fascia', shape: 'box', position: [0.28, -0.34, 0.32], scale: [0.34, 0.045, 0.58] }
 ]
 
 function toggleArea(areaId: string) {
@@ -252,11 +254,10 @@ function buildBody() {
   if (!bodyGroup) return
   clearModelMeshes()
   const baseMaterial = new THREE.MeshStandardMaterial({
-    color: 0x17202c,
-    roughness: 0.72,
+    color: 0x202a34,
+    roughness: 0.66,
     metalness: 0.04,
-    transparent: true,
-    opacity: 0.92
+    transparent: false
   })
   const shadowMaterial = new THREE.MeshBasicMaterial({
     color: 0x07130f,
@@ -289,6 +290,14 @@ function clearModelMeshes() {
   if (!bodyGroup) return
   for (const mesh of [...clickableMeshes, ...baseMeshes]) {
     bodyGroup.remove(mesh)
+    for (const child of [...mesh.children]) {
+      if (child instanceof THREE.LineSegments) {
+        child.geometry.dispose()
+        const material = child.material
+        if (Array.isArray(material)) material.forEach((item) => item.dispose())
+        else material.dispose()
+      }
+    }
     mesh.geometry.dispose()
     const material = mesh.material
     if (Array.isArray(material)) material.forEach((item) => item.dispose())
@@ -296,6 +305,7 @@ function clearModelMeshes() {
   }
   clickableMeshes.length = 0
   baseMeshes.length = 0
+  outlineSegments.length = 0
   partMeshes.clear()
 }
 
@@ -318,13 +328,12 @@ function addBaseMesh(
 function createBodyPartMesh(spec: BodyPartSpec) {
   const geometry = createGeometry(spec)
   const material = new THREE.MeshStandardMaterial({
-    color: 0x38bdf8,
-    emissive: 0x062f3f,
-    emissiveIntensity: 0.36,
-    roughness: 0.62,
-    metalness: 0.08,
-    transparent: true,
-    opacity: 0.72
+    color: 0x24313c,
+    emissive: 0x000000,
+    emissiveIntensity: 0,
+    roughness: 0.64,
+    metalness: 0.04,
+    transparent: false
   })
   const mesh = new THREE.Mesh(geometry, material)
   mesh.position.set(...spec.position)
@@ -332,13 +341,65 @@ function createBodyPartMesh(spec: BodyPartSpec) {
   if (spec.rotation) mesh.rotation.set(...spec.rotation)
   mesh.userData.areaId = spec.areaId
   mesh.userData.baseScale = [...spec.scale]
+  const outline = createAreaOutline(geometry)
+  mesh.add(outline)
+  outlineSegments.push(outline)
+  mesh.userData.outline = outline
   return mesh
 }
 
 function createGeometry(spec: Pick<BodyPartSpec, 'shape'>) {
+  if (spec.shape === 'torso') return createTorsoGeometry()
+  if (spec.shape === 'limb') return createLimbGeometry()
+  if (spec.shape === 'footSurface') return createFootGeometry()
   if (spec.shape === 'sphere') return new THREE.SphereGeometry(1, 24, 16)
   if (spec.shape === 'box') return new THREE.BoxGeometry(1, 1, 1, 2, 2, 2)
+  if (spec.shape === 'muscle') return new THREE.SphereGeometry(1, 28, 18)
   return new THREE.CapsuleGeometry(1, 1.8, 8, 18)
+}
+
+function createTorsoGeometry() {
+  const points = [
+    new THREE.Vector2(0.2, -0.86),
+    new THREE.Vector2(0.42, -0.62),
+    new THREE.Vector2(0.48, -0.18),
+    new THREE.Vector2(0.56, 0.26),
+    new THREE.Vector2(0.5, 0.62),
+    new THREE.Vector2(0.34, 0.86),
+    new THREE.Vector2(0.14, 0.98)
+  ]
+  return new THREE.LatheGeometry(points, 36)
+}
+
+function createLimbGeometry() {
+  const points = [
+    new THREE.Vector2(0.08, -0.9),
+    new THREE.Vector2(0.13, -0.62),
+    new THREE.Vector2(0.18, -0.14),
+    new THREE.Vector2(0.2, 0.26),
+    new THREE.Vector2(0.16, 0.68),
+    new THREE.Vector2(0.1, 0.9)
+  ]
+  return new THREE.LatheGeometry(points, 28)
+}
+
+function createFootGeometry() {
+  const geometry = new THREE.SphereGeometry(1, 28, 16)
+  geometry.scale(1.2, 0.32, 1.85)
+  geometry.translate(0, 0, 0.22)
+  return geometry
+}
+
+function createAreaOutline(geometry: THREE.BufferGeometry) {
+  const edgeGeometry = new THREE.EdgesGeometry(geometry, 24)
+  const material = new THREE.LineBasicMaterial({
+    color: 0x6b7f8e,
+    transparent: true,
+    opacity: 0.86
+  })
+  const outline = new THREE.LineSegments(edgeGeometry, material)
+  outline.renderOrder = 2
+  return outline
 }
 
 function updateMaterials() {
@@ -347,10 +408,16 @@ function updateMaterials() {
     const material = mesh.material as THREE.MeshStandardMaterial
     const selected = ids.has(mesh.userData.areaId)
     const hovered = hoveredPart.value === mesh.userData.areaId
-    material.color.setHex(selected ? 0x4ade80 : hovered ? 0x7dd3fc : 0x38bdf8)
-    material.emissive.setHex(selected ? 0x14532d : hovered ? 0x0e7490 : 0x062f3f)
-    material.emissiveIntensity = selected ? 0.85 : hovered ? 0.62 : 0.36
-    material.opacity = selected ? 0.94 : hovered ? 0.78 : 0.55
+    material.color.setHex(selected ? 0x38bdf8 : hovered ? 0x2f4c5d : 0x24313c)
+    material.emissive.setHex(selected ? 0x0e7490 : hovered ? 0x062f3f : 0x000000)
+    material.emissiveIntensity = selected ? 0.58 : hovered ? 0.22 : 0
+    const outline = mesh.userData.outline as THREE.LineSegments | undefined
+    if (outline) {
+      const outlineMaterial = outline.material as THREE.LineBasicMaterial
+      outlineMaterial.color.setHex(selected ? 0x67e8f9 : hovered ? 0x7dd3fc : 0x6b7f8e)
+      outlineMaterial.opacity = selected ? 1 : hovered ? 0.98 : 0.72
+      outlineMaterial.linewidth = selected ? 2 : 1
+    }
     const baseScale = mesh.userData.baseScale as [number, number, number] | undefined
     if (baseScale) {
       const scaleUp = selected || hovered ? 1.08 : 1
