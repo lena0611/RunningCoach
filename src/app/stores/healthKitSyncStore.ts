@@ -66,17 +66,16 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
     async requestSync() {
       this.init()
       const authStore = useAuthStore()
-      const runStore = useRunStore()
       if (!authStore.isAuthenticated || !hasNativeBridge()) return
 
-      await ensureRunStoreLoaded()
-
+      const requestedAt = Date.now()
       this.syncing = true
       this.error = ''
       this.status = 'HealthKit 동기화 중'
-      this.lastRequestedAt = Date.now()
+      this.lastRequestedAt = requestedAt
 
       try {
+        await ensureRunStoreLoaded()
         requestHealthKitRuns(getLookbackDays(getLatestSavedDate()))
       } catch (err) {
         this.syncing = false
