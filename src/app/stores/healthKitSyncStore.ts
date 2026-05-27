@@ -39,6 +39,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
       registerHealthKitBridge({
         onRuns: (runs) => void this.handleRuns(runs),
         onRunUpdate: (run) => void this.handleRunUpdate(run),
+        onHealthKitChanged: () => void this.syncAfterNativeChange(),
         onError: (message) => this.handleError(message),
         onRunUpdateError: (externalId, message) => this.handleRunUpdateError(externalId, message)
       })
@@ -64,6 +65,12 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
       if (!authStore.isAuthenticated || !hasNativeBridge()) return
       const now = Date.now()
       if (this.syncing || now - this.lastRequestedAt < minSyncIntervalMs) return
+      await this.requestSync()
+    },
+    async syncAfterNativeChange() {
+      this.init()
+      const authStore = useAuthStore()
+      if (!authStore.isAuthenticated || !hasNativeBridge() || this.syncing) return
       await this.requestSync()
     },
     async requestSync() {

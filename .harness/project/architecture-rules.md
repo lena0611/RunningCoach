@@ -26,6 +26,7 @@
 - 현재 웹 앱은 GitHub Pages 정적 프론트이며, 백엔드/Auth/DB/AI 경계는 Supabase를 사용한다.
 - iOS 확장 방향은 하이브리드 앱이다. Vue 화면은 WebView 또는 로컬 번들로 유지하고, 네이티브 iOS 레이어는 HealthKit 조회, 날씨용 CoreLocation/Open-Meteo 조회, 웹-네이티브 브리지만 담당한다.
 - 알림은 FCM 같은 원격 푸시 인프라를 기본값으로 두지 않는다. 훈련 스케줄 알림과 앱 내부 HealthKit 신규 저장 알림은 iOS 네이티브 `runContextNotifications` 브리지를 통해 로컬 알림으로 예약/표시한다.
+- HealthKit 신규 러닝 감지는 네이티브 `HKObserverQuery` background delivery를 우선 사용한다. foreground에서는 웹 `RunContextHealthKit.receiveHealthKitChanged`로 즉시 동기화하고, background에서는 로컬 알림으로 앱 재진입을 유도한 뒤 기존 activation sync가 누락분을 저장한다. 사용자가 앱을 강제 종료한 상태까지 보장하는 요구는 원격 푸시/APNs 설계로 별도 분리한다.
 - 현재 로컬 iOS 네이티브 프로젝트 경로는 `/Users/smart-tn-083/practice/RunningCoach/RunningCoach/RunningCoach.xcodeproj`다. Swift 소스는 `/Users/smart-tn-083/practice/RunningCoach/RunningCoach/RunningCoach` 아래에 있다. 네이티브 Git 저장소는 `https://github.com/lena0611/RunningCoach-Native-Swift`이며, 웹 repo 밖에 있으므로 네이티브 변경 시 이 경로와 저장소를 함께 확인한다.
 - iOS Bundle Identifier는 계정 이메일에서 추론하지 않고 `com.lena0611.RunningCoach`로 고정한다. iPhone의 Apple ID가 `lenas0611@gmail.com`이고 Apple Developer 계정이 `lena0611@gmail.com`이어도 Bundle ID는 개발자 계정 문자열이 아니라 앱 식별자이므로 `lenas0611`로 바꾸지 않는다.
 - 현재 사용자는 Personal Team으로 iPhone 빌드한다. Personal Team은 WeatherKit capability를 지원하지 않으므로 네이티브 타깃에 WeatherKit entitlement/capability를 켜면 안 된다. WeatherKit을 다시 켜려면 유료 Apple Developer Program 전환 또는 다른 날씨 API/서버리스 대안을 먼저 결정한다.

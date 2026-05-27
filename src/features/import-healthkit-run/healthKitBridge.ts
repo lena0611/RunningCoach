@@ -48,6 +48,7 @@ export type HealthKitRunUpdateRequest = {
 type HealthKitBridgeHandlers = {
   onRuns: (runs: HealthKitRunCandidate[]) => void
   onRunUpdate: (run: HealthKitRunCandidate) => void
+  onHealthKitChanged: (reason?: string) => void
   onError: (message: string) => void
   onRunUpdateError: (externalId: string | null, message: string) => void
 }
@@ -57,6 +58,7 @@ declare global {
     RunContextHealthKit?: {
       receiveRuns: (runs: HealthKitRunCandidate[]) => void
       receiveRunUpdate: (run: HealthKitRunCandidate) => void
+      receiveHealthKitChanged: (reason?: string) => void
       receiveError: (message: string) => void
       receiveRunUpdateError: (externalId: string | null, message: string) => void
     }
@@ -86,6 +88,9 @@ export function registerHealthKitBridge(handlers: HealthKitBridgeHandlers) {
     },
     receiveRunUpdate(run) {
       handlers.onRunUpdate(normalizeCandidate(run))
+    },
+    receiveHealthKitChanged(reason) {
+      handlers.onHealthKitChanged(reason)
     },
     receiveError(message) {
       handlers.onError(message || 'HealthKit 가져오기 실패')
