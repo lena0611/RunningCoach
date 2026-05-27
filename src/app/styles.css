@@ -2001,13 +2001,24 @@ button.run-session-row {
 }
 
 .run-calendar-day.has-run span {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+  background: color-mix(in srgb, var(--run-type-color, var(--color-primary)) 24%, transparent);
+  color: color-mix(in srgb, var(--run-type-color, var(--color-primary)) 88%, var(--color-text));
+}
+
+.run-calendar-day.has-run.scheduled span {
+  box-shadow:
+    0 0 0 2px var(--color-surface),
+    0 0 0 4px color-mix(in srgb, var(--run-type-color, var(--color-primary)) 48%, transparent);
+}
+
+.run-calendar-day.has-run.run-type-race span {
+  color: color-mix(in srgb, var(--run-type-color, var(--color-primary)) 88%, var(--color-text));
 }
 
 .run-calendar-day.selected span {
-  background: var(--color-primary);
-  color: var(--color-bg);
+  box-shadow:
+    0 0 0 2px var(--color-surface),
+    0 0 0 4px var(--color-text);
 }
 
 .run-calendar-day small {

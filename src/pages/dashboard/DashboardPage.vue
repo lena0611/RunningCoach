@@ -178,8 +178,8 @@ function openRunAction(run: RunLog, action: 'edit' | 'delete') {
   router.push({ path: '/runs', query: { runId: run.id, action } })
 }
 
-function canRefreshFromHealthKit(run: RunLog) {
-  return hasNativeBridge() && Boolean(run.externalId)
+function canRefreshFromHealthKit(_run: RunLog) {
+  return hasNativeBridge()
 }
 
 function openMemoryPanel(panel: 'goals' | 'injuries') {

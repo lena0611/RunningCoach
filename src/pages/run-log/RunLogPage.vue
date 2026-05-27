@@ -12,7 +12,7 @@ import UploadRunPage from '@/pages/upload-run/UploadRunPage.vue'
 import { fetchCoachReports, requestCoachRunStream, type CoachReport } from '@/shared/api/coachRepository'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { formatDateTimeWithWeekday, formatDateWithWeekday } from '@/shared/lib/format'
-import { getRunFilterTags, hasRunFilterTag, type RunFilterTag } from '@/shared/lib/runMetaChips'
+import { getRunFilterTags, hasRunFilterTag, isScheduledSession, type RunFilterTag } from '@/shared/lib/runMetaChips'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import CoachMessage from '@/shared/ui/CoachMessage.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
@@ -73,6 +73,15 @@ const deleteSheetDrag = useBottomSheetDrag(() => {
   pendingDeleteRun.value = null
 })
 const goalSheetDrag = useBottomSheetDrag(closeGoalProposal)
+
+type CalendarCell = {
+  key: string
+  date: string
+  day: number | null
+  runs: RunLog[]
+  markerType: RunType | null
+  hasScheduledRun: boolean
+}
 const coachCommandItems = [
   {
     id: 'session',
@@ -473,8 +482,8 @@ function detailCoachButtonLabel(run: RunLog) {
   return hasCoachThread(run) ? 'AI 코칭 이어가기' : 'AI 코칭 받기'
 }
 
-function canRefreshFromHealthKit(run: RunLog) {
-  return hasNativeBridge() && Boolean(run.externalId)
+function canRefreshFromHealthKit(_run: RunLog) {
+  return hasNativeBridge()
 }
 
 function closeCoach() {
@@ -735,19 +744,44 @@ function shiftMonth(monthKey: string, offset: number) {
   return toMonthKey(new Date(year, month - 1 + offset, 1))
 }
 
-function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>) {
+function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>): CalendarCell[] {
   const [year, month] = monthKey.split('-').map(Number)
   const first = new Date(year, month - 1, 1)
   const daysInMonth = new Date(year, month, 0).getDate()
-  const cells: Array<{ key: string; date: string; day: number | null; runs: RunLog[] }> = []
+  const cells: CalendarCell[] = []
   for (let i = 0; i < first.getDay(); i += 1) {
-    cells.push({ key: `blank-${i}`, date: '', day: null, runs: [] })
+    cells.push({ key: `blank-${i}`, date: '', day: null, runs: [], markerType: null, hasScheduledRun: false })
   }
   for (let day = 1; day <= daysInMonth; day += 1) {
     const date = `${monthKey}-${String(day).padStart(2, '0')}`
-    cells.push({ key: date, date, day, runs: map.get(date) ?? [] })
+    const runs = map.get(date) ?? []
+    const markerRun = getCalendarMarkerRun(runs)
+    cells.push({
+      key: date,
+      date,
+      day,
+      runs,
+      markerType: markerRun?.type ?? null,
+      hasScheduledRun: runs.some((run) => isScheduledSession(run.date, run.type, memoryStore.memory.weeklyPattern))
+    })
   }
   return cells
+}
+
+function getCalendarMarkerRun(runs: RunLog[]) {
+  if (!runs.length) return null
+  const sortedRuns = [...runs].sort((a, b) => {
+    const aScheduled = isScheduledSession(a.date, a.type, memoryStore.memory.weeklyPattern)
+    const bScheduled = isScheduledSession(b.date, b.type, memoryStore.memory.weeklyPattern)
+    if (aScheduled !== bScheduled) return aScheduled ? -1 : 1
+    return b.distanceKm - a.distanceKm
+  })
+  return sortedRuns[0] ?? null
+}
+
+function runTypeClass(type: RunType | null) {
+  if (!type) return ''
+  return `run-type-${String(type).toLowerCase().replaceAll(' ', '-').replaceAll('+', 'plus')}`
 }
 
 function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
@@ -809,7 +843,10 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
           v-for="cell in calendarCells"
           :key="cell.key"
           class="run-calendar-day"
-          :class="{ 'has-run': cell.runs.length, selected: selectedDate === cell.date }"
+          :class="[
+            { 'has-run': cell.runs.length, selected: selectedDate === cell.date, scheduled: cell.hasScheduledRun },
+            runTypeClass(cell.markerType)
+          ]"
           type="button"
           :disabled="!cell.day || !cell.runs.length"
           @click="toggleDate(cell.date, Boolean(cell.runs.length))"
