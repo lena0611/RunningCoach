@@ -37,6 +37,14 @@ describe('settingsStore', () => {
     expect(store.themePreference).toBe('dark')
     expect(document.documentElement.classList.contains('theme-dark')).toBe(true)
     expect(document.documentElement.dataset.themePreference).toBe('dark')
-    expect(JSON.parse(localStorage.getItem('runcontext.settings') || '{}')).toEqual({ themePreference: 'dark' })
+    expect(JSON.parse(localStorage.getItem('runcontext.settings') || '{}')).toMatchObject({
+      themePreference: 'dark',
+      notificationSettings: {
+        allEnabled: false,
+        healthKitNewRun: true,
+        scheduledWorkout: true,
+        workoutMorning: true
+      }
+    })
   })
 })

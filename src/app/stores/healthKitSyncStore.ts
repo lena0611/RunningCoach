@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { useAuthStore } from '@/app/stores/authStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { useSettingsStore } from '@/app/stores/settingsStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import type { RunLog } from '@/entities/run/model'
 import {
@@ -13,6 +14,7 @@ import {
   type HealthKitRunCandidate
 } from '@/features/import-healthkit-run/healthKitBridge'
 import { mergeHealthKitRefreshRun } from '@/features/import-healthkit-run/mergeHealthKitRefreshRun'
+import { notifyHealthKitNewRuns } from '@/features/sync-native-notifications/notificationBridge'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 
 const defaultLookbackDays = 90
@@ -130,6 +132,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
 
         if (newRuns.length) {
           const inserted = await runStore.addRuns(newRuns.map((candidate) => toExtractedRunData(candidate, memoryStore.memory.weeklyPattern)), 'healthkit')
+          notifyHealthKitNewRuns(useSettingsStore().notificationSettings, inserted.length)
           const skipped = newRuns.length - inserted.length
           const repairText = repaired.length ? ` · 기존 ${repaired.length}개 보강` : ''
           this.status = skipped > 0

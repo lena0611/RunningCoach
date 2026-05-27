@@ -8,6 +8,7 @@ import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { canUseAppFeatures } from '@/shared/lib/runtime'
+import { syncNativeNotifications } from '@/features/sync-native-notifications/notificationBridge'
 import './app/styles.css'
 
 const pinia = createPinia()
@@ -55,6 +56,10 @@ app.mount('#app')
 if (!isSupabaseConfigured || authStore.isAuthenticated) {
   Promise.all([useMemoryStore().load(), useRunStore().load()]).catch(() => {
     // 화면 mount를 막지 않는다. 각 store가 자체 error 상태를 표시한다.
+  }).finally(() => {
+    const settingsStore = useSettingsStore()
+    const memoryStore = useMemoryStore()
+    syncNativeNotifications(settingsStore.notificationSettings, memoryStore.memory.weeklyPattern)
   })
 }
 

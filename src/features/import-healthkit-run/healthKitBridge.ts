@@ -71,6 +71,9 @@ declare global {
         runContextHaptics?: {
           postMessage: (message: unknown) => void
         }
+        runContextNotifications?: {
+          postMessage: (message: unknown) => void
+        }
       }
     }
   }

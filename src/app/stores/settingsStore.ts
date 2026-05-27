@@ -2,13 +2,28 @@ import { defineStore } from 'pinia'
 
 export type ThemePreference = 'system' | 'light' | 'dark'
 export type ManualThemeMode = 'light' | 'dark'
+export type NotificationSettingKey = 'scheduledWorkout' | 'workoutMorning' | 'healthKitNewRun'
+
+export type NotificationSettings = {
+  allEnabled: boolean
+  scheduledWorkout: boolean
+  workoutMorning: boolean
+  healthKitNewRun: boolean
+}
 
 const storageKey = 'runcontext.settings'
 let mediaListenerAttached = false
+const defaultNotificationSettings: NotificationSettings = {
+  allEnabled: false,
+  scheduledWorkout: true,
+  workoutMorning: true,
+  healthKitNewRun: true
+}
 
 export const useSettingsStore = defineStore('settingsStore', {
   state: () => ({
     themePreference: loadSettings().themePreference,
+    notificationSettings: loadSettings().notificationSettings,
     systemTheme: getSystemTheme()
   }),
   getters: {
@@ -38,6 +53,20 @@ export const useSettingsStore = defineStore('settingsStore', {
       this.persist()
       this.applyTheme()
     },
+    setAllNotifications(enabled: boolean) {
+      this.notificationSettings = {
+        ...this.notificationSettings,
+        allEnabled: enabled
+      }
+      this.persist()
+    },
+    setNotificationSetting(key: NotificationSettingKey, enabled: boolean) {
+      this.notificationSettings = {
+        ...this.notificationSettings,
+        [key]: enabled
+      }
+      this.persist()
+    },
     applyTheme() {
       if (typeof document === 'undefined') return
       const root = document.documentElement
@@ -47,23 +76,39 @@ export const useSettingsStore = defineStore('settingsStore', {
       root.dataset.theme = this.effectiveTheme
     },
     persist() {
-      localStorage.setItem(storageKey, JSON.stringify({ themePreference: this.themePreference }))
+      localStorage.setItem(storageKey, JSON.stringify({
+        themePreference: this.themePreference,
+        notificationSettings: this.notificationSettings
+      }))
     }
   }
 })
 
-function loadSettings(): { themePreference: ThemePreference } {
-  if (typeof localStorage === 'undefined') return { themePreference: 'dark' }
+function loadSettings(): { themePreference: ThemePreference, notificationSettings: NotificationSettings } {
+  if (typeof localStorage === 'undefined') {
+    return { themePreference: 'dark', notificationSettings: defaultNotificationSettings }
+  }
   try {
-    const parsed = JSON.parse(localStorage.getItem(storageKey) || '{}') as { themePreference?: string }
-    return { themePreference: normalizeThemePreference(parsed.themePreference) }
+    const parsed = JSON.parse(localStorage.getItem(storageKey) || '{}') as { themePreference?: string, notificationSettings?: Partial<NotificationSettings> }
+    return {
+      themePreference: normalizeThemePreference(parsed.themePreference),
+      notificationSettings: normalizeNotificationSettings(parsed.notificationSettings)
+    }
   } catch {
-    return { themePreference: 'dark' }
+    return { themePreference: 'dark', notificationSettings: defaultNotificationSettings }
   }
 }
 
 function normalizeThemePreference(value: string | undefined): ThemePreference {
   return value === 'light' || value === 'dark' || value === 'system' ? value : 'dark'
+}
+
+function normalizeNotificationSettings(value: Partial<NotificationSettings> | undefined): NotificationSettings {
+  return {
+    ...defaultNotificationSettings,
+    ...(value ?? {}),
+    allEnabled: Boolean(value?.allEnabled)
+  }
 }
 
 function getSystemTheme(): ManualThemeMode {

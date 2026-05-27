@@ -5,6 +5,7 @@ import { useAuthStore } from '@/app/stores/authStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useSettingsStore, type ManualThemeMode } from '@/app/stores/settingsStore'
 import { getActiveGoal, getActiveInjuryItem, type PersonalBest, type TrainingMemory } from '@/entities/training-memory/model'
+import { syncNativeNotifications } from '@/features/sync-native-notifications/notificationBridge'
 import { formatDateWithWeekday } from '@/shared/lib/format'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
@@ -57,6 +58,23 @@ const weeklyRunDaysTargetOptions = [
     return { value: String(count), label: `${count}회` }
   })
 ]
+const notificationRows = [
+  {
+    key: 'workoutMorning',
+    title: '훈련 당일 아침',
+    detail: '예정 훈련이 있는 날 오전 7시에 알려줍니다.'
+  },
+  {
+    key: 'scheduledWorkout',
+    title: '스케줄 훈련 준비',
+    detail: '예정 세션 당일 저녁에 한 번 더 알려줍니다.'
+  },
+  {
+    key: 'healthKitNewRun',
+    title: 'HealthKit 새 러닝',
+    detail: '앱이 새 러닝을 저장하면 알림을 보냅니다.'
+  }
+] as const
 
 const accountLabel = computed(() => {
   return memoryStore.selectedUser.name || authStore.user?.email || '계정'
@@ -189,6 +207,20 @@ function signOutAndClose() {
 function setThemeMode(value: string | string[]) {
   if (Array.isArray(value)) return
   if (value === 'light' || value === 'dark') settingsStore.setManualTheme(value as ManualThemeMode)
+}
+
+function setAllNotifications(enabled: boolean) {
+  settingsStore.setAllNotifications(enabled)
+  syncNotifications()
+}
+
+function setNotification(key: typeof notificationRows[number]['key'], enabled: boolean) {
+  settingsStore.setNotificationSetting(key, enabled)
+  syncNotifications()
+}
+
+function syncNotifications() {
+  syncNativeNotifications(settingsStore.notificationSettings, memoryStore.memory.weeklyPattern)
 }
 
 function goDashboard() {
@@ -357,6 +389,52 @@ function goDashboard() {
             />
 
             <p class="helper">현재 적용: {{ settingsStore.effectiveTheme === 'light' ? '라이트' : '다크' }}</p>
+          </section>
+
+          <section class="settings-section">
+            <div class="settings-section-heading">
+              <p class="eyebrow">Notifications</p>
+              <h3>알림</h3>
+            </div>
+
+            <div class="settings-row">
+              <div>
+                <strong>전체 알림</strong>
+                <span>훈련 스케줄과 HealthKit 신규 기록 알림을 한 번에 켜고 끕니다.</span>
+              </div>
+              <button
+                class="switch-control"
+                :class="{ on: settingsStore.notificationSettings.allEnabled }"
+                type="button"
+                role="switch"
+                :aria-checked="settingsStore.notificationSettings.allEnabled"
+                @click="setAllNotifications(!settingsStore.notificationSettings.allEnabled)"
+              >
+                <span />
+              </button>
+            </div>
+
+            <div class="notification-list" :class="{ disabled: !settingsStore.notificationSettings.allEnabled }">
+              <div v-for="row in notificationRows" :key="row.key" class="settings-row compact">
+                <div>
+                  <strong>{{ row.title }}</strong>
+                  <span>{{ row.detail }}</span>
+                </div>
+                <button
+                  class="switch-control"
+                  :class="{ on: settingsStore.notificationSettings.allEnabled && settingsStore.notificationSettings[row.key] }"
+                  type="button"
+                  role="switch"
+                  :aria-checked="settingsStore.notificationSettings.allEnabled && settingsStore.notificationSettings[row.key]"
+                  :disabled="!settingsStore.notificationSettings.allEnabled"
+                  @click="setNotification(row.key, !settingsStore.notificationSettings[row.key])"
+                >
+                  <span />
+                </button>
+              </div>
+            </div>
+
+            <p class="helper">iPhone에서는 알림 권한을 허용해야 배너가 표시됩니다. 루틴 변경 후에는 가까운 2주 알림을 다시 예약합니다.</p>
           </section>
         </section>
       </aside>
