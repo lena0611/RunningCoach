@@ -2149,7 +2149,8 @@ button.run-session-row {
 .fitness-detail-card {
   display: grid;
   gap: 18px;
-  overflow: hidden;
+  min-width: 0;
+  overflow: visible;
 }
 
 .fitness-detail-header {
@@ -2434,7 +2435,8 @@ button.run-session-row {
 }
 
 .run-detail-content {
-  padding-bottom: 16px;
+  padding-bottom: calc(env(safe-area-inset-bottom) + 140px);
+  scroll-padding-bottom: calc(env(safe-area-inset-bottom) + 140px);
 }
 
 .run-detail-cta {
