@@ -113,19 +113,24 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         await ensureRunStoreLoaded()
 
         const latestDate = getLatestSavedDate()
+        const memoryStore = useMemoryStore()
+        const repaired = await repairExistingHealthKitRuns(runs, memoryStore.memory.weeklyPattern)
         const newRuns = runs
           .filter((candidate) => isAfterLatestSaved(candidate, latestDate))
           .filter((candidate) => !isAlreadySaved(candidate))
           .sort((a, b) => a.date.localeCompare(b.date) || a.startAt.localeCompare(b.startAt))
 
         if (newRuns.length) {
-          const memoryStore = useMemoryStore()
           const inserted = await runStore.addRuns(newRuns.map((candidate) => toExtractedRunData(candidate, memoryStore.memory.weeklyPattern)), 'healthkit')
           const skipped = newRuns.length - inserted.length
+          const repairText = repaired.length ? ` · 기존 ${repaired.length}개 보강` : ''
           this.status = skipped > 0
-            ? `HealthKit 동기화 완료 · 새 러닝 ${inserted.length}개 저장 · 중복 ${skipped}개 제외`
-            : `HealthKit 동기화 완료 · 새 러닝 ${inserted.length}개 저장`
+            ? `HealthKit 동기화 완료 · 새 러닝 ${inserted.length}개 저장 · 중복 ${skipped}개 제외${repairText}`
+            : `HealthKit 동기화 완료 · 새 러닝 ${inserted.length}개 저장${repairText}`
           showSyncToast('success', this.status, 3600)
+        } else if (repaired.length) {
+          this.status = `HealthKit 동기화 완료 · 기존 러닝 ${repaired.length}개 보강`
+          showSyncToast('success', this.status, 3200)
         } else {
           this.status = latestDate
             ? `HealthKit 변화 없음 · ${latestDate} 이후 새 러닝 없음`
@@ -243,6 +248,57 @@ function isAlreadySaved(candidate: HealthKitRunCandidate) {
       run.durationSec === candidate.durationSec
     )
   })
+}
+
+async function repairExistingHealthKitRuns(candidates: HealthKitRunCandidate[], weeklyPattern: string[]) {
+  const runStore = useRunStore()
+  const repaired: RunLog[] = []
+  for (const candidate of candidates) {
+    const target = findRepairableHealthKitRun(candidate)
+    if (!target) continue
+    const extracted = toExtractedRunData(candidate, weeklyPattern)
+    const updated = await runStore.updateRun({
+      ...target,
+      externalId: extracted.externalId ?? target.externalId,
+      type: target.type === 'Unknown' || target.tags.includes('auto-inferred') ? extracted.type : target.type,
+      distanceKm: extracted.distanceKm || target.distanceKm,
+      durationSec: extracted.durationSec ?? target.durationSec,
+      avgPaceSec: extracted.avgPaceSec ?? target.avgPaceSec,
+      avgHeartRate: extracted.avgHeartRate ?? target.avgHeartRate,
+      maxHeartRate: extracted.maxHeartRate ?? target.maxHeartRate,
+      cadence: extracted.cadence ?? target.cadence,
+      activeEnergyKcal: extracted.activeEnergyKcal ?? target.activeEnergyKcal,
+      elevationGainM: extracted.elevationGainM ?? target.elevationGainM,
+      elevationLossM: extracted.elevationLossM ?? target.elevationLossM,
+      courseType: extracted.courseType === 'Unknown' ? target.courseType : extracted.courseType,
+      laps: extracted.laps.length ? extracted.laps : target.laps,
+      fastSegments: extracted.fastSegments?.length ? extracted.fastSegments : target.fastSegments,
+      metricSamples: extracted.metricSamples?.length ? extracted.metricSamples : target.metricSamples,
+      routePoints: extracted.routePoints?.length ? extracted.routePoints : target.routePoints,
+      tags: Array.from(new Set([...(target.tags ?? []), 'healthkit', 'healthkit-repaired'])),
+      source: 'healthkit'
+    })
+    repaired.push(updated)
+  }
+  return repaired
+}
+
+function findRepairableHealthKitRun(candidate: HealthKitRunCandidate) {
+  const runStore = useRunStore()
+  return runStore.runs.find((run) => {
+    if (run.externalId || run.source !== 'healthkit') return false
+    return isSameWorkoutLike(run, candidate)
+  }) ?? null
+}
+
+function isSameWorkoutLike(run: RunLog, candidate: HealthKitRunCandidate) {
+  const distanceKm = candidate.distanceKm ?? 0
+  const durationSec = candidate.durationSec ?? null
+  const distanceClose = Math.abs(run.distanceKm - distanceKm) <= 0.03
+  const durationClose = run.durationSec !== null && durationSec !== null
+    ? Math.abs(run.durationSec - durationSec) <= 8
+    : true
+  return run.date === candidate.date && distanceClose && durationClose
 }
 
 function parseDateOnly(value: string) {
