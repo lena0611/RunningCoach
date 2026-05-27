@@ -5,30 +5,24 @@ describe('chartAxis', () => {
   it('adds readable padding around heart rate charts', () => {
     const domain = getChartDomain([136, 156], 'heartRate')
 
-    expect(domain).toEqual(expect.objectContaining({ dataMin: 136, dataMax: 156 }))
-    expect(domain?.min).toBeLessThanOrEqual(130)
-    expect(domain?.max).toBeGreaterThanOrEqual(160)
+    expect(domain).toEqual(expect.objectContaining({ min: 0, max: 210, dataMin: 136, dataMax: 156, interval: 10 }))
   })
 
   it('keeps pace charts from using raw dataMin/dataMax', () => {
     const domain = getChartDomain([420, 450], 'pace')
 
-    expect(domain?.min).toBeLessThan(420)
-    expect(domain?.max).toBeGreaterThan(450)
-    expect((domain?.min ?? 0) % 15).toBe(0)
-    expect((domain?.max ?? 0) % 15).toBe(0)
+    expect(domain).toEqual(expect.objectContaining({ min: 210, max: 720, dataMin: 420, dataMax: 450, interval: 30 }))
   })
 
-  it('uses a robust display range for pace charts with GPS outliers', () => {
+  it('keeps pace charts on a fixed comparable domain even with GPS outliers', () => {
     const values = [
       433, 435, 436, 438, 439, 441, 442, 443, 444, 445, 446, 447,
       353, 698
     ]
     const domain = getChartDomain(values, 'pace')
 
-    expect(domain).toEqual(expect.objectContaining({ dataMin: 353, dataMax: 698, displayMin: 433, displayMax: 447 }))
-    expect(domain?.min).toBeGreaterThan(330)
-    expect(domain?.max).toBeLessThan(520)
+    expect(domain).toEqual(expect.objectContaining({ min: 210, max: 720, dataMin: 353, dataMax: 698, displayMin: 353, displayMax: 698 }))
+    expect(domain?.interval).toBe(30)
   })
 
   it('keeps moderate pace variation inside the display domain', () => {
@@ -37,9 +31,7 @@ describe('chartAxis', () => {
     ]
     const domain = getChartDomain(values, 'pace')
 
-    expect(domain).toEqual(expect.objectContaining({ dataMin: 361, dataMax: 546, displayMin: 361, displayMax: 546 }))
-    expect(domain?.min).toBeLessThanOrEqual(360)
-    expect(domain?.max).toBeGreaterThanOrEqual(555)
+    expect(domain).toEqual(expect.objectContaining({ min: 210, max: 720, dataMin: 361, dataMax: 546, displayMin: 361, displayMax: 546 }))
   })
 
   it('gives constant cadence values a non-flat domain', () => {

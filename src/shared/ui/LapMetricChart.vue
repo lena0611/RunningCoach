@@ -149,6 +149,7 @@ function renderChart() {
       inverse: props.inverse,
       min: currentDomain?.min,
       max: currentDomain?.max,
+      interval: currentDomain?.interval,
       splitLine: { lineStyle: { color: subtle } },
       axisLabel: {
         color: muted,

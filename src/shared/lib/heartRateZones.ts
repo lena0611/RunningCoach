@@ -1,4 +1,4 @@
-export type HeartRateZone = 'Z1' | 'Z2' | 'Z3' | 'Z4' | 'Z5' | 'Unknown'
+export type HeartRateZone = 'Z0' | 'Z1' | 'Z2' | 'Z3' | 'Z4' | 'Z5' | 'Unknown'
 
 export type HeartRateZoneDefinition = {
   zone: HeartRateZone
@@ -10,9 +10,16 @@ export type HeartRateZoneDefinition = {
 
 export const defaultHeartRateZones: HeartRateZoneDefinition[] = [
   {
+    zone: 'Z0',
+    label: '비훈련/매우 낮음',
+    minBpm: null,
+    maxBpm: 99,
+    trainingMeaning: '러닝 강도 판단보다는 이동, 대기, 아주 낮은 회복 상태로 본다.'
+  },
+  {
     zone: 'Z1',
     label: '회복',
-    minBpm: null,
+    minBpm: 100,
     maxBpm: 130,
     trainingMeaning: '회복 조깅, 워밍업, 쿨다운. 숨이 편하고 다음 훈련을 방해하지 않는 강도.'
   },
@@ -57,11 +64,12 @@ export function getHeartRateZone(heartRate: number | null | undefined): HeartRat
 
 export function isHeartRateAtOrBelowZone2(heartRate: number | null | undefined): boolean {
   const zone = getHeartRateZone(heartRate)
-  return zone === 'Z1' || zone === 'Z2'
+  return zone === 'Z0' || zone === 'Z1' || zone === 'Z2'
 }
 
 export function isRecoveryHeartRateZone(heartRate: number | null | undefined): boolean {
-  return getHeartRateZone(heartRate) === 'Z1'
+  const zone = getHeartRateZone(heartRate)
+  return zone === 'Z0' || zone === 'Z1'
 }
 
 export function isTempoHeartRateZone(heartRate: number | null | undefined): boolean {

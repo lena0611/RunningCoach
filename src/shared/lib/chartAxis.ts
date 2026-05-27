@@ -17,15 +17,16 @@ export type ChartDomain = {
   dataMax: number
   displayMin: number
   displayMax: number
+  interval?: number
 }
 
 const presets: Record<ChartMetricKind, { paddingRatio: number; minSpan: number; step: number; clampMin?: number; clampMax?: number }> = {
   distance: { paddingRatio: 0.16, minSpan: 5, step: 1, clampMin: 0 },
   temperature: { paddingRatio: 0.18, minSpan: 6, step: 2 },
   elevation: { paddingRatio: 0.18, minSpan: 10, step: 5 },
-  heartRate: { paddingRatio: 0.14, minSpan: 24, step: 5, clampMin: 40 },
+  heartRate: { paddingRatio: 0, minSpan: 210, step: 10, clampMin: 0, clampMax: 210 },
   heartCadence: { paddingRatio: 0.14, minSpan: 32, step: 5, clampMin: 0 },
-  pace: { paddingRatio: 0.24, minSpan: 105, step: 15, clampMin: 60 },
+  pace: { paddingRatio: 0, minSpan: 510, step: 30, clampMin: 210, clampMax: 720 },
   cadence: { paddingRatio: 0.14, minSpan: 24, step: 5, clampMin: 0 },
   percent: { paddingRatio: 0.08, minSpan: 20, step: 10, clampMin: 0, clampMax: 100 },
   count: { paddingRatio: 0.16, minSpan: 4, step: 1, clampMin: 0 },
@@ -41,9 +42,15 @@ export function getChartDomain(values: Array<number | null | undefined>, kind: C
   if (kind === 'percent') {
     return { min: 0, max: 100, dataMin, dataMax, displayMin: dataMin, displayMax: dataMax }
   }
+  if (kind === 'heartRate') {
+    return { min: 0, max: 210, dataMin, dataMax, displayMin: dataMin, displayMax: dataMax, interval: 10 }
+  }
+  if (kind === 'pace') {
+    return { min: 210, max: 720, dataMin, dataMax, displayMin: dataMin, displayMax: dataMax, interval: 30 }
+  }
 
   const preset = presets[kind]
-  const domainNumbers = kind === 'pace' && numbers.length >= 12 ? trimExtremePaceOutliers(numbers) : numbers
+  const domainNumbers = numbers
   const displayMin = Math.min(...domainNumbers)
   const displayMax = Math.max(...domainNumbers)
   const rawSpan = Math.max(displayMax - displayMin, 0)
@@ -81,20 +88,4 @@ function roundDown(value: number, step: number) {
 
 function roundUp(value: number, step: number) {
   return Math.ceil(value / step) * step
-}
-
-function trimExtremePaceOutliers(values: number[]) {
-  if (values.length < 12) return values
-  const sorted = [...values].sort((a, b) => a - b)
-  const dataMin = sorted[0]
-  const dataMax = sorted[sorted.length - 1]
-  const lowerProbe = sorted[Math.floor((sorted.length - 1) * 0.08)]
-  const upperProbe = sorted[Math.ceil((sorted.length - 1) * 0.92)]
-  const stableSpan = Math.max(upperProbe - lowerProbe, 1)
-  const fastOutlierGap = Math.max(45, stableSpan * 0.8)
-  const slowOutlierGap = Math.max(75, stableSpan * 1.0)
-  const displayMin = dataMin < lowerProbe - fastOutlierGap ? lowerProbe : dataMin
-  const displayMax = dataMax > upperProbe + slowOutlierGap ? upperProbe : dataMax
-
-  return values.filter((value) => value >= displayMin && value <= displayMax)
 }
