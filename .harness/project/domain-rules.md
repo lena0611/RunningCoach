@@ -52,6 +52,7 @@
 - HealthKit 자동 동기화는 best-effort여야 한다. 여러 후보 중 일부가 중복이면 전체 실패로 처리하지 말고 중복만 제외한 뒤 저장 가능한 기록을 계속 저장한다.
 - 이미 저장된 HealthKit `RunLog`는 자동 동기화에서 조용히 덮어쓰지 않는다. 기존 세션의 랩/케이던스/route 기반 `fastSegments`, `metricSamples`, `routePoints` 같은 보강 데이터는 세션 상세의 명시적 HealthKit 새로고침 액션으로만 갱신한다.
 - 세션별 HealthKit 새로고침은 `RunLog.externalId`로 원본 `HKWorkout`을 다시 조회해 구조화 필드만 갱신한다. 사용자가 입력한 제목, RPE, 컨디션, 통증 메모, 동반주, 자유 메모는 보존한다.
+- 세션별 HealthKit 새로고침은 `type:user` 태그가 있는 사용자 확정 유형을 덮어쓰지 않는다. 반대로 HealthKit/FIT에서 만들어진 자동판정 유형(`type:auto` 또는 legacy 자동판정으로 간주되는 값)은 추론 로직 개선 후 재동기화하면 새 후보 유형으로 갱신될 수 있어야 한다. 2026-05-26 Easy + Strides 같은 대표 샘플은 개선 로직으로 다시 판정했을 때 Easy + Strides가 되어야 하며, 사용자가 수동으로 유형을 바꾸면 `type:user`로 잠근다.
 - 세션별 HealthKit 새로고침은 기존 `coach_reports`를 삭제하거나 재생성하지 않는다. 이미 받은 AI 코칭은 당시 데이터 기준의 대화 기록으로 유지하고, 보강된 데이터에 대한 재판단은 같은 세션 대화에서 추가 턴으로 이어간다.
 - iOS 하이브리드 앱을 새로 기동할 때 기능 탭 URL이 남아 있어도 기본 진입은 Home이다. 로그인/접근 차단 같은 시스템 라우트는 예외로 둔다.
 - `Easy + Strides` 자동 추론은 세션 이름보다 “대부분 쉬운 페이스 + 여러 개의 짧은 고속 구간”을 우선한다. HealthKit lap이 1km 단위로 뭉개져도 route timestamp 좌표가 있으면 순간 속도 기반 `fastSegments`로 판정한다. route/속도 샘플이 없고 1km lap만 있으면 보수적으로 `Easy`나 `Unknown`으로 둔다.

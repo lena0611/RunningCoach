@@ -401,6 +401,10 @@ async function saveEdit() {
   saving.value = true
   error.value = ''
   try {
+    const original = parseRunSnapshot(editSnapshot.value)
+    if (original && original.type !== editing.value.type) {
+      editing.value.tags = Array.from(new Set([...(editing.value.tags ?? []).filter((tag) => tag !== 'type:auto'), 'type:user']))
+    }
     const updated = await runStore.updateRun(editing.value)
     if (updated) {
       detailRun.value = updated
@@ -412,6 +416,14 @@ async function saveEdit() {
     error.value = err instanceof Error ? err.message : '수정 실패'
   } finally {
     saving.value = false
+  }
+}
+
+function parseRunSnapshot(value: string): RunLog | null {
+  try {
+    return value ? JSON.parse(value) : null
+  } catch {
+    return null
   }
 }
 

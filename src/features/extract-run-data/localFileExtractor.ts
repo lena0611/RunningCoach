@@ -96,6 +96,7 @@ async function extractFromFit(buffer: ArrayBuffer): Promise<ExtractedRunData> {
     laps: mappedLaps,
     metricSamples,
     routePoints,
+    tags: ['type:auto'],
     memo: 'FIT 세션 요약 기반 로컬 추출. 저장 전 실제 값을 확인하세요.'
   }
 }

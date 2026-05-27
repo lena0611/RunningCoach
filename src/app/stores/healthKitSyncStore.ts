@@ -12,6 +12,7 @@ import {
   unregisterHealthKitBridge,
   type HealthKitRunCandidate
 } from '@/features/import-healthkit-run/healthKitBridge'
+import { mergeHealthKitRefreshRun } from '@/features/import-healthkit-run/mergeHealthKitRefreshRun'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 
 const defaultLookbackDays = 90
@@ -161,33 +162,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
 
         const memoryStore = useMemoryStore()
         const extracted = toExtractedRunData(candidate, memoryStore.memory.weeklyPattern)
-        const updated = await runStore.updateRun({
-          ...target,
-          externalId: extracted.externalId ?? target.externalId,
-          date: extracted.date,
-          type: extracted.type,
-          distanceKm: extracted.distanceKm,
-          durationSec: extracted.durationSec,
-          avgPaceSec: extracted.avgPaceSec,
-          avgHeartRate: extracted.avgHeartRate,
-          maxHeartRate: extracted.maxHeartRate,
-          cadence: extracted.cadence,
-          activeEnergyKcal: extracted.activeEnergyKcal,
-          temperature: extracted.temperature,
-          humidity: extracted.humidity,
-          windMps: extracted.windMps,
-          elevationGainM: extracted.elevationGainM,
-          elevationLossM: extracted.elevationLossM,
-          courseType: extracted.courseType === 'Unknown' ? target.courseType : extracted.courseType,
-          rpe: extracted.rpe ?? target.rpe,
-          memo: mergeHealthKitMemo(target.memo, extracted.memo),
-          laps: extracted.laps,
-          fastSegments: extracted.fastSegments ?? [],
-          metricSamples: extracted.metricSamples ?? [],
-          routePoints: extracted.routePoints ?? [],
-          tags: Array.from(new Set([...(target.tags ?? []), 'healthkit'])),
-          source: 'healthkit'
-        })
+        const updated = await runStore.updateRun(mergeHealthKitRefreshRun(target, extracted))
         this.status = `${updated.date} HealthKit 세션 갱신 완료`
         this.error = ''
         showSyncToast('success', this.status, 3200)
@@ -260,7 +235,7 @@ async function repairExistingHealthKitRuns(candidates: HealthKitRunCandidate[], 
     const updated = await runStore.updateRun({
       ...target,
       externalId: extracted.externalId ?? target.externalId,
-      type: target.type === 'Unknown' || target.tags.includes('auto-inferred') ? extracted.type : target.type,
+      type: target.tags.includes('type:user') || extracted.type === 'Unknown' ? target.type : extracted.type,
       distanceKm: extracted.distanceKm || target.distanceKm,
       durationSec: extracted.durationSec ?? target.durationSec,
       avgPaceSec: extracted.avgPaceSec ?? target.avgPaceSec,
@@ -275,12 +250,19 @@ async function repairExistingHealthKitRuns(candidates: HealthKitRunCandidate[], 
       fastSegments: extracted.fastSegments?.length ? extracted.fastSegments : target.fastSegments,
       metricSamples: extracted.metricSamples?.length ? extracted.metricSamples : target.metricSamples,
       routePoints: extracted.routePoints?.length ? extracted.routePoints : target.routePoints,
-      tags: Array.from(new Set([...(target.tags ?? []), 'healthkit', 'healthkit-repaired'])),
+      tags: mergeHealthKitRepairTags(target.tags ?? []),
       source: 'healthkit'
     })
     repaired.push(updated)
   }
   return repaired
+}
+
+function mergeHealthKitRepairTags(tags: string[]) {
+  if (tags.includes('type:user')) {
+    return Array.from(new Set([...tags.filter((tag) => tag !== 'type:auto'), 'healthkit', 'healthkit-repaired']))
+  }
+  return Array.from(new Set([...tags.filter((tag) => tag !== 'type:user'), 'healthkit', 'healthkit-repaired', 'type:auto']))
 }
 
 function findRepairableHealthKitRun(candidate: HealthKitRunCandidate) {
@@ -323,10 +305,4 @@ async function ensureRunStoreLoaded() {
       }
     }, 80)
   })
-}
-
-function mergeHealthKitMemo(currentMemo: string, healthKitMemo: string) {
-  if (!currentMemo.trim()) return healthKitMemo
-  if (/HealthKit 러닝 기록/.test(currentMemo)) return healthKitMemo
-  return currentMemo
 }

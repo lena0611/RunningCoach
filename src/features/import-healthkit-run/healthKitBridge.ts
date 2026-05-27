@@ -162,7 +162,7 @@ export function toExtractedRunData(candidate: HealthKitRunCandidate, weeklyPatte
     fastSegments: candidate.fastSegments ?? [],
     metricSamples: candidate.metricSamples ?? [],
     routePoints: candidate.routePoints ?? [],
-    tags: ['healthkit']
+    tags: ['healthkit', 'type:auto']
   }
 }
 
