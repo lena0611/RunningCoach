@@ -163,13 +163,15 @@ export async function fetchCoachReports(): Promise<CoachReport[]> {
 
 function drainSseBuffer(buffer: string) {
   const events: Array<{ event: string; data: unknown }> = []
-  const chunks = buffer.split('\n\n')
+  const chunks = buffer.split(/\r?\n\r?\n/)
   const rest = chunks.pop() ?? ''
 
   for (const chunk of chunks) {
-    const eventName = chunk.split('\n').find((line) => line.startsWith('event:'))?.slice(6).trim() || 'message'
+    const lines = chunk.split(/\r?\n/).map((line) => line.trimStart())
+    const eventName = lines.find((line) => line.startsWith('event:'))?.slice(6).trim() || 'message'
     const dataText = chunk
-      .split('\n')
+      .split(/\r?\n/)
+      .map((line) => line.trimStart())
       .filter((line) => line.startsWith('data:'))
       .map((line) => line.slice(5).trim())
       .join('\n')

@@ -331,8 +331,8 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     currentMonthHardSessions: currentMonth.filter((run) => ['Tempo', 'Steady Long', 'Race'].includes(run.type)).length,
     hardSessionsLast7: withinDaysFromAnchor(runRows, 7, anchorDate).filter((run) => ['Tempo', 'Steady Long', 'Race'].includes(run.type)).length,
     runsAfterSelectedRunCount: runsAfterSelected.length,
-    latestTempo: decorateRunDate(latestTempo),
-    latestLong: decorateRunDate(latestLong)
+    latestTempo: summarizeRunForCoach(latestTempo),
+    latestLong: summarizeRunForCoach(latestLong)
   }
   const coachingDecisionBoard = buildCoachingDecisionBoard({
     selectedRun,
@@ -459,7 +459,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
             createdAtDisplay: formatDateTimeWithWeekday(report.created_at)
           }))
       : [],
-    selectedRun: decorateRunDate(selectedRun),
+    selectedRun: summarizeRunForCoach(selectedRun),
     selectedRunLapAnalysis,
     selectedRunExecutionGuide,
     lapAnalysisInstruction:
@@ -470,8 +470,8 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     prescriptionComplianceSummary,
     prescriptionMemoryInstruction:
       'recentPrescriptionComplianceSignals는 최근 세션들이 각 유형별 처방 기준을 얼마나 지켰는지 보는 신호다. 단일 세션 결과를 장기기억으로 저장하지 말고, 최근 여러 세션에서 반복되는 준수/이탈 패턴만 memoryItems에 저장한다. 예: "최근 Tempo는 165 상한을 대체로 지키지만 후반 1~2랩에서 흔들린다", "Recovery는 심박을 잘 누르는 편이다".',
-    runsAfterSelectedRun: runsAfterSelected.slice(0, 20).map(decorateRunDate),
-    recent14: recent14.map(decorateRunDate),
+    runsAfterSelectedRun: runsAfterSelected.slice(0, 10).map(summarizeRunForCoach),
+    recent14: recent14.slice(0, 20).map(summarizeRunForCoach),
     summaryStats
   }
 }
@@ -544,7 +544,14 @@ type AdaptiveSessionGuidePatch = {
   nextCheck?: string
 }
 
-async function callOpenAI(apiKey: string, model: string, context: unknown): Promise<{ report: string; memoryItems: string[]; trainingMemoryPatch: TrainingMemoryPatch | null; injuryUpdateProposal: InjuryUpdateProposal | null }> {
+type CoachAiResult = {
+  report: string
+  memoryItems: string[]
+  trainingMemoryPatch: TrainingMemoryPatch | null
+  injuryUpdateProposal: InjuryUpdateProposal | null
+}
+
+async function callOpenAI(apiKey: string, model: string, context: unknown): Promise<CoachAiResult> {
   const instructions = buildCoachInstructions()
 
   const response = await fetch('https://api.openai.com/v1/responses', {
@@ -562,14 +569,8 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
 
   if (!response.ok) throw new Error(`OpenAI API failed: ${response.status}`)
   const payload = await response.json()
-  const text = payload.output_text ?? payload.output?.flatMap((item: any) => item.content ?? []).map((content: any) => content.text ?? '').join('\n') ?? ''
-  const parsed = safeJson(text)
-  return {
-    report: typeof parsed.report === 'string' ? parsed.report : text,
-    memoryItems: Array.isArray(parsed.memoryItems) ? parsed.memoryItems.filter((item: unknown) => typeof item === 'string').slice(0, 8) : [],
-    trainingMemoryPatch: parsed.trainingMemoryPatch && typeof parsed.trainingMemoryPatch === 'object' ? parsed.trainingMemoryPatch as TrainingMemoryPatch : null,
-    injuryUpdateProposal: parsed.injuryUpdateProposal && typeof parsed.injuryUpdateProposal === 'object' ? parsed.injuryUpdateProposal as InjuryUpdateProposal : null
-  }
+  const text = extractOpenAIResponseText(payload)
+  return parseCoachAiText(text)
 }
 
 function buildCoachInstructions() {
@@ -738,63 +739,7 @@ function streamCoachRun(
       }
 
       try {
-        const response = await fetch('https://api.openai.com/v1/responses', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model,
-            instructions: buildCoachInstructions(),
-            input: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context, null, 2)}`,
-            stream: true
-          })
-        })
-
-        if (!response.ok || !response.body) {
-          throw new Error(`OpenAI API failed: ${response.status}`)
-        }
-
-        const decoder = new TextDecoder()
-        const reader = response.body.getReader()
-        const reportExtractor = createReportStreamExtractor()
-        let sseBuffer = ''
-        let fullText = ''
-        let streamedReport = ''
-
-        while (true) {
-          const { value, done } = await reader.read()
-          if (done) break
-          sseBuffer += decoder.decode(value, { stream: true })
-          const parsed = drainOpenAISseBuffer(sseBuffer)
-          sseBuffer = parsed.rest
-
-          for (const event of parsed.events) {
-            const delta = getOpenAITextDelta(event)
-            if (!delta) continue
-            fullText += delta
-            const reportDelta = reportExtractor.push(delta)
-            if (reportDelta) {
-              streamedReport += reportDelta
-              send('delta', { delta: reportDelta })
-            }
-          }
-        }
-
-        const parsed = safeJson(fullText)
-        const ai = {
-          report: typeof parsed.report === 'string' ? parsed.report : streamedReport || fullText,
-          memoryItems: Array.isArray(parsed.memoryItems) ? parsed.memoryItems.filter((item: unknown) => typeof item === 'string').slice(0, 8) : [],
-          trainingMemoryPatch: parsed.trainingMemoryPatch && typeof parsed.trainingMemoryPatch === 'object' ? parsed.trainingMemoryPatch as TrainingMemoryPatch : null,
-          injuryUpdateProposal: parsed.injuryUpdateProposal && typeof parsed.injuryUpdateProposal === 'object' ? parsed.injuryUpdateProposal as InjuryUpdateProposal : null
-        }
-
-        if (ai.report && ai.report !== streamedReport) {
-          const missing = ai.report.slice(streamedReport.length)
-          if (missing) send('delta', { delta: missing })
-        }
-
+        const ai = await callOpenAIStream(apiKey, model, context, (delta) => send('delta', { delta }))
         const result = await persistCoachResult(admin, userId, selectedRunId, userNote, context, ai)
         send('done', result)
         controller.close()
@@ -815,14 +760,97 @@ function streamCoachRun(
   })
 }
 
+async function callOpenAIStream(
+  apiKey: string,
+  model: string,
+  context: unknown,
+  onReportDelta: (delta: string) => void
+): Promise<CoachAiResult> {
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model,
+      instructions: buildCoachInstructions(),
+      input: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context, null, 2)}`,
+      stream: true
+    })
+  })
+
+  if (!response.ok || !response.body) {
+    throw new Error(`OpenAI API failed: ${response.status}`)
+  }
+
+  const decoder = new TextDecoder()
+  const reader = response.body.getReader()
+  const reportExtractor = createReportStreamExtractor()
+  let sseBuffer = ''
+  let fullText = ''
+  let completedText = ''
+  let streamedReport = ''
+
+  const handleEvent = (event: unknown) => {
+    const completed = getOpenAICompletedText(event)
+    if (completed) completedText = completed
+
+    const delta = getOpenAITextDelta(event)
+    if (!delta) return
+    fullText += delta
+    const reportDelta = reportExtractor.push(delta)
+    if (!reportDelta) return
+    streamedReport += reportDelta
+    onReportDelta(reportDelta)
+  }
+
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) break
+    sseBuffer += decoder.decode(value, { stream: true })
+    const parsed = drainOpenAISseBuffer(sseBuffer)
+    sseBuffer = parsed.rest
+    parsed.events.forEach(handleEvent)
+  }
+
+  sseBuffer += decoder.decode()
+  if (sseBuffer.trim()) {
+    const parsed = drainOpenAISseBuffer(`${sseBuffer}\n\n`)
+    parsed.events.forEach(handleEvent)
+  }
+
+  const ai = parseCoachAiText(completedText || fullText, streamedReport)
+  if (!streamedReport) {
+    onReportDelta(ai.report)
+  } else if (ai.report.startsWith(streamedReport) && ai.report.length > streamedReport.length) {
+    onReportDelta(ai.report.slice(streamedReport.length))
+  }
+
+  return ai
+}
+
+function parseCoachAiText(text: string, fallbackReport = ''): CoachAiResult {
+  const parsed = safeJson(text)
+  const ai = {
+    report: typeof parsed.report === 'string' ? parsed.report : fallbackReport || text,
+    memoryItems: Array.isArray(parsed.memoryItems) ? parsed.memoryItems.filter((item: unknown) => typeof item === 'string').slice(0, 8) : [],
+    trainingMemoryPatch: parsed.trainingMemoryPatch && typeof parsed.trainingMemoryPatch === 'object' ? parsed.trainingMemoryPatch as TrainingMemoryPatch : null,
+    injuryUpdateProposal: parsed.injuryUpdateProposal && typeof parsed.injuryUpdateProposal === 'object' ? parsed.injuryUpdateProposal as InjuryUpdateProposal : null
+  }
+  if (!ai.report.trim()) throw new Error('AI 코칭 응답이 비어 있습니다. 다시 요청해 주세요.')
+  return ai
+}
+
 function drainOpenAISseBuffer(buffer: string) {
   const events: unknown[] = []
-  const chunks = buffer.split('\n\n')
+  const chunks = buffer.split(/\r?\n\r?\n/)
   const rest = chunks.pop() ?? ''
 
   for (const chunk of chunks) {
     const dataLines = chunk
-      .split('\n')
+      .split(/\r?\n/)
+      .map((line) => line.trimStart())
       .filter((line) => line.startsWith('data:'))
       .map((line) => line.slice(5).trim())
     if (!dataLines.length) continue
@@ -845,6 +873,54 @@ function getOpenAITextDelta(event: unknown) {
   if (typeof item.text === 'string' && String(item.type).includes('delta')) return item.text
   if (typeof item.output_text === 'string' && String(item.type).includes('delta')) return item.output_text
   return ''
+}
+
+function getOpenAICompletedText(event: unknown): string {
+  if (!event || typeof event !== 'object') return ''
+  const item = event as Record<string, unknown>
+  const type = String(item.type ?? '')
+  if (
+    type !== 'response.completed' &&
+    type !== 'response.output_item.done' &&
+    type !== 'response.content_part.done' &&
+    type !== 'response.output_text.done'
+  ) return ''
+  return extractOpenAIResponseText(item.response ?? item.item ?? item.part ?? item)
+}
+
+function extractOpenAIResponseText(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') return ''
+  const item = payload as Record<string, unknown>
+  if (typeof item.output_text === 'string') return item.output_text
+  if (typeof item.text === 'string') return item.text
+  if (typeof item.delta === 'string') return item.delta
+
+  const contentText = extractOpenAIContentText(item.content)
+  if (contentText) return contentText
+
+  if (Array.isArray(item.output)) {
+    return item.output
+      .map((outputItem) => extractOpenAIResponseText(outputItem))
+      .filter(Boolean)
+      .join('\n')
+  }
+
+  return ''
+}
+
+function extractOpenAIContentText(content: unknown): string {
+  if (!Array.isArray(content)) return ''
+  return content
+    .map((part) => {
+      if (!part || typeof part !== 'object') return ''
+      const item = part as Record<string, unknown>
+      if (typeof item.text === 'string') return item.text
+      if (typeof item.output_text === 'string') return item.output_text
+      if (typeof item.value === 'string') return item.value
+      return ''
+    })
+    .filter(Boolean)
+    .join('\n')
 }
 
 function createReportStreamExtractor() {
@@ -1405,8 +1481,8 @@ type SummaryStatsForCoaching = {
   currentMonthHardSessions: number
   hardSessionsLast7: number
   runsAfterSelectedRunCount: number
-  latestTempo: (RunLogRow & { dateDisplay: string }) | null
-  latestLong: (RunLogRow & { dateDisplay: string }) | null
+  latestTempo: ReturnType<typeof summarizeRunForCoach>
+  latestLong: ReturnType<typeof summarizeRunForCoach>
 }
 
 function buildCoachingDecisionBoard(args: {
@@ -2351,6 +2427,53 @@ function decorateRunDate<T extends RunLogRow | null>(run: T): T extends RunLogRo
     ...run,
     dateDisplay: formatDateWithWeekday(run.date)
   } as unknown as T extends RunLogRow ? RunLogRow & { dateDisplay: string } : null
+}
+
+function summarizeRunForCoach(run: RunLogRow | null) {
+  if (!run) return null
+  return {
+    id: run.id,
+    externalId: run.external_id,
+    sessionTitle: run.session_title,
+    date: run.date,
+    dateDisplay: formatDateWithWeekday(run.date),
+    type: run.type,
+    distanceKm: run.distance_km,
+    durationSec: run.duration_sec,
+    durationDisplay: formatDurationText(run.duration_sec ?? 0),
+    avgPaceSec: run.avg_pace_sec,
+    avgPaceDisplay: formatPaceForCoach(run.avg_pace_sec),
+    avgHeartRate: run.avg_heart_rate,
+    maxHeartRate: run.max_heart_rate,
+    cadence: run.cadence,
+    activeEnergyKcal: run.active_energy_kcal,
+    weather: {
+      temperature: run.temperature,
+      humidity: run.humidity,
+      windMps: run.wind_mps
+    },
+    elevation: {
+      gainM: run.elevation_gain_m,
+      lossM: run.elevation_loss_m
+    },
+    courseType: run.course_type,
+    rpe: run.rpe,
+    workoutFeeling: run.workout_feeling,
+    painNote: run.pain_note,
+    sleepQuality: run.sleep_quality,
+    conditionScore: run.condition_score,
+    stressLevel: run.stress_level,
+    companion: run.companion,
+    memo: truncateText(run.memo, 500),
+    tags: run.tags,
+    source: run.source,
+    dataAvailability: {
+      laps: Array.isArray(run.laps) ? run.laps.length : 0,
+      fastSegments: Array.isArray(run.fast_segments) ? run.fast_segments.length : 0,
+      metricSamples: Array.isArray(run.metric_samples) ? run.metric_samples.length : 0,
+      routePoints: Array.isArray(run.route_points) ? run.route_points.length : 0
+    }
+  }
 }
 
 type LapMetric = {

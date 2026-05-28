@@ -175,6 +175,38 @@ Edge Function은 이 계약을 OpenAI context에 포함하고, system instructio
 - `## 다음 훈련`: 처방 준수 결과에 따른 다음 체크포인트
 - `## 루틴 업데이트`: 목표 달성 관점에서 루틴을 유지할지 조정할지
 
+## 스트리밍과 컨텍스트 예산
+
+`coach-run`은 긴 원본 러닝 데이터를 그대로 OpenAI context에 넣지 않는다. 선택 세션과 최근 세션은 코칭 판단에 필요한 요약값만 전달하고, 원본 `metric_samples`, `route_points`, `laps`, `fast_segments`처럼 큰 배열은 DB/앱 내부 근거로 유지한다.
+
+컨텍스트에 포함할 수 있는 러닝 근거:
+
+- 날짜, 세션명/type, 거리, 시간, 페이스, 심박, 케이던스, RPE, 메모
+- 랩/샘플에서 계산한 흐름 요약과 처방 위반 신호
+- `dataAvailability` 같은 데이터 존재 여부와 개수
+- 최근 세션은 전체 원본이 아니라 최대 소량의 요약 목록
+
+컨텍스트에 직접 넣지 않는 데이터:
+
+- `metric_samples` 전체
+- `route_points` 전체
+- `laps` 원본 전체
+- `fast_segments` 원본 전체
+- 최근 14일 전체 RunLog 원본 목록
+
+2026-05-28 장애 대응 후 운영 기준은 단일 호출 스트리밍이다. OpenAI 호출은 서버에서 `stream: true`로 한 번만 수행하고, 모델이 반환하는 JSON 텍스트에서 `"report"` 문자열 내부를 추출해 SSE `delta`로 즉시 내려보낸다. 스트림이 끝나면 같은 응답에서 모은 전체 JSON만 파싱해 저장한다.
+
+스트리밍 fallback은 같은 사용자 요청에서 두 번째 OpenAI 호출을 만들면 안 된다. `response.output_text.delta` 등 delta 이벤트가 충분하면 report를 토큰 단위로 표시하고, delta가 없고 `response.completed`/done 계열 이벤트에만 완성 텍스트가 있으면 마지막에 한 번만 report를 보낸다.
+
+빈 report는 저장하지 않는다. `coach_reports`에 빈 메시지가 저장되면 사용자는 재시도해도 같은 빈 응답을 보게 되므로, Edge Function은 빈 report를 오류로 중단하고 저장을 막는다.
+
+429 또는 빈 응답이 재발하면 다음 순서로 본다.
+
+1. 같은 요청에서 OpenAI 호출이 중복 실행되는지 확인한다.
+2. OpenAI context에 원본 RunLog 대용량 배열이 들어가는지 확인한다.
+3. 스트리밍 이벤트 파서가 현재 Responses API 이벤트 형태를 놓치는지 확인한다.
+4. 마지막으로 실제 모델/프로젝트 rate limit과 quota를 확인한다.
+
 ## 처방 가이드와 사후 조정
 
 PaceLAB 코칭은 단순 사후 감상이 아니다.

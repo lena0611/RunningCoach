@@ -9,6 +9,7 @@
 | 상태 | 항목 | 필요한 사용자 조치 | 관련 작업 |
 | --- | --- | --- | --- |
 | TBD | 예: 외부 서비스 secret 등록 | 콘솔에서 값을 등록하고 결과를 알려주세요. | TBD |
+| done | Supabase Edge Function `coach-run` 스트리밍 복구 배포 | 2026-05-28 23:14 KST 배포 완료. Supabase Functions list 기준 `coach-run` ACTIVE version 45, updated_at 2026-05-28 14:14:11 UTC. 앱에서 AI 코칭이 토큰 단위로 표시되는지 재시도만 남았습니다. | 2026-05-28 coach-run 단일 호출 스트리밍 복구 |
 
 ## 작성 기준
 

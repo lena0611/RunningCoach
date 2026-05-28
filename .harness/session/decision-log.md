@@ -219,3 +219,19 @@
 - 결정: `package.json`에 `supabase:functions:check`를 추가해 `deno check supabase/functions/coach-run/index.ts`를 프로젝트 지정 Edge Function 검증으로 둔다. `harness:check`는 Supabase 함수 변경 시 이 스크립트를 우선 호출한다.
 - 선택 이유: 하네스의 fallback `deno check`에만 기대면 명령 존재 여부와 대상 파일이 암묵적이다. 프로젝트 스크립트로 고정하면 로컬/후속 workstream/커밋 전 검증에서 같은 명령을 반복 사용할 수 있다.
 - 후속 기준: Edge Function 파일이 늘어나면 이 스크립트의 대상 목록을 함께 확장한다.
+
+## 2026-05-28 - coach-run 빈 응답/429 장애 안정화
+- 문제: HealthKit 러닝 저장 후 AI 코칭을 요청하면 화면에 빈 코칭 메시지 시각만 남거나 "AI 코칭 응답이 비어 있습니다" 오류가 표시됐다. 배포 후 재시도 과정에서는 OpenAI 429도 반복됐다.
+- 확정된 운영 원인: `coach-run` context에 선택 세션과 최근 세션의 원본 RunLog 대용량 배열이 들어가 토큰/요청 비용이 커졌고, 스트리밍 파서 실패를 보완하는 fallback이 같은 사용자 요청에서 OpenAI를 한 번 더 호출해 429를 증폭했다.
+- 미확정 세부 원인: 최초 빈 응답의 직접 원인은 Responses API streaming 이벤트 payload를 현장에서 캡처하지 못해 확정하지 않는다. 현재 운영 코드는 토큰 단위 스트리밍을 우회하므로, 스트리밍 이벤트 형태 검증은 별도 복구 작업으로 남긴다.
+- 결정: `coach-run`은 안정화 모드에서 OpenAI non-stream 호출을 한 번만 수행하고, 완성된 report를 SSE `delta` 한 번으로 보낸 뒤 `done`을 보낸다. OpenAI context에는 원본 `metric_samples`, `route_points`, `laps`, `fast_segments`, 최근 14일 RunLog 원본 목록을 넣지 않고 요약만 넣는다.
+- 선택 이유: 사용자에게 코칭이 정상 반환되는 것이 우선이며, 단일 호출과 요약 context가 429/빈 저장을 동시에 줄인다. 2026-05-28 운영 재시도에서 약 14초 후 정상 응답이 확인됐다.
+- 포기한 대안: 스트리밍 파서 실패 시 OpenAI non-stream 호출을 한 번 더 수행하는 fallback은 응답 복구처럼 보이지만 rate limit을 악화시키므로 채택하지 않는다. 원본 전체 RunLog를 모델에 주입하는 방식도 코칭 품질보다 비용/실패 위험이 커서 채택하지 않는다.
+- 후속 기준: 토큰 단위 스트리밍을 복구하려면 먼저 실제 Responses API SSE 이벤트 원문을 캡처해 파서 테스트를 만들고, 같은 요청에서 OpenAI 호출 1회 원칙을 깨지 않는 구조로만 복구한다.
+
+## 2026-05-28 - coach-run 단일 호출 스트리밍 복구
+- 문제: 안정화 모드에서는 AI 코칭이 정상 반환되지만, 사용자는 답변이 완성될 때까지 기다려야 해서 스트리밍 피드백 경험이 사라졌다.
+- 결정: `coach-run` 스트림 경로를 OpenAI `stream: true` 단일 호출로 복구한다. 서버는 OpenAI SSE delta를 누적하면서 JSON의 `"report"` 문자열 내부만 추출해 앱 SSE `delta`로 즉시 전달하고, 종료 시 같은 스트림에서 모은 전체 텍스트를 파싱해 `coach_reports`, `coach_memory_items`, 허용된 `trainingMemoryPatch`, `injuryUpdateProposal`을 처리한다.
+- 안전장치: `response.completed`, `response.output_item.done`, `response.content_part.done`, `response.output_text.done`에서 완성 텍스트가 오면 같은 호출의 completed payload를 저장 파싱에 사용한다. delta가 없어 report를 실시간으로 못 흘린 경우에도 두 번째 OpenAI 호출 없이 마지막에 한 번만 report를 보낸다.
+- 선택 이유: 429 재발을 막으려면 사용자 요청 1회당 OpenAI 호출 1회 원칙을 유지해야 한다. 동시에 UI에는 report 본문만 보여야 하므로 JSON 전체를 그대로 스트리밍하지 않고 report 문자열 내부만 추출한다.
+- 포기한 대안: 스트리밍 실패 시 non-stream 호출을 다시 실행하는 방식은 이전 장애 원인이므로 금지한다. 프론트에서 JSON 전체를 받아 report를 파싱하는 방식은 사용자에게 JSON 파편이 보일 수 있어 채택하지 않는다.
