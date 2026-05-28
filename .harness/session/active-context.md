@@ -11,15 +11,16 @@
 - harnessMode: `.harness/policy/profile.json` 참고
 
 ## 최근 작업
-- 하네스가 설치되었거나 업데이트되었습니다.
-- 프로젝트 구조 분석 결과는 `.harness/session/project-scan-report.md`를 확인합니다.
-- 설치/업데이트 직후 요약은 `.harness/session/handoff.md`를 확인합니다.
-- RunContext는 AI 없는 정적 PWA 방향으로 전환 중이다.
-- 러닝 파일 import는 FIT 단일 포맷으로 좁혔고, GPX/TCX/CSV 파싱 로직은 제거했다.
-- 향후 편의성 확장은 Strava API 연동이다. 단, 정적 앱 단독이 아니라 서버리스 백엔드로 OAuth/refresh token을 처리해야 한다.
+- 긴 대화창을 새 스레드로 넘기기 위한 최신 인수인계는 `.harness/session/thread-handoff-2026-05-28.md`를 먼저 확인한다.
+- 현재 제품명은 `PaceLAB`이다. 사용자-facing UI에서 `RunContext` 표현은 제거하는 방향이다.
+- 현재 구조는 GitHub Pages 정적 프론트 + Supabase Auth/Postgres/Edge Function + OpenAI API + iOS WKWebView/HealthKit 하이브리드다.
+- iOS 네이티브 로컬 프로젝트는 `/Users/smart-tn-083/practice/RunningCoach`에 있다.
+- HealthKit 자동 동기화, 세션별 HealthKit 재갱신, FIT 보조 import를 유지한다.
+- AI 코칭은 세션 상세에서 열며, 별도 Coach 하단 탭은 제거된 상태다.
+- 작업 후 `source ~/.nvm/nvm.sh && nvm use`를 먼저 적용하고 `npm run build`, `npm run harness:check -- --no-cache` 순서로 검증한다.
 
 ## 확인할 일
-- `.harness/project/project-charter.md`의 TBD 항목을 프로젝트 상황에 맞게 채웁니다.
-- 큰 작업이나 낯선 영역이면 에이전트가 `npm run harness:context -- "<작업 설명>"`으로 판단 컨텍스트를 만듭니다.
-- 작업 후 `npm run harness:check`로 기준, 링크, 검증 상태를 확인합니다.
-- 다음 구현 시 FIT import 정확도, 모바일 업로드 흐름, 규칙 기반 코칭 품질을 우선 확인한다.
+- 새 대화에서 이 문서만 보지 말고 `.harness/session/thread-handoff-2026-05-28.md`를 먼저 읽는다.
+- 코칭/훈련 알고리즘 작업은 `.harness/project/ai-coaching-goal.md`, `.harness/project/domain-rules.md`, `.harness/project/running-coaching-standards.md`를 함께 확인한다.
+- HealthKit/iOS 작업은 `.harness/project/healthkit-data-contract.md`와 네이티브 로컬 프로젝트를 함께 확인한다.
+- Supabase Edge Function 변경 시 `coach-run` 배포가 별도로 필요하다.
