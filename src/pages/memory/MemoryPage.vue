@@ -626,7 +626,7 @@ async function save() {
 
 <template>
   <PageLayout variant="memory">
-    <SectionCard>
+    <SectionCard class="memory-overview-card" variant="flat">
       <SectionHeader title="코칭 메모리">
         <button type="button" :disabled="saving || !isDirty" @click="save">{{ saving ? '저장 중' : '저장' }}</button>
       </SectionHeader>
@@ -640,27 +640,29 @@ async function save() {
           <small>{{ activeGoalMeta }}</small>
           <small v-if="activeInjury">부상관리: {{ activeInjury.title }} · {{ activeInjuryMeta }}</small>
         </div>
-        <button class="memory-nav-card" type="button" @click="openGoals">
-          <span>
-            <strong>목표 관리</strong>
-            <small>{{ activeGoal?.title || '목표 없음' }}</small>
-          </span>
-          <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
-        </button>
-        <button class="memory-nav-card" type="button" @click="openInjuries">
-          <span>
-            <strong>부상 관리</strong>
-            <small>{{ activeInjury?.title || '관리 항목 없음' }}</small>
-          </span>
-          <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
-        </button>
-        <button class="memory-nav-card" type="button" @click="openKnowledge">
-          <span>
-            <strong>훈련 지식 보관소</strong>
-            <small>MAF, 10K, 회복 기준 같은 승인된 처방 근거</small>
-          </span>
-          <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
-        </button>
+        <div class="memory-nav-list" aria-label="코칭 메모리 관리">
+          <button class="memory-nav-card" type="button" @click="openGoals">
+            <span>
+              <strong>목표 관리</strong>
+              <small>{{ activeGoal?.title || '목표 없음' }}</small>
+            </span>
+            <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
+          </button>
+          <button class="memory-nav-card" type="button" @click="openInjuries">
+            <span>
+              <strong>부상 관리</strong>
+              <small>{{ activeInjury?.title || '관리 항목 없음' }}</small>
+            </span>
+            <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
+          </button>
+          <button class="memory-nav-card" type="button" @click="openKnowledge">
+            <span>
+              <strong>훈련 지식 보관소</strong>
+              <small>MAF, 10K, 회복 기준 같은 승인된 처방 근거</small>
+            </span>
+            <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
+          </button>
+        </div>
 
         <div class="form-section-title section-title-row">
           <span>AI 관리 훈련 루틴</span>
@@ -770,13 +772,15 @@ async function save() {
               <SectionHeader title="목표 목록" compact>
                 <button type="button" @click="openGoalNew">새 목표</button>
               </SectionHeader>
-              <button v-for="goal in draft.goals" :key="goal.id" class="memory-list-card" type="button" @click="openGoalEdit(goal.id)">
-                <span>
-                  <strong>{{ goal.title }}</strong>
-                  <small>{{ goal.id === draft.activeGoalId ? '활성 목표 · ' : '' }}{{ goal.category }} · {{ goal.status }}{{ goalDateMeta(goal) }}</small>
-                </span>
-                <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
-              </button>
+              <div class="memory-card-list">
+                <button v-for="goal in draft.goals" :key="goal.id" class="memory-list-card" type="button" @click="openGoalEdit(goal.id)">
+                  <span>
+                    <strong>{{ goal.title }}</strong>
+                    <small>{{ goal.id === draft.activeGoalId ? '활성 목표 · ' : '' }}{{ goal.category }} · {{ goal.status }}{{ goalDateMeta(goal) }}</small>
+                  </span>
+                  <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
+                </button>
+              </div>
                 </div>
 
                 <FormGrid v-else-if="panel === 'goal-new'">
@@ -861,14 +865,16 @@ async function save() {
               <SectionHeader title="부상 관리 목록" compact>
                 <button type="button" @click="openInjuryNew">새 항목</button>
               </SectionHeader>
-              <button v-for="item in draft.injuryItems" :key="item.id" class="memory-list-card" type="button" @click="openInjuryEdit(item.id)">
-                <span>
-                  <strong>{{ item.title }}</strong>
-                  <small>{{ item.id === draft.activeInjuryItemId ? '현재 기준 · ' : '' }}{{ item.status }}{{ item.severity !== null ? ` · ${item.severity}/5` : '' }}{{ injuryDateMeta(item) }}</small>
-                  <small>{{ injuryAreaMeta(item) }}</small>
-                </span>
-                <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
-              </button>
+              <div class="memory-card-list">
+                <button v-for="item in draft.injuryItems" :key="item.id" class="memory-list-card" type="button" @click="openInjuryEdit(item.id)">
+                  <span>
+                    <strong>{{ item.title }}</strong>
+                    <small>{{ item.id === draft.activeInjuryItemId ? '현재 기준 · ' : '' }}{{ item.status }}{{ item.severity !== null ? ` · ${item.severity}/5` : '' }}{{ injuryDateMeta(item) }}</small>
+                    <small>{{ injuryAreaMeta(item) }}</small>
+                  </span>
+                  <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
+                </button>
+              </div>
                 </div>
 
                 <FormGrid v-else-if="panel === 'injury-new'">
