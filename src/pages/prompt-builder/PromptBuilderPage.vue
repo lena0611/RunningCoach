@@ -13,8 +13,7 @@ import CoachMessage from '@/shared/ui/CoachMessage.vue'
 import ClearableField from '@/shared/ui/ClearableField.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
-import SectionCard from '@/shared/ui/SectionCard.vue'
-import SectionHeader from '@/shared/ui/SectionHeader.vue'
+import SectionGroup from '@/shared/ui/SectionGroup.vue'
 
 const runStore = useRunStore()
 const memoryStore = useMemoryStore()
@@ -73,8 +72,7 @@ async function coach() {
 
 <template>
   <PageLayout variant="coach">
-    <SectionCard class="coach-composer">
-      <SectionHeader title="AI Coach" />
+    <SectionGroup class="coach-composer" title="AI Coach">
       <p class="helper">선택 기록을 활성 목표와 부상관리 기준에 맞춰 짧게 해석합니다.</p>
       <div class="coach-context-card">
         <span class="context-chip">코칭 기준</span>
@@ -98,16 +96,15 @@ async function coach() {
       </ActionGroup>
       <p v-if="!isSupabaseConfigured" class="error">Supabase 환경변수가 설정되어야 AI 코칭을 사용할 수 있습니다.</p>
       <p v-if="error" class="error">{{ error }}</p>
-    </SectionCard>
+    </SectionGroup>
 
-    <SectionCard class="coach-thread">
-      <SectionHeader title="코칭 리포트" />
+    <SectionGroup class="coach-thread" title="코칭 리포트">
       <div v-for="report in reports" :key="report.id" class="coach-thread-item">
         <CoachMessage v-if="report.userNote" role="user" :text="report.userNote" :meta="formatDateTimeWithWeekday(report.updatedAt || report.createdAt)" />
         <CoachMessage role="coach" :text="report.report" meta="PaceLAB Coach" />
         <p v-if="report.trainingMemoryUpdated" class="helper">AI가 목표와 누적 기록을 기준으로 코칭 메모리의 주간 루틴을 갱신했습니다.</p>
       </div>
       <EmptyState v-if="!reports.length" title="아직 코칭 리포트가 없습니다." description="RunLog를 고르고 오늘 메모를 짧게 적으면 코치가 맥락을 붙여 해석합니다." />
-    </SectionCard>
+    </SectionGroup>
   </PageLayout>
 </template>

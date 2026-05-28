@@ -24,7 +24,7 @@ import DateField from '@/shared/ui/DateField.vue'
 import FormGrid from '@/shared/ui/FormGrid.vue'
 import InjuryBodySelector from '@/shared/ui/InjuryBodySelector.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
-import SectionCard from '@/shared/ui/SectionCard.vue'
+import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
 import SchedulingHelpSheet from '@/shared/ui/SchedulingHelpSheet.vue'
 
@@ -626,10 +626,10 @@ async function save() {
 
 <template>
   <PageLayout variant="memory">
-    <SectionCard class="memory-overview-card" variant="flat">
-      <SectionHeader title="코칭 메모리">
+    <SectionGroup class="memory-overview-card" title="코칭 메모리" :surface="false">
+      <template #actions>
         <button type="button" :disabled="saving || !isDirty" @click="save">{{ saving ? '저장 중' : '저장' }}</button>
-      </SectionHeader>
+      </template>
       <p v-if="error || memoryStore.error" class="error">{{ error || memoryStore.error }}</p>
       <p class="helper">계정 이름, 출생연도, 성별, PB 같은 개인정보는 우상단 계정 메뉴에서 수정합니다.</p>
 
@@ -745,7 +745,7 @@ async function save() {
           </label>
         </FormGrid>
       </div>
-    </SectionCard>
+    </SectionGroup>
 
     <Teleport to="body">
       <Transition name="stack-page">

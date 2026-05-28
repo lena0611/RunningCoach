@@ -2,8 +2,7 @@
 import { computed } from 'vue'
 import type { Lap, RunMetricSample } from '@/entities/run/model'
 import { formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
-import SectionCard from '@/shared/ui/SectionCard.vue'
-import SectionHeader from '@/shared/ui/SectionHeader.vue'
+import SectionGroup from '@/shared/ui/SectionGroup.vue'
 
 const props = defineProps<{
   laps: Lap[]
@@ -62,10 +61,10 @@ function getMaxHeartRateInRange(startSec: number, endSec: number) {
 </script>
 
 <template>
-  <SectionCard>
-    <SectionHeader title="스플릿">
+  <SectionGroup title="스플릿">
+    <template #actions>
       <small class="helper">{{ laps.length ? `${laps.length}개` : '데이터 부족' }}</small>
-    </SectionHeader>
+    </template>
     <div v-if="laps.length" class="lap-content">
       <div class="lap-split-table">
         <div class="lap-split-head">
@@ -85,5 +84,5 @@ function getMaxHeartRateInRange(startSec: number, endSec: number) {
       </div>
     </div>
     <p v-else class="helper">랩별 페이스와 심박이 있으면 자동 세션 재해석과 코칭 근거가 좋아집니다.</p>
-  </SectionCard>
+  </SectionGroup>
 </template>

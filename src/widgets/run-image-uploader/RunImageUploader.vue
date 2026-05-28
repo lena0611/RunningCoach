@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import SectionCard from '@/shared/ui/SectionCard.vue'
-import SectionHeader from '@/shared/ui/SectionHeader.vue'
+import SectionGroup from '@/shared/ui/SectionGroup.vue'
 
 const emit = defineEmits<{ selected: [file: File]; cleared: [] }>()
 
@@ -33,10 +32,10 @@ defineExpose({ clear })
 </script>
 
 <template>
-  <SectionCard>
-    <SectionHeader title="FIT 파일 업로드">
+  <SectionGroup title="FIT 파일 업로드">
+    <template #actions>
       <button v-if="fileName" class="ghost" type="button" @click="clear">폐기</button>
-    </SectionHeader>
+    </template>
     <label class="upload-box">
       <input type="file" accept=".fit,application/octet-stream" @change="onFileChange" />
       <span class="upload-icon">FIT</span>
@@ -47,5 +46,5 @@ defineExpose({ clear })
       <strong>{{ fileName }}</strong>
       <p>{{ fileSize }}</p>
     </div>
-  </SectionCard>
+  </SectionGroup>
 </template>

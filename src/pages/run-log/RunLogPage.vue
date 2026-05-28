@@ -21,7 +21,7 @@ import RunForm from '@/shared/ui/RunForm.vue'
 import RunDetailContent from '@/shared/ui/RunDetailContent.vue'
 import RunSessionList from '@/shared/ui/RunSessionList.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
-import SectionHeader from '@/shared/ui/SectionHeader.vue'
+import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import SchedulingHelpSheet from '@/shared/ui/SchedulingHelpSheet.vue'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
@@ -986,10 +986,10 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
       </button>
     </SectionCard>
 
-    <SectionCard>
-      <SectionHeader :title="selectedDate ? formatDateWithWeekday(selectedDate) : '전체 기록'">
+    <SectionGroup :title="selectedDate ? formatDateWithWeekday(selectedDate) : '전체 기록'" :surface="false">
+      <template #actions>
         <small class="helper">{{ filteredRuns.length }}개</small>
-      </SectionHeader>
+      </template>
       <p v-if="runStore.loading" class="helper">Run Log를 불러오고 있습니다.</p>
       <template v-if="visibleRuns.length">
         <RunSessionList
@@ -1011,7 +1011,7 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
       </div>
       <EmptyState v-if="!visibleRuns.length && !runStore.loading" title="기록이 없습니다." description="Upload에서 HealthKit 또는 FIT 기록을 저장하세요." />
       <p v-if="error" class="error">{{ error }}</p>
-    </SectionCard>
+    </SectionGroup>
 
     <Teleport to="body">
       <Transition name="stack-page">

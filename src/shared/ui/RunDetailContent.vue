@@ -9,7 +9,7 @@ import RunSplitSection from '@/shared/ui/RunSplitSection.vue'
 import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
 import RunTypeIcon from '@/shared/ui/RunTypeIcon.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
-import SectionHeader from '@/shared/ui/SectionHeader.vue'
+import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import UnitValue from '@/shared/ui/UnitValue.vue'
 
 defineProps<{
@@ -64,12 +64,11 @@ const selectedOffsetSec = ref<number | null>(null)
       </div>
     </SectionCard>
 
-    <SectionCard v-if="run.memo || run.workoutFeeling || run.painNote">
-      <SectionHeader title="메모" />
+    <SectionGroup v-if="run.memo || run.workoutFeeling || run.painNote" title="메모">
       <p v-if="run.memo">{{ run.memo }}</p>
       <p v-if="run.workoutFeeling" class="helper">느낌: {{ run.workoutFeeling }}</p>
       <p v-if="run.painNote" class="helper">통증/주의: {{ run.painNote }}</p>
-    </SectionCard>
+    </SectionGroup>
 
     <FitnessDetailCharts
       v-if="(run.metricSamples?.length ?? 0) || (run.routePoints?.length ?? 0)"

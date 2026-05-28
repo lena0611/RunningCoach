@@ -6,8 +6,7 @@ import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import ClearableField from '@/shared/ui/ClearableField.vue'
 import FormGrid from '@/shared/ui/FormGrid.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
-import SectionCard from '@/shared/ui/SectionCard.vue'
-import SectionHeader from '@/shared/ui/SectionHeader.vue'
+import SectionGroup from '@/shared/ui/SectionGroup.vue'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -28,8 +27,7 @@ async function verify() {
 
 <template>
   <PageLayout variant="narrow">
-    <SectionCard>
-      <SectionHeader title="로그인" />
+    <SectionGroup title="로그인">
       <p>PaceLAB 데이터와 AI 코칭은 Supabase 계정으로 보호됩니다.</p>
       <FormGrid v-if="!sent" as="form" @submit.prevent="submit">
         <label class="full">
@@ -59,6 +57,6 @@ async function verify() {
       <p v-if="sent" class="helper">메일함에서 인증 코드를 확인한 뒤 여기에 입력하세요.</p>
       <p v-if="authStore.error" class="error">{{ authStore.error }}</p>
       <p v-if="!authStore.isConfigured" class="error">VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY 설정이 필요합니다.</p>
-    </SectionCard>
+    </SectionGroup>
   </PageLayout>
 </template>

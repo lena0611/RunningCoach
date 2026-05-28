@@ -94,6 +94,7 @@ Prefer shared UI components in `src/shared/ui`:
 - `AppHeader`
 - `PageLayout`
 - `ContentStack`
+- `SectionGroup`
 - `SectionHeader`
 - `ActionGroup`
 - `FormGrid`
@@ -114,7 +115,7 @@ Prefer shared UI components in `src/shared/ui`:
 
 New page work should reuse these before adding page-specific layout.
 
-Common display components should not decide how much page space they receive. Page-level spacing, grids, stacks, section headers, action rows, and forms must be owned by layout components such as `PageLayout`, `ContentStack`, `SectionHeader`, `ActionGroup`, and `FormGrid`.
+Common display components should not decide how much page space they receive. Page-level spacing, grids, stacks, section headers, action rows, and forms must be owned by layout components such as `PageLayout`, `ContentStack`, `SectionGroup`, `SectionHeader`, `ActionGroup`, and `FormGrid`.
 
 If a page needs a new button, card, input, select, toast, bottom sheet, list row, metric card, date display, or stack header, first extend an existing shared component. Add page-specific markup only when the pattern is truly one-off and document why if it is likely to repeat.
 

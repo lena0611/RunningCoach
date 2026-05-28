@@ -20,8 +20,7 @@ import MetricGrid from '@/shared/ui/MetricGrid.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
 import RunDetailContent from '@/shared/ui/RunDetailContent.vue'
 import RunSessionList from '@/shared/ui/RunSessionList.vue'
-import SectionCard from '@/shared/ui/SectionCard.vue'
-import SectionHeader from '@/shared/ui/SectionHeader.vue'
+import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import StatCard from '@/shared/ui/StatCard.vue'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
@@ -206,15 +205,15 @@ function formatDateOnly(value: Date) {
       </div>
     </section>
 
-    <SectionCard v-if="runStore.loading || runStore.error">
-      <SectionHeader title="데이터 상태">
+    <SectionGroup v-if="runStore.loading || runStore.error" title="데이터 상태">
+      <template #actions>
         <button class="ghost" type="button" :disabled="runStore.loading" @click="runStore.load">
           {{ runStore.loading ? '불러오는 중' : '다시 불러오기' }}
         </button>
-      </SectionHeader>
+      </template>
       <p v-if="runStore.loading" class="helper">Run Log를 불러오고 있습니다.</p>
       <p v-if="runStore.error" class="error">{{ runStore.error }}</p>
-    </SectionCard>
+    </SectionGroup>
 
     <MetricGrid>
       <RunSummaryCard label="이번 달" :value="`${monthDistance}km`" :loading="runDataLoading" interactive @click="trendMetric = 'month'" />
@@ -248,8 +247,7 @@ function formatDateOnly(value: Date) {
       <RecentRuns :runs="runs.slice(0, 5)" :weekly-pattern="memoryStore.memory.weeklyPattern" @show-all="router.push('/runs')" @select="openRunDetail" />
       <ContentStack>
         <FatigueCard :warning="getVolumeWarning(runs, today)" />
-        <SectionCard>
-          <SectionHeader title="다음 추천 세션" />
+        <SectionGroup title="다음 추천 세션" :surface="false">
           <div class="recommendation-card">
             <strong>{{ nextSession.title }}</strong>
             <span>{{ formatDateWithWeekday(nextSession.plannedDate) }} · {{ nextSession.dayName }}</span>
@@ -264,7 +262,7 @@ function formatDateOnly(value: Date) {
             :session-title="nextSession.title"
             @refresh="weatherStore.requestForecast()"
           />
-        </SectionCard>
+        </SectionGroup>
       </ContentStack>
     </div>
 
@@ -281,17 +279,16 @@ function formatDateOnly(value: Date) {
               </button>
             </header>
             <main class="memory-stack-content">
-              <SectionCard>
-                <SectionHeader title="추이">
+              <SectionGroup title="추이">
+                <template #actions>
                   <small class="helper">{{ trendRuns.length }}개 세션</small>
-                </SectionHeader>
+                </template>
                 <TrendChart v-if="trendChartPoints.length" :points="trendChartPoints" unit="km" />
                 <EmptyState v-else title="표시할 기록이 없습니다." description="해당 기간의 러닝 기록이 아직 부족합니다." />
-              </SectionCard>
-              <SectionCard v-if="trendRuns.length">
-                <SectionHeader title="세션" />
+              </SectionGroup>
+              <SectionGroup v-if="trendRuns.length" title="세션" :surface="false">
                 <RunSessionList :runs="trendRuns" :weekly-pattern="memoryStore.memory.weeklyPattern" interactive @select="openRunDetail" />
-              </SectionCard>
+              </SectionGroup>
             </main>
           </section>
         </div>
@@ -309,8 +306,7 @@ function formatDateOnly(value: Date) {
               </button>
             </header>
             <main class="memory-stack-content">
-              <SectionCard>
-                <SectionHeader title="현재 예상" />
+              <SectionGroup title="현재 예상">
                 <div class="projection-detail-metric">
                   <strong>{{ formatDuration(raceProjection.current.projectedSec) }}</strong>
                   <span>{{ raceProjection.targetDistanceKm }}km 기준</span>
@@ -319,17 +315,15 @@ function formatDateOnly(value: Date) {
                   {{ formatDateWithWeekday(raceProjection.current.date) }} {{ raceProjection.current.type }}
                   {{ raceProjection.current.distanceKm.toFixed(2) }}km 기록을 목표 거리로 환산한 값입니다.
                 </p>
-              </SectionCard>
-              <SectionCard>
-                <SectionHeader title="목표 준비도" />
+              </SectionGroup>
+              <SectionGroup title="목표 준비도">
                 <div class="projection-score">
                   <strong>{{ raceProjection.readinessScore }}</strong>
                   <span>/100 · {{ raceProjection.readinessLevel }}</span>
                 </div>
                 <p class="helper">{{ raceProjection.readinessSummary }}</p>
-              </SectionCard>
-              <SectionCard>
-                <SectionHeader title="판단 근거" />
+              </SectionGroup>
+              <SectionGroup title="판단 근거">
                 <div class="projection-factor-list">
                   <article
                     v-for="factor in raceProjection.factors"
@@ -345,16 +339,15 @@ function formatDateOnly(value: Date) {
                     <p>{{ factor.detail }}</p>
                   </article>
                 </div>
-              </SectionCard>
-              <SectionCard>
-                <SectionHeader title="변화" />
+              </SectionGroup>
+              <SectionGroup title="변화">
                 <p v-if="raceProjection.deltaSec === null" class="helper">
                   아직 비교할 이전 품질 세션이 부족합니다. Tempo, Race, Steady Long 기록이 쌓이면 변화 방향을 보여줍니다.
                 </p>
                 <p v-else class="helper">
                   {{ raceProjectionHint }}입니다. 이 값은 루틴 상향/유지 판단의 보조 근거로만 사용합니다.
                 </p>
-              </SectionCard>
+              </SectionGroup>
             </main>
           </section>
         </div>

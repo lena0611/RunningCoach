@@ -7,8 +7,7 @@ import RunImageUploader from '@/widgets/run-image-uploader/RunImageUploader.vue'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import ContentStack from '@/shared/ui/ContentStack.vue'
 import RunForm from '@/shared/ui/RunForm.vue'
-import SectionCard from '@/shared/ui/SectionCard.vue'
-import SectionHeader from '@/shared/ui/SectionHeader.vue'
+import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import type { ExtractedRunData } from '@/entities/run/model'
 import { createEmptyRun, extractRunDataFromFile } from '@/features/extract-run-data/localFileExtractor'
 import { hasNativeBridge } from '@/shared/lib/runtime'
@@ -77,8 +76,7 @@ async function save() {
 <template>
   <section class="upload-page" :class="{ page: !stackMode }">
     <ContentStack>
-    <SectionCard>
-      <SectionHeader title="HealthKit 자동 동기화" />
+    <SectionGroup title="HealthKit 자동 동기화">
       <p v-if="hasNativeBridge()" class="helper">
         로그인 상태에서 앱을 켜거나 다시 활성화하면, 저장된 최신 Run Log 이후의 HealthKit 러닝만 자동으로 동기화합니다.
       </p>
@@ -86,7 +84,7 @@ async function save() {
       <p v-if="healthKitSyncStore.syncing" class="helper">HealthKit 동기화 중입니다.</p>
       <p v-else-if="healthKitSyncStore.status" class="helper">{{ healthKitSyncStore.status }}</p>
       <p v-if="healthKitSyncStore.error" class="error">{{ healthKitSyncStore.error }}</p>
-    </SectionCard>
+    </SectionGroup>
     <RunImageUploader ref="uploader" @selected="onSelected" @cleared="file = null" />
     <ActionGroup>
       <button type="button" :disabled="!file || loading" @click="analyze">
@@ -95,13 +93,12 @@ async function save() {
       <button class="ghost" type="button" @click="manual">수동 입력</button>
       <p v-if="error" class="error">{{ error }}</p>
     </ActionGroup>
-    <SectionCard v-if="form">
-      <SectionHeader title="분석 결과 확인" />
+    <SectionGroup v-if="form" title="분석 결과 확인">
       <RunForm v-model="form" />
       <ActionGroup>
         <button type="button" :disabled="saving" @click="save">{{ saving ? '저장 중' : '저장' }}</button>
       </ActionGroup>
-    </SectionCard>
+    </SectionGroup>
     </ContentStack>
   </section>
 </template>
