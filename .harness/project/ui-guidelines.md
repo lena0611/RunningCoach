@@ -102,6 +102,7 @@ Prefer shared UI components in `src/shared/ui`:
 - `BottomNav`
 - `StatCard`
 - `SectionCard`
+- `MetricPairList`
 - `RunTypeBadge`
 - `PrimaryButton`
 - `SecondaryButton`
@@ -126,6 +127,7 @@ Charts should use `TrendChart` and ECharts unless there is a specific reason to 
 
 - `Top`: Use `AppHeader` for root screens and stack headers for deep screens. Header copy must be compact: small service label, large page title, and one right-side action.
 - `ListRow`: Use for logs, goals, injuries, account details, and other repeated navigable items. Do not turn every row into a heavy card.
+- `MetricPairList`: Use for dense detail metrics that need a single grouped surface with two columns per row and hairline dividers. Do not use separate mini cards when the metrics are peer facts in one section.
 - `Button`: Primary is filled green, secondary is weak/neutral, danger is weak red unless the destructive action is inside a confirmation sheet.
 - TDS-inspired tone should prefer grey-scale surfaces, weak/filled action hierarchy, and hairline-level dividers over visible boxed borders. Use background, spacing, typography, and subtle shadows to separate sections before adding borders.
 - `TextField`: Use box-style inputs with persistent labels. iOS zoom prevention requires 16px or larger input text.

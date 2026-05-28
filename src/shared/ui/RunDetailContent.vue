@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { RunLog } from '@/entities/run/model'
 import { estimateHeartRateDrift } from '@/shared/lib/runStats'
 import { formatDateWithWeekday, formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
 import FitnessDetailCharts from '@/shared/ui/FitnessDetailCharts.vue'
+import MetricPairList from '@/shared/ui/MetricPairList.vue'
 import RunMetaChips from '@/shared/ui/RunMetaChips.vue'
 import RunSplitSection from '@/shared/ui/RunSplitSection.vue'
 import RunTypeBadge from '@/shared/ui/RunTypeBadge.vue'
@@ -12,12 +13,23 @@ import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import UnitValue from '@/shared/ui/UnitValue.vue'
 
-defineProps<{
+const props = defineProps<{
   run: RunLog
   weeklyPattern?: string[]
 }>()
 
 const selectedOffsetSec = ref<number | null>(null)
+
+const detailMetrics = computed(() => [
+  { id: 'avg-pace', label: '평균 페이스', value: formatPace(props.run.avgPaceSec), unit: '/km' },
+  { id: 'cadence', label: '평균 케이던스', value: formatInteger(props.run.cadence) },
+  { id: 'avg-heart-rate', label: '평균 심박', value: formatInteger(props.run.avgHeartRate) },
+  { id: 'max-heart-rate', label: '최고 심박', value: formatInteger(props.run.maxHeartRate) },
+  { id: 'active-energy', label: '활동 칼로리', value: formatInteger(props.run.activeEnergyKcal), unit: props.run.activeEnergyKcal === null ? '' : 'kcal' },
+  { id: 'heart-rate-drift', label: '드리프트', value: estimateHeartRateDrift(props.run), valueKind: 'text' as const },
+  { id: 'elevation-gain', label: '누적 상승', value: formatInteger(props.run.elevationGainM), unit: props.run.elevationGainM === null ? '' : 'm' },
+  { id: 'elevation-loss', label: '누적 하강', value: formatInteger(props.run.elevationLossM), unit: props.run.elevationLossM === null ? '' : 'm' }
+])
 </script>
 
 <template>
@@ -44,25 +56,7 @@ const selectedOffsetSec = ref<number | null>(null)
       </div>
     </SectionCard>
 
-    <SectionCard>
-      <div class="metric-grid compact-metric-grid">
-        <div class="metric metric-monochrome-value"><span>평균 페이스</span><strong><UnitValue :amount="formatPace(run.avgPaceSec)" unit="/km" /></strong></div>
-        <div class="metric"><span>평균 케이던스</span><strong>{{ formatInteger(run.cadence) }}</strong></div>
-        <div class="metric"><span>평균 심박</span><strong>{{ formatInteger(run.avgHeartRate) }}</strong></div>
-        <div class="metric"><span>최고 심박</span><strong>{{ formatInteger(run.maxHeartRate) }}</strong></div>
-        <div class="metric metric-monochrome-value">
-          <span>활동 칼로리</span>
-          <strong>
-            <UnitValue v-if="run.activeEnergyKcal !== null" :amount="formatInteger(run.activeEnergyKcal)" unit="kcal" />
-            <span v-else>-</span>
-          </strong>
-        </div>
-        <div class="metric"><span>운동강도</span><strong>{{ run.rpe ?? '-' }}</strong></div>
-        <div class="metric"><span>드리프트</span><strong class="metric-text-value">{{ estimateHeartRateDrift(run) }}</strong></div>
-        <div class="metric metric-monochrome-value"><span>누적 상승</span><strong><UnitValue :amount="formatInteger(run.elevationGainM)" unit="m" /></strong></div>
-        <div class="metric metric-monochrome-value"><span>누적 하강</span><strong><UnitValue :amount="formatInteger(run.elevationLossM)" unit="m" /></strong></div>
-      </div>
-    </SectionCard>
+    <MetricPairList :items="detailMetrics" />
 
     <SectionGroup v-if="run.memo || run.workoutFeeling || run.painNote" title="메모">
       <p v-if="run.memo">{{ run.memo }}</p>
