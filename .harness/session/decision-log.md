@@ -214,6 +214,14 @@
 - 선택 이유: 최초 요청 창으로 무조건 돌아가면 잘못 시작된 창이나 범위 밖 창이 최종 판단을 맡을 수 있다. 반대로 책임 창이 없으면 후속 창 결과가 흩어져 완료 승인, 검증, 커밋 판단이 흐려진다.
 - 포기한 대안: 모든 다중 workstream 업무를 별도 PM/리뷰 창으로 모으는 방식은 창 수를 늘리고 운영 부담이 커서 채택하지 않는다.
 
+## 2026-05-28 - Workstream 첫 메시지 bootstrap
+- 문제: 같은 workstream 창을 새로 열어 컨텍스트를 줄이고 싶을 때마다 긴 시작 문구를 붙여넣어야 하면 운영 비용이 커진다. 반면 Codex hook이 창 제목 메타데이터를 안정적으로 받는다는 근거는 없다.
+- 결정: `.codex/hooks/inject-context.sh`가 `UserPromptSubmit` 입력 본문에서 `01-harness-ops` 같은 workstream id를 감지하면 `.harness/session/workstreams/README.md`와 해당 workstream 파일을 읽으라는 bootstrap 문구를 주입한다.
+- 사용 기준: 새 창 첫 메시지는 `이 창은 01-harness-ops workstream이다.`처럼 짧게 쓸 수 있다. 창 제목만으로 자동 감지한다고 가정하지 않고, 사용자 프롬프트 본문에 workstream id를 포함한다.
+- hook 범위: 이번 변경은 Codex `UserPromptSubmit` 컨텍스트 주입만 다룬다. commit/push hook의 `harness:check` 실행 정책은 바꾸지 않으므로 `.githooks/**`, `install-hooks.mjs`, `run-previous-hook.mjs`, `.github/commit-template.txt` 변경은 필요하지 않다.
+- 앱 영향: Vue 앱, Supabase Edge Function, iOS/HealthKit 경계는 변경하지 않는다. workstream bootstrap 기준과 Codex hook만 바뀌므로 critical path 구현 변경은 없다.
+- 선택 이유: 사용자가 새 창을 열 때 붙여넣을 문구를 줄이면서도, 제목 메타데이터 의존이나 외부 상태 파일 같은 불안정한 경로를 피할 수 있다.
+
 ## 2026-05-28 - Edge Function 타입 체크를 프로젝트 검증 스크립트로 고정
 - 문제: `coach-run`은 Deno 런타임에서 실행되지만 기존 검증 흐름은 Vue/Node 빌드 중심이라 Supabase client 타입 추론, Deno strict null 처리, remote import lock 문제가 늦게 드러날 수 있었다.
 - 결정: `package.json`에 `supabase:functions:check`를 추가해 `deno check supabase/functions/coach-run/index.ts`를 프로젝트 지정 Edge Function 검증으로 둔다. `harness:check`는 Supabase 함수 변경 시 이 스크립트를 우선 호출한다.

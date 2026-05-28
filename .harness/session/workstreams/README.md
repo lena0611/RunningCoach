@@ -48,6 +48,14 @@
 완료 승인 전에는 build/test/harness:check/commit/push/PR을 실행하지 말고 후보로만 보고한다.
 ```
 
+Codex `UserPromptSubmit` hook은 첫 메시지에 `01-harness-ops`, `02-product-planning` 같은 workstream id가 들어 있으면 해당 파일을 읽으라는 bootstrap 문구를 주입한다. 새 창을 같은 workstream으로 다시 열 때는 아래처럼 줄여 쓸 수 있다.
+
+```text
+이 창은 01-harness-ops workstream이다.
+```
+
+창 제목만으로 자동 감지한다고 가정하지 않는다. 현재 Codex 어댑터는 사용자 프롬프트 본문에 포함된 workstream id만 안정적으로 감지한다.
+
 ## 완료 책임 창
 
 모든 업무 요청은 시작할 때 `완료 책임 창`을 하나 정합니다. 완료 책임 창은 업무 목표, 완료 조건, 후속 workstream 인수인계, 최종 리뷰, 검증 후보 정리를 소유합니다.
