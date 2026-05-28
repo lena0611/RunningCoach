@@ -2312,7 +2312,7 @@ button.run-session-row {
   padding: 18px 22px;
 }
 
-.metric-pair-cell + .metric-pair-cell {
+.metric-pair-list-vertical-divider .metric-pair-cell + .metric-pair-cell {
   border-left: 1px solid var(--color-border);
 }
 
