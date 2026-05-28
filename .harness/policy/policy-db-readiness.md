@@ -51,6 +51,7 @@
 - 현재 검증은 필수 필드와 enum 중심입니다.
 - 정책 간 의미 충돌, 만료일 초과, 승인자 권한 검증은 아직 수동 검토 대상입니다.
 - 스택 하네스의 외부 `policies.json`는 기존 호환을 위해 기본 필드만 검사합니다.
+- `policy-harness.mjs`가 정책 영향 결과를 기계가 읽을 수 있는 요약으로 내보낼 때는 `.harness/generated/policy-impact-summary.json`처럼 generated 영역에 기록합니다. 이 산출물은 정책 registry의 원본이 아니라 guard, handoff, guide가 재사용하는 런타임 요약입니다.
 
 ## DB화 순서
 

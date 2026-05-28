@@ -1,35 +1,35 @@
 {
   "version": 1,
-  "updatedAt": "2026-05-27T08:54:35.270Z",
+  "updatedAt": "2026-05-28T05:37:02.523Z",
   "baseHarness": {
     "id": "harness-seed",
-    "version": "0.2.43",
+    "version": "0.2.47",
     "repo": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git",
-    "ref": "v0.2.43",
+    "ref": "v0.2.47",
     "commit": null,
     "source": {
       "type": "git",
       "repo": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git",
-      "ref": "v0.2.43",
+      "ref": "v0.2.47",
       "commit": null,
-      "packageVersion": "0.2.43",
-      "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.43"
+      "packageVersion": "0.2.47",
+      "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.47"
     }
   },
   "stackHarness": {
     "id": "vue3-vite-pinia-router",
     "title": "Vue 3 + Vite + Pinia + Vue Router Stack Harness",
-    "version": "0.1.26",
+    "version": "0.1.30",
     "repo": "https://git.smartscore.kr/ai-standard/harnesses/vue3-vite-pinia-router.git",
-    "ref": "v0.1.26",
+    "ref": "v0.1.30",
     "range": null,
     "commit": null,
     "manifestVersion": 1,
     "manifestPath": ".harness/stacks/.applied/vue3-vite-pinia-router/manifest.json",
     "requiredBaseHarness": {
       "repo": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git",
-      "ref": "v0.2.43",
-      "minVersion": "0.2.43"
+      "ref": "v0.2.47",
+      "minVersion": "0.2.47"
     }
   }
 }

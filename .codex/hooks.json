@@ -1,0 +1,34 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/smart-tn-083/practice/run-ai/.codex/hooks/session-start-reminder.sh'"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/smart-tn-083/practice/run-ai/.codex/hooks/inject-context.sh'"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "'/Users/smart-tn-083/practice/run-ai/.codex/hooks/enforce-check.sh'"
+          }
+        ]
+      }
+    ]
+  }
+}

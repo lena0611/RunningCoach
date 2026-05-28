@@ -2,6 +2,8 @@
 
 이 문서는 현재 긴 대화창을 새 대화로 넘기기 위한 압축 인수인계다. 새 스레드에서는 이 파일을 먼저 읽고, 필요한 세부 규칙은 각 문서로 좁혀서 확인한다.
 
+> 상태: 과거 스냅샷. 하네스 본체 `0.2.46` 업데이트 이후 최신 세션 진입점은 `active-context.md`, `next-session-reminder.md`, `project-memory.md`, `workflow-rules.md`, `decision-log.md`를 우선한다. 이 문서는 2026-05-28 긴 대화의 상세 배경을 확인할 때만 참고한다.
+
 ## 프로젝트 루트
 
 - 웹/PWA: `/Users/smart-tn-083/practice/run-ai`

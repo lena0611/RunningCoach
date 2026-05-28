@@ -13,6 +13,49 @@
 - `harness:check`의 “Project rule candidate check”는 통과 메시지가 아니라 실제 검토 요청으로 취급한다. 같은 종류의 버그가 재발 가능하면 룰을 업데이트한다.
 - HealthKit/세션 상세/스플릿/경로 차트/자동 동기화/세션별 새로고침을 수정할 때는 구현 전에 `.harness/project/healthkit-data-contract.md`를 먼저 확인한다. 네이티브 후보 구조, 웹 `RunLog` 매핑, 샘플/랩/라우트 배열 의미를 추측하지 않는다.
 
+## 대화창 분리 운영
+- PaceLAB은 workstream 대화창 분리 운영을 명시적으로 채택한 프로젝트다. 하네스 본체의 일반 가이드는 선택형이지만, 이 프로젝트 안에서는 아래 규칙을 강하게 적용한다.
+- 한 대화창은 하나의 주 작업 유형만 맡긴다. 기획, 버그픽스, UI, 코칭 로직, HealthKit/iOS, Supabase/Edge Function, 부상관리 도메인, 하네스/정책 정리는 서로 다른 대화창으로 분리한다.
+- 각 대화창은 모든 사용자 요청을 처리하기 전에 현재 workstream 범위를 먼저 식별한다. 현재 창의 workstream이 불명확하면 넓은 작업을 진행하지 말고 사용자에게 workstream 확인을 요청한다.
+- 현재 창에 수행 역할이 있더라도 선행 결정이나 선행 구현이 다른 workstream에 있으면 현재 창에서 먼저 진행하지 않는다. 대상 workstream, 선행 이유, 붙여넣을 인수인계 문구를 제안한다.
+- 사용자가 완료를 명시하면 현재 창에서 완료 처리해도 되는지 먼저 검토한다. 다른 workstream의 후속 확인이나 마무리가 남아 있으면 완료 처리 전에 대상 workstream으로 넘긴다.
+- 현재 대화창에서 주 작업 유형이 바뀌면 새 대화창으로 넘긴다. 단, 작업을 끝내기 위한 짧은 문서 갱신, 결정 로그, 검증 명령은 같은 대화창에서 마무리할 수 있다.
+- 기존 workstream으로 안정적으로 처리하기 어려운 새 도메인이 반복적으로 등장하면 임의로 현재 창 범위를 넓히지 않는다. `01-harness-ops`에서 새 workstream 추가 여부를 검토하고, 필요하면 workstreams 폴더의 `NN-name.md`와 이 문서의 작업 유형 목록을 갱신한다.
+- 새 대화창 첫 메시지는 작업 유형, 목표, 완료 조건, 관련 파일 또는 화면, 이전 대화의 인수인계 문구나 인수인계 파일을 포함한다.
+- 창 간 인수인계 문구는 기본적으로 복사/붙여넣기용 임시 전달물이다. 진행 중에는 문서화를 늘리지 않고, 최종 완료 승인 시점에 남길 내용만 정리해 문서화한다.
+- 완료 전 창 이동은 커밋 없이 진행할 수 있다. 후속 창 인수인계 문구에는 `git status --short`, `git diff`, 필요 시 `git diff --staged`로 현재 작업트리 변경분을 먼저 확인하라는 문장을 포함한다.
+- 단, 여러 창이 이어서 알아야 하는 최신 상태, pending 작업, 구조 결정, 반복 규칙, 사용자 확인 질문은 다음 창이 이어받을 수 있도록 진행 중에도 관련 `.harness/session/*` 또는 `.harness/project/*` 문서에 최소 내역을 남긴다.
+- 최종 완료 승인 시에는 임시 인수인계 문구 중 실제로 남길 가치가 있는 내용만 문서화하고, 단순 중간 전달 문구는 남기지 않는다.
+- 대화창이 길어져 에이전트 응답이 느려지거나 서로 다른 도메인 판단이 섞이기 시작하면 구현을 더 밀지 말고 `.harness/session/active-context.md` 또는 별도 `thread-handoff-YYYY-MM-DD.md`에 인수인계를 남긴 뒤 새 대화창에서 재개한다.
+- 긴 인수인계는 최신 상태와 다음 작업만 남긴다. 회고, 모든 시도 내역, 장황한 diff 설명은 넣지 않고 필요한 경우 `decision-log.md`나 관련 프로젝트 룰 문서로 승격한다.
+- build, test, `harness:check`, commit, push, PR 생성은 `CLAUDE.md`의 완료 승인 게이트를 따른다.
+
+작업 유형별 시작 문서:
+
+| 작업 유형 | 먼저 읽을 문서 |
+| --- | --- |
+| 전체 목록 | `.harness/session/workstreams/README.md` |
+| 제품/기획/범위 | `.harness/project/project-charter.md`, `.harness/project/scope-contract.md`, `.harness/session/decision-log.md` |
+| 버그픽스/회귀 | `.harness/session/active-context.md`, `.harness/project/workflow-rules.md`, 관련 `critical-paths.md` 항목 |
+| UI/UX | `.harness/project/ui-system-contract.md`, `.harness/project/workflow-rules.md`, 영향 화면의 공통 컴포넌트 |
+| 코칭/훈련 로직 | `.harness/project/ai-coaching-goal.md`, `.harness/project/running-coaching-standards.md`, `.harness/project/domain-rules.md` |
+| HealthKit/iOS | `.harness/project/healthkit-data-contract.md`, `/Users/smart-tn-083/practice/RunningCoach` |
+| Supabase/OpenAI Edge Function | `.harness/project/config-contract.md`, `.harness/project/ai-coaching-goal.md`, `supabase/functions/coach-run/index.ts` |
+| 부상관리 도메인 | `.harness/project/domain-rules.md`, `.harness/project/ai-coaching-goal.md`, `src/shared/ui/InjuryBodySelector.vue` |
+| 하네스/정책 | `.harness/policy/context-protocol.md`, `.harness/project/workflow-rules.md`, `.harness/session/decision-log.md` |
+
+새 작업 유형을 추가할 때는 `.harness/session/workstreams/README.md`의 `새 workstream 추가 기준`을 따른다.
+
+대화창 종료 또는 분기 전 기록 기준:
+
+| 기록 위치 | 기록할 내용 |
+| --- | --- |
+| `.harness/session/active-context.md` | 현재 가장 최신 제품/작업 상태와 새 대화가 먼저 볼 인수인계 |
+| `.harness/session/next-session-reminder.md` | 다음 대화창에서 바로 실행할 확인 순서와 작업 후보 |
+| `.harness/session/decision-log.md` | 이후에도 영향을 주는 구조 결정, 예외, 기준 충돌 해결 |
+| `.harness/session/project-memory.md` | 세션이 바뀌어도 오래 유지되는 안정적인 프로젝트 사실 |
+| `.harness/session/developer-input-queue.md` | 사용자 확인 없이는 확정할 수 없는 질문 |
+
 ## 리뷰 기준
 - 원본 파일 또는 secret이 브라우저 저장소에 남지 않는지 확인한다.
 - FIT import 결과가 거리, 시간, 페이스, 심박, 케이던스를 일관되게 계산하는지 확인한다.
@@ -39,6 +82,7 @@
 - 수정/삭제가 안 된다고 보고되면 API 실패와 UX 오해를 분리한다. 버튼 상태, 확인창, 오류 메시지, 수정 폼 위치를 먼저 점검한다.
 
 ## 검증 명령
+- 아래 검증 명령은 `CLAUDE.md`의 완료 승인 게이트에 따라 사용자의 최종화 승인 뒤 실행한다.
 - 검증 명령을 실행하기 전에는 프로젝트 루트의 `.nvmrc` 존재를 확인하고, 존재하면 반드시 `nvm use`를 먼저 실행한다. `nvm use` 없이 하네스/빌드/테스트를 돌려 Node 버전 오류가 나면 검증 절차 미준수로 본다.
 - 기본 검증: `npm run build`
 - 단위/컴포넌트 회귀 검증: `npm run test:run`
