@@ -63,6 +63,8 @@
   --space-5: 20px;
   --space-6: 24px;
   --space-7: 32px;
+  --section-stack-gap: var(--space-6);
+  --section-title-body-gap: var(--space-3);
   --radius-card: 20px;
   --radius-button: 14px;
   --radius-field: 14px;
@@ -1033,14 +1035,14 @@ label {
 
 .page {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--section-stack-gap);
   max-width: 1080px;
   margin: 0 auto;
 }
 
 .upload-page {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--section-stack-gap);
 }
 
 .page-slide-forward-enter-active,
@@ -1121,7 +1123,7 @@ label {
 
 .section-group {
   display: grid;
-  gap: 12px;
+  gap: var(--section-title-body-gap);
 }
 
 .section-group > .section-heading {
@@ -1922,7 +1924,7 @@ button.run-session-row {
 
 .content-stack {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--section-stack-gap);
 }
 
 .content-stack-compact {
@@ -4259,8 +4261,8 @@ button.run-session-row {
 }
 
 .memory-page .sub-panel {
-  padding: 14px 0 0;
-  border-top: 1px solid var(--color-border);
+  padding: 0;
+  border-top: 0;
   background: transparent;
 }
 
@@ -4437,12 +4439,12 @@ button.run-session-row {
 
 .memory-stack {
   display: grid;
-  gap: 14px;
+  gap: var(--section-stack-gap);
 }
 
 .memory-overview-card {
   display: grid;
-  gap: 12px;
+  gap: var(--section-title-body-gap);
 }
 
 .memory-stack-screen {
@@ -4546,7 +4548,7 @@ button.run-session-row {
 .memory-stack-content {
   display: grid;
   align-content: start;
-  gap: 14px;
+  gap: var(--section-stack-gap);
   width: min(760px, 100%);
   margin: 0 auto;
   min-height: 0;

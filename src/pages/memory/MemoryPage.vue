@@ -663,88 +663,91 @@ async function save() {
             <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
           </button>
         </div>
-
-        <div class="form-section-title section-title-row">
-          <span>AI 관리 훈련 루틴</span>
-          <button class="help-icon-button" type="button" aria-label="AI 스케줄링 기준 보기" @click="schedulingHelpOpen = true">?</button>
-        </div>
-        <div class="sub-panel">
-          <div class="training-phase-card">
-            <span class="context-chip">현재 단계</span>
-            <strong>{{ trainingPhase.currentPhase }} · {{ trainingPhase.goal }}</strong>
-            <small>다음 후보: {{ trainingPhase.nextPhase || '미정' }} · 검토: {{ trainingPhase.reviewAfter }}</small>
-            <div class="phase-focus-list">
-              <span v-for="focus in trainingPhase.focus" :key="focus">{{ focus }}</span>
-            </div>
-          </div>
-
-          <strong>승급 조건</strong>
-          <ul class="progression-criteria-list">
-            <li v-for="criterion in progressionCriteria" :key="criterion.id">
-              <div>
-                <span class="context-chip" :class="`criterion-${criterion.status}`">{{ criterion.status }}</span>
-                <strong>{{ criterion.label }}</strong>
-              </div>
-              <small>{{ criterion.evidence }}</small>
-              <p>{{ criterion.action }}</p>
-            </li>
-          </ul>
-
-          <strong>처방 템플릿</strong>
-          <div class="prescription-template-list">
-            <article v-for="template in prescriptionTemplates.slice(0, 6)" :key="template.id">
-              <span class="context-chip">{{ template.phase }}</span>
-              <strong>{{ template.name }}</strong>
-              <small>{{ template.sessionType }} · {{ template.purpose }}</small>
-              <ul>
-                <li v-for="step in template.workout.slice(0, 3)" :key="step">{{ step }}</li>
-              </ul>
-            </article>
-          </div>
-
-          <strong>주간 루틴</strong>
-          <p class="helper">아래는 현재 처방 기준입니다. AI 코칭은 목표와 누적 데이터를 보고 유지하거나 숫자를 조정합니다.</p>
-          <ul class="routine-guide-list">
-            <li v-for="guide in weeklyRoutineGuides" :key="guide.item">
-              <div class="routine-guide-head">
-                <strong>{{ guide.item }}</strong>
-                <span>{{ guide.metric }}</span>
-              </div>
-              <small>{{ guide.title }}</small>
-              <ul>
-                <li v-for="detail in guide.details" :key="detail">{{ detail }}</li>
-              </ul>
-            </li>
-          </ul>
-        </div>
-        <FormGrid>
-          <label class="full">
-            장거리 전략
-            <ClearableField v-model="draft.longRunStrategy" as="textarea" rows="3" />
-          </label>
-          <label class="full">
-            현재 볼륨 노트
-            <ClearableField v-model="draft.currentVolumeNote" as="textarea" rows="3" />
-          </label>
-          <div class="form-section-title full">개인화 메모</div>
-          <label class="full">
-            기타 주의사항
-            <ClearableField :model-value="join(draft.knownIssues)" as="textarea" rows="5" @update:model-value="draft.knownIssues = split(String($event ?? ''))" />
-          </label>
-          <label class="full">
-            러닝 스타일
-            <ClearableField :model-value="join(draft.runningStyle)" as="textarea" rows="6" @update:model-value="draft.runningStyle = split(String($event ?? ''))" />
-          </label>
-          <label class="full">
-            여름 전략
-            <ClearableField :model-value="join(draft.heatStrategy)" as="textarea" rows="5" @update:model-value="draft.heatStrategy = split(String($event ?? ''))" />
-          </label>
-          <label class="full">
-            코칭 메모
-            <ClearableField :model-value="join(draft.aiNotes)" as="textarea" rows="5" @update:model-value="draft.aiNotes = split(String($event ?? ''))" />
-          </label>
-        </FormGrid>
       </div>
+    </SectionGroup>
+
+    <SectionGroup title="AI 관리 훈련 루틴">
+      <template #actions>
+        <button class="help-icon-button" type="button" aria-label="AI 스케줄링 기준 보기" @click="schedulingHelpOpen = true">?</button>
+      </template>
+      <div class="sub-panel">
+        <div class="training-phase-card">
+          <span class="context-chip">현재 단계</span>
+          <strong>{{ trainingPhase.currentPhase }} · {{ trainingPhase.goal }}</strong>
+          <small>다음 후보: {{ trainingPhase.nextPhase || '미정' }} · 검토: {{ trainingPhase.reviewAfter }}</small>
+          <div class="phase-focus-list">
+            <span v-for="focus in trainingPhase.focus" :key="focus">{{ focus }}</span>
+          </div>
+        </div>
+
+        <strong>승급 조건</strong>
+        <ul class="progression-criteria-list">
+          <li v-for="criterion in progressionCriteria" :key="criterion.id">
+            <div>
+              <span class="context-chip" :class="`criterion-${criterion.status}`">{{ criterion.status }}</span>
+              <strong>{{ criterion.label }}</strong>
+            </div>
+            <small>{{ criterion.evidence }}</small>
+            <p>{{ criterion.action }}</p>
+          </li>
+        </ul>
+
+        <strong>처방 템플릿</strong>
+        <div class="prescription-template-list">
+          <article v-for="template in prescriptionTemplates.slice(0, 6)" :key="template.id">
+            <span class="context-chip">{{ template.phase }}</span>
+            <strong>{{ template.name }}</strong>
+            <small>{{ template.sessionType }} · {{ template.purpose }}</small>
+            <ul>
+              <li v-for="step in template.workout.slice(0, 3)" :key="step">{{ step }}</li>
+            </ul>
+          </article>
+        </div>
+
+        <strong>주간 루틴</strong>
+        <p class="helper">아래는 현재 처방 기준입니다. AI 코칭은 목표와 누적 데이터를 보고 유지하거나 숫자를 조정합니다.</p>
+        <ul class="routine-guide-list">
+          <li v-for="guide in weeklyRoutineGuides" :key="guide.item">
+            <div class="routine-guide-head">
+              <strong>{{ guide.item }}</strong>
+              <span>{{ guide.metric }}</span>
+            </div>
+            <small>{{ guide.title }}</small>
+            <ul>
+              <li v-for="detail in guide.details" :key="detail">{{ detail }}</li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+    </SectionGroup>
+
+    <SectionGroup title="개인화 메모">
+      <FormGrid>
+        <label class="full">
+          장거리 전략
+          <ClearableField v-model="draft.longRunStrategy" as="textarea" rows="3" />
+        </label>
+        <label class="full">
+          현재 볼륨 노트
+          <ClearableField v-model="draft.currentVolumeNote" as="textarea" rows="3" />
+        </label>
+        <label class="full">
+          기타 주의사항
+          <ClearableField :model-value="join(draft.knownIssues)" as="textarea" rows="5" @update:model-value="draft.knownIssues = split(String($event ?? ''))" />
+        </label>
+        <label class="full">
+          러닝 스타일
+          <ClearableField :model-value="join(draft.runningStyle)" as="textarea" rows="6" @update:model-value="draft.runningStyle = split(String($event ?? ''))" />
+        </label>
+        <label class="full">
+          여름 전략
+          <ClearableField :model-value="join(draft.heatStrategy)" as="textarea" rows="5" @update:model-value="draft.heatStrategy = split(String($event ?? ''))" />
+        </label>
+        <label class="full">
+          코칭 메모
+          <ClearableField :model-value="join(draft.aiNotes)" as="textarea" rows="5" @update:model-value="draft.aiNotes = split(String($event ?? ''))" />
+        </label>
+      </FormGrid>
     </SectionGroup>
 
     <Teleport to="body">

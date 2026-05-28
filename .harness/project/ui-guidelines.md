@@ -26,6 +26,7 @@ PaceLAB is a personal running coach app, not an admin dashboard.
 - Metric units such as `km`, `%`, and `회` must render smaller than the number and should not be concatenated at the same visual size in compact cards.
 - Supporting labels and metadata are smaller and muted.
 - Cards should have generous spacing, soft borders, and `--radius-card`.
+- Section titles need visible breathing room from the previous section; use `--section-stack-gap` for section-to-section spacing and `--section-title-body-gap` between a title and its body.
 - Repeated list content should prefer a ListRow pattern over mini cards: primary title, muted detail, optional right metric/addon, and a clear press/action target.
 - Run session lists are compact previews. Show only the run type plus one highest-priority meta chip so rows never clip text at mobile widths; show the full metadata only in session detail.
 - Compact repeated rows such as Run Log must use icon-only edit/delete actions with accessible labels. Do not use text buttons when the row has limited horizontal space.

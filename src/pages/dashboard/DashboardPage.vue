@@ -247,7 +247,7 @@ function formatDateOnly(value: Date) {
       <RecentRuns :runs="runs.slice(0, 5)" :weekly-pattern="memoryStore.memory.weeklyPattern" @show-all="router.push('/runs')" @select="openRunDetail" />
       <ContentStack>
         <FatigueCard :warning="getVolumeWarning(runs, today)" />
-        <SectionGroup title="다음 추천 세션" :surface="false">
+        <SectionGroup title="다음 추천 세션">
           <div class="recommendation-card">
             <strong>{{ nextSession.title }}</strong>
             <span>{{ formatDateWithWeekday(nextSession.plannedDate) }} · {{ nextSession.dayName }}</span>
