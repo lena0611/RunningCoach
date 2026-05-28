@@ -381,7 +381,7 @@ function formatDateOnly(value: Date) {
                     type="button"
                     :disabled="healthKitSyncStore.refreshingRunId === detailRun.id"
                     aria-label="HealthKit 세션 다시 갱신"
-                    @click="healthKitSyncStore.requestRunRefresh(detailRun)"
+                    @click.stop="healthKitSyncStore.requestRunRefresh(detailRun)"
                   >
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M20 11a8 8 0 0 0-14.8-4.2" />
@@ -390,13 +390,13 @@ function formatDateOnly(value: Date) {
                       <path d="M19 21v-4h-4" />
                     </svg>
                   </button>
-                  <button class="icon-only-button" type="button" aria-label="기록 수정" @click="openRunAction(detailRun, 'edit')">
+                  <button class="icon-only-button" type="button" aria-label="기록 수정" @click.stop="openRunAction(detailRun, 'edit')">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M4.5 19.5h4.2L18.8 9.4a2.1 2.1 0 0 0 0-3l-1.2-1.2a2.1 2.1 0 0 0-3 0L4.5 15.3z" />
                       <path d="m13.6 6.2 4.2 4.2" />
                     </svg>
                   </button>
-                  <button class="icon-only-button danger" type="button" aria-label="기록 삭제" @click="openRunAction(detailRun, 'delete')">
+                  <button class="icon-only-button danger" type="button" aria-label="기록 삭제" @click.stop="openRunAction(detailRun, 'delete')">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M5.5 7h13" />
                       <path d="M9.5 7V5.5h5V7" />
@@ -409,7 +409,7 @@ function formatDateOnly(value: Date) {
               </template>
             </RunDetailContent>
             <footer class="stack-action-bar run-detail-cta">
-              <button type="button" @click="openCoachForRun(detailRun)">
+              <button type="button" @click.stop="openCoachForRun(detailRun)">
                 AI 코칭 받기
               </button>
             </footer>

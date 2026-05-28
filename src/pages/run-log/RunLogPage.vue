@@ -356,6 +356,7 @@ function openRouteRunIfNeeded() {
   if (detailRun.value?.id !== runId) openDetail(run)
   if (shouldOpenCoach && coachRun.value?.id !== runId) {
     void openCoach(run)
+    clearCoachRouteQuery(runId)
   }
   if (action === 'edit' && editing.value?.id !== runId) {
     startEdit(run)
@@ -508,6 +509,15 @@ function closeCoach() {
   streamingCoachMeta.value = ''
   coachAutoScroll.value = true
   showCoachScrollButton.value = false
+  clearCoachRouteQuery()
+}
+
+function clearCoachRouteQuery(runId = typeof route.query.runId === 'string' ? route.query.runId : '') {
+  if (route.path !== '/runs' || route.query.coach !== '1') return
+  void router.replace({
+    path: '/runs',
+    query: runId ? { runId } : {}
+  })
 }
 
 function clearCoachNote() {
@@ -921,7 +931,7 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
                     type="button"
                     :disabled="healthKitSyncStore.refreshingRunId === detailRun.id"
                     aria-label="HealthKit 세션 다시 갱신"
-                    @click="healthKitSyncStore.requestRunRefresh(detailRun)"
+                    @click.stop="healthKitSyncStore.requestRunRefresh(detailRun)"
                   >
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M20 11a8 8 0 0 0-14.8-4.2" />
@@ -930,13 +940,13 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
                       <path d="M19 21v-4h-4" />
                     </svg>
                   </button>
-                  <button class="icon-only-button" type="button" aria-label="기록 수정" @click="startEdit(detailRun)">
+                  <button class="icon-only-button" type="button" aria-label="기록 수정" @click.stop="startEdit(detailRun)">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M4.5 19.5h4.2L18.8 9.4a2.1 2.1 0 0 0 0-3l-1.2-1.2a2.1 2.1 0 0 0-3 0L4.5 15.3z" />
                       <path d="m13.6 6.2 4.2 4.2" />
                     </svg>
                   </button>
-                  <button class="icon-only-button danger" type="button" :disabled="deletingId === detailRun.id" aria-label="기록 삭제" @click="askRemove(detailRun)">
+                  <button class="icon-only-button danger" type="button" :disabled="deletingId === detailRun.id" aria-label="기록 삭제" @click.stop="askRemove(detailRun)">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <path d="M5.5 7h13" />
                       <path d="M9.5 7V5.5h5V7" />
@@ -949,7 +959,7 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
             </template>
           </RunDetailContent>
           <footer class="stack-action-bar run-detail-cta">
-            <button type="button" :disabled="!isSupabaseConfigured" @click="openCoach(detailRun)">
+            <button type="button" :disabled="!isSupabaseConfigured" @click.stop="openCoach(detailRun)">
               {{ detailCoachButtonLabel(detailRun) }}
             </button>
           </footer>
