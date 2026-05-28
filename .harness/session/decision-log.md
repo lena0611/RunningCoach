@@ -156,3 +156,66 @@
 - PaceLAB 적용 범위: 본체 일반 가이드는 약하게 제공하더라도, 이 프로젝트는 workstream 운영을 명시적으로 채택했으므로 각 대화창에서 범위 식별, 선행 workstream 안내, 완료 전 후속창 검토, 커밋 없는 인수인계를 강하게 적용한다.
 - 계층 판단: workstream은 회사 공통/스택/템플릿/프로젝트/개인 같은 기준 계층이 아니라 세션 운영 레인이다.
 - 선택 이유: 프로젝트마다 도메인 이름은 달라도 긴 대화창의 컨텍스트 비대화, 선행 workstream 판단, 커밋 전 인수인계, 최종 완료 게이트 문제는 공통적으로 반복된다.
+
+## 2026-05-28 - Node 버전 불일치 시 npm 명령 복구
+- 문제: Codex 대화창이나 새 터미널 셸이 프로젝트 `.nvmrc`보다 낮은 Node 버전을 잡으면 하네스/빌드/테스트 npm 스크립트가 실행 전에 실패한다.
+- 결정: Node 버전 불일치가 보이면 작업을 포기하지 않고 프로젝트 루트에서 `. "$HOME/.nvm/nvm.sh" && nvm use`를 실행해 `.nvmrc` 버전을 활성화한 뒤 같은 npm 명령을 재시도한다.
+- 선택 이유: 이 프로젝트는 `.nvmrc`로 런타임 기준을 이미 명시하고 있으므로, 실패를 검증 실패로 처리하기보다 셸 런타임을 프로젝트 기준에 맞추는 것이 올바른 복구 절차다.
+- 포기한 대안: 낮은 Node 버전에 맞춰 패키지나 스크립트를 낮추는 방식은 프로젝트 기준과 lockfile 환경을 흔들 수 있어 채택하지 않는다.
+
+## 2026-05-28 - 부상 체크인과 보강운동 도메인 사양
+- 문제: 부상 부위 정규화와 `strengthPlan` 기본값은 들어갔지만, 앱이 언제 사용자에게 통증 상태를 다시 물어야 하는지, 완치 후보를 어떻게 제안해야 하는지, 보강운동 근거와 의료 한계를 어떻게 표현해야 하는지 기준이 부족했다.
+- 결정: 부상 체크인은 active/monitoring 항목에 대해 앱 기동, 포커스 복귀, 품질 세션 이후 앱 사용 시점에 수행하되, 항목별 최근 체크 시각을 보고 과도하게 반복하지 않는다.
+- 통증 스케일은 목표 구조를 0~5로 둔다. 0은 통증 없음, 1~2는 관찰/보강운동 가능 범위, 3은 강훈련/롱런 상향 보류, 4~5는 러닝 강도 하향 또는 중단/전문가 상담 안내가 필요한 신호다.
+- `severity`는 의료적 중증도가 아니라 부위별 `painLevel` 최대값으로 파생되는 훈련 부하 조절 신호로 본다.
+- 완치 또는 `resolved` 처리는 사용자가 직접 승인해야 한다. 앱이나 AI는 반복 0~1/5, 일상 보행/Easy 조깅 악화 없음, 강훈련/롱런 뒤 flare 없음이 보일 때만 해소 후보를 제안한다.
+- 보강운동은 치료 처방이 아니라 참고용 회복 보조 루틴이다. 장기 구조는 운동명, 대상 부위, 목적, 수행 조건, 중단 조건, 단계 조절, 근거 출처 메타데이터를 포함해야 한다.
+- 포기한 대안: AI가 코칭 응답만으로 `injuryItems`를 자동 갱신하는 방식은 의료/건강 상태를 사용자 승인 없이 바꾸는 위험이 있어 채택하지 않는다.
+
+## 2026-05-28 - 부상관리 저장 계약은 TrainingMemory JSON 확장
+- 문제: 부상 체크인 이력, 완치 시각, 보강운동 근거를 Supabase에 저장해야 하지만, 별도 테이블로 분리하면 UI/AI/Edge Function 전반의 조회 경계와 RLS 정책이 커진다.
+- 결정: 현 단계에서는 `training_memory.memory.injuryItems` JSON 계약을 확장한다. `painLevel`은 0~5를 허용하고, `lastCheckedAt`, `resolvedAt`, `checkInHistory`, `strengthPlanDetails`를 추가한다.
+- 호환성: 기존 `strengthPlan: string[]`는 UI/AI 표시용 호환 필드로 유지하고, 구조화 근거와 수행/중단/단계 조절 조건은 `strengthPlanDetails`에 병렬 저장한다. 기존 문자열 처방은 normalize 과정에서 내부 기준 출처를 가진 구조화 항목으로 보강한다.
+- RLS/마이그레이션 판단: `training_memory`는 이미 `user_id = auth.uid()` 정책이 적용된 JSONB 단일 행 저장소이므로 이번 변경에는 Supabase migration과 RLS 변경이 필요하지 않다.
+- 포기한 대안: 체크인 이력을 별도 `injury_check_ins` 테이블로 분리하는 방식은 장기 분석에는 유리하지만, 현재는 단일 사용자 메모 문맥과 함께 저장/로드되는 흐름이 더 단순하고 기존 repository 계약을 덜 흔든다.
+
+## 2026-05-28 - 부상 체크인은 전역 바텀시트 UI로 처리
+- 문제: 부상 상태 갱신이 Memory 화면 편집에만 묶이면 앱 기동/복귀나 품질 세션 이후에 사용자가 통증 반응을 놓치기 쉽다.
+- 결정: `App.vue`에서 인증 후 메모리/러닝 기록 로드와 HealthKit 동기화 완료 시점을 보고 active/monitoring 부상 항목의 체크인 필요 여부를 판단하고, `InjuryCheckInSheet` 전역 bottom sheet를 띄운다.
+- UI 기준: 질문은 통증 0~5 `ScaleSlider`, 러닝 중/후 악화, 일상 보행/계단 반응, 강훈련/롱런 가능 여부로 제한한다. 보강운동은 참고용 카드로 표시하고 의료 진단/치료 표현은 피한다.
+- 다중 부위 항목은 전체 통증값 하나로 모든 부위를 덮어쓰지 않는다. 체크인 UI는 부위가 2개 이상이면 부위별 `ScaleSlider`를 보여주고, `checkInHistory.areaPainLevels`와 `normalizedAreas`를 같은 구조로 저장하며 `severity`는 부위별 최대 통증값으로 둔다.
+- 해소 처리: 현재 응답이 0~1/5, 악화 없음, 일상 반응 없음, 강훈련 가능이고 최근 체크인 이력에도 같은 조용한 기록이 최소 1회 있을 때만 해소 후보 버튼을 보여준다. 이력이 없으면 다음 체크인 안내만 표시하며, `resolved` 저장은 사용자가 명시적으로 누를 때만 한다.
+- 포기한 대안: Memory 편집 화면 안에만 체크인을 두는 방식은 반복 사용 UX가 약하고, AI나 규칙이 자동으로 해소 처리하는 방식은 사용자 승인 없는 건강 상태 변경이라 채택하지 않는다.
+
+## 2026-05-28 - AI 부상 제안은 코칭 메시지 아래 승인 카드로 처리
+- 문제: `coach-run`이 `injuryUpdateProposal`을 반환해도 Run Log 코칭 화면이 소비하지 않으면 AI가 통증 변경이나 해소 후보를 제안해도 사용자가 승인해 저장하는 루프가 없다.
+- 결정: 세션별 코칭 메시지 아래에 `injuryUpdateProposal` 승인 카드를 표시한다. 승인 시에만 `memoryStore.update()`로 해당 `TrainingInjuryItem`의 `painLevel`, `status`, `resolvedAt`, `lastCheckedAt`, `checkInHistory`를 갱신한다.
+- 기록 기준: 승인된 제안은 `checkInHistory.source = coach_suggestion`으로 남긴다. 무시는 저장 없이 해당 카드만 닫는다.
+- 경계: `trainingMemoryPatch`는 주간 루틴/목표 전략/AI 메모 갱신 전용으로 유지하고, 사용자 승인 전에는 `injuryItems`를 바꾸지 않는다.
+
+## 2026-05-28 - AI 코칭 부상 상태 변경은 별도 승인 제안으로 반환
+- 문제: `coach-run`의 `trainingMemoryPatch`는 응답 후 즉시 `training_memory.memory`에 병합되는 자동 저장 경로라서, 여기에 `injuryItems` 변경 후보를 넣으면 사용자 승인 없이 통증/완치 상태가 바뀔 수 있다.
+- 결정: `trainingMemoryPatch`는 기존처럼 주간 루틴, 목표 전략 메모, AI notes, adaptive profile만 갱신한다. 부상 체크인 갱신, monitoring/resolved 후보, painLevel 변경 후보는 별도 `injuryUpdateProposal` 응답 객체로 반환한다.
+- 선택 이유: AI 코칭은 부상 상태를 과장하거나 확정하지 않고 훈련 강도 조절에만 반영해야 하며, 건강 상태 저장은 사용자가 승인한 뒤 UI/저장 흐름에서 처리해야 한다.
+- 포기한 대안: `trainingMemoryPatch.injuryItems` 같은 하위 필드를 추가하는 방식은 저장 경로가 단순하지만 승인 게이트를 우회할 위험이 있어 채택하지 않는다.
+
+## 2026-05-28 - 부상 체크인 iOS 네이티브 개입 기준
+- 문제: 부상 체크인을 앱 기동/복귀와 품질 세션 이후에 띄우려면 iOS lifecycle이나 local notification을 새로 연결해야 하는지 판단이 필요했다.
+- 결정: 현 단계에서는 새 네이티브 lifecycle 브리지를 추가하지 않는다. 웹 `App.vue`의 `focus`, `pageshow`, `visibilitychange`, 인증 후 로드, HealthKit 동기화 완료 watcher로 체크인 트리거를 처리한다.
+- 선택 이유: 기존 HealthKit/WeatherKit store도 같은 웹 activation 이벤트로 동작하고, iOS `RunContextWebView.swift`에는 이미 HealthKit background delivery와 `runContextNotifications` 로컬 알림 브리지가 있다. 새 lifecycle 이벤트를 추가하면 중복 트리거와 HealthKit 동기화 경쟁만 늘 수 있다.
+- 충돌 방지: 부상 체크인은 `runStore.loaded`, `memoryStore.loading`, `healthKitSyncStore.lastCompletedAt`, 항목별 `lastCheckedAt`, 당일 dismiss sessionStorage를 기준으로 중복 노출을 막는다. HealthKit 새 기록 동기화 뒤에는 `lastCompletedAt` watcher가 다시 판단한다.
+- 후속 기준: 웹 activation 이벤트가 실제 iOS WKWebView 복귀에서 누락된다는 재현 로그가 있거나, 앱이 닫힌 상태에서 사용자를 깨워야 하는 요구가 확정되면 그때 `runContextLifecycle` 또는 기존 `runContextNotifications` 확장을 검토한다.
+- 포기한 대안: 지금 `scenePhase`/`applicationDidBecomeActive`를 네이티브에서 웹으로 별도 전달하는 방식은 근거가 부족하고, local notification을 기본 체크인 채널로 두는 방식은 건강 상태 질문을 과도하게 푸시할 위험이 있어 채택하지 않는다.
+
+## 2026-05-28 - Workstream 완료 책임 창 지정
+- 문제: workstream별 범위와 인수인계 규칙은 있었지만, 여러 창을 거친 하나의 업무를 누가 최종 리뷰하고 완료 승인 전 검증 후보를 모으는지 기준이 부족했다.
+- 결정: 모든 업무 요청은 시작할 때 `완료 책임 창`을 하나 정한다. 완료 책임 창은 업무 목표, 완료 조건, 후속 workstream 인수인계, 최종 리뷰, 검증 후보 정리를 소유한다.
+- 책임 기준: 단일 workstream 업무는 해당 workstream 창이 완료 책임 창이다. 여러 workstream 업무는 처음 업무 목표를 받은 창이 임시 책임 창이며, 업무 중심이 다른 workstream으로 명확해지면 책임을 이관한다. 기획/범위 중심은 `02-product-planning`, 하네스/운영 절차 중심은 `01-harness-ops`가 책임진다.
+- 선택 이유: 최초 요청 창으로 무조건 돌아가면 잘못 시작된 창이나 범위 밖 창이 최종 판단을 맡을 수 있다. 반대로 책임 창이 없으면 후속 창 결과가 흩어져 완료 승인, 검증, 커밋 판단이 흐려진다.
+- 포기한 대안: 모든 다중 workstream 업무를 별도 PM/리뷰 창으로 모으는 방식은 창 수를 늘리고 운영 부담이 커서 채택하지 않는다.
+
+## 2026-05-28 - Edge Function 타입 체크를 프로젝트 검증 스크립트로 고정
+- 문제: `coach-run`은 Deno 런타임에서 실행되지만 기존 검증 흐름은 Vue/Node 빌드 중심이라 Supabase client 타입 추론, Deno strict null 처리, remote import lock 문제가 늦게 드러날 수 있었다.
+- 결정: `package.json`에 `supabase:functions:check`를 추가해 `deno check supabase/functions/coach-run/index.ts`를 프로젝트 지정 Edge Function 검증으로 둔다. `harness:check`는 Supabase 함수 변경 시 이 스크립트를 우선 호출한다.
+- 선택 이유: 하네스의 fallback `deno check`에만 기대면 명령 존재 여부와 대상 파일이 암묵적이다. 프로젝트 스크립트로 고정하면 로컬/후속 workstream/커밋 전 검증에서 같은 명령을 반복 사용할 수 있다.
+- 후속 기준: Edge Function 파일이 늘어나면 이 스크립트의 대상 목록을 함께 확장한다.

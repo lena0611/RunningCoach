@@ -383,10 +383,10 @@ function openZone(zoneId: string) {
         :key="selection.areaId"
         :model-value="selection.painLevel"
         :label="getInjuryAreaLabel(selection.areaId)"
-        :min="1"
+        :min="0"
         :max="5"
-        min-label="조용함"
-        max-label="강함"
+        min-label="0 없음"
+        max-label="5 강함"
         @update:model-value="updatePain(selection.areaId, $event)"
       />
     </div>

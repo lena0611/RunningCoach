@@ -5,6 +5,7 @@ import { useMemoryStore } from '@/app/stores/memoryStore'
 import type { TrainingGoal, TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
 import {
   createConservativeStrengthPlan,
+  createConservativeStrengthPlanDetails,
   createInjuryManagementPlan,
   createReturnToRunCriteria,
   createInjuryRestrictions,
@@ -67,12 +68,16 @@ const newInjury = reactive({
   severity: null as number | null,
   onsetDate: null as string | null,
   lastFlareDate: null as string | null,
+  lastCheckedAt: null as string | null,
+  resolvedAt: null as string | null,
+  checkInHistory: [] as TrainingInjuryItem['checkInHistory'],
   notes: '',
   managementPlan: '',
   triggers: [] as string[],
   restrictions: [] as string[],
   returnToRunCriteria: '',
-  strengthPlan: [] as string[]
+  strengthPlan: [] as string[],
+  strengthPlanDetails: [] as TrainingInjuryItem['strengthPlanDetails']
 })
 const newKnowledgeRequest = reactive({
   title: '',
@@ -116,7 +121,7 @@ const activeGoalMeta = computed(() => {
 })
 const activeInjuryMeta = computed(() => {
   if (!activeInjury.value) return '관리 항목 없음'
-  return [activeInjury.value.status, activeInjury.value.severity ? `${activeInjury.value.severity}/5` : '강도 미입력'].join(' · ')
+  return [activeInjury.value.status, activeInjury.value.severity !== null ? `${activeInjury.value.severity}/5` : '강도 미입력'].join(' · ')
 })
 const panel = computed<MemoryPanel>(() => stack.value.at(-1) ?? 'overview')
 const isStackOpen = computed(() => panel.value !== 'overview')
@@ -193,6 +198,7 @@ function goalDateMeta(goal: TrainingGoal) {
 }
 
 function injuryDateMeta(item: TrainingInjuryItem) {
+  if (item.lastCheckedAt) return ` · 체크 ${formatDateWithWeekday(item.lastCheckedAt.slice(0, 10))}`
   if (item.lastFlareDate) return ` · 최근 ${formatDateWithWeekday(item.lastFlareDate)}`
   if (item.onsetDate) return ` · 시작 ${formatDateWithWeekday(item.onsetDate)}`
   return ''
@@ -453,12 +459,16 @@ function openInjuryNew() {
     severity: null,
     onsetDate: null,
     lastFlareDate: null,
+    lastCheckedAt: null,
+    resolvedAt: null,
+    checkInHistory: [],
     notes: '',
     managementPlan: '',
     triggers: [],
     restrictions: [],
     returnToRunCriteria: '',
-    strengthPlan: []
+    strengthPlan: [],
+    strengthPlanDetails: []
   })
   pushPanel('injury-new')
 }
@@ -468,6 +478,7 @@ function applyNewInjuryAreas(value: InjuryAreaSelection[]) {
   newInjury.area = summarizeInjuryAreas(value)
   newInjury.severity = deriveInjurySeverity(value, newInjury.severity)
   newInjury.strengthPlan = createConservativeStrengthPlan(value)
+  newInjury.strengthPlanDetails = createConservativeStrengthPlanDetails(value)
   if (!newInjury.managementPlan.trim()) newInjury.managementPlan = createInjuryManagementPlan(value)
   if (!newInjury.restrictions.length) newInjury.restrictions = createInjuryRestrictions(value)
   if (!newInjury.returnToRunCriteria.trim()) newInjury.returnToRunCriteria = createReturnToRunCriteria(value)
@@ -487,12 +498,16 @@ function addInjury() {
     severity: newInjury.severity,
     onsetDate: newInjury.onsetDate || null,
     lastFlareDate: newInjury.lastFlareDate || null,
+    lastCheckedAt: newInjury.lastCheckedAt || null,
+    resolvedAt: newInjury.resolvedAt || null,
+    checkInHistory: newInjury.checkInHistory,
     notes: newInjury.notes,
     managementPlan: newInjury.managementPlan,
     triggers: newInjury.triggers,
     restrictions: newInjury.restrictions,
     returnToRunCriteria: newInjury.returnToRunCriteria,
     strengthPlan: newInjury.strengthPlan,
+    strengthPlanDetails: newInjury.strengthPlanDetails,
     createdAt: now,
     updatedAt: now
   }
@@ -511,6 +526,7 @@ function updateInjuryAreas(item: TrainingInjuryItem, value: InjuryAreaSelection[
   item.area = summarizeInjuryAreas(value)
   item.severity = deriveInjurySeverity(value, item.severity)
   item.strengthPlan = createConservativeStrengthPlan(value)
+  item.strengthPlanDetails = createConservativeStrengthPlanDetails(value)
   item.managementPlan = item.managementPlan.trim() ? item.managementPlan : createInjuryManagementPlan(value)
   item.restrictions = item.restrictions.length ? item.restrictions : createInjuryRestrictions(value)
   item.returnToRunCriteria = item.returnToRunCriteria.trim() ? item.returnToRunCriteria : createReturnToRunCriteria(value)
@@ -848,7 +864,7 @@ async function save() {
               <button v-for="item in draft.injuryItems" :key="item.id" class="memory-list-card" type="button" @click="openInjuryEdit(item.id)">
                 <span>
                   <strong>{{ item.title }}</strong>
-                  <small>{{ item.id === draft.activeInjuryItemId ? '현재 기준 · ' : '' }}{{ item.status }}{{ item.severity ? ` · ${item.severity}/5` : '' }}{{ injuryDateMeta(item) }}</small>
+                  <small>{{ item.id === draft.activeInjuryItemId ? '현재 기준 · ' : '' }}{{ item.status }}{{ item.severity !== null ? ` · ${item.severity}/5` : '' }}{{ injuryDateMeta(item) }}</small>
                   <small>{{ injuryAreaMeta(item) }}</small>
                 </span>
                 <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
@@ -867,10 +883,14 @@ async function save() {
               <DateField v-model="newInjury.lastFlareDate" label="최근 신호일" />
               <div v-if="newInjury.strengthPlan.length" class="strength-plan-card full">
                 <strong>보강운동 처방</strong>
-                <small>보수적 기본값입니다. 통증이 커지면 강도를 낮추거나 생략하세요.</small>
-                <ul>
-                  <li v-for="plan in newInjury.strengthPlan" :key="plan">{{ plan }}</li>
-                </ul>
+                <small>러닝 부하 조절을 돕는 참고용 기본값입니다. 의료 진단이나 치료 처방이 아닙니다.</small>
+                <div class="strength-plan-detail-list">
+                  <article v-for="plan in newInjury.strengthPlanDetails" :key="plan.id">
+                    <strong>{{ plan.title }}</strong>
+                    <p>{{ plan.instruction }}</p>
+                    <small>{{ plan.useWhen }} · 중단: {{ plan.stopWhen }}</small>
+                  </article>
+                </div>
               </div>
               <label class="full">
                 악화 트리거
@@ -909,10 +929,14 @@ async function save() {
               <DateField v-model="editingInjury.lastFlareDate" label="최근 신호일" @update:model-value="updateInjury(editingInjury)" />
               <div v-if="editingInjury.strengthPlan.length" class="strength-plan-card full">
                 <strong>보강운동 처방</strong>
-                <small>부위와 통증 레벨을 기준으로 만든 보수적 처방입니다.</small>
-                <ul>
-                  <li v-for="plan in editingInjury.strengthPlan" :key="plan">{{ plan }}</li>
-                </ul>
+                <small>부위와 통증 레벨을 기준으로 만든 참고용 처방입니다. 통증이 커지거나 보행 통증이 있으면 축소/중단을 우선합니다.</small>
+                <div class="strength-plan-detail-list">
+                  <article v-for="plan in editingInjury.strengthPlanDetails" :key="plan.id">
+                    <strong>{{ plan.title }}</strong>
+                    <p>{{ plan.instruction }}</p>
+                    <small>{{ plan.useWhen }} · 출처: {{ plan.sources[0]?.title || 'PaceLAB 내부 기준' }}</small>
+                  </article>
+                </div>
               </div>
               <label class="full">
                 악화 트리거

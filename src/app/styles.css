@@ -2957,6 +2957,54 @@ button.run-session-row {
   font-size: 14px;
 }
 
+.coach-injury-proposal-card {
+  display: grid;
+  gap: 8px;
+  width: min(520px, 100%);
+  margin: 0 0 10px;
+  padding: 14px;
+  border-radius: 20px;
+  background: var(--color-surface);
+}
+
+.coach-injury-proposal-card > strong {
+  color: var(--color-text);
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.coach-injury-proposal-card > small,
+.coach-injury-proposal-card li {
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.coach-injury-proposal-card p {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.coach-injury-proposal-card ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.coach-injury-proposal-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.8fr);
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.coach-injury-proposal-actions button {
+  min-height: 40px;
+}
+
 .chat-input-wrap {
   position: relative;
   min-width: 0;
@@ -3478,6 +3526,31 @@ button.run-session-row {
   color: var(--color-text);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.strength-plan-detail-list {
+  display: grid;
+  gap: 8px;
+}
+
+.strength-plan-detail-list article {
+  display: grid;
+  gap: 4px;
+  padding: 11px 12px;
+  border-radius: 16px;
+  background: var(--color-field);
+}
+
+.strength-plan-detail-list article > strong {
+  color: var(--color-text);
+  font-size: 14px;
+}
+
+.strength-plan-detail-list p {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 @media (max-width: 520px) {
@@ -4526,6 +4599,177 @@ button.run-session-row {
 
 .goal-intent-sheet .confirm-actions {
   grid-template-columns: 1fr;
+}
+
+.injury-checkin-layer {
+  z-index: var(--z-confirm-sheet);
+}
+
+.injury-checkin-sheet {
+  gap: 12px;
+  max-height: min(86vh, 760px);
+}
+
+.injury-checkin-sheet .bottom-sheet-heading > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.injury-checkin-sheet h2 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--color-text);
+  font-size: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.injury-checkin-content {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 2px;
+}
+
+.injury-checkin-area {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: var(--color-field);
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.checkin-question {
+  display: grid;
+  gap: 9px;
+  padding: 13px;
+  border-radius: 18px;
+  background: var(--color-field);
+}
+
+.checkin-area-pain-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.checkin-area-pain-panel > strong {
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.checkin-question > strong,
+.checkin-strength-panel > strong,
+.resolved-candidate-card > strong {
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.segmented-choice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+}
+
+.segmented-choice button {
+  min-height: 40px;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-muted);
+  box-shadow: none;
+}
+
+.segmented-choice button.active {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.checkin-note {
+  display: grid;
+  gap: 8px;
+  color: var(--color-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.checkin-note textarea {
+  width: 100%;
+  min-height: 68px;
+  resize: vertical;
+}
+
+.checkin-strength-panel,
+.resolved-candidate-card {
+  display: grid;
+  gap: 8px;
+  padding: 13px;
+  border-radius: 18px;
+  background: var(--color-surface);
+}
+
+.checkin-strength-panel p,
+.resolved-candidate-card small {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.checkin-strength-panel ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checkin-strength-panel li {
+  display: grid;
+  gap: 2px;
+  padding: 10px 11px;
+  border-radius: 14px;
+  background: var(--color-field);
+}
+
+.checkin-strength-panel span {
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.checkin-strength-panel small {
+  color: var(--color-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.resolved-candidate-card {
+  background: var(--color-primary-soft);
+}
+
+.resolved-candidate-card-pending {
+  background: var(--color-field);
+}
+
+.injury-checkin-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 9px;
+}
+
+.injury-checkin-actions:has(.ghost) {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
 }
 
 .goal-intent-card {

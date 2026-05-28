@@ -6,11 +6,14 @@ import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
+import type { RunLog } from '@/entities/run/model'
+import type { TrainingInjuryCheckIn, TrainingMemory } from '@/entities/training-memory/model'
 import DashboardPage from '@/pages/dashboard/DashboardPage.vue'
 import RunLogPage from '@/pages/run-log/RunLogPage.vue'
 import MemoryPage from '@/pages/memory/MemoryPage.vue'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import AppShell from '@/shared/ui/AppShell.vue'
+import InjuryCheckInSheet from '@/shared/ui/InjuryCheckInSheet.vue'
 import ToastHost from '@/shared/ui/ToastHost.vue'
 import type { BottomNavItem } from '@/shared/ui/BottomNav.vue'
 
@@ -38,8 +41,11 @@ const swipeOffset = ref(0)
 const swipeLocked = ref<'pending' | 'horizontal' | 'vertical' | null>(null)
 const isTabDragging = ref(false)
 const suppressNextTabClick = ref(false)
+const injuryCheckInItemId = ref('')
+const injuryCheckInSaving = ref(false)
 let activePanelObserver: ResizeObserver | null = null
 let keyboardInsetCleanup: (() => void) | null = null
+let injuryCheckInCleanup: (() => void) | null = null
 
 function getNavIndex(path: string) {
   return navItems.findIndex((item) => item.to === path)
@@ -47,6 +53,7 @@ function getNavIndex(path: string) {
 
 const currentTabIndex = computed(() => mainTabRoutes.indexOf(route.path))
 const isMainTabRoute = computed(() => currentTabIndex.value !== -1)
+const injuryCheckInItem = computed(() => memoryStore.memory.injuryItems.find((item) => item.id === injuryCheckInItemId.value) ?? null)
 const tabTrackStyle = computed(() => ({
   transform: `translate3d(calc(${-currentTabIndex.value * 100}% + ${swipeOffset.value}px), 0, 0)`
 }))
@@ -70,6 +77,11 @@ watch(currentTabIndex, () => {
 })
 
 watch(
+  () => healthKitSyncStore.lastCompletedAt,
+  () => requestInjuryCheckInPrompt()
+)
+
+watch(
   () => authStore.isAuthenticated,
   async (isAuthenticated) => {
     if (!isAuthenticated) return
@@ -79,6 +91,7 @@ watch(
     ])
     await healthKitSyncStore.syncAfterActivation()
     await weatherStore.refreshAfterActivation()
+    requestInjuryCheckInPrompt()
   },
   { immediate: true }
 )
@@ -89,10 +102,12 @@ onMounted(() => {
   healthKitSyncStore.attachActivationListeners()
   weatherStore.init()
   weatherStore.attachActivationListeners()
+  attachInjuryCheckInActivationListeners()
   void nextTick(observeActivePanel)
   void resetNativeStartupRoute()
   void healthKitSyncStore.syncAfterActivation()
   void weatherStore.refreshAfterActivation()
+  requestInjuryCheckInPrompt()
 })
 
 onBeforeUnmount(() => {
@@ -100,6 +115,8 @@ onBeforeUnmount(() => {
   weatherStore.dispose()
   keyboardInsetCleanup?.()
   keyboardInsetCleanup = null
+  injuryCheckInCleanup?.()
+  injuryCheckInCleanup = null
   activePanelObserver?.disconnect()
   document.body.classList.remove('tab-swiping')
 })
@@ -129,6 +146,176 @@ function attachKeyboardInsetTracking() {
     window.removeEventListener('orientationchange', updateKeyboardInset)
     document.documentElement.style.setProperty('--keyboard-inset-bottom', '0px')
   }
+}
+
+function attachInjuryCheckInActivationListeners() {
+  const request = () => {
+    window.setTimeout(requestInjuryCheckInPrompt, 350)
+  }
+  const requestWhenVisible = () => {
+    if (document.visibilityState === 'visible') request()
+  }
+  window.addEventListener('focus', request)
+  window.addEventListener('pageshow', request)
+  document.addEventListener('visibilitychange', requestWhenVisible)
+
+  injuryCheckInCleanup = () => {
+    window.removeEventListener('focus', request)
+    window.removeEventListener('pageshow', request)
+    document.removeEventListener('visibilitychange', requestWhenVisible)
+  }
+}
+
+function requestInjuryCheckInPrompt() {
+  if (!authStore.isAuthenticated || injuryCheckInItemId.value || injuryCheckInSaving.value) return
+  if (memoryStore.loading || runStore.loading || !runStore.loaded) return
+  const item = findDueInjuryCheckIn()
+  if (item) injuryCheckInItemId.value = item.id
+}
+
+function findDueInjuryCheckIn() {
+  const candidates = memoryStore.memory.injuryItems
+    .filter((item) => item.status === 'active' || item.status === 'monitoring')
+    .sort((a, b) => Number(b.status === 'active') - Number(a.status === 'active'))
+
+  return candidates.find((item) => {
+    if (isInjuryCheckInDismissed(item.id)) return false
+    if (isSameLocalDate(item.lastCheckedAt, new Date())) return false
+    if (!item.lastCheckedAt) return true
+    const latestQualityRun = findLatestQualityRun()
+    if (latestQualityRun && compareDateKeys(latestQualityRun.date, item.lastCheckedAt) > 0) return true
+    return Date.now() - Date.parse(item.lastCheckedAt) > 72 * 60 * 60 * 1000
+  })
+}
+
+function findLatestQualityRun() {
+  return runStore.sortedRuns.find((run) => isQualitySession(run)) ?? null
+}
+
+function isQualitySession(run: RunLog) {
+  return ['Easy + Strides', 'Tempo', 'LSD', 'Steady Long', 'Race'].includes(run.type) || run.distanceKm >= 10
+}
+
+function dismissCurrentInjuryCheckIn() {
+  const item = injuryCheckInItem.value
+  if (item) sessionStorage.setItem(injuryCheckInDismissKey(item.id), '1')
+  injuryCheckInItemId.value = ''
+}
+
+async function submitInjuryCheckIn(payload: {
+  painLevel: number | null
+  worsenedDuringOrAfterRun: boolean | null
+  dailyActivityPain: boolean | null
+  readyForQualitySession: boolean | null
+  areaPainLevels: TrainingInjuryCheckIn['areaPainLevels']
+  note: string
+  markResolved: boolean
+}) {
+  const current = injuryCheckInItem.value
+  if (!current) return
+  injuryCheckInSaving.value = true
+  try {
+    const memory = cloneTrainingMemory(memoryStore.memory)
+    const item = memory.injuryItems.find((entry) => entry.id === current.id)
+    if (!item) return
+    const now = new Date().toISOString()
+    const today = localDateKey(new Date())
+    const hadPriorQuietCheckIn = (item.checkInHistory ?? []).slice(0, 5).some(isQuietInjuryCheckIn)
+    const areaPainLevels = normalizeCheckInAreaPainLevels(item.normalizedAreas, payload.areaPainLevels, payload.painLevel)
+    const severity = deriveMaxPainLevel(areaPainLevels) ?? payload.painLevel
+    const checkIn: TrainingInjuryCheckIn = {
+      id: crypto.randomUUID(),
+      checkedAt: now,
+      painLevel: severity,
+      areaPainLevels,
+      worsenedDuringOrAfterRun: payload.worsenedDuringOrAfterRun,
+      dailyActivityPain: payload.dailyActivityPain,
+      readyForQualitySession: payload.readyForQualitySession,
+      note: payload.note,
+      source: 'user_check_in'
+    }
+
+    item.normalizedAreas = areaPainLevels
+    item.severity = severity
+    item.lastCheckedAt = now
+    item.checkInHistory = [checkIn, ...(item.checkInHistory ?? [])].slice(0, 30)
+    if ((severity ?? 0) >= 2 || payload.worsenedDuringOrAfterRun || payload.dailyActivityPain) {
+      item.lastFlareDate = today
+    }
+    if (payload.markResolved && isQuietInjuryCheckInResponse({ ...payload, painLevel: severity, areaPainLevels }) && hadPriorQuietCheckIn) {
+      item.status = 'resolved'
+      item.resolvedAt = now
+      if (memory.activeInjuryItemId === item.id) {
+        memory.activeInjuryItemId = memory.injuryItems.find((entry) => entry.id !== item.id && (entry.status === 'active' || entry.status === 'monitoring'))?.id ?? null
+      }
+    }
+    item.updatedAt = now
+
+    await memoryStore.update(memory)
+    injuryCheckInItemId.value = ''
+  } finally {
+    injuryCheckInSaving.value = false
+  }
+}
+
+function isInjuryCheckInDismissed(itemId: string) {
+  return sessionStorage.getItem(injuryCheckInDismissKey(itemId)) === '1'
+}
+
+function isQuietInjuryCheckIn(value: TrainingInjuryCheckIn) {
+  return isQuietInjuryCheckInResponse(value)
+}
+
+function isQuietInjuryCheckInResponse(value: {
+  painLevel: number | null
+  areaPainLevels?: TrainingInjuryCheckIn['areaPainLevels']
+  worsenedDuringOrAfterRun: boolean | null
+  dailyActivityPain: boolean | null
+  readyForQualitySession: boolean | null
+}) {
+  const painLevel = deriveMaxPainLevel(value.areaPainLevels ?? []) ?? value.painLevel
+  return painLevel !== null && painLevel <= 1 && value.worsenedDuringOrAfterRun === false && value.dailyActivityPain === false && value.readyForQualitySession === true
+}
+
+function normalizeCheckInAreaPainLevels(
+  currentAreas: TrainingInjuryCheckIn['areaPainLevels'],
+  nextAreas: TrainingInjuryCheckIn['areaPainLevels'],
+  fallbackPainLevel: number | null
+) {
+  const nextById = new Map(nextAreas.map((area) => [area.areaId, area.painLevel]))
+  if (currentAreas.length) {
+    return currentAreas.map((area) => ({
+      ...area,
+      painLevel: nextById.has(area.areaId) ? nextById.get(area.areaId) ?? null : fallbackPainLevel
+    }))
+  }
+  return nextAreas.map((area) => ({ ...area }))
+}
+
+function deriveMaxPainLevel(areas: TrainingInjuryCheckIn['areaPainLevels']) {
+  const levels = areas.map((area) => area.painLevel).filter((value): value is number => value !== null)
+  return levels.length ? Math.max(...levels) : null
+}
+
+function injuryCheckInDismissKey(itemId: string) {
+  return `pacelab.injuryCheckIn.dismissed.${memoryStore.selectedUserId}.${itemId}.${localDateKey(new Date())}`
+}
+
+function isSameLocalDate(value: string | null, date: Date) {
+  if (!value) return false
+  return localDateKey(new Date(value)) === localDateKey(date)
+}
+
+function compareDateKeys(a: string, b: string) {
+  return a.slice(0, 10).localeCompare(b.slice(0, 10))
+}
+
+function localDateKey(date: Date) {
+  return date.toLocaleDateString('sv-SE')
+}
+
+function cloneTrainingMemory(memory: TrainingMemory): TrainingMemory {
+  return JSON.parse(JSON.stringify(memory))
 }
 
 async function resetNativeStartupRoute() {
@@ -256,6 +443,13 @@ function resetSwipeState() {
 <template>
   <AppShell :nav-items="navItems" :is-authenticated="authStore.isAuthenticated" @sign-out="authStore.signOut()">
     <ToastHost />
+    <InjuryCheckInSheet
+      :open="Boolean(injuryCheckInItem)"
+      :item="injuryCheckInItem"
+      :saving="injuryCheckInSaving"
+      @close="dismissCurrentInjuryCheckIn"
+      @submit="submitInjuryCheckIn"
+    />
     <div
       v-if="isMainTabRoute"
       class="tab-swipe-viewport"

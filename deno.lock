@@ -1,0 +1,31 @@
+{
+  "version": "5",
+  "redirects": {
+    "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2.106.2"
+  },
+  "remote": {
+    "https://esm.sh/@supabase/supabase-js@2.106.2": "239a7bd494d2521e29f1b25f00b2dfb595a6b8eb4694543db239073eaecf8d32"
+  },
+  "workspace": {
+    "packageJson": {
+      "dependencies": [
+        "npm:@playwright/test@^1.60.0",
+        "npm:@supabase/supabase-js@^2.106.1",
+        "npm:@types/node@^24.10.1",
+        "npm:@vitejs/plugin-vue@^6.0.3",
+        "npm:@vue/test-utils@^2.4.10",
+        "npm:echarts@^6.1.0",
+        "npm:fit-file-parser@3",
+        "npm:jsdom@^29.1.1",
+        "npm:nanoid@^5.1.6",
+        "npm:pinia@^3.0.4",
+        "npm:typescript@~5.9.3",
+        "npm:vite@^7.2.4",
+        "npm:vitest@^4.1.7",
+        "npm:vue-router@^4.6.3",
+        "npm:vue-tsc@^3.1.5",
+        "npm:vue@^3.5.25"
+      ]
+    }
+  }
+}

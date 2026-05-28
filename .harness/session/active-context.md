@@ -12,6 +12,7 @@
 
 ## 최근 작업
 - 2026-05-28 긴 대화창 인수인계는 `.harness/session/thread-handoff-2026-05-28.md`에 남아 있다. 현재 기준은 이 문서와 `project-memory.md`, `next-session-reminder.md`, `workflow-rules.md`를 우선한다.
+- 2026-05-28 `08-injury-domain`에서 부상 체크인/완치 후보/보강운동 근거 기준을 정리했다. 최신 도메인 기준은 `.harness/project/domain-rules.md`, 코칭 표현 기준은 `.harness/project/ai-coaching-goal.md`, 선택 이유는 `.harness/session/decision-log.md`를 본다.
 - 현재 제품명은 `PaceLAB`이다. 사용자-facing UI에서 `RunContext` 표현은 제거하는 방향이다.
 - 현재 구조는 GitHub Pages 정적 프론트 + Supabase Auth/Postgres/Edge Function + OpenAI API + iOS WKWebView/HealthKit 하이브리드다.
 - iOS 네이티브 로컬 프로젝트는 `/Users/smart-tn-083/practice/RunningCoach`에 있다.

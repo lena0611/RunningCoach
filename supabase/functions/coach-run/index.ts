@@ -108,6 +108,8 @@ type CurrentWeatherContext = {
   }
 }
 
+type SupabaseAdminClient = any
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -154,15 +156,16 @@ Deno.serve(async (req) => {
 })
 
 async function persistCoachResult(
-  admin: ReturnType<typeof createClient>,
+  admin: SupabaseAdminClient,
   userId: string,
   selectedRunId: string | null,
   userNote: string,
   context: CoachContext,
-  ai: { report: string; memoryItems: string[]; trainingMemoryPatch: TrainingMemoryPatch | null }
+  ai: { report: string; memoryItems: string[]; trainingMemoryPatch: TrainingMemoryPatch | null; injuryUpdateProposal: InjuryUpdateProposal | null }
 ) {
     const durableMemoryItems = normalizeMemoryItems(ai.memoryItems, context.coachMemoryItems)
     const memoryPatch = normalizeTrainingMemoryPatch(ai.trainingMemoryPatch)
+    const injuryUpdateProposal = normalizeInjuryUpdateProposal(ai.injuryUpdateProposal, context.activeInjuryItem)
     const updatedMemory = memoryPatch ? mergeTrainingMemoryPatch(context.trainingMemory, memoryPatch) : null
     if (updatedMemory) {
       const { error } = await admin.from('training_memory').upsert({
@@ -204,10 +207,12 @@ async function persistCoachResult(
         report: reportRow.report,
         createdAt: reportRow.created_at,
         updatedAt: reportRow.updated_at,
-        trainingMemoryUpdated: Boolean(updatedMemory)
+        trainingMemoryUpdated: Boolean(updatedMemory),
+        injuryUpdateProposal
       },
       trainingMemoryUpdated: Boolean(updatedMemory),
-      trainingMemoryPatch: memoryPatch
+      trainingMemoryPatch: memoryPatch,
+      injuryUpdateProposal
     }
 }
 
@@ -266,7 +271,7 @@ function normalizeCurrentWeather(value: unknown): CurrentWeatherContext | null {
   }
 }
 
-async function buildContext(admin: ReturnType<typeof createClient>, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null) {
+async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null) {
   const [
     { data: memoryRow },
     { data: runs },
@@ -342,6 +347,7 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
     trainingKnowledge,
     adaptiveTrainingProfile
   })
+  const injuryCheckInPolicy = buildInjuryCheckInPolicy(activeInjuryItem)
 
   return {
     userNote,
@@ -429,6 +435,7 @@ async function buildContext(admin: ReturnType<typeof createClient>, userId: stri
       'coachingDecisionBoard는 이번 답변의 판단 보드다. 답변 전에 selectedRunEvidence, lapProcess, prescriptionCompliance, goalProjectionCheck, routineUpdateCheck를 먼저 확인하고, 핵심 지표/오늘 해석/루틴 업데이트에 그 근거를 반영한다. 이 보드와 원본 RunLog가 충돌하면 원본 RunLog를 우선하되, 보드는 설명 구조를 잡는 데 사용한다.',
     injuryItems,
     activeInjuryItem,
+    injuryCheckInPolicy,
     injuryTemporalPolicy: selectedRun
       ? 'injuryItems와 activeInjuryItem은 selectedRun.date 이전 또는 당일에 이미 발생/등록된 항목만 포함한다. 여기에 없는 현재 active 부상은 선택 세션 당시에는 아직 발생하지 않은 것으로 보고 언급하지 마라.'
       : '현재 흐름 코칭이므로 현재 active/monitoring 부상 항목을 사용할 수 있다.',
@@ -480,6 +487,16 @@ type TrainingMemoryPatch = {
   adaptiveTrainingProfile?: AdaptiveTrainingProfilePatch
 }
 
+type InjuryUpdateProposal = {
+  injuryItemId: string
+  proposalType: 'check_in_update' | 'resolve_candidate' | 'status_change_candidate'
+  suggestedStatus?: 'active' | 'monitoring' | 'resolved'
+  suggestedPainLevel?: number | null
+  rationale: string
+  userApprovalPrompt: string
+  safetyNotes: string[]
+}
+
 type AdaptiveTrainingProfilePatch = {
   methodologyVersion?: string
   updatedAt?: string
@@ -527,7 +544,7 @@ type AdaptiveSessionGuidePatch = {
   nextCheck?: string
 }
 
-async function callOpenAI(apiKey: string, model: string, context: unknown): Promise<{ report: string; memoryItems: string[]; trainingMemoryPatch: TrainingMemoryPatch | null }> {
+async function callOpenAI(apiKey: string, model: string, context: unknown): Promise<{ report: string; memoryItems: string[]; trainingMemoryPatch: TrainingMemoryPatch | null; injuryUpdateProposal: InjuryUpdateProposal | null }> {
   const instructions = buildCoachInstructions()
 
   const response = await fetch('https://api.openai.com/v1/responses', {
@@ -550,7 +567,8 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
   return {
     report: typeof parsed.report === 'string' ? parsed.report : text,
     memoryItems: Array.isArray(parsed.memoryItems) ? parsed.memoryItems.filter((item: unknown) => typeof item === 'string').slice(0, 8) : [],
-    trainingMemoryPatch: parsed.trainingMemoryPatch && typeof parsed.trainingMemoryPatch === 'object' ? parsed.trainingMemoryPatch as TrainingMemoryPatch : null
+    trainingMemoryPatch: parsed.trainingMemoryPatch && typeof parsed.trainingMemoryPatch === 'object' ? parsed.trainingMemoryPatch as TrainingMemoryPatch : null,
+    injuryUpdateProposal: parsed.injuryUpdateProposal && typeof parsed.injuryUpdateProposal === 'object' ? parsed.injuryUpdateProposal as InjuryUpdateProposal : null
   }
 }
 
@@ -646,11 +664,15 @@ function buildCoachInstructions() {
     '다른 목표는 보조 관점으로만 활용하고, activeGoal과 충돌하면 activeGoal을 우선한다.',
     '부상관리는 knownIssues 자유 텍스트보다 injuryItems와 activeInjuryItem을 우선한다.',
     'injuryItems의 normalizedAreas는 정규화된 부상 부위와 부위별 painLevel이다. area 자유 텍스트보다 normalizedAreas, severity, strengthPlan을 우선한다.',
-    'strengthPlan은 러닝 보강운동 처방의 보수적 기본값이다. 의료 처방처럼 말하지 말고, 통증 0~2/5에서만 수행하고 악화 시 중단/축소하는 회복 보조 운동으로 설명한다.',
+    'painLevel은 0~5 훈련 부하 조절 신호다. 0~1은 루틴 유지 가능, 2는 강훈련 전 체크포인트, 3은 Tempo/Strides/Steady Long 상향 보류, 4~5는 러닝 강도 하향 또는 중단/전문가 상담 안내를 우선한다.',
+    'strengthPlan은 러닝 보강운동 처방의 보수적 기본값이다. strengthPlanDetails가 있으면 instruction, useWhen, stopWhen, sources의 짧은 근거를 우선한다. 의료 처방처럼 말하지 말고, 통증 0~2/5에서만 수행하고 악화 시 중단/축소하는 회복 보조 운동으로 설명한다.',
     '수면질은 부상 부위가 아니라 회복/컨디션 신호다. 수면이 나쁘면 훈련 강도 조절 근거로 쓰되 injuryItems에 포함된 부상처럼 특정 부위 문제로 단정하지 않는다.',
     '단, injuryItems와 activeInjuryItem은 선택 세션 날짜 기준으로 시간축이 맞는 항목만 들어온다. 현재 active 부상이라도 selectedRun.date 이후에 발생한 부상은 과거 세션 평가에서 절대 언급하지 않는다.',
     'activeInjuryItem이 있을 때만 triggers, restrictions, returnToRunCriteria를 다음 훈련 추천과 강도 제한 판단에 반영한다.',
     'activeInjuryItem이 active 또는 monitoring이면 강훈련/롱런 뒤 회복 반응, pain_note, workout_feeling을 보수적으로 해석한다.',
+    '부상 체크인 결과나 대화에서 통증 상태 변경 후보가 보여도 trainingMemoryPatch에 injuryItems, activeInjuryItemId, status, painLevel, resolvedAt, lastFlareDate를 넣지 않는다. 이런 값은 사용자 승인 전 자동 저장 금지다.',
+    '완치 후보는 단정하지 않는다. 최근 0~1/5가 반복되고 Easy 조깅/일상 보행/강훈련 뒤 반응이 조용할 때만 report에서 앱 확인을 제안하고 injuryUpdateProposal로 사용자 승인 후보를 반환한다.',
+    'injuryUpdateProposal은 부상 상태 변경 후보가 있을 때만 반환한다. 사용자가 승인해야 저장되는 제안이며, 치료 진단이나 자동 완치 처리로 표현하지 않는다.',
     '통증/부상 메모가 있어도 의료 진단처럼 말하지 않는다. 통증은 훈련 판단 기준과 관찰 포인트로만 다룬다.',
     '통증 수치가 없으면 단정하지 않는다. 예: "통증 강도가 안 나와 있으니 크게 단정하진 말자. 다만 다음 착지감은 체크하자."',
     '코칭은 해당 러닝 세션 평가에서 끝나지 않는다. 반드시 계정의 목표와 누적 데이터를 보고 현재 weeklyPattern을 유지할지 수정할지 판단한다.',
@@ -682,7 +704,7 @@ function buildCoachInstructions() {
     '루틴 변경이 activeGoal의 목표관리에도 반영되어야 하면 trainingMemoryPatch.activeGoalStrategyNotes에 활성 목표의 새 strategyNotes 문장을 넣는다. 이 값은 activeGoal.strategyNotes에 저장된다.',
     '롱런 전략이나 현재 볼륨 노트도 바뀌어야 하면 trainingMemoryPatch.longRunStrategy, trainingMemoryPatch.currentVolumeNote에 반영한다.',
     '루틴을 바꾼 이유는 report에 짧게 설명하고, aiNotes에는 장기적으로 기억할 계획 변경 근거만 1~3개 넣는다.',
-    'trainingMemoryPatch는 RunLog 원본 값을 바꾸는 용도가 아니다. 훈련 계획과 코칭 메모리만 갱신한다.',
+    'trainingMemoryPatch는 RunLog 원본 값이나 injuryItems를 바꾸는 용도가 아니다. 훈련 계획과 코칭 메모리만 갱신한다.',
     '긴 문단, 같은 말 반복, 모든 맥락 나열, 의료 진단, 부상 위험 단정, 목표 달성 보장, 원본 RunLog 임의 수정은 금지한다.',
     'report는 UI가 마크다운처럼 렌더링할 수 있게 짧은 제목, bullet list, --- divider를 적절히 사용한다.',
     '이모지는 문맥에 맞으면 0~3개 사용한다. 좋은 회복/잘 눌림/주의/날씨/다음 훈련 같은 감정이나 의미를 살릴 때만 쓰고, 제목마다 기계적으로 붙이거나 장식처럼 남발하지 않는다.',
@@ -692,14 +714,14 @@ function buildCoachInstructions() {
     'memoryItems는 0~3개만 반환한다. 반복 패턴, 성향, 부상/더위/회복 기준, 계획 변경처럼 다음 코칭에도 쓸 장기 기억만 넣는다.',
     'memoryItems에 단일 세션의 거리/페이스/심박, "오늘 잘했다", "다음 훈련은 휴식" 같은 일회성 코멘트를 넣지 않는다.',
     '이미 context.coachMemoryItems나 trainingMemory에 같은 의미가 있으면 memoryItems에 다시 넣지 않는다.',
-    '스트리밍 UI가 report를 먼저 표시하므로 JSON 객체의 키 순서는 반드시 report, memoryItems, trainingMemoryPatch 순서로 둔다.',
-    'JSON만 반환한다. 형식: {"report":"사용자에게 보여줄 마크다운 코칭","memoryItems":["장기 기억으로 저장할 짧은 문장"],"trainingMemoryPatch":null 또는 {"weeklyPattern":["화요일: ..."],"longRunStrategy":"...","currentVolumeNote":"...","activeGoalStrategyNotes":"활성 목표 전략 메모","aiNotes":["..."],"adaptiveTrainingProfile":{"trainingPhase":{"currentPhase":"Base","startedAt":null,"goal":"...","focus":["..."],"nextPhase":"Build","reviewAfter":"..."},"progressionCriteria":[{"id":"easy-hr-stability","label":"Easy 심박 안정","status":"watch","evidence":"...","action":"..."}],"prescriptionTemplates":[{"id":"tempo-ceiling-165","name":"Tempo 상한주","phase":"Build","sessionType":"Tempo","purpose":"...","workout":["..."],"useWhen":["..."],"avoidWhen":["..."],"progressionTrigger":"..."}],"compliancePatterns":["반복 패턴"],"sessionGuides":[{"type":"Tempo","boundary":"현재 사용자에게 맞는 처방 경계","adjustment":"maintain","evidence":"반복 근거","nextCheck":"다음 확인 기준"}]}}}'
+    '스트리밍 UI가 report를 먼저 표시하므로 JSON 객체의 키 순서는 반드시 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal 순서로 둔다.',
+    'JSON만 반환한다. 형식: {"report":"사용자에게 보여줄 마크다운 코칭","memoryItems":["장기 기억으로 저장할 짧은 문장"],"trainingMemoryPatch":null 또는 {"weeklyPattern":["화요일: ..."],"longRunStrategy":"...","currentVolumeNote":"...","activeGoalStrategyNotes":"활성 목표 전략 메모","aiNotes":["..."],"adaptiveTrainingProfile":{"trainingPhase":{"currentPhase":"Base","startedAt":null,"goal":"...","focus":["..."],"nextPhase":"Build","reviewAfter":"..."},"progressionCriteria":[{"id":"easy-hr-stability","label":"Easy 심박 안정","status":"watch","evidence":"...","action":"..."}],"prescriptionTemplates":[{"id":"tempo-ceiling-165","name":"Tempo 상한주","phase":"Build","sessionType":"Tempo","purpose":"...","workout":["..."],"useWhen":["..."],"avoidWhen":["..."],"progressionTrigger":"..."}],"compliancePatterns":["반복 패턴"],"sessionGuides":[{"type":"Tempo","boundary":"현재 사용자에게 맞는 처방 경계","adjustment":"maintain","evidence":"반복 근거","nextCheck":"다음 확인 기준"}]}},"injuryUpdateProposal":null 또는 {"injuryItemId":"...","proposalType":"check_in_update","suggestedStatus":"monitoring","suggestedPainLevel":1,"rationale":"...","userApprovalPrompt":"앱에서 이 부상 상태를 갱신할까요?","safetyNotes":["사용자 승인 전에는 저장하지 않는다"]}}'
   ].join('\n')
 
 }
 
 function streamCoachRun(
-  admin: ReturnType<typeof createClient>,
+  admin: SupabaseAdminClient,
   userId: string,
   selectedRunId: string | null,
   userNote: string,
@@ -764,7 +786,8 @@ function streamCoachRun(
         const ai = {
           report: typeof parsed.report === 'string' ? parsed.report : streamedReport || fullText,
           memoryItems: Array.isArray(parsed.memoryItems) ? parsed.memoryItems.filter((item: unknown) => typeof item === 'string').slice(0, 8) : [],
-          trainingMemoryPatch: parsed.trainingMemoryPatch && typeof parsed.trainingMemoryPatch === 'object' ? parsed.trainingMemoryPatch as TrainingMemoryPatch : null
+          trainingMemoryPatch: parsed.trainingMemoryPatch && typeof parsed.trainingMemoryPatch === 'object' ? parsed.trainingMemoryPatch as TrainingMemoryPatch : null,
+          injuryUpdateProposal: parsed.injuryUpdateProposal && typeof parsed.injuryUpdateProposal === 'object' ? parsed.injuryUpdateProposal as InjuryUpdateProposal : null
         }
 
         if (ai.report && ai.report !== streamedReport) {
@@ -1171,7 +1194,7 @@ function normalizeTrainingPhase(value: unknown): Required<TrainingPhasePatch> {
   const base = defaultTrainingPhase()
   const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {}
   return {
-    currentPhase: normalizeTrainingPhaseName(raw.currentPhase, base.currentPhase),
+    currentPhase: normalizeTrainingPhaseName(raw.currentPhase, base.currentPhase) ?? base.currentPhase,
     startedAt: typeof raw.startedAt === 'string' && raw.startedAt.trim() ? raw.startedAt.trim().slice(0, 80) : null,
     goal: typeof raw.goal === 'string' && raw.goal.trim() ? raw.goal.trim().slice(0, 300) : base.goal,
     focus: normalizeStringArray(raw.focus, 8, 120).length ? normalizeStringArray(raw.focus, 8, 120) : base.focus,
@@ -1402,6 +1425,7 @@ function buildCoachingDecisionBoard(args: {
   const selectedCompliance = args.selectedRun
     ? classifyPrescriptionCompliance(args.selectedRun, args.selectedRunLapAnalysis)
     : 'no_selected_run'
+  const injuryCheck = buildInjuryCheckEvidence(args.activeInjuryItem)
 
   return {
     purpose:
@@ -1415,6 +1439,7 @@ function buildCoachingDecisionBoard(args: {
       selectedCompliance
     ),
     goalProjectionCheck: buildGoalProjectionEvidence(args.performanceProjection, args.selectedRun, args.activeGoal),
+    injuryCheck,
     routineUpdateCheck: buildRoutineUpdateEvidence({
       selectedRun: args.selectedRun,
       selectedCompliance,
@@ -1439,6 +1464,131 @@ function buildCoachingDecisionBoard(args: {
       '장기기억은 반복 패턴만 저장한다.'
     ]
   }
+}
+
+function buildInjuryCheckInPolicy(activeInjuryItem: unknown) {
+  return {
+    active: Boolean(activeInjuryItem),
+    painScale:
+      'painLevel은 0~5다. 0은 통증 없음, 1~2는 관찰하며 보강운동 가능, 3은 강훈련/롱런 상향 보류, 4~5는 러닝 강도 하향 또는 중단 검토 신호다.',
+    trainingIntensityRules: [
+      '0~1/5: 기본 루틴 유지 가능. 최근 강훈련 뒤에도 조용했는지 확인한다.',
+      '2/5: Easy는 가능할 수 있지만 Tempo, Strides, Steady Long 상향은 체크포인트를 둔다.',
+      '3/5: 강훈련과 롱런 상향을 보류하고 Easy 또는 Recovery 쪽으로 낮춘다.',
+      '4~5/5: 러닝 강도 처방보다 중단/휴식/전문가 상담 안내를 우선한다.'
+    ],
+    strengthPlanPolicy:
+      '보강운동은 치료 처방이 아니라 러닝 부하 조절 보조다. strengthPlanDetails의 useWhen/stopWhen/source 요약을 짧게 반영하고, 통증 0~2/5에서만 수행하도록 말한다.',
+    approvalPolicy:
+      'AI는 injuryItems를 자동 갱신하지 않는다. 통증 변경, monitoring/resolved 후보, 완치 후보는 injuryUpdateProposal로만 반환하고 사용자가 승인해야 저장된다.',
+    activeInjuryEvidence: buildInjuryCheckEvidence(activeInjuryItem)
+  }
+}
+
+function buildInjuryCheckEvidence(activeInjuryItem: unknown) {
+  if (!activeInjuryItem || typeof activeInjuryItem !== 'object') {
+    return {
+      available: false,
+      instruction: 'active 또는 monitoring 부상 항목이 없으면 일반 회복 신호와 pain_note만 보조로 확인한다.'
+    }
+  }
+
+  const item = activeInjuryItem as Record<string, unknown>
+  const normalizedAreas = Array.isArray(item.normalizedAreas) ? item.normalizedAreas : []
+  const areaPainLevels = normalizedAreas
+    .map((area) => {
+      if (!area || typeof area !== 'object') return null
+      const record = area as Record<string, unknown>
+      return {
+        areaId: typeof record.areaId === 'string' ? record.areaId : '',
+        painLevel: normalizePainLevelValue(record.painLevel)
+      }
+    })
+    .filter((area): area is { areaId: string; painLevel: number | null } => Boolean(area))
+  const painCandidates = [
+    ...areaPainLevels.map((area) => area.painLevel),
+    normalizePainLevelValue(item.severity),
+    normalizePainLevelValue(getLatestCheckIn(item)?.painLevel)
+  ].filter((value): value is number => value !== null)
+  const maxPainLevel = painCandidates.length ? Math.max(...painCandidates) : null
+  const latestCheckIn = getLatestCheckIn(item)
+  const strengthPlanDetails = Array.isArray(item.strengthPlanDetails) ? item.strengthPlanDetails : []
+  const strengthPlan = Array.isArray(item.strengthPlan) ? item.strengthPlan : []
+
+  return {
+    available: true,
+    id: typeof item.id === 'string' ? item.id : '',
+    title: typeof item.title === 'string' ? item.title : '',
+    status: typeof item.status === 'string' ? item.status : '',
+    maxPainLevel,
+    intensityGuidance: describePainLevelGuidance(maxPainLevel),
+    areaPainLevels,
+    latestCheckIn: latestCheckIn
+      ? {
+          checkedAt: readString(latestCheckIn.checkedAt),
+          painLevel: normalizePainLevelValue(latestCheckIn.painLevel),
+          worsenedDuringOrAfterRun: typeof latestCheckIn.worsenedDuringOrAfterRun === 'boolean' ? latestCheckIn.worsenedDuringOrAfterRun : null,
+          dailyActivityPain: typeof latestCheckIn.dailyActivityPain === 'boolean' ? latestCheckIn.dailyActivityPain : null,
+          readyForQualitySession: typeof latestCheckIn.readyForQualitySession === 'boolean' ? latestCheckIn.readyForQualitySession : null,
+          note: readString(latestCheckIn.note)
+        }
+      : null,
+    restrictions: normalizeStringArray(item.restrictions, 8, 180),
+    returnToRunCriteria: readString(item.returnToRunCriteria).slice(0, 300),
+    strengthPlan: strengthPlan.filter((entry): entry is string => typeof entry === 'string').slice(0, 6),
+    strengthPlanDetails: strengthPlanDetails.map(formatStrengthPlanDetailForCoach).filter(Boolean).slice(0, 6),
+    updateProposalGuidance:
+      '상태 변경은 자동 저장하지 않는다. 0~1/5가 반복되고 일상/러닝/강훈련 뒤 조용한 경우에만 resolved 후보를, 그 외 통증 변화는 check_in_update 후보를 injuryUpdateProposal로 반환한다.'
+  }
+}
+
+function getLatestCheckIn(item: Record<string, unknown>) {
+  const history = Array.isArray(item.checkInHistory) ? item.checkInHistory : []
+  const latest = history.find((entry) => entry && typeof entry === 'object')
+  return latest ? latest as Record<string, unknown> : null
+}
+
+function formatStrengthPlanDetailForCoach(value: unknown) {
+  if (!value || typeof value !== 'object') return null
+  const item = value as Record<string, unknown>
+  const sources = Array.isArray(item.sources) ? item.sources : []
+  return {
+    title: readString(item.title).slice(0, 120),
+    instruction: readString(item.instruction).slice(0, 240),
+    useWhen: readString(item.useWhen).slice(0, 180),
+    stopWhen: readString(item.stopWhen).slice(0, 180),
+    sourceSummaries: sources.map(formatStrengthPlanSourceForCoach).filter(Boolean).slice(0, 3)
+  }
+}
+
+function formatStrengthPlanSourceForCoach(value: unknown) {
+  if (!value || typeof value !== 'object') return null
+  const item = value as Record<string, unknown>
+  const title = readString(item.title)
+  if (!title) return null
+  return {
+    title: title.slice(0, 120),
+    organization: readString(item.organization).slice(0, 80),
+    summary: readString(item.summary).slice(0, 180)
+  }
+}
+
+function describePainLevelGuidance(painLevel: number | null) {
+  if (painLevel === null) return '통증 수치가 없으므로 단정하지 말고 다음 착지감과 체크인을 확인한다.'
+  if (painLevel <= 1) return '기본 루틴은 유지 가능하지만 강훈련 뒤에도 조용했는지 확인한다.'
+  if (painLevel === 2) return 'Easy는 가능할 수 있지만 강훈련/롱런 상향 전 체크포인트가 필요하다.'
+  if (painLevel === 3) return 'Tempo, Strides, Steady Long 상향은 보류하고 Easy 또는 Recovery 쪽으로 낮춘다.'
+  return '러닝 강도 처방보다 중단/휴식/전문가 상담 안내를 우선한다.'
+}
+
+function normalizePainLevelValue(value: unknown) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) return null
+  return Math.min(5, Math.max(0, Math.round(numeric)))
+}
+
+function readString(value: unknown) {
+  return typeof value === 'string' ? value.trim() : ''
 }
 
 function buildSelectedRunEvidence(run: RunLogRow | null) {
@@ -1521,8 +1671,9 @@ function buildLapCoachingFocus(analysis: AvailableLapAnalysis) {
     focus.push('후반 페이스가 떨어졌다. 장거리 지속성/초반 오버페이스/보급/날씨를 확인한다.')
   }
 
-  if (analysis.lapHeartRatesOverTempoCeiling.length > 0) {
-    focus.push(`템포 상한 165를 넘긴 구간이 ${analysis.lapHeartRatesOverTempoCeiling.length}개 있다.`)
+  const lapsOverTempoCeiling = analysis.lapHeartRatesOverTempoCeiling ?? []
+  if (lapsOverTempoCeiling.length > 0) {
+    focus.push(`템포 상한 165를 넘긴 구간이 ${lapsOverTempoCeiling.length}개 있다.`)
   }
 
   return focus.length ? focus : ['페이스 흐름과 심박 흐름을 함께 보고 세션 품질을 짧게 해석한다.']
@@ -1563,7 +1714,7 @@ function buildComplianceEvidenceBullets(
   if (run.type === 'Tempo') {
     bullets.push(`Tempo 처방 핵심은 max HR 165 이하. 세션 max HR ${run.max_heart_rate ?? '-'}.`)
     if (hasAvailableLapAnalysis(analysis)) {
-      const over = analysis.lapHeartRatesOverTempoCeiling.map((lap) => `${lap.index}번 ${lap.avgHeartRate}`)
+      const over = (analysis.lapHeartRatesOverTempoCeiling ?? []).map((lap) => `${lap.index}번 ${lap.avgHeartRate}`)
       bullets.push(over.length ? `165 초과 랩: ${over.join(', ')}` : '랩 평균 기준으로 165 초과 구간은 없다.')
     }
   } else if (run.type === 'Easy' || run.type === 'Recovery') {
@@ -1668,7 +1819,9 @@ function buildRoutineUpdateEvidence(args: {
   const selectedSignal = args.selectedRun
     ? args.recentPrescriptionComplianceSignals.find((signal) => signal.id === args.selectedRun?.id) ?? null
     : null
-  const hasActiveInjury = Boolean(args.activeInjuryItem)
+  const injuryEvidence = buildInjuryCheckEvidence(args.activeInjuryItem)
+  const injuryPainLevel = injuryEvidence.available ? injuryEvidence.maxPainLevel ?? null : null
+  const hasActiveInjury = injuryEvidence.available
   const projection = args.performanceProjection
   const projectionImproving = Boolean(projection && projection.status === 'available' && projection.trend === 'improving')
   const hardSessionPressure = args.summaryStats.hardSessionsLast7 >= 3 || args.summaryStats.currentMonthHardSessions >= 8
@@ -1678,6 +1831,7 @@ function buildRoutineUpdateEvidence(args: {
     `최근 30일 Easy 비율: ${args.summaryStats.recent30EasyRatio}%`,
     `최근 7일 강훈련: ${args.summaryStats.hardSessionsLast7}회`,
     selectedSignal ? `선택 세션 준수: ${selectedSignal.compliance}` : '선택 세션 준수: 선택 세션 없음',
+    `부상 체크: ${injuryEvidence.available ? `${injuryEvidence.status || 'status_unknown'} / pain ${injuryPainLevel ?? 'unknown'} / ${injuryEvidence.intensityGuidance}` : 'active injury 없음'}`,
     `반복 준수 그룹: ${stableGroups.map((group) => group.type).join(', ') || '-'}`,
     `경계 압력 그룹: ${pressureGroups.map((group) => group.type).join(', ') || '-'}`
   ]
@@ -1685,9 +1839,18 @@ function buildRoutineUpdateEvidence(args: {
   let decision = 'maintain'
   let reason = '루틴을 바꿀 반복 근거가 아직 부족하다.'
 
-  if (hasActiveInjury) {
+  if (hasActiveInjury && injuryPainLevel !== null && injuryPainLevel >= 4) {
+    decision = 'lower_or_stop_for_injury_gate'
+    reason = '통증 4~5/5 신호는 러닝 강도 처방보다 하향/중단 검토와 전문가 상담 안내가 먼저다.'
+  } else if (hasActiveInjury && injuryPainLevel !== null && injuryPainLevel >= 3) {
+    decision = 'lower_for_injury_gate'
+    reason = '통증 3/5 이상이면 Tempo/Strides/Steady Long 상향보다 Easy 또는 Recovery 조정이 먼저다.'
+  } else if (hasActiveInjury && injuryPainLevel === 2) {
     decision = 'watch_or_lower'
-    reason = '부상/주의 항목이 있어 상향보다 회복 반응 확인이 먼저다.'
+    reason = '통증 2/5 신호가 있어 Easy는 가능할 수 있지만 강훈련 전 체크포인트가 필요하다.'
+  } else if (hasActiveInjury && injuryPainLevel === null) {
+    decision = 'watch_or_lower'
+    reason = '부상/주의 항목은 있으나 통증 수치가 없어 상향보다 체크인이 먼저다.'
   } else if (args.selectedCompliance.startsWith('missed_') || pressureGroups.some((group) => group.dominantPattern === 'repeated_boundary_miss')) {
     decision = 'consider_lower_or_recovery_gate'
     reason = '처방 경계 초과가 있어 다음 처방을 보수적으로 보거나 회복 게이트를 둔다.'
@@ -1710,6 +1873,7 @@ function buildRoutineUpdateEvidence(args: {
       '## 루틴 업데이트 섹션에서 이 decision을 자연어로 풀어 말한다. 유지면 유지 근거와 다음 상향 조건을, 변경이면 변경 이유와 새 처방을 말한다.',
     patchGuidance:
       decision === 'consider_small_raise' || decision === 'consider_lower_or_recovery_gate' || decision === 'watch_or_lower'
+        || decision === 'lower_for_injury_gate' || decision === 'lower_or_stop_for_injury_gate'
         ? '반복 근거가 충분하고 실제 루틴을 바꿔야 한다면 trainingMemoryPatch를 반환한다. 단일 세션만 근거라면 report에 보류/다음 확인 조건만 말한다.'
         : 'trainingMemoryPatch는 null로 둔다.'
   }
@@ -1746,6 +1910,44 @@ function normalizeTrainingMemoryPatch(patch: TrainingMemoryPatch | null): Traini
   if (adaptiveTrainingProfile) normalized.adaptiveTrainingProfile = adaptiveTrainingProfile
 
   return Object.keys(normalized).length ? normalized : null
+}
+
+function normalizeInjuryUpdateProposal(proposal: InjuryUpdateProposal | null, activeInjuryItem: unknown): InjuryUpdateProposal | null {
+  if (!proposal || typeof proposal !== 'object') return null
+  if (!activeInjuryItem || typeof activeInjuryItem !== 'object') return null
+  const activeInjuryItemId = readString((activeInjuryItem as Record<string, unknown>).id)
+  const injuryItemId = readString((proposal as Record<string, unknown>).injuryItemId)
+  if (!activeInjuryItemId || injuryItemId !== activeInjuryItemId) return null
+
+  const proposalType = normalizeInjuryProposalType((proposal as Record<string, unknown>).proposalType)
+  const suggestedStatus = normalizeInjuryProposalStatus((proposal as Record<string, unknown>).suggestedStatus)
+  const suggestedPainLevel = normalizePainLevelValue((proposal as Record<string, unknown>).suggestedPainLevel)
+  const rationale = readString((proposal as Record<string, unknown>).rationale).slice(0, 500)
+  const userApprovalPrompt = readString((proposal as Record<string, unknown>).userApprovalPrompt).slice(0, 220)
+  const safetyNotes = normalizeStringArray((proposal as Record<string, unknown>).safetyNotes, 5, 160)
+
+  if (!proposalType || !rationale || !userApprovalPrompt) return null
+  return {
+    injuryItemId,
+    proposalType,
+    ...(suggestedStatus ? { suggestedStatus } : {}),
+    suggestedPainLevel,
+    rationale,
+    userApprovalPrompt,
+    safetyNotes: safetyNotes.length
+      ? safetyNotes
+      : ['사용자 승인 전에는 injuryItems를 저장하지 않는다.', '의료 진단이나 치료 완료로 단정하지 않는다.']
+  }
+}
+
+function normalizeInjuryProposalType(value: unknown): InjuryUpdateProposal['proposalType'] | null {
+  if (value === 'check_in_update' || value === 'resolve_candidate' || value === 'status_change_candidate') return value
+  return null
+}
+
+function normalizeInjuryProposalStatus(value: unknown): InjuryUpdateProposal['suggestedStatus'] | null {
+  if (value === 'active' || value === 'monitoring' || value === 'resolved') return value
+  return null
 }
 
 function mergeTrainingMemoryPatch(memory: CoachContext['trainingMemory'], patch: TrainingMemoryPatch) {
@@ -2148,7 +2350,7 @@ function decorateRunDate<T extends RunLogRow | null>(run: T): T extends RunLogRo
   return {
     ...run,
     dateDisplay: formatDateWithWeekday(run.date)
-  } as T extends RunLogRow ? RunLogRow & { dateDisplay: string } : null
+  } as unknown as T extends RunLogRow ? RunLogRow & { dateDisplay: string } : null
 }
 
 type LapMetric = {
@@ -2338,7 +2540,7 @@ function buildPrescriptionComplianceSignals(runs: RunLogRow[]) {
 function classifyPrescriptionCompliance(run: RunLogRow, analysis: ReturnType<typeof buildLapProgressionAnalysis>) {
   const type = run.type
   if (type === 'Tempo') {
-    const overCeiling = analysis?.available ? analysis.lapHeartRatesOverTempoCeiling.length : 0
+    const overCeiling = analysis?.available ? (analysis.lapHeartRatesOverTempoCeiling ?? []).length : 0
     if (overCeiling > 1 || (run.max_heart_rate ?? 0) > 168) return 'missed_high_heart_rate'
     if (overCeiling === 1 || (run.max_heart_rate ?? 0) > 165) return 'partial_late_heart_rate_rise'
     return 'met_heart_rate_ceiling'
@@ -2356,7 +2558,7 @@ function classifyPrescriptionCompliance(run: RunLogRow, analysis: ReturnType<typ
   }
 
   if (type === 'LSD' || type === 'Steady Long') {
-    const drift = analysis?.available ? analysis.heartRateDriftBpmSecondHalfMinusFirstHalf : null
+    const drift = analysis?.available ? analysis.heartRateDriftBpmSecondHalfMinusFirstHalf ?? null : null
     if (drift === null) return 'unknown_no_lap_drift'
     if (drift <= 8) return 'met_long_run_stability'
     if (drift <= 12) return 'partial_long_run_drift'

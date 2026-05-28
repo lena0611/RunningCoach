@@ -17,6 +17,10 @@
 - PaceLAB은 workstream 대화창 분리 운영을 명시적으로 채택한 프로젝트다. 하네스 본체의 일반 가이드는 선택형이지만, 이 프로젝트 안에서는 아래 규칙을 강하게 적용한다.
 - 한 대화창은 하나의 주 작업 유형만 맡긴다. 기획, 버그픽스, UI, 코칭 로직, HealthKit/iOS, Supabase/Edge Function, 부상관리 도메인, 하네스/정책 정리는 서로 다른 대화창으로 분리한다.
 - 각 대화창은 모든 사용자 요청을 처리하기 전에 현재 workstream 범위를 먼저 식별한다. 현재 창의 workstream이 불명확하면 넓은 작업을 진행하지 말고 사용자에게 workstream 확인을 요청한다.
+- 모든 업무 요청은 시작할 때 `완료 책임 창`을 하나 정한다. 완료 책임 창은 업무 목표, 완료 조건, 후속 workstream 인수인계, 최종 리뷰, 검증 후보 정리를 소유한다.
+- 단일 workstream 업무는 해당 workstream 창이 완료 책임 창이다. 여러 workstream을 거치는 업무는 처음 업무 목표를 받은 창을 임시 완료 책임 창으로 두되, 업무 중심이 다른 workstream으로 명확해지면 완료 책임을 그 창으로 이관한다.
+- 기획/범위 판단이 중심인 업무는 `02-product-planning`, 하네스/운영 절차 자체를 정하는 업무는 `01-harness-ops`가 완료 책임 창이다.
+- 완료 책임 창이 불명확하면 구현이나 문서 변경을 넓히지 않고 먼저 책임 창을 정한다. 다른 workstream 창은 자기 범위 작업을 수행한 뒤 완료 책임 창으로 결과를 돌려준다.
 - 현재 창에 수행 역할이 있더라도 선행 결정이나 선행 구현이 다른 workstream에 있으면 현재 창에서 먼저 진행하지 않는다. 대상 workstream, 선행 이유, 붙여넣을 인수인계 문구를 제안한다.
 - 사용자가 완료를 명시하면 현재 창에서 완료 처리해도 되는지 먼저 검토한다. 다른 workstream의 후속 확인이나 마무리가 남아 있으면 완료 처리 전에 대상 workstream으로 넘긴다.
 - 현재 대화창에서 주 작업 유형이 바뀌면 새 대화창으로 넘긴다. 단, 작업을 끝내기 위한 짧은 문서 갱신, 결정 로그, 검증 명령은 같은 대화창에서 마무리할 수 있다.
@@ -28,6 +32,7 @@
 - 최종 완료 승인 시에는 임시 인수인계 문구 중 실제로 남길 가치가 있는 내용만 문서화하고, 단순 중간 전달 문구는 남기지 않는다.
 - 대화창이 길어져 에이전트 응답이 느려지거나 서로 다른 도메인 판단이 섞이기 시작하면 구현을 더 밀지 말고 `.harness/session/active-context.md` 또는 별도 `thread-handoff-YYYY-MM-DD.md`에 인수인계를 남긴 뒤 새 대화창에서 재개한다.
 - 긴 인수인계는 최신 상태와 다음 작업만 남긴다. 회고, 모든 시도 내역, 장황한 diff 설명은 넣지 않고 필요한 경우 `decision-log.md`나 관련 프로젝트 룰 문서로 승격한다.
+- 여러 창을 거친 업무의 최종 검토는 완료 책임 창에서 모은다. 완료 책임 창은 남은 리스크, 미해결 질문, 검증 후보, 커밋 후보 범위를 정리하고 사용자 완료 승인을 기다린다.
 - build, test, `harness:check`, commit, push, PR 생성은 `CLAUDE.md`의 완료 승인 게이트를 따른다.
 
 작업 유형별 시작 문서:
@@ -84,12 +89,15 @@
 ## 검증 명령
 - 아래 검증 명령은 `CLAUDE.md`의 완료 승인 게이트에 따라 사용자의 최종화 승인 뒤 실행한다.
 - 검증 명령을 실행하기 전에는 프로젝트 루트의 `.nvmrc` 존재를 확인하고, 존재하면 반드시 `nvm use`를 먼저 실행한다. `nvm use` 없이 하네스/빌드/테스트를 돌려 Node 버전 오류가 나면 검증 절차 미준수로 본다.
+- Codex 또는 새 터미널 셸에서 Node 버전이 낮아 npm 스크립트가 실패하면 작업을 포기하지 않는다. 프로젝트 루트에서 `. "$HOME/.nvm/nvm.sh" && nvm use`로 `.nvmrc` 버전을 활성화한 뒤 같은 npm 명령을 재시도한다.
 - 기본 검증: `npm run build`
 - 단위/컴포넌트 회귀 검증: `npm run test:run`
 - 모바일 E2E smoke 검증: `npm run e2e`
+- Supabase Edge Function 검증: `npm run supabase:functions:check`
 - 하네스 검증: `npm run harness:check`
 - 하네스 문맥 확인이 필요한 큰 변경: `npm run harness:context -- "<작업 설명>"`
 - 검증 순서는 변경 성격에 맞는 단위/컴포넌트 테스트 또는 E2E 테스트 추가 여부를 먼저 판단하고, 필요한 테스트를 추가/갱신해 통과시킨 뒤 `npm run harness:check`로 간다. 하네스 체크는 테스트 필요성 판단을 대체하지 않는다.
+- `supabase/functions/**`를 변경하면 `npm run harness:check`가 `supabase:functions:check`를 자동 호출한다. 그래도 Edge Function만 빠르게 확인할 때는 같은 Node 준비 절차 후 `npm run supabase:functions:check`를 직접 실행한다.
 
 ## 테스트 전략 선택지
 테스트 루트나 `test` script가 없다면 아래 중 하나를 선택해 이 문서 또는 `decision-log.md`에 기록합니다.

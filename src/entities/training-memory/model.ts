@@ -1,12 +1,15 @@
 import {
   createConservativeStrengthPlan,
+  createConservativeStrengthPlanDetails,
   createInjuryManagementPlan,
   createReturnToRunCriteria,
   createInjuryRestrictions,
   deriveInjurySeverity,
   normalizeInjuryAreaSelections,
   summarizeInjuryAreas,
-  type InjuryAreaSelection
+  type InjuryAreaSelection,
+  type InjuryStrengthPlanDetail,
+  type InjuryStrengthPlanSource
 } from './injuryAreas'
 
 export type TrainingMemory = {
@@ -52,15 +55,34 @@ export type TrainingInjuryItem = {
   severity: number | null
   onsetDate: string | null
   lastFlareDate: string | null
+  lastCheckedAt: string | null
+  resolvedAt: string | null
+  checkInHistory: TrainingInjuryCheckIn[]
   notes: string
   managementPlan: string
   triggers: string[]
   restrictions: string[]
   returnToRunCriteria: string
   strengthPlan: string[]
+  strengthPlanDetails: TrainingStrengthPlanDetail[]
   createdAt: string
   updatedAt: string
 }
+
+export type TrainingInjuryCheckIn = {
+  id: string
+  checkedAt: string
+  painLevel: number | null
+  areaPainLevels: InjuryAreaSelection[]
+  worsenedDuringOrAfterRun: boolean | null
+  dailyActivityPain: boolean | null
+  readyForQualitySession: boolean | null
+  note: string
+  source: 'user_check_in' | 'coach_suggestion' | 'manual_edit'
+}
+
+export type TrainingStrengthPlanDetail = InjuryStrengthPlanDetail
+export type TrainingStrengthPlanSource = InjuryStrengthPlanSource
 
 export type AthleteProfile = {
   birthYear: number | null
@@ -293,12 +315,16 @@ export const initialTrainingMemory: TrainingMemory = {
       severity: null,
       onsetDate: null,
       lastFlareDate: null,
+      lastCheckedAt: null,
+      resolvedAt: null,
+      checkInHistory: [],
       notes: '과거 이슈. 강훈련/롱런 뒤 뻣뻣함 여부 확인.',
       managementPlan: '통증 단정 없이 피로 누적 신호를 보수적으로 관찰한다.',
       triggers: ['템포/롱런 다음날 뻣뻣함', '볼륨 급증'],
       restrictions: ['통증이 있으면 스트라이드와 템포를 줄인다', '롱런 후 회복 반응을 먼저 확인한다'],
       returnToRunCriteria: '다음날 뻣뻣함이나 통증 신호 없이 Easy 조깅이 편하게 느껴질 때 강도를 올린다.',
       strengthPlan: ['둔근 브리지 8~10회 x 2세트', '힙힌지 패턴 연습', '통증이 있으면 빠른 가속/스트라이드 생략'],
+      strengthPlanDetails: createConservativeStrengthPlanDetails([{ areaId: 'left-hamstring', painLevel: null }]),
       createdAt: '2026-05-24T00:00:00.000Z',
       updatedAt: '2026-05-24T00:00:00.000Z'
     }
@@ -581,6 +607,15 @@ function normalizeInjuryItem(item: Partial<TrainingInjuryItem>, index: number, n
   const normalizedAreas = normalizeInjuryAreaSelections(item.normalizedAreas, legacyArea)
   const area = summarizeInjuryAreas(normalizedAreas) || legacyArea
   const strengthPlan = normalizeStringArray(item.strengthPlan)
+  const strengthPlanDetails = normalizeStrengthPlanDetails(
+    (item as { strengthPlanDetails?: unknown }).strengthPlanDetails,
+    normalizedAreas,
+    strengthPlan
+  )
+  const checkInHistory = normalizeInjuryCheckIns((item as { checkInHistory?: unknown }).checkInHistory, normalizedAreas)
+  const lastCheckedAt = normalizeNullableDate((item as { lastCheckedAt?: unknown }).lastCheckedAt)
+    ?? checkInHistory[0]?.checkedAt
+    ?? null
   return {
     id: typeof item.id === 'string' && item.id ? item.id : `injury-${index + 1}`,
     title,
@@ -590,12 +625,16 @@ function normalizeInjuryItem(item: Partial<TrainingInjuryItem>, index: number, n
     severity: deriveInjurySeverity(normalizedAreas, item.severity),
     onsetDate: typeof item.onsetDate === 'string' && item.onsetDate ? item.onsetDate : null,
     lastFlareDate: typeof item.lastFlareDate === 'string' && item.lastFlareDate ? item.lastFlareDate : null,
+    lastCheckedAt,
+    resolvedAt: normalizeNullableDate((item as { resolvedAt?: unknown }).resolvedAt),
+    checkInHistory,
     notes: typeof item.notes === 'string' ? item.notes : '',
     managementPlan: typeof item.managementPlan === 'string' && item.managementPlan.trim() ? item.managementPlan : createInjuryManagementPlan(normalizedAreas),
     triggers: normalizeStringArray(item.triggers),
     restrictions: normalizeStringArray(item.restrictions).length ? normalizeStringArray(item.restrictions) : createInjuryRestrictions(normalizedAreas),
     returnToRunCriteria: typeof item.returnToRunCriteria === 'string' && item.returnToRunCriteria.trim() ? item.returnToRunCriteria : createReturnToRunCriteria(normalizedAreas),
     strengthPlan: strengthPlan.length ? strengthPlan : createConservativeStrengthPlan(normalizedAreas),
+    strengthPlanDetails,
     createdAt: typeof item.createdAt === 'string' ? item.createdAt : now,
     updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : now
   }
@@ -610,9 +649,135 @@ function normalizeNullableNumber(value: unknown): number | null {
   return Number.isFinite(numberValue) ? numberValue : null
 }
 
+function normalizeInjuryCheckIns(value: unknown, fallbackAreas: InjuryAreaSelection[]): TrainingInjuryCheckIn[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item, index) => normalizeInjuryCheckIn(item, index, fallbackAreas))
+    .filter((item): item is TrainingInjuryCheckIn => Boolean(item))
+    .sort((a, b) => b.checkedAt.localeCompare(a.checkedAt))
+    .slice(0, 30)
+}
+
+function normalizeInjuryCheckIn(value: unknown, index: number, fallbackAreas: InjuryAreaSelection[]): TrainingInjuryCheckIn | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Partial<TrainingInjuryCheckIn>
+  const checkedAt = normalizeNullableDate(raw.checkedAt)
+  if (!checkedAt) return null
+  const areaPainLevels = normalizeInjuryAreaSelections(raw.areaPainLevels)
+  return {
+    id: typeof raw.id === 'string' && raw.id ? raw.id : `check-in-${index + 1}`,
+    checkedAt,
+    painLevel: normalizePainLevel(raw.painLevel),
+    areaPainLevels: areaPainLevels.length ? areaPainLevels : fallbackAreas,
+    worsenedDuringOrAfterRun: normalizeNullableBoolean(raw.worsenedDuringOrAfterRun),
+    dailyActivityPain: normalizeNullableBoolean(raw.dailyActivityPain),
+    readyForQualitySession: normalizeNullableBoolean(raw.readyForQualitySession),
+    note: typeof raw.note === 'string' ? raw.note.trim() : '',
+    source: normalizeCheckInSource(raw.source)
+  }
+}
+
+function normalizeStrengthPlanDetails(value: unknown, normalizedAreas: InjuryAreaSelection[], legacyPlan: string[]): TrainingStrengthPlanDetail[] {
+  if (Array.isArray(value)) {
+    const items = value
+      .map((item, index) => normalizeStrengthPlanDetail(item, index))
+      .filter((item): item is TrainingStrengthPlanDetail => Boolean(item))
+      .slice(0, 12)
+    if (items.length) return items
+  }
+
+  if (legacyPlan.length) {
+    return legacyPlan.slice(0, 12).map((instruction, index) => ({
+      id: `legacy-strength-${index + 1}`,
+      title: instruction.split(':')[0]?.trim() || `보강운동 ${index + 1}`,
+      targetAreaIds: normalizedAreas.map((area) => area.areaId),
+      purpose: '기존 문자열 보강운동 처방을 구조화 계약에 맞춰 보존한다.',
+      instruction,
+      useWhen: '통증 0~2/5이고 다음날 악화가 없을 때',
+      stopWhen: '통증이 커지거나 일상 보행 통증, 저림, 붓기, 날카로운 통증이 있을 때',
+      progression: '사용자 체크인에서 악화가 없을 때만 세트 수나 강도를 소폭 조정한다.',
+      sources: [internalStrengthPlanSource]
+    }))
+  }
+
+  return createConservativeStrengthPlanDetails(normalizedAreas)
+}
+
+function normalizeStrengthPlanDetail(value: unknown, index: number): TrainingStrengthPlanDetail | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Partial<TrainingStrengthPlanDetail>
+  const instruction = typeof raw.instruction === 'string' ? raw.instruction.trim() : ''
+  if (!instruction) return null
+  const sources = Array.isArray(raw.sources)
+    ? raw.sources
+        .map((source) => normalizeStrengthPlanSource(source))
+        .filter((source): source is TrainingStrengthPlanSource => Boolean(source))
+        .slice(0, 5)
+    : []
+  return {
+    id: typeof raw.id === 'string' && raw.id ? raw.id : `strength-${index + 1}`,
+    title: typeof raw.title === 'string' && raw.title.trim() ? raw.title.trim() : `보강운동 ${index + 1}`,
+    targetAreaIds: normalizeStringArray(raw.targetAreaIds).slice(0, 12),
+    purpose: typeof raw.purpose === 'string' ? raw.purpose.trim() : '',
+    instruction,
+    useWhen: typeof raw.useWhen === 'string' ? raw.useWhen.trim() : '',
+    stopWhen: typeof raw.stopWhen === 'string' ? raw.stopWhen.trim() : '',
+    progression: typeof raw.progression === 'string' ? raw.progression.trim() : '',
+    sources: sources.length ? sources : [internalStrengthPlanSource]
+  }
+}
+
+function normalizeStrengthPlanSource(value: unknown): TrainingStrengthPlanSource | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Partial<TrainingStrengthPlanSource>
+  const title = typeof raw.title === 'string' ? raw.title.trim() : ''
+  if (!title) return null
+  return {
+    type: normalizeStrengthPlanSourceType(raw.type),
+    title,
+    organization: typeof raw.organization === 'string' ? raw.organization.trim() : '',
+    url: typeof raw.url === 'string' ? raw.url.trim() : '',
+    summary: typeof raw.summary === 'string' ? raw.summary.trim() : '',
+    trainingKnowledgeId: typeof raw.trainingKnowledgeId === 'string' && raw.trainingKnowledgeId.trim() ? raw.trainingKnowledgeId.trim() : null
+  }
+}
+
+function normalizeStrengthPlanSourceType(value: unknown): TrainingStrengthPlanSource['type'] {
+  return value === 'training_knowledge' || value === 'external_reference' || value === 'user_note' || value === 'internal_baseline'
+    ? value
+    : 'internal_baseline'
+}
+
+function normalizeCheckInSource(value: unknown): TrainingInjuryCheckIn['source'] {
+  return value === 'coach_suggestion' || value === 'manual_edit' || value === 'user_check_in' ? value : 'user_check_in'
+}
+
+function normalizePainLevel(value: unknown): number | null {
+  const numberValue = Number(value)
+  if (!Number.isFinite(numberValue)) return null
+  return Math.min(5, Math.max(0, Math.round(numberValue)))
+}
+
+function normalizeNullableBoolean(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null
+}
+
+function normalizeNullableDate(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
 function normalizeStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.filter((item) => typeof item === 'string').map((item) => item.trim()).filter(Boolean)
+}
+
+const internalStrengthPlanSource: TrainingStrengthPlanSource = {
+  type: 'internal_baseline',
+  title: 'PaceLAB 보수적 러닝 부하 조절 기준',
+  organization: 'PaceLAB',
+  url: '',
+  summary: '의료 처방이 아니라 통증 0~2/5 범위에서만 보강운동을 허용하고 악화 시 축소/중단하는 앱 내부 안전 기준이다.',
+  trainingKnowledgeId: null
 }
 
 function cloneMemory<T>(memory: T): T {

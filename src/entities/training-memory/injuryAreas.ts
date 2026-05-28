@@ -7,6 +7,27 @@ export type InjuryAreaSelection = {
   painLevel: number | null
 }
 
+export type InjuryStrengthPlanSource = {
+  type: 'internal_baseline' | 'training_knowledge' | 'external_reference' | 'user_note'
+  title: string
+  organization: string
+  url: string
+  summary: string
+  trainingKnowledgeId: string | null
+}
+
+export type InjuryStrengthPlanDetail = {
+  id: string
+  title: string
+  targetAreaIds: string[]
+  purpose: string
+  instruction: string
+  useWhen: string
+  stopWhen: string
+  progression: string
+  sources: InjuryStrengthPlanSource[]
+}
+
 export type InjuryAreaDefinition = {
   id: string
   label: string
@@ -376,40 +397,170 @@ export function deriveInjurySeverity(selections: InjuryAreaSelection[], fallback
   if (levels.length) return Math.max(...levels)
   const numberValue = Number(fallback)
   if (!Number.isFinite(numberValue)) return null
-  return Math.min(5, Math.max(1, Math.round(numberValue)))
+  return normalizePainLevel(numberValue)
 }
 
 export function createConservativeStrengthPlan(selections: InjuryAreaSelection[]) {
+  return createConservativeStrengthPlanDetails(selections).map((plan) => plan.instruction)
+}
+
+export function createConservativeStrengthPlanDetails(selections: InjuryAreaSelection[]) {
   const ids = new Set(normalizeInjuryAreaSelections(selections).map((selection) => selection.areaId))
-  const plans = new Set<string>()
+  const plans = new Map<string, InjuryStrengthPlanDetail>()
+
+  const addPlan = (detail: Omit<InjuryStrengthPlanDetail, 'sources'> & { sources?: InjuryStrengthPlanSource[] }) => {
+    if (!plans.has(detail.id)) {
+      plans.set(detail.id, {
+        ...detail,
+        sources: detail.sources?.length ? detail.sources : [internalStrengthPlanSource]
+      })
+    }
+  }
 
   if (hasAny(ids, ['left-plantar-fascia', 'right-plantar-fascia'])) {
-    plans.add('족저근막: 짧은발(short foot) 5초 유지 x 8~10회, 통증이 올라오면 중단')
-    plans.add('족저근막: 수건 말기/발가락 벌리기처럼 낮은 부하 발 intrinsic 운동')
+    addPlan({
+      id: 'plantar-short-foot',
+      title: '짧은발 유지',
+      targetAreaIds: matchingIds(ids, ['left-plantar-fascia', 'right-plantar-fascia']),
+      purpose: '발 intrinsic 근육을 낮은 부하로 깨워 착지 안정성을 보조한다.',
+      instruction: '족저근막: 짧은발(short foot) 5초 유지 x 8~10회, 통증이 올라오면 중단',
+      useWhen: '통증 0~2/5이고 보행 통증이 없을 때',
+      stopWhen: '발바닥 통증이 커지거나 다음날 첫발 통증이 뚜렷할 때',
+      progression: '통증이 조용하면 유지 시간을 먼저 늘리고, 반복 수는 천천히 늘린다.'
+    })
+    addPlan({
+      id: 'plantar-foot-intrinsic',
+      title: '발 intrinsic 낮은 부하 운동',
+      targetAreaIds: matchingIds(ids, ['left-plantar-fascia', 'right-plantar-fascia']),
+      purpose: '발바닥 부담을 크게 올리지 않고 발가락/아치 조절감을 회복한다.',
+      instruction: '족저근막: 수건 말기/발가락 벌리기처럼 낮은 부하 발 intrinsic 운동',
+      useWhen: '착지 통증이 낮고 운동 중 통증 증가가 없을 때',
+      stopWhen: '저림, 날카로운 통증, 보행 통증이 생길 때',
+      progression: '가동 범위와 정확도를 먼저 확보한 뒤 반복 수를 소폭 늘린다.'
+    })
   }
   if (hasAny(ids, ['left-achilles', 'right-achilles', 'left-calf', 'right-calf'])) {
-    plans.add('아킬레스/종아리: 양발 카프 아이소메트릭 20~30초 x 3회, 통증 3/5 이상이면 생략')
-    plans.add('아킬레스/종아리: 가벼운 발목 가동성, 빠른 점프성 동작 금지')
+    addPlan({
+      id: 'achilles-calf-isometric',
+      title: '양발 카프 아이소메트릭',
+      targetAreaIds: matchingIds(ids, ['left-achilles', 'right-achilles', 'left-calf', 'right-calf']),
+      purpose: '아킬레스/종아리 부하를 급격히 올리지 않고 긴장도와 통증 반응을 확인한다.',
+      instruction: '아킬레스/종아리: 양발 카프 아이소메트릭 20~30초 x 3회, 통증 3/5 이상이면 생략',
+      useWhen: '통증 0~2/5이고 다음날 악화가 없을 때',
+      stopWhen: '통증 3/5 이상, 날카로운 통증, 붓기 또는 보행 통증이 있을 때',
+      progression: '양발 유지가 조용하면 시간부터 늘리고, 편측/동적 부하는 별도 승인 뒤 진행한다.'
+    })
+    addPlan({
+      id: 'achilles-ankle-mobility',
+      title: '가벼운 발목 가동성',
+      targetAreaIds: matchingIds(ids, ['left-achilles', 'right-achilles', 'left-calf', 'right-calf']),
+      purpose: '러닝 전후 발목 가동 범위를 낮은 강도로 점검한다.',
+      instruction: '아킬레스/종아리: 가벼운 발목 가동성, 빠른 점프성 동작 금지',
+      useWhen: '뻣뻣함은 있으나 통증 증가가 없을 때',
+      stopWhen: '반동 동작에서 통증이 증가하거나 다음날 악화될 때',
+      progression: '반동 없이 범위를 확보하고, 점프성 동작은 통증이 안정된 뒤에만 검토한다.'
+    })
   }
   if (hasAny(ids, ['left-hamstring', 'right-hamstring'])) {
-    plans.add('햄스트링: 둔근 브리지 8~10회 x 2세트, 당김이 커지면 범위 축소')
-    plans.add('햄스트링: 힙힌지 패턴 연습, 빠른 가속/스트라이드는 통증이 조용할 때만')
+    addPlan({
+      id: 'hamstring-glute-bridge',
+      title: '둔근 브리지',
+      targetAreaIds: matchingIds(ids, ['left-hamstring', 'right-hamstring']),
+      purpose: '햄스트링에 과부하를 주지 않고 둔근 협응과 후면사슬 지지를 보조한다.',
+      instruction: '햄스트링: 둔근 브리지 8~10회 x 2세트, 당김이 커지면 범위 축소',
+      useWhen: '통증 0~2/5이고 당김이 운동 중 커지지 않을 때',
+      stopWhen: '햄스트링 당김이 커지거나 다음날 뻣뻣함이 증가할 때',
+      progression: '가동 범위를 먼저 안정화하고, 세트 수 증가는 다음날 반응이 조용할 때만 한다.'
+    })
+    addPlan({
+      id: 'hamstring-hip-hinge',
+      title: '힙힌지 패턴',
+      targetAreaIds: matchingIds(ids, ['left-hamstring', 'right-hamstring']),
+      purpose: '빠른 가속 전 고관절 접기 패턴을 낮은 강도로 확인한다.',
+      instruction: '햄스트링: 힙힌지 패턴 연습, 빠른 가속/스트라이드는 통증이 조용할 때만',
+      useWhen: 'Easy 착지감이 조용하고 햄스트링 당김이 낮을 때',
+      stopWhen: '전굴/힌지 중 당김이 뚜렷해지거나 가속 뒤 불편감이 남을 때',
+      progression: '속도보다 패턴 정확도를 우선하고, 스트라이드는 별도 체크 후 재개한다.'
+    })
   }
   if (hasAny(ids, ['left-knee', 'right-knee', 'left-it-band', 'right-it-band'])) {
-    plans.add('무릎/IT밴드: 낮은 스텝다운 6~8회 x 2세트, 무릎 바깥쪽 신호 확인')
-    plans.add('무릎/IT밴드: 클램셸 또는 사이드워크로 둔근 중둔근을 가볍게 깨우기')
+    addPlan({
+      id: 'knee-low-stepdown',
+      title: '낮은 스텝다운',
+      targetAreaIds: matchingIds(ids, ['left-knee', 'right-knee', 'left-it-band', 'right-it-band']),
+      purpose: '무릎 정렬과 외측 신호를 낮은 높이에서 확인한다.',
+      instruction: '무릎/IT밴드: 낮은 스텝다운 6~8회 x 2세트, 무릎 바깥쪽 신호 확인',
+      useWhen: '일상 계단 통증이 없고 통증 0~2/5일 때',
+      stopWhen: '무릎 바깥쪽/앞쪽 통증이 커지거나 계단 통증이 생길 때',
+      progression: '높이보다 정렬을 우선하고, 반복 수 증가는 다음날 반응 확인 뒤 진행한다.'
+    })
+    addPlan({
+      id: 'knee-glute-med-activation',
+      title: '둔근 중둔근 활성',
+      targetAreaIds: matchingIds(ids, ['left-knee', 'right-knee', 'left-it-band', 'right-it-band']),
+      purpose: '무릎/IT밴드 부담을 낮추기 위한 고관절 측면 지지를 가볍게 깨운다.',
+      instruction: '무릎/IT밴드: 클램셸 또는 사이드워크로 둔근 중둔근을 가볍게 깨우기',
+      useWhen: '통증이 낮고 동작 중 무릎 신호가 늘지 않을 때',
+      stopWhen: '무릎 통증이나 고관절 통증이 새로 생길 때',
+      progression: '저항보다 동작 정확도를 먼저 확보하고, 밴드 강도는 천천히 올린다.'
+    })
   }
   if (hasAny(ids, ['left-hip', 'right-hip', 'lower-back'])) {
-    plans.add('고관절/허리: 버드독 또는 데드버그 6~8회 x 2세트, 허리 반동 없이')
-    plans.add('고관절/허리: 가벼운 고관절 회전 가동성, 피로한 날은 세트 수 절반')
+    addPlan({
+      id: 'hip-back-core-control',
+      title: '버드독/데드버그',
+      targetAreaIds: matchingIds(ids, ['left-hip', 'right-hip', 'lower-back']),
+      purpose: '허리 반동을 줄이고 러닝 자세를 지탱하는 몸통 조절을 보조한다.',
+      instruction: '고관절/허리: 버드독 또는 데드버그 6~8회 x 2세트, 허리 반동 없이',
+      useWhen: '허리/고관절 통증이 낮고 동작 중 악화가 없을 때',
+      stopWhen: '저림, 방사통, 날카로운 통증 또는 보행 통증이 있을 때',
+      progression: '반복 수보다 흔들림 없는 자세를 우선하고, 피로한 날은 세트 수를 줄인다.'
+    })
+    addPlan({
+      id: 'hip-back-mobility',
+      title: '고관절 회전 가동성',
+      targetAreaIds: matchingIds(ids, ['left-hip', 'right-hip', 'lower-back']),
+      purpose: '러닝 전후 고관절 회전 제한과 허리 부담을 낮은 강도로 점검한다.',
+      instruction: '고관절/허리: 가벼운 고관절 회전 가동성, 피로한 날은 세트 수 절반',
+      useWhen: '뻣뻣함은 있으나 통증 증가가 없을 때',
+      stopWhen: '허리 반동이나 고관절 찝힘이 커질 때',
+      progression: '범위보다 편안한 움직임을 우선하고, 피로가 크면 절반만 수행한다.'
+    })
   }
   if (hasAny(ids, ['left-shin', 'right-shin'])) {
-    plans.add('정강이: 티비얼리스 레이즈 8~12회 x 2세트, 뼈성 통증이면 러닝 부하 우선 축소')
-    plans.add('정강이: 딱딱한 노면/다운힐/속도주를 보수적으로 제한')
+    addPlan({
+      id: 'shin-tibialis-raise',
+      title: '티비얼리스 레이즈',
+      targetAreaIds: matchingIds(ids, ['left-shin', 'right-shin']),
+      purpose: '정강이 주변 근육을 낮은 부하로 자극하면서 통증 반응을 확인한다.',
+      instruction: '정강이: 티비얼리스 레이즈 8~12회 x 2세트, 뼈성 통증이면 러닝 부하 우선 축소',
+      useWhen: '통증 0~2/5이고 압통/보행 통증이 없을 때',
+      stopWhen: '뼈성 통증, 국소 압통, 보행 통증 또는 다음날 악화가 있을 때',
+      progression: '반복 수 증가는 천천히 하고, 러닝 부하 증가는 별도 체크 후 진행한다.'
+    })
+    addPlan({
+      id: 'shin-load-restriction',
+      title: '정강이 부하 제한',
+      targetAreaIds: matchingIds(ids, ['left-shin', 'right-shin']),
+      purpose: '보강운동보다 러닝 부하 조절을 우선해야 하는 정강이 신호를 관리한다.',
+      instruction: '정강이: 딱딱한 노면/다운힐/속도주를 보수적으로 제한',
+      useWhen: '정강이 신호가 남아 있거나 최근 거리 증가가 있었을 때',
+      stopWhen: '통증이 강해지면 제한이 아니라 러닝 중단/전문가 상담을 우선한다.',
+      progression: '노면과 속도 변수를 먼저 안정화하고, 거리 증가는 통증 기록이 조용할 때만 한다.'
+    })
   }
 
-  plans.add('공통: 보강운동은 통증 0~2/5 범위에서만, 다음날 악화되면 강도와 세트 수를 낮춘다.')
-  return [...plans].slice(0, 8)
+  addPlan({
+    id: 'common-pain-gate',
+    title: '공통 통증 게이트',
+    targetAreaIds: [...ids],
+    purpose: '보강운동이 러닝 부하 조절을 방해하지 않도록 중단 기준을 먼저 둔다.',
+    instruction: '공통: 보강운동은 통증 0~2/5 범위에서만, 다음날 악화되면 강도와 세트 수를 낮춘다.',
+    useWhen: '통증이 0~2/5이고 일상 보행 악화가 없을 때',
+    stopWhen: '통증 증가, 저림, 붓기, 날카로운 통증, 일상 보행 통증이 있을 때',
+    progression: '강도 상향보다 다음날 반응 기록을 우선한다.'
+  })
+  return [...plans.values()].slice(0, 8)
 }
 
 export function createInjuryRestrictions(selections: InjuryAreaSelection[]) {
@@ -448,7 +599,7 @@ function normalizeInjuryAreaSelection(value: unknown): InjuryAreaSelection | nul
   const pain = Number(raw.painLevel)
   return {
     areaId: raw.areaId,
-    painLevel: Number.isFinite(pain) ? Math.min(5, Math.max(1, Math.round(pain))) : null
+    painLevel: Number.isFinite(pain) ? normalizePainLevel(pain) : null
   }
 }
 
@@ -469,4 +620,21 @@ function uniqueSelections(selections: InjuryAreaSelection[]) {
 
 function hasAny(ids: Set<string>, targets: string[]) {
   return targets.some((target) => ids.has(target))
+}
+
+function matchingIds(ids: Set<string>, targets: string[]) {
+  return targets.filter((target) => ids.has(target))
+}
+
+function normalizePainLevel(value: number) {
+  return Math.min(5, Math.max(0, Math.round(value)))
+}
+
+const internalStrengthPlanSource: InjuryStrengthPlanSource = {
+  type: 'internal_baseline',
+  title: 'PaceLAB 보수적 러닝 부하 조절 기준',
+  organization: 'PaceLAB',
+  url: '',
+  summary: '의료 처방이 아니라 통증 0~2/5 범위에서만 보강운동을 허용하고 악화 시 축소/중단하는 앱 내부 안전 기준이다.',
+  trainingKnowledgeId: null
 }

@@ -10,6 +10,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "e2e": "playwright test",
+    "supabase:functions:check": "deno check supabase/functions/coach-run/index.ts",
     "harness:guide": "node .harness/bin/check-node-version.mjs && node .harness/bin/harness-guide.mjs",
     "harness:scan": "node .harness/bin/check-node-version.mjs && node .harness/bin/scan-project.mjs --write",
     "harness:handoff": "node .harness/bin/check-node-version.mjs && node .harness/bin/handoff.mjs --write",

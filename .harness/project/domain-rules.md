@@ -29,7 +29,7 @@
 - `TrainingMethod`: MAF, Daniels, Hanson 같은 훈련법 단위다. 적용 거리, 러너 수준, 주간 훈련 가능 횟수, 주의사항을 가진다.
 - `TrainingPrescriptionRule`: 거리/단계/세션 타입별 처방 규칙이다. 처방 기준, 상향 조건, 하향 조건, 금기 조건, 근거 요약을 가진다.
 - `TrainingGoal`: title/category/status 외에 startDate, targetDate, distanceKm, targetDurationSec, successCriteria, strategyNotes를 가진다. AI는 active goal의 성공 기준과 전략을 우선 기준으로 삼는다.
-- `TrainingInjuryItem`: title/area/status/severity 외에 `normalizedAreas`, triggers, restrictions, returnToRunCriteria, strengthPlan을 가진다. `area`는 레거시/표시용 요약이며, AI는 normalizedAreas의 부위별 painLevel과 active injury의 제한 조건을 다음 훈련 추천에 반영한다.
+- `TrainingInjuryItem`: title/area/status/severity 외에 `normalizedAreas`, triggers, restrictions, returnToRunCriteria, strengthPlan, strengthPlanDetails, lastCheckedAt, resolvedAt, checkInHistory를 가진다. `area`는 레거시/표시용 요약이며, AI는 normalizedAreas의 부위별 painLevel과 active injury의 제한 조건을 다음 훈련 추천에 반영한다.
 
 ## 불변식
 - 원본 운동 파일은 저장하지 않는다.
@@ -81,9 +81,18 @@
 - 목표는 완성 날짜(`TrainingGoal.targetDate`)를 가질 수 있다. AI 코칭은 매 요청마다 활성 목표의 남은 기간, 최근 수행 흐름, Easy + Strides/Tempo/Long Run 수행 여부를 확인하고, 목표 달성에 맞춰 스케줄 유지/수정 필요성을 놓치지 않는다.
 - AI 코칭 입력에서 “7:00/km로 Zone 2가 되고 싶다”처럼 장기 목표나 보조 목표로 보이는 문장이 감지되면, 즉시 대화로 되묻지 않고 바텀시트로 저장 여부를 확인한다. 저장 시 활성 목표를 바꾸지 않고 보조 `TrainingGoal`과 `aiNotes`에 남겨 이후 코칭 기준으로 사용한다.
 - 부상/주의사항은 별도 이벤트가 아니라 스케줄 관리의 핵심 제약이다. AI 코칭은 매 요청마다 `activeInjuryItem`, `painNote`, 최근 강훈련/롱런 이후 회복 반응을 확인하고, 의료 진단 없이 훈련 강도와 다음 세션 배치에 반영한다.
-- 부상 부위 입력은 자유 텍스트에 의존하지 않는다. UI는 WebGL/Three.js 없는 생성 이미지 기반 스틸컷 around-view와 상체/허리, 하체, 발/발목 모델 범위를 함께 제공하고, 사용자는 각도별 스틸컷을 넘기며 영역을 터치한 뒤 상세 후보에서 정확한 부위를 선택한다. 선택된 부위는 이미지 위 노드와 선택 목록에 표시하고, 최종 등록 전 부위별 통증 레벨을 1~5 게이지로 입력한다. 모바일에서는 전신 하나에 모든 세그먼트를 우겨 넣지 말고 모델 범위를 분리해 부위 인지와 터치 정확도를 우선한다. 상체/하체는 45도 단위 9컷, 발/발목은 전면/후면/내측/외측/발등/발바닥 관점으로 관리한다.
-- 보강운동 처방은 `TrainingInjuryItem.strengthPlan`에 저장한다. 보강운동은 항상 보수적으로 제안하며, 통증 0~2/5 범위에서만 수행하고 다음날 악화되면 세트 수나 강도를 낮춘다. 진단/치료 보장을 암시하지 않는다.
+- 부상 부위 입력은 자유 텍스트에 의존하지 않는다. UI는 WebGL/Three.js 없는 생성 이미지 기반 스틸컷 around-view와 상체/허리, 하체, 발/발목 모델 범위를 함께 제공하고, 사용자는 각도별 스틸컷을 넘기며 영역을 터치한 뒤 상세 후보에서 정확한 부위를 선택한다. 선택된 부위는 이미지 위 노드와 선택 목록에 표시하고, 최종 등록 전 부위별 통증 레벨을 0~5 게이지로 입력한다. 모바일에서는 전신 하나에 모든 세그먼트를 우겨 넣지 말고 모델 범위를 분리해 부위 인지와 터치 정확도를 우선한다. 상체/하체는 45도 단위 9컷, 발/발목은 전면/후면/내측/외측/발등/발바닥 관점으로 관리한다.
+- 보강운동 처방의 기존 표시/호환 문자열은 `TrainingInjuryItem.strengthPlan`에 유지하고, 출처와 수행 조건이 필요한 구조화 계약은 `strengthPlanDetails`에 둔다. 보강운동은 항상 보수적으로 제안하며, 통증 0~2/5 범위에서만 수행하고 다음날 악화되면 세트 수나 강도를 낮춘다. 진단/치료 보장을 암시하지 않는다.
 - 수면질은 부상 범주에 넣지 않는다. 수면은 회복/컨디션 신호로 분리하고, 훈련 강도/목표 예상/회복 판단에 반영한다. 수면이 나쁘다는 이유로 특정 부위 부상처럼 처리하지 않는다.
+- 부상 체크인은 사용자가 Memory 화면을 직접 열 때만 의존하지 않는다. 앱 기동, 포커스 복귀, 롱런/Tempo/Strides 같은 품질 세션 다음 앱 사용 시점에 active 또는 monitoring 부상 항목이 있으면 통증 변화와 완치 후보 여부를 짧게 확인한다. 단, 매 기동마다 반복 질문하지 않도록 항목별 최근 체크 시각과 최근 강도 세션 이후 여부를 함께 본다.
+- 부상 체크인 질문은 최소 네 가지다. 1) 지금 해당 부위 통증이 0~5 중 몇 점인지, 2) 지난 러닝 중/후에 통증이 커졌는지, 3) 일상 보행이나 계단에서 신경 쓰이는지, 4) 오늘 강훈련/롱런을 그대로 해도 될 만큼 조용한지. 필요할 때만 자유 메모를 추가로 받는다.
+- 부위별 `painLevel`의 목표 스케일은 0~5다. 0은 통증 없음, 1~2는 관찰하며 보강운동 가능, 3은 강훈련/롱런 상향 보류, 4~5는 러닝 강도 하향 또는 중단 검토가 필요한 강한 신호다. 현재 구현이 1~5만 허용한다면 UI/저장 구조 후속 작업에서 0을 허용하도록 조정한다.
+- `TrainingInjuryItem.severity`는 기본적으로 active normalizedAreas의 최대 `painLevel`이다. 여러 부위가 동시에 있으면 가장 강한 부위가 훈련 제한을 결정한다. 다만 의료 진단이나 조직 손상 정도가 아니라 훈련 부하 조절용 위험 신호로만 해석한다.
+- `resolved`는 사용자가 직접 확정해야 한다. 앱은 최근 체크인에서 통증 0~1/5가 반복되고, 최근 Easy 조깅과 일상 보행에서 악화가 없으며, 최근 강훈련/롱런 뒤에도 `lastFlareDate`가 갱신되지 않았을 때만 해소 후보로 제안한다. 해소 처리 시 `resolvedAt` 같은 별도 시각을 남기는 저장 구조가 필요하면 데이터 workstream에서 확정한다.
+- active 또는 monitoring 부상 항목이 있으면 목표 예상 준비도와 다음 세션 추천은 보수적으로 낮춘다. 0~1/5은 루틴 유지 가능, 2/5는 강훈련 전 체크포인트 추가, 3/5 이상은 Tempo/Strides/Steady Long 상향 보류, 4~5/5 또는 달리며 악화되는 통증은 회복주/휴식/전문가 상담 안내를 우선한다.
+- 보강운동 처방은 운동명만 저장하지 않는다. 장기 구조는 `strengthPlanDetails`에 운동명, 대상 부위, 목적, 수행 조건, 중단 조건, 단계 조절, 근거 출처 메타데이터를 함께 둔다. 출처는 원문 전문이 아니라 제목/기관 또는 논문명/URL/짧은 근거 요약 수준으로 저장한다.
+- 보강운동 출처는 러닝 부상 재활을 직접 보장하는 권위처럼 쓰지 않는다. 앱은 "러닝 부하 조절을 돕는 참고용 보강운동"으로만 제안하며, 통증이 커지거나 일상 보행 통증, 저림, 붓기, 날카로운 통증이 있으면 운동 처방보다 중단/축소와 전문가 상담을 먼저 안내한다.
+- 부상 체크인 결과가 코칭에서 부상 상태 변경이나 완치 후보를 만들 수 있더라도 자동으로 `injuryItems`를 바꾸지 않는다. AI나 규칙 로직은 제안만 하고, 사용자가 승인한 뒤에만 painLevel, status, lastFlareDate, resolvedAt 같은 상태를 저장한다.
 - 코칭 알고리즘은 문헌 기반 기준선을 먼저 적용하고, 사용자 데이터와 대화로 확인된 반복 패턴만 `adaptiveTrainingProfile`에 저장해 개인화한다. “스스로 진화”는 소스 코드 수정이 아니라 이 구조화된 개인화 프로필 갱신을 의미한다.
 - `adaptiveTrainingProfile`은 `trainingPhase`, `progressionCriteria`, `prescriptionTemplates`, `compliancePatterns`, `sessionGuides`로 구성한다. 훈련 단계는 현재 블록, 승급 조건은 상향/유지/하향 판단 게이트, 처방 템플릿은 사용자가 Workoutdoors에 옮겨 실행할 세부 지침이다.
 - `adaptiveTrainingProfile`은 단일 세션으로 크게 바꾸지 않는다. 같은 유형 2~3회 이상의 반복 준수/이탈, 또는 사용자의 명시 피드백이 있을 때만 갱신한다.

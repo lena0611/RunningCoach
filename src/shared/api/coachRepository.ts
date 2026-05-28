@@ -9,6 +9,17 @@ export type CoachReport = {
   createdAt: string
   updatedAt?: string
   trainingMemoryUpdated?: boolean
+  injuryUpdateProposal?: CoachInjuryUpdateProposal | null
+}
+
+export type CoachInjuryUpdateProposal = {
+  injuryItemId: string
+  proposalType: 'check_in_update' | 'resolve_candidate' | 'status_change_candidate'
+  suggestedStatus?: 'active' | 'monitoring' | 'resolved'
+  suggestedPainLevel?: number | null
+  rationale: string
+  userApprovalPrompt: string
+  safetyNotes: string[]
 }
 
 type CoachReportRow = {

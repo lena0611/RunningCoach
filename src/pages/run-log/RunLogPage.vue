@@ -6,10 +6,10 @@ import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import { runTypes, type RunLog, type RunType } from '@/entities/run/model'
-import type { TrainingGoal, TrainingMemory } from '@/entities/training-memory/model'
+import type { TrainingGoal, TrainingInjuryCheckIn, TrainingMemory } from '@/entities/training-memory/model'
 import { detectGoalIntent, type GoalIntentProposal } from '@/features/detect-goal-intent/detectGoalIntent'
 import UploadRunPage from '@/pages/upload-run/UploadRunPage.vue'
-import { fetchCoachReports, requestCoachRunStream, type CoachReport } from '@/shared/api/coachRepository'
+import { fetchCoachReports, requestCoachRunStream, type CoachInjuryUpdateProposal, type CoachReport } from '@/shared/api/coachRepository'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { formatDateTimeWithWeekday, formatDateWithWeekday } from '@/shared/lib/format'
 import { getRunFilterTags, hasRunFilterTag, isScheduledSession, type RunFilterTag } from '@/shared/lib/runMetaChips'
@@ -66,6 +66,8 @@ const pendingDeleteRun = ref<RunLog | null>(null)
 const pendingGoalProposal = ref<GoalIntentProposal | null>(null)
 const pendingGoalCoachNote = ref('')
 const savingGoalProposal = ref(false)
+const dismissedInjuryProposalIds = ref<string[]>([])
+const savingInjuryProposalId = ref('')
 const error = ref('')
 const calendarMonth = ref(toMonthKey(new Date()))
 const schedulingHelpOpen = ref(false)
@@ -682,6 +684,108 @@ function closeGoalProposal() {
   pendingGoalCoachNote.value = ''
 }
 
+function getInjuryProposalKey(report: CoachReport) {
+  const proposal = report.injuryUpdateProposal
+  if (!proposal) return ''
+  return `${report.id}:${proposal.injuryItemId}:${proposal.proposalType}`
+}
+
+function shouldShowInjuryProposal(report: CoachReport) {
+  const key = getInjuryProposalKey(report)
+  if (!key || dismissedInjuryProposalIds.value.includes(key)) return false
+  return Boolean(getProposalInjuryItem(report.injuryUpdateProposal))
+}
+
+function getProposalInjuryItem(proposal: CoachInjuryUpdateProposal | null | undefined) {
+  if (!proposal) return null
+  return memoryStore.memory.injuryItems.find((item) => item.id === proposal.injuryItemId) ?? null
+}
+
+function getInjuryProposalTitle(proposal: CoachInjuryUpdateProposal) {
+  const item = getProposalInjuryItem(proposal)
+  if (!item) return '부상 상태 제안'
+  return `${item.title} 상태 제안`
+}
+
+function getInjuryProposalSummary(proposal: CoachInjuryUpdateProposal) {
+  const parts = []
+  if (proposal.suggestedPainLevel !== undefined) parts.push(`통증 ${proposal.suggestedPainLevel ?? '미입력'}/5`)
+  if (proposal.suggestedStatus) parts.push(statusLabel(proposal.suggestedStatus))
+  return parts.length ? parts.join(' · ') : '사용자 승인 후 상태 기록'
+}
+
+function getInjuryProposalSafetyNotes(proposal: CoachInjuryUpdateProposal) {
+  return Array.isArray(proposal.safetyNotes) ? proposal.safetyNotes.filter(Boolean) : []
+}
+
+function statusLabel(status: 'active' | 'monitoring' | 'resolved') {
+  if (status === 'active') return '현재 관리 중'
+  if (status === 'monitoring') return '관찰 중'
+  return '해소됨'
+}
+
+function dismissInjuryProposal(report: CoachReport) {
+  const key = getInjuryProposalKey(report)
+  if (!key) return
+  dismissedInjuryProposalIds.value = [...dismissedInjuryProposalIds.value, key]
+}
+
+async function approveInjuryProposal(report: CoachReport) {
+  const proposal = report.injuryUpdateProposal
+  if (!proposal) return
+  const current = getProposalInjuryItem(proposal)
+  if (!current) return
+  const key = getInjuryProposalKey(report)
+  savingInjuryProposalId.value = key
+  coachError.value = ''
+  try {
+    const now = new Date().toISOString()
+    const memory = JSON.parse(JSON.stringify(memoryStore.memory)) as TrainingMemory
+    const item = memory.injuryItems.find((entry) => entry.id === proposal.injuryItemId)
+    if (!item) return
+    const nextPainLevel = proposal.suggestedPainLevel === undefined ? item.severity : normalizePainLevel(proposal.suggestedPainLevel)
+    const areaPainLevels = item.normalizedAreas.map((area) => ({ ...area, painLevel: nextPainLevel }))
+    const checkIn: TrainingInjuryCheckIn = {
+      id: crypto.randomUUID(),
+      checkedAt: now,
+      painLevel: nextPainLevel,
+      areaPainLevels,
+      worsenedDuringOrAfterRun: null,
+      dailyActivityPain: null,
+      readyForQualitySession: proposal.proposalType === 'resolve_candidate' ? true : null,
+      note: proposal.rationale,
+      source: 'coach_suggestion'
+    }
+
+    item.normalizedAreas = areaPainLevels
+    item.severity = nextPainLevel
+    item.lastCheckedAt = now
+    item.checkInHistory = [checkIn, ...(item.checkInHistory ?? [])].slice(0, 30)
+    if (proposal.suggestedStatus) item.status = proposal.suggestedStatus
+    if (proposal.proposalType === 'resolve_candidate' || proposal.suggestedStatus === 'resolved') {
+      item.status = 'resolved'
+      item.resolvedAt = now
+      if (memory.activeInjuryItemId === item.id) {
+        memory.activeInjuryItemId = memory.injuryItems.find((entry) => entry.id !== item.id && (entry.status === 'active' || entry.status === 'monitoring'))?.id ?? null
+      }
+    }
+    item.updatedAt = now
+
+    await memoryStore.update(memory)
+    dismissInjuryProposal(report)
+  } catch (err) {
+    coachError.value = err instanceof Error ? err.message : '부상 상태 제안을 저장하지 못했습니다.'
+  } finally {
+    savingInjuryProposalId.value = ''
+  }
+}
+
+function normalizePainLevel(value: number | null | undefined) {
+  if (value === null || value === undefined) return null
+  const numberValue = Number(value)
+  return Number.isFinite(numberValue) ? Math.min(5, Math.max(0, Math.round(numberValue))) : null
+}
+
 async function saveGoalProposal(proposal: GoalIntentProposal) {
   const now = new Date().toISOString()
   const memory = JSON.parse(JSON.stringify(memoryStore.memory)) as TrainingMemory
@@ -1015,6 +1119,22 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
                 <div v-for="report in selectedReports" :key="report.id" class="coach-turn">
                   <CoachMessage v-if="report.userNote" role="user" :text="report.userNote" :meta="formatDateTimeWithWeekday(report.createdAt)" />
                   <CoachMessage role="coach" :text="report.report" :meta="formatDateTimeWithWeekday(report.updatedAt || report.createdAt)" />
+                  <article v-if="report.injuryUpdateProposal && shouldShowInjuryProposal(report)" class="coach-injury-proposal-card">
+                    <span class="context-chip">사용자 승인 필요</span>
+                    <strong>{{ getInjuryProposalTitle(report.injuryUpdateProposal) }}</strong>
+                    <small>{{ getInjuryProposalSummary(report.injuryUpdateProposal) }}</small>
+                    <p>{{ report.injuryUpdateProposal.userApprovalPrompt || report.injuryUpdateProposal.rationale }}</p>
+                    <small v-if="report.injuryUpdateProposal.rationale">{{ report.injuryUpdateProposal.rationale }}</small>
+                    <ul v-if="getInjuryProposalSafetyNotes(report.injuryUpdateProposal).length">
+                      <li v-for="note in getInjuryProposalSafetyNotes(report.injuryUpdateProposal)" :key="note">{{ note }}</li>
+                    </ul>
+                    <div class="coach-injury-proposal-actions">
+                      <button type="button" :disabled="Boolean(savingInjuryProposalId)" @click="approveInjuryProposal(report)">
+                        {{ savingInjuryProposalId === getInjuryProposalKey(report) ? '저장 중' : '승인하고 저장' }}
+                      </button>
+                      <button class="ghost" type="button" :disabled="Boolean(savingInjuryProposalId)" @click="dismissInjuryProposal(report)">무시</button>
+                    </div>
+                  </article>
                 </div>
               </template>
               <CoachMessage v-if="visibleStreamingCoachText" role="coach" :text="visibleStreamingCoachText" :meta="streamingCoachMeta" :streaming="coachLoading" :thinking="coachLoading && !streamingCoachText" />
