@@ -243,3 +243,10 @@
 - 안전장치: `response.completed`, `response.output_item.done`, `response.content_part.done`, `response.output_text.done`에서 완성 텍스트가 오면 같은 호출의 completed payload를 저장 파싱에 사용한다. delta가 없어 report를 실시간으로 못 흘린 경우에도 두 번째 OpenAI 호출 없이 마지막에 한 번만 report를 보낸다.
 - 선택 이유: 429 재발을 막으려면 사용자 요청 1회당 OpenAI 호출 1회 원칙을 유지해야 한다. 동시에 UI에는 report 본문만 보여야 하므로 JSON 전체를 그대로 스트리밍하지 않고 report 문자열 내부만 추출한다.
 - 포기한 대안: 스트리밍 실패 시 non-stream 호출을 다시 실행하는 방식은 이전 장애 원인이므로 금지한다. 프론트에서 JSON 전체를 받아 report를 파싱하는 방식은 사용자에게 JSON 파편이 보일 수 있어 채택하지 않는다.
+
+## 2026-05-29 - AI/하네스 운영 변경은 Pages 배포 제외
+- 문제: `.harness/**`, `.codex/**`, `.agents/**` 같은 AI 에이전트 운영 파일만 바꿔도 `main` push 기준 GitHub Pages workflow가 실행되어 실제 앱 산출물이 바뀌지 않은 배포 이력이 생긴다.
+- 결정: `.github/workflows/pages.yml`에 `paths-ignore`를 추가해 AI/하네스 운영 파일만 변경된 push는 Pages deploy를 생략한다.
+- 적용 범위: `.harness/**`, `.codex/**`, `.agents/**`, `.claude/**`, `AGENTS.md`, `CLAUDE.md`, `.github/commit-template.txt`, Copilot instructions만 ignore한다.
+- 배포 유지 범위: `src/**`, `public/**`, `package.json`, `.nvmrc`, Vite 설정, GitHub workflow 자체, Supabase 함수처럼 런타임/빌드/배포 산출물에 영향을 줄 수 있는 파일은 ignore하지 않는다.
+- 선택 이유: iOS WebView 캐시/전파 지연까지 고려하면 사용자-facing 산출물이 바뀌지 않은 배포는 운영 신호를 흐린다. 에이전트 운영 변경은 로컬 검증과 커밋/푸시 hook으로 확인하고, Pages 배포는 앱 산출물 변경에만 연결한다.
