@@ -12,6 +12,7 @@ type MetricPairListItem = {
 
 const props = defineProps<{
   items: MetricPairListItem[]
+  density?: 'regular' | 'compact' | 'dense'
   verticalDivider?: boolean
 }>()
 
@@ -29,7 +30,13 @@ function displayValue(value: MetricPairListItem['value']) {
 </script>
 
 <template>
-  <div class="metric-pair-list" :class="{ 'metric-pair-list-vertical-divider': verticalDivider !== false }">
+  <div
+    class="metric-pair-list"
+    :class="[
+      `metric-pair-list-density-${density ?? 'regular'}`,
+      { 'metric-pair-list-vertical-divider': verticalDivider !== false }
+    ]"
+  >
     <div v-for="row in rows" :key="row.map((item) => item?.id).join('-')" class="metric-pair-row">
       <article
         v-for="item in row"

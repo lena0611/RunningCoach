@@ -2312,6 +2312,18 @@ button.run-session-row {
   padding: 18px 22px;
 }
 
+.metric-pair-list-density-compact .metric-pair-cell {
+  min-height: 82px;
+  gap: 8px;
+  padding: 14px 22px;
+}
+
+.metric-pair-list-density-dense .metric-pair-cell {
+  min-height: 72px;
+  gap: 6px;
+  padding: 12px 18px;
+}
+
 .metric-pair-list-vertical-divider .metric-pair-cell + .metric-pair-cell {
   border-left: 1px solid var(--color-border);
 }

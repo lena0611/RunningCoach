@@ -56,7 +56,7 @@ const detailMetrics = computed(() => [
       </div>
     </SectionCard>
 
-    <MetricPairList :items="detailMetrics" :vertical-divider="false" />
+    <MetricPairList :items="detailMetrics" density="compact" :vertical-divider="false" />
 
     <SectionGroup v-if="run.memo || run.workoutFeeling || run.painNote" title="메모">
       <p v-if="run.memo">{{ run.memo }}</p>
