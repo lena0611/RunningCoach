@@ -318,3 +318,11 @@
 - 배치 기준: `요약`은 다음 훈련 추천과 목표 준비도 중심의 현재 작전판, `기록`은 `RunLog` 원장과 세션별 상세/코칭, `기억`은 목표/프로필/부상/루틴/AI 장기 기억 같은 장기 맥락 관리 화면으로 둔다.
 - 선택 이유: PaceLAB MVP 핵심 흐름은 `목표 -> 러닝 기록 -> 부하와 적응/몸 상태 -> 코칭 -> 다음 훈련`이므로, 반복 사용 메뉴도 현재 판단, 과거 원장, 장기 맥락으로 분리해야 한다.
 - 후속 기준: 상세 기준은 `.harness/project/navigation-information-architecture.md`를 따른다. 화면 구조와 UI 반영은 `03-ui-ux` workstream에서 별도 처리한다.
+
+## 2026-05-29 - 업무 피로도 Project 필드와 자가진단 기준
+- 문제: workstream 대화창을 분리해도 각 창의 대화가 길어지면 컨텍스트 오염, branch/worktree 혼선, 완료 조건 누락 위험이 다시 커질 수 있다.
+- 결정: GitHub Project `PaceLAB Development`에 `업무 피로도` single-select 필드를 두고 `fresh`, `normal`, `tired`, `reset-needed`로 관리한다. 이 값은 Issue lifecycle `Status`가 아니라 현재 작업 창의 컨텍스트 부하 신호다.
+- 측정 기준: 정확한 토큰 수나 내부 기억 품질은 외부에서 안정적으로 측정할 수 없으므로, 에이전트가 작업 시작/종료/handoff 시 자가진단한다. 긴 대화, 반복 재확인, workstream/Issue 혼선, 운영 규칙 누락, 사용자의 리셋 언급을 신호로 본다.
+- hook 영향: Codex `UserPromptSubmit` hook은 사용자가 피로도, 컨텍스트 오염, 리셋, 새 창, 느려짐을 언급하면 `업무 피로도` 기준을 읽고 Project 필드와 Issue 댓글을 갱신하라는 안내를 주입한다.
+- 운영 기준: `tired`면 현재 Issue만 마무리하고 새 작업을 섞지 않는다. `reset-needed`면 넓은 새 작업을 시작하지 않고 Issue 댓글과 handoff를 남긴 뒤 같은 workstream 새 창에서 재개한다.
+- 앱 영향: 사용자-facing Vue 앱, Supabase Edge Function, iOS/HealthKit 경계는 변경하지 않는다. 이번 변경은 GitHub Project 운영 필드, 하네스 문서, Codex 컨텍스트 주입에 한정한다.

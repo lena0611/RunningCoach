@@ -33,8 +33,16 @@ PaceLAB의 정식 개발 작업은 GitHub Issues를 단일 출처로 두고, 전
 | `Target` | `MVP`, `Beta`, `App Store`, `Later` |
 | `Verification` | `none`, `unit`, `e2e`, `build`, `harness-check`, `manual` |
 | `Blocked` | `yes`, `no` |
+| `업무 피로도` | `fresh`, `normal`, `tired`, `reset-needed` |
 
 GitHub `Assignees`는 사람 계정 배정용입니다. PaceLAB의 담당 workstream은 `Assignees`가 아니라 Project의 `Workstream`과 `Completion Owner` 필드로 관리합니다.
+
+`업무 피로도`는 Issue lifecycle 상태가 아니라 해당 작업을 맡은 대화창의 컨텍스트 부하 자가진단 값입니다. 정확한 토큰 수나 내부 기억 품질을 측정하는 필드가 아니며, 에이전트가 작업 시작/종료/인수인계 시 현재 창을 계속 써도 되는지 판단해 갱신합니다.
+
+- `fresh`: 새 창이거나 짧은 맥락입니다.
+- `normal`: 현재 작업을 안정적으로 계속할 수 있습니다.
+- `tired`: 대화가 길거나 여러 주제가 섞여 새 작업을 추가하지 않는 편이 낫습니다.
+- `reset-needed`: 컨텍스트 혼선 위험이 커서 새 같은 workstream 창으로 넘겨야 합니다.
 
 기본 view:
 
@@ -135,6 +143,9 @@ gh project field-create <project-number> --owner lena0611 --name "Completion Own
 gh project field-create <project-number> --owner lena0611 --name "Target" --data-type SINGLE_SELECT --single-select-options "MVP,Beta,App Store,Later"
 gh project field-create <project-number> --owner lena0611 --name "Verification" --data-type SINGLE_SELECT --single-select-options "none,unit,e2e,build,harness-check,manual"
 gh project field-create <project-number> --owner lena0611 --name "Blocked" --data-type SINGLE_SELECT --single-select-options "no,yes"
+gh project field-create <project-number> --owner lena0611 --name "업무 피로도" --data-type SINGLE_SELECT --single-select-options "fresh,normal,tired,reset-needed"
 ```
 
 GitHub 기본 `Status` 필드는 `Inbox`, `Backlog`, `Ready`, `In Progress`, `Review`, `Verify`, `Deployed`, `Done`, `Deferred`, `Rejected` 옵션으로 정리합니다.
+
+`PaceLAB Development` Project에는 `업무 피로도` 필드가 이미 추가되어 있습니다. 새 Project를 다시 만들 때만 위 필드 생성 명령을 사용합니다.

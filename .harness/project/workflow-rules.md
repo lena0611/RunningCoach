@@ -10,6 +10,7 @@
 - `.harness/project/*`는 장기 기준과 결정 문서로 유지하고, 개별 백로그/진행 상태는 GitHub Issues/Projects에 둔다.
 - 에이전트가 Supabase 데이터를 조회/수정할 때는 앱의 인증 컨텍스트와 RLS 정책을 1차 경로로 사용한다. 인증 없는 직접 DB 조회나 service role/admin 우회 시도 후 앱 사용자 컨텍스트로 fallback하는 흐름을 반복하지 않는다.
 - 아이디어는 `Idea` issue로 `Inbox`에 넣고, 목표/완료 조건/완료 책임 창/검증 후보가 정리되면 `Feature`, `Bug`, `Decision`, `Research` 등 정식 작업 issue로 승격한다.
+- 정식 Issue 작업 중 대화가 길어지거나 여러 workstream/Issue 맥락이 섞이면 GitHub Project의 `업무 피로도` 필드를 `fresh`, `normal`, `tired`, `reset-needed` 중 하나로 자가진단해 맞춘다. 값이 `tired` 또는 `reset-needed`로 바뀌면 Issue 댓글에 이유와 권장을 남기고, `reset-needed`이면 넓은 새 작업을 시작하지 않는다.
 - 먼저 도메인/아키텍처 결정이 일회성인지 반복 규칙인지 판단한다.
 - 반복 규칙이면 `.harness/session/*`에만 두지 말고 `.harness/project/*` 문서로 승격한다.
 - 구현은 GitHub Pages 정적 프론트 + Supabase 백엔드 경계를 우선하며, secret이 필요한 기능은 브라우저가 아니라 Supabase Edge Function 또는 서버리스 경계로 분리한다.
@@ -44,6 +45,7 @@
 - 대화창이 길어져 에이전트 응답이 느려지거나 서로 다른 도메인 판단이 섞이기 시작하면 구현을 더 밀지 말고 `.harness/session/active-context.md` 또는 별도 `thread-handoff-YYYY-MM-DD.md`에 인수인계를 남긴 뒤 새 대화창에서 재개한다.
 - 긴 인수인계는 최신 상태와 다음 작업만 남긴다. 회고, 모든 시도 내역, 장황한 diff 설명은 넣지 않고 필요한 경우 `decision-log.md`나 관련 프로젝트 룰 문서로 승격한다.
 - 여러 창을 거친 업무의 최종 검토는 완료 책임 창에서 모은다. MVP Target의 정식 Issue이고 사용자가 검토/보류/PR까지만 같은 중단점을 지정하지 않았다면, 완료 책임 창은 남은 리스크와 검증을 정리한 뒤 최종 완료까지 이어서 진행한다. 단, parent Issue는 필수 child Issue가 Done이거나 명시적으로 parent에 handoff되기 전까지 최종 Done으로 닫지 않는다.
+- 각 workstream 창은 작업 시작, 종료, handoff 전에 `업무 피로도`를 확인한다. `tired`면 현재 Issue만 마무리하고 새 요청은 새 창으로 넘기는 것을 우선하며, `reset-needed`면 Issue 댓글과 handoff를 남긴 뒤 같은 workstream 새 창에서 재개한다.
 - build, test, `harness:check`, commit, push, PR 생성은 `CLAUDE.md`와 이 프로젝트의 MVP 기본 완료 흐름을 함께 따른다. 단순 확인/검토/조사 요청이거나 사용자가 명시한 중단점이 있으면 그 지점에서 멈춘다.
 
 작업 유형별 시작 문서:

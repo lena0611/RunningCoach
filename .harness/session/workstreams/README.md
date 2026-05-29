@@ -85,6 +85,19 @@ Codex hook은 위와 같은 공통 새로고침 문구를 감지하면 특정 wo
 
 사용자가 `검토만`, `조사만`, `PR까지만`, `커밋하지 마`, `배포하지 마`, `여기서 멈춰`처럼 중단점을 지정하면 그 지시를 우선합니다. 완료 책임 창이나 workstream이 불명확하거나 다른 workstream의 선행 결정이 필요한 경우에는 넓은 작업을 진행하지 않고 먼저 책임 창 또는 선행 workstream을 확정합니다.
 
+## 업무 피로도
+
+각 workstream 창은 작업 시작, 긴 작업 종료, 후속 창 인수인계 전에 현재 창의 `업무 피로도`를 자가진단합니다. 정식 GitHub Issue 작업이면 Project 필드 `업무 피로도`를 `fresh`, `normal`, `tired`, `reset-needed` 중 하나로 맞춥니다.
+
+이 값은 정확한 토큰 수나 내부 기억 품질 측정값이 아닙니다. 대화가 길어져 workstream, Issue, branch, 완료 조건을 혼동할 가능성이 커졌는지 판단하는 운영 신호입니다.
+
+- `fresh`: 새 창이거나 맥락이 짧습니다.
+- `normal`: 현재 Issue를 계속 처리해도 됩니다.
+- `tired`: 현재 Issue 마무리는 가능하지만 새 작업을 섞지 않습니다.
+- `reset-needed`: 넓은 새 작업을 시작하지 않고 handoff를 남긴 뒤 같은 workstream 새 창에서 재개합니다.
+
+`tired` 또는 `reset-needed`로 바뀌면 Issue 댓글에 이유와 권장을 실제 Markdown 줄바꿈으로 남깁니다. `reset-needed` 상태의 창은 다음 요청을 새로 받지 않고, 사용자가 같은 workstream 새 창을 열 수 있도록 짧은 시작 문구와 현재 Issue/branch/worktree 상태를 남깁니다.
+
 ## 다중 workstream 업무
 
 Codex 대화창끼리는 직접 메시지를 주고받지 못합니다. 여러 workstream이 필요한 업무는 GitHub Issue, PR, Project를 공용 작업판으로 사용합니다.

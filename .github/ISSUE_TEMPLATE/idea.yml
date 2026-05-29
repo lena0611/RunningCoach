@@ -8,6 +8,7 @@ body:
     attributes:
       value: |
         Capture early ideas here. Promote to Feature/Bug/Decision/Research only when scope, completion owner, verification, and worktree/branch handling are clear. Keep comments as real Markdown with actual newlines, not literal `\n` text.
+        The GitHub Project field `업무 피로도` is maintained separately by the active workstream window as `fresh`, `normal`, `tired`, or `reset-needed`.
   - type: textarea
     id: idea
     attributes:
