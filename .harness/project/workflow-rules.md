@@ -3,6 +3,9 @@
 프로젝트 고유의 개발, 리뷰, 릴리스, 장애 대응 흐름을 기록합니다.
 
 ## 개발 흐름
+- 정식 개발 작업의 단일 출처는 GitHub Issues로 둔다. 전체 상태판은 GitHub Project `PaceLAB Development`로 관리하며, 상세 기준은 `.harness/project/github-tracking-rules.md`를 따른다.
+- `.harness/project/*`는 장기 기준과 결정 문서로 유지하고, 개별 백로그/진행 상태는 GitHub Issues/Projects에 둔다.
+- 아이디어는 `Idea` issue로 `Inbox`에 넣고, 목표/완료 조건/완료 책임 창/검증 후보가 정리되면 `Feature`, `Bug`, `Decision`, `Research` 등 정식 작업 issue로 승격한다.
 - 먼저 도메인/아키텍처 결정이 일회성인지 반복 규칙인지 판단한다.
 - 반복 규칙이면 `.harness/session/*`에만 두지 말고 `.harness/project/*` 문서로 승격한다.
 - 구현은 GitHub Pages 정적 프론트 + Supabase 백엔드 경계를 우선하며, secret이 필요한 기능은 브라우저가 아니라 Supabase Edge Function 또는 서버리스 경계로 분리한다.
@@ -41,6 +44,7 @@
 | 작업 유형 | 먼저 읽을 문서 |
 | --- | --- |
 | 전체 목록 | `.harness/session/workstreams/README.md` |
+| 백로그/이슈/프로젝트 운영 | `.harness/project/github-tracking-rules.md`, `.harness/project/workflow-rules.md` |
 | 제품/기획/범위 | `.harness/project/project-charter.md`, `.harness/project/scope-contract.md`, `.harness/session/decision-log.md` |
 | 버그픽스/회귀 | `.harness/session/active-context.md`, `.harness/project/workflow-rules.md`, 관련 `critical-paths.md` 항목 |
 | UI/UX | `.harness/project/ui-system-contract.md`, `.harness/project/workflow-rules.md`, 영향 화면의 공통 컴포넌트 |

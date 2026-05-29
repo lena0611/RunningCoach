@@ -1,0 +1,58 @@
+name: Idea
+description: Capture an idea before it becomes formal development work.
+title: "[Idea] "
+labels:
+  - type:idea
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+      description: What might be useful, and for whom?
+    validations:
+      required: true
+  - type: dropdown
+    id: workstream
+    attributes:
+      label: Likely Workstream
+      options:
+        - 01-harness-ops
+        - 02-product-planning
+        - 03-ui-ux
+        - 04-running-logic
+        - 05-ai-coaching
+        - 06-healthkit-ios
+        - 07-data-supabase
+        - 08-injury-domain
+        - unclear
+    validations:
+      required: true
+  - type: dropdown
+    id: target
+    attributes:
+      label: Target
+      options:
+        - MVP
+        - Beta
+        - App Store
+        - Later
+        - unknown
+    validations:
+      required: true
+  - type: textarea
+    id: why-now
+    attributes:
+      label: Why Now
+      description: What signal, pain, or opportunity makes this worth keeping?
+  - type: textarea
+    id: promotion
+    attributes:
+      label: Promotion Criteria
+      description: What would make this ready to convert into a Feature, Bug, Decision, or Research issue?
+      placeholder: |
+        - ...
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Links, notes, screenshots, references, or related project documents.

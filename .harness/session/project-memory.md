@@ -19,6 +19,7 @@
 - Strava 연동은 GitHub Pages 단독 정적 앱만으로 처리하지 않는다. OAuth `client_secret`, refresh token, webhook callback 보호를 위해 Cloudflare Worker, Vercel Function 등 최소 서버리스 백엔드를 둔다.
 - AI 코칭은 세션 상세에서 열며, 별도 Coach 하단 탭은 제거된 상태다.
 - PaceLAB은 workstream 대화창 분리 운영을 명시적으로 채택했다. 하네스 본체의 일반 가이드는 선택형이지만, 이 프로젝트 안에서는 강하게 적용한다.
+- 정식 개발 작업의 단일 출처는 GitHub Issues이고, 전체 상태판은 GitHub Project `PaceLAB Development`로 둔다. `.harness/project/*`는 장기 기준과 결정 문서로 유지한다.
 - 대화창은 작업 유형별로 분리한다. 기획, 버그픽스, UI/UX, 코칭/훈련 로직, HealthKit/iOS, Supabase/OpenAI Edge Function, 부상관리 도메인, 하네스/정책은 서로 다른 대화창에서 진행한다.
 - 각 대화창은 모든 사용자 요청마다 현재 workstream 범위를 먼저 식별한다. 범위가 불명확하거나 요청이 범위를 넘으면 구현을 넓히지 않고 사용자에게 확인하거나 대상 workstream 인수인계를 제안한다.
 - 모든 업무 요청은 시작할 때 `완료 책임 창`을 정한다. 완료 책임 창은 업무 목표, 완료 조건, 후속 workstream 인수인계, 최종 리뷰, 검증 후보 정리를 소유한다.

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: PaceLAB work tracking rules
+    url: https://github.com/lena0611/RunningCoach/blob/main/.harness/project/github-tracking-rules.md
+    about: Check the Issues and Projects operating rules before filing work.

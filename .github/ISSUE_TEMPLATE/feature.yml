@@ -1,0 +1,103 @@
+name: Feature
+description: Track a planned PaceLAB feature or product increment.
+title: "[Feature] "
+labels:
+  - type:feature
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for formal development work. GitHub Issues are the single source of truth for committed work items.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What user or product outcome should this feature create?
+      placeholder: Describe the outcome, not only the implementation.
+    validations:
+      required: true
+  - type: dropdown
+    id: workstream
+    attributes:
+      label: Workstream
+      options:
+        - 01-harness-ops
+        - 02-product-planning
+        - 03-ui-ux
+        - 04-running-logic
+        - 05-ai-coaching
+        - 06-healthkit-ios
+        - 07-data-supabase
+        - 08-injury-domain
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - P0
+        - P1
+        - P2
+        - P3
+    validations:
+      required: true
+  - type: dropdown
+    id: target
+    attributes:
+      label: Target
+      options:
+        - MVP
+        - Beta
+        - App Store
+        - Later
+    validations:
+      required: true
+  - type: input
+    id: completion-owner
+    attributes:
+      label: Completion Owner
+      description: Which workstream owns final review and completion conditions?
+      placeholder: "02-product-planning"
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What is included and explicitly excluded?
+      placeholder: |
+        Included:
+        - ...
+
+        Excluded:
+        - ...
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: What must be true before this can move to Done?
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: checkboxes
+    id: verification
+    attributes:
+      label: Verification
+      options:
+        - label: none
+        - label: unit
+        - label: e2e
+        - label: build
+        - label: harness-check
+        - label: manual
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Link relevant docs, decisions, screens, or prior issues.
+      placeholder: "- .harness/project/..."

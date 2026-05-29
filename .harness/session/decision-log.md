@@ -275,3 +275,9 @@
 - 수익 모델 후보: 무료 기록/대시보드와 유료 AI 코칭 구독을 1차 모델로 둔다. 일회성 유료 앱은 AI API와 백엔드 반복 비용 구조와 맞지 않아 우선하지 않는다.
 - 선택 이유: Nike Run Club, Strava, Runna 같은 기존 앱은 기록/커뮤니티/훈련 플랜에서 강하다. PaceLAB의 차별점은 HealthKit/Workoutdoors 기반 실제 기록, 한국어 자연어 코칭, 목표 가능성, 부상/회복 게이트, 장기 기억을 묶어 다음 훈련 판단까지 제공하는 것이다.
 - 후속 기준: 사업화 상세는 `.harness/project/business-review.md`를 기준으로 보고, 결제/구독 구현은 유료 가설 검증 뒤 별도 workstream에서 다룬다.
+
+## 2026-05-29 - GitHub Issues와 Projects를 개발 작업 추적 기준으로 채택
+- 문제: PaceLAB의 백로그, 아이디어, 정식 요청, 처리 상태가 `.harness/project/*`와 세션 문서에 섞이면 장기 기준 문서와 일회성 작업 상태가 뒤섞인다.
+- 결정: 정식 개발 작업의 단일 출처는 GitHub Issues로 두고, 전체 상태판은 GitHub Project `PaceLAB Development`로 관리한다. `.harness/project/*`는 장기 기준, 계약, 결정 문서로 유지한다.
+- 운영 기준: Issue에는 workstream, type, priority, completion owner, target, verification 후보를 기록한다. Project에는 `Status`, `Workstream`, `Type`, `Priority`, `Completion Owner`, `Target`, `Verification`, `Blocked` 필드를 둔다.
+- 선택 이유: GitHub Issues/Projects는 코드 변경, 커밋, PR, 검증과 가장 가까운 작업 추적 시스템이다. Notion은 향후 사업화/인터뷰/레퍼런스 노트 보조 도구로 검토하되 당장 핵심 이슈트래커로 쓰지 않는다.
