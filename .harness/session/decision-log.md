@@ -263,3 +263,10 @@
 - 적용 범위: `.harness/**`, `.codex/**`, `.agents/**`, `.claude/**`, `AGENTS.md`, `CLAUDE.md`, `.github/commit-template.txt`, Copilot instructions만 ignore한다.
 - 배포 유지 범위: `src/**`, `public/**`, `package.json`, `.nvmrc`, Vite 설정, GitHub workflow 자체, Supabase 함수처럼 런타임/빌드/배포 산출물에 영향을 줄 수 있는 파일은 ignore하지 않는다.
 - 선택 이유: iOS WebView 캐시/전파 지연까지 고려하면 사용자-facing 산출물이 바뀌지 않은 배포는 운영 신호를 흐린다. 에이전트 운영 변경은 로컬 검증과 커밋/푸시 hook으로 확인하고, Pages 배포는 앱 산출물 변경에만 연결한다.
+
+## 2026-05-29 - PaceLAB 사업화 검토 기준
+- 문제: 현재 PaceLAB은 미출시 개인용 개발 앱이지만, 향후 App Store 출시와 구독형 수익화를 고려할 수 있어 제품 포지션과 검증 순서를 정리할 필요가 생겼다.
+- 결정: 사업화 포지션은 범용 러닝 기록 앱이 아니라 `한국어 개인 러닝 코치`로 둔다. 출시 전에는 대중 App Store 배포보다 개인 사용과 소규모 TestFlight 베타로 유료 가설을 먼저 검증한다.
+- 수익 모델 후보: 무료 기록/대시보드와 유료 AI 코칭 구독을 1차 모델로 둔다. 일회성 유료 앱은 AI API와 백엔드 반복 비용 구조와 맞지 않아 우선하지 않는다.
+- 선택 이유: Nike Run Club, Strava, Runna 같은 기존 앱은 기록/커뮤니티/훈련 플랜에서 강하다. PaceLAB의 차별점은 HealthKit/Workoutdoors 기반 실제 기록, 한국어 자연어 코칭, 목표 가능성, 부상/회복 게이트, 장기 기억을 묶어 다음 훈련 판단까지 제공하는 것이다.
+- 후속 기준: 사업화 상세는 `.harness/project/business-review.md`를 기준으로 보고, 결제/구독 구현은 유료 가설 검증 뒤 별도 workstream에서 다룬다.
