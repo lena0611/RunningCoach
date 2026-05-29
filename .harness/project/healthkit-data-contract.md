@@ -183,6 +183,19 @@ type FastSegment = {
 - 네이티브는 `HealthKitRunCandidate[]`를 plain JSON으로 직렬화해 넘긴다.
 - 웹은 후보를 바로 저장하지 않고 확인/수정 폼에 채운다.
 
+## HealthKit/알림 브리지 플로우
+- PaceLAB의 iOS 알림은 APNs/FCM 원격 푸시가 아니라 `runContextNotifications` WebView bridge를 통해 네이티브가 예약/표시하는 로컬 알림이다.
+- 앱 시작 또는 인증 후 웹이 `syncNotificationSettings`를 보내면 네이티브는 `allEnabled`, `healthKitNewRun`을 `UserDefaults`에 저장하고, `pacelab-` prefix의 기존 예약 알림을 제거한 뒤 웹이 넘긴 새 예약 알림을 등록한다.
+- 앱 설정에서 전체 알림 또는 개별 알림을 바꾸면 웹은 최신 설정 객체를 즉시 `syncNotificationSettings`로 다시 보낸다. 네이티브는 이 sync를 iOS 알림 권한 요청 기회로도 사용한다.
+- 훈련 스케줄 알림은 웹이 주간 루틴을 기준으로 최대 14일치 후보를 만든다. `workoutMorning`은 오전 7시, `scheduledWorkout`은 오후 6시 로컬 알림으로 예약한다.
+- HealthKit 신규 러닝 감지는 네이티브 `HKObserverQuery`와 `enableBackgroundDelivery(.immediate)`를 사용한다. 감지 대상은 `.running` workout 변경이다.
+- 앱이 foreground `active` 상태에서 HealthKit 변경을 감지하면 네이티브는 배너를 직접 띄우지 않고 `window.RunContextHealthKit.receiveHealthKitChanged('background-delivery')`를 호출한다. 웹은 reason 값으로 분기하지 않고 `syncAfterNativeChange()`를 실행해 최근 HealthKit 러닝을 즉시 다시 요청한다.
+- foreground 자동 동기화 결과 새 러닝이 저장되면 웹은 toast로 저장 결과를 표시하고, 앱 내부 알림 설정의 `allEnabled`와 `healthKitNewRun`이 모두 켜져 있을 때 `showNotification` bridge로 "새 러닝 기록을 가져왔습니다" 로컬 알림을 요청한다.
+- 앱이 background 상태에서 HealthKit 변경을 감지하면 네이티브는 웹 동기화 대신 "새 러닝 기록이 감지됐습니다" 로컬 알림을 시도한다. 조건은 iOS 알림 권한 허용, `allEnabled=true`, `healthKitNewRun=true`이다. 사용자가 앱을 다시 열면 기존 activation sync가 누락 러닝을 저장한다.
+- HealthKit 감지가 웹 설정 sync보다 먼저 와서 네이티브 저장 설정이 아직 `allEnabled=false`이고 `healthKitNewRun=true`이면 네이티브는 감지를 최대 10분 pending으로 보관한다. 이후 `syncNotificationSettings`에서 `allEnabled=true`가 들어오면 pending HealthKit 감지 알림을 표시한다.
+- 앱이 foreground에 있어도 네이티브 즉시 알림은 `UNUserNotificationCenterDelegate.willPresent`에서 `.banner`, `.sound`, `.list`를 반환하므로 배너로 보일 수 있다.
+- 사용자가 앱을 강제 종료한 상태에서 HealthKit background delivery가 반드시 앱을 깨운다고 보장하지 않는다. 강제 종료 상태까지 사용자 호출을 보장해야 하는 요구는 원격 푸시/APNs 설계로 별도 분리한다.
+
 ## 동기화 정책
 - 앱 기동/재활성화 자동 동기화는 현재 저장된 최신 `RunLog.date` 이후의 새 HealthKit 러닝만 가져온다.
 - 이미 저장된 HealthKit 세션은 자동 동기화에서 갱신하지 않는다. 기존 세션 보강은 세션 상세의 새로고침 아이콘을 통해 사용자가 명시적으로 요청한다.
