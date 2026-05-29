@@ -1473,16 +1473,28 @@ button.stat-card {
 
 .projection-factor-list {
   display: grid;
-  gap: 10px;
+  gap: 0;
 }
 
 .projection-factor {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px 12px;
-  padding: 14px;
-  border-radius: 18px;
-  background: var(--color-surface-2);
+  padding: 14px 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.projection-factor:first-child {
+  padding-top: 0;
+}
+
+.projection-factor:last-child {
+  padding-bottom: 0;
+}
+
+.projection-factor + .projection-factor {
+  border-top: 1px solid var(--color-border);
 }
 
 .projection-factor > div {
