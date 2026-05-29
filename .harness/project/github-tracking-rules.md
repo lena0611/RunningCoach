@@ -15,6 +15,8 @@ PaceLAB의 정식 개발 작업은 GitHub Issues를 단일 출처로 두고, 전
 - 이름: `PaceLAB Development`
 - 소유자: `lena0611`
 - 저장소: `lena0611/RunningCoach`
+- URL: `https://github.com/users/lena0611/projects/1`
+- Project number: `1`
 
 권장 필드:
 
@@ -35,6 +37,8 @@ PaceLAB의 정식 개발 작업은 GitHub Issues를 단일 출처로 두고, 전
 - `Backlog by Priority`: `Status != Done/Rejected`, `Priority` 정렬
 - `By Workstream`: `Workstream` 그룹
 - `Verification`: `Status in Review/Verify`, `Verification` 확인
+
+현재 GitHub CLI와 공개 GraphQL mutation에서는 Project view 생성/정렬/그룹 설정을 안정적으로 자동화하지 않습니다. 필드와 Status 옵션은 자동 설정했으며, 위 view 구성은 GitHub 웹 UI에서 필요할 때 수동으로 추가합니다.
 
 ## Issue 상태 흐름
 
@@ -110,4 +114,4 @@ gh project field-create <project-number> --owner lena0611 --name "Verification" 
 gh project field-create <project-number> --owner lena0611 --name "Blocked" --data-type SINGLE_SELECT --single-select-options "no,yes"
 ```
 
-GitHub 기본 `Status` 필드는 생성된 뒤 UI에서 `Inbox`, `Backlog`, `Ready`, `In Progress`, `Review`, `Verify`, `Done`, `Deferred`, `Rejected` 옵션으로 정리합니다.
+GitHub 기본 `Status` 필드는 `Inbox`, `Backlog`, `Ready`, `In Progress`, `Review`, `Verify`, `Done`, `Deferred`, `Rejected` 옵션으로 정리합니다.
