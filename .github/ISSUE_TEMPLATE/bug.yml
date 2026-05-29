@@ -8,6 +8,7 @@ body:
     attributes:
       value: |
         Track confirmed defects here. After the issue is accepted, work should happen in an issue-specific git worktree on an `issue-<number>/<short-slug>` branch. Keep comments as real Markdown with actual newlines, not literal `\n` text.
+        The GitHub Project field `업무 피로도` is maintained separately by the active workstream window as `fresh`, `normal`, `tired`, or `reset-needed`.
   - type: textarea
     id: problem
     attributes:

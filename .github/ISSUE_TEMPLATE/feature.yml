@@ -9,6 +9,7 @@ body:
       value: |
         Use this for formal development work. GitHub Issues are the single source of truth for committed work items.
         After the issue is accepted, work should happen in an issue-specific git worktree on an `issue-<number>/<short-slug>` branch. Keep this issue body focused on scope, acceptance criteria, verification, and links to long-lived project documents.
+        The GitHub Project field `업무 피로도` is maintained separately by the active workstream window as `fresh`, `normal`, `tired`, or `reset-needed`.
   - type: textarea
     id: goal
     attributes:
