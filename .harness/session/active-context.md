@@ -5,8 +5,8 @@
 > 하네스 본체의 개발 기록이 아닙니다. 설치된 프로젝트의 현재 작업 맥락만 기록합니다.
 
 ## 현재 상태
-- updatedAt: 2026-05-28
-- baseHarness: 0.2.48
+- updatedAt: 2026-05-29
+- baseHarness: 0.2.51
 - activeStack: `.harness/policy/profile.json` 참고
 - harnessMode: `.harness/policy/profile.json` 참고
 
@@ -18,7 +18,7 @@
 - iOS 네이티브 로컬 프로젝트는 `/Users/smart-tn-083/practice/RunningCoach`에 있다.
 - HealthKit 자동 동기화, 세션별 HealthKit 재갱신, FIT 보조 import를 유지한다.
 - AI 코칭은 세션 상세에서 열며, 별도 Coach 하단 탭은 제거된 상태다.
-- 완료 승인 전 자동 검증/커밋 금지 원칙은 하네스 본체 `0.2.48`에 반영되어 있다. `CLAUDE.md`, `AGENTS.md`, `.claude/hooks/enforce-check.sh` 기준을 따른다.
+- 완료 승인 전 자동 검증/커밋 금지 원칙은 하네스 본체 `0.2.51`에 반영되어 있다. `CLAUDE.md`, `AGENTS.md`, `.claude/hooks/enforce-check.sh` 기준을 따른다.
 
 ## 대화창 분리 기준
 - 이 프로젝트는 대화창을 작업 유형별로 분리해 진행한다.

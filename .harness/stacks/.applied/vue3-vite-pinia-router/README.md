@@ -34,7 +34,7 @@ npx -y git+https://git.smartscore.kr/ai-standard/harnesses/vue3-vite-pinia-route
 
 `init`은 다음을 순서대로 수행합니다.
 
-1. `manifest.json`의 `baseHarness`에 명시된 공통 하네스를 설치하거나 업데이트합니다.
+1. `manifest.json`의 `baseHarness` 최소 요구 버전을 확인하고 필요한 경우에만 공통 하네스를 설치하거나 업데이트합니다.
 2. 이 저장소의 Vue3/Vite/Pinia/Router 기준을 `.harness/project/stack-preset-rules.md`에 로컬룰로 정착시킵니다.
 3. 스택 기준 스냅샷을 `.harness/stacks/.applied/vue3-vite-pinia-router/`에 남깁니다.
 4. `.harness/harness-lock.json`에 설치된 공통 하네스와 이 스택 하네스의 repo, ref, version을 기록합니다.
@@ -73,7 +73,9 @@ npx -y git+https://git.smartscore.kr/ai-standard/harnesses/vue3-vite-pinia-route
 
 같은 스택 기준이 이미 적용되어 있으면 `init`은 기존 스택 적용분을 reset한 뒤 다시 적용해 업데이트합니다.
 
-스택 하네스를 새 버전으로 올릴 때는 적용 프로젝트에서 `npm run harness:outdated`로 업데이트 후보를 확인하고, 반영하려면 `npm run harness:update`를 실행합니다. 기본 전략은 현재 설치된 버전의 SemVer caret 범위 안에서 최신 태그를 다시 선택하는 방식입니다. 예를 들어 `1.0.0`이 설치되어 있으면 `^1.0.0` 범위의 최신 패치/마이너를 받습니다. 이때 공통 하네스도 `manifest.json`의 `baseHarness` 요구사항에 맞춰 함께 업데이트되고, 실제 적용된 버전은 `.harness/harness-lock.json`과 `npm run stack:status`에서 확인합니다.
+스택 하네스를 새 버전으로 올릴 때는 적용 프로젝트에서 `npm run harness:outdated`로 업데이트 후보를 확인하고, 반영하려면 `npm run harness:update`를 실행합니다. 기본 전략은 현재 설치된 버전의 SemVer caret 범위 안에서 최신 태그를 다시 선택하는 방식입니다. 예를 들어 `1.0.0`이 설치되어 있으면 `^1.0.0` 범위의 최신 패치/마이너를 받습니다.
+
+공통 하네스는 `manifest.json`의 `baseHarness.minVersion` 이상이면 기존 설치 버전을 보존합니다. `baseHarness.ref`는 이 스택이 검증한 기준 ref이며 exact pin이 아닙니다. 따라서 이미 더 높은 공통 하네스가 설치되어 있으면 `npm run harness:update`로 스택을 갱신해도 공통 하네스를 낮은 ref로 자동 downgrade하지 않습니다. 공통 하네스만 올릴 때는 `npm run harness:update -- --base-only`를 사용합니다.
 
 ```bash
 npm run harness:outdated

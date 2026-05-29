@@ -264,6 +264,11 @@
 - 배포 유지 범위: `src/**`, `public/**`, `package.json`, `.nvmrc`, Vite 설정, GitHub workflow 자체, Supabase 함수처럼 런타임/빌드/배포 산출물에 영향을 줄 수 있는 파일은 ignore하지 않는다.
 - 선택 이유: iOS WebView 캐시/전파 지연까지 고려하면 사용자-facing 산출물이 바뀌지 않은 배포는 운영 신호를 흐린다. 에이전트 운영 변경은 로컬 검증과 커밋/푸시 hook으로 확인하고, Pages 배포는 앱 산출물 변경에만 연결한다.
 
+## 2026-05-29 - 하네스 0.2.51 baseline 문서 변경은 소비자 구현 변경 없이 수용
+- 문제: 하네스 본체 0.2.51 업데이트가 `.harness/project/portability-guide.md`의 런타임/이식 기준 문서를 갱신해 `common.runtime.minimum-node` sync gap이 문서 단독 변경으로 표시됐다.
+- 결정: 이번 변경은 본체 baseline 업데이트 수용이며, 소비자 프로젝트의 앱 코드나 별도 로컬 런타임 구현을 추가하지 않는다. 설치된 하네스의 `check-node-version.mjs`, `.nvmrc`, npm script 실행 전 `nvm use` 운영 기준으로 Node 최소 버전 검증을 유지한다.
+- 선택 이유: 소비자 프로젝트는 하네스 본체 소스 저장소가 아니므로 portability guide의 본체 기준 변경에 대응해 로컬 앱 구현을 추가하면 책임 경계가 흐려진다. 실제 검증은 `npm run harness:check`에서 Node 버전 확인, test, build로 수행한다.
+
 ## 2026-05-29 - PaceLAB 사업화 검토 기준
 - 문제: 현재 PaceLAB은 미출시 개인용 개발 앱이지만, 향후 App Store 출시와 구독형 수익화를 고려할 수 있어 제품 포지션과 검증 순서를 정리할 필요가 생겼다.
 - 결정: 사업화 포지션은 범용 러닝 기록 앱이 아니라 `한국어 개인 러닝 코치`로 둔다. 출시 전에는 대중 App Store 배포보다 개인 사용과 소규모 TestFlight 베타로 유료 가설을 먼저 검증한다.

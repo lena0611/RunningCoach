@@ -68,6 +68,7 @@ function parseArgs(argv) {
     noCheck: false,
     seedRepo: manifest.baseHarness?.repo,
     seedRef: manifest.baseHarness?.ref,
+    seedRefExplicit: false,
     seedPath: null,
   }
 
@@ -114,6 +115,7 @@ function parseArgs(argv) {
         break
       case '--seed-ref':
         opts.seedRef = requireValue(args, i, arg)
+        opts.seedRefExplicit = true
         i += 1
         break
       case '--seed-path':
@@ -180,7 +182,83 @@ function buildPackageSpec(repo, ref) {
   return withPrefix.includes('#') ? withPrefix : `${withPrefix}#${ref}`
 }
 
+function parseSemver(value) {
+  const match = String(value ?? '').match(/^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/)
+  if (!match) {
+    return null
+  }
+
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+  }
+}
+
+function compareSemver(a, b) {
+  const left = parseSemver(a)
+  const right = parseSemver(b)
+  if (!left || !right) {
+    return null
+  }
+
+  for (const key of ['major', 'minor', 'patch']) {
+    if (left[key] > right[key]) return 1
+    if (left[key] < right[key]) return -1
+  }
+
+  return 0
+}
+
+function readInstalledBaseHarness() {
+  return readJson(path.join(targetRoot, '.harness/harness-lock.json'))?.baseHarness ?? null
+}
+
+function installedBaseSatisfiesRequirement(installedBase, requiredBase) {
+  const minVersion = requiredBase?.minVersion ?? requiredBase?.ref
+  if (!installedBase?.version || !minVersion) {
+    return false
+  }
+
+  const compare = compareSemver(installedBase.version, minVersion)
+  return compare !== null && compare >= 0
+}
+
+function shouldSkipBaseHarnessInstall(opts) {
+  if (opts.seedRefExplicit) {
+    return false
+  }
+
+  const requiredBase = manifest.baseHarness ?? {}
+  const installedBase = readInstalledBaseHarness()
+  if (!installedBase) {
+    return false
+  }
+
+  if (requiredBase.exactRefRequired && requiredBase.ref && installedBase.ref && installedBase.ref !== requiredBase.ref) {
+    console.error('공통 하네스 exact ref 요구사항과 현재 설치 상태가 다릅니다.')
+    console.error(`  required ref: ${requiredBase.ref}`)
+    console.error(`  installed ref: ${installedBase.ref}`)
+    console.error('자동 downgrade/변경은 수행하지 않습니다. 필요한 ref로 명시 업데이트한 뒤 다시 실행하세요.')
+    process.exit(1)
+  }
+
+  if (installedBaseSatisfiesRequirement(installedBase, requiredBase)) {
+    console.log('')
+    console.log('공통 하네스 설치 또는 업데이트')
+    console.log(`installed base ${installedBase.version}${installedBase.ref ? ` (${installedBase.ref})` : ''}가 stack 최소 요구 버전 ${requiredBase.minVersion ?? requiredBase.ref} 이상이므로 기존 base를 유지합니다.`)
+    console.log(`manifest base ref ${requiredBase.ref ?? '(none)'}는 검증된 기준 ref이며 exact pin이 아니므로 downgrade하지 않습니다.`)
+    return true
+  }
+
+  return false
+}
+
 function installBaseHarness(opts) {
+  if (shouldSkipBaseHarnessInstall(opts)) {
+    return
+  }
+
   const seedArgs = buildSeedArgs(opts)
 
   if (opts.seedPath) {

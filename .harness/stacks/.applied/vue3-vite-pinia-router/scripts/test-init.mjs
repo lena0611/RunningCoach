@@ -100,7 +100,7 @@ function stackInitInstallsBaseHarnessAndAppliesRules() {
   assert(status.includes(`stack: vue3-vite-pinia-router ${stackPackage.version} (${stackManifest.stackHarness.ref})`), 'stack status should show stack harness version')
 
   const updatePlan = run('npm', ['run', 'harness:update', '--', '--dry-run'], { cwd: target })
-  assert(updatePlan.includes('npx -y git+https://git.smartscore.kr/ai-standard/harnesses/vue3-vite-pinia-router.git#semver:^0.1.31 init'), 'harness update should plan compatible stack update')
+  assert(updatePlan.includes(`npx -y git+https://git.smartscore.kr/ai-standard/harnesses/vue3-vite-pinia-router.git#semver:^${stackPackage.version} init`), 'harness update should plan compatible stack update')
 }
 
 function stackInitUpdatesSameStack() {
@@ -111,6 +111,25 @@ function stackInitUpdatesSameStack() {
   assert(output.includes('기존 동일 스택 기준 업데이트 준비'), 'same stack init should reset and reapply')
   const profile = readJson(target, '.harness/policy/profile.json')
   assert(profile.activeStack === 'vue3-vite-pinia-router', 'same stack update should keep activeStack')
+}
+
+function stackInitPreservesNewerInstalledBaseHarness() {
+  const target = makeTarget()
+  stackInit(target, '--no-scan', '--no-handoff', '--no-check')
+
+  const lockPath = path.join(target, '.harness/harness-lock.json')
+  const lock = readJson(target, '.harness/harness-lock.json')
+  lock.baseHarness.version = '9.9.9'
+  lock.baseHarness.ref = 'v9.9.9'
+  fs.writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`)
+
+  const output = stackInit(target, '--no-scan', '--no-handoff', '--no-check')
+  assert(output.includes('기존 base를 유지합니다'), 'stack init should keep newer base harness when minVersion is satisfied')
+
+  const updatedLock = readJson(target, '.harness/harness-lock.json')
+  assert(updatedLock.baseHarness.version === '9.9.9', 'stack init should not downgrade newer base harness version')
+  assert(updatedLock.baseHarness.ref === 'v9.9.9', 'stack init should not downgrade newer base harness ref')
+  assert(updatedLock.stackHarness.requiredBaseHarness.minVersion === stackManifest.baseHarness.minVersion, 'stack lock should still record required base minVersion')
 }
 
 function stackInitBlocksVue2WithoutWritingFiles() {
@@ -196,6 +215,7 @@ function stackInitBlocksDifferentAppliedStackBeforeUpdate() {
 const tests = [
   stackInitInstallsBaseHarnessAndAppliesRules,
   stackInitUpdatesSameStack,
+  stackInitPreservesNewerInstalledBaseHarness,
   stackInitBlocksVue2WithoutWritingFiles,
   stackInitAllowsCurrentCreateVueRouterMajor,
   stackInitBlocksDifferentAppliedStackBeforeUpdate,
