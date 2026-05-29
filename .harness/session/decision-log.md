@@ -338,3 +338,9 @@
 - 결정: `.codex/hooks/inject-context.sh`의 기본 `UserPromptSubmit` 출력에 최신 PaceLAB 운영 룰 위치와 핵심 기준을 항상 포함한다. 기존 창은 다음 사용자 입력을 받는 순간 이 hook 출력을 통해 최신 기준을 주입받는다.
 - 주입 기준: 모든 창은 `.harness/session/workstreams/README.md`, `.harness/project/github-issue-management-guide.md`, `.harness/project/github-tracking-rules.md`, `.harness/project/workflow-rules.md`를 우선 확인하고, Issue/Project/worktree/comment, parent/child Issue, `업무 피로도` 기준을 적용한다.
 - 한계: 이미 열린 창에 아무 입력 없이 즉시 메시지를 밀어 넣는 것은 불가능하다. 같은 프로젝트 루트 또는 최신 main/worktree를 쓰는 창에서 다음 프롬프트가 들어올 때 적용된다.
+
+## 2026-05-29 - 모바일 Issue 메타데이터 라벨 압축 기준
+- 문제: GitHub 모바일 앱에서 Project field가 많이 보이면 Issue 카드 높이가 커져 열린 Issue를 훑기 어렵다.
+- 결정: Project field는 관리/자동화 원본으로 유지하고, 모바일 스캔용 정보는 짧은 GitHub label로 복제한다. `Status`, `Priority`, `Labels`를 모바일 기본 노출 후보로 보고, `Workstream`, `Type`, `Target`, `Verification`, `Completion Owner`, `Blocked`, `업무 피로도`는 상세 field로 둔다.
+- label 기준: 최소 `type:*` label은 항상 붙인다. `ws:*`, `target:*`, `verify:*` label은 값이 확실할 때만 붙인다. `blocked`, `fatigue:tired`, `fatigue:reset`은 예외 상태일 때만 붙이고, 정상 상태 label은 만들지 않는다.
+- 선택 이유: Project field를 삭제하면 자동화와 보드 필터 기준이 약해진다. label mirror는 모바일 목록 스캔 문제를 줄이면서도 Project field를 단일 관리 기준으로 유지한다.

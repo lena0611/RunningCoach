@@ -37,6 +37,47 @@ PaceLAB의 정식 개발 작업은 GitHub Issues를 단일 출처로 두고, 전
 
 GitHub `Assignees`는 사람 계정 배정용입니다. PaceLAB의 담당 workstream은 `Assignees`가 아니라 Project의 `Workstream`과 `Completion Owner` 필드로 관리합니다.
 
+## 모바일 스캔 라벨
+
+GitHub 모바일 앱에서는 Project field가 많이 보이면 Issue 카드 높이가 커집니다. Project field는 자동화와 전체 상태판의 원본으로 유지하고, 모바일에서 빠르게 훑을 값은 label로 짧게 복제합니다.
+
+역할 분리:
+
+| 구분 | 역할 | 예 |
+| --- | --- | --- |
+| Project field | 정식 관리 원본, 보드/필터/자동화 기준 | `Status=In Progress`, `Priority=P1` |
+| Label | 모바일 목록 스캔과 빠른 검색 보조 | `type:bug`, `ws:03-ui`, `target:mvp` |
+
+모바일 기본 노출 후보:
+
+- `Status`
+- `Priority`
+- `Labels`
+
+모바일에서 숨겨도 되는 상세 field:
+
+- `Workstream`
+- `Type`
+- `Completion Owner`
+- `Target`
+- `Verification`
+- `Blocked`
+- `업무 피로도`
+
+`Completion Owner`는 단일 workstream Issue에서는 `Workstream`과 같으면 label로 만들지 않습니다. 다중 workstream parent/child Issue에서 완료 책임이 담당 workstream과 다를 때만 Issue 본문이나 댓글에 명시합니다.
+
+권장 label:
+
+| 그룹 | 값 |
+| --- | --- |
+| type | `type:idea`, `type:feature`, `type:bug`, `type:chore`, `type:decision`, `type:research`, `type:release` |
+| workstream | `ws:01-harness`, `ws:02-product`, `ws:03-ui`, `ws:04-running`, `ws:05-ai`, `ws:06-ios`, `ws:07-data`, `ws:08-injury` |
+| target | `target:mvp`, `target:beta`, `target:app-store`, `target:later` |
+| verification | `verify:none`, `verify:unit`, `verify:e2e`, `verify:build`, `verify:harness`, `verify:manual` |
+| exception | `blocked`, `fatigue:tired`, `fatigue:reset` |
+
+label은 Project field의 보조 표시입니다. label과 Project field가 충돌하면 Project field를 원본으로 보고 label을 고칩니다.
+
 `업무 피로도`는 Issue lifecycle 상태가 아니라 해당 작업을 맡은 대화창의 컨텍스트 부하 자가진단 값입니다. 정확한 토큰 수나 내부 기억 품질을 측정하는 필드가 아니며, 에이전트가 작업 시작/종료/인수인계 시 현재 창을 계속 써도 되는지 판단해 갱신합니다.
 
 - `fresh`: 새 창이거나 짧은 맥락입니다.
