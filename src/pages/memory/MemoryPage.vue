@@ -22,6 +22,7 @@ import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import ClearableField from '@/shared/ui/ClearableField.vue'
 import DateField from '@/shared/ui/DateField.vue'
 import FormGrid from '@/shared/ui/FormGrid.vue'
+import InfoPairGrid from '@/shared/ui/InfoPairGrid.vue'
 import InjuryBodySelector from '@/shared/ui/InjuryBodySelector.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
@@ -721,12 +722,7 @@ async function save() {
     </SectionGroup>
 
     <SectionGroup title="러너 프로필" :surface="false">
-      <div class="memory-profile-grid">
-        <div v-for="fact in profileFacts" :key="fact.label">
-          <span>{{ fact.label }}</span>
-          <strong>{{ fact.value }}</strong>
-        </div>
-      </div>
+      <InfoPairGrid :items="profileFacts" />
       <div v-if="personalBestPreview.length" class="memory-context-block">
         <strong>PB</strong>
         <ul>

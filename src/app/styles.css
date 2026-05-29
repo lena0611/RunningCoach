@@ -81,6 +81,8 @@
   --text-title-line: 1.28;
   --text-body-size: 16px;
   --text-body-line: 1.6;
+  --text-info-size: 15px;
+  --text-info-line: 1.56;
   --text-caption-size: 13px;
   --text-caption-line: 1.45;
   --text-metric-size: clamp(28px, 7.8vw, 38px);
@@ -1404,9 +1406,9 @@ button.stat-card {
 }
 
 .dashboard-context-card small {
-  font-size: 11px;
-  font-weight: 400;
-  line-height: 1.35;
+  font-size: var(--text-caption-size);
+  font-weight: 650;
+  line-height: var(--text-caption-line);
 }
 
 .dashboard-projection-card strong {
@@ -1498,9 +1500,9 @@ button.stat-card {
 .projection-factor small,
 .projection-factor p {
   color: var(--color-muted);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.45;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: var(--text-info-line);
 }
 
 .projection-factor p {
@@ -3063,15 +3065,15 @@ button.run-session-row {
 .coach-injury-proposal-card > small,
 .coach-injury-proposal-card li {
   color: var(--color-muted);
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: var(--text-info-line);
 }
 
 .coach-injury-proposal-card p {
   margin: 0;
   color: var(--color-text);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: var(--text-info-size);
+  line-height: var(--text-info-line);
 }
 
 .coach-injury-proposal-card ul {
@@ -3499,8 +3501,8 @@ button.run-session-row {
 .injury-group-head small,
 .strength-plan-card small {
   color: var(--color-muted);
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: var(--text-info-line);
 }
 
 .injury-area-chip-grid {
@@ -3611,8 +3613,8 @@ button.run-session-row {
   margin: 0;
   padding-left: 18px;
   color: var(--color-text);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: var(--text-info-size);
+  line-height: var(--text-info-line);
 }
 
 .strength-plan-detail-list {
@@ -3630,14 +3632,14 @@ button.run-session-row {
 
 .strength-plan-detail-list article > strong {
   color: var(--color-text);
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .strength-plan-detail-list p {
   margin: 0;
   color: var(--color-text);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: var(--text-info-size);
+  line-height: var(--text-info-line);
 }
 
 @media (max-width: 520px) {
@@ -4297,8 +4299,8 @@ button.run-session-row {
 
 .helper {
   margin: 10px 0 0;
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: var(--text-info-size);
+  line-height: var(--text-info-line);
 }
 
 .empty-state {
@@ -4376,7 +4378,7 @@ button.run-session-row {
 
 .routine-guide-head strong {
   color: var(--color-text);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1.25;
 }
@@ -4384,7 +4386,7 @@ button.run-session-row {
 .routine-guide-head span {
   max-width: 48%;
   color: var(--color-primary);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1.35;
   text-align: right;
@@ -4392,8 +4394,9 @@ button.run-session-row {
 
 .routine-guide-list small {
   color: var(--color-muted);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: var(--text-caption-line);
 }
 
 .routine-guide-list ul {
@@ -4402,8 +4405,8 @@ button.run-session-row {
   margin: 0;
   padding-left: 18px;
   color: var(--color-muted);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: var(--text-info-size);
+  line-height: var(--text-info-line);
 }
 
 .training-phase-card,
@@ -4431,9 +4434,9 @@ button.run-session-row {
 .progression-criteria-list small,
 .prescription-template-list small {
   color: var(--color-muted);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
-  line-height: 1.4;
+  line-height: var(--text-info-line);
 }
 
 .phase-focus-list {
@@ -4476,15 +4479,15 @@ button.run-session-row {
 .progression-criteria-list strong,
 .prescription-template-list strong {
   color: var(--color-text);
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.3;
 }
 
 .progression-criteria-list p {
   margin: 0;
   color: var(--color-muted);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: var(--text-info-size);
+  line-height: var(--text-info-line);
 }
 
 .criterion-ready {
@@ -4508,8 +4511,8 @@ button.run-session-row {
   margin: 0;
   padding-left: 18px;
   color: var(--color-muted);
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: var(--text-info-size);
+  line-height: var(--text-info-line);
 }
 
 .memory-stack {
@@ -4539,7 +4542,7 @@ button.run-session-row {
 
 .memory-compact-list,
 .memory-context-block,
-.memory-profile-grid,
+.info-pair-grid,
 .memory-note-grid,
 .memory-subsection {
   min-width: 0;
@@ -4585,9 +4588,9 @@ button.run-session-row {
 .memory-compact-list small {
   overflow: hidden;
   color: var(--color-muted);
-  font-size: 12px;
+  font-size: var(--text-caption-size);
   font-weight: 750;
-  line-height: 1.4;
+  line-height: var(--text-caption-line);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -4611,8 +4614,8 @@ button.run-session-row {
 .memory-context-block ul {
   margin: 0;
   color: var(--color-muted);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: var(--text-info-size);
+  line-height: var(--text-info-line);
 }
 
 .memory-context-block ul {
@@ -4621,7 +4624,7 @@ button.run-session-row {
   padding-left: 18px;
 }
 
-.memory-profile-grid {
+.info-pair-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   overflow: hidden;
@@ -4630,7 +4633,7 @@ button.run-session-row {
   box-shadow: var(--shadow-card);
 }
 
-.memory-profile-grid > div {
+.info-pair-grid > div {
   display: grid;
   gap: 6px;
   min-height: 72px;
@@ -4638,21 +4641,21 @@ button.run-session-row {
   padding: 13px 15px;
 }
 
-.memory-profile-grid > div:nth-child(n + 3) {
+.info-pair-grid > div:nth-child(n + 3) {
   border-top: 1px solid var(--color-border);
 }
 
-.memory-profile-grid > div:nth-child(even) {
+.info-pair-grid-vertical-divider > div:nth-child(even) {
   border-left: 1px solid var(--color-border);
 }
 
-.memory-profile-grid span {
+.info-pair-grid span {
   color: var(--color-muted);
-  font-size: 12px;
+  font-size: var(--text-caption-size);
   font-weight: 850;
 }
 
-.memory-profile-grid strong {
+.info-pair-grid strong {
   overflow: hidden;
   color: var(--color-text);
   font-size: 17px;
@@ -5001,8 +5004,8 @@ button.run-session-row {
 .resolved-candidate-card small {
   margin: 0;
   color: var(--color-muted);
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: var(--text-info-line);
 }
 
 .checkin-strength-panel ul {
@@ -5023,14 +5026,14 @@ button.run-session-row {
 
 .checkin-strength-panel span {
   color: var(--color-text);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 850;
 }
 
 .checkin-strength-panel small {
   color: var(--color-muted);
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
 }
 
 .resolved-candidate-card {
@@ -5189,8 +5192,9 @@ button.run-session-row {
 .memory-list-card small {
   overflow: hidden;
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 750;
+  line-height: var(--text-caption-line);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -5221,14 +5225,16 @@ button.run-session-row {
 
 .knowledge-card-header small {
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
+  line-height: var(--text-info-line);
 }
 
 .knowledge-card p {
   margin: 0;
   color: var(--color-muted);
-  line-height: 1.55;
+  font-size: var(--text-info-size);
+  line-height: var(--text-info-line);
 }
 
 .knowledge-rule-list {
@@ -5239,7 +5245,7 @@ button.run-session-row {
 
 .knowledge-rule-list > strong {
   color: var(--color-text);
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .knowledge-rule-list ul {
@@ -5271,8 +5277,8 @@ button.run-session-row {
 
 .knowledge-rule-list small {
   color: var(--color-muted);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 14px;
+  line-height: var(--text-info-line);
 }
 
 .compact-heading {
@@ -5449,8 +5455,9 @@ button.run-session-row {
   margin: 0;
   padding-left: 18px;
   color: var(--color-muted);
-  font-size: 14px;
+  font-size: var(--text-info-size);
   font-weight: 760;
+  line-height: var(--text-info-line);
 }
 
 .weather-chart-card {
