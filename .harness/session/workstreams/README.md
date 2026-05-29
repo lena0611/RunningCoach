@@ -56,6 +56,19 @@ Codex `UserPromptSubmit` hook은 첫 메시지에 `01-harness-ops`, `02-product-
 
 창 제목만으로 자동 감지한다고 가정하지 않는다. 현재 Codex 어댑터는 사용자 프롬프트 본문에 포함된 workstream id만 안정적으로 감지한다.
 
+## 열린 창 공통 새로고침
+
+이미 열려 있는 여러 workstream 창에 최신 운영 기준을 다시 적용해야 할 때는 창마다 workstream id를 바꿔 붙이지 않습니다. 모든 창에 같은 문구를 붙여넣습니다.
+
+```text
+워크스트림 기준 새로고침.
+현재 창이 기존에 맡고 있던 workstream을 유지해서 README와 해당 workstream 파일을 다시 확인하고, 이후 요청부터 최신 GitHub Issue/Project/worktree/comment 기준을 적용해줘.
+```
+
+Codex hook은 위와 같은 공통 새로고침 문구를 감지하면 특정 workstream id를 새로 지정하지 않고, 현재 대화 맥락에서 이미 확립된 workstream을 유지하라는 generic refresh 안내를 주입한다.
+
+에이전트는 기존 workstream이 명확하면 해당 `.harness/session/workstreams/<id>.md`를 다시 읽고 계속 진행한다. 기존 workstream이 명확하지 않으면 넓은 작업을 진행하지 말고 사용자에게 workstream id를 확인한다.
+
 ## 완료 책임 창
 
 모든 업무 요청은 시작할 때 `완료 책임 창`을 하나 정합니다. 완료 책임 창은 업무 목표, 완료 조건, 후속 workstream 인수인계, 최종 리뷰, 검증 후보 정리를 소유합니다.
