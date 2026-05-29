@@ -332,3 +332,9 @@
 - 결정: `.github/workflows/pages.yml`의 `paths-ignore`에 `.github/ISSUE_TEMPLATE/**`를 추가한다. Issue template, commit template, Copilot instructions는 에이전트/운영 문서로 보고 Pages 배포 제외 대상으로 관리한다.
 - 배포 유지 범위: workflow 파일 자체, `src/**`, `public/**`, `package.json`, `.nvmrc`, Vite 설정, Supabase 함수는 계속 배포 영향 후보로 둔다.
 - 선택 이유: Issue 관리 문구나 템플릿을 고칠 때 앱 빌드/배포가 반복되면 실제 사용자-facing 변경과 운영 변경 신호가 섞인다.
+
+## 2026-05-29 - 기존 창 운영 룰 next-turn 강제 주입
+- 문제: 최신 운영 룰을 이미 열려 있는 여러 Codex workstream 창에 강제로 주입해야 하지만, 창끼리 직접 메시지를 보내거나 백그라운드로 기존 대화 컨텍스트를 수정하는 경로는 없다.
+- 결정: `.codex/hooks/inject-context.sh`의 기본 `UserPromptSubmit` 출력에 최신 PaceLAB 운영 룰 위치와 핵심 기준을 항상 포함한다. 기존 창은 다음 사용자 입력을 받는 순간 이 hook 출력을 통해 최신 기준을 주입받는다.
+- 주입 기준: 모든 창은 `.harness/session/workstreams/README.md`, `.harness/project/github-issue-management-guide.md`, `.harness/project/github-tracking-rules.md`, `.harness/project/workflow-rules.md`를 우선 확인하고, Issue/Project/worktree/comment, parent/child Issue, `업무 피로도` 기준을 적용한다.
+- 한계: 이미 열린 창에 아무 입력 없이 즉시 메시지를 밀어 넣는 것은 불가능하다. 같은 프로젝트 루트 또는 최신 main/worktree를 쓰는 창에서 다음 프롬프트가 들어올 때 적용된다.

@@ -11,6 +11,9 @@
 6. `.harness/session/developer-input-queue.md`
 
 ## 다음 작업
+- 기존에 열려 있는 Codex 창에는 백그라운드 메시지를 직접 보낼 수 없다. 최신 운영 룰은 다음 사용자 입력 시 `.codex/hooks/inject-context.sh`의 기본 컨텍스트로 주입된다.
+- 다음 사용자 입력을 받은 모든 창은 최신 운영 룰로 `.harness/session/workstreams/README.md`, `.harness/project/github-issue-management-guide.md`, `.harness/project/github-tracking-rules.md`, `.harness/project/workflow-rules.md`를 우선 확인한다.
+- 정식 Issue 작업은 GitHub Issue/Project, Issue별 worktree/branch, 실제 Markdown 댓글, parent/child Issue, `업무 피로도` 자가진단 기준을 적용한다.
 - 새 대화창의 작업 유형을 먼저 정합니다: 기획, 버그픽스, UI/UX, 코칭/훈련 로직, HealthKit/iOS, Supabase/OpenAI Edge Function, 부상관리 도메인, 하네스/정책.
 - 모든 사용자 요청마다 현재 창의 workstream 범위를 먼저 식별합니다. 불명확하면 넓은 작업을 진행하지 말고 사용자에게 workstream 확인을 요청합니다.
 - 모든 업무 요청은 시작할 때 `완료 책임 창`을 하나 정합니다. 완료 책임 창이 불명확하면 구현이나 문서 변경을 넓히기 전에 먼저 책임 창을 정합니다.
