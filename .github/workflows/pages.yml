@@ -11,6 +11,7 @@ on:
       - 'AGENTS.md'
       - 'CLAUDE.md'
       - '.github/commit-template.txt'
+      - '.github/ISSUE_TEMPLATE/**'
       - '.github/copilot-instructions.md'
       - '.github/copilot-instructions/**'
   workflow_dispatch:

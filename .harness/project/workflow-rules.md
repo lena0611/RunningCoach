@@ -90,7 +90,7 @@
 
 ## 릴리스 절차
 - GitHub Pages 같은 정적 배포를 기준으로 `npm run build` 결과물을 사용한다.
-- AI 에이전트/하네스 운영 파일만 변경된 push는 GitHub Pages 배포를 트리거하지 않는다. `.github/workflows/pages.yml`의 `paths-ignore`는 `.harness/**`, `.codex/**`, `.agents/**`, `.claude/**`, `AGENTS.md`, `CLAUDE.md`, Copilot instructions, commit template에만 적용하고, `src/**`, `public/**`, `package.json`, `.nvmrc`, Vite 설정, workflow 자체, Supabase 함수는 배포 영향 후보로 유지한다.
+- AI 에이전트/하네스 운영 파일만 변경된 push는 GitHub Pages 배포를 트리거하지 않는다. `.github/workflows/pages.yml`의 `paths-ignore`는 `.harness/**`, `.codex/**`, `.agents/**`, `.claude/**`, `AGENTS.md`, `CLAUDE.md`, Copilot instructions, commit template, Issue template에만 적용하고, `src/**`, `public/**`, `package.json`, `.nvmrc`, Vite 설정, workflow 자체, Supabase 함수는 배포 영향 후보로 유지한다.
 - 배포 전 정적 라우팅과 PWA manifest가 유지되는지 확인한다.
 - GitHub Pages 배포 직후 iOS WebView는 캐시/전파 지연이 있을 수 있다. 새 배포 후 첫 실행 이슈는 Pages 배포 완료, WebView 캐시, 앱 재시작, 네이티브 진단 로직 순서로 확인한다.
 
