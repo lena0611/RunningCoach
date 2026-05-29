@@ -6,6 +6,7 @@ profile="$root/.harness/policy/profile.json"
 active_stack="unknown"
 hook_input=""
 detected_workstream=""
+needs_workstream_refresh="false"
 needs_github_issue_guide="false"
 
 if [ -f "$profile" ]; then
@@ -29,6 +30,10 @@ if [ -d "$workstream_dir" ] && [ -n "$hook_input" ]; then
 fi
 
 if [ -n "$hook_input" ]; then
+  if printf '%s' "$hook_input" | grep -Eiq '워크스트림.*(새로고침|리프레시|refresh|재확인|기준|동기화)|workstream.*(refresh|sync|bootstrap|reload)|운영 기준.*(새로고침|재확인|동기화)|기준.*(새로고침|재확인|동기화)'; then
+    needs_workstream_refresh="true"
+  fi
+
   if printf '%s' "$hook_input" | grep -Eiq 'github|깃허브|깃헙|이슈|issue|project|프로젝트|브랜치|branch|pr|pull request|댓글|comment|진행해|검증해|배포해|완료처리'; then
     needs_github_issue_guide="true"
   fi
@@ -38,6 +43,8 @@ printf 'Harness context: read CLAUDE.md first; check .harness/policy/ai-standard
 
 if [ -n "$detected_workstream" ]; then
   printf 'Detected workstream bootstrap: user prompt mentions %s. Read .harness/session/workstreams/README.md, especially the `완료 책임 창` section, then read .harness/session/workstreams/%s.md and treat this window as that workstream unless the user corrects it.\n' "$detected_workstream" "$detected_workstream"
+elif [ "$needs_workstream_refresh" = "true" ]; then
+  printf 'Generic workstream refresh: read .harness/session/workstreams/README.md, especially the `완료 책임 창` section, then keep this window on the workstream already established by the current conversation. If the existing workstream is clear, reread that matching .harness/session/workstreams/<id>.md file and continue within that scope. If the existing workstream is not clear, do not broaden work; ask the user for the workstream id. The user may paste the same refresh prompt into every open workstream window without editing ids.\n'
 fi
 
 if [ "$needs_github_issue_guide" = "true" ]; then

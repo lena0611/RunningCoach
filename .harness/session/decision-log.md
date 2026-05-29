@@ -289,6 +289,13 @@
 - 앱 영향: `src/**`, `supabase/**`, 배포 workflow는 변경하지 않는다. 사용자-facing 앱 동작이 아니라 Issue 운영 환경 분리 기준이므로 critical path 구현 변경도 필요하지 않다.
 - 선택 이유: worktree는 branch보다 강한 로컬 격리 단위라 동시에 여러 Issue를 진행해도 파일 상태, stash, commit 범위를 명확히 유지할 수 있다. stash는 예외적 임시 조치로만 남긴다.
 
+## 2026-05-29 - 열린 workstream 창 공통 새로고침
+- 문제: 이미 여러 workstream 창이 열려 있을 때 최신 운영 기준을 주입하려면 사용자가 창마다 `01-harness-ops`, `02-product-planning`처럼 id를 바꿔 붙여야 해서 운영 비용과 실수 가능성이 커진다.
+- 결정: 모든 열린 workstream 창에 같은 `워크스트림 기준 새로고침` 문구를 붙이면, Codex hook은 특정 id를 새로 지정하지 않고 현재 대화에서 이미 확립된 workstream을 유지하라는 generic refresh 안내를 주입한다.
+- hook/구현 영향: 이번 변경은 `.codex/hooks/inject-context.sh`의 프롬프트 감지 문구와 workstream 운영 문서만 바꾼다. 앱 런타임, GitHub Pages workflow, commit/push hook 구현은 변경하지 않는다.
+- 앱 영향: `src/**`, `supabase/**`, iOS/HealthKit 경계는 변경하지 않는다. 사용자-facing 앱 동작이 아니라 에이전트 대화창 운영 기준이므로 critical path 구현 변경이 필요 없다.
+- 선택 이유: 창 제목 메타데이터에 의존하지 않으면서도 모든 창에 같은 문구를 붙일 수 있다. 기존 workstream이 불명확한 창에서는 넓은 작업을 막고 사용자에게 id를 확인하도록 해 오인식을 줄인다.
+
 ## 2026-05-29 - 요약/기록/기억 메뉴 정보 구조 재정의
 - 문제: 기억 페이지 내용이 혼잡하고, 하단 메뉴인 요약/기록/기억의 성격이 러너 관점에서 명확히 분리되지 않았다.
 - 결정: 하단 메뉴는 기능 묶음이 아니라 러너의 질문으로 나눈다. `요약`은 오늘/이번 주 무엇을 해야 하는지, `기록`은 내가 무엇을 어떻게 뛰었는지, `기억`은 앱과 코치가 나를 어떤 기준으로 알고 있는지에 답한다.
