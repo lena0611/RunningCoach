@@ -282,6 +282,13 @@
 - 운영 기준: Issue에는 workstream, type, priority, completion owner, target, verification 후보를 기록한다. Project에는 `Status`, `Workstream`, `Type`, `Priority`, `Completion Owner`, `Target`, `Verification`, `Blocked` 필드를 둔다.
 - 선택 이유: GitHub Issues/Projects는 코드 변경, 커밋, PR, 검증과 가장 가까운 작업 추적 시스템이다. Notion은 향후 사업화/인터뷰/레퍼런스 노트 보조 도구로 검토하되 당장 핵심 이슈트래커로 쓰지 않는다.
 
+## 2026-05-29 - Issue별 worktree 운영 기준
+- 문제: Issue별 branch만 분리해도 로컬 작업트리가 하나이면 여러 Codex 창이나 여러 Issue 변경이 같은 디렉터리에 섞이고, stash로 임시 분리하는 과정에서 어떤 변경이 어느 Issue 소속인지 흐려질 수 있다.
+- 결정: 정식 Issue 작업은 Issue 전용 git worktree와 `issue-<번호>/<짧은-설명>` branch를 함께 사용한다. 기준 작업트리 `/Users/smart-tn-083/practice/run-ai`는 `main` 확인, Issue/Project 정리, merge/deploy 기준으로 두고, 구현/문서 수정은 `/Users/smart-tn-083/practice/run-ai.worktrees/issue-<번호>-<짧은-설명>`에서 수행한다.
+- hook/구현 영향: 이번 변경은 운영 기준, Issue template, Codex 컨텍스트 주입 문구 변경이다. commit/push hook의 실행 방식은 유지하므로 `.githooks/**`, `.harness/bin/install-hooks.mjs`, `.harness/bin/run-previous-hook.mjs`, `.github/commit-template.txt` 구현 변경은 필요하지 않다.
+- 앱 영향: `src/**`, `supabase/**`, 배포 workflow는 변경하지 않는다. 사용자-facing 앱 동작이 아니라 Issue 운영 환경 분리 기준이므로 critical path 구현 변경도 필요하지 않다.
+- 선택 이유: worktree는 branch보다 강한 로컬 격리 단위라 동시에 여러 Issue를 진행해도 파일 상태, stash, commit 범위를 명확히 유지할 수 있다. stash는 예외적 임시 조치로만 남긴다.
+
 ## 2026-05-29 - 요약/기록/기억 메뉴 정보 구조 재정의
 - 문제: 기억 페이지 내용이 혼잡하고, 하단 메뉴인 요약/기록/기억의 성격이 러너 관점에서 명확히 분리되지 않았다.
 - 결정: 하단 메뉴는 기능 묶음이 아니라 러너의 질문으로 나눈다. `요약`은 오늘/이번 주 무엇을 해야 하는지, `기록`은 내가 무엇을 어떻게 뛰었는지, `기억`은 앱과 코치가 나를 어떤 기준으로 알고 있는지에 답한다.

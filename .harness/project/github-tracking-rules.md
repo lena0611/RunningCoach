@@ -48,9 +48,10 @@ GitHub `Assignees`는 사람 계정 배정용입니다. PaceLAB의 담당 workst
 ## 브랜치와 메인라인
 
 - `main`은 머지와 배포 기준 브랜치입니다.
-- 정식 Issue 작업은 `main`에서 직접 진행하지 않고 Issue 단위 feature branch에서 진행합니다.
+- 정식 Issue 작업은 `main`에서 직접 진행하지 않고 Issue 단위 git worktree와 feature branch에서 진행합니다.
 - feature branch 이름은 `issue-<번호>/<짧은-설명>` 형식을 기본으로 합니다. 예: `issue-1/memory-page-ia`.
-- 동시에 여러 요청이 들어오면 각 Issue별 branch를 분리합니다.
+- Issue worktree 경로는 `/Users/smart-tn-083/practice/run-ai.worktrees/issue-<번호>-<짧은-설명>` 형식을 기본으로 합니다.
+- 동시에 여러 요청이 들어오면 각 Issue별 worktree와 branch를 분리합니다.
 - PR은 feature branch에서 `main`으로 열고, `main`에 머지된 뒤 배포 대상으로 봅니다.
 - `main`에 머지되지 않은 branch의 변경은 배포 완료로 보지 않습니다.
 
