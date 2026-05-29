@@ -14,11 +14,12 @@ const scheduleHorizonDays = 14
 export function syncNativeNotifications(settings: NotificationSettings, weeklyPattern: string[]) {
   const handler = window.webkit?.messageHandlers?.runContextNotifications
   if (!handler) return false
+  const payloadSettings = { ...settings }
 
   handler.postMessage({
     type: 'syncNotificationSettings',
-    settings,
-    notifications: buildTrainingNotifications(settings, weeklyPattern)
+    settings: payloadSettings,
+    notifications: buildTrainingNotifications(payloadSettings, weeklyPattern)
   })
   return true
 }

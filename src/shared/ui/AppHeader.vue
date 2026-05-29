@@ -3,7 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/app/stores/authStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
-import { useSettingsStore, type ManualThemeMode } from '@/app/stores/settingsStore'
+import { useSettingsStore, type ManualThemeMode, type NotificationSettings } from '@/app/stores/settingsStore'
 import { getActiveGoal, getActiveInjuryItem, type PersonalBest, type TrainingMemory } from '@/entities/training-memory/model'
 import { syncNativeNotifications } from '@/features/sync-native-notifications/notificationBridge'
 import { formatDateWithWeekday } from '@/shared/lib/format'
@@ -211,16 +211,22 @@ function setThemeMode(value: string | string[]) {
 
 function setAllNotifications(enabled: boolean) {
   settingsStore.setAllNotifications(enabled)
-  syncNotifications()
+  syncNotifications({
+    ...settingsStore.notificationSettings,
+    allEnabled: enabled
+  })
 }
 
 function setNotification(key: typeof notificationRows[number]['key'], enabled: boolean) {
   settingsStore.setNotificationSetting(key, enabled)
-  syncNotifications()
+  syncNotifications({
+    ...settingsStore.notificationSettings,
+    [key]: enabled
+  })
 }
 
-function syncNotifications() {
-  syncNativeNotifications(settingsStore.notificationSettings, memoryStore.memory.weeklyPattern)
+function syncNotifications(settings: NotificationSettings = settingsStore.notificationSettings) {
+  syncNativeNotifications(settings, memoryStore.memory.weeklyPattern)
 }
 
 function goDashboard() {
