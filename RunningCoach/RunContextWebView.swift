@@ -43,12 +43,16 @@ private struct RunContextNotificationSettings {
 private final class RunContextNotificationManager {
     private let notificationPrefix = "pacelab-"
     private let settingsKey = "pacelab.notificationSettings"
+    private let pendingHealthKitNotificationWindow: TimeInterval = 10 * 60
+    private var pendingHealthKitDetectedAt: Date?
 
     func updateSettings(_ settings: RunContextNotificationSettings) {
         UserDefaults.standard.set([
             "allEnabled": settings.allEnabled,
             "healthKitNewRun": settings.healthKitNewRun
         ], forKey: settingsKey)
+        print("[RunContext Notifications] settings updated all=\(settings.allEnabled) healthKit=\(settings.healthKitNewRun)")
+        showPendingHealthKitDetectedNotificationIfNeeded(settings: settings)
     }
 
     func syncScheduledNotifications(enabled: Bool, requests: [RunContextNotificationRequest]) {
@@ -59,8 +63,9 @@ private final class RunContextNotificationManager {
                 .filter { $0.hasPrefix(notificationPrefix) }
             center.removePendingNotificationRequests(withIdentifiers: identifiers)
 
-            guard enabled, !requests.isEmpty else { return }
+            guard enabled else { return }
             self.requestAuthorization { granted in
+                print("[RunContext Notifications] authorization \(granted ? "granted" : "not granted"), scheduled=\(requests.count)")
                 guard granted else { return }
                 requests.forEach { self.schedule($0) }
             }
@@ -69,6 +74,7 @@ private final class RunContextNotificationManager {
 
     func showImmediateNotification(id: String, title: String, body: String) {
         requestAuthorization { [weak self] granted in
+            print("[RunContext Notifications] immediate authorization \(granted ? "granted" : "not granted")")
             guard granted, let self else { return }
             let content = self.content(title: title, body: body)
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
@@ -79,7 +85,29 @@ private final class RunContextNotificationManager {
 
     func showHealthKitDetectedNotificationIfEnabled() {
         let settings = loadSettings()
-        guard settings.allEnabled, settings.healthKitNewRun else { return }
+        guard settings.allEnabled, settings.healthKitNewRun else {
+            print("[RunContext Notifications] HealthKit detected notification skipped settings all=\(settings.allEnabled) healthKit=\(settings.healthKitNewRun)")
+            if !settings.allEnabled, settings.healthKitNewRun {
+                pendingHealthKitDetectedAt = Date()
+                print("[RunContext Notifications] HealthKit detected notification pending until web settings sync")
+            }
+            return
+        }
+        showHealthKitDetectedNotification()
+    }
+
+    private func showPendingHealthKitDetectedNotificationIfNeeded(settings: RunContextNotificationSettings) {
+        guard settings.allEnabled, settings.healthKitNewRun, let detectedAt = pendingHealthKitDetectedAt else { return }
+        pendingHealthKitDetectedAt = nil
+        guard Date().timeIntervalSince(detectedAt) <= pendingHealthKitNotificationWindow else {
+            print("[RunContext Notifications] pending HealthKit detected notification expired")
+            return
+        }
+        print("[RunContext Notifications] showing pending HealthKit detected notification")
+        showHealthKitDetectedNotification()
+    }
+
+    private func showHealthKitDetectedNotification() {
         showImmediateNotification(
             id: "healthkit-detected-\(Date().timeIntervalSince1970)",
             title: "새 러닝 기록이 감지됐습니다",
@@ -116,8 +144,10 @@ private final class RunContextNotificationManager {
                     completion(granted)
                 }
             case .denied:
+                print("[RunContext Notifications] authorization denied in iOS Settings")
                 completion(false)
             @unknown default:
+                print("[RunContext Notifications] authorization unknown status")
                 completion(false)
             }
         }
@@ -360,6 +390,7 @@ struct RunContextWebView: UIViewRepresentable {
                 let enabled = settings["allEnabled"] as? Bool ?? false
                 let payloads = body["notifications"] as? [[String: Any]] ?? []
                 let requests = payloads.compactMap(RunContextNotificationRequest.init(payload:))
+                print("[RunContext Notifications] received syncNotificationSettings enabled=\(enabled) scheduled=\(requests.count)")
                 notificationManager.updateSettings(RunContextNotificationSettings(payload: settings))
                 notificationManager.syncScheduledNotifications(enabled: enabled, requests: requests)
             case "showNotification":
