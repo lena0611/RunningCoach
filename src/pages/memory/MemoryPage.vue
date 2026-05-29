@@ -14,7 +14,7 @@ import {
   type InjuryAreaSelection
 } from '@/entities/training-memory/injuryAreas'
 import type { TrainingKnowledgeCatalog, TrainingKnowledgeRequest, TrainingMethod } from '@/entities/training-knowledge/model'
-import { formatDateWithWeekday } from '@/shared/lib/format'
+import { formatDateWithWeekday, formatDuration } from '@/shared/lib/format'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 import { createTrainingKnowledgeRequest, fetchTrainingKnowledgeCatalog } from '@/shared/api/trainingKnowledgeRepository'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
@@ -115,6 +115,11 @@ const activeInjury = computed(() => {
   return draft.injuryItems.find((item) => item.id === draft.activeInjuryItemId) ?? null
 })
 const editingInjury = computed(() => draft.injuryItems.find((item) => item.id === editingInjuryId.value) ?? null)
+const secondaryGoals = computed(() => draft.goals
+  .filter((goal) => goal.id !== activeGoal.value?.id && goal.status !== 'archived')
+  .sort((a, b) => a.priority - b.priority)
+)
+const managedInjuries = computed(() => draft.injuryItems.filter((item) => item.status === 'active' || item.status === 'monitoring'))
 const activeGoalMeta = computed(() => {
   if (!activeGoal.value) return '목표 없음'
   return [activeGoal.value.category, activeGoal.value.targetDate ? `${formatDateWithWeekday(activeGoal.value.targetDate)}까지` : '목표일 미정'].join(' · ')
@@ -163,6 +168,19 @@ const weeklyRoutineGuides = computed(() => draft.weeklyPattern.map((item) => ({
 const trainingPhase = computed(() => draft.adaptiveTrainingProfile.trainingPhase)
 const progressionCriteria = computed(() => draft.adaptiveTrainingProfile.progressionCriteria)
 const prescriptionTemplates = computed(() => draft.adaptiveTrainingProfile.prescriptionTemplates)
+const profileFacts = computed(() => [
+  { label: '러너', value: memoryStore.selectedUser.name || '기본 사용자' },
+  { label: '출생연도', value: draft.athleteProfile.birthYear ? `${draft.athleteProfile.birthYear}` : '미입력' },
+  { label: '성별', value: sexLabel(draft.athleteProfile.sex) },
+  { label: '러닝 경력', value: formatExperience(draft.athleteProfile.runningExperienceMonths) },
+  { label: '주간 목표', value: draft.athleteProfile.weeklyRunDaysTarget ? `${draft.athleteProfile.weeklyRunDaysTarget}회` : '미입력' },
+  { label: '롱런 요일', value: draft.athleteProfile.preferredLongRunDay || '미입력' }
+])
+const personalBestPreview = computed(() => draft.athleteProfile.personalBests
+  .slice(0, 4)
+  .map((pb) => `${pb.distanceKm}km · ${formatDuration(pb.durationSec)} · ${formatDateWithWeekday(pb.date)}`)
+)
+const aiMemoryCount = computed(() => draft.knownIssues.length + draft.runningStyle.length + draft.heatStrategy.length + draft.aiNotes.length)
 
 watch(
   () => memoryStore.selectedUserId,
@@ -191,6 +209,26 @@ onBeforeUnmount(() => {
 
 function join(items: string[]) {
   return items.join('\n')
+}
+
+function sexLabel(value: TrainingMemory['athleteProfile']['sex']) {
+  switch (value) {
+    case 'male':
+      return '남성'
+    case 'female':
+      return '여성'
+    case 'other':
+      return '기타'
+    default:
+      return '미입력'
+  }
+}
+
+function formatExperience(months: number | null) {
+  if (months === null) return '미입력'
+  if (months < 12) return '1년 미만'
+  const years = Math.floor(months / 12)
+  return `${years}년`
 }
 
 function goalDateMeta(goal: TrainingGoal) {
@@ -626,86 +664,92 @@ async function save() {
 
 <template>
   <PageLayout variant="memory">
-    <SectionGroup class="memory-overview-card" title="코칭 메모리" :surface="false">
+    <SectionGroup class="memory-overview-card" title="목표" :surface="false">
       <template #actions>
         <button type="button" :disabled="saving || !isDirty" @click="save">{{ saving ? '저장 중' : '저장' }}</button>
       </template>
       <p v-if="error || memoryStore.error" class="error">{{ error || memoryStore.error }}</p>
-      <p class="helper">계정 이름, 출생연도, 성별, PB 같은 개인정보는 우상단 계정 메뉴에서 수정합니다.</p>
 
-      <div class="memory-stack">
-        <div class="memory-hero">
-          <span class="context-chip">현재 코칭 기준</span>
-          <strong>{{ activeGoal?.title || '목표 없음' }}</strong>
-          <small>{{ activeGoalMeta }}</small>
-          <small v-if="activeInjury">부상관리: {{ activeInjury.title }} · {{ activeInjuryMeta }}</small>
-        </div>
-        <div class="memory-nav-list" aria-label="코칭 메모리 관리">
-          <button class="memory-nav-card" type="button" @click="openGoals">
-            <span>
-              <strong>목표 관리</strong>
-              <small>{{ activeGoal?.title || '목표 없음' }}</small>
-            </span>
-            <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
-          </button>
-          <button class="memory-nav-card" type="button" @click="openInjuries">
-            <span>
-              <strong>부상 관리</strong>
-              <small>{{ activeInjury?.title || '관리 항목 없음' }}</small>
-            </span>
-            <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
-          </button>
-          <button class="memory-nav-card" type="button" @click="openKnowledge">
-            <span>
-              <strong>훈련 지식 보관소</strong>
-              <small>MAF, 10K, 회복 기준 같은 승인된 처방 근거</small>
-            </span>
-            <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
-          </button>
+      <button class="memory-hero memory-hero-button" type="button" @click="openGoals">
+        <span class="context-chip">활성 목표</span>
+        <strong>{{ activeGoal?.title || '목표 없음' }}</strong>
+        <small>{{ activeGoalMeta }}</small>
+        <small v-if="activeGoal?.successCriteria">{{ activeGoal.successCriteria }}</small>
+        <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
+      </button>
+
+      <div v-if="secondaryGoals.length" class="memory-compact-list">
+        <div v-for="goal in secondaryGoals.slice(0, 3)" :key="goal.id">
+          <span>{{ goal.status }}</span>
+          <strong>{{ goal.title }}</strong>
+          <small>{{ goal.category }}{{ goalDateMeta(goal) }}</small>
         </div>
       </div>
     </SectionGroup>
 
-    <SectionGroup title="AI 관리 훈련 루틴">
+    <SectionGroup title="몸 상태" :surface="false">
+      <button class="memory-nav-card memory-nav-card-standalone" type="button" @click="openInjuries">
+        <span>
+          <strong>{{ activeInjury?.title || '관리 항목 없음' }}</strong>
+          <small>{{ activeInjury ? `${injuryAreaMeta(activeInjury)} · ${activeInjuryMeta}` : '부상/주의사항 없음' }}</small>
+        </span>
+        <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
+      </button>
+      <div v-if="activeInjury" class="memory-context-block">
+        <strong>복귀 기준</strong>
+        <p>{{ activeInjury.returnToRunCriteria || 'Easy 후 다음날 반응을 기준으로 조정합니다.' }}</p>
+      </div>
+      <div v-if="managedInjuries.length > 1" class="memory-compact-list">
+        <div v-for="item in managedInjuries.slice(0, 3)" :key="item.id">
+          <span>{{ item.status }}</span>
+          <strong>{{ item.title }}</strong>
+          <small>{{ injuryAreaMeta(item) }}{{ injuryDateMeta(item) }}</small>
+        </div>
+      </div>
+    </SectionGroup>
+
+    <SectionGroup title="러너 프로필" :surface="false">
+      <div class="memory-profile-grid">
+        <div v-for="fact in profileFacts" :key="fact.label">
+          <span>{{ fact.label }}</span>
+          <strong>{{ fact.value }}</strong>
+        </div>
+      </div>
+      <div v-if="personalBestPreview.length" class="memory-context-block">
+        <strong>PB</strong>
+        <ul>
+          <li v-for="pb in personalBestPreview" :key="pb">{{ pb }}</li>
+        </ul>
+      </div>
+      <p class="helper">프로필과 PB 수정은 우상단 계정 메뉴에서 관리합니다.</p>
+    </SectionGroup>
+
+    <SectionGroup title="훈련 기준" :surface="false">
       <template #actions>
         <button class="help-icon-button" type="button" aria-label="AI 스케줄링 기준 보기" @click="schedulingHelpOpen = true">?</button>
       </template>
-      <div class="sub-panel">
-        <div class="training-phase-card">
-          <span class="context-chip">현재 단계</span>
-          <strong>{{ trainingPhase.currentPhase }} · {{ trainingPhase.goal }}</strong>
-          <small>다음 후보: {{ trainingPhase.nextPhase || '미정' }} · 검토: {{ trainingPhase.reviewAfter }}</small>
-          <div class="phase-focus-list">
-            <span v-for="focus in trainingPhase.focus" :key="focus">{{ focus }}</span>
-          </div>
+      <div class="training-phase-card">
+        <span class="context-chip">현재 단계</span>
+        <strong>{{ trainingPhase.currentPhase }} · {{ trainingPhase.goal }}</strong>
+        <small>다음 후보: {{ trainingPhase.nextPhase || '미정' }} · 검토: {{ trainingPhase.reviewAfter }}</small>
+        <div class="phase-focus-list">
+          <span v-for="focus in trainingPhase.focus" :key="focus">{{ focus }}</span>
         </div>
+      </div>
 
-        <strong>승급 조건</strong>
-        <ul class="progression-criteria-list">
-          <li v-for="criterion in progressionCriteria" :key="criterion.id">
-            <div>
-              <span class="context-chip" :class="`criterion-${criterion.status}`">{{ criterion.status }}</span>
-              <strong>{{ criterion.label }}</strong>
-            </div>
-            <small>{{ criterion.evidence }}</small>
-            <p>{{ criterion.action }}</p>
-          </li>
-        </ul>
+      <div class="memory-note-grid">
+        <label>
+          장거리 전략
+          <ClearableField v-model="draft.longRunStrategy" as="textarea" rows="3" />
+        </label>
+        <label>
+          현재 볼륨 노트
+          <ClearableField v-model="draft.currentVolumeNote" as="textarea" rows="3" />
+        </label>
+      </div>
 
-        <strong>처방 템플릿</strong>
-        <div class="prescription-template-list">
-          <article v-for="template in prescriptionTemplates.slice(0, 6)" :key="template.id">
-            <span class="context-chip">{{ template.phase }}</span>
-            <strong>{{ template.name }}</strong>
-            <small>{{ template.sessionType }} · {{ template.purpose }}</small>
-            <ul>
-              <li v-for="step in template.workout.slice(0, 3)" :key="step">{{ step }}</li>
-            </ul>
-          </article>
-        </div>
-
+      <div class="memory-subsection">
         <strong>주간 루틴</strong>
-        <p class="helper">아래는 현재 처방 기준입니다. AI 코칭은 목표와 누적 데이터를 보고 유지하거나 숫자를 조정합니다.</p>
         <ul class="routine-guide-list">
           <li v-for="guide in weeklyRoutineGuides" :key="guide.item">
             <div class="routine-guide-head">
@@ -721,16 +765,41 @@ async function save() {
       </div>
     </SectionGroup>
 
-    <SectionGroup title="개인화 메모">
-      <FormGrid>
-        <label class="full">
-          장거리 전략
-          <ClearableField v-model="draft.longRunStrategy" as="textarea" rows="3" />
-        </label>
-        <label class="full">
-          현재 볼륨 노트
-          <ClearableField v-model="draft.currentVolumeNote" as="textarea" rows="3" />
-        </label>
+    <SectionGroup title="AI 기억" :surface="false">
+      <div class="memory-ai-summary">
+        <span class="context-chip">장기 메모 {{ aiMemoryCount }}개</span>
+        <button class="memory-link-button" type="button" @click="openKnowledge">훈련 지식 보관소</button>
+      </div>
+
+      <div class="memory-subsection">
+        <strong>승급 조건</strong>
+        <ul class="progression-criteria-list">
+          <li v-for="criterion in progressionCriteria" :key="criterion.id">
+            <div>
+              <span class="context-chip" :class="`criterion-${criterion.status}`">{{ criterion.status }}</span>
+              <strong>{{ criterion.label }}</strong>
+            </div>
+            <small>{{ criterion.evidence }}</small>
+            <p>{{ criterion.action }}</p>
+          </li>
+        </ul>
+      </div>
+
+      <div class="memory-subsection">
+        <strong>처방 템플릿</strong>
+        <div class="prescription-template-list">
+          <article v-for="template in prescriptionTemplates.slice(0, 4)" :key="template.id">
+            <span class="context-chip">{{ template.phase }}</span>
+            <strong>{{ template.name }}</strong>
+            <small>{{ template.sessionType }} · {{ template.purpose }}</small>
+            <ul>
+              <li v-for="step in template.workout.slice(0, 3)" :key="step">{{ step }}</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+
+      <FormGrid class="memory-ai-fields">
         <label class="full">
           기타 주의사항
           <ClearableField :model-value="join(draft.knownIssues)" as="textarea" rows="5" @update:model-value="draft.knownIssues = split(String($event ?? ''))" />

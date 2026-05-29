@@ -281,3 +281,10 @@
 - 결정: 정식 개발 작업의 단일 출처는 GitHub Issues로 두고, 전체 상태판은 GitHub Project `PaceLAB Development`로 관리한다. `.harness/project/*`는 장기 기준, 계약, 결정 문서로 유지한다.
 - 운영 기준: Issue에는 workstream, type, priority, completion owner, target, verification 후보를 기록한다. Project에는 `Status`, `Workstream`, `Type`, `Priority`, `Completion Owner`, `Target`, `Verification`, `Blocked` 필드를 둔다.
 - 선택 이유: GitHub Issues/Projects는 코드 변경, 커밋, PR, 검증과 가장 가까운 작업 추적 시스템이다. Notion은 향후 사업화/인터뷰/레퍼런스 노트 보조 도구로 검토하되 당장 핵심 이슈트래커로 쓰지 않는다.
+
+## 2026-05-29 - 요약/기록/기억 메뉴 정보 구조 재정의
+- 문제: 기억 페이지 내용이 혼잡하고, 하단 메뉴인 요약/기록/기억의 성격이 러너 관점에서 명확히 분리되지 않았다.
+- 결정: 하단 메뉴는 기능 묶음이 아니라 러너의 질문으로 나눈다. `요약`은 오늘/이번 주 무엇을 해야 하는지, `기록`은 내가 무엇을 어떻게 뛰었는지, `기억`은 앱과 코치가 나를 어떤 기준으로 알고 있는지에 답한다.
+- 배치 기준: `요약`은 다음 훈련 추천과 목표 준비도 중심의 현재 작전판, `기록`은 `RunLog` 원장과 세션별 상세/코칭, `기억`은 목표/프로필/부상/루틴/AI 장기 기억 같은 장기 맥락 관리 화면으로 둔다.
+- 선택 이유: PaceLAB MVP 핵심 흐름은 `목표 -> 러닝 기록 -> 부하와 적응/몸 상태 -> 코칭 -> 다음 훈련`이므로, 반복 사용 메뉴도 현재 판단, 과거 원장, 장기 맥락으로 분리해야 한다.
+- 후속 기준: 상세 기준은 `.harness/project/navigation-information-architecture.md`를 따른다. 화면 구조와 UI 반영은 `03-ui-ux` workstream에서 별도 처리한다.
