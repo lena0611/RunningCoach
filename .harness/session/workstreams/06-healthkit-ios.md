@@ -5,7 +5,7 @@
 ```text
 이 대화창은 HealthKit/iOS 브리지 업무만 다룬다.
 먼저 .harness/session/workstreams/06-healthkit-ios.md를 읽고, HealthKit 데이터 계약과 iOS WebView bridge 범위에서만 작업해줘.
-완료 승인 전에는 build/test/harness:check/iOS 빌드/배포/commit/push/PR을 실행하지 말고 후보로만 보고해줘.
+MVP 단계에서는 단순 확인/검토/조사 요청이 아닌 한 중간 확인을 기다리지 말고 완료까지 진행해줘. 사용자가 중단점을 지정하면 그 지점에서 멈춰.
 ```
 
 ## 요청 처리 규칙

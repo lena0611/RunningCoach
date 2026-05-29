@@ -5,6 +5,7 @@
 ## 개발 흐름
 - 정식 개발 작업의 단일 출처는 GitHub Issues로 둔다. 전체 상태판은 GitHub Project `PaceLAB Development`로 관리하며, 상세 기준은 `.harness/project/github-tracking-rules.md`를 따른다.
 - 정식 Issue 작업은 Issue 단위 git worktree와 feature branch에서 수행하고, `main`은 머지와 배포 기준 브랜치로 유지한다. 동시에 여러 요청이 들어오면 각 Issue별 worktree, branch, PR을 분리한다.
+- PaceLAB MVP 단계에서는 단순 확인, 검토, 조사, 기획 질문이 아닌 구현/버그/운영 요청을 사용자가 맡기면 중간 확인을 기본 대기점으로 두지 않는다. 명시적 보류 지시가 없으면 완료 책임 창이 검증, 커밋, 푸시, PR, main 머지, 배포 확인, Issue 완료처리까지 이어서 수행한다.
 - 에이전트가 GitHub Issue/Project를 생성하거나 수정할 때는 로컬 `gh` CLI를 1차 경로로 사용한다. GitHub App connector의 Issue/Project write 권한 부족이 확인된 작업에서는 connector-first 시도 후 fallback하는 흐름을 반복하지 않는다.
 - `.harness/project/*`는 장기 기준과 결정 문서로 유지하고, 개별 백로그/진행 상태는 GitHub Issues/Projects에 둔다.
 - 에이전트가 Supabase 데이터를 조회/수정할 때는 앱의 인증 컨텍스트와 RLS 정책을 1차 경로로 사용한다. 인증 없는 직접 DB 조회나 service role/admin 우회 시도 후 앱 사용자 컨텍스트로 fallback하는 흐름을 반복하지 않는다.
@@ -41,8 +42,8 @@
 - 최종 완료 승인 시에는 임시 인수인계 문구 중 실제로 남길 가치가 있는 내용만 문서화하고, 단순 중간 전달 문구는 남기지 않는다.
 - 대화창이 길어져 에이전트 응답이 느려지거나 서로 다른 도메인 판단이 섞이기 시작하면 구현을 더 밀지 말고 `.harness/session/active-context.md` 또는 별도 `thread-handoff-YYYY-MM-DD.md`에 인수인계를 남긴 뒤 새 대화창에서 재개한다.
 - 긴 인수인계는 최신 상태와 다음 작업만 남긴다. 회고, 모든 시도 내역, 장황한 diff 설명은 넣지 않고 필요한 경우 `decision-log.md`나 관련 프로젝트 룰 문서로 승격한다.
-- 여러 창을 거친 업무의 최종 검토는 완료 책임 창에서 모은다. 완료 책임 창은 남은 리스크, 미해결 질문, 검증 후보, 커밋 후보 범위를 정리하고 사용자 완료 승인을 기다린다.
-- build, test, `harness:check`, commit, push, PR 생성은 `CLAUDE.md`의 완료 승인 게이트를 따른다.
+- 여러 창을 거친 업무의 최종 검토는 완료 책임 창에서 모은다. MVP Target의 정식 Issue이고 사용자가 검토/보류/PR까지만 같은 중단점을 지정하지 않았다면, 완료 책임 창은 남은 리스크와 검증을 정리한 뒤 최종 완료까지 이어서 진행한다.
+- build, test, `harness:check`, commit, push, PR 생성은 `CLAUDE.md`와 이 프로젝트의 MVP 기본 완료 흐름을 함께 따른다. 단순 확인/검토/조사 요청이거나 사용자가 명시한 중단점이 있으면 그 지점에서 멈춘다.
 
 작업 유형별 시작 문서:
 

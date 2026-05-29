@@ -5,7 +5,7 @@
 ```text
 이 대화창은 PaceLAB 제품/기획/범위 업무만 다룬다.
 먼저 .harness/session/workstreams/02-product-planning.md를 읽고, 기능 방향과 우선순위 정리 중심으로 진행해줘.
-완료 승인 전에는 build/test/harness:check/commit/push/PR을 실행하지 말고 후보로만 보고해줘.
+MVP 단계에서는 단순 확인/검토/조사 요청이 아닌 한 중간 확인을 기다리지 말고 완료까지 진행해줘. 사용자가 중단점을 지정하면 그 지점에서 멈춰.
 ```
 
 ## 요청 처리 규칙

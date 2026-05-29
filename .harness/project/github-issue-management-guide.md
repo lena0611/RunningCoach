@@ -252,7 +252,7 @@ Issue: <GitHub Issue URL>
 <이번에 처리할 내용>
 
 주의:
-- 완료 승인 전에는 build/test/harness:check/commit/push/PR을 실행하지 않는다.
+- MVP 기본 완료 흐름을 따른다. 단순 확인/검토/조사 요청이거나 사용자가 중단점을 지정한 경우에만 해당 지점에서 멈춘다.
 ```
 
 ## 진행 중 업데이트
@@ -343,16 +343,28 @@ Bug Issue에는 재현 조건을 가장 먼저 채웁니다.
 
 ## 커밋, PR, 배포 흐름
 
+PaceLAB MVP 단계에서는 사용자가 단순 확인, 검토, 조사, 기획 질문만 요청한 경우가 아니라면 중간 확인을 기본 대기점으로 두지 않습니다. 정식 Issue의 `Target`이 `MVP`이고 workstream/완료 책임 창이 명확하면, 에이전트는 가능한 경우 작업 시작부터 검증, commit, push, PR, main 머지, 배포 확인, 완료 댓글, Project `Done`, Issue close까지 이어서 진행합니다.
+
+이 자동 완료 흐름은 Issue별 worktree/branch 원칙을 대체하지 않습니다. 동시에 여러 일을 할 수 있도록 모든 정식 Issue는 먼저 고유 worktree와 branch를 분리하고, 완료까지 이어갈 때도 해당 worktree 안의 변경만 커밋합니다.
+
+아래 경우에는 자동 최종화를 멈춥니다.
+
+- 사용자가 `검토만`, `조사만`, `PR까지만`, `커밋하지 마`, `배포하지 마`, `여기서 멈춰`처럼 중단점을 지정했다.
+- 완료 책임 창이나 workstream이 불명확하다.
+- 다른 workstream의 선행 결정이나 구현이 필요하다.
+- 비밀값, DB migration, 외부 결제, App Store 제출처럼 별도 수동 조치가 필요한 단계가 있다.
+- 검증 실패, merge conflict, 배포 실패처럼 사용자가 알아야 할 차단점이 생겼다.
+
 사용자 요청과 Project Status는 아래처럼 연결합니다.
 
 | 사용자 말 | 에이전트 동작 | Project Status |
 | --- | --- | --- |
 | `증상은 이래`, `검토해줘`, `이 기능 필요해` | Issue 필요 여부 판단, 필요 시 Issue/Project 등록 | `Inbox` 또는 `Ready` |
-| `진행해` | Issue worktree/feature branch 생성, 작업 시작 | `In Progress` |
-| 작업 완료 보고 | branch에 커밋, PR 준비 또는 생성, 사용자 확인 요청 | `Review` |
-| `검증해`, `배포해` | 승인된 검증 실행, PR merge 또는 main 반영, 배포 진행 | `Verify` |
-| 배포 완료 | 배포 URL/확인 방법을 Issue 댓글에 남김 | `Deployed` |
-| `완료처리해` | 완료 요약 댓글, Issue close | `Done` |
+| `진행해` 또는 구현/버그/운영 작업 위임 | Issue worktree/feature branch 생성 후, 중단 지시가 없으면 검증/commit/push/PR/merge/deploy/Done까지 진행 | `In Progress` -> `Done` |
+| 작업 완료 보고가 필요한 예외 | 사용자가 `검토만`, `PR까지만` 등 중단점을 지정한 경우 그 지점에서 요약 | `Review` |
+| `검증해`, `배포해` | 보류 중인 branch/PR을 검증하고 main 반영, 배포 진행 | `Verify` -> `Done` |
+| 배포 완료 | 배포 URL/확인 방법 또는 배포 생략 사유를 Issue 댓글에 남김 | `Deployed` 또는 `Done` |
+| `완료처리해` | 이미 배포/검증된 Issue에 완료 요약 댓글, Issue close | `Done` |
 
 `main`은 머지와 배포 기준입니다. Issue worktree의 feature branch에서 작업이 끝났더라도 `main`에 머지되지 않으면 배포 완료로 보지 않습니다.
 
@@ -380,13 +392,13 @@ Bug Issue에는 재현 조건을 가장 먼저 채웁니다.
 이 창은 <workstream> workstream이다.
 Issue <URL>를 처리해줘.
 완료 책임 창은 <workstream>이다.
-먼저 Issue 내용과 관련 하네스 문서를 확인하고, 완료 승인 전에는 build/test/harness:check/commit/push/PR을 실행하지 마.
+먼저 Issue 내용과 관련 하네스 문서를 확인하고, MVP 기본 완료 흐름에 따라 중단 지시가 없으면 완료까지 진행해줘.
 ```
 
-커밋/푸시까지 원하면 마지막에 명시적으로 말합니다.
+중단점을 지정하려면 마지막에 명시적으로 말합니다.
 
 ```text
-최종 승인한다. 커밋푸시.
+PR까지만 진행해.
 ```
 
 이 경우 hook이 설치되어 있으면 에이전트는 별도 선행 `harness:check`를 중복 실행하지 않고 commit/push hook 검증에 맡깁니다.

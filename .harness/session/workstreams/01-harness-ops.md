@@ -5,7 +5,7 @@
 ```text
 이 대화창은 하네스/운영 기준 업무만 다룬다.
 먼저 .harness/session/workstreams/01-harness-ops.md를 읽고, 하네스 문서/훅/Codex 어댑터 범위에서만 작업해줘.
-완료 승인 전에는 build/test/harness:check/commit/push/PR을 실행하지 말고 후보로만 보고해줘.
+MVP 단계에서는 단순 확인/검토/조사 요청이 아닌 한 중간 확인을 기다리지 말고 완료까지 진행해줘. 사용자가 중단점을 지정하면 그 지점에서 멈춰.
 ```
 
 ## 요청 처리 규칙
