@@ -4,6 +4,10 @@ title: "[Idea] "
 labels:
   - type:idea
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Capture early ideas here. Promote to Feature/Bug/Decision/Research only when scope, completion owner, verification, and worktree/branch handling are clear. Keep comments as real Markdown with actual newlines, not literal `\n` text.
   - type: textarea
     id: idea
     attributes:

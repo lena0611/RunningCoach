@@ -4,6 +4,10 @@ title: "[Bug] "
 labels:
   - type:bug
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Track confirmed defects here. After the issue is accepted, work should happen in an issue-specific git worktree on an `issue-<number>/<short-slug>` branch. Keep comments as real Markdown with actual newlines, not literal `\n` text.
   - type: textarea
     id: problem
     attributes:

@@ -11,12 +11,13 @@ commit/push 단계에서 동작하는 git hook, 커밋 템플릿, 최종 검증 
 
 ## 브랜치와 머지 기준
 - `main`은 머지와 배포 기준 브랜치입니다.
-- 정식 Issue 작업은 `main`에 직접 커밋하지 않고 `issue-<번호>/<짧은-설명>` feature branch에서 진행합니다.
-- feature branch를 만들기 전에는 현재 작업트리에 다른 Issue 변경이 섞여 있는지 `git status --short`와 `git diff`로 확인합니다.
-- 동시에 여러 요청이 진행되면 각 Issue별 branch를 분리합니다.
+- 정식 Issue 작업은 `main`에 직접 커밋하지 않고 Issue 전용 git worktree와 `issue-<번호>/<짧은-설명>` feature branch에서 진행합니다.
+- feature branch와 worktree를 만들기 전에는 현재 작업트리에 다른 Issue 변경이 섞여 있는지 `git status --short`와 `git diff`로 확인합니다.
+- 동시에 여러 요청이 진행되면 각 Issue별 worktree와 branch를 분리합니다.
+- 기준 작업트리 `/Users/smart-tn-083/practice/run-ai`는 `main` 확인, Issue/Project 정리, merge/deploy 기준으로 두고, 구현/문서 수정은 `/Users/smart-tn-083/practice/run-ai.worktrees/issue-<번호>-<짧은-설명>`에서 수행합니다.
 - feature branch 변경은 PR을 통해 `main`으로 머지합니다.
 - `main`에 머지된 뒤에만 GitHub Pages 배포 또는 운영 배포의 기준 변경으로 봅니다.
-- 하네스/운영 문서처럼 짧고 독립적인 변경도 원칙적으로 Issue/branch를 권장합니다. 사용자가 명시적으로 `main` 직접 커밋을 승인한 경우에만 직접 커밋할 수 있습니다.
+- 하네스/운영 문서처럼 짧고 독립적인 변경도 원칙적으로 Issue worktree/branch를 권장합니다. 사용자가 명시적으로 `main` 직접 커밋을 승인한 경우에만 직접 커밋할 수 있습니다.
 
 ## hook 설치 기준
 - `npm run hooks:install`은 `core.hooksPath`를 `.githooks`로 설정합니다.

@@ -6,6 +6,18 @@ PaceLAB의 정식 개발 작업은 GitHub Issues에 등록하고, 전체 진행 
 - Repository: `lena0611/RunningCoach`
 - 기준 문서: [GitHub 작업 추적 규칙](./github-tracking-rules.md)
 
+## 필수 체크리스트
+
+GitHub Issue, Project, branch, PR, 댓글을 만들거나 수정하기 전에 에이전트는 아래를 먼저 확인합니다.
+
+- 이 요청이 Issue 생성 대상인지 판단한다.
+- Issue가 필요하면 본문에 문제/목표, 범위, 완료 조건, 검증 후보, 관련 문서 링크를 남긴다.
+- Project 필드 `Status`, `Workstream`, `Type`, `Priority`, `Completion Owner`, `Target`, `Verification`, `Blocked`를 맞춘다.
+- 정식 Issue 작업은 `main`이 아니라 Issue 전용 git worktree와 `issue-<번호>/<짧은-설명>` branch에서 진행한다.
+- 동시에 여러 Issue를 진행하면 같은 로컬 작업트리에 변경을 섞지 않는다.
+- 댓글은 실제 Markdown 줄바꿈으로 작성한다. 문자열 `\n`이 보이게 만들지 않는다.
+- Issue 본문은 실행 범위와 상태를, `.harness/project/*`는 장기 기준을 담는다. 둘을 서로 대체하지 않는다.
+
 ## 기본 원칙
 
 - 머릿속 아이디어, 대화 중 나온 후보, 버그 의심은 바로 구현하지 말고 먼저 Issue로 정리합니다.
@@ -132,16 +144,92 @@ Issue 템플릿에 적은 `Workstream`, `Priority`, `Completion Owner`, `Verific
 
 Issue가 Project에 자동으로 들어가지 않았으면 Project `PaceLAB Development`에서 `Add item`으로 Issue URL을 추가합니다.
 
+에이전트가 Issue 본문을 작성할 때는 아래 구조를 기본으로 씁니다.
+
+```markdown
+## 문제 또는 목표
+- ...
+
+## 범위
+포함:
+- ...
+
+제외:
+- ...
+
+## 완료 조건
+- [ ] ...
+
+## 검증 후보
+- ...
+
+## 관련 문서/이슈
+- ...
+```
+
 ## 작업 시작 절차
 
 Issue를 실제로 시작할 때는 아래 순서로 진행합니다.
 
 1. Issue의 `Status`를 `Ready`에서 `In Progress`로 바꿉니다.
-2. `main` 기준으로 Issue 단위 feature branch를 만듭니다.
-3. 작업할 대화창이 `Workstream`과 맞는지 확인합니다.
-4. 첫 댓글이나 작업 시작 메시지에 완료 책임 창과 branch 이름을 명시합니다.
-5. 다른 workstream 판단이 필요하면 현재 창에서 넓히지 말고 해당 workstream으로 넘깁니다.
-6. 구현이나 문서 변경이 끝나면 Issue 댓글에 변경 요약과 검증 후보를 남깁니다.
+2. `main` 기준으로 Issue 단위 git worktree와 feature branch를 만듭니다.
+3. 작업할 Codex 창은 해당 worktree 경로에서만 진행합니다.
+4. 작업할 대화창이 `Workstream`과 맞는지 확인합니다.
+5. 첫 댓글이나 작업 시작 메시지에 완료 책임 창, branch 이름, worktree 경로를 명시합니다.
+6. 다른 workstream 판단이 필요하면 현재 창에서 넓히지 말고 해당 workstream으로 넘깁니다.
+7. 구현이나 문서 변경이 끝나면 Issue 댓글에 변경 요약과 검증 후보를 남깁니다.
+
+## Issue 단위 worktree
+
+동시에 여러 Issue를 진행할 수 있으므로, 정식 작업은 branch만 분리하지 않고 로컬 worktree도 분리합니다.
+
+기본 경로:
+
+```text
+기준 작업트리: /Users/smart-tn-083/practice/run-ai
+Issue 작업트리: /Users/smart-tn-083/practice/run-ai.worktrees/issue-<번호>-<짧은-설명>
+```
+
+새 Issue 작업을 시작할 때:
+
+```bash
+cd /Users/smart-tn-083/practice/run-ai
+git status --short
+git switch main
+git pull --ff-only
+mkdir -p ../run-ai.worktrees
+git worktree add ../run-ai.worktrees/issue-4-github-issue-guard -b issue-4/github-issue-guard main
+```
+
+이미 branch가 있으면:
+
+```bash
+cd /Users/smart-tn-083/practice/run-ai
+mkdir -p ../run-ai.worktrees
+git worktree add ../run-ai.worktrees/issue-4-github-issue-guard issue-4/github-issue-guard
+```
+
+Codex 창을 열 때는 해당 worktree 경로를 작업 루트로 사용합니다.
+
+```text
+/Users/smart-tn-083/practice/run-ai.worktrees/issue-4-github-issue-guard
+```
+
+작업 완료 후 `main`에 머지되고 더 이상 필요 없으면:
+
+```bash
+cd /Users/smart-tn-083/practice/run-ai
+git worktree remove ../run-ai.worktrees/issue-4-github-issue-guard
+git worktree prune
+```
+
+worktree 운영 기준:
+
+- 기준 작업트리 `run-ai`는 `main` 확인, Issue 생성, Project 정리, 최종 merge/deploy 기준으로 둡니다.
+- Issue 구현/문서 수정은 Issue 전용 worktree에서만 수행합니다.
+- 한 worktree에는 한 Issue의 변경만 둡니다.
+- 다른 Issue 변경이 보이면 커밋하지 말고 먼저 worktree/branch를 분리합니다.
+- stash는 예외적 임시 조치입니다. 정상 운영에서는 Issue worktree로 분리해 stash 사용을 최소화합니다.
 
 branch 이름은 `issue-<번호>/<짧은-설명>`을 기본으로 합니다.
 
@@ -181,6 +269,33 @@ Issue: <GitHub Issue URL>
 댓글은 상태 보고서처럼 길게 쓰지 않아도 됩니다. 나중에 왜 그렇게 판단했는지 복원할 수 있으면 충분합니다.
 
 에이전트가 `gh issue comment` 또는 GitHub API로 댓글을 남길 때는 실제 줄바꿈이 들어간 Markdown 본문을 stdin, temp file, 또는 JSON body로 전달합니다. 명령 인자 안에 `\n`을 문자열로 이어 붙이면 GitHub 모바일/웹에서 `\n`이 그대로 보이므로 사용하지 않습니다.
+
+권장 댓글 형태:
+
+```markdown
+작업 시작합니다.
+
+- 완료 책임 창: 03-ui-ux
+- Worktree: /Users/smart-tn-083/practice/run-ai.worktrees/issue-1-memory-page-ia
+- Branch: issue-1/memory-page-ia
+- Status: In Progress
+```
+
+```markdown
+배포 완료.
+
+완료 요약:
+- ...
+
+검증:
+- ...
+
+배포:
+- ...
+
+후속:
+- 사용자 확인 후 완료처리 가능
+```
 
 ## 아이디어 승격
 
@@ -233,13 +348,13 @@ Bug Issue에는 재현 조건을 가장 먼저 채웁니다.
 | 사용자 말 | 에이전트 동작 | Project Status |
 | --- | --- | --- |
 | `증상은 이래`, `검토해줘`, `이 기능 필요해` | Issue 필요 여부 판단, 필요 시 Issue/Project 등록 | `Inbox` 또는 `Ready` |
-| `진행해` | feature branch 생성, 작업 시작 | `In Progress` |
+| `진행해` | Issue worktree/feature branch 생성, 작업 시작 | `In Progress` |
 | 작업 완료 보고 | branch에 커밋, PR 준비 또는 생성, 사용자 확인 요청 | `Review` |
 | `검증해`, `배포해` | 승인된 검증 실행, PR merge 또는 main 반영, 배포 진행 | `Verify` |
 | 배포 완료 | 배포 URL/확인 방법을 Issue 댓글에 남김 | `Deployed` |
 | `완료처리해` | 완료 요약 댓글, Issue close | `Done` |
 
-`main`은 머지와 배포 기준입니다. feature branch에서 작업이 끝났더라도 `main`에 머지되지 않으면 배포 완료로 보지 않습니다.
+`main`은 머지와 배포 기준입니다. Issue worktree의 feature branch에서 작업이 끝났더라도 `main`에 머지되지 않으면 배포 완료로 보지 않습니다.
 
 배포가 없는 문서/운영 작업은 `Deployed`를 건너뛰고, 사용자 확인과 필요한 검증이 끝나면 `Done`으로 닫을 수 있습니다.
 
