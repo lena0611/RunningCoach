@@ -207,6 +207,19 @@
 - 후속 기준: 웹 activation 이벤트가 실제 iOS WKWebView 복귀에서 누락된다는 재현 로그가 있거나, 앱이 닫힌 상태에서 사용자를 깨워야 하는 요구가 확정되면 그때 `runContextLifecycle` 또는 기존 `runContextNotifications` 확장을 검토한다.
 - 포기한 대안: 지금 `scenePhase`/`applicationDidBecomeActive`를 네이티브에서 웹으로 별도 전달하는 방식은 근거가 부족하고, local notification을 기본 체크인 채널로 두는 방식은 건강 상태 질문을 과도하게 푸시할 위험이 있어 채택하지 않는다.
 
+## 2026-05-29 - HealthKit route 고도 요약 nil 처리
+- 문제: HealthKit route point에는 유효 altitude가 있는데 원본 route의 연속 고도 차이가 모두 노이즈 필터 하한보다 작으면 `elevationGainM/elevationLossM`가 `nil`로 전달되어 웹 상세에서 고도 데이터 없음처럼 보였다.
+- 결정: 네이티브 `routeElevation(from:)`은 유효 altitude location이 2개 이상이면 누적 상승/하강이 0이어도 숫자 `0`을 반환한다. route나 유효 altitude가 부족할 때만 `nil`을 유지한다.
+- 선택 이유: 평지/완만한 코스의 0m 또는 작은 누적값은 “데이터 없음”과 의미가 다르며, 웹은 HealthKit 후보 값을 그대로 저장하는 계약이므로 네이티브 후보에서 결측과 평지를 구분해야 한다.
+- 포기한 대안: 고도 변화 하한 0.5m를 제거해 모든 미세 변화를 누적하는 방식은 GPS/고도 노이즈를 누적할 위험이 있어 채택하지 않는다.
+
+## 2026-05-29 - 누적상승/하강 웹 fallback은 2차 안전장치로 보류
+- 문제: 네이티브 HealthKit route 고도 요약 개선이 진행 중이므로 웹이 즉시 별도 추론값을 저장하면 원본 route 기준 계산과 downsampled route point 기준 계산이 충돌할 수 있다.
+- 결정: 누적상승/하강의 1차 소스는 네이티브 HealthKit 후보의 `elevationGainM/elevationLossM`로 둔다. 네이티브 개선 결과가 최근 평지/완만한 샘플에서 여전히 `nil` 또는 부정확한 값으로 확인될 때만 웹 `routePoints.altitude` 기반 fallback 추론을 2차 안전장치로 추가한다.
+- fallback 조건: `elevationGainM/elevationLossM`가 `null`이고, 저장 또는 후보 route point에 유효 altitude가 2개 이상 있으며, route/altitude가 실제로 없는 결측 상태가 아님을 확인할 수 있을 때만 적용한다.
+- 선택 이유: 원본 HealthKit route location이 downsampled 웹 route point보다 누적 고도 계산에 더 적합하다. 다만 사용자-facing 상세에서 “고도 데이터 있음”을 “데이터 없음”처럼 보여주는 회귀를 막기 위해 웹 fallback 경로를 보류된 안전장치로 유지한다.
+- 포기한 대안: 네이티브 개선과 동시에 웹 fallback을 기본 적용하는 방식은 값 출처가 불명확해지고 기존 저장 데이터 재보정 기준도 흔들릴 수 있어 지금은 채택하지 않는다.
+
 ## 2026-05-28 - Workstream 완료 책임 창 지정
 - 문제: workstream별 범위와 인수인계 규칙은 있었지만, 여러 창을 거친 하나의 업무를 누가 최종 리뷰하고 완료 승인 전 검증 후보를 모으는지 기준이 부족했다.
 - 결정: 모든 업무 요청은 시작할 때 `완료 책임 창`을 하나 정한다. 완료 책임 창은 업무 목표, 완료 조건, 후속 workstream 인수인계, 최종 리뷰, 검증 후보 정리를 소유한다.

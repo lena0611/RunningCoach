@@ -187,7 +187,7 @@ type FastSegment = {
 - 앱 기동/재활성화 자동 동기화는 현재 저장된 최신 `RunLog.date` 이후의 새 HealthKit 러닝만 가져온다.
 - 이미 저장된 HealthKit 세션은 자동 동기화에서 갱신하지 않는다. 기존 세션 보강은 세션 상세의 새로고침 아이콘을 통해 사용자가 명시적으로 요청한다.
 - 단일 세션 갱신은 `RunLog.externalId`와 `HKWorkout.uuid`를 매칭해 같은 원본 운동만 다시 조회한다.
-- 단일 세션 갱신은 HealthKit 유래 구조화 필드(`distanceKm`, `durationSec`, `avgPaceSec`, `avgHeartRate`, `maxHeartRate`, `cadence`, `activeEnergyKcal`, `laps`, `fastSegments`, `metricSamples`, `routePoints`, `rawAvailability`)를 새 값으로 갱신한다.
+- 단일 세션 갱신은 HealthKit 유래 구조화 필드(`distanceKm`, `durationSec`, `avgPaceSec`, `avgHeartRate`, `maxHeartRate`, `cadence`, `activeEnergyKcal`, `elevationGainM`, `elevationLossM`, `laps`, `fastSegments`, `metricSamples`, `routePoints`, `rawAvailability`)를 새 값으로 갱신한다.
 - 단일 세션 갱신은 사용자가 입력한 코칭 메모, RPE, 통증 메모, 동반주, 제목, 기존 AI 코칭 대화 기록을 보존한다.
 
 ## `RunLog` 매핑
@@ -202,8 +202,8 @@ type FastSegment = {
 - `temperature`: `HKMetadataKeyWeatherTemperature`가 있으면 섭씨로 채운다. 없으면 `null`.
 - `humidity`: `HKMetadataKeyWeatherHumidity`가 있으면 0~100 퍼센트로 채운다. 없으면 `null`.
 - `windMps`: HealthKit workout metadata에서 안정적으로 기대하지 않는다. 없으면 `null`.
-- `elevationGainM`: route location altitude로 계산한 누적 상승이다. route나 유효 altitude가 없으면 `null`.
-- `elevationLossM`: route location altitude로 계산한 누적 하강이다. route나 유효 altitude가 없으면 `null`.
+- `elevationGainM`: route location altitude로 계산한 누적 상승이다. route와 유효 altitude가 있으면 평지에 가까운 기록도 `0` 또는 작은 수치로 채우고, route나 유효 altitude가 없을 때만 `null`.
+- `elevationLossM`: route location altitude로 계산한 누적 하강이다. route와 유효 altitude가 있으면 평지에 가까운 기록도 `0` 또는 작은 수치로 채우고, route나 유효 altitude가 없을 때만 `null`.
 - `courseType`: 웹에서 `elevationGainM`, `elevationLossM`, `distanceKm`, `routePoints.altitude`로 사용자 수정 가능한 기본값을 추론한다. 고저 데이터가 부족하면 `Unknown`으로 둔다. 고도 기반 자동 추론은 Flat/Mixed/Hilly/Trail까지만 수행하고, Track/Treadmill은 고도만으로 단정하지 않는다.
 - `rpe`: iOS 18+에서 `workoutEffortScore`가 workout에 연결되어 조회될 때만 운동강도로 채운다. 없으면 사용자가 수정할 수 있게 `null`로 둔다.
 - `laps`: HealthKit에서 route 또는 거리 샘플이 있으면 네이티브가 1km 단위 split으로 가공해 채운다. 각 lap은 거리, 페이스, 평균 심박을 우선 채우고 cadence는 가능한 경우에만 채운다. HealthKit lap은 Workoutdoors FIT의 workout step split처럼 세부 가속/회복 구조를 보장하지 않는다. 랩 최대심박은 HealthKit 후보 원본에 없을 수 있으며, 웹 UI는 `metricSamples`를 lap 시간 구간으로 잘라 보정 표시한다.
