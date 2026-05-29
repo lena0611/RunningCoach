@@ -626,15 +626,19 @@ async function sendCoachRequest(note: string) {
   streamingCoachMeta.value = 'AI 코치가 답변 중'
   const controller = new AbortController()
   coachAbortController.value = controller
+  let revealCancelled = false
+  let revealChain = Promise.resolve()
+  const enqueueCoachDelta = (delta: string) => {
+    revealChain = revealChain.then(() => revealCoachDelta(delta, () => revealCancelled || controller.signal.aborted))
+    void revealChain
+  }
   startCoachThinkingTimer()
   try {
     const report = await requestCoachRunStream(coachRun.value.id, note, weatherStore.snapshot, {
       signal: controller.signal,
-      onDelta: (delta) => {
-        if (!streamingCoachText.value) stopCoachThinkingTimer()
-        streamingCoachText.value += delta
-      }
+      onDelta: enqueueCoachDelta
     })
+    await revealChain
     reports.value = [report, ...reports.value.filter((item) => item.id !== report.id)]
     coachNote.value = ''
     coachCommandOpen.value = false
@@ -642,6 +646,7 @@ async function sendCoachRequest(note: string) {
     streamingCoachMeta.value = ''
     reportsLoaded.value = true
   } catch (err) {
+    revealCancelled = true
     if (err instanceof Error && err.name === 'AbortError') {
       streamingCoachMeta.value = '생성 중단됨 · 저장되지 않음'
     } else {
@@ -650,10 +655,55 @@ async function sendCoachRequest(note: string) {
       streamingCoachMeta.value = ''
     }
   } finally {
+    revealCancelled = true
     stopCoachThinkingTimer()
     coachLoading.value = false
     if (coachAbortController.value === controller) coachAbortController.value = null
   }
+}
+
+async function revealCoachDelta(delta: string, shouldStop: () => boolean) {
+  for (const chunk of splitCoachDelta(delta)) {
+    if (shouldStop()) return
+    if (!streamingCoachText.value) stopCoachThinkingTimer()
+    streamingCoachText.value += chunk
+    await waitForCoachReveal(getCoachRevealDelay(chunk))
+  }
+}
+
+function splitCoachDelta(delta: string) {
+  const chunks: string[] = []
+  let index = 0
+  while (index < delta.length) {
+    const remaining = delta.slice(index)
+    if (remaining.startsWith('\n')) {
+      chunks.push('\n')
+      index += 1
+      continue
+    }
+    if (remaining.startsWith('```')) {
+      chunks.push('```')
+      index += 3
+      continue
+    }
+    const maxLength = remaining.startsWith('|') ? 18 : 7
+    const windowText = remaining.slice(0, maxLength + 4)
+    const sentenceEnd = windowText.search(/[.!?。]\s/)
+    const take = sentenceEnd >= 2 ? sentenceEnd + 2 : Math.min(maxLength, remaining.length)
+    chunks.push(delta.slice(index, index + take))
+    index += take
+  }
+  return chunks
+}
+
+function getCoachRevealDelay(chunk: string) {
+  if (chunk === '\n') return 18
+  if (chunk === '```') return 28
+  return chunk.length >= 14 ? 12 : 9
+}
+
+function waitForCoachReveal(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms))
 }
 
 async function confirmGoalProposal() {

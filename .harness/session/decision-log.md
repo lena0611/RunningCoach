@@ -344,3 +344,10 @@
 - 결정: Project field는 관리/자동화 원본으로 유지하고, 모바일 스캔용 정보는 짧은 GitHub label로 복제한다. `Status`, `Priority`, `Labels`를 모바일 기본 노출 후보로 보고, `Workstream`, `Type`, `Target`, `Verification`, `Completion Owner`, `Blocked`, `업무 피로도`는 상세 field로 둔다.
 - label 기준: 최소 `type:*` label은 항상 붙인다. `ws:*`, `target:*`, `verify:*` label은 값이 확실할 때만 붙인다. `blocked`, `fatigue:tired`, `fatigue:reset`은 예외 상태일 때만 붙이고, 정상 상태 label은 만들지 않는다.
 - 선택 이유: Project field를 삭제하면 자동화와 보드 필터 기준이 약해진다. label mirror는 모바일 목록 스캔 문제를 줄이면서도 Project field를 단일 관리 기준으로 유지한다.
+
+## 2026-05-29 - AI 코칭 스트리밍 표시와 표현 밀도 보강
+- 문제: `coach-run`이 서버 스트리밍 경로를 사용해도 실제 네트워크나 OpenAI 이벤트 형태에 따라 앱에는 큰 delta가 한 번에 도착할 수 있다. 이 경우 사용자는 코칭이 스트리밍되지 않고 한 번에 뜬다고 느낀다.
+- 결정: 서버의 OpenAI 호출 1회 원칙은 유지하고, 프론트에서 도착한 delta를 작은 조각으로 순차 표시한다. 큰 delta가 한 번에 와도 UI는 점진 표시 경험을 제공한다.
+- 표현 기준: 코칭 답변은 문단과 bullet만 길게 이어지지 않도록 표, 인용문, 짧은 Workoutdoors 세팅 코드블록 중 1~2개를 상황에 맞게 사용할 수 있게 한다. 렌더러는 blockquote와 markdown table을 지원한다.
+- 선택 이유: 429 재발을 막으려면 서버 fallback 재호출을 피해야 한다. 동시에 사용자가 체감하는 스트리밍은 네트워크 chunk 크기에만 의존하지 않아야 한다.
+- 포기한 대안: OpenAI 응답이 final payload로만 올 때 서버에서 두 번째 non-stream 호출을 실행하는 방식은 이전 장애 원인이므로 금지한다. 답변마다 모든 시각 요소를 강제하는 방식은 코칭이 장식 위주로 흐를 수 있어 채택하지 않는다.
