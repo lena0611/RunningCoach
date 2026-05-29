@@ -85,6 +85,23 @@ Codex hook은 위와 같은 공통 새로고침 문구를 감지하면 특정 wo
 
 사용자가 `검토만`, `조사만`, `PR까지만`, `커밋하지 마`, `배포하지 마`, `여기서 멈춰`처럼 중단점을 지정하면 그 지시를 우선합니다. 완료 책임 창이나 workstream이 불명확하거나 다른 workstream의 선행 결정이 필요한 경우에는 넓은 작업을 진행하지 않고 먼저 책임 창 또는 선행 workstream을 확정합니다.
 
+## 다중 workstream 업무
+
+Codex 대화창끼리는 직접 메시지를 주고받지 못합니다. 여러 workstream이 필요한 업무는 GitHub Issue, PR, Project를 공용 작업판으로 사용합니다.
+
+다중 workstream 업무는 아래 구조를 기본으로 합니다.
+
+- parent Issue: 최초 요청 또는 전체 목표를 소유하는 Issue입니다. 완료 책임 창이 owner입니다.
+- child Issue: 각 workstream이 자기 범위만 처리하는 Issue입니다. 각 child Issue는 별도 worktree와 branch를 가집니다.
+- GitHub Project: parent/child의 `Status`, `Workstream`, `Completion Owner`, `Blocked` 상태를 조감하는 보드입니다.
+- Issue 댓글/PR: 창 간 전달과 결과 보고의 공식 통신 기록입니다.
+
+완료 책임 창은 다른 창을 직접 깨우거나 명령하지 않습니다. 대신 parent Issue에 child Issue 목록, 완료 조건, 통합 조건을 남기고, GitHub에서 child Issue 상태와 PR 상태를 읽어 최종 판단합니다.
+
+child workstream 창은 자기 child Issue만 처리합니다. 자기 범위가 끝나면 Issue 댓글에 변경 요약, 검증, PR, 후속 조건을 남기고 Project 상태를 맞춥니다. parent 완료 책임 창이 통합해야 할 정보는 모두 GitHub에 남깁니다.
+
+MVP 자동 완료 흐름은 parent/child 구조를 대체하지 않습니다. 단일 workstream Issue는 그 창이 끝까지 완료할 수 있지만, 다중 workstream parent Issue는 모든 필수 child Issue가 Done이거나 명시적으로 parent에 handoff되기 전까지 최종 Done으로 닫지 않습니다.
+
 ## 범위 밖 처리
 
 각 workstream 창은 모든 사용자 요청을 처리하기 전에 현재 창의 workstream 범위를 먼저 떠올립니다. workstream이 불명확하면 넓은 작업을 진행하지 말고 사용자에게 현재 창이 어떤 workstream인지 확인합니다.

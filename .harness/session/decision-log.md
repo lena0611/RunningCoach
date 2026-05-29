@@ -304,6 +304,14 @@
 - hook/구현 영향: 이번 변경은 Codex 컨텍스트 주입 문구와 운영 문서 기준 변경이다. commit/push hook 자체는 여전히 안전장치로만 동작하므로 `.githooks/**`, hook 설치 스크립트, 앱 런타임 구현 변경은 필요하지 않다.
 - 선택 이유: MVP 단계에서는 빠른 검증과 반복이 중요하다. 사용자가 명시적으로 멈춤을 요청하지 않은 정식 작업은 끝까지 닫아야 GitHub Project 상태가 실제 진행 상태를 반영한다.
 
+## 2026-05-29 - 다중 workstream parent-child Issue 운영
+- 문제: Codex 대화창끼리는 직접 메시지를 주고받지 못하므로, 여러 workstream이 필요한 업무를 “창들이 알아서 대화하며 끝낸다”고 가정하면 완료 책임 창이 결과를 놓치거나 사용자가 수동으로 상태를 모아야 한다.
+- 결정: 다중 workstream 업무는 GitHub를 공용 작업판으로 쓰고 parent Issue와 child Issue로 나눈다. parent Issue는 완료 책임 창이 전체 목표, 완료 조건, child 목록, 최종 통합을 소유한다. child Issue는 담당 workstream 창이 자기 worktree/branch에서 처리하고 댓글/PR/Project 상태로 결과를 남긴다.
+- 완료 기준: parent 완료 책임 창은 모든 필수 child Issue가 Done이거나 명시적으로 parent에 handoff된 뒤에만 최종 merge/deploy/Done을 수행한다. child 창은 다른 창에 직접 메시지를 보내지 않고 parent Issue 댓글에 handoff를 남긴다.
+- worktree 기준: parent와 child 모두 Issue별 worktree/branch 분리를 유지한다. child 변경이 parent worktree나 다른 child worktree에 섞이면 커밋하지 않는다.
+- hook/구현 영향: 이번 변경은 Codex 컨텍스트 주입 문구와 운영 문서 기준 변경이다. 창 간 직접 메시징이나 외부 wake-up 시스템은 구현하지 않는다.
+- 선택 이유: GitHub Issue, PR, Project는 모든 창이 공통으로 읽을 수 있는 지속 상태다. 창 간 직접 대화가 없어도 parent/child 구조를 쓰면 사용자는 특정 창에 요청하고 GitHub에서 진행 상태를 확인할 수 있다.
+
 ## 2026-05-29 - 요약/기록/기억 메뉴 정보 구조 재정의
 - 문제: 기억 페이지 내용이 혼잡하고, 하단 메뉴인 요약/기록/기억의 성격이 러너 관점에서 명확히 분리되지 않았다.
 - 결정: 하단 메뉴는 기능 묶음이 아니라 러너의 질문으로 나눈다. `요약`은 오늘/이번 주 무엇을 해야 하는지, `기록`은 내가 무엇을 어떻게 뛰었는지, `기억`은 앱과 코치가 나를 어떤 기준으로 알고 있는지에 답한다.
