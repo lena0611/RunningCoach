@@ -5560,6 +5560,49 @@ button.run-session-row {
   padding: 0 0 0 24px;
 }
 
+.coach-report blockquote {
+  margin: 0;
+  border-left: 3px solid var(--color-primary);
+  padding: 10px 12px;
+  border-radius: 0 10px 10px 0;
+  background: color-mix(in srgb, var(--color-primary-soft) 72%, transparent);
+  color: var(--color-text);
+  font-weight: 850;
+}
+
+.coach-report-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+.coach-report table {
+  width: 100%;
+  min-width: 320px;
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.coach-report th,
+.coach-report td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.coach-report th {
+  background: color-mix(in srgb, var(--color-surface-elevated) 82%, var(--color-primary-soft));
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.coach-report tbody tr:last-child td {
+  border-bottom: 0;
+}
+
 .coach-report pre {
   margin: 0;
   overflow-x: auto;
