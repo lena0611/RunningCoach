@@ -26,6 +26,7 @@ export function syncNativeNotifications(settings: NotificationSettings, weeklyPa
 
 export function notifyHealthKitNewRuns(settings: NotificationSettings, count: number) {
   if (!settings.allEnabled || !settings.healthKitNewRun || count <= 0) return false
+  if (isDocumentVisible()) return false
   const handler = window.webkit?.messageHandlers?.runContextNotifications
   if (!handler) return false
 
@@ -36,6 +37,10 @@ export function notifyHealthKitNewRuns(settings: NotificationSettings, count: nu
     body: count === 1 ? 'HealthKit에서 새 러닝 1개를 저장했습니다.' : `HealthKit에서 새 러닝 ${count}개를 저장했습니다.`
   })
   return true
+}
+
+function isDocumentVisible() {
+  return typeof document !== 'undefined' && document.visibilityState === 'visible'
 }
 
 function buildTrainingNotifications(settings: NotificationSettings, weeklyPattern: string[]): NativeNotificationRequest[] {
