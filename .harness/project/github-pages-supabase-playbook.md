@@ -10,6 +10,7 @@
 - iOS 하이브리드 앱은 GitHub Pages URL을 `WKWebView`로 열고, 필요한 네이티브 기능만 JavaScript bridge로 제공한다.
 - 일반 공개 브라우저는 네이티브 bridge가 없으면 기능 화면이 아니라 접근 안내 화면으로 보낸다.
 - localhost는 개발 편의를 위해 기능 화면 접근을 허용한다.
+- Supabase 데이터 접근은 RLS를 기본 경계로 삼고, 앱 인증 세션의 `auth.uid()`/`user_id` 컨텍스트로 조회/수정한다. 에이전트는 인증 없는 직접 DB 조회나 service role/admin 우회를 먼저 시도한 뒤 앱 컨텍스트로 fallback하지 않는다.
 
 ## 에이전트가 할 수 있는 일
 - Vue/Vite 앱 코드, 라우터 가드, Supabase client, repository 계층, Pinia store를 구현한다.
@@ -119,6 +120,8 @@
 - OTP 코드 입력 방식은 redirect URL을 핵심 경로로 쓰지 않지만, 나중에 magic link/OAuth로 전환할 수 있으니 GitHub Pages와 localhost URL을 정상 값으로 유지한다.
 - Supabase 기본 이메일 발송 제한은 개발 중에 금방 걸릴 수 있다. 기본 SMTP에서 rate limit을 수정할 수 없다면 기다리거나 custom SMTP를 연결한다.
 - RLS 정책은 `user_id = auth.uid()` 기준으로 본인 데이터만 읽고 쓰게 둔다.
+- RLS로 막히는 조회는 실패가 아니라 설계된 보호 동작이다. 디버깅은 앱 로그인 세션, repository/store 경계, 현재 앱 컨텍스트의 사용자 ID를 기준으로 재현한다.
+- service role key는 운영자/서버 전용 비밀값이다. 브라우저, GitHub Pages workflow, 대화 기록, 일반 에이전트 디버깅 경로에 쓰지 않는다.
 
 ## 로컬 개발 기준
 - Node 버전은 `.nvmrc`를 따른다.

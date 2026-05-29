@@ -2,6 +2,8 @@
 
 PaceLAB의 정식 개발 작업은 GitHub Issues를 단일 출처로 두고, 전체 상태판은 GitHub Projects로 관리합니다.
 
+일상 운영 절차는 [GitHub 이슈 운영 가이드](./github-issue-management-guide.md)를 따릅니다.
+
 ## 원칙
 
 - 정식 개발 작업은 GitHub Issue로 등록한 뒤 진행합니다.
@@ -9,6 +11,7 @@ PaceLAB의 정식 개발 작업은 GitHub Issues를 단일 출처로 두고, 전
 - `.harness/project/*`는 장기 기준, 결정, 계약 문서를 보존합니다. 개별 작업 상태와 할 일 목록은 이 폴더에 누적하지 않습니다.
 - Notion은 당장 핵심 이슈트래커로 사용하지 않습니다. 향후 사업화, 인터뷰, 레퍼런스 노트 보조 도구로만 재검토합니다.
 - Issue가 기준 변경을 낳으면 구현 PR/커밋과 함께 `.harness/project/*` 또는 `.harness/session/decision-log.md`로 승격합니다.
+- 에이전트가 GitHub Issue 또는 Project를 생성/수정할 때는 로컬 `gh` CLI를 1차 경로로 사용합니다. 현재 GitHub App connector는 Issue/Project write 권한이 부족해 403이 발생할 수 있으므로, connector-first 시도 후 fallback하는 흐름을 반복하지 않습니다.
 
 ## GitHub Project
 
@@ -30,6 +33,8 @@ PaceLAB의 정식 개발 작업은 GitHub Issues를 단일 출처로 두고, 전
 | `Target` | `MVP`, `Beta`, `App Store`, `Later` |
 | `Verification` | `none`, `unit`, `e2e`, `build`, `harness-check`, `manual` |
 | `Blocked` | `yes`, `no` |
+
+GitHub `Assignees`는 사람 계정 배정용입니다. PaceLAB의 담당 workstream은 `Assignees`가 아니라 Project의 `Workstream`과 `Completion Owner` 필드로 관리합니다.
 
 기본 view:
 
@@ -95,6 +100,13 @@ PaceLAB의 정식 개발 작업은 GitHub Issues를 단일 출처로 두고, 전
 ## GitHub CLI 생성 명령
 
 GitHub Project 작업에는 `project` scope가 필요합니다.
+
+에이전트 자동 등록 경로:
+
+- Issue 생성, Project item 추가, Project 필드 수정은 로컬 `gh` CLI와 `gh api graphql`을 우선 사용합니다.
+- GitHub App connector는 조회, PR/Issue 요약, 댓글/라벨처럼 권한이 확인된 작업에 우선 사용합니다.
+- 로컬 `gh` 인증이 없거나 scope가 부족하면 쓰기 작업을 추측으로 진행하지 않고 사용자에게 `gh auth status`와 `gh auth refresh -s repo -s project` 실행을 요청합니다.
+- 같은 요청에서 connector write 403을 예상할 수 있으면 connector write를 먼저 시도하지 않습니다.
 
 ```bash
 gh auth refresh -s project

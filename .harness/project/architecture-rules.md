@@ -22,6 +22,7 @@
 - 상위 레이어는 하위 레이어를 사용할 수 있지만, 하위 레이어가 pages/widgets에 의존하지 않는다.
 - 도메인 타입은 `entities`에 두고 계산 유틸은 `shared/lib` 또는 관련 `features`에 둔다.
 - 정적 프론트는 직접 secret을 갖지 않는다. DB/Auth/AI 호출은 Supabase public client와 Edge Function 경계로만 수행한다.
+- Supabase 데이터 접근은 RLS를 우회하지 않고 앱 인증 세션의 `auth.uid()`/`user_id` 컨텍스트를 1차 경로로 사용한다. 에이전트 디버깅도 인증 없는 직접 조회나 service role/admin 우회를 먼저 시도하지 않고, 앱 repository/store 경계 또는 동일한 사용자 세션 조건으로 재현한다.
 
 ## 공개 API 경계
 - 현재 웹 앱은 GitHub Pages 정적 프론트이며, 백엔드/Auth/DB/AI 경계는 Supabase를 사용한다.
@@ -34,6 +35,12 @@
 - iOS WebView는 상단/하단 safe area 안쪽에 갇히지 않고 화면 끝까지 확장한다. 네이티브는 `WKWebView`를 `.ignoresSafeArea()`와 `contentInsetAdjustmentBehavior = .never`로 배치하고, 실제 터치/가독성 여백은 웹 CSS의 `env(safe-area-inset-top/bottom)`에서 책임진다.
 - Strava 연동을 추가할 때는 Supabase Edge Function 또는 별도 서버리스 API가 Strava OAuth, refresh token, activity fetch를 책임진다.
 - `RunLog`, `TrainingMemory`, `coach_reports`, `coach_memory_items`의 영구 저장소는 Supabase Postgres다. localStorage는 Supabase 미설정/개발 fallback으로만 취급한다.
+
+## Supabase 접근 기준
+- RLS 실패는 예상 가능한 권한 경계입니다. 에이전트는 인증 없는 anon 조회, 임의 SQL 조회, service role/admin key 경로를 먼저 시도한 뒤 앱 사용자 컨텍스트로 fallback하지 않습니다.
+- 사용자의 실제 데이터 확인이 필요하면 앱 로그인 세션, repository/store 함수, 또는 사용자가 제공한 현재 앱 컨텍스트의 사용자 ID를 기준으로 재현합니다.
+- Edge Function 내부에서 서버 권한이 필요한 경우에도 목적, 대상 테이블, RLS 우회 필요성을 먼저 설명하고, service role key나 secret 값을 대화에 노출하지 않습니다.
+- 여러 사용자 전체를 대상으로 하는 운영 조회, migration 검증, RLS 정책 점검은 `07-data-supabase` 범위에서 별도 작업으로 분리하고 사용자 승인을 받습니다.
 
 ## 데이터 흐름
 - FIT 파일 선택 -> 브라우저 로컬 파싱 -> 사용자가 확인/수정 -> Supabase `run_logs` 저장 -> 대시보드/AI Coach 컨텍스트 계산

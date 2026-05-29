@@ -4,7 +4,9 @@
 
 ## 개발 흐름
 - 정식 개발 작업의 단일 출처는 GitHub Issues로 둔다. 전체 상태판은 GitHub Project `PaceLAB Development`로 관리하며, 상세 기준은 `.harness/project/github-tracking-rules.md`를 따른다.
+- 에이전트가 GitHub Issue/Project를 생성하거나 수정할 때는 로컬 `gh` CLI를 1차 경로로 사용한다. GitHub App connector의 Issue/Project write 권한 부족이 확인된 작업에서는 connector-first 시도 후 fallback하는 흐름을 반복하지 않는다.
 - `.harness/project/*`는 장기 기준과 결정 문서로 유지하고, 개별 백로그/진행 상태는 GitHub Issues/Projects에 둔다.
+- 에이전트가 Supabase 데이터를 조회/수정할 때는 앱의 인증 컨텍스트와 RLS 정책을 1차 경로로 사용한다. 인증 없는 직접 DB 조회나 service role/admin 우회 시도 후 앱 사용자 컨텍스트로 fallback하는 흐름을 반복하지 않는다.
 - 아이디어는 `Idea` issue로 `Inbox`에 넣고, 목표/완료 조건/완료 책임 창/검증 후보가 정리되면 `Feature`, `Bug`, `Decision`, `Research` 등 정식 작업 issue로 승격한다.
 - 먼저 도메인/아키텍처 결정이 일회성인지 반복 규칙인지 판단한다.
 - 반복 규칙이면 `.harness/session/*`에만 두지 말고 `.harness/project/*` 문서로 승격한다.
