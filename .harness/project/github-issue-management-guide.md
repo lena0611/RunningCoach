@@ -103,6 +103,7 @@ Priority는 긴급도와 제품 영향도를 함께 봅니다.
 | `In Progress` | 실제 작업을 시작했다. 담당 창이나 담당자가 댓글로 현재 진행을 남긴다. |
 | `Review` | 변경은 끝났고 완료 책임 창의 검토가 필요하다. |
 | `Verify` | 검증 후보를 실행하거나 수동 확인 중이다. |
+| `Deployed` | `main` 머지와 배포가 끝났고 사용자 최종 확인을 기다린다. |
 | `Done` | 완료 조건, 검증, 필요한 기준 문서 반영이 끝났다. |
 | `Deferred` | 의도적으로 미뤘다. 다시 볼 조건을 댓글에 남긴다. |
 | `Rejected` | 하지 않기로 했다. 이유를 댓글에 남긴다. |
@@ -136,10 +137,21 @@ Issue가 Project에 자동으로 들어가지 않았으면 Project `PaceLAB Deve
 Issue를 실제로 시작할 때는 아래 순서로 진행합니다.
 
 1. Issue의 `Status`를 `Ready`에서 `In Progress`로 바꿉니다.
-2. 작업할 대화창이 `Workstream`과 맞는지 확인합니다.
-3. 첫 댓글이나 작업 시작 메시지에 완료 책임 창을 명시합니다.
-4. 다른 workstream 판단이 필요하면 현재 창에서 넓히지 말고 해당 workstream으로 넘깁니다.
-5. 구현이나 문서 변경이 끝나면 Issue 댓글에 변경 요약과 검증 후보를 남깁니다.
+2. `main` 기준으로 Issue 단위 feature branch를 만듭니다.
+3. 작업할 대화창이 `Workstream`과 맞는지 확인합니다.
+4. 첫 댓글이나 작업 시작 메시지에 완료 책임 창과 branch 이름을 명시합니다.
+5. 다른 workstream 판단이 필요하면 현재 창에서 넓히지 말고 해당 workstream으로 넘깁니다.
+6. 구현이나 문서 변경이 끝나면 Issue 댓글에 변경 요약과 검증 후보를 남깁니다.
+
+branch 이름은 `issue-<번호>/<짧은-설명>`을 기본으로 합니다.
+
+```text
+issue-1/memory-page-ia
+issue-12/healthkit-refresh
+issue-27/coach-streaming-regression
+```
+
+작업 중 다른 요청이 들어오면 기존 branch에 섞지 않습니다. 새 Issue가 필요하면 새 branch를 만듭니다.
 
 대화창에 붙여넣을 때는 이렇게 시작합니다.
 
@@ -211,6 +223,25 @@ Bug Issue에는 재현 조건을 가장 먼저 채웁니다.
 ```
 
 검증을 못 했다면 `검증`에 실행하지 못한 이유와 남은 확인 방법을 씁니다. 후속이 있으면 새 Issue를 만들고 링크합니다.
+
+## 커밋, PR, 배포 흐름
+
+사용자 요청과 Project Status는 아래처럼 연결합니다.
+
+| 사용자 말 | 에이전트 동작 | Project Status |
+| --- | --- | --- |
+| `증상은 이래`, `검토해줘`, `이 기능 필요해` | Issue 필요 여부 판단, 필요 시 Issue/Project 등록 | `Inbox` 또는 `Ready` |
+| `진행해` | feature branch 생성, 작업 시작 | `In Progress` |
+| 작업 완료 보고 | branch에 커밋, PR 준비 또는 생성, 사용자 확인 요청 | `Review` |
+| `검증해`, `배포해` | 승인된 검증 실행, PR merge 또는 main 반영, 배포 진행 | `Verify` |
+| 배포 완료 | 배포 URL/확인 방법을 Issue 댓글에 남김 | `Deployed` |
+| `완료처리해` | 완료 요약 댓글, Issue close | `Done` |
+
+`main`은 머지와 배포 기준입니다. feature branch에서 작업이 끝났더라도 `main`에 머지되지 않으면 배포 완료로 보지 않습니다.
+
+배포가 없는 문서/운영 작업은 `Deployed`를 건너뛰고, 사용자 확인과 필요한 검증이 끝나면 `Done`으로 닫을 수 있습니다.
+
+커밋 대상은 해당 Issue를 해결하는 소스코드와 장기 기준 문서만 포함합니다. GitHub Issue/Project 진행 상태 자체는 커밋 대상이 아닙니다.
 
 ## 주간 정리 루틴
 

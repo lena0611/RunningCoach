@@ -25,7 +25,7 @@ PaceLAB의 정식 개발 작업은 GitHub Issues를 단일 출처로 두고, 전
 
 | 필드 | 값 |
 | --- | --- |
-| `Status` | `Inbox`, `Backlog`, `Ready`, `In Progress`, `Review`, `Verify`, `Done`, `Deferred`, `Rejected` |
+| `Status` | `Inbox`, `Backlog`, `Ready`, `In Progress`, `Review`, `Verify`, `Deployed`, `Done`, `Deferred`, `Rejected` |
 | `Workstream` | `01-harness-ops`, `02-product-planning`, `03-ui-ux`, `04-running-logic`, `05-ai-coaching`, `06-healthkit-ios`, `07-data-supabase`, `08-injury-domain` |
 | `Type` | `idea`, `feature`, `bug`, `chore`, `decision`, `research`, `release` |
 | `Priority` | `P0`, `P1`, `P2`, `P3` |
@@ -45,6 +45,15 @@ GitHub `Assignees`는 사람 계정 배정용입니다. PaceLAB의 담당 workst
 
 현재 GitHub CLI와 공개 GraphQL mutation에서는 Project view 생성/정렬/그룹 설정을 안정적으로 자동화하지 않습니다. 필드와 Status 옵션은 자동 설정했으며, 위 view 구성은 GitHub 웹 UI에서 필요할 때 수동으로 추가합니다.
 
+## 브랜치와 메인라인
+
+- `main`은 머지와 배포 기준 브랜치입니다.
+- 정식 Issue 작업은 `main`에서 직접 진행하지 않고 Issue 단위 feature branch에서 진행합니다.
+- feature branch 이름은 `issue-<번호>/<짧은-설명>` 형식을 기본으로 합니다. 예: `issue-1/memory-page-ia`.
+- 동시에 여러 요청이 들어오면 각 Issue별 branch를 분리합니다.
+- PR은 feature branch에서 `main`으로 열고, `main`에 머지된 뒤 배포 대상으로 봅니다.
+- `main`에 머지되지 않은 branch의 변경은 배포 완료로 보지 않습니다.
+
 ## Issue 상태 흐름
 
 | 상태 | 의미 |
@@ -55,6 +64,7 @@ GitHub `Assignees`는 사람 계정 배정용입니다. PaceLAB의 담당 workst
 | `In Progress` | 구현, 문서화, 조사 중입니다. |
 | `Review` | 변경은 끝났고 검토가 필요합니다. |
 | `Verify` | 검증 후보를 실행하거나 수동 확인하는 단계입니다. |
+| `Deployed` | `main` 머지와 배포가 끝났고 사용자 최종 확인을 기다리는 단계입니다. |
 | `Done` | 완료 조건과 검증 기준을 만족했고 필요한 문서/결정 기록이 반영됐습니다. |
 | `Deferred` | 의도적으로 미뤘습니다. 재검토 조건을 남깁니다. |
 | `Rejected` | 하지 않기로 결정했습니다. 이유를 남깁니다. |
@@ -126,4 +136,4 @@ gh project field-create <project-number> --owner lena0611 --name "Verification" 
 gh project field-create <project-number> --owner lena0611 --name "Blocked" --data-type SINGLE_SELECT --single-select-options "no,yes"
 ```
 
-GitHub 기본 `Status` 필드는 `Inbox`, `Backlog`, `Ready`, `In Progress`, `Review`, `Verify`, `Done`, `Deferred`, `Rejected` 옵션으로 정리합니다.
+GitHub 기본 `Status` 필드는 `Inbox`, `Backlog`, `Ready`, `In Progress`, `Review`, `Verify`, `Deployed`, `Done`, `Deferred`, `Rejected` 옵션으로 정리합니다.

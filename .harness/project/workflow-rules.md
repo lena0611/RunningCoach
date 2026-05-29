@@ -4,6 +4,7 @@
 
 ## 개발 흐름
 - 정식 개발 작업의 단일 출처는 GitHub Issues로 둔다. 전체 상태판은 GitHub Project `PaceLAB Development`로 관리하며, 상세 기준은 `.harness/project/github-tracking-rules.md`를 따른다.
+- 정식 Issue 작업은 Issue 단위 feature branch에서 수행하고, `main`은 머지와 배포 기준 브랜치로 유지한다. 동시에 여러 요청이 들어오면 각 Issue별 branch와 PR을 분리한다.
 - 에이전트가 GitHub Issue/Project를 생성하거나 수정할 때는 로컬 `gh` CLI를 1차 경로로 사용한다. GitHub App connector의 Issue/Project write 권한 부족이 확인된 작업에서는 connector-first 시도 후 fallback하는 흐름을 반복하지 않는다.
 - `.harness/project/*`는 장기 기준과 결정 문서로 유지하고, 개별 백로그/진행 상태는 GitHub Issues/Projects에 둔다.
 - 에이전트가 Supabase 데이터를 조회/수정할 때는 앱의 인증 컨텍스트와 RLS 정책을 1차 경로로 사용한다. 인증 없는 직접 DB 조회나 service role/admin 우회 시도 후 앱 사용자 컨텍스트로 fallback하는 흐름을 반복하지 않는다.
@@ -28,6 +29,7 @@
 - 완료 책임 창이 불명확하면 구현이나 문서 변경을 넓히지 않고 먼저 책임 창을 정한다. 다른 workstream 창은 자기 범위 작업을 수행한 뒤 완료 책임 창으로 결과를 돌려준다.
 - 현재 창에 수행 역할이 있더라도 선행 결정이나 선행 구현이 다른 workstream에 있으면 현재 창에서 먼저 진행하지 않는다. 대상 workstream, 선행 이유, 붙여넣을 인수인계 문구를 제안한다.
 - 사용자가 완료를 명시하면 현재 창에서 완료 처리해도 되는지 먼저 검토한다. 다른 workstream의 후속 확인이나 마무리가 남아 있으면 완료 처리 전에 대상 workstream으로 넘긴다.
+- 사용자가 새 요청을 동시에 시작하면 기존 작업 branch에 섞지 않는다. 새 요청이 Issue 대상이면 새 Issue와 feature branch를 만들고, 기존 작업은 해당 Issue/branch/Project Status로 추적한다.
 - 현재 대화창에서 주 작업 유형이 바뀌면 새 대화창으로 넘긴다. 단, 작업을 끝내기 위한 짧은 문서 갱신, 결정 로그, 검증 명령은 같은 대화창에서 마무리할 수 있다.
 - 기존 workstream으로 안정적으로 처리하기 어려운 새 도메인이 반복적으로 등장하면 임의로 현재 창 범위를 넓히지 않는다. `01-harness-ops`에서 새 workstream 추가 여부를 검토하고, 필요하면 workstreams 폴더의 `NN-name.md`와 이 문서의 작업 유형 목록을 갱신한다.
 - 새 대화창 첫 메시지는 작업 유형, 목표, 완료 조건, 관련 파일 또는 화면, 이전 대화의 인수인계 문구나 인수인계 파일을 포함한다.
