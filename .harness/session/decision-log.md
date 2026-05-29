@@ -326,3 +326,9 @@
 - hook 영향: Codex `UserPromptSubmit` hook은 사용자가 피로도, 컨텍스트 오염, 리셋, 새 창, 느려짐을 언급하면 `업무 피로도` 기준을 읽고 Project 필드와 Issue 댓글을 갱신하라는 안내를 주입한다.
 - 운영 기준: `tired`면 현재 Issue만 마무리하고 새 작업을 섞지 않는다. `reset-needed`면 넓은 새 작업을 시작하지 않고 Issue 댓글과 handoff를 남긴 뒤 같은 workstream 새 창에서 재개한다.
 - 앱 영향: 사용자-facing Vue 앱, Supabase Edge Function, iOS/HealthKit 경계는 변경하지 않는다. 이번 변경은 GitHub Project 운영 필드, 하네스 문서, Codex 컨텍스트 주입에 한정한다.
+
+## 2026-05-29 - Issue template 변경은 Pages 배포 제외
+- 문제: #13에서 `.github/ISSUE_TEMPLATE/**`만 변경했는데 GitHub Pages deploy가 실행됐다. Issue template은 앱 런타임 산출물이 아니므로 배포 이력을 만들 필요가 없다.
+- 결정: `.github/workflows/pages.yml`의 `paths-ignore`에 `.github/ISSUE_TEMPLATE/**`를 추가한다. Issue template, commit template, Copilot instructions는 에이전트/운영 문서로 보고 Pages 배포 제외 대상으로 관리한다.
+- 배포 유지 범위: workflow 파일 자체, `src/**`, `public/**`, `package.json`, `.nvmrc`, Vite 설정, Supabase 함수는 계속 배포 영향 후보로 둔다.
+- 선택 이유: Issue 관리 문구나 템플릿을 고칠 때 앱 빌드/배포가 반복되면 실제 사용자-facing 변경과 운영 변경 신호가 섞인다.
