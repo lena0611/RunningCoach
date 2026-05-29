@@ -185,11 +185,18 @@ const aiMemoryCount = computed(() => draft.knownIssues.length + draft.runningSty
 watch(
   () => memoryStore.selectedUserId,
   () => {
-    Object.assign(draft, JSON.parse(JSON.stringify(memoryStore.memory)))
-    memorySnapshot.value = JSON.stringify(draft)
+    syncDraftFromStore()
     stack.value = []
     editingGoalId.value = ''
     editingInjuryId.value = ''
+  }
+)
+
+watch(
+  () => memoryStore.selectedUser.updatedAt,
+  () => {
+    if (isDirty.value) return
+    syncDraftFromStore()
   }
 )
 
@@ -209,6 +216,11 @@ onBeforeUnmount(() => {
 
 function join(items: string[]) {
   return items.join('\n')
+}
+
+function syncDraftFromStore() {
+  Object.assign(draft, JSON.parse(JSON.stringify(memoryStore.memory)))
+  memorySnapshot.value = JSON.stringify(draft)
 }
 
 function sexLabel(value: TrainingMemory['athleteProfile']['sex']) {
