@@ -2667,11 +2667,11 @@ button.run-session-row {
 }
 
 .fitness-route-line {
-  stroke: #f8fafc;
+  stroke: #22e8ff;
   stroke-width: 4.2;
   filter:
-    drop-shadow(0 0 7px rgba(34, 211, 238, 0.96))
-    drop-shadow(0 0 14px rgba(34, 211, 238, 0.62));
+    drop-shadow(0 0 7px rgba(34, 232, 255, 0.98))
+    drop-shadow(0 0 16px rgba(34, 232, 255, 0.72));
 }
 
 .fitness-route-start,

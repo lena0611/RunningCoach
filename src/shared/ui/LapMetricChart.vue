@@ -113,10 +113,21 @@ function formatMetric(value: number) {
   return `${formatInteger(value)}SPM`
 }
 
+function shouldInvertBarValues() {
+  return props.chartType === 'bar' && props.inverse && props.type === 'pace'
+}
+
+function invertDomainValue(value: number) {
+  const currentDomain = domain.value
+  if (!currentDomain) return value
+  return currentDomain.min + currentDomain.max - value
+}
+
 function shouldShowYAxisLabel(value: number) {
   const currentDomain = domain.value
   if (!currentDomain?.interval || (props.type !== 'pace' && props.type !== 'heartRate')) return true
-  const tickIndex = Math.round((value - currentDomain.min) / currentDomain.interval)
+  const displayValue = shouldInvertBarValues() ? invertDomainValue(value) : value
+  const tickIndex = Math.round((displayValue - currentDomain.min) / currentDomain.interval)
   return tickIndex % 3 === 0
 }
 
@@ -126,6 +137,10 @@ function renderChart() {
   const muted = getColor('--color-muted') || '#8b98a8'
   const subtle = getColor('--color-subtle-2') || 'rgba(255,255,255,0.08)'
   const currentDomain = domain.value
+  const useInvertedBarValues = shouldInvertBarValues()
+  const chartValues = useInvertedBarValues
+    ? props.values.map((value) => typeof value === 'number' && Number.isFinite(value) ? invertDomainValue(value) : value)
+    : props.values
 
   const option: EChartsOption = {
     animationDuration: 480,
@@ -137,8 +152,9 @@ function renderChart() {
       textStyle: { color: text },
       formatter: (params) => {
         const list = Array.isArray(params) ? params : [params]
-        const first = list[0] as { axisValue?: string | number; value?: number } | undefined
-        const value = Number(first?.value)
+        const first = list[0] as { axisValue?: string | number; dataIndex?: number; value?: number } | undefined
+        const sourceValue = typeof first?.dataIndex === 'number' ? props.values[first.dataIndex] : first?.value
+        const value = Number(sourceValue)
         if (!Number.isFinite(value)) return ''
         const label = props.axisName === '랩' ? `${first?.axisValue ?? ''}랩` : `${first?.axisValue ?? ''}`
         return `<strong>${label}</strong><div style="display:flex;justify-content:space-between;gap:18px"><span>${props.title}</span><strong>${formatMetric(value)}</strong></div>`
@@ -153,7 +169,7 @@ function renderChart() {
     },
     yAxis: {
       type: 'value',
-      inverse: props.inverse,
+      inverse: useInvertedBarValues ? false : props.inverse,
       min: currentDomain?.min,
       max: currentDomain?.max,
       interval: currentDomain?.interval,
@@ -163,7 +179,7 @@ function renderChart() {
         fontWeight: 700,
         formatter: (value: number) => {
           if (!shouldShowYAxisLabel(value)) return ''
-          if (props.type === 'pace') return formatPace(value)
+          if (props.type === 'pace') return formatPace(useInvertedBarValues ? invertDomainValue(value) : value)
           return formatInteger(value)
         }
       }
@@ -172,7 +188,7 @@ function renderChart() {
       {
         name: props.title,
         type: props.chartType,
-        data: props.values,
+        data: chartValues,
         smooth: props.chartType === 'line',
         symbolSize: props.chartType === 'line' ? 4 : 0,
         barMaxWidth: 16,
@@ -211,7 +227,7 @@ function renderChart() {
           shadowBlur: 12,
           shadowColor: props.color
         },
-        data: [{ coord: [props.labels[props.selectedIndex], selectedValue] }]
+        data: [{ coord: [props.labels[props.selectedIndex], useInvertedBarValues ? invertDomainValue(selectedValue) : selectedValue] }]
       }
     }
   }
