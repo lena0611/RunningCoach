@@ -81,7 +81,9 @@ Codex hook은 위와 같은 공통 새로고침 문구를 감지하면 특정 wo
 - 다른 workstream 창은 자기 범위 작업을 수행한 뒤 완료 책임 창으로 결과를 돌려줍니다.
 - 완료 책임 창이 불명확하면 구현이나 문서 변경을 넓히지 않고 먼저 책임 창을 정합니다.
 
-완료 책임 창은 모든 후속 창의 결과를 모은 뒤 남은 리스크, 미해결 질문, 최종 검증 후보, 커밋 후보 범위를 정리합니다. PaceLAB MVP 단계에서는 단순 확인, 검토, 조사, 기획 질문이 아닌 구현/버그/운영 요청을 사용자가 맡긴 경우 중간 확인을 기본 대기점으로 두지 않고, 명시적 보류 지시가 없으면 검증, commit, push, PR, main 머지, 배포 확인, Issue Done까지 이어서 진행합니다.
+완료 책임 창은 모든 후속 창의 결과를 모은 뒤 남은 리스크, 미해결 질문, 최종 검증 후보, 커밋 후보 범위를 정리합니다. PaceLAB MVP 단계에서는 단순 확인, 검토, 조사, 기획 질문이 아닌 구현/버그/운영 요청을 사용자가 맡긴 경우 중간 확인을 기본 대기점으로 두지 않습니다. 명시적 보류 지시가 없고 완료 책임 창 안에서 해결 가능한 업무라면 검증, commit, push, PR, main 머지, 배포 확인까지 이어서 진행한 뒤 사용자에게 완료 확인을 요청합니다. 단, GitHub Issue/Project를 `Done`, `Closed`, 또는 이에 준하는 최종 완료 상태로 변경하는 것은 사용자의 명시 지시가 있을 때만 수행합니다.
+
+사용자가 완료 처리, 최종 완료, 닫기 등 명시적 완료 지시를 하면 완료 책임 창은 Issue를 닫기 전에 기준 작업트리 `/Users/smart-tn-083/practice/run-ai`의 `main`을 `origin/main` 최신 상태로 맞춥니다. 기준 작업트리에 미커밋 변경이 있으면 임의로 stash/reset하지 않고 먼저 보고합니다.
 
 사용자가 `검토만`, `조사만`, `PR까지만`, `커밋하지 마`, `배포하지 마`, `여기서 멈춰`처럼 중단점을 지정하면 그 지시를 우선합니다. 완료 책임 창이나 workstream이 불명확하거나 다른 workstream의 선행 결정이 필요한 경우에는 넓은 작업을 진행하지 않고 먼저 책임 창 또는 선행 workstream을 확정합니다.
 
@@ -113,7 +115,7 @@ Codex 대화창끼리는 직접 메시지를 주고받지 못합니다. 여러 w
 
 child workstream 창은 자기 child Issue만 처리합니다. 자기 범위가 끝나면 Issue 댓글에 변경 요약, 검증, PR, 후속 조건을 남기고 Project 상태를 맞춥니다. parent 완료 책임 창이 통합해야 할 정보는 모두 GitHub에 남깁니다.
 
-MVP 자동 완료 흐름은 parent/child 구조를 대체하지 않습니다. 단일 workstream Issue는 그 창이 끝까지 완료할 수 있지만, 다중 workstream parent Issue는 모든 필수 child Issue가 Done이거나 명시적으로 parent에 handoff되기 전까지 최종 Done으로 닫지 않습니다.
+MVP 자동 완료 흐름은 parent/child 구조를 대체하지 않습니다. 단일 workstream Issue는 그 창이 배포 확인까지 완료할 수 있지만, 최종 Issue/Project Done 또는 Closed 처리는 사용자의 명시 지시가 있을 때만 수행합니다. 다중 workstream parent Issue는 모든 필수 child Issue가 Done이거나 명시적으로 parent에 handoff되기 전까지 최종 Done으로 닫지 않으며, 이 조건을 만족해도 사용자의 최종 완료 지시 전에는 닫지 않습니다.
 
 ## 범위 밖 처리
 

@@ -20,6 +20,8 @@
 - AI 코칭은 세션 상세에서 열며, 별도 Coach 하단 탭은 제거된 상태다.
 - PaceLAB은 workstream 대화창 분리 운영을 명시적으로 채택했다. 하네스 본체의 일반 가이드는 선택형이지만, 이 프로젝트 안에서는 강하게 적용한다.
 - 정식 개발 작업의 단일 출처는 GitHub Issues이고, 전체 상태판은 GitHub Project `PaceLAB Development`로 둔다. `.harness/project/*`는 장기 기준과 결정 문서로 유지한다.
+- `Target=MVP` 정식 Issue에서 완료 책임 창 안에서 해결 가능한 구현/버그/운영 요청은 명시적 중단점이 없으면 검증, commit, push, PR, main 머지, 배포 확인까지 이어서 수행하고 사용자 완료 확인을 요청한다. Project `Done` 또는 Issue close는 사용자의 명시 완료 지시 후에만 수행한다.
+- 사용자 완료 지시를 받은 뒤 Issue를 닫기 전에는 기준 작업트리 `/Users/smart-tn-083/practice/run-ai`의 local `main`을 `origin/main` 최신 상태로 맞춘다. 기준 작업트리에 미커밋 변경이 있으면 임의로 stash/reset하지 않고 상태를 보고한다.
 - 정식 Issue를 `Done`으로 닫기 전에는 완료 책임 창이 재발 방지 기록 게이트를 통과한다. 여러 번의 수정/배포, 반복 회귀, 다중 workstream 인수인계, 공유 계약 변경, 에이전트 운영 실패가 있었다면 `project-memory`, `decision-log`, 관련 `.harness/project/*` 중 적절한 장기 기억을 갱신하고 final Issue comment에 `재발 방지 기록`을 남긴다.
 - 대화창은 작업 유형별로 분리한다. 기획, 버그픽스, UI/UX, 코칭/훈련 로직, HealthKit/iOS, Supabase/OpenAI Edge Function, 부상관리 도메인, 하네스/정책은 서로 다른 대화창에서 진행한다.
 - 각 대화창은 모든 사용자 요청마다 현재 workstream 범위를 먼저 식별한다. 범위가 불명확하거나 요청이 범위를 넘으면 구현을 넓히지 않고 사용자에게 확인하거나 대상 workstream 인수인계를 제안한다.

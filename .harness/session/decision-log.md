@@ -298,16 +298,16 @@
 
 ## 2026-05-29 - MVP 요청 기본 완료 흐름
 - 문제: MVP 개발 중 에이전트가 작업 완료, 검토, 커밋, 배포, 완료처리마다 사용자 확인을 기다리면 대기 시간이 길어지고 사용자가 여러 창을 관리해야 하는 부담이 커진다.
-- 결정: `Target=MVP`인 정식 Issue에서 단순 확인, 검토, 조사, 기획 질문이 아닌 구현/버그/운영 요청을 사용자가 맡기면, 명시적 중단점이 없는 한 에이전트가 검증, commit, push, PR, main 머지, 배포 확인, Issue 완료처리까지 이어서 수행한다.
+- 결정: `Target=MVP`인 정식 Issue에서 단순 확인, 검토, 조사, 기획 질문이 아닌 구현/버그/운영 요청을 사용자가 맡기면, 명시적 중단점이 없는 한 에이전트가 검증, commit, push, PR, main 머지, 배포 확인까지 이어서 수행한다. Issue/Project 최종 완료 상태 변경은 2026-05-30 결정에 따라 사용자의 명시 지시가 있을 때만 수행한다.
 - 중단 조건: `검토만`, `조사만`, `PR까지만`, `커밋하지 마`, `배포하지 마`, `여기서 멈춰`처럼 사용자가 중단점을 지정하거나, workstream/완료 책임 창이 불명확하거나, 선행 workstream 결정/수동 조치/검증 실패가 있으면 그 지점에서 멈춘다.
 - worktree 기준: 자동 완료 흐름은 Issue별 worktree/branch 분리 원칙을 대체하지 않는다. 동시에 여러 일을 진행할 수 있도록 한 worktree에는 한 Issue의 변경만 둔다.
 - hook/구현 영향: 이번 변경은 Codex 컨텍스트 주입 문구와 운영 문서 기준 변경이다. commit/push hook 자체는 여전히 안전장치로만 동작하므로 `.githooks/**`, hook 설치 스크립트, 앱 런타임 구현 변경은 필요하지 않다.
-- 선택 이유: MVP 단계에서는 빠른 검증과 반복이 중요하다. 사용자가 명시적으로 멈춤을 요청하지 않은 정식 작업은 끝까지 닫아야 GitHub Project 상태가 실제 진행 상태를 반영한다.
+- 선택 이유: MVP 단계에서는 빠른 검증과 반복이 중요하다. 다만 최종 완료 상태는 사용자가 직접 승인해야 GitHub Project 상태가 실제 사용자 판단을 반영한다.
 
 ## 2026-05-29 - 다중 workstream parent-child Issue 운영
 - 문제: Codex 대화창끼리는 직접 메시지를 주고받지 못하므로, 여러 workstream이 필요한 업무를 “창들이 알아서 대화하며 끝낸다”고 가정하면 완료 책임 창이 결과를 놓치거나 사용자가 수동으로 상태를 모아야 한다.
 - 결정: 다중 workstream 업무는 GitHub를 공용 작업판으로 쓰고 parent Issue와 child Issue로 나눈다. parent Issue는 완료 책임 창이 전체 목표, 완료 조건, child 목록, 최종 통합을 소유한다. child Issue는 담당 workstream 창이 자기 worktree/branch에서 처리하고 댓글/PR/Project 상태로 결과를 남긴다.
-- 완료 기준: parent 완료 책임 창은 모든 필수 child Issue가 Done이거나 명시적으로 parent에 handoff된 뒤에만 최종 merge/deploy/Done을 수행한다. child 창은 다른 창에 직접 메시지를 보내지 않고 parent Issue 댓글에 handoff를 남긴다.
+- 완료 기준: parent 완료 책임 창은 모든 필수 child Issue가 Done이거나 명시적으로 parent에 handoff된 뒤에만 최종 merge/deploy를 수행하고 사용자 완료 확인을 요청한다. Project `Done` 또는 Issue close는 사용자의 명시 완료 지시 후에만 수행한다. child 창은 다른 창에 직접 메시지를 보내지 않고 parent Issue 댓글에 handoff를 남긴다.
 - worktree 기준: parent와 child 모두 Issue별 worktree/branch 분리를 유지한다. child 변경이 parent worktree나 다른 child worktree에 섞이면 커밋하지 않는다.
 - hook/구현 영향: 이번 변경은 Codex 컨텍스트 주입 문구와 운영 문서 기준 변경이다. 창 간 직접 메시징이나 외부 wake-up 시스템은 구현하지 않는다.
 - 선택 이유: GitHub Issue, PR, Project는 모든 창이 공통으로 읽을 수 있는 지속 상태다. 창 간 직접 대화가 없어도 parent/child 구조를 쓰면 사용자는 특정 창에 요청하고 GitHub에서 진행 상태를 확인할 수 있다.
@@ -365,3 +365,9 @@
 - 장기 기록 기준: 여러 번의 수정/배포, 반복 회귀, 다중 workstream 인수인계, 공유 계약 변경, 에이전트 운영 실패가 있었다면 `project-memory`, `decision-log`, 관련 `.harness/project/*` 중 적절한 위치를 갱신한다.
 - hook 영향: Codex `UserPromptSubmit` hook은 완료, 배포, merge, close, 장기 기억, 문서화 관련 요청에서 completion learning gate 안내를 주입한다.
 - 선택 이유: `harness:check`의 Project rule candidate 문구만으로는 완료 직전 기억 승격이 누락될 수 있다. 완료 프롬프트와 Issue close 흐름에서 다시 강제해야 실제 재발 방지 기준이 남는다.
+
+## 2026-05-30 - MVP 완료 확인과 기준 main 최신화 게이트
+- 문제: MVP 자동 완료 흐름이 배포 확인과 Issue Done/Closed를 한 단계로 취급하면 사용자가 최종 완료 상태를 승인하기 어렵고, 배포 후 기준 작업트리의 local `main`이 낡은 상태로 남아 다음 Issue worktree가 오래된 기준에서 분기될 수 있다.
+- 결정: 완료 책임 창 안에서 해결 가능한 `Target=MVP` 정식 Issue는 명시적 중단점이 없으면 검증, commit, push, PR, main 머지, 배포 확인까지 이어서 진행하고 사용자에게 완료 확인을 요청한다. GitHub Project `Done` 또는 Issue close는 사용자의 명시 완료 지시 후에만 수행한다.
+- main 최신화 기준: 사용자 완료 지시를 받은 뒤 완료 댓글, Project `Done`, Issue close 전에 기준 작업트리 `/Users/smart-tn-083/practice/run-ai`에서 `git switch main`, `git pull --ff-only`, `git status -sb`로 local `main`을 최신화한다. 기준 작업트리에 미커밋 변경이 있으면 임의로 stash/reset하지 않고 상태를 보고한다.
+- 선택 이유: MVP 속도는 유지하되 최종 완료 판단은 사용자 승인에 묶고, 다음 Issue worktree가 항상 배포된 `main` 기준에서 시작하도록 한다.

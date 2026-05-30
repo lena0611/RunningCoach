@@ -5,7 +5,7 @@
 ## 개발 흐름
 - 정식 개발 작업의 단일 출처는 GitHub Issues로 둔다. 전체 상태판은 GitHub Project `PaceLAB Development`로 관리하며, 상세 기준은 `.harness/project/github-tracking-rules.md`를 따른다.
 - 정식 Issue 작업은 Issue 단위 git worktree와 feature branch에서 수행하고, `main`은 머지와 배포 기준 브랜치로 유지한다. 동시에 여러 요청이 들어오면 각 Issue별 worktree, branch, PR을 분리한다.
-- PaceLAB MVP 단계에서는 단순 확인, 검토, 조사, 기획 질문이 아닌 구현/버그/운영 요청을 사용자가 맡기면 중간 확인을 기본 대기점으로 두지 않는다. 명시적 보류 지시가 없으면 완료 책임 창이 검증, 커밋, 푸시, PR, main 머지, 배포 확인, Issue 완료처리까지 이어서 수행한다.
+- PaceLAB MVP 단계에서는 단순 확인, 검토, 조사, 기획 질문이 아닌 구현/버그/운영 요청을 사용자가 맡기면 중간 확인을 기본 대기점으로 두지 않는다. 명시적 보류 지시가 없고 완료 책임 창 안에서 해결 가능한 업무라면 완료 책임 창이 검증, 커밋, 푸시, PR, main 머지, 배포 확인까지 이어서 수행한 뒤 사용자에게 완료 확인을 요청한다. 단, GitHub Issue/Project를 `Done`, `Closed`, 또는 이에 준하는 최종 완료 상태로 변경하는 것은 사용자의 명시 지시가 있을 때만 수행한다.
 - 에이전트가 GitHub Issue/Project를 생성하거나 수정할 때는 로컬 `gh` CLI를 1차 경로로 사용한다. GitHub App connector의 Issue/Project write 권한 부족이 확인된 작업에서는 connector-first 시도 후 fallback하는 흐름을 반복하지 않는다.
 - `.harness/project/*`는 장기 기준과 결정 문서로 유지하고, 개별 백로그/진행 상태는 GitHub Issues/Projects에 둔다.
 - 에이전트가 Supabase 데이터를 조회/수정할 때는 앱의 인증 컨텍스트와 RLS 정책을 1차 경로로 사용한다. 인증 없는 직접 DB 조회나 service role/admin 우회 시도 후 앱 사용자 컨텍스트로 fallback하는 흐름을 반복하지 않는다.
@@ -45,7 +45,7 @@
 - 최종 완료 승인 시에는 임시 인수인계 문구 중 실제로 남길 가치가 있는 내용만 문서화하고, 단순 중간 전달 문구는 남기지 않는다.
 - 대화창이 길어져 에이전트 응답이 느려지거나 서로 다른 도메인 판단이 섞이기 시작하면 구현을 더 밀지 말고 `.harness/session/active-context.md` 또는 별도 `thread-handoff-YYYY-MM-DD.md`에 인수인계를 남긴 뒤 새 대화창에서 재개한다.
 - 긴 인수인계는 최신 상태와 다음 작업만 남긴다. 회고, 모든 시도 내역, 장황한 diff 설명은 넣지 않고 필요한 경우 `decision-log.md`나 관련 프로젝트 룰 문서로 승격한다.
-- 여러 창을 거친 업무의 최종 검토는 완료 책임 창에서 모은다. MVP Target의 정식 Issue이고 사용자가 검토/보류/PR까지만 같은 중단점을 지정하지 않았다면, 완료 책임 창은 남은 리스크와 검증을 정리한 뒤 최종 완료까지 이어서 진행한다. 단, parent Issue는 필수 child Issue가 Done이거나 명시적으로 parent에 handoff되기 전까지 최종 Done으로 닫지 않는다.
+- 여러 창을 거친 업무의 최종 검토는 완료 책임 창에서 모은다. MVP Target의 정식 Issue이고 사용자가 검토/보류/PR까지만 같은 중단점을 지정하지 않았다면, 완료 책임 창은 남은 리스크와 검증을 정리한 뒤 배포 확인까지 이어서 진행하고 사용자에게 완료 확인을 요청한다. 단, parent Issue와 child Issue 모두 사용자의 명시 지시 전에는 최종 Done/Closed로 닫지 않는다.
 - 각 workstream 창은 작업 시작, 종료, handoff 전에 `업무 피로도`를 확인한다. `tired`면 현재 Issue만 마무리하고 새 요청은 새 창으로 넘기는 것을 우선하며, `reset-needed`면 Issue 댓글과 handoff를 남긴 뒤 같은 workstream 새 창에서 재개한다.
 - build, test, `harness:check`, commit, push, PR 생성은 `CLAUDE.md`와 이 프로젝트의 MVP 기본 완료 흐름을 함께 따른다. 단순 확인/검토/조사 요청이거나 사용자가 명시한 중단점이 있으면 그 지점에서 멈춘다.
 
@@ -82,6 +82,25 @@ Issue final comment에는 항상 아래 항목을 포함합니다.
 재발 방지 기록:
 - 해당 없음: 일회성 문구 수정이며 반복 규칙이나 공유 계약 변경 없음
 ```
+
+## 완료 확인 후 기준 main 최신화 게이트
+
+완료 책임 창은 배포 또는 배포 생략 확인 뒤 사용자가 완료를 명시하면 GitHub Issue/Project를 `Done` 또는 `Closed`로 바꾸기 전에 기준 작업트리의 `main`을 최신화합니다.
+
+- 기준 작업트리: `/Users/smart-tn-083/practice/run-ai`
+- 실행 조건:
+  - PR이 `main`에 merge되었다.
+  - 배포가 필요한 작업이면 배포 성공을 확인했고, 배포가 없는 작업이면 배포 생략 사유를 Issue 댓글에 남겼다.
+  - 사용자가 완료 처리, 최종 완료, 닫기 등 명시적 완료 지시를 했다.
+- 실행 순서:
+  - 기준 작업트리에서 `git switch main`
+  - `git pull --ff-only`
+  - `git status -sb`로 `main...origin/main` 기준 clean 상태 확인
+- 예외:
+  - 기준 작업트리에 사용자가 만든 미커밋 변경이 있으면 임의로 stash, reset, checkout하지 않고 상태와 충돌 가능성을 먼저 보고한다.
+  - 다른 Issue 전용 worktree는 해당 Issue 완료 또는 정리 전까지 건드리지 않는다.
+
+이 게이트를 통과한 뒤 완료 요약 댓글, `재발 방지 기록`, Project `Done`, Issue close를 처리합니다.
 
 작업 유형별 시작 문서:
 
