@@ -19,6 +19,7 @@
 - 사용자 답변이 "추천/예상한 기본값대로"인 경우, 적용한 기본값을 `developer-input-queue.md`와 관련 project 문서에 구체적으로 남긴다.
 - 버그픽스나 로직 강화 요청을 처리할 때는 코드 수정 전에 관련 project 룰 후보를 같이 찾고, 반복 가능성이 있으면 같은 커밋 또는 후속 커밋에서 `.harness/project/*`에 반영한다.
 - `harness:check`의 “Project rule candidate check”는 통과 메시지가 아니라 실제 검토 요청으로 취급한다. 같은 종류의 버그가 재발 가능하면 룰을 업데이트한다.
+- 정식 Issue를 `Done`으로 닫기 전에는 완료 책임 창이 재발 방지 기록 게이트를 통과해야 한다. 여러 번의 수정/배포, 반복 회귀, 다중 workstream 인수인계, 공유 계약 변경, 에이전트 운영 실패가 있었다면 `project-memory`, `decision-log`, 관련 `.harness/project/*` 중 적절한 장기 기억을 갱신한다.
 - HealthKit/세션 상세/스플릿/경로 차트/자동 동기화/세션별 새로고침을 수정할 때는 구현 전에 `.harness/project/healthkit-data-contract.md`를 먼저 확인한다. 네이티브 후보 구조, 웹 `RunLog` 매핑, 샘플/랩/라우트 배열 의미를 추측하지 않는다.
 
 ## 대화창 분리 운영
@@ -47,6 +48,40 @@
 - 여러 창을 거친 업무의 최종 검토는 완료 책임 창에서 모은다. MVP Target의 정식 Issue이고 사용자가 검토/보류/PR까지만 같은 중단점을 지정하지 않았다면, 완료 책임 창은 남은 리스크와 검증을 정리한 뒤 최종 완료까지 이어서 진행한다. 단, parent Issue는 필수 child Issue가 Done이거나 명시적으로 parent에 handoff되기 전까지 최종 Done으로 닫지 않는다.
 - 각 workstream 창은 작업 시작, 종료, handoff 전에 `업무 피로도`를 확인한다. `tired`면 현재 Issue만 마무리하고 새 요청은 새 창으로 넘기는 것을 우선하며, `reset-needed`면 Issue 댓글과 handoff를 남긴 뒤 같은 workstream 새 창에서 재개한다.
 - build, test, `harness:check`, commit, push, PR 생성은 `CLAUDE.md`와 이 프로젝트의 MVP 기본 완료 흐름을 함께 따른다. 단순 확인/검토/조사 요청이거나 사용자가 명시한 중단점이 있으면 그 지점에서 멈춘다.
+
+## 완료 전 재발 방지 기록 게이트
+
+완료 책임 창은 정식 Issue를 `Done`으로 닫기 전에 아래를 판단합니다. 하나라도 해당하면 장기 기억을 갱신해야 합니다.
+
+- 같은 요청을 해결하기 위해 여러 번 수정, PR, merge, deploy를 반복했다.
+- 사용자가 “왜 또 발생하나”, “재발하지 않게”, “다음에는 스스로”처럼 반복 실패를 지적했다.
+- 다중 workstream, parent/child Issue, worktree 이관, 배포 확인처럼 운영 절차 실패가 있었다.
+- 공유 계약, 데이터 계약, UI 공통 패턴, 검증 기준, 배포 기준이 바뀌었다.
+- 같은 회귀가 다시 생길 가능성이 있어 다음 에이전트가 먼저 떠올려야 한다.
+- 하네스/에이전트 운영 규칙 자체가 부족해 보강했다.
+
+기록 위치:
+
+| 위치 | 남길 내용 |
+| --- | --- |
+| `.harness/session/project-memory.md` | 세션이 바뀌어도 반복해서 참고할 안정적인 프로젝트 사실 |
+| `.harness/session/decision-log.md` | 원인, 선택 이유, 포기한 대안, 예외, 기준 변경 이유 |
+| `.harness/project/*.md` | 다음 작업에도 반복 적용할 도메인/아키텍처/워크플로우/검증 규칙 |
+| GitHub Issue final comment | 이번 Issue에서 어떤 장기 기억을 남겼는지 또는 왜 남기지 않았는지 |
+
+Issue final comment에는 항상 아래 항목을 포함합니다.
+
+```text
+재발 방지 기록:
+- 반영: .harness/project/workflow-rules.md, .harness/session/decision-log.md
+```
+
+남길 장기 기준이 없을 때도 생략하지 않고 이유를 적습니다.
+
+```text
+재발 방지 기록:
+- 해당 없음: 일회성 문구 수정이며 반복 규칙이나 공유 계약 변경 없음
+```
 
 작업 유형별 시작 문서:
 
