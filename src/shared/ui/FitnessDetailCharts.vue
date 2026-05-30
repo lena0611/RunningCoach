@@ -257,6 +257,7 @@ function writeCachedLocationName(key: string, value: string) {
           preserveAspectRatio="none"
         />
         <rect class="fitness-route-dim" x="-100000" y="-100000" width="200000" height="200000" />
+        <polyline class="fitness-route-line-casing" :points="routeMap.path" />
         <polyline class="fitness-route-line" :points="routeMap.path" />
         <circle v-if="startPointPosition" class="fitness-route-start" :cx="startPointPosition.x" :cy="startPointPosition.y" r="9" />
         <circle v-if="endPointPosition" class="fitness-route-end" :cx="endPointPosition.x" :cy="endPointPosition.y" r="9" />
