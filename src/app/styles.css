@@ -2611,7 +2611,9 @@ button.run-session-row {
 }
 
 .fitness-route-card {
-  position: relative;
+  position: sticky;
+  top: var(--space-3);
+  z-index: 4;
   min-height: 206px;
   overflow: hidden;
   border-radius: 18px;
@@ -2619,6 +2621,7 @@ button.run-session-row {
     linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 18%, transparent), transparent 42%),
     radial-gradient(circle at 80% 20%, color-mix(in srgb, var(--color-primary) 12%, transparent), transparent 36%),
     linear-gradient(180deg, color-mix(in srgb, var(--color-surface-3) 88%, #000), color-mix(in srgb, var(--color-bg) 92%, #000));
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.24);
 }
 
 .fitness-route-card::before {
