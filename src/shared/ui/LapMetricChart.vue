@@ -152,9 +152,11 @@ function renderChart() {
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'none' },
+      confine: true,
       borderWidth: 0,
       backgroundColor: getColor('--color-surface') || '#141a21',
       textStyle: { color: text },
+      extraCssText: 'z-index:1; pointer-events:none;',
       formatter: (params) => {
         const list = Array.isArray(params) ? params : [params]
         const first = list[0] as { axisValue?: string | number; dataIndex?: number; value?: number } | undefined
