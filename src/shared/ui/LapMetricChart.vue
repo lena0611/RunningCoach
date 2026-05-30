@@ -151,6 +151,7 @@ function renderChart() {
     grid: { left: 8, right: 8, top: 12, bottom: 18, containLabel: true },
     tooltip: {
       trigger: 'axis',
+      axisPointer: { type: 'none' },
       borderWidth: 0,
       backgroundColor: getColor('--color-surface') || '#141a21',
       textStyle: { color: text },
@@ -163,7 +164,8 @@ function renderChart() {
         const fallbackValue = Number(displayValue)
         if (!Number.isFinite(value) && !Number.isFinite(fallbackValue)) return ''
         const label = props.axisName === '랩' ? `${first?.axisValue ?? ''}랩` : `${first?.axisValue ?? ''}`
-        const metricLabel = Number.isFinite(value) ? formatMetric(value) : `표시 보정 ${formatMetric(fallbackValue)}`
+        const metricValue = Number.isFinite(value) ? value : fallbackValue
+        const metricLabel = formatMetric(metricValue)
         return `<strong>${label}</strong><div style="display:flex;justify-content:space-between;gap:18px"><span>${props.title}</span><strong>${metricLabel}</strong></div>`
       }
     },
@@ -216,16 +218,16 @@ function renderChart() {
     series[0].markLine = {
       symbol: 'none',
       silent: true,
+      label: { show: false },
       lineStyle: {
         color: text,
         opacity: 0.88,
-        width: 2
+        width: 2,
+        type: 'dashed'
       },
       data: [{ xAxis: props.labels[props.selectedIndex] }]
     }
     if (
-      typeof selectedValue === 'number' &&
-      Number.isFinite(selectedValue) &&
       typeof selectedDisplayValue === 'number' &&
       Number.isFinite(selectedDisplayValue)
     ) {
@@ -233,6 +235,9 @@ function renderChart() {
         symbol: 'circle',
         symbolSize: 10,
         silent: true,
+        animation: false,
+        animationDuration: 0,
+        animationDurationUpdate: 0,
         itemStyle: {
           color: '#f8fafc',
           borderColor: props.color,
