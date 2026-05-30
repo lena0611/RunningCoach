@@ -190,11 +190,11 @@ type FastSegment = {
 - 훈련 스케줄 알림은 웹이 주간 루틴을 기준으로 최대 14일치 후보를 만든다. `workoutMorning`은 오전 7시, `scheduledWorkout`은 오후 6시 로컬 알림으로 예약한다.
 - HealthKit 신규 러닝 감지는 네이티브 `HKObserverQuery`와 `enableBackgroundDelivery(.immediate)`를 사용한다. 감지 대상은 `.running` workout 변경이다.
 - 앱이 foreground `active` 상태에서 HealthKit 변경을 감지하면 네이티브는 배너를 직접 띄우지 않고 `window.RunContextHealthKit.receiveHealthKitChanged('background-delivery')`를 호출한다. 웹은 reason 값으로 분기하지 않고 `syncAfterNativeChange()`를 실행해 최근 HealthKit 러닝을 즉시 다시 요청한다.
-- foreground 앱 기동/재활성화 또는 foreground HealthKit 변경 감지로 실행한 자동 동기화는 사용자-facing toast를 띄우지 않는다. 결과는 store `status`로만 남기고, 실제 신규 저장/기존 보강 여부는 내부 상태로 구분한다.
+- foreground 앱 기동/재활성화 또는 foreground HealthKit 변경 감지로 실행한 자동 동기화는 무변경/중복 결과를 사용자-facing toast로 띄우지 않는다. 실제 신규 저장이나 기존 보강이 있으면 프론트 toast로 저장 결과를 표시하고, native local notification은 사용하지 않는다.
 - HealthKit 동기화 결과 알림의 기본 원칙은 "앱 밖에서 새 러닝이 감지되어 사용자를 앱으로 유도해야 할 때 local notification"이다. `showNotification`으로 "새 러닝 기록을 가져왔습니다" 배너를 요청하는 경로는 문서가 hidden/background인 경우에만 허용한다.
 - 앱이 background 상태에서 HealthKit 변경을 감지하면 네이티브는 웹 동기화 대신 "새 러닝 기록이 감지됐습니다" 로컬 알림을 시도한다. 조건은 iOS 알림 권한 허용, `allEnabled=true`, `healthKitNewRun=true`이다. 사용자가 앱을 다시 열면 기존 activation sync가 누락 러닝을 저장한다.
-- HealthKit 감지가 웹 설정 sync보다 먼저 와서 네이티브 저장 설정이 아직 `allEnabled=false`이고 `healthKitNewRun=true`이면 네이티브는 감지를 최대 10분 pending으로 보관한다. 이후 `syncNotificationSettings`에서 `allEnabled=true`가 들어오면 pending HealthKit 감지 알림을 표시한다.
-- 앱이 foreground에 있어도 네이티브 즉시 알림은 `UNUserNotificationCenterDelegate.willPresent`에서 `.banner`, `.sound`, `.list`를 반환하므로 배너로 보일 수 있다.
+- HealthKit 감지가 웹 설정 sync보다 먼저 와서 네이티브 저장 설정이 아직 `allEnabled=false`이고 `healthKitNewRun=true`이면 네이티브는 감지를 최대 10분 pending으로 보관한다. 이후 `syncNotificationSettings`에서 `allEnabled=true`가 들어오면 앱이 background 상태일 때만 pending HealthKit 감지 알림을 표시하고, foreground active 상태이면 pending 감지를 폐기한다.
+- 앱이 foreground에 있어도 네이티브 즉시 알림은 `UNUserNotificationCenterDelegate.willPresent`에서 `.banner`, `.sound`, `.list`를 반환하면 배너로 보일 수 있다. 단, `pacelab-healthkit-detected-` 알림은 foreground에서 배너를 표시하지 않는다.
 - 사용자가 앱을 강제 종료한 상태에서 HealthKit background delivery가 반드시 앱을 깨운다고 보장하지 않는다. 강제 종료 상태까지 사용자 호출을 보장해야 하는 요구는 원격 푸시/APNs 설계로 별도 분리한다.
 
 ## 동기화 정책
