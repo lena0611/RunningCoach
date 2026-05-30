@@ -358,3 +358,10 @@
 - 결정: stack header와 sticky 요소를 맞물리게 할 때 고정 수치를 추정하지 않는다. `header.getBoundingClientRect().bottom - scrollContainer.getBoundingClientRect().top`처럼 실제 렌더링 좌표를 계산해 CSS 변수에 반영하고, page-specific padding override는 `.memory-stack-content.run-detail-content`처럼 공통 선언을 이길 수 있는 선택자로 고정한다.
 - 검증 기준: 모바일 viewport에서 여러 scrollTop 지점을 찍고 `headerBottom`, `contentTop`, `routeTop`, `routeTop - headerBottom`, 실제 `paddingTop`, sticky CSS 변수를 기록한다. Issue #34 최종 수정은 390x844 viewport에서 scrollTop 760/980/1180/1380/1580 모두 `headerBottom=63`, `routeTop=63`, 차이 `0px`로 확인한 뒤 배포했다.
 - 선택 이유: iOS safe area, stack header 높이, scroll container top, CSS cascade는 기기와 구조에 따라 달라질 수 있다. 추정값은 한 상태를 고치면서 다른 상태를 깨뜨렸고, 실제 좌표 계측만이 재현 가능한 완료 조건을 제공했다.
+
+## 2026-05-30 - 완료 전 재발 방지 기록 게이트
+- 문제: 여러 번의 수정/배포를 거쳐 어렵게 해결한 요청에서도 에이전트가 스스로 재발 방지 기준을 장기 기억에 남기지 못하는 경우가 있었다.
+- 결정: 정식 Issue를 `Done`으로 닫기 전에 완료 책임 창은 재발 방지 기록 게이트를 반드시 통과한다. final Issue comment에는 `재발 방지 기록` 항목을 항상 남기고, 장기 기록이 필요 없으면 `해당 없음`과 이유를 적는다.
+- 장기 기록 기준: 여러 번의 수정/배포, 반복 회귀, 다중 workstream 인수인계, 공유 계약 변경, 에이전트 운영 실패가 있었다면 `project-memory`, `decision-log`, 관련 `.harness/project/*` 중 적절한 위치를 갱신한다.
+- hook 영향: Codex `UserPromptSubmit` hook은 완료, 배포, merge, close, 장기 기억, 문서화 관련 요청에서 completion learning gate 안내를 주입한다.
+- 선택 이유: `harness:check`의 Project rule candidate 문구만으로는 완료 직전 기억 승격이 누락될 수 있다. 완료 프롬프트와 Issue close 흐름에서 다시 강제해야 실제 재발 방지 기준이 남는다.
