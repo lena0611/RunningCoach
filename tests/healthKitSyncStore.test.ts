@@ -12,14 +12,14 @@ beforeEach(() => {
 })
 
 describe('healthKitSyncStore', () => {
-  it('does not show a toast for silent activation sync with no changes', async () => {
+  it('does not show a toast for activation sync with no changes', async () => {
     const syncStore = useHealthKitSyncStore()
     const runStore = useRunStore()
     const toastStore = useToastStore()
     const show = vi.spyOn(toastStore, 'show')
 
     runStore.loaded = true
-    syncStore.syncFeedbackMode = 'silent'
+    syncStore.syncFeedbackMode = 'changes-only'
 
     await syncStore.handleRuns([])
 
@@ -29,7 +29,7 @@ describe('healthKitSyncStore', () => {
     expect(show).not.toHaveBeenCalled()
   })
 
-  it('marks real inserted HealthKit runs as changes without showing activation toast', async () => {
+  it('marks real inserted HealthKit runs as changes and shows the sync toast', async () => {
     const syncStore = useHealthKitSyncStore()
     const runStore = useRunStore()
     const memoryStore = useMemoryStore()
@@ -37,7 +37,7 @@ describe('healthKitSyncStore', () => {
     const show = vi.spyOn(toastStore, 'show')
 
     runStore.loaded = true
-    syncStore.syncFeedbackMode = 'silent'
+    syncStore.syncFeedbackMode = 'changes-only'
 
     await syncStore.handleRuns([createCandidate({
       externalId: 'hk-2026-05-30',
@@ -50,7 +50,9 @@ describe('healthKitSyncStore', () => {
     expect(runStore.runs[0].userId).toBe(memoryStore.selectedUserId)
     expect(syncStore.status).toContain('새 러닝 1개 저장')
     expect(syncStore.lastChangedAt).toBeGreaterThan(0)
-    expect(show).not.toHaveBeenCalled()
+    expect(show).toHaveBeenCalledWith(expect.stringContaining('새 러닝 1개 저장'), 'success', expect.objectContaining({
+      placement: 'top'
+    }))
   })
 })
 
