@@ -9,6 +9,7 @@ import { init } from 'echarts/core'
 import { getChartDomain, type ChartMetricKind } from '@/shared/lib/chartAxis'
 import { formatInteger, formatPace } from '@/shared/lib/format'
 import { triggerSelectionHaptic } from '@/shared/lib/haptics'
+import { preparePaceChartDisplayValues } from '@/shared/lib/paceChartDisplay'
 
 use([BarChart, LineChart, GridComponent, MarkLineComponent, MarkPointComponent, TooltipComponent, CanvasRenderer])
 
@@ -138,9 +139,12 @@ function renderChart() {
   const subtle = getColor('--color-subtle-2') || 'rgba(255,255,255,0.08)'
   const currentDomain = domain.value
   const useInvertedBarValues = shouldInvertBarValues()
-  const chartValues = useInvertedBarValues
-    ? props.values.map((value) => typeof value === 'number' && Number.isFinite(value) ? invertDomainValue(value) : value)
+  const displayValues = useInvertedBarValues && currentDomain
+    ? preparePaceChartDisplayValues(props.values, { minSec: currentDomain.min, maxSec: currentDomain.max })
     : props.values
+  const chartValues = useInvertedBarValues
+    ? displayValues.map((value) => typeof value === 'number' && Number.isFinite(value) ? invertDomainValue(value) : value)
+    : displayValues
 
   const option: EChartsOption = {
     animationDuration: 480,
@@ -154,10 +158,13 @@ function renderChart() {
         const list = Array.isArray(params) ? params : [params]
         const first = list[0] as { axisValue?: string | number; dataIndex?: number; value?: number } | undefined
         const sourceValue = typeof first?.dataIndex === 'number' ? props.values[first.dataIndex] : first?.value
+        const displayValue = typeof first?.dataIndex === 'number' ? displayValues[first.dataIndex] : first?.value
         const value = Number(sourceValue)
-        if (!Number.isFinite(value)) return ''
+        const fallbackValue = Number(displayValue)
+        if (!Number.isFinite(value) && !Number.isFinite(fallbackValue)) return ''
         const label = props.axisName === '랩' ? `${first?.axisValue ?? ''}랩` : `${first?.axisValue ?? ''}`
-        return `<strong>${label}</strong><div style="display:flex;justify-content:space-between;gap:18px"><span>${props.title}</span><strong>${formatMetric(value)}</strong></div>`
+        const metricLabel = Number.isFinite(value) ? formatMetric(value) : `표시 보정 ${formatMetric(fallbackValue)}`
+        return `<strong>${label}</strong><div style="display:flex;justify-content:space-between;gap:18px"><span>${props.title}</span><strong>${metricLabel}</strong></div>`
       }
     },
     xAxis: {
@@ -205,6 +212,7 @@ function renderChart() {
   if (typeof props.selectedIndex === 'number' && props.labels[props.selectedIndex]) {
     const series = option.series as Array<Record<string, unknown>>
     const selectedValue = props.values[props.selectedIndex]
+    const selectedDisplayValue = displayValues[props.selectedIndex]
     series[0].markLine = {
       symbol: 'none',
       silent: true,
@@ -215,7 +223,12 @@ function renderChart() {
       },
       data: [{ xAxis: props.labels[props.selectedIndex] }]
     }
-    if (typeof selectedValue === 'number' && Number.isFinite(selectedValue)) {
+    if (
+      typeof selectedValue === 'number' &&
+      Number.isFinite(selectedValue) &&
+      typeof selectedDisplayValue === 'number' &&
+      Number.isFinite(selectedDisplayValue)
+    ) {
       series[0].markPoint = {
         symbol: 'circle',
         symbolSize: 10,
@@ -227,7 +240,7 @@ function renderChart() {
           shadowBlur: 12,
           shadowColor: props.color
         },
-        data: [{ coord: [props.labels[props.selectedIndex], useInvertedBarValues ? invertDomainValue(selectedValue) : selectedValue] }]
+        data: [{ coord: [props.labels[props.selectedIndex], useInvertedBarValues ? invertDomainValue(selectedDisplayValue) : selectedDisplayValue] }]
       }
     }
   }
