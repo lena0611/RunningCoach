@@ -2518,7 +2518,10 @@ button.run-session-row {
 }
 
 .lap-metric-card {
+  position: relative;
+  z-index: 0;
   display: grid;
+  isolation: isolate;
   gap: 8px;
   padding: 12px;
   border-radius: 18px;
@@ -2612,8 +2615,8 @@ button.run-session-row {
 
 .fitness-route-card {
   position: sticky;
-  top: var(--space-3);
-  z-index: 4;
+  top: 0;
+  z-index: 8;
   min-height: 206px;
   overflow: hidden;
   border-radius: 18px;
