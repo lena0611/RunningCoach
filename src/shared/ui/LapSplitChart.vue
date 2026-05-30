@@ -158,7 +158,7 @@ function getElevationAtOffset(offsetSec: number) {
     <LapMetricChart
       title="페이스"
       type="pace"
-      chart-type="line"
+      chart-type="bar"
       domain-kind="pace"
       color="#22d3ee"
       inverse
@@ -171,7 +171,7 @@ function getElevationAtOffset(offsetSec: number) {
     <LapMetricChart
       title="심박수"
       type="heartRate"
-      chart-type="bar"
+      chart-type="line"
       domain-kind="heartRate"
       color="#ef4444"
       :axis-name="axisName"
@@ -183,7 +183,7 @@ function getElevationAtOffset(offsetSec: number) {
     <LapMetricChart
       title="케이던스"
       type="cadence"
-      chart-type="line"
+      chart-type="bar"
       domain-kind="cadence"
       color="#38bdf8"
       :axis-name="axisName"

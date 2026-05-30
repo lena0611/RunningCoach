@@ -2654,15 +2654,24 @@ button.run-session-row {
   fill: rgba(2, 6, 12, 0.28);
 }
 
-.fitness-route-line {
+.fitness-route-line,
+.fitness-route-line-casing {
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
+.fitness-route-line-casing {
+  stroke: rgba(2, 6, 12, 0.82);
+  stroke-width: 8.6;
+}
+
 .fitness-route-line {
-  stroke: #22d3ee;
-  stroke-width: 3.4;
+  stroke: #f8fafc;
+  stroke-width: 4.2;
+  filter:
+    drop-shadow(0 0 7px rgba(34, 211, 238, 0.96))
+    drop-shadow(0 0 14px rgba(34, 211, 238, 0.62));
 }
 
 .fitness-route-start,
