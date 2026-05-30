@@ -22,6 +22,7 @@ const maxLookbackDays = 365
 const minSyncIntervalMs = 30_000
 const syncToastDelayMs = 900
 let listenersAttached = false
+type SyncFeedbackMode = 'silent' | 'toast'
 
 export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
   state: () => ({
@@ -31,7 +32,9 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
     status: '',
     error: '',
     lastRequestedAt: 0,
-    lastCompletedAt: 0
+    lastCompletedAt: 0,
+    lastChangedAt: 0,
+    syncFeedbackMode: 'toast' as SyncFeedbackMode
   }),
   actions: {
     init() {
@@ -65,15 +68,15 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
       if (!authStore.isAuthenticated || !hasNativeBridge()) return
       const now = Date.now()
       if (this.syncing || now - this.lastRequestedAt < minSyncIntervalMs) return
-      await this.requestSync()
+      await this.requestSync({ feedback: 'silent' })
     },
     async syncAfterNativeChange() {
       this.init()
       const authStore = useAuthStore()
       if (!authStore.isAuthenticated || !hasNativeBridge() || this.syncing) return
-      await this.requestSync()
+      await this.requestSync({ feedback: 'silent' })
     },
-    async requestSync() {
+    async requestSync(options: { feedback?: SyncFeedbackMode } = {}) {
       this.init()
       const authStore = useAuthStore()
       if (!authStore.isAuthenticated || !hasNativeBridge()) return
@@ -83,6 +86,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
       this.error = ''
       this.status = 'HealthKit 동기화 중'
       this.lastRequestedAt = requestedAt
+      this.syncFeedbackMode = options.feedback ?? 'toast'
 
       try {
         await ensureRunStoreLoaded()
@@ -91,7 +95,8 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         this.syncing = false
         this.status = ''
         this.error = err instanceof Error ? err.message : 'HealthKit 동기화 요청 실패'
-        showSyncToast('error', this.error, 4200)
+        if (this.syncFeedbackMode === 'toast') showSyncToast('error', this.error, 4200)
+        this.syncFeedbackMode = 'toast'
       }
     },
     async requestRunRefresh(run: RunLog) {
@@ -139,36 +144,50 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
 
         if (newRuns.length) {
           const inserted = await runStore.addRuns(newRuns.map((candidate) => toExtractedRunData(candidate, memoryStore.memory.weeklyPattern)), 'healthkit')
-          notifyHealthKitNewRuns(useSettingsStore().notificationSettings, inserted.length)
-          const skipped = newRuns.length - inserted.length
+          const insertedCount = inserted.length
+          notifyHealthKitNewRuns(useSettingsStore().notificationSettings, insertedCount)
+          const skipped = newRuns.length - insertedCount
           const repairText = repaired.length ? ` · 기존 ${repaired.length}개 보강` : ''
-          this.status = skipped > 0
-            ? `HealthKit 동기화 완료 · 새 러닝 ${inserted.length}개 저장 · 중복 ${skipped}개 제외${repairText}`
-            : `HealthKit 동기화 완료 · 새 러닝 ${inserted.length}개 저장${repairText}`
-          showSyncToast('success', this.status, 3600)
+          if (insertedCount > 0) {
+            this.status = skipped > 0
+              ? `HealthKit 동기화 완료 · 새 러닝 ${insertedCount}개 저장 · 중복 ${skipped}개 제외${repairText}`
+              : `HealthKit 동기화 완료 · 새 러닝 ${insertedCount}개 저장${repairText}`
+            this.lastChangedAt = Date.now()
+            if (this.syncFeedbackMode === 'toast') showSyncToast('success', this.status, 3600)
+          } else if (repaired.length) {
+            this.status = `HealthKit 동기화 완료 · 기존 러닝 ${repaired.length}개 보강 · 중복 ${skipped}개 제외`
+            this.lastChangedAt = Date.now()
+            if (this.syncFeedbackMode === 'toast') showSyncToast('success', this.status, 3200)
+          } else {
+            this.status = `HealthKit 변화 없음 · 중복 ${skipped}개 제외`
+            if (this.syncFeedbackMode === 'toast') showSyncToast('neutral', this.status, 2600)
+          }
         } else if (repaired.length) {
           this.status = `HealthKit 동기화 완료 · 기존 러닝 ${repaired.length}개 보강`
-          showSyncToast('success', this.status, 3200)
+          this.lastChangedAt = Date.now()
+          if (this.syncFeedbackMode === 'toast') showSyncToast('success', this.status, 3200)
         } else {
           this.status = latestDate
             ? `HealthKit 변화 없음 · ${latestDate} 이후 새 러닝 없음`
             : 'HealthKit 변화 없음 · 새 러닝 없음'
-          showSyncToast('neutral', this.status, 2600)
+          if (this.syncFeedbackMode === 'toast') showSyncToast('neutral', this.status, 2600)
         }
         this.error = ''
         this.lastCompletedAt = Date.now()
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'HealthKit 동기화 저장 실패'
-        showSyncToast('error', this.error, 4200)
+        if (this.syncFeedbackMode === 'toast') showSyncToast('error', this.error, 4200)
       } finally {
         this.syncing = false
+        this.syncFeedbackMode = 'toast'
       }
     },
     handleError(message: string) {
       this.syncing = false
       this.status = ''
       this.error = message || 'HealthKit 동기화 실패'
-      showSyncToast('error', this.error, 4200)
+      if (this.syncFeedbackMode === 'toast') showSyncToast('error', this.error, 4200)
+      this.syncFeedbackMode = 'toast'
     },
     async handleRunUpdate(candidate: HealthKitRunCandidate) {
       const runStore = useRunStore()

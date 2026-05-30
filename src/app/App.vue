@@ -8,6 +8,7 @@ import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import type { RunLog } from '@/entities/run/model'
 import type { TrainingInjuryCheckIn, TrainingMemory } from '@/entities/training-memory/model'
+import { createInjuryCheckInDismissKey } from '@/features/injury-check-in/injuryCheckInPrompt'
 import DashboardPage from '@/pages/dashboard/DashboardPage.vue'
 import RunLogPage from '@/pages/run-log/RunLogPage.vue'
 import MemoryPage from '@/pages/memory/MemoryPage.vue'
@@ -77,7 +78,7 @@ watch(currentTabIndex, () => {
 })
 
 watch(
-  () => healthKitSyncStore.lastCompletedAt,
+  () => healthKitSyncStore.lastChangedAt,
   () => requestInjuryCheckInPrompt()
 )
 
@@ -198,7 +199,7 @@ function isQualitySession(run: RunLog) {
 
 function dismissCurrentInjuryCheckIn() {
   const item = injuryCheckInItem.value
-  if (item) sessionStorage.setItem(injuryCheckInDismissKey(item.id), '1')
+  if (item) localStorage.setItem(injuryCheckInDismissKey(item), '1')
   injuryCheckInItemId.value = ''
 }
 
@@ -259,7 +260,8 @@ async function submitInjuryCheckIn(payload: {
 }
 
 function isInjuryCheckInDismissed(itemId: string) {
-  return sessionStorage.getItem(injuryCheckInDismissKey(itemId)) === '1'
+  const item = memoryStore.memory.injuryItems.find((entry) => entry.id === itemId)
+  return item ? localStorage.getItem(injuryCheckInDismissKey(item)) === '1' : false
 }
 
 function isQuietInjuryCheckIn(value: TrainingInjuryCheckIn) {
@@ -297,8 +299,14 @@ function deriveMaxPainLevel(areas: TrainingInjuryCheckIn['areaPainLevels']) {
   return levels.length ? Math.max(...levels) : null
 }
 
-function injuryCheckInDismissKey(itemId: string) {
-  return `pacelab.injuryCheckIn.dismissed.${memoryStore.selectedUserId}.${itemId}.${localDateKey(new Date())}`
+function injuryCheckInDismissKey(item: TrainingMemory['injuryItems'][number]) {
+  return createInjuryCheckInDismissKey({
+    userId: memoryStore.selectedUserId,
+    itemId: item.id,
+    todayKey: localDateKey(new Date()),
+    latestQualityRunDate: findLatestQualityRun()?.date ?? null,
+    lastCheckedAt: item.lastCheckedAt
+  })
 }
 
 function isSameLocalDate(value: string | null, date: Date) {
