@@ -351,3 +351,10 @@
 - 표현 기준: 코칭 답변은 문단과 bullet만 길게 이어지지 않도록 표, 인용문, 짧은 Workoutdoors 세팅 코드블록 중 1~2개를 상황에 맞게 사용할 수 있게 한다. 렌더러는 blockquote와 markdown table을 지원한다.
 - 선택 이유: 429 재발을 막으려면 서버 fallback 재호출을 피해야 한다. 동시에 사용자가 체감하는 스트리밍은 네트워크 chunk 크기에만 의존하지 않아야 한다.
 - 포기한 대안: OpenAI 응답이 final payload로만 올 때 서버에서 두 번째 non-stream 호출을 실행하는 방식은 이전 장애 원인이므로 금지한다. 답변마다 모든 시각 요소를 강제하는 방식은 코칭이 장식 위주로 흐를 수 있어 채택하지 않는다.
+
+## 2026-05-30 - 세션 상세 sticky 지도 정렬 회귀에서 배운 기준
+- 문제: Issue #34 세션 상세 sticky 지도 보정 중 `top: 0`, 음수 offset, 고정 헤더 높이 같은 추정값을 반복 적용하면서 헤더와 지도 사이 틈, 헤더 뒤 겹침, 화면 중간 sticky 같은 회귀가 연속 발생했다.
+- 실제 원인: sticky 기준은 기기/WebView에서 viewport와 stack scroll container 관계에 따라 달라졌다. 최종적으로는 `.memory-stack-content`의 공통 `padding: 16px ...`가 CSS 선언 순서상 다시 이겨 세션 상세의 `padding-top: 0` 보정이 무력화되고, header 아래 16px 틈이 남는 것이 계측으로 확인됐다.
+- 결정: stack header와 sticky 요소를 맞물리게 할 때 고정 수치를 추정하지 않는다. `header.getBoundingClientRect().bottom - scrollContainer.getBoundingClientRect().top`처럼 실제 렌더링 좌표를 계산해 CSS 변수에 반영하고, page-specific padding override는 `.memory-stack-content.run-detail-content`처럼 공통 선언을 이길 수 있는 선택자로 고정한다.
+- 검증 기준: 모바일 viewport에서 여러 scrollTop 지점을 찍고 `headerBottom`, `contentTop`, `routeTop`, `routeTop - headerBottom`, 실제 `paddingTop`, sticky CSS 변수를 기록한다. Issue #34 최종 수정은 390x844 viewport에서 scrollTop 760/980/1180/1380/1580 모두 `headerBottom=63`, `routeTop=63`, 차이 `0px`로 확인한 뒤 배포했다.
+- 선택 이유: iOS safe area, stack header 높이, scroll container top, CSS cascade는 기기와 구조에 따라 달라질 수 있다. 추정값은 한 상태를 고치면서 다른 상태를 깨뜨렸고, 실제 좌표 계측만이 재현 가능한 완료 조건을 제공했다.
