@@ -2615,7 +2615,7 @@ button.run-session-row {
 
 .fitness-route-card {
   position: sticky;
-  top: calc(var(--space-4) * -1);
+  top: var(--fitness-route-sticky-top, 0);
   z-index: 8;
   min-height: 206px;
   overflow: hidden;
@@ -2914,6 +2914,7 @@ button.run-session-row {
 }
 
 .run-detail-content {
+  --fitness-route-sticky-top: calc((var(--space-4) + 48px) * -1);
   padding-bottom: calc(env(safe-area-inset-bottom) + var(--keyboard-inset-bottom) + 140px);
   scroll-padding-bottom: calc(env(safe-area-inset-bottom) + var(--keyboard-inset-bottom) + 140px);
 }
