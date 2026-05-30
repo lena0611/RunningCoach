@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { RunLog } from '@/entities/run/model'
 import { estimateHeartRateDrift } from '@/shared/lib/runStats'
 import { formatDateWithWeekday, formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
@@ -19,6 +19,9 @@ const props = defineProps<{
 }>()
 
 const selectedOffsetSec = ref<number | null>(null)
+const contentRef = ref<HTMLElement | null>(null)
+let stickyOffsetResizeObserver: ResizeObserver | null = null
+let stickyOffsetFrame = 0
 
 const detailMetrics = computed(() => [
   { id: 'avg-pace', label: '평균 페이스', value: formatPace(props.run.avgPaceSec), unit: '/km' },
@@ -30,10 +33,70 @@ const detailMetrics = computed(() => [
   { id: 'elevation-gain', label: '누적 상승', value: formatInteger(props.run.elevationGainM), unit: props.run.elevationGainM === null ? '' : 'm' },
   { id: 'elevation-loss', label: '누적 하강', value: formatInteger(props.run.elevationLossM), unit: props.run.elevationLossM === null ? '' : 'm' }
 ])
+
+onMounted(() => {
+  void nextTick(() => {
+    syncRouteStickyOffset()
+    observeStickyOffsetSources()
+  })
+  window.addEventListener('resize', scheduleRouteStickyOffsetSync)
+  window.visualViewport?.addEventListener('resize', scheduleRouteStickyOffsetSync)
+  window.visualViewport?.addEventListener('scroll', scheduleRouteStickyOffsetSync)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', scheduleRouteStickyOffsetSync)
+  window.visualViewport?.removeEventListener('resize', scheduleRouteStickyOffsetSync)
+  window.visualViewport?.removeEventListener('scroll', scheduleRouteStickyOffsetSync)
+  stickyOffsetResizeObserver?.disconnect()
+  stickyOffsetResizeObserver = null
+  if (stickyOffsetFrame) window.cancelAnimationFrame(stickyOffsetFrame)
+})
+
+watch(
+  () => props.run.id,
+  () => {
+    void nextTick(syncRouteStickyOffset)
+  }
+)
+
+function observeStickyOffsetSources() {
+  if (!contentRef.value || typeof ResizeObserver === 'undefined') return
+  stickyOffsetResizeObserver?.disconnect()
+  const stackPage = contentRef.value.closest('.memory-stack-page')
+  const header = stackPage?.querySelector<HTMLElement>('.memory-stack-header')
+  stickyOffsetResizeObserver = new ResizeObserver(scheduleRouteStickyOffsetSync)
+  stickyOffsetResizeObserver.observe(contentRef.value)
+  if (header) stickyOffsetResizeObserver.observe(header)
+}
+
+function scheduleRouteStickyOffsetSync() {
+  if (stickyOffsetFrame) window.cancelAnimationFrame(stickyOffsetFrame)
+  stickyOffsetFrame = window.requestAnimationFrame(() => {
+    stickyOffsetFrame = 0
+    syncRouteStickyOffset()
+  })
+}
+
+function syncRouteStickyOffset() {
+  const content = contentRef.value
+  if (!content) return
+  const stackPage = content.closest('.memory-stack-page')
+  const header = stackPage?.querySelector<HTMLElement>('.memory-stack-header')
+  if (!header) {
+    content.style.setProperty('--fitness-route-sticky-top', '0px')
+    return
+  }
+
+  const headerBottom = header.getBoundingClientRect().bottom
+  const scrollTop = content.getBoundingClientRect().top
+  const offset = Math.max(0, Math.round(headerBottom - scrollTop))
+  content.style.setProperty('--fitness-route-sticky-top', `${offset}px`)
+}
 </script>
 
 <template>
-  <main class="memory-stack-content run-detail-content">
+  <main ref="contentRef" class="memory-stack-content run-detail-content">
     <SectionCard class="run-detail-hero">
       <div class="run-detail-topline">
         <span class="list-row-kicker">{{ formatDateWithWeekday(run.date) }}</span>
