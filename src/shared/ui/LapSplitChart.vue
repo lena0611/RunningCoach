@@ -51,46 +51,9 @@ const lapPoints = computed<SplitChartPoint[]>(() => {
     })
 })
 
-const routePacePoints = computed<SplitChartPoint[]>(() => {
-  const points = props.routePoints
-    .filter((point) => Number.isFinite(point.offsetSec) && Number.isFinite(point.latitude) && Number.isFinite(point.longitude))
-    .sort((a, b) => a.offsetSec - b.offsetSec)
-  if (points.length < 3) return []
-
-  const samples: SplitChartPoint[] = []
-  let anchor = points[0]
-  for (let index = 1; index < points.length; index += 1) {
-    const point = points[index]
-    const deltaSec = point.offsetSec - anchor.offsetSec
-    if (deltaSec < 45) continue
-    const distanceM = distanceMeters(anchor.latitude, anchor.longitude, point.latitude, point.longitude)
-    const paceSec = distanceM > 45 ? deltaSec / (distanceM / 1000) : null
-    if (isUsablePace(paceSec)) {
-      samples.push({
-        label: formatDuration(point.offsetSec),
-        offsetSec: point.offsetSec,
-        paceSec: Math.round(paceSec),
-        heartRate: null,
-        cadence: null
-      })
-    }
-    anchor = point
-  }
-
-  return downsamplePoints(samples, 100)
-})
-
 const useSampleAxis = computed(() => samplePoints.value.length >= Math.max(6, lapPoints.value.length + 2))
 const chartPoints = computed(() => useSampleAxis.value ? samplePoints.value : lapPoints.value)
 const labels = computed(() => chartPoints.value.map((point) => point.label))
-const paceChartPoints = computed(() => {
-  if (routePacePoints.value.length >= 6) return routePacePoints.value
-  const valid = chartPoints.value.filter((point) => isUsablePace(point.paceSec))
-  if (valid.length >= 6) return valid
-  const validLaps = lapPoints.value.filter((point) => isUsablePace(point.paceSec))
-  return validLaps.length >= 2 ? validLaps : valid
-})
-const paceLabels = computed(() => paceChartPoints.value.map((point) => point.label))
 const axisName = computed(() => useSampleAxis.value ? '시간' : '랩')
 const elevationValues = computed(() => chartPoints.value.map((point) => getElevationAtOffset(point.offsetSec)))
 const selectedIndex = computed(() => {
@@ -98,16 +61,8 @@ const selectedIndex = computed(() => {
   if (!points.length || props.selectedOffsetSec === null || props.selectedOffsetSec === undefined) return null
   return getNearestIndex(points, props.selectedOffsetSec)
 })
-const selectedPaceIndex = computed(() => getNearestIndex(paceChartPoints.value, props.selectedOffsetSec))
-
 function selectIndex(index: number) {
   const point = chartPoints.value[index]
-  if (!point) return
-  emit('select-offset', point.offsetSec)
-}
-
-function selectPaceIndex(index: number) {
-  const point = paceChartPoints.value[index]
   if (!point) return
   emit('select-offset', point.offsetSec)
 }
@@ -119,28 +74,6 @@ function getNearestIndex(points: SplitChartPoint[], offsetSec: number | null | u
       ? index
       : nearestIndex
   }, 0)
-}
-
-function isUsablePace(value: number | null | undefined): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 120 && value <= 1800
-}
-
-function downsamplePoints(points: SplitChartPoint[], maxCount: number) {
-  if (points.length <= maxCount) return points
-  const step = Math.ceil(points.length / maxCount)
-  return points.filter((_, index) => index % step === 0)
-}
-
-function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const earthRadiusM = 6371000
-  const dLat = toRad(lat2 - lat1)
-  const dLon = toRad(lon2 - lon1)
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
-  return 2 * earthRadiusM * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
-
-function toRad(value: number) {
-  return (value * Math.PI) / 180
 }
 
 function getElevationAtOffset(offsetSec: number) {
@@ -163,10 +96,10 @@ function getElevationAtOffset(offsetSec: number) {
       color="#22d3ee"
       inverse
       :axis-name="axisName"
-      :labels="paceLabels"
-      :values="paceChartPoints.map((point) => point.paceSec)"
-      :selected-index="selectedPaceIndex"
-      @select-index="selectPaceIndex"
+      :labels="labels"
+      :values="chartPoints.map((point) => point.paceSec)"
+      :selected-index="selectedIndex"
+      @select-index="selectIndex"
     />
     <LapMetricChart
       title="심박수"

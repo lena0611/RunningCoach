@@ -6,7 +6,7 @@ export type PaceChartDisplayOptions = {
 }
 
 const DEFAULT_MAX_INTERPOLATED_GAP = 2
-const DEFAULT_MIN_VISIBLE_BAR_SEC = 18
+const DEFAULT_MIN_VISIBLE_BAR_SEC = 60
 
 export function preparePaceChartDisplayValues(
   values: Array<number | null | undefined>,

@@ -7,7 +7,7 @@ describe('paceChartDisplay', () => {
   it('clips slow pace outliers into the visible display range without changing normal values', () => {
     const values = preparePaceChartDisplayValues([480, 1295, 510], domain)
 
-    expect(values).toEqual([480, 702, 510])
+    expect(values).toEqual([480, 660, 510])
   })
 
   it('interpolates short missing gaps only for display continuity', () => {
