@@ -371,3 +371,8 @@
 - 결정: 완료 책임 창 안에서 해결 가능한 `Target=MVP` 정식 Issue는 명시적 중단점이 없으면 검증, commit, push, PR, main 머지, 배포 확인까지 이어서 진행하고 사용자에게 완료 확인을 요청한다. GitHub Project `Done` 또는 Issue close는 사용자의 명시 완료 지시 후에만 수행한다.
 - main 최신화 기준: 사용자 완료 지시를 받은 뒤 완료 댓글, Project `Done`, Issue close 전에 기준 작업트리 `/Users/smart-tn-083/practice/run-ai`에서 `git switch main`, `git pull --ff-only`, `git status -sb`로 local `main`을 최신화한다. 기준 작업트리에 미커밋 변경이 있으면 임의로 stash/reset하지 않고 상태를 보고한다.
 - 선택 이유: MVP 속도는 유지하되 최종 완료 판단은 사용자 승인에 묶고, 다음 Issue worktree가 항상 배포된 `main` 기준에서 시작하도록 한다.
+
+## 2026-05-31 - Store 단위 테스트의 Supabase 환경 의존 차단
+- 문제: Issue #57에서 `tests/healthKitSyncStore.test.ts`가 일반 로컬 환경에서는 통과했지만, pre-commit hook처럼 `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`가 있는 환경에서는 `runStore.addRuns()`가 Supabase repository 경로를 타면서 로컬 store 삽입 기대가 깨졌다.
+- 결정: store 단위 테스트가 로컬 저장 동작을 검증한다면 Supabase 설정 모듈 또는 repository 경계를 명시적으로 mock해 환경변수 유무와 무관하게 같은 경로를 테스트한다. 이 기준을 `.harness/project/workflow-rules.md`의 외부 경계 mock 규칙에 반영했다.
+- 선택 이유: HealthKit sync 테스트는 HealthKit 후보 처리와 store 상태 전이를 검증하는 단위 테스트이며, Supabase RLS/API 통합 테스트가 아니다. 환경변수에 따라 테스트 대상 경계가 바뀌면 hook 검증이 불안정해진다.

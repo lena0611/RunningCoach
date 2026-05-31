@@ -6,6 +6,14 @@ import { useRunStore } from '@/app/stores/runStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import type { HealthKitRunCandidate } from '@/features/import-healthkit-run/healthKitBridge'
 
+vi.mock('@/shared/api/supabase', () => ({
+  isSupabaseConfigured: false,
+  supabase: null,
+  requireSupabase: vi.fn(),
+  getSupabaseFunctionUrl: vi.fn(),
+  getSupabaseAnonKey: vi.fn()
+}))
+
 beforeEach(() => {
   localStorage.clear()
   setActivePinia(createPinia())
