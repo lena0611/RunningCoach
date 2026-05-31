@@ -376,3 +376,32 @@
 - 문제: Issue #57에서 `tests/healthKitSyncStore.test.ts`가 일반 로컬 환경에서는 통과했지만, pre-commit hook처럼 `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`가 있는 환경에서는 `runStore.addRuns()`가 Supabase repository 경로를 타면서 로컬 store 삽입 기대가 깨졌다.
 - 결정: store 단위 테스트가 로컬 저장 동작을 검증한다면 Supabase 설정 모듈 또는 repository 경계를 명시적으로 mock해 환경변수 유무와 무관하게 같은 경로를 테스트한다. 이 기준을 `.harness/project/workflow-rules.md`의 외부 경계 mock 규칙에 반영했다.
 - 선택 이유: HealthKit sync 테스트는 HealthKit 후보 처리와 store 상태 전이를 검증하는 단위 테스트이며, Supabase RLS/API 통합 테스트가 아니다. 환경변수에 따라 테스트 대상 경계가 바뀌면 hook 검증이 불안정해진다.
+
+## 2026-05-31 - 요청 단위 풀스택 창 운영 전환
+- 문제: 상시 workstream별 대화창을 유지하면 사용자가 창을 관리하고 인수인계를 붙여넣는 비용이 컸다. Codex 창끼리가 GitHub Project를 통해 자동으로 협업하거나 상태를 주고받는 것도 아니어서, 창 분리의 이점보다 운영 피로도가 커졌다.
+- 결정: PaceLAB은 상시 workstream 창 분리 운영을 중단하고, 사용자가 요청마다 새 대화창을 열어 업무 내용을 바로 적는 요청 단위 풀스택 창 운영을 기본으로 한다. 에이전트는 요청을 분류해 필요한 workstream 파일을 읽을거리로만 선택하고, 같은 목표 안의 기획/디자인/웹/네이티브/Supabase/AI/운영 작업을 현재 창에서 끝까지 관리한다.
+- Issue 기준: 에이전트가 정식 개발 작업 여부를 판단해 직접 GitHub Issue를 만들거나 기존 Issue를 확인한다. 사용자가 Issue를 먼저 만들 필요는 없다. 단, 사용자가 동시에 여러 업무를 요청하거나 한 요청 안에 독립 목표가 섞이면 Issue, worktree, branch, PR을 분리한다.
+- 유지한 기준: Issue별 worktree 격리는 계속 유지한다. 같은 창이 여러 요청을 순차 관리할 수는 있지만 파일 변경, 검증, 커밋, PR 범위는 Issue별로 섞지 않는다.
+- 포기한 대안: workstream별 상시 창 유지, 여러 workstream이면 parent/child Issue로 기본 분해, 사용자가 Issue와 완료 책임 창을 먼저 지정해야 하는 방식은 기본 운영에서 제외한다. parent/child Issue는 독립 목표가 실제로 분리될 때만 사용한다.
+- 문서/hook 영향: `.harness/session/workstreams/README.md`, `.harness/project/workflow-rules.md`, `.harness/project/github-issue-management-guide.md`, `.harness/session/project-memory.md`, `.codex/hooks/inject-context.sh`는 요청 단위 풀스택 창과 동시 업무 worktree 격리 기준을 우선하도록 갱신한다.
+- 시작 컨텍스트 보강: 요청 창이 웹 프론트 래퍼, iOS 네이티브 래퍼, Supabase/Auth/Postgres/Edge Function, OpenAI 코칭, GitHub Pages 배포 경계를 함께 떠올리도록 `session-start-alert`, `next-session-reminder`, `active-context`, `project-memory`, `workflow-rules`, `CLAUDE.md`, `AGENTS.md`, Codex/Claude hook 문구를 보강한다.
+- 앱 영향: 이번 변경은 에이전트 운영 문서와 Codex hook 주입 문구에 한정한다. Vue 앱, Supabase Edge Function, iOS/HealthKit 런타임 동작이나 사용자-facing UI 변경은 필요하지 않다.
+
+## 2026-05-31 - Codex worktree Node/dependency 준비 기준
+- 문제: Codex 세션이나 Issue worktree가 프로젝트 `.nvmrc`와 다른 Node를 잡거나, git ignored 파일인 `node_modules` 없이 생성되면 `vue-tsc`, `vite`, `vitest` 같은 로컬 바이너리 누락으로 실제 코드 문제가 아닌 검증 실패가 발생할 수 있다.
+- 결정: Codex `SessionStart` hook은 `.nvmrc` 요구 버전과 hook 프로세스의 Node 버전을 보여주고, 후속 shell 명령에서는 다시 `. "$HOME/.nvm/nvm.sh" && nvm use`를 실행하도록 안내한다. 새 Issue worktree를 만들거나 들어간 뒤 `node_modules`가 없으면 `npm ci`로 의존성을 준비한 뒤 TypeScript/build/test/harness 명령을 실행한다.
+- 선택 이유: hook 자식 프로세스에서 실행한 `nvm use`는 Codex의 이후 shell에 영구 적용되지 않는다. 또한 `node_modules` 복사나 symlink는 캐시/절대경로/네이티브 의존성 문제를 만들 수 있으므로, `package-lock.json` 기준 `npm ci`가 재현 가능한 1차 준비 절차다.
+- 적용 범위: `.codex/hooks/session-start-reminder.sh`, `.codex/hooks/inject-context.sh`, `.harness/session/session-start-alert.md`, `.harness/session/next-session-reminder.md`, `.harness/project/github-issue-management-guide.md`, `.harness/project/workflow-rules.md`, `.harness/session/project-memory.md`.
+
+## 2026-05-31 - 특정 사용자 Supabase 데이터 확인은 앱 컨텍스트 우선
+- 문제: PaceLAB Supabase 테이블은 RLS가 기본 경계이므로 특정 사용자 데이터를 확인할 때 익명 클라이언트, 인증 없는 SQL, service role/admin 우회를 먼저 시도하면 권한 실패를 데이터 없음으로 오해하거나 실제 앱 흐름과 다른 결과를 볼 수 있다.
+- 결정: 특정 사용자의 실제 데이터 확인은 처음부터 앱 로그인 세션, repository/store 함수, 또는 사용자가 제공한 현재 앱 컨텍스트의 사용자 ID를 기준으로 재현한다. anon 조회나 service role/admin key 경로를 먼저 시도한 뒤 앱 컨텍스트로 fallback하지 않는다.
+- 선택 이유: PaceLAB에서 의미 있는 데이터 확인 단위는 RLS가 적용된 사용자 앱 세션이다. 디버깅도 같은 사용자, 같은 인증 상태, 같은 repository/store 경로를 거쳐야 화면 증상과 저장 상태를 일관되게 판단할 수 있다.
+- 적용 범위: `.harness/project/architecture-rules.md`, `.harness/project/workflow-rules.md`, `.harness/session/project-memory.md`, `.codex/hooks/inject-context.sh`.
+
+## 2026-05-31 - Issue URL 선조회와 업무 요청 Issue 구체화
+- 문제: 새 Codex 요청 창에 Issue URL만 들어오면 현재 hook은 GitHub 운영 문서를 읽으라고 안내하지만, 해당 Issue 본문과 Project fields를 먼저 조회한 뒤 라우팅하라는 절차가 직접적이지 않았다. 반대로 사용자가 Issue 없이 업무 내용만 적는 새 운영 방식에서는 에이전트가 요청을 충분히 구체화해 Issue를 만들지 못하면 완료 조건과 검증 후보가 흐려질 수 있다.
+- 결정: 사용자 프롬프트에 Issue URL 또는 Issue 번호가 있으면 구현이나 workstream 라우팅 전에 Issue 본문, labels, Project fields를 먼저 조회한다. Issue 없이 새 정식 업무 요청이 들어오면 에이전트가 한글 우선 제목, 문제/목표, 범위, 제외 범위, 완료 조건, 검증 후보, Project fields, label 후보로 구체화하고, 기존 Issue 검색 후 새 Issue 생성 또는 재사용을 결정한다. 제목은 가능하면 한글로 쓰되 `HealthKit`, `Supabase`, API명, 라이브러리명, 에러 메시지처럼 원문 식별이 중요한 고유명은 영어를 유지한다.
+- 선택 이유: 요청 단위 풀스택 창 운영에서는 첫 프롬프트가 유일한 진입점이다. Issue 기반 요청과 새 업무 요청 모두 시작 단계에서 실행 범위와 읽을거리를 안정화해야 worktree/branch/PR이 섞이지 않는다.
+- 포기한 대안: 사용자가 항상 Workstream과 Issue 본문을 직접 붙여넣도록 요구하는 방식은 창 관리 피로도를 줄인다는 최신 운영 방향과 맞지 않아 채택하지 않는다.
+- 적용 범위: `.codex/hooks/inject-context.sh`, `.harness/project/github-issue-management-guide.md`, `.harness/project/github-tracking-rules.md`, `.harness/project/workflow-rules.md`.

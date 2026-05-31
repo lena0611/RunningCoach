@@ -38,7 +38,8 @@
 
 ## Supabase 접근 기준
 - RLS 실패는 예상 가능한 권한 경계입니다. 에이전트는 인증 없는 anon 조회, 임의 SQL 조회, service role/admin key 경로를 먼저 시도한 뒤 앱 사용자 컨텍스트로 fallback하지 않습니다.
-- 사용자의 실제 데이터 확인이 필요하면 앱 로그인 세션, repository/store 함수, 또는 사용자가 제공한 현재 앱 컨텍스트의 사용자 ID를 기준으로 재현합니다.
+- 특정 사용자의 실제 데이터 확인이 필요하면 처음부터 앱 로그인 세션, repository/store 함수, 또는 사용자가 제공한 현재 앱 컨텍스트의 사용자 ID를 기준으로 재현합니다. 익명 클라이언트, 인증 없는 SQL, service role/admin key를 먼저 시도하지 않습니다.
+- RLS로 막힌 결과를 "데이터 없음"으로 해석하지 않습니다. 앱 컨텍스트에서 같은 사용자, 같은 repository/store 경로, 같은 인증 상태로 다시 확인한 뒤 판단합니다.
 - Edge Function 내부에서 서버 권한이 필요한 경우에도 목적, 대상 테이블, RLS 우회 필요성을 먼저 설명하고, service role key나 secret 값을 대화에 노출하지 않습니다.
 - 여러 사용자 전체를 대상으로 하는 운영 조회, migration 검증, RLS 정책 점검은 `07-data-supabase` 범위에서 별도 작업으로 분리하고 사용자 승인을 받습니다.
 

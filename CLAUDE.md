@@ -51,7 +51,8 @@
 - 모든 작업은 먼저 `.harness/policy/ai-standard-guiding-policy.md` 위배 여부를 확인합니다.
 - 작업 전에는 최소 `npm run harness:impact`로 영향 범위를 확인합니다. `npm run harness:check`는 사용자가 최종 검증을 승인한 뒤 실행합니다.
 - 큰 작업이나 생소한 영역은 `npm run harness:sync` 후 `npm run harness:context -- "<작업 설명>"`로 에이전트 판단 컨텍스트를 먼저 만듭니다.
-- 프로젝트가 session workstreams README로 workstream 운영을 opt-in 했다면, 매 요청 시작 시 현재 workstream과 선행/후행 workstream 필요 여부를 먼저 식별합니다.
+- 프로젝트가 session workstreams README로 요청 라우팅을 opt-in 했다면, 매 요청 시작 시 관련 workstream 파일을 읽을거리 인덱스로 고르고, 독립 목표나 동시 업무의 Issue/worktree 분리 필요 여부를 먼저 식별합니다.
+- PaceLAB 요청 창은 웹 프론트 래퍼, iOS 네이티브 래퍼, Supabase/Auth/Postgres/Edge Function, OpenAI 코칭, GitHub Pages 배포 경계를 함께 관장합니다. 특정 표면만 언급된 요청도 사용자 흐름 기준으로 연결 표면과 계약을 확인합니다.
 - `harness:context` 결과의 Selected Skills를 보고 읽을 문서, 실행할 명령, 기록 위치를 좁힌 뒤 작업합니다.
 - 개발 기준 문서, 스택 문서, `src/`를 변경하면 관련 반대편 문서/코드도 함께 검토합니다.
 - 코드 변경 후에는 도메인, 아키텍처, 워크플로우 로컬룰로 승격할 반복 패턴이나 검증 기준이 생겼는지 반드시 점검합니다.

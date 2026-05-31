@@ -25,6 +25,25 @@ Claude Code에서는 `SessionStart` hook이 `next-session-reminder.md`를 자동
 15. 큰 작업이나 생소한 영역은 `npm run harness:sync`와 `npm run harness:context -- "<작업 설명>"`로 에이전트 판단 컨텍스트를 먼저 만듭니다.
 16. 개발자에게 진행 상황을 보일 때는 원시 내부 추론이 아니라 `[harness] request/context/impact/action/decision/verify` 형태의 visible trace로 요약합니다.
 17. 사용자가 하네스를 언급하지 않는 것은 하네스를 비활성화한다는 뜻이 아닙니다. 하네스 설치 프로젝트에서는 항상 이 문서의 절차를 적용합니다.
+18. PaceLAB 새 요청 창은 단일 풀스택 담당 창입니다. 요청이 들어오면 웹 프론트 래퍼, iOS 네이티브 래퍼, Supabase/Auth/Postgres/Edge Function, OpenAI 코칭, GitHub Pages 배포 경계 중 어떤 표면이 영향을 받는지 먼저 떠올립니다.
+19. 한 목표 안에서 프론트, 네이티브, Supabase가 함께 필요하면 같은 요청 창이 전체 계약과 검증 후보를 관리합니다. 독립 목표나 동시 업무만 Issue/worktree/branch로 분리합니다.
+20. 프롬프트에 Issue URL 또는 Issue 번호가 있으면 구현이나 라우팅 전에 Issue 본문, labels, Project fields를 먼저 조회합니다.
+21. Issue 없이 업무 내용만 들어오면 에이전트가 한글 우선 제목, 문제/목표, 범위, 제외 범위, 완료 조건, 검증 후보, Project fields, label 후보로 구체화한 뒤 기존 Issue 검색과 생성/재사용을 판단합니다.
+22. Codex 세션 시작 시 `.nvmrc` 기준 Node 버전을 먼저 확인합니다. hook에서 `nvm use`를 실행해도 이후 Codex shell에 영구 적용되지는 않으므로, npm/tsc/build/test/harness 명령 전에는 현재 작업트리에서 `. "$HOME/.nvm/nvm.sh" && nvm use`를 실행합니다.
+23. Issue worktree는 git ignored 파일인 `node_modules`를 자동으로 가져오지 않습니다. 새 worktree를 만들거나 들어간 뒤 `node_modules`가 없으면 TypeScript/build/test 전에 `npm ci`로 의존성을 준비합니다.
+
+## PaceLAB 기본 제품 표면
+- 웹 프론트 래퍼: 이 저장소의 Vue 3 + Vite + TypeScript 앱, `src/**`, GitHub Pages 정적 배포, iOS WebView에서 실행되는 화면과 상태 관리.
+- iOS 네이티브 래퍼: `/Users/smart-tn-083/practice/RunningCoach`의 Swift/WKWebView/HealthKit/WeatherKit/로컬 알림 브리지.
+- Supabase 백엔드: 이 저장소의 `supabase/**`, Supabase Auth/Postgres/RLS/Edge Function, `coach-run`, OpenAI API secret 경계.
+- 공유 계약: `.harness/project/architecture-rules.md`, `.harness/project/healthkit-data-contract.md`, `.harness/project/config-contract.md`, `.harness/project/github-pages-supabase-playbook.md`.
+- 시작 판단: 요청을 한 표면에 가두지 말고, 사용자 흐름 기준으로 프론트 표시, 네이티브 브리지, 저장/동기화, Edge Function, 배포/캐시 영향까지 확인합니다.
+
+## Codex 런타임 준비
+- 세션 시작 hook은 `.nvmrc` 요구 버전과 현재 hook 프로세스의 Node 버전을 보여줍니다.
+- 후속 shell 명령은 별도 프로세스이므로 npm 계열 명령 앞에는 `. "$HOME/.nvm/nvm.sh" && nvm use`를 붙이거나 같은 shell에서 먼저 실행합니다.
+- 이 프로젝트는 `package-lock.json` 기준 npm 프로젝트입니다. Issue worktree에서 `node_modules`가 없으면 복사나 symlink보다 `npm ci`를 우선합니다.
+- `npm ci`는 설치 작업이므로 정식 검증 명령은 아니지만, `vue-tsc`, `vite`, `vitest` 같은 로컬 바이너리가 없어 생기는 가짜 실패를 막기 위한 worktree 준비 단계입니다.
 
 ## 방향 유지 장치 원칙
 - **Harness**는 방향과 작업 레일을 정합니다.

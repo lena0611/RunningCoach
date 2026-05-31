@@ -8,9 +8,9 @@
 - PaceLAB MVP 단계에서는 단순 확인, 검토, 조사, 기획 질문이 아닌 구현/버그/운영 요청을 사용자가 맡기면 중간 확인을 기본 대기점으로 두지 않는다. 명시적 보류 지시가 없고 완료 책임 창 안에서 해결 가능한 업무라면 완료 책임 창이 검증, 커밋, 푸시, PR, main 머지, 배포 확인까지 이어서 수행한 뒤 사용자에게 완료 확인을 요청한다. 단, GitHub Issue/Project를 `Done`, `Closed`, 또는 이에 준하는 최종 완료 상태로 변경하는 것은 사용자의 명시 지시가 있을 때만 수행한다.
 - 에이전트가 GitHub Issue/Project를 생성하거나 수정할 때는 로컬 `gh` CLI를 1차 경로로 사용한다. GitHub App connector의 Issue/Project write 권한 부족이 확인된 작업에서는 connector-first 시도 후 fallback하는 흐름을 반복하지 않는다.
 - `.harness/project/*`는 장기 기준과 결정 문서로 유지하고, 개별 백로그/진행 상태는 GitHub Issues/Projects에 둔다.
-- 에이전트가 Supabase 데이터를 조회/수정할 때는 앱의 인증 컨텍스트와 RLS 정책을 1차 경로로 사용한다. 인증 없는 직접 DB 조회나 service role/admin 우회 시도 후 앱 사용자 컨텍스트로 fallback하는 흐름을 반복하지 않는다.
+- 에이전트가 Supabase 데이터를 조회/수정할 때는 앱의 인증 컨텍스트와 RLS 정책을 1차 경로로 사용한다. 특히 특정 사용자의 데이터 확인은 처음부터 앱 로그인 세션, repository/store 함수, 또는 사용자가 제공한 현재 앱 컨텍스트의 사용자 ID로 재현한다. 인증 없는 직접 DB 조회나 service role/admin 우회 시도 후 앱 사용자 컨텍스트로 fallback하는 흐름을 반복하지 않는다.
 - 아이디어는 `Idea` issue로 `Inbox`에 넣고, 목표/완료 조건/완료 책임 창/검증 후보가 정리되면 `Feature`, `Bug`, `Decision`, `Research` 등 정식 작업 issue로 승격한다.
-- 정식 Issue 작업 중 대화가 길어지거나 여러 workstream/Issue 맥락이 섞이면 GitHub Project의 `업무 피로도` 필드를 `fresh`, `normal`, `tired`, `reset-needed` 중 하나로 자가진단해 맞춘다. 값이 `tired` 또는 `reset-needed`로 바뀌면 Issue 댓글에 이유와 권장을 남기고, `reset-needed`이면 넓은 새 작업을 시작하지 않는다.
+- 정식 Issue 작업 중 대화가 길어지거나 여러 독립 목표/Issue 맥락이 섞이면 GitHub Project의 `업무 피로도` 필드를 `fresh`, `normal`, `tired`, `reset-needed` 중 하나로 자가진단해 맞춘다. 값이 `tired` 또는 `reset-needed`로 바뀌면 Issue 댓글에 이유와 권장을 남기고, `reset-needed`이면 넓은 새 작업을 시작하지 않는다.
 - 먼저 도메인/아키텍처 결정이 일회성인지 반복 규칙인지 판단한다.
 - 반복 규칙이면 `.harness/session/*`에만 두지 말고 `.harness/project/*` 문서로 승격한다.
 - 구현은 GitHub Pages 정적 프론트 + Supabase 백엔드 경계를 우선하며, secret이 필요한 기능은 브라우저가 아니라 Supabase Edge Function 또는 서버리스 경계로 분리한다.
@@ -19,34 +19,27 @@
 - 사용자 답변이 "추천/예상한 기본값대로"인 경우, 적용한 기본값을 `developer-input-queue.md`와 관련 project 문서에 구체적으로 남긴다.
 - 버그픽스나 로직 강화 요청을 처리할 때는 코드 수정 전에 관련 project 룰 후보를 같이 찾고, 반복 가능성이 있으면 같은 커밋 또는 후속 커밋에서 `.harness/project/*`에 반영한다.
 - `harness:check`의 “Project rule candidate check”는 통과 메시지가 아니라 실제 검토 요청으로 취급한다. 같은 종류의 버그가 재발 가능하면 룰을 업데이트한다.
-- 정식 Issue를 `Done`으로 닫기 전에는 완료 책임 창이 재발 방지 기록 게이트를 통과해야 한다. 여러 번의 수정/배포, 반복 회귀, 다중 workstream 인수인계, 공유 계약 변경, 에이전트 운영 실패가 있었다면 `project-memory`, `decision-log`, 관련 `.harness/project/*` 중 적절한 장기 기억을 갱신한다.
+- 정식 Issue를 `Done`으로 닫기 전에는 완료 책임 창이 재발 방지 기록 게이트를 통과해야 한다. 여러 번의 수정/배포, 반복 회귀, 독립 업무 분리나 인수인계 실패, 공유 계약 변경, 에이전트 운영 실패가 있었다면 `project-memory`, `decision-log`, 관련 `.harness/project/*` 중 적절한 장기 기억을 갱신한다.
 - HealthKit/세션 상세/스플릿/경로 차트/자동 동기화/세션별 새로고침을 수정할 때는 구현 전에 `.harness/project/healthkit-data-contract.md`를 먼저 확인한다. 네이티브 후보 구조, 웹 `RunLog` 매핑, 샘플/랩/라우트 배열 의미를 추측하지 않는다.
 
-## 대화창 분리 운영
-- PaceLAB은 workstream 대화창 분리 운영을 명시적으로 채택한 프로젝트다. 하네스 본체의 일반 가이드는 선택형이지만, 이 프로젝트 안에서는 아래 규칙을 강하게 적용한다.
-- 한 대화창은 하나의 주 작업 유형만 맡긴다. 기획, 버그픽스, UI, 코칭 로직, HealthKit/iOS, Supabase/Edge Function, 부상관리 도메인, 하네스/정책 정리는 서로 다른 대화창으로 분리한다.
-- 각 대화창은 모든 사용자 요청을 처리하기 전에 현재 workstream 범위를 먼저 식별한다. 현재 창의 workstream이 불명확하면 넓은 작업을 진행하지 말고 사용자에게 workstream 확인을 요청한다.
-- 모든 업무 요청은 시작할 때 `완료 책임 창`을 하나 정한다. 완료 책임 창은 업무 목표, 완료 조건, 후속 workstream 인수인계, 최종 리뷰, 검증 후보 정리를 소유한다.
-- 단일 workstream 업무는 해당 workstream 창이 완료 책임 창이다. 여러 workstream을 거치는 업무는 처음 업무 목표를 받은 창을 임시 완료 책임 창으로 두되, 업무 중심이 다른 workstream으로 명확해지면 완료 책임을 그 창으로 이관한다.
-- 다중 workstream 업무는 GitHub parent Issue와 child Issue로 나눈다. parent Issue는 완료 책임 창이 소유하고, child Issue는 각 workstream 창이 자기 worktree/branch에서 처리한다. 창끼리 직접 대화하지 않고 Issue 댓글, PR, Project 필드로만 상태와 결과를 전달한다.
-- 기획/범위 판단이 중심인 업무는 `02-product-planning`, 하네스/운영 절차 자체를 정하는 업무는 `01-harness-ops`가 완료 책임 창이다.
-- 완료 책임 창이 불명확하면 구현이나 문서 변경을 넓히지 않고 먼저 책임 창을 정한다. 다른 workstream 창은 자기 범위 작업을 수행한 뒤 완료 책임 창으로 결과를 돌려준다.
-- 현재 창에 수행 역할이 있더라도 선행 결정이나 선행 구현이 다른 workstream에 있으면 현재 창에서 먼저 진행하지 않는다. 대상 workstream, 선행 이유, 붙여넣을 인수인계 문구를 제안한다.
-- 사용자가 완료를 명시하면 현재 창에서 완료 처리해도 되는지 먼저 검토한다. 다른 workstream의 후속 확인이나 마무리가 남아 있으면 완료 처리 전에 대상 workstream으로 넘긴다.
-- 사용자가 새 요청을 동시에 시작하면 기존 작업 worktree/branch에 섞지 않는다. 새 요청이 Issue 대상이면 새 Issue와 Issue 전용 worktree/feature branch를 만들고, 기존 작업은 해당 Issue/branch/Project Status로 추적한다.
-- 현재 대화창에서 주 작업 유형이 바뀌면 새 대화창으로 넘긴다. 단, 작업을 끝내기 위한 짧은 문서 갱신, 결정 로그, 검증 명령은 같은 대화창에서 마무리할 수 있다.
-- 기존 workstream으로 안정적으로 처리하기 어려운 새 도메인이 반복적으로 등장하면 임의로 현재 창 범위를 넓히지 않는다. `01-harness-ops`에서 새 workstream 추가 여부를 검토하고, 필요하면 workstreams 폴더의 `NN-name.md`와 이 문서의 작업 유형 목록을 갱신한다.
-- 새 대화창 첫 메시지는 작업 유형, 목표, 완료 조건, 관련 파일 또는 화면, 이전 대화의 인수인계 문구나 인수인계 파일을 포함한다.
-- 같은 workstream 창을 새로 열어 컨텍스트를 줄일 때는 첫 메시지에 `01-harness-ops`처럼 workstream id를 포함한다. Codex hook은 사용자 프롬프트 본문의 workstream id를 감지해 해당 workstream 파일을 읽으라는 bootstrap 문구를 주입한다. 창 제목만으로 자동 감지한다고 가정하지 않는다.
-- 이미 열려 있는 여러 창에 최신 운영 기준을 다시 적용할 때는 모든 창에 같은 `워크스트림 기준 새로고침` 문구를 붙인다. 에이전트는 현재 대화 맥락에서 이미 확립된 workstream을 유지해 README와 해당 workstream 파일을 다시 읽고, 기존 workstream이 불명확한 창에서만 사용자에게 id를 확인한다.
-- 창 간 인수인계 문구는 기본적으로 복사/붙여넣기용 임시 전달물이다. 진행 중에는 문서화를 늘리지 않고, 최종 완료 승인 시점에 남길 내용만 정리해 문서화한다.
-- 완료 전 창 이동은 커밋 없이 진행할 수 있다. 후속 창 인수인계 문구에는 `git status --short`, `git diff`, 필요 시 `git diff --staged`로 현재 작업트리 변경분을 먼저 확인하라는 문장을 포함한다.
-- 단, 여러 창이 이어서 알아야 하는 최신 상태, pending 작업, 구조 결정, 반복 규칙, 사용자 확인 질문은 다음 창이 이어받을 수 있도록 진행 중에도 관련 `.harness/session/*` 또는 `.harness/project/*` 문서에 최소 내역을 남긴다.
-- 최종 완료 승인 시에는 임시 인수인계 문구 중 실제로 남길 가치가 있는 내용만 문서화하고, 단순 중간 전달 문구는 남기지 않는다.
-- 대화창이 길어져 에이전트 응답이 느려지거나 서로 다른 도메인 판단이 섞이기 시작하면 구현을 더 밀지 말고 `.harness/session/active-context.md` 또는 별도 `thread-handoff-YYYY-MM-DD.md`에 인수인계를 남긴 뒤 새 대화창에서 재개한다.
-- 긴 인수인계는 최신 상태와 다음 작업만 남긴다. 회고, 모든 시도 내역, 장황한 diff 설명은 넣지 않고 필요한 경우 `decision-log.md`나 관련 프로젝트 룰 문서로 승격한다.
-- 여러 창을 거친 업무의 최종 검토는 완료 책임 창에서 모은다. MVP Target의 정식 Issue이고 사용자가 검토/보류/PR까지만 같은 중단점을 지정하지 않았다면, 완료 책임 창은 남은 리스크와 검증을 정리한 뒤 배포 확인까지 이어서 진행하고 사용자에게 완료 확인을 요청한다. 단, parent Issue와 child Issue 모두 사용자의 명시 지시 전에는 최종 Done/Closed로 닫지 않는다.
-- 각 workstream 창은 작업 시작, 종료, handoff 전에 `업무 피로도`를 확인한다. `tired`면 현재 Issue만 마무리하고 새 요청은 새 창으로 넘기는 것을 우선하며, `reset-needed`면 Issue 댓글과 handoff를 남긴 뒤 같은 workstream 새 창에서 재개한다.
+## 요청 단위 풀스택 창 운영
+- PaceLAB은 상시 workstream 대화창 분리 운영을 중단하고, 요청 단위 새 창 운영을 기본으로 한다.
+- 사용자는 새 대화창 첫 메시지에 업무 내용만 적는다. 에이전트가 요청을 분류해 `.harness/session/workstreams/README.md`와 필요한 workstream 파일의 "먼저 읽을 문서"만 골라 읽는다.
+- workstream 파일은 창 역할 분리 기준이 아니라 읽을거리 라우팅 인덱스다. 한 요청 안에서 기획, 디자인, 웹 개발, HealthKit/iOS, Supabase, AI 코칭, 하네스 운영이 함께 필요하면 현재 창이 풀스택 담당자로 전체를 관리한다.
+- 모든 요청 창은 시작 시 기본 제품 표면을 함께 확인한다. 웹 프론트 래퍼(`src/**`, GitHub Pages, iOS WebView 화면), iOS 네이티브 래퍼(`/Users/smart-tn-083/practice/RunningCoach`), Supabase 백엔드(`supabase/**`, Auth/Postgres/RLS/Edge Function), OpenAI 코칭/secret 경계가 기본 표면이다.
+- 특정 표면만 언급된 요청이라도 사용자 흐름이 다른 표면과 연결되면 같은 목표 안에서 데이터 계약, 브리지, 저장/동기화, 표시, Edge Function, 배포/캐시 영향까지 현재 요청 창이 검토한다.
+- 모든 업무 요청의 기본 완료 책임 창은 현재 요청을 받은 새 창이다. 다른 상시 workstream 창으로 완료 책임을 이관하지 않는다.
+- 에이전트는 요청이 정식 Issue 대상인지 판단하고, 필요하면 직접 GitHub Issue를 생성한다. 사용자가 Issue 번호를 먼저 만들 필요는 없다.
+- 사용자 프롬프트에 Issue URL 또는 Issue 번호가 있으면 구현이나 workstream 라우팅 전에 해당 Issue 본문, labels, Project fields를 먼저 조회한다. 조회한 `Workstream`, `Completion Owner`, `Target`, `Verification`을 기준으로 읽을거리와 작업 범위를 정한다.
+- 사용자가 Issue 없이 업무 내용만 적으면 에이전트가 요청을 한글 우선 제목, 문제/목표, 범위, 제외 범위, 완료 조건, 검증 후보, Project fields, label 후보로 구체화한다. 같은 목표의 기존 Issue가 있는지 검색한 뒤 새 Issue 생성 또는 기존 Issue 재사용을 결정한다.
+- 정식 Issue 작업은 계속 Issue 전용 git worktree와 `issue-<번호>/<짧은-설명>` branch에서 수행한다. 기준 작업트리 `main`은 merge/deploy/완료 정리 기준으로 유지한다.
+- 새 Issue worktree를 만들거나 들어간 뒤에는 `. "$HOME/.nvm/nvm.sh" && nvm use`로 `.nvmrc` Node 버전을 맞추고, `node_modules`가 없으면 `npm ci`를 실행해 TypeScript/build/test 로컬 바이너리 누락을 막는다.
+- 사용자가 동시에 여러 업무를 요청하면 업무마다 Issue, worktree, branch를 분리한다. 같은 창이 여러 요청을 순차 관리할 수는 있지만, 파일 변경, 검증, 커밋, PR은 Issue별 worktree 격리 원칙을 유지한다.
+- 같은 제품/버그 목표의 완료 조건 안에 여러 기술 영역이 포함되면 하나의 Issue/worktree/PR로 묶을 수 있다. 분리 기준은 workstream 종류가 아니라 독립적인 목표, 동시 진행 필요성, 검증/배포 단위다.
+- 사용자가 `검토만`, `조사만`, `PR까지만`, `커밋하지 마`, `배포하지 마`, `여기서 멈춰`처럼 중단점을 지정하면 그 지시를 우선한다.
+- 대화창이 길어져 에이전트 응답이 느려지거나 서로 다른 Issue/branch/완료 조건이 섞이기 시작하면 구현을 더 밀지 말고 Issue 댓글 또는 `.harness/session/active-context.md`에 최소 인수인계를 남긴 뒤 새 요청 창에서 재개한다.
+- 인수인계는 긴 작업 중단, 미커밋 변경 보존, 외부 수동 조치 대기, 컨텍스트 리셋 때만 사용한다. 긴 인수인계는 최신 상태와 다음 작업만 남기고, 회고나 모든 시도 내역은 남기지 않는다.
+- 각 요청 창은 작업 시작, 종료, handoff 전에 `업무 피로도`를 확인한다. `tired`면 현재 Issue만 마무리하고 새 요청은 새 창으로 넘기며, `reset-needed`면 넓은 새 작업을 시작하지 않고 Issue 댓글과 handoff를 남긴다.
 - build, test, `harness:check`, commit, push, PR 생성은 `CLAUDE.md`와 이 프로젝트의 MVP 기본 완료 흐름을 함께 따른다. 단순 확인/검토/조사 요청이거나 사용자가 명시한 중단점이 있으면 그 지점에서 멈춘다.
 
 ## 완료 전 재발 방지 기록 게이트
@@ -55,7 +48,7 @@
 
 - 같은 요청을 해결하기 위해 여러 번 수정, PR, merge, deploy를 반복했다.
 - 사용자가 “왜 또 발생하나”, “재발하지 않게”, “다음에는 스스로”처럼 반복 실패를 지적했다.
-- 다중 workstream, parent/child Issue, worktree 이관, 배포 확인처럼 운영 절차 실패가 있었다.
+- 독립 업무 분리, parent/child Issue, worktree 이관, 배포 확인처럼 운영 절차 실패가 있었다.
 - 공유 계약, 데이터 계약, UI 공통 패턴, 검증 기준, 배포 기준이 바뀌었다.
 - 같은 회귀가 다시 생길 가능성이 있어 다음 에이전트가 먼저 떠올려야 한다.
 - 하네스/에이전트 운영 규칙 자체가 부족해 보강했다.
@@ -159,6 +152,8 @@ Issue final comment에는 항상 아래 항목을 포함합니다.
 - 아래 검증 명령은 `CLAUDE.md`의 완료 승인 게이트에 따라 사용자의 최종화 승인 뒤 실행한다.
 - 검증 명령을 실행하기 전에는 프로젝트 루트의 `.nvmrc` 존재를 확인하고, 존재하면 반드시 `nvm use`를 먼저 실행한다. `nvm use` 없이 하네스/빌드/테스트를 돌려 Node 버전 오류가 나면 검증 절차 미준수로 본다.
 - Codex 또는 새 터미널 셸에서 Node 버전이 낮아 npm 스크립트가 실패하면 작업을 포기하지 않는다. 프로젝트 루트에서 `. "$HOME/.nvm/nvm.sh" && nvm use`로 `.nvmrc` 버전을 활성화한 뒤 같은 npm 명령을 재시도한다.
+- Codex hook이 세션 시작 시 `nvm use`를 실행해도 이후 shell 명령에 영구 적용되지 않는다. 에이전트가 npm/tsc/build/test/harness 명령을 실행하는 실제 shell에서 다시 `nvm use`를 적용한다.
+- Issue worktree에서 `node_modules`가 없으면 검증 실패로 해석하지 않고 먼저 `npm ci`로 의존성을 준비한다. `node_modules` 복사나 symlink는 캐시/경로 문제를 만들 수 있으므로 기본값으로 쓰지 않는다.
 - 기본 검증: `npm run build`
 - 단위/컴포넌트 회귀 검증: `npm run test:run`
 - 모바일 E2E smoke 검증: `npm run e2e`

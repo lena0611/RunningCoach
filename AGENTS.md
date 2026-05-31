@@ -25,4 +25,4 @@ Codex나 Copilot 계열 에이전트는 Claude Code의 `SessionStart` hook과 sl
 
 큰 작업이나 낯선 요청은 `npm run harness:context -- "<작업 설명>"` 결과의 Selected Skills를 보고 읽을 문서, 실행할 명령, 기록 위치를 좁힙니다.
 
-프로젝트가 session workstreams README를 만들어 workstream 운영을 선택했다면, 각 요청 시작 시 현재 요청의 workstream과 선행/후행 workstream 필요 여부를 먼저 식별합니다. workstream 운영이 없으면 강제하지 않습니다.
+프로젝트가 session workstreams README를 만들어 요청 라우팅 운영을 선택했다면, 각 요청 시작 시 관련 workstream 파일을 읽을거리 인덱스로 고르고, 독립 목표나 동시 업무의 Issue/worktree 분리 필요 여부를 먼저 식별합니다. PaceLAB에서는 웹 프론트 래퍼, iOS 네이티브 래퍼, Supabase/Auth/Postgres/Edge Function, OpenAI 코칭, GitHub Pages 배포 경계를 같은 요청 창이 함께 관장합니다. 요청 라우팅 운영이 없으면 강제하지 않습니다.
