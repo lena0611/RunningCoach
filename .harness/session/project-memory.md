@@ -28,7 +28,7 @@
 - Issue 없이 업무 내용만 들어오면 에이전트는 요청을 한글 우선 제목, 문제/목표, 범위, 제외 범위, 완료 조건, 검증 후보, Project fields, label 후보로 구체화하고, 기존 Issue 검색 후 생성 또는 재사용을 판단한다.
 - 사용자가 동시에 여러 업무를 요청하면 업무마다 Issue, worktree, branch를 분리한다. 같은 창이 여러 요청을 순차 관리할 수는 있지만, 파일 변경, 검증, 커밋, PR 범위는 Issue별 worktree 격리 원칙을 유지한다.
 - 정식 개발 작업의 단일 출처는 GitHub Issues이고, 전체 상태판은 GitHub Project `PaceLAB Development`로 둔다. `.harness/project/*`는 장기 기준과 결정 문서로 유지한다.
-- `Target=MVP` 정식 Issue 또는 PaceLAB MVP 단계의 완료 책임 창 안에서 해결 가능한 구현/버그/운영 요청은 명시적 중단점이 없으면 검증, commit, push, PR/main 반영, 배포 확인까지 이어서 수행한 뒤 보고하고 사용자 최종 완료 승인을 기다린다. Project `Done` 또는 Issue close는 사용자의 명시 완료 지시 후에만 수행한다.
+- `Target=MVP` 정식 Issue 또는 PaceLAB MVP 단계의 완료 책임 창 안에서 해결 가능한 구현/버그/운영 요청은 먼저 GitHub Issue 생성/재사용과 Issue worktree/branch 분리를 완료한 뒤, 명시적 중단점이 없으면 검증, commit, push, PR/main 반영, 배포 확인까지 이어서 수행하고 보고한 다음 사용자 최종 완료 승인을 기다린다. Project `Done` 또는 Issue close는 사용자의 명시 완료 지시 후에만 수행한다.
 - 사용자 완료 지시를 받은 뒤 Issue를 닫기 전에는 기준 작업트리 `/Users/smart-tn-083/practice/run-ai`의 local `main`을 `origin/main` 최신 상태로 맞춘다. 기준 작업트리에 미커밋 변경이 있으면 임의로 stash/reset하지 않고 상태를 보고한다.
 - 정식 Issue를 `Done`으로 닫기 전에는 완료 책임 창이 재발 방지 기록 게이트를 통과한다. 여러 번의 수정/배포, 반복 회귀, 독립 업무 분리나 인수인계 실패, 공유 계약 변경, 에이전트 운영 실패가 있었다면 `project-memory`, `decision-log`, 관련 `.harness/project/*` 중 적절한 장기 기억을 갱신하고 final Issue comment에 `재발 방지 기록`을 남긴다.
 - 모든 업무 요청은 시작할 때 `완료 책임 창`을 정한다. 기본 완료 책임 창은 현재 요청을 받은 새 창이며, 완료 조건, 최종 리뷰, 검증 후보, 필요한 후속 Issue 분리를 소유한다.
@@ -37,6 +37,7 @@
 - 기존 workstream 라우팅으로 안정적으로 처리하기 어려운 새 도메인이 반복되면 `01-harness-ops`에서 새 라우팅 파일 추가 여부를 검토한다.
 - 새 대화창의 시작 문서와 종료 기록 기준은 `.harness/project/workflow-rules.md`의 `요청 단위 풀스택 창 운영`을 따른다.
 - 일반 작업의 완료 승인 전 자동 검증/커밋 금지 원칙은 하네스 본체 `0.2.51`에 반영되었으므로 `CLAUDE.md`와 `AGENTS.md`를 따른다. PaceLAB MVP 구현/버그/운영 요청은 프로젝트 로컬 예외로 배포 확인까지 완료한 뒤 사용자 완료 승인을 기다린다.
+- 기준 작업트리 `main` 직접 commit/push는 hook에서 차단한다. 사용자가 명시적으로 main 직접 기록/최종화 예외를 승인한 경우에만 `HARNESS_ALLOW_MAIN_COMMIT=1` 또는 `HARNESS_ALLOW_MAIN_PUSH=1`로 우회한다.
 - Node 버전 불일치로 npm 스크립트가 실패하면 중단하지 않고 프로젝트 루트에서 `. "$HOME/.nvm/nvm.sh" && nvm use`로 `.nvmrc` 버전을 활성화한 뒤 재시도한다.
 - Codex hook의 `nvm use`는 hook 자식 프로세스에만 적용된다. 실제 npm/tsc/build/test/harness 명령을 실행하는 shell에서는 다시 `. "$HOME/.nvm/nvm.sh" && nvm use`를 적용한다.
 - Issue worktree는 `node_modules`를 자동으로 가져오지 않는다. 이 프로젝트는 `package-lock.json` 기준 npm 프로젝트이므로 새 worktree에서 `node_modules`가 없으면 `npm ci`로 의존성을 준비한 뒤 TypeScript/build/test를 실행한다.

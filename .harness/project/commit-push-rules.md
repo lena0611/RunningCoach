@@ -6,7 +6,7 @@ commit/push 단계에서 동작하는 git hook, 커밋 템플릿, 최종 검증 
 
 ## MVP 기본 최종화 흐름
 - PaceLAB MVP 단계에서 `Target=MVP`인 정식 Issue 작업은 사용자가 단순 확인, 검토, 조사, 기획 질문만 요청한 경우를 제외하고 완료까지 이어서 진행합니다.
-- 구현/버그/운영 요청을 사용자가 맡긴 경우, 명시적인 보류 지시가 없으면 검증, commit, push, PR 생성 또는 main 반영, 배포 확인까지 진행한 뒤 보고하고 사용자의 최종 완료 승인을 기다립니다.
+- 구현/버그/운영 요청을 사용자가 맡긴 경우, 먼저 GitHub Issue 생성/재사용과 Issue worktree/branch 분리를 완료합니다. 그 뒤 명시적인 보류 지시가 없으면 검증, commit, push, PR 생성 또는 main 반영, 배포 확인까지 진행하고 보고한 다음 사용자의 최종 완료 승인을 기다립니다.
 - 이 기본 완료 흐름에서도 Issue별 git worktree와 feature branch 분리는 유지합니다. 동시에 여러 Issue를 처리할 수 있도록 한 작업트리에 여러 Issue 변경을 섞지 않습니다.
 - 사용자가 `검토만`, `PR까지만`, `커밋하지 마`, `배포하지 마`, `여기서 멈춰`처럼 중단점을 지정하면 그 지시를 우선합니다.
 - git hook은 작업 완료 시점을 결정하지 않고, commit/push 직전에 실행되는 안전장치입니다.
@@ -18,6 +18,7 @@ commit/push 단계에서 동작하는 git hook, 커밋 템플릿, 최종 검증 
 - feature branch와 worktree를 만들기 전에는 현재 작업트리에 다른 Issue 변경이 섞여 있는지 `git status --short`와 `git diff`로 확인합니다.
 - 동시에 여러 요청이 진행되면 각 Issue별 worktree와 branch를 분리합니다.
 - 기준 작업트리 `/Users/smart-tn-083/practice/run-ai`는 `main` 확인, Issue/Project 정리, merge/deploy 기준으로 두고, 구현/문서 수정은 `/Users/smart-tn-083/practice/run-ai.worktrees/issue-<번호>-<짧은-설명>`에서 수행합니다.
+- `.githooks/pre-commit`과 `.githooks/pre-push`는 `main` 직접 commit/push를 차단합니다. 사용자 명시 승인 예외만 `HARNESS_ALLOW_MAIN_COMMIT=1` 또는 `HARNESS_ALLOW_MAIN_PUSH=1`로 우회합니다.
 - feature branch 변경은 PR을 통해 `main`으로 머지합니다.
 - `main`에 머지된 뒤에만 GitHub Pages 배포 또는 운영 배포의 기준 변경으로 봅니다.
 - 하네스/운영 문서처럼 짧고 독립적인 변경도 원칙적으로 Issue worktree/branch를 권장합니다. 사용자가 명시적으로 `main` 직접 커밋을 승인한 경우에만 직접 커밋할 수 있습니다.

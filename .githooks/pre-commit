@@ -14,6 +14,9 @@ fi
 # 기존 프로젝트 pre-commit hook이 있으면 먼저 실행
 node .harness/bin/run-previous-hook.mjs pre-commit "$@"
 
+# 정식 작업은 Issue worktree/branch에서만 커밋한다. main 직접 커밋은 명시 예외만 허용한다.
+node .harness/bin/guard-main-worktree.mjs pre-commit
+
 # 시드 하네스 가드: .harness-seed-mode가 있으면 stack:apply 산출물의 staging을 차단
 # (일반 사용자는 .harness-seed-mode를 삭제하면 자동으로 비활성화됨)
 node .harness/bin/check-seed-mode.mjs
