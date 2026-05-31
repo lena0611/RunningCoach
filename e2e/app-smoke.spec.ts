@@ -17,7 +17,7 @@ test('bottom navigation loads lazy feature routes', async ({ page }) => {
 
   await page.getByRole('button', { name: '기억', exact: true }).click()
   await expect(page).toHaveURL(/#\/memory/)
-  await expect(page.getByText('코칭 메모리')).toBeVisible()
+  await expect(page.getByText('러너 프로필')).toBeVisible()
   await expect(page.locator('body')).not.toContainText('Vue 화면이 렌더링되지 않았습니다')
 
   await page.getByRole('button', { name: '요약', exact: true }).click()
