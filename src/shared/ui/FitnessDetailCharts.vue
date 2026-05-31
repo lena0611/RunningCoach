@@ -243,45 +243,55 @@ function writeCachedLocationName(key: string, value: string) {
       </div>
     </div>
 
-    <div v-if="routeMap" class="fitness-route-card">
-      <svg class="fitness-route-map" :viewBox="routeMap.viewBox" role="img" aria-label="러닝 경로">
-        <image
-          v-for="tile in routeMap.tiles"
-          :key="`${tile.x}-${tile.y}`"
-          class="fitness-route-tile"
-          :href="tile.href"
-          :x="tile.x * 256"
-          :y="tile.y * 256"
-          width="256"
-          height="256"
-          preserveAspectRatio="none"
-        />
-        <rect class="fitness-route-dim" x="-100000" y="-100000" width="200000" height="200000" />
-        <polyline class="fitness-route-line-casing" :points="routeMap.path" />
-        <polyline class="fitness-route-line" :points="routeMap.path" />
-        <circle v-if="startPointPosition" class="fitness-route-start" :cx="startPointPosition.x" :cy="startPointPosition.y" r="9" />
-        <circle v-if="endPointPosition" class="fitness-route-end" :cx="endPointPosition.x" :cy="endPointPosition.y" r="9" />
-        <circle v-if="selectedRoutePosition" class="fitness-route-selected-ring" :cx="selectedRoutePosition.x" :cy="selectedRoutePosition.y" r="16" />
-        <circle v-if="selectedRoutePosition" class="fitness-route-selected" :cx="selectedRoutePosition.x" :cy="selectedRoutePosition.y" r="8" />
-      </svg>
-      <a
-        class="fitness-route-attribution"
-        href="https://www.openstreetmap.org/copyright"
-        target="_blank"
-        rel="noreferrer"
-      >
-        © OpenStreetMap
-      </a>
-      <div class="fitness-route-overlay">
-        <strong>{{ formatDuration(activeSample?.offsetSec ?? run.durationSec) }}</strong>
-        <strong><UnitValue :amount="selectedDistanceKm" unit="km" /></strong>
+    <div v-if="routeMap" class="fitness-route-sticky-group">
+      <div class="fitness-route-card">
+        <svg class="fitness-route-map" :viewBox="routeMap.viewBox" role="img" aria-label="러닝 경로">
+          <image
+            v-for="tile in routeMap.tiles"
+            :key="`${tile.x}-${tile.y}`"
+            class="fitness-route-tile"
+            :href="tile.href"
+            :x="tile.x * 256"
+            :y="tile.y * 256"
+            width="256"
+            height="256"
+            preserveAspectRatio="none"
+          />
+          <rect class="fitness-route-dim" x="-100000" y="-100000" width="200000" height="200000" />
+          <polyline class="fitness-route-line-casing" :points="routeMap.path" />
+          <polyline class="fitness-route-line" :points="routeMap.path" />
+          <circle v-if="startPointPosition" class="fitness-route-start" :cx="startPointPosition.x" :cy="startPointPosition.y" r="9" />
+          <circle v-if="endPointPosition" class="fitness-route-end" :cx="endPointPosition.x" :cy="endPointPosition.y" r="9" />
+          <circle v-if="selectedRoutePosition" class="fitness-route-selected-ring" :cx="selectedRoutePosition.x" :cy="selectedRoutePosition.y" r="16" />
+          <circle v-if="selectedRoutePosition" class="fitness-route-selected" :cx="selectedRoutePosition.x" :cy="selectedRoutePosition.y" r="8" />
+        </svg>
+        <a
+          class="fitness-route-attribution"
+          href="https://www.openstreetmap.org/copyright"
+          target="_blank"
+          rel="noreferrer"
+        >
+          © OpenStreetMap
+        </a>
+        <div class="fitness-route-overlay">
+          <strong>{{ formatDuration(activeSample?.offsetSec ?? run.durationSec) }}</strong>
+          <strong><UnitValue :amount="selectedDistanceKm" unit="km" /></strong>
+        </div>
+        <div v-if="routeLocationName" class="fitness-route-location">
+          {{ routeLocationName }}
+        </div>
       </div>
-      <div v-if="routeLocationName" class="fitness-route-location">
-        {{ routeLocationName }}
+
+      <div v-if="activeSample" class="fitness-selected-metrics">
+        <span>선택 구간</span>
+        <strong>{{ formatDuration(activeSample.offsetSec) }}</strong>
+        <em>{{ formatPace(activeSample.paceSec) }}/km</em>
+        <em>{{ formatInteger(activeSample.heartRate) }}BPM</em>
+        <em>{{ formatInteger(activeSample.cadence) }}SPM</em>
       </div>
     </div>
 
-    <div v-if="activeSample" class="fitness-selected-metrics">
+    <div v-else-if="activeSample" class="fitness-selected-metrics">
       <span>선택 구간</span>
       <strong>{{ formatDuration(activeSample.offsetSec) }}</strong>
       <em>{{ formatPace(activeSample.paceSec) }}/km</em>
