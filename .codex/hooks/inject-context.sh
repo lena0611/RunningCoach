@@ -11,6 +11,7 @@ needs_github_issue_guide="false"
 needs_multi_workstream_guide="false"
 needs_context_load_guide="false"
 needs_learning_gate_guide="false"
+needs_handoff_command="false"
 
 if [ -f "$profile" ]; then
   active_stack="$(node -e "const fs=require('fs'); const p=JSON.parse(fs.readFileSync(process.argv[1],'utf8')); console.log(p.activeStack || 'none')" "$profile" 2>/dev/null || printf 'unknown')"
@@ -33,6 +34,10 @@ if [ -d "$workstream_dir" ] && [ -n "$hook_input" ]; then
 fi
 
 if [ -n "$hook_input" ]; then
+  if printf '%s' "$hook_input" | grep -Eiq '^[[:space:]]*/(handoff|인수인계)([[:space:]]|$)'; then
+    needs_handoff_command="true"
+  fi
+
   if printf '%s' "$hook_input" | grep -Eiq '워크스트림.*(새로고침|리프레시|refresh|재확인|기준|동기화)|workstream.*(refresh|sync|bootstrap|reload)|운영 기준.*(새로고침|재확인|동기화)|기준.*(새로고침|재확인|동기화)'; then
     needs_workstream_refresh="true"
   fi
@@ -55,6 +60,10 @@ if [ -n "$hook_input" ]; then
 fi
 
 printf 'Harness context: read CLAUDE.md first; check .harness/policy/ai-standard-guiding-policy.md before work; source of truth is .harness/; activeStack=%s; agent work must follow standards layers. Latest PaceLAB operating rules are always active: read .harness/session/workstreams/README.md, .harness/project/github-issue-management-guide.md, .harness/project/github-tracking-rules.md, and .harness/project/workflow-rules.md before broad work. Enforce Issue/Project/worktree/comment rules, parent/child Issue rules for multi-workstream work, the Project field `업무 피로도` self-diagnosis, and the completion learning gate before closing formal Issues. Existing windows cannot receive background messages; this UserPromptSubmit hook is the next-turn injection path for already-open windows. PaceLAB MVP delivery rule: unless the user asks only for simple confirmation, review, investigation, planning, or explicitly says to stop before commit/push/merge/deploy, treat an accepted implementation/bug/chore request that can be completed by the completion-owner window as authorization to proceed through the appropriate Issue worktree, verification, commit, push, PR, main merge, and deploy check, then ask the user for completion confirmation. Do not set GitHub Project Done or close the Issue until the user explicitly says completion is approved. Before Issue Done/close, update the baseline worktree /Users/smart-tn-083/practice/run-ai local main with git switch main, git pull --ff-only, and git status -sb; if that worktree has uncommitted changes, report instead of stashing or resetting. Also decide whether the work created recurrence-prevention learning; update project-memory, decision-log, or project rules when needed, and always include `재발 방지 기록` in the final Issue comment. If the work is not an MVP-targeted formal Issue, or a safety/workstream blocker appears, stop at the narrow blocker and explain. Workstream guard: for every user request, identify the active workstream from the current window context or the workstream file already read in this window. Also identify the completion-owner window for the request. If unclear, ask the user to identify the workstream or completion owner before broad work. Respect the current workstream file under .harness/session/workstreams/. Decide whether this window has a valid role in the request and whether another workstream must make a prerequisite decision or implementation first. If prerequisite work belongs elsewhere or the request crosses workstream boundaries, do not broaden implementation in this window; name the target workstream, explain why it must go first, and provide a handoff prompt for the user to paste into that window.\n' "$active_stack"
+
+if [ "$needs_handoff_command" = "true" ]; then
+  printf 'PaceLAB handoff command requested: treat the user prompt as the local `/인수인계` command even if the Codex slash menu does not expose custom plugin commands. Do not edit files. Produce one copyable Korean ```text``` code block for opening or refreshing another Codex window. Include: current workstream id or `<workstream 미확인>`, previous window, completion owner, project path `/Users/smart-tn-083/practice/run-ai`, first files to check (`git status -sb`, workstreams README, matching workstream file, workflow-rules, github-issue-management-guide), current repo state, active Issue/PR/branch/worktree if known, important operating rules, and the next request. If the current worktree has changes, tell the next window to check `git status --short`, `git diff`, and if needed `git diff --staged` before continuing.\n'
+fi
 
 if [ -n "$detected_workstream" ]; then
   printf 'Detected workstream bootstrap: user prompt mentions %s. Read .harness/session/workstreams/README.md, especially the `완료 책임 창` section, then read .harness/session/workstreams/%s.md and treat this window as that workstream unless the user corrects it.\n' "$detected_workstream" "$detected_workstream"
