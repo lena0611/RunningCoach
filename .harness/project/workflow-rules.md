@@ -30,6 +30,7 @@
 - 특정 표면만 언급된 요청이라도 사용자 흐름이 다른 표면과 연결되면 같은 목표 안에서 데이터 계약, 브리지, 저장/동기화, 표시, Edge Function, 배포/캐시 영향까지 현재 요청 창이 검토한다.
 - 모든 업무 요청의 기본 완료 책임 창은 현재 요청을 받은 새 창이다. 다른 상시 workstream 창으로 완료 책임을 이관하지 않는다.
 - 에이전트는 요청이 정식 Issue 대상인지 판단하고, 필요하면 직접 GitHub Issue를 생성한다. 사용자가 Issue 번호를 먼저 만들 필요는 없다.
+- 정식 개발/문서/운영 작업의 Issue 생성/재사용과 Issue worktree/branch 분리는 MVP 배포 자동 완료 흐름보다 먼저 적용되는 선행 게이트다.
 - 사용자 프롬프트에 Issue URL 또는 Issue 번호가 있으면 구현이나 workstream 라우팅 전에 해당 Issue 본문, labels, Project fields를 먼저 조회한다. 조회한 `Workstream`, `Completion Owner`, `Target`, `Verification`을 기준으로 읽을거리와 작업 범위를 정한다.
 - 사용자가 Issue 없이 업무 내용만 적으면 에이전트가 요청을 한글 우선 제목, 문제/목표, 범위, 제외 범위, 완료 조건, 검증 후보, Project fields, label 후보로 구체화한다. 같은 목표의 기존 Issue가 있는지 검색한 뒤 새 Issue 생성 또는 기존 Issue 재사용을 결정한다.
 - 정식 Issue 작업은 계속 Issue 전용 git worktree와 `issue-<번호>/<짧은-설명>` branch에서 수행한다. 기준 작업트리 `main`은 merge/deploy/완료 정리 기준으로 유지한다.
@@ -41,6 +42,7 @@
 - 인수인계는 긴 작업 중단, 미커밋 변경 보존, 외부 수동 조치 대기, 컨텍스트 리셋 때만 사용한다. 긴 인수인계는 최신 상태와 다음 작업만 남기고, 회고나 모든 시도 내역은 남기지 않는다.
 - 각 요청 창은 작업 시작, 종료, handoff 전에 `업무 피로도`를 확인한다. `tired`면 현재 Issue만 마무리하고 새 요청은 새 창으로 넘기며, `reset-needed`면 넓은 새 작업을 시작하지 않고 Issue 댓글과 handoff를 남긴다.
 - build, test, `harness:check`, commit, push, PR 생성은 `CLAUDE.md`와 이 프로젝트의 MVP 기본 완료 흐름을 함께 따른다. 단순 확인/검토/조사 요청이거나 사용자가 명시한 중단점이 있으면 그 지점에서 멈춘다.
+- 기준 작업트리 `main` 직접 commit/push는 hook에서 차단한다. 사용자 명시 승인 예외만 `HARNESS_ALLOW_MAIN_COMMIT=1` 또는 `HARNESS_ALLOW_MAIN_PUSH=1`로 우회한다.
 
 ## 완료 전 재발 방지 기록 게이트
 

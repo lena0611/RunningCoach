@@ -18,7 +18,7 @@
 - iOS 네이티브 로컬 프로젝트는 `/Users/smart-tn-083/practice/RunningCoach`에 있다.
 - HealthKit 자동 동기화, 세션별 HealthKit 재갱신, FIT 보조 import를 유지한다.
 - AI 코칭은 세션 상세에서 열며, 별도 Coach 하단 탭은 제거된 상태다.
-- 일반 작업의 완료 승인 전 자동 검증/커밋 금지 원칙은 하네스 본체 `0.2.51`에 반영되어 있다. 다만 PaceLAB MVP 단계의 구현/버그/운영 요청은 명시적 중단 지시가 없으면 배포 확인까지 수행한 뒤 보고하고 사용자의 최종 완료 승인을 기다린다. `CLAUDE.md`, `AGENTS.md`, `.claude/hooks/enforce-check.sh`, `.harness/project/commit-push-rules.md` 기준을 함께 따른다.
+- 일반 작업의 완료 승인 전 자동 검증/커밋 금지 원칙은 하네스 본체 `0.2.51`에 반영되어 있다. 다만 PaceLAB MVP 단계의 구현/버그/운영 요청은 먼저 GitHub Issue 생성/재사용과 Issue worktree/branch 분리를 완료한 뒤, 명시적 중단 지시가 없으면 배포 확인까지 수행하고 보고한 다음 사용자의 최종 완료 승인을 기다린다. `CLAUDE.md`, `AGENTS.md`, `.claude/hooks/enforce-check.sh`, `.harness/project/commit-push-rules.md` 기준을 함께 따른다.
 
 ## 요청 단위 창 운영 기준
 - 이 프로젝트는 상시 workstream별 대화창 분리 운영을 중단하고, 요청 단위 새 창 운영을 기본으로 한다.
@@ -27,6 +27,7 @@
 - 모든 요청 창은 시작 시 PaceLAB 기본 제품 표면을 함께 확인한다. 웹 프론트 래퍼는 이 저장소의 `src/**`와 GitHub Pages/iOS WebView 화면, iOS 네이티브 래퍼는 `/Users/smart-tn-083/practice/RunningCoach`, Supabase 백엔드는 `supabase/**`와 Auth/Postgres/RLS/Edge Function이다.
 - 요청이 특정 표면만 언급해도 사용자 흐름상 저장, 동기화, 표시, 브리지, Edge Function, 배포/캐시가 연결되면 현재 요청 창이 전체 계약과 검증 후보를 소유한다.
 - 모든 대화창은 GitHub Issue/Project, Issue별 worktree/branch, 실제 Markdown 댓글, 필요한 경우의 parent/child Issue, `업무 피로도` 자가진단 기준을 현재 운영 기준으로 적용한다.
+- 기준 작업트리 `main` 직접 commit/push는 hook에서 차단한다. 사용자 승인 예외만 `HARNESS_ALLOW_MAIN_COMMIT=1` 또는 `HARNESS_ALLOW_MAIN_PUSH=1`로 우회한다.
 - 사용자가 동시에 여러 업무를 요청하면 업무마다 Issue, worktree, branch, PR을 분리한다. 같은 창이 순차 관리할 수는 있지만 파일 변경과 커밋 범위는 섞지 않는다.
 - 작업 유형별 시작 문서와 종료 기록 기준은 `.harness/project/workflow-rules.md`의 `요청 단위 풀스택 창 운영`을 따른다.
 - 긴 대화창을 넘길 때는 이 문서에 최신 인수인계 파일만 가리키고, 상세는 `thread-handoff-YYYY-MM-DD.md`처럼 별도 파일로 둔다.

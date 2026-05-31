@@ -18,7 +18,7 @@ Claude Code에서는 `SessionStart` hook이 `next-session-reminder.md`를 자동
 8. 강제 강도와 예외 허용 범위가 애매하면 `.harness/policy/enforcement-ladder.md`를 보고 사용자에게 묻습니다.
 9. 코드 변경 시 스타일 검증도 구조 검증과 함께 보며, `npm run lint` 또는 `npm run harness:check`를 기준으로 판단합니다.
 10. 새 환경을 준비한 뒤에는 `npm run hooks:install`로 로컬 훅과 커밋 템플릿을 연결합니다.
-11. 에이전트 작업은 hook 설치 여부와 무관하게 기준 계층을 읽습니다. 다만 일반 작업은 사용자 완료 승인 전 `build`, `test`, `harness:check`, commit, push, PR 생성을 실행하지 않고 검증 후보로 보고합니다. PaceLAB MVP 단계에서 구현/버그/운영 요청을 맡은 경우에는 명시적 중단 지시가 없는 한 검증, commit, push, PR/main 반영, 배포 확인까지 수행한 뒤 보고하고 사용자의 최종 완료 승인을 기다립니다.
+11. 에이전트 작업은 hook 설치 여부와 무관하게 기준 계층을 읽습니다. 다만 일반 작업은 사용자 완료 승인 전 `build`, `test`, `harness:check`, commit, push, PR 생성을 실행하지 않고 검증 후보로 보고합니다. PaceLAB MVP 단계에서 구현/버그/운영 요청을 맡은 경우에는 먼저 GitHub Issue 생성/재사용과 Issue worktree/branch 분리를 완료한 뒤, 명시적 중단 지시가 없는 한 검증, commit, push, PR/main 반영, 배포 확인까지 수행하고 보고한 다음 사용자의 최종 완료 승인을 기다립니다.
 12. 사용자가 `최종 검증만` 요청하면 `npm run harness:check`를 직접 실행합니다. 사용자가 `커밋/푸시`를 요청했고 hook이 설치되어 있으면 pre-commit/pre-push 검증을 신뢰하고 선행 `harness:check`를 중복 실행하지 않습니다.
 13. 스타일이 반복 패턴으로 굳어지기 시작하면 `.harness/style/style-evolution.md` 기준으로 규칙 승격 후보를 확인합니다.
 14. 코드 변경 후에는 도메인, 아키텍처, 워크플로우 로컬룰로 승격할 후보가 있는지 확인하고, 확신이 없으면 `.harness/session/developer-input-queue.md`에 질문으로 남깁니다.
@@ -28,9 +28,10 @@ Claude Code에서는 `SessionStart` hook이 `next-session-reminder.md`를 자동
 18. PaceLAB 새 요청 창은 단일 풀스택 담당 창입니다. 요청이 들어오면 웹 프론트 래퍼, iOS 네이티브 래퍼, Supabase/Auth/Postgres/Edge Function, OpenAI 코칭, GitHub Pages 배포 경계 중 어떤 표면이 영향을 받는지 먼저 떠올립니다.
 19. 한 목표 안에서 프론트, 네이티브, Supabase가 함께 필요하면 같은 요청 창이 전체 계약과 검증 후보를 관리합니다. 독립 목표나 동시 업무만 Issue/worktree/branch로 분리합니다.
 20. 프롬프트에 Issue URL 또는 Issue 번호가 있으면 구현이나 라우팅 전에 Issue 본문, labels, Project fields를 먼저 조회합니다.
-21. Issue 없이 업무 내용만 들어오면 에이전트가 한글 우선 제목, 문제/목표, 범위, 제외 범위, 완료 조건, 검증 후보, Project fields, label 후보로 구체화한 뒤 기존 Issue 검색과 생성/재사용을 판단합니다.
+21. Issue 없이 업무 내용만 들어오면 에이전트가 한글 우선 제목, 문제/목표, 범위, 제외 범위, 완료 조건, 검증 후보, Project fields, label 후보로 구체화한 뒤 기존 Issue 검색과 생성/재사용을 판단합니다. 정식 개발/문서/운영 작업이면 이 단계가 MVP 배포 자동 완료 흐름보다 먼저입니다.
 22. Codex 세션 시작 시 `.nvmrc` 기준 Node 버전을 먼저 확인합니다. hook에서 `nvm use`를 실행해도 이후 Codex shell에 영구 적용되지는 않으므로, npm/tsc/build/test/harness 명령 전에는 현재 작업트리에서 `. "$HOME/.nvm/nvm.sh" && nvm use`를 실행합니다.
 23. Issue worktree는 git ignored 파일인 `node_modules`를 자동으로 가져오지 않습니다. 새 worktree를 만들거나 들어간 뒤 `node_modules`가 없으면 TypeScript/build/test 전에 `npm ci`로 의존성을 준비합니다.
+24. 기준 작업트리 `main` 직접 commit/push는 git hook에서 차단합니다. 사용자가 명시적으로 main 직접 기록/최종화 예외를 승인한 경우에만 `HARNESS_ALLOW_MAIN_COMMIT=1` 또는 `HARNESS_ALLOW_MAIN_PUSH=1`로 우회합니다.
 
 ## PaceLAB 기본 제품 표면
 - 웹 프론트 래퍼: 이 저장소의 Vue 3 + Vite + TypeScript 앱, `src/**`, GitHub Pages 정적 배포, iOS WebView에서 실행되는 화면과 상태 관리.

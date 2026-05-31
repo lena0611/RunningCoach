@@ -419,3 +419,9 @@
 - 결정: 이미 main 반영과 배포가 끝난 작업은 사후에 worktree를 분리할 수 없으므로 GitHub Issue #59를 생성해 범위, 검증, 배포 확인, 운영 예외를 기록하고 Project field를 `Status=Deployed`, `Target=MVP`, `업무 피로도=reset-needed`로 보정한다. 사용자의 명시 완료 지시 전까지 Issue는 닫지 않는다.
 - 재발 방지 기준: MVP 자동 완료 흐름은 Issue별 worktree/branch 원칙을 대체하지 않는다. 이후 구현/버그/운영 요청은 먼저 기존 Issue 검색 또는 신규 Issue 생성을 수행하고, 해당 Issue worktree/branch에서만 변경한 뒤 배포 확인까지 이어간다.
 - 선택 이유: 완료된 main 배포 이력을 되돌리거나 가짜 worktree 이력을 만드는 것은 실제 추적성을 더 흐린다. 실제 누락을 Issue와 decision log에 명시하고 다음 요청 시작 게이트를 지키는 것이 가장 투명하다.
+
+## 2026-05-31 - main 직접 commit/push hook 차단
+- 문제: Issue/worktree 원칙은 문서에 있었지만, 가장 먼저 보이는 MVP 배포 자동 완료 문구가 더 강하게 작동했고 git hook에는 `main` 직접 commit/push를 막는 실행 차단이 없었다. 따라서 에이전트가 기준 작업트리에서 바로 작업해도 시스템이 멈추지 않았다.
+- 결정: MVP 배포 자동 완료는 Issue 생성/재사용과 Issue worktree/branch 분리 이후에만 시작되는 후속 단계로 재정의한다. `.githooks/pre-commit`과 `.githooks/pre-push`에서 기준 작업트리 `main` 직접 commit/push를 차단하고, 사용자 명시 승인 예외만 `HARNESS_ALLOW_MAIN_COMMIT=1` 또는 `HARNESS_ALLOW_MAIN_PUSH=1`로 1회 우회한다.
+- 선택 이유: 문서 안내만으로는 긴 대화나 예외 규칙 충돌에서 누락될 수 있다. 실행 단계 hook이 main 직접 기록을 막아야 Issue/worktree 선행 게이트가 실제 운영 기준이 된다.
+- 적용 범위: `CLAUDE.md`, `AGENTS.md`, `.codex/hooks/inject-context.sh`, `.githooks/pre-commit`, `.githooks/pre-push`, `.harness/bin/guard-main-worktree.mjs`, `.harness/session/session-start-alert.md`, `.harness/session/active-context.md`, `.harness/session/next-session-reminder.md`, `.harness/session/project-memory.md`, `.harness/project/workflow-rules.md`, `.harness/project/commit-push-rules.md`.
