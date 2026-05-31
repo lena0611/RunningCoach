@@ -413,3 +413,9 @@
 - 선택 이유: MVP 속도를 위해 배포 가능한 변경은 실제 앱까지 반영되어야 한다. 동시에 최종 완료 판단은 사용자 확인에 남겨 배포 성공과 제품 확인을 분리한다.
 - hook 영향: `.githooks/pre-commit`과 `.githooks/pre-push`는 commit/push가 실제 실행될 때 검증을 수행하는 안전장치로 그대로 둔다. 이번 변경은 hook 구현이 아니라 에이전트가 MVP 작업에서 commit/push/배포 단계까지 진행해야 하는지에 대한 프로젝트 로컬 해석 변경이므로 hook 스크립트 수정은 필요하지 않다.
 - 적용 범위: `CLAUDE.md`, `AGENTS.md`, `.harness/session/session-start-alert.md`, `.harness/session/next-session-reminder.md`, `.harness/session/session-boot.md`, `.harness/session/active-context.md`, `.harness/session/project-memory.md`, `.harness/project/commit-push-rules.md`.
+
+## 2026-05-31 - Issue 없이 처리한 MVP 기능 작업 사후 보정
+- 문제: 세션 상세 시작/종료 시간과 위치 구 단위 표시 작업을 기준 작업트리 `main`에서 바로 처리하고 배포한 뒤에야 GitHub Issue/worktree 분리 누락이 확인됐다.
+- 결정: 이미 main 반영과 배포가 끝난 작업은 사후에 worktree를 분리할 수 없으므로 GitHub Issue #59를 생성해 범위, 검증, 배포 확인, 운영 예외를 기록하고 Project field를 `Status=Deployed`, `Target=MVP`, `업무 피로도=reset-needed`로 보정한다. 사용자의 명시 완료 지시 전까지 Issue는 닫지 않는다.
+- 재발 방지 기준: MVP 자동 완료 흐름은 Issue별 worktree/branch 원칙을 대체하지 않는다. 이후 구현/버그/운영 요청은 먼저 기존 Issue 검색 또는 신규 Issue 생성을 수행하고, 해당 Issue worktree/branch에서만 변경한 뒤 배포 확인까지 이어간다.
+- 선택 이유: 완료된 main 배포 이력을 되돌리거나 가짜 worktree 이력을 만드는 것은 실제 추적성을 더 흐린다. 실제 누락을 Issue와 decision log에 명시하고 다음 요청 시작 게이트를 지키는 것이 가장 투명하다.
