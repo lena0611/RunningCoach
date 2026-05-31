@@ -182,6 +182,8 @@ Issue final comment에는 항상 아래 항목을 포함합니다.
 - 반복 UI 버그가 있었던 `BottomSheetSelect`, 날짜 표시, 페이스/시간 표시, Run Log action, stack header는 컴포넌트 테스트 대상이다.
 - stack header와 sticky 요소를 함께 수정하면 모바일 viewport에서 실제 좌표를 계측한다. 최소 `headerBottom`, `scrollContainerTop`, `stickyTop`, `stickyTop - headerBottom`을 기록하고, 헤더와 맞물려야 하는 화면은 차이가 0px인지 확인한다. `top: 0`, 고정 헤더 높이, 음수 offset 같은 추정값만으로 완료하지 않는다.
 - stack 화면의 page-specific padding override는 공통 `.memory-stack-content` 선언과 CSS 순서/선택자 특이성을 같이 검증한다. sticky 간격 문제는 `top`이 아니라 부모 padding이 다시 적용된 회귀일 수 있다.
+- sticky 지도와 상태/정보바를 함께 고정하면 지도 bottom과 정보바 top의 실제 차이를 계측한다. 둘이 붙어야 하는 UI는 `barTop - cardBottom = 0px`, sticky group gap `0px`, group `overflow: hidden`을 확인해 뒤 스크롤 콘텐츠가 틈으로 보이지 않게 한다.
+- drawer 또는 stack의 sticky header를 수정하면 scroll container top과 header top의 차이, panel padding, header background를 함께 계측한다. header 아래로 폼 label/input이 비치는 구조면 회귀로 본다.
 - 코칭/채팅 입력 UI는 한 줄 기본, 최대 3줄 자동 확장, 입력 지우기 버튼, 원형 아이콘 전송 버튼을 기본 패턴으로 검토한다. 텍스트 전송 버튼이나 2줄 고정 textarea로 돌아가면 모바일 공간을 낭비하는 회귀로 본다.
 - 스플릿/랩 목록처럼 모바일 폭이 좁은 표는 모든 주요 컬럼이 한 화면에서 최소한 일부 보이는지 확인한다. 컬럼 폭, gap, 숫자 폰트가 커져 케이던스/심박 같은 후행 컬럼이 사라지면 회귀로 본다.
 - 라우팅/접근 제어/모바일 셸이 바뀌면 Playwright E2E smoke를 갱신한다.
