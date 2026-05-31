@@ -8,6 +8,7 @@ import type { RunLog } from '@/entities/run/model'
 import {
   registerHealthKitBridge,
   requestHealthKitRuns,
+  requestHealthKitRunsInRange,
   requestHealthKitRunUpdate,
   toExtractedRunData,
   unregisterHealthKitBridge,
@@ -23,6 +24,7 @@ const minSyncIntervalMs = 30_000
 const syncToastDelayMs = 900
 let listenersAttached = false
 type SyncFeedbackMode = 'changes-only' | 'toast'
+type HistoricalMigrationRange = { startDate: string; endDate: string }
 
 export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
   state: () => ({
@@ -34,7 +36,8 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
     lastRequestedAt: 0,
     lastCompletedAt: 0,
     lastChangedAt: 0,
-    syncFeedbackMode: 'toast' as SyncFeedbackMode
+    syncFeedbackMode: 'toast' as SyncFeedbackMode,
+    historicalMigrationRange: null as HistoricalMigrationRange | null
   }),
   actions: {
     init() {
@@ -99,6 +102,30 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         this.syncFeedbackMode = 'toast'
       }
     },
+    async requestHistoricalMigration(startDate: string, endDate: string) {
+      this.init()
+      const authStore = useAuthStore()
+      if (!authStore.isAuthenticated || !hasNativeBridge()) return
+      if (this.syncing) return
+
+      const range = normalizeHistoricalMigrationRange(startDate, endDate)
+      this.syncing = true
+      this.error = ''
+      this.status = `HealthKit 과거 기록 마이그레이션 요청 중 · ${formatRange(range)}`
+      this.historicalMigrationRange = range
+      this.lastRequestedAt = Date.now()
+
+      try {
+        await ensureRunStoreLoaded()
+        requestHealthKitRunsInRange(range)
+      } catch (err) {
+        this.syncing = false
+        this.historicalMigrationRange = null
+        this.status = ''
+        this.error = err instanceof Error ? err.message : 'HealthKit 과거 기록 마이그레이션 요청 실패'
+        showSyncToast('error', this.error, 4200)
+      }
+    },
     async requestRunRefresh(run: RunLog) {
       this.init()
       const authStore = useAuthStore()
@@ -130,6 +157,11 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
       }
     },
     async handleRuns(runs: HealthKitRunCandidate[]) {
+      if (this.historicalMigrationRange) {
+        await this.handleHistoricalMigrationRuns(runs, this.historicalMigrationRange)
+        return
+      }
+
       const runStore = useRunStore()
       try {
         await ensureRunStoreLoaded()
@@ -182,8 +214,44 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         this.syncFeedbackMode = 'toast'
       }
     },
+    async handleHistoricalMigrationRuns(runs: HealthKitRunCandidate[], range: HistoricalMigrationRange) {
+      const runStore = useRunStore()
+      try {
+        await ensureRunStoreLoaded()
+
+        const memoryStore = useMemoryStore()
+        const rangeRuns = runs
+          .filter((candidate) => isWithinRange(candidate, range))
+          .sort((a, b) => a.date.localeCompare(b.date) || a.startAt.localeCompare(b.startAt))
+        const repaired = await repairExistingHealthKitRuns(rangeRuns, memoryStore.memory.weeklyPattern)
+        const newRuns = rangeRuns.filter((candidate) => !isAlreadySaved(candidate))
+
+        const inserted = await runStore.addRuns(newRuns.map((candidate) => toExtractedRunData(candidate, memoryStore.memory.weeklyPattern)), 'healthkit')
+        const skipped = Math.max(0, rangeRuns.length - inserted.length - repaired.length)
+        const outsideRange = Math.max(0, runs.length - rangeRuns.length)
+        const parts = [
+          `저장 ${inserted.length}개`,
+          skipped ? `중복 ${skipped}개 제외` : '',
+          repaired.length ? `기존 ${repaired.length}개 보강` : '',
+          outsideRange ? `범위 밖 ${outsideRange}개 무시` : ''
+        ].filter(Boolean)
+        this.status = `HealthKit 과거 기록 마이그레이션 완료 · ${formatRange(range)} · ${parts.join(' · ')}`
+        this.error = ''
+        this.lastCompletedAt = Date.now()
+        showSyncToast('success', this.status, 4200)
+      } catch (err) {
+        this.error = err instanceof Error ? err.message : 'HealthKit 과거 기록 마이그레이션 저장 실패'
+        this.status = ''
+        showSyncToast('error', this.error, 4200)
+      } finally {
+        this.historicalMigrationRange = null
+        this.syncing = false
+        this.syncFeedbackMode = 'toast'
+      }
+    },
     handleError(message: string) {
       this.syncing = false
+      this.historicalMigrationRange = null
       this.status = ''
       this.error = message || 'HealthKit 동기화 실패'
       if (this.syncFeedbackMode === 'toast') showSyncToast('error', this.error, 4200)
@@ -262,6 +330,10 @@ function isAfterLatestSaved(candidate: HealthKitRunCandidate, latestDate: string
   return !latestDate || candidate.date > latestDate
 }
 
+function isWithinRange(candidate: HealthKitRunCandidate, range: HistoricalMigrationRange) {
+  return candidate.date >= range.startDate && candidate.date <= range.endDate
+}
+
 function isAlreadySaved(candidate: HealthKitRunCandidate) {
   const runStore = useRunStore()
   return runStore.runs.some((run) => {
@@ -338,6 +410,29 @@ function isSameWorkoutLike(run: RunLog, candidate: HealthKitRunCandidate) {
 function parseDateOnly(value: string) {
   const [year, month, day] = value.split('-').map(Number)
   return new Date(year, month - 1, day)
+}
+
+function normalizeHistoricalMigrationRange(startDate: string, endDate: string): HistoricalMigrationRange {
+  const start = normalizeDateKey(startDate)
+  const end = normalizeDateKey(endDate)
+  if (!start || !end) throw new Error('마이그레이션 날짜 범위가 올바르지 않습니다.')
+  if (start > end) throw new Error('마이그레이션 시작일이 종료일보다 늦습니다.')
+  return { startDate: start, endDate: end }
+}
+
+function normalizeDateKey(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return ''
+  const parsed = parseDateOnly(value)
+  if (!Number.isFinite(parsed.getTime())) return ''
+  const year = parsed.getFullYear()
+  const month = String(parsed.getMonth() + 1).padStart(2, '0')
+  const day = String(parsed.getDate()).padStart(2, '0')
+  const normalized = `${year}-${month}-${day}`
+  return normalized === value ? normalized : ''
+}
+
+function formatRange(range: HistoricalMigrationRange) {
+  return `${range.startDate}~${range.endDate}`
 }
 
 async function ensureRunStoreLoaded() {
