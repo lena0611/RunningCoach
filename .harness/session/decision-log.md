@@ -179,6 +179,12 @@
 - RLS/마이그레이션 판단: `training_memory`는 이미 `user_id = auth.uid()` 정책이 적용된 JSONB 단일 행 저장소이므로 이번 변경에는 Supabase migration과 RLS 변경이 필요하지 않다.
 - 포기한 대안: 체크인 이력을 별도 `injury_check_ins` 테이블로 분리하는 방식은 장기 분석에는 유리하지만, 현재는 단일 사용자 메모 문맥과 함께 저장/로드되는 흐름이 더 단순하고 기존 repository 계약을 덜 흔든다.
 
+## 2026-05-29 - HealthKit 과거 러닝 마이그레이션은 날짜 범위 브리지와 기존 RunLog 저장 경로 사용
+- 문제: 앱 기동/재활성화 HealthKit 자동 동기화는 최신 저장일 이후 후보만 저장하므로 2025-11~2026-04 같은 과거 구간 마이그레이션에는 맞지 않는다.
+- 결정: 과거 이관은 자동 동기화와 분리해 `requestRunningWorkoutsInRange(startDate, endDate)` 브리지 요청으로 후보를 받고, 웹은 응답 후보 중 요청 범위만 기존 `runStore.addRuns(..., 'healthkit')` 경로로 저장한다.
+- 저장 원칙: Supabase 직접 admin/service role 쓰기보다 앱 인증 세션과 `run_logs` RLS `auth.uid()`/`user_id` 컨텍스트를 우선한다. 중복 방지는 기존 `external_id` unique index와 날짜/거리/시간 유사도 필터를 재사용한다.
+- 후속: iOS native bridge가 아직 `requestRunningWorkoutsInRange`를 처리하지 않으므로 `06-healthkit-ios`에서 `RunContextWebView.swift` 메시지 핸들러와 HealthKit 기간 조회 구현이 필요하다.
+
 ## 2026-05-28 - 부상 체크인은 전역 바텀시트 UI로 처리
 - 문제: 부상 상태 갱신이 Memory 화면 편집에만 묶이면 앱 기동/복귀나 품질 세션 이후에 사용자가 통증 반응을 놓치기 쉽다.
 - 결정: `App.vue`에서 인증 후 메모리/러닝 기록 로드와 HealthKit 동기화 완료 시점을 보고 active/monitoring 부상 항목의 체크인 필요 여부를 판단하고, `InjuryCheckInSheet` 전역 bottom sheet를 띄운다.

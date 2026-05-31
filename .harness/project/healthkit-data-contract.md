@@ -174,7 +174,8 @@ type FastSegment = {
 ## 웹-네이티브 브리지
 - 웹 -> 네이티브 요청:
   - `window.webkit.messageHandlers.runContextHealthKit.postMessage({ type: 'requestRecentRunningWorkouts', days: 14 })`
-  - `window.webkit.messageHandlers.runContextHealthKit.postMessage({ type: 'requestRunningWorkoutByExternalId', externalId })`
+  - `window.webkit.messageHandlers.runContextHealthKit.postMessage({ type: 'requestRunningWorkoutsInRange', startDate, endDate })`
+  - `window.webkit.messageHandlers.runContextHealthKit.postMessage({ type: 'requestRunningWorkoutByExternalId', externalId, date, startAt, endAt, distanceKm, durationSec })`
 - 네이티브 -> 웹 응답:
   - 성공: `window.RunContextHealthKit.receiveRuns(candidates)`
   - 실패: `window.RunContextHealthKit.receiveError(message)`
@@ -200,6 +201,8 @@ type FastSegment = {
 ## 동기화 정책
 - 앱 기동/재활성화 자동 동기화는 현재 저장된 최신 `RunLog.date` 이후의 새 HealthKit 러닝만 가져온다.
 - 자동 동기화는 실제 신규 `RunLog`가 저장되거나 기존 HealthKit 기록이 보강된 경우와 중복/무변경 결과를 구분한다. 중복/무변경 결과는 부상 체크인 같은 후속 사용자 프롬프트를 다시 여는 트리거로 쓰지 않는다.
+- 과거 데이터 마이그레이션은 자동 동기화와 분리한다. 웹은 명시적 날짜 범위로 `requestRunningWorkoutsInRange`를 요청하고, 응답 후보 중 해당 범위만 기존 `run_logs` 저장 경로로 넣는다. 이 흐름은 최신 저장일 이후 필터를 적용하지 않지만, `externalId` 고유 인덱스와 날짜/거리/시간 기반 중복 방지를 그대로 사용한다.
+- 2025-11~2026-04처럼 과거 월 단위 이관을 수행할 때도 앱 인증 세션과 Supabase RLS `auth.uid()`/`user_id` 컨텍스트를 우선 사용한다. service role 또는 인증 없는 직접 DB 쓰기는 기본 경로가 아니다.
 - 이미 저장된 HealthKit 세션은 자동 동기화에서 갱신하지 않는다. 기존 세션 보강은 세션 상세의 새로고침 아이콘을 통해 사용자가 명시적으로 요청한다.
 - 단일 세션 갱신은 `RunLog.externalId`와 `HKWorkout.uuid`를 매칭해 같은 원본 운동만 다시 조회한다.
 - 단일 세션 갱신은 HealthKit 유래 구조화 필드(`distanceKm`, `durationSec`, `avgPaceSec`, `avgHeartRate`, `maxHeartRate`, `cadence`, `activeEnergyKcal`, `elevationGainM`, `elevationLossM`, `laps`, `fastSegments`, `metricSamples`, `routePoints`, `rawAvailability`)를 새 값으로 갱신한다.

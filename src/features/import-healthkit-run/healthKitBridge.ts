@@ -45,6 +45,11 @@ export type HealthKitRunUpdateRequest = {
   durationSec: number | null
 }
 
+export type HealthKitRunRangeRequest = {
+  startDate: string
+  endDate: string
+}
+
 type HealthKitBridgeHandlers = {
   onRuns: (runs: HealthKitRunCandidate[]) => void
   onRunUpdate: (run: HealthKitRunCandidate) => void
@@ -114,6 +119,19 @@ export function requestHealthKitRuns(days = 14) {
   handler.postMessage({
     type: 'requestRecentRunningWorkouts',
     days
+  })
+}
+
+export function requestHealthKitRunsInRange(range: HealthKitRunRangeRequest) {
+  const handler = window.webkit?.messageHandlers?.runContextHealthKit
+  if (!handler) {
+    throw new Error('iOS HealthKit 브리지가 연결되어 있지 않습니다. 웹에서는 FIT 업로드를 사용하세요.')
+  }
+
+  handler.postMessage({
+    type: 'requestRunningWorkoutsInRange',
+    startDate: range.startDate,
+    endDate: range.endDate
   })
 }
 
