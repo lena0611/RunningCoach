@@ -45,6 +45,8 @@ async function extractFromFit(buffer: ArrayBuffer): Promise<ExtractedRunData> {
   const windMps = numberOrNull(String(session?.avg_wind_speed ?? session?.wind_speed ?? ''))
   const rpe = normalizeRpe(numberOrNull(String(session?.perceived_exertion ?? session?.workout_effort_score ?? '')))
   const date = toIsoDate(session?.start_time ?? session?.timestamp ?? records[0]?.timestamp)
+  const startAt = toIsoDateTime(session?.start_time ?? session?.timestamp ?? records[0]?.timestamp)
+  const endAt = addSecondsToIso(startAt, durationSec)
   const mappedLaps = laps.map((lap: any, index: number) => {
     const distanceKm = numberOrNull(String(lap.total_distance ?? ''))
     const lapDurationSec = numberOrNull(String(lap.total_timer_time ?? lap.total_moving_time ?? lap.total_elapsed_time ?? ''))
@@ -75,10 +77,12 @@ async function extractFromFit(buffer: ArrayBuffer): Promise<ExtractedRunData> {
     ...createEmptyRun(),
     sessionTitle: createSessionTitle({
       date,
-      startAt: toIsoDateTime(session?.start_time ?? session?.timestamp ?? records[0]?.timestamp),
+      startAt,
       type
     }),
     date,
+    startAt,
+    endAt,
     type,
     distanceKm: totalDistanceKm,
     durationSec: durationSec || null,
@@ -107,6 +111,8 @@ export function createEmptyRun(): ExtractedRunData {
     externalId: null,
     sessionTitle: '',
     date: new Date().toISOString().slice(0, 10),
+    startAt: null,
+    endAt: null,
     type: 'Unknown',
     distanceKm: 0,
     durationSec: null,
@@ -215,6 +221,13 @@ function toIsoDate(value: unknown): string {
 function toIsoDateTime(value: unknown): string | null {
   const date = value instanceof Date ? value : new Date(String(value ?? ''))
   return Number.isFinite(date.getTime()) ? date.toISOString() : null
+}
+
+function addSecondsToIso(value: string | null, seconds: number): string | null {
+  if (!value || !seconds) return null
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return null
+  return new Date(date.getTime() + seconds * 1000).toISOString()
 }
 
 function numberOrNull(value: string): number | null {

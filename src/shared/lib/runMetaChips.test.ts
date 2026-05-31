@@ -86,6 +86,8 @@ function createRun(input: Partial<RunLog>): RunLog {
     externalId: null,
     sessionTitle: '',
     date: '2026-05-26',
+    startAt: null,
+    endAt: null,
     type: 'Easy',
     distanceKm: 5,
     durationSec: 1800,

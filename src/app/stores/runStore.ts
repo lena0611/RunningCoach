@@ -21,7 +21,7 @@ export const useRunStore = defineStore('runStore', {
       return state.runs.filter((run) => run.userId === memoryStore.selectedUserId)
     },
     sortedRuns(): RunLog[] {
-      return [...this.selectedUserRuns].sort((a, b) => b.date.localeCompare(a.date))
+      return [...this.selectedUserRuns].sort((a, b) => b.date.localeCompare(a.date) || (b.startAt ?? '').localeCompare(a.startAt ?? ''))
     }
   },
   actions: {
@@ -130,6 +130,8 @@ function loadRuns(): RunLog[] {
           ...run,
           userId: run.userId ?? 'default',
           externalId: run.externalId ?? null,
+          startAt: run.startAt ?? null,
+          endAt: run.endAt ?? null,
           activeEnergyKcal: run.activeEnergyKcal ?? null,
           fastSegments: run.fastSegments ?? [],
           metricSamples: run.metricSamples ?? [],

@@ -117,8 +117,8 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         requestHealthKitRunUpdate({
           externalId: run.externalId,
           date: run.date,
-          startAt: null,
-          endAt: null,
+          startAt: run.startAt,
+          endAt: run.endAt,
           distanceKm: run.distanceKm,
           durationSec: run.durationSec
         })
@@ -285,6 +285,8 @@ async function repairExistingHealthKitRuns(candidates: HealthKitRunCandidate[], 
     const updated = await runStore.updateRun({
       ...target,
       externalId: extracted.externalId ?? target.externalId,
+      startAt: extracted.startAt ?? target.startAt,
+      endAt: extracted.endAt ?? target.endAt,
       type: target.tags.includes('type:user') || extracted.type === 'Unknown' ? target.type : extracted.type,
       distanceKm: extracted.distanceKm || target.distanceKm,
       durationSec: extracted.durationSec ?? target.durationSec,

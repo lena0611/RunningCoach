@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, formatPace } from '@/shared/lib/format'
+import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, formatPace, formatTimeRange } from '@/shared/lib/format'
 
 describe('format helpers', () => {
   it('rounds fractional pace seconds and never leaks decimals', () => {
@@ -15,5 +15,9 @@ describe('format helpers', () => {
   it('renders displayed dates with weekday', () => {
     expect(formatDateWithWeekday('2026-05-24')).toBe('2026-05-24(일)')
     expect(formatDateTimeWithWeekday('2026-05-24T19:36:12+09:00')).toBe('2026-05-24(일) 19:36')
+  })
+
+  it('renders a compact local time range for session detail', () => {
+    expect(formatTimeRange('2026-05-24T06:05:12+09:00', '2026-05-24T06:45:52+09:00')).toBe('06:05-06:45')
   })
 })

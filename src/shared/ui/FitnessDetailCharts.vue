@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import type { RunLog, RunRoutePoint } from '@/entities/run/model'
 import { formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
+import { formatLocationAddress } from '@/shared/lib/location'
 import UnitValue from '@/shared/ui/UnitValue.vue'
 
 const props = defineProps<{
@@ -186,13 +187,13 @@ function pointToMapPosition(point: RunRoutePoint, zoom: number) {
 }
 
 async function resolveRouteLocationName(latitude: number, longitude: number) {
-  const key = `pacelab-route-location:${latitude.toFixed(3)},${longitude.toFixed(3)}`
+  const key = `pacelab-route-location:v2:${latitude.toFixed(3)},${longitude.toFixed(3)}`
   const cached = readCachedLocationName(key)
   if (cached) return cached
 
   try {
     const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}&zoom=10&addressdetails=1&accept-language=ko`
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}&zoom=12&addressdetails=1&accept-language=ko`
     )
     if (!response.ok) return ''
     const data = await response.json() as { address?: Record<string, string> }
@@ -202,14 +203,6 @@ async function resolveRouteLocationName(latitude: number, longitude: number) {
   } catch {
     return ''
   }
-}
-
-function formatLocationAddress(address: Record<string, string>) {
-  const province = address.province || address.state || address.region || ''
-  const city = address.city || address.county || address.town || address.municipality || ''
-  const district = address.borough || address.suburb || ''
-  const parts = [province, city || district].filter(Boolean)
-  return [...new Set(parts)].join(' ')
 }
 
 function readCachedLocationName(key: string) {

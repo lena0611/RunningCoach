@@ -68,6 +68,8 @@ function run(overrides: Partial<RunLog>): RunLog {
     externalId: null,
     sessionTitle: '',
     date: '2026-05-01',
+    startAt: null,
+    endAt: null,
     type: 'Easy',
     distanceKm: 5,
     durationSec: 2400,

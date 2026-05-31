@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { RunLog } from '@/entities/run/model'
 import { estimateHeartRateDrift } from '@/shared/lib/runStats'
-import { formatDateWithWeekday, formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
+import { formatDateWithWeekday, formatDuration, formatInteger, formatPace, formatTimeRange } from '@/shared/lib/format'
 import FitnessDetailCharts from '@/shared/ui/FitnessDetailCharts.vue'
 import MetricPairList from '@/shared/ui/MetricPairList.vue'
 import RunMetaChips from '@/shared/ui/RunMetaChips.vue'
@@ -33,6 +33,7 @@ const detailMetrics = computed(() => [
   { id: 'elevation-gain', label: '누적 상승', value: formatInteger(props.run.elevationGainM), unit: props.run.elevationGainM === null ? '' : 'm' },
   { id: 'elevation-loss', label: '누적 하강', value: formatInteger(props.run.elevationLossM), unit: props.run.elevationLossM === null ? '' : 'm' }
 ])
+const sessionTimeRange = computed(() => formatTimeRange(props.run.startAt, props.run.endAt))
 
 onMounted(() => {
   void nextTick(() => {
@@ -99,7 +100,10 @@ function syncRouteStickyOffset() {
   <main ref="contentRef" class="memory-stack-content run-detail-content">
     <SectionCard class="run-detail-hero">
       <div class="run-detail-topline">
-        <span class="list-row-kicker">{{ formatDateWithWeekday(run.date) }}</span>
+        <div class="run-detail-datetime">
+          <span class="list-row-kicker">{{ formatDateWithWeekday(run.date) }}</span>
+          <span v-if="sessionTimeRange">{{ sessionTimeRange }}</span>
+        </div>
         <slot name="actions" />
       </div>
       <div class="run-detail-identity">

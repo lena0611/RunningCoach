@@ -48,6 +48,8 @@ export type RunLog = {
   externalId: string | null
   sessionTitle: string
   date: string
+  startAt: string | null
+  endAt: string | null
   type: RunType
   distanceKm: number
   durationSec: number | null

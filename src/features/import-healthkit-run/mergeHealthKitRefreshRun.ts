@@ -5,6 +5,8 @@ export function mergeHealthKitRefreshRun(target: RunLog, extracted: ExtractedRun
     ...target,
     externalId: extracted.externalId ?? target.externalId,
     date: extracted.date,
+    startAt: extracted.startAt ?? target.startAt,
+    endAt: extracted.endAt ?? target.endAt,
     type: shouldApplyInferredType(target, extracted) ? extracted.type : target.type,
     distanceKm: extracted.distanceKm,
     durationSec: extracted.durationSec,

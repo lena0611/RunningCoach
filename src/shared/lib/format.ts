@@ -68,6 +68,22 @@ export function formatDateTimeWithWeekday(value: string | null | undefined): str
   return `${formatDateWithWeekday(dateText)} ${timeText}`
 }
 
+export function formatTime(value: string | null | undefined): string {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return '-'
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+export function formatTimeRange(startValue: string | null | undefined, endValue: string | null | undefined): string {
+  const start = formatTime(startValue)
+  const end = formatTime(endValue)
+  if (start === '-' && end === '-') return ''
+  if (start === '-') return end
+  if (end === '-') return start
+  return `${start}-${end}`
+}
+
 export function toNumberOrNull(value: string): number | null {
   if (value.trim() === '') return null
   const next = Number(value)

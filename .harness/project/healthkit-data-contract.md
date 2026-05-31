@@ -207,6 +207,8 @@ type FastSegment = {
 
 ## `RunLog` 매핑
 - `date`: `HKWorkout.startDate`의 로컬 날짜
+- `startAt`: `HKWorkout.startDate`의 ISO 시각. 세션 상세 상단의 시간 범위 표시와 단일 세션 갱신 요청에 사용한다.
+- `endAt`: `HKWorkout.endDate`의 ISO 시각. 세션 상세 상단의 시간 범위 표시와 단일 세션 갱신 요청에 사용한다.
 - `durationSec`: `HKWorkout.duration`
 - `distanceKm`: workout distance statistics 또는 distance quantity sample 합계
 - `avgPaceSec`: `durationSec / distanceKm`

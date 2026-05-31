@@ -7,6 +7,8 @@ type RunLogRow = {
   external_id: string | null
   session_title: string | null
   date: string
+  start_at: string | null
+  end_at: string | null
   type: RunLog['type']
   distance_km: number
   duration_sec: number | null
@@ -40,7 +42,11 @@ type RunLogRow = {
 }
 
 export async function fetchRunLogs(): Promise<RunLog[]> {
-  const { data, error } = await requireSupabase().from('run_logs').select('*').order('date', { ascending: false })
+  const { data, error } = await requireSupabase()
+    .from('run_logs')
+    .select('*')
+    .order('date', { ascending: false })
+    .order('start_at', { ascending: false, nullsFirst: false })
   if (error) throw error
   return (data ?? []).map(fromRow)
 }
@@ -75,6 +81,8 @@ export async function updateRunLog(run: RunLog): Promise<RunLog> {
     .from('run_logs')
     .update({
       date: rest.date,
+      start_at: rest.startAt,
+      end_at: rest.endAt,
       type: rest.type,
       external_id: rest.externalId,
       session_title: rest.sessionTitle,
@@ -123,6 +131,8 @@ function toInsertRow(data: ExtractedRunData, source: RunLog['source']) {
   return {
     external_id: data.externalId || null,
     date: data.date,
+    start_at: data.startAt,
+    end_at: data.endAt,
     type: data.type,
     session_title: data.sessionTitle,
     distance_km: data.distanceKm,
@@ -168,6 +178,8 @@ function fromRow(row: RunLogRow): RunLog {
     externalId: row.external_id,
     sessionTitle: row.session_title ?? '',
     date: row.date,
+    startAt: row.start_at,
+    endAt: row.end_at,
     type: row.type,
     distanceKm: row.distance_km,
     durationSec: row.duration_sec,

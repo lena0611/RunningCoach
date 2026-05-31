@@ -159,6 +159,8 @@ export function toExtractedRunData(candidate: HealthKitRunCandidate, weeklyPatte
       weeklyPattern
     }),
     date: candidate.date || new Date().toISOString().slice(0, 10),
+    startAt: candidate.startAt || null,
+    endAt: candidate.endAt || null,
     type,
     distanceKm,
     durationSec,
@@ -192,6 +194,8 @@ export function toExtractedRunData(candidate: HealthKitRunCandidate, weeklyPatte
 function normalizeCandidate(candidate: HealthKitRunCandidate): HealthKitRunCandidate {
   return {
     ...candidate,
+    startAt: typeof candidate.startAt === 'string' ? candidate.startAt : '',
+    endAt: typeof candidate.endAt === 'string' ? candidate.endAt : '',
     distanceKm: normalizeNumber(candidate.distanceKm),
     durationSec: normalizeNumber(candidate.durationSec),
     avgPaceSec: normalizeNumber(candidate.avgPaceSec),
