@@ -405,3 +405,11 @@
 - 선택 이유: 요청 단위 풀스택 창 운영에서는 첫 프롬프트가 유일한 진입점이다. Issue 기반 요청과 새 업무 요청 모두 시작 단계에서 실행 범위와 읽을거리를 안정화해야 worktree/branch/PR이 섞이지 않는다.
 - 포기한 대안: 사용자가 항상 Workstream과 Issue 본문을 직접 붙여넣도록 요구하는 방식은 창 관리 피로도를 줄인다는 최신 운영 방향과 맞지 않아 채택하지 않는다.
 - 적용 범위: `.codex/hooks/inject-context.sh`, `.harness/project/github-issue-management-guide.md`, `.harness/project/github-tracking-rules.md`, `.harness/project/workflow-rules.md`.
+
+## 2026-05-31 - MVP 작업은 배포 확인 후 완료 승인 대기
+- 문제: 일반 하네스 게이트 문구가 "완료 승인 전 build/test/harness:check/commit/push/배포 금지"로만 읽히면서, PaceLAB MVP 기본 완료 흐름의 "구현/버그/운영 요청은 배포까지 진행" 기준과 충돌했다.
+- 결정: 일반 작업의 승인 전 금지 원칙은 유지하되, PaceLAB이 MVP 단계이고 사용자가 구현/버그/운영 작업을 맡긴 경우에는 명시적 중단 지시가 없는 한 검증, commit, push, PR/main 반영, 배포 확인까지 수행한다. 그 뒤 결과를 보고하고 사용자의 최종 완료 승인을 기다린다.
+- 완료 경계: 배포 확인은 에이전트가 수행하지만, GitHub Project `Done`, Issue close, 또는 이에 준하는 최종 완료 상태 변경은 사용자의 명시 완료 지시 후에만 수행한다.
+- 선택 이유: MVP 속도를 위해 배포 가능한 변경은 실제 앱까지 반영되어야 한다. 동시에 최종 완료 판단은 사용자 확인에 남겨 배포 성공과 제품 확인을 분리한다.
+- hook 영향: `.githooks/pre-commit`과 `.githooks/pre-push`는 commit/push가 실제 실행될 때 검증을 수행하는 안전장치로 그대로 둔다. 이번 변경은 hook 구현이 아니라 에이전트가 MVP 작업에서 commit/push/배포 단계까지 진행해야 하는지에 대한 프로젝트 로컬 해석 변경이므로 hook 스크립트 수정은 필요하지 않다.
+- 적용 범위: `CLAUDE.md`, `AGENTS.md`, `.harness/session/session-start-alert.md`, `.harness/session/next-session-reminder.md`, `.harness/session/session-boot.md`, `.harness/session/active-context.md`, `.harness/session/project-memory.md`, `.harness/project/commit-push-rules.md`.

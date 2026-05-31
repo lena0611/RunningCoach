@@ -59,7 +59,7 @@ npm run harness:impact
 - 장기 규칙은 `project-memory.md`와 `CLAUDE.md`를 우선 신뢰합니다.
 - 둘이 충돌하면 `active-context.md`에 충돌 사실을 기록하고 최신 코드 기준으로 다시 정리합니다.
 - 기준 문서나 업무 코드를 건드리는 작업이면 시작 전 `harness:impact`를 실행 대상으로 취급합니다.
-- 에이전트 작업에서는 로컬 git hook 설치 여부와 무관하게 기준 계층을 읽습니다. 사용자 완료 승인 전에는 `harness:check`, build/test, commit/push/PR을 실행하지 않고 검증 후보로 보고합니다.
+- 에이전트 작업에서는 로컬 git hook 설치 여부와 무관하게 기준 계층을 읽습니다. 일반 작업은 사용자 완료 승인 전 `harness:check`, build/test, commit/push/PR을 실행하지 않고 검증 후보로 보고합니다. PaceLAB MVP 단계의 구현/버그/운영 요청은 명시적 중단 지시가 없으면 검증, commit/push, PR/main 반영, 배포 확인까지 수행한 뒤 보고하고 사용자의 최종 완료 승인을 기다립니다.
 - 사용자가 `최종 검증만` 요청하면 `npm run harness:check`를 직접 실행합니다. 사용자가 `커밋/푸시`를 요청했고 hook이 설치되어 있으면 hook 검증을 신뢰하고 commit 직전 수동 `harness:check`를 중복 실행하지 않습니다.
 - hook이 설치되지 않았거나 `--no-verify` 등으로 우회되는 환경이면 commit/push 전에 에이전트가 직접 `npm run harness:check`를 실행합니다.
 - 프로젝트 상태나 책임 범위가 `TBD`인 상태라면 새 작업 설계 전에 `project-charter.md` 재계획 여부를 먼저 판단합니다.

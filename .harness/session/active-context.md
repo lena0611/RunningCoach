@@ -18,7 +18,7 @@
 - iOS 네이티브 로컬 프로젝트는 `/Users/smart-tn-083/practice/RunningCoach`에 있다.
 - HealthKit 자동 동기화, 세션별 HealthKit 재갱신, FIT 보조 import를 유지한다.
 - AI 코칭은 세션 상세에서 열며, 별도 Coach 하단 탭은 제거된 상태다.
-- 완료 승인 전 자동 검증/커밋 금지 원칙은 하네스 본체 `0.2.51`에 반영되어 있다. `CLAUDE.md`, `AGENTS.md`, `.claude/hooks/enforce-check.sh` 기준을 따른다.
+- 일반 작업의 완료 승인 전 자동 검증/커밋 금지 원칙은 하네스 본체 `0.2.51`에 반영되어 있다. 다만 PaceLAB MVP 단계의 구현/버그/운영 요청은 명시적 중단 지시가 없으면 배포 확인까지 수행한 뒤 보고하고 사용자의 최종 완료 승인을 기다린다. `CLAUDE.md`, `AGENTS.md`, `.claude/hooks/enforce-check.sh`, `.harness/project/commit-push-rules.md` 기준을 함께 따른다.
 
 ## 요청 단위 창 운영 기준
 - 이 프로젝트는 상시 workstream별 대화창 분리 운영을 중단하고, 요청 단위 새 창 운영을 기본으로 한다.

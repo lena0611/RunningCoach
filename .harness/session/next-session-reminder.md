@@ -29,6 +29,6 @@
 - 기존 01~08 workstream 라우팅으로 안정적으로 처리하기 어려운 새 도메인이 반복되면 `01-harness-ops`에서 새 라우팅 파일 추가 여부를 먼저 검토한다.
 - 업무 유형별로 `.harness/session/workstreams/*.md`의 시작 문서만 좁혀 읽는다.
 - 이번 작업 설명이 있으면 `npm run harness:context -- "<작업 설명>"`으로 읽을 기준을 좁힙니다.
-- 완료 승인 전에는 `build`, 테스트, `harness:check`, 배포, commit, push를 실행하지 않습니다. 이 원칙은 하네스 본체 `0.2.51`에 반영되어 있습니다.
+- 일반 작업은 완료 승인 전 `build`, 테스트, `harness:check`, 배포, commit, push를 실행하지 않습니다. 단, PaceLAB MVP 단계의 구현/버그/운영 요청은 명시적 중단 지시가 없으면 배포 확인까지 수행한 뒤 보고하고 사용자의 최종 완료 승인을 기다립니다.
 - 긴 대화창을 마칠 때는 `active-context.md` 또는 `thread-handoff-YYYY-MM-DD.md`에 다음 대화가 이어받을 최소 정보만 남깁니다.
 - `.harness/session/thread-handoff-2026-05-28.md`는 2026-05-28 긴 대화의 과거 스냅샷입니다. 최신 기준은 `active-context.md`, `project-memory.md`, `workflow-rules.md`, `decision-log.md`를 우선합니다.

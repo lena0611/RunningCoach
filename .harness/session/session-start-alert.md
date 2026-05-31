@@ -18,7 +18,7 @@ Claude Code에서는 `SessionStart` hook이 `next-session-reminder.md`를 자동
 8. 강제 강도와 예외 허용 범위가 애매하면 `.harness/policy/enforcement-ladder.md`를 보고 사용자에게 묻습니다.
 9. 코드 변경 시 스타일 검증도 구조 검증과 함께 보며, `npm run lint` 또는 `npm run harness:check`를 기준으로 판단합니다.
 10. 새 환경을 준비한 뒤에는 `npm run hooks:install`로 로컬 훅과 커밋 템플릿을 연결합니다.
-11. 에이전트 작업은 hook 설치 여부와 무관하게 기준 계층을 읽습니다. 다만 사용자 완료 승인 전에는 `build`, `test`, `harness:check`, commit, push, PR 생성을 실행하지 않고 검증 후보로 보고합니다.
+11. 에이전트 작업은 hook 설치 여부와 무관하게 기준 계층을 읽습니다. 다만 일반 작업은 사용자 완료 승인 전 `build`, `test`, `harness:check`, commit, push, PR 생성을 실행하지 않고 검증 후보로 보고합니다. PaceLAB MVP 단계에서 구현/버그/운영 요청을 맡은 경우에는 명시적 중단 지시가 없는 한 검증, commit, push, PR/main 반영, 배포 확인까지 수행한 뒤 보고하고 사용자의 최종 완료 승인을 기다립니다.
 12. 사용자가 `최종 검증만` 요청하면 `npm run harness:check`를 직접 실행합니다. 사용자가 `커밋/푸시`를 요청했고 hook이 설치되어 있으면 pre-commit/pre-push 검증을 신뢰하고 선행 `harness:check`를 중복 실행하지 않습니다.
 13. 스타일이 반복 패턴으로 굳어지기 시작하면 `.harness/style/style-evolution.md` 기준으로 규칙 승격 후보를 확인합니다.
 14. 코드 변경 후에는 도메인, 아키텍처, 워크플로우 로컬룰로 승격할 후보가 있는지 확인하고, 확신이 없으면 `.harness/session/developer-input-queue.md`에 질문으로 남깁니다.

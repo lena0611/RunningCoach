@@ -13,7 +13,7 @@ Codex, Copilot, 기타 에이전트는 사용자가 "하네스"라고 말하지 
 2. 코드/문서/설정 변경 전 반복 규칙 승격 후보를 판단합니다.
 3. 확정된 반복 규칙은 `.harness/project/domain-rules.md`, `architecture-rules.md`, `workflow-rules.md`, `commit-push-rules.md` 중 알맞은 곳에 반영합니다.
 4. 불확실한 질문은 `.harness/session/developer-input-queue.md`에 남기고 필요하면 사용자에게 인터뷰합니다.
-5. 사용자가 명시적으로 완료, 최종 검증, 커밋, 푸시, PR 생성을 승인하기 전에는 `build`, `test`, `harness:check`, commit, push, PR 생성을 실행하지 않고 검증 후보로 보고합니다.
+5. 사용자가 명시적으로 완료, 최종 검증, 커밋, 푸시, PR 생성을 승인하기 전에는 `build`, `test`, `harness:check`, commit, push, PR 생성을 실행하지 않고 검증 후보로 보고합니다. 단, 이 프로젝트가 PaceLAB MVP 단계이고 사용자가 구현/버그/운영 작업을 맡긴 경우에는 명시적 중단 지시가 없는 한 검증, commit, push, PR/main 반영, 배포 확인까지 수행한 뒤 보고하고 사용자의 최종 완료 승인을 기다립니다.
 6. 사용자가 `최종 검증만` 요청하면 `npm run harness:check`를 직접 실행합니다. 사용자가 `커밋` 또는 `커밋하고 푸시`를 요청했고 git hook이 설치되어 있으면 선행 `harness:check`를 중복 실행하지 않고 hook 검증에 맡깁니다.
 7. hook이 설치되어 있지 않거나 `--no-verify` 등으로 우회되는 환경이면 commit/push 전에 에이전트가 직접 `npm run harness:check`를 실행합니다.
 
