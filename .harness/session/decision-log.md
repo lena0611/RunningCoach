@@ -461,3 +461,9 @@
 - 결정: `BottomNav`가 항목 수를 CSS 변수로 내려주고, 모바일/데스크톱 그리드는 해당 값을 사용한다. 모바일 네비 폭과 항목 패딩은 4탭 기준에서 라벨이 한 줄로 유지되는 값으로 보정한다.
 - 선택 이유: 탭 수 변경은 앱 쉘의 제품 구조 변경이므로 스타일에서 숫자를 중복 고정하면 같은 회귀가 반복된다. 컴포넌트의 실제 항목 수를 단일 기준으로 삼아 레이아웃을 맞춘다.
 - 적용 범위: `src/shared/ui/BottomNav.vue`, `src/app/styles.css`.
+
+## 2026-06-01 - Root tab pager 내부 fixed 요소는 비활성 탭에서 숨김
+- 문제: Root tab pager가 swipe 연속성을 위해 `요약`, `기록`, `추세`, `기억` 패널을 DOM에 유지하면서, Run Log의 viewport fixed 월 heading이 비활성 탭에서도 화면 위로 새어 나왔다.
+- 결정: tab-local fixed chrome은 비활성 `.tab-swipe-panel[aria-hidden='true']` 아래에서 숨기고, 이 기준을 UI guideline에 명시한다.
+- 선택 이유: fixed 요소는 부모 패널의 overflow와 시각 위치를 벗어나므로 z-index 조정만으로는 다른 탭 누수를 막을 수 없다. root pager의 mounted 구조를 유지하려면 active panel scoping이 필요하다.
+- 적용 범위: `src/app/styles.css`, `.harness/project/ui-guidelines.md`.
