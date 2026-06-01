@@ -455,3 +455,9 @@
 - 결정: 완료된 Issue worktree는 `Issue Closed`, Project Status `Done`, worktree clean, 후속 확인 불필요 조건을 모두 만족할 때 정리 대상 후보로 본다. `Open` 또는 `Deployed` 상태 worktree는 사용자 최종 완료 확인 전까지 보류한다. 미커밋 변경이 있으면 임의 삭제하지 않고 보고하며, 사용자가 특정 경로 삭제를 명시한 경우에만 변경 소실을 알리고 force 제거할 수 있다.
 - 선택 이유: 완료된 작업의 로컬 잔여물을 줄이되, 배포 확인 대기나 미커밋 변경 같은 상태를 삭제로 잃지 않기 위해서다.
 - 적용 범위: `.harness/project/workflow-rules.md`, `.harness/project/github-issue-management-guide.md`, `.harness/project/commit-push-rules.md`.
+
+## 2026-06-01 - 하단 네비 탭 수는 컴포넌트 상태를 기준으로 렌더링
+- 문제: Issue #68에서 하단 네비가 4개 탭으로 늘었지만 전역 CSS 그리드는 3개 컬럼에 고정되어 모바일에서 네 번째 탭이 두 번째 줄로 밀리고 active pill이 화면을 가렸다.
+- 결정: `BottomNav`가 항목 수를 CSS 변수로 내려주고, 모바일/데스크톱 그리드는 해당 값을 사용한다. 모바일 네비 폭과 항목 패딩은 4탭 기준에서 라벨이 한 줄로 유지되는 값으로 보정한다.
+- 선택 이유: 탭 수 변경은 앱 쉘의 제품 구조 변경이므로 스타일에서 숫자를 중복 고정하면 같은 회귀가 반복된다. 컴포넌트의 실제 항목 수를 단일 기준으로 삼아 레이아웃을 맞춘다.
+- 적용 범위: `src/shared/ui/BottomNav.vue`, `src/app/styles.css`.
