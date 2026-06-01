@@ -1768,6 +1768,7 @@ button.stat-card {
 .run-month-heading-sticky {
   position: relative;
   z-index: 1;
+  padding: 8px 0 6px;
 }
 
 .run-month-fixed-heading {
@@ -1776,7 +1777,7 @@ button.stat-card {
   left: 50%;
   z-index: 18;
   width: min(1080px, calc(100vw - 28px));
-  padding: 0 2px 20px;
+  padding: 8px 2px 20px;
   background: linear-gradient(
     180deg,
     var(--color-header-bg) 0%,
@@ -1813,15 +1814,15 @@ button.stat-card {
 .run-month-summary-head strong {
   color: var(--color-muted);
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 400;
   line-height: 1.25;
 }
 
 .run-month-summary-row dt {
   min-width: 0;
   color: var(--color-text);
-  font-size: 19px;
-  font-weight: 720;
+  font-size: 18px;
+  font-weight: 400;
   line-height: 1.2;
 }
 
@@ -1833,7 +1834,7 @@ button.stat-card {
   margin: 0;
   color: var(--color-muted);
   font-size: 18px;
-  font-weight: 800;
+  font-weight: 400;
   line-height: 1.15;
   white-space: nowrap;
 }
@@ -1845,7 +1846,7 @@ button.stat-card {
 
 .run-month-summary-row dd small {
   font-size: 0.76em;
-  font-weight: 800;
+  font-weight: 400;
   line-height: 1;
   text-transform: uppercase;
 }

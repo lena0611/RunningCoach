@@ -11,7 +11,7 @@ import { detectGoalIntent, type GoalIntentProposal } from '@/features/detect-goa
 import UploadRunPage from '@/pages/upload-run/UploadRunPage.vue'
 import { fetchCoachReports, requestCoachRunStream, type CoachInjuryUpdateProposal, type CoachReport } from '@/shared/api/coachRepository'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
-import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
+import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, formatInteger, formatNumberWithCommas, formatPace } from '@/shared/lib/format'
 import { getRunFilterTags, hasRunFilterTag, isScheduledSession, type RunFilterTag } from '@/shared/lib/runMetaChips'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import CoachMessage from '@/shared/ui/CoachMessage.vue'
@@ -532,7 +532,7 @@ function getMonthSummaryRows(summary: RunMonthSummary): RunMonthSummaryRow[] {
 
 function formatDistance(value: number | null) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '-'
-  return value.toFixed(2)
+  return formatNumberWithCommas(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function previousMonth() {

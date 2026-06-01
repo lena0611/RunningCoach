@@ -15,8 +15,23 @@ export function formatDuration(seconds: number | null): string {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`
 }
 
-export function formatInteger(value: number | null): string {
-  return typeof value === 'number' && Number.isFinite(value) ? String(Math.round(value)) : '-'
+type NumberFormatOptions = {
+  minimumFractionDigits?: number
+  maximumFractionDigits?: number
+}
+
+export function formatNumberWithCommas(value: number | null | undefined, options: NumberFormatOptions = {}): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-'
+
+  return new Intl.NumberFormat('en-US', {
+    useGrouping: true,
+    minimumFractionDigits: options.minimumFractionDigits ?? 0,
+    maximumFractionDigits: options.maximumFractionDigits ?? 0
+  }).format(value)
+}
+
+export function formatInteger(value: number | null | undefined): string {
+  return formatNumberWithCommas(typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : null)
 }
 
 export function formatDateWithWeekday(value: string | null | undefined): string {
