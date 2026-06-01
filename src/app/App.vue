@@ -11,6 +11,7 @@ import type { TrainingInjuryCheckIn, TrainingMemory } from '@/entities/training-
 import { createInjuryCheckInDismissKey } from '@/features/injury-check-in/injuryCheckInPrompt'
 import DashboardPage from '@/pages/dashboard/DashboardPage.vue'
 import RunLogPage from '@/pages/run-log/RunLogPage.vue'
+import TrendsPage from '@/pages/trends/TrendsPage.vue'
 import MemoryPage from '@/pages/memory/MemoryPage.vue'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import AppShell from '@/shared/ui/AppShell.vue'
@@ -27,11 +28,12 @@ const router = useRouter()
 const navItems: BottomNavItem[] = [
   { to: '/', label: '요약', shortLabel: '요약', icon: 'home' },
   { to: '/runs', label: '기록', shortLabel: '기록', icon: 'log' },
+  { to: '/trends', label: '추세', shortLabel: '추세', icon: 'trend' },
   { to: '/memory', label: '기억', shortLabel: '기억', icon: 'memo' }
 ]
 const route = useRoute()
 const transitionName = ref('page-slide-forward')
-const mainTabRoutes = ['/', '/runs', '/memory']
+const mainTabRoutes = ['/', '/runs', '/trends', '/memory']
 const tabPanelRefs = ref<HTMLElement[]>([])
 const tabViewportHeight = ref(0)
 const swipeStartX = ref(0)
@@ -477,6 +479,9 @@ function resetSwipeState() {
           <RunLogPage />
         </section>
         <section :ref="(element) => setTabPanelRef(element, 2)" class="tab-swipe-panel" :aria-hidden="currentTabIndex !== 2" :inert="currentTabIndex !== 2">
+          <TrendsPage />
+        </section>
+        <section :ref="(element) => setTabPanelRef(element, 3)" class="tab-swipe-panel" :aria-hidden="currentTabIndex !== 3" :inert="currentTabIndex !== 3">
           <MemoryPage />
         </section>
       </div>

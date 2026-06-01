@@ -5,7 +5,7 @@ export type BottomNavItem = {
   to: string
   label: string
   shortLabel?: string
-  icon: 'home' | 'upload' | 'log' | 'memo' | 'coach'
+  icon: 'home' | 'upload' | 'log' | 'trend' | 'memo' | 'coach'
 }
 
 defineProps<{ items: BottomNavItem[] }>()
@@ -47,6 +47,11 @@ function navigate(to: string) {
           <path d="M8.5 9h7" />
           <path d="M8.5 13h7" />
           <path d="M8.5 17h4" />
+        </template>
+        <template v-else-if="item.icon === 'trend'">
+          <path d="M4.5 18.5h15" />
+          <path d="M6 15.5 10 11l3 2.5 5-7" />
+          <path d="M16.5 6.5H18v1.5" />
         </template>
         <template v-else-if="item.icon === 'memo'">
           <path d="M6.5 4.5h8l3 3v12h-11z" />
