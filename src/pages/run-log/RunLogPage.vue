@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type ComponentPublicInstance } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
@@ -11,7 +11,7 @@ import { detectGoalIntent, type GoalIntentProposal } from '@/features/detect-goa
 import UploadRunPage from '@/pages/upload-run/UploadRunPage.vue'
 import { fetchCoachReports, requestCoachRunStream, type CoachInjuryUpdateProposal, type CoachReport } from '@/shared/api/coachRepository'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
-import { formatDateTimeWithWeekday, formatDateWithWeekday } from '@/shared/lib/format'
+import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
 import { getRunFilterTags, hasRunFilterTag, isScheduledSession, type RunFilterTag } from '@/shared/lib/runMetaChips'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import CoachMessage from '@/shared/ui/CoachMessage.vue'
@@ -39,6 +39,8 @@ const selectedDate = ref<string | null>(null)
 const visibleCount = ref(10)
 const loadMoreRef = ref<HTMLElement | null>(null)
 const observer = ref<IntersectionObserver | null>(null)
+const runMonthGroupRefs = new Map<string, HTMLElement>()
+const activeStickyMonth = ref<RunMonthGroup | null>(null)
 const detailRun = ref<RunLog | null>(null)
 const addingRun = ref(false)
 const editing = ref<RunLog | null>(null)
@@ -83,6 +85,34 @@ type CalendarCell = {
   runs: RunLog[]
   markerType: RunType | null
   hasScheduledRun: boolean
+}
+
+type RunMonthSummary = {
+  runCount: number
+  totalDurationSec: number | null
+  avgDurationSec: number | null
+  totalCalories: number | null
+  avgCalories: number | null
+  totalDistanceKm: number
+  avgDistanceKm: number
+  avgPaceSec: number | null
+}
+
+type RunMonthSummaryRow = {
+  id: string
+  label: string
+  total: string
+  totalUnit?: string
+  average: string
+  averageUnit?: string
+  tone?: 'time' | 'calorie' | 'distance' | 'pace'
+}
+
+type RunMonthGroup = {
+  key: string
+  title: string
+  runs: RunLog[]
+  summary: RunMonthSummary
 }
 const coachCommandItems = [
   {
@@ -225,6 +255,9 @@ const filteredCoachCommands = computed(() => {
 })
 
 let reportsLoadPromise: Promise<void> | null = null
+let runMonthStickyOffsetResizeObserver: ResizeObserver | null = null
+let runMonthStickyOffsetFrame = 0
+let runMonthStickyStateFrame = 0
 
 onMounted(() => {
   if (!runStore.loaded && !runStore.loading) {
@@ -234,6 +267,8 @@ onMounted(() => {
     memoryStore.load()
   }
   setupObserver()
+  setupRunMonthStickyOffset()
+  window.addEventListener('scroll', scheduleRunMonthStickyStateSync, { passive: true })
   openRouteRunIfNeeded()
 })
 
@@ -243,7 +278,10 @@ watch(openStack, (open) => {
 
 watch([filteredRuns, selectedTypes, selectedMetaFilterValues, selectedDate], () => {
   visibleCount.value = 10
-  nextTick(setupObserver)
+  nextTick(() => {
+    setupObserver()
+    syncRunMonthStickyState()
+  })
 })
 
 watch(metaFilterValues, (values) => {
@@ -291,6 +329,8 @@ watch(selectedReports, () => {
 onBeforeUnmount(() => {
   document.body.classList.remove('memory-stack-open')
   observer.value?.disconnect()
+  cleanupRunMonthStickyOffset()
+  cleanupRunMonthStickyState()
   stopCoachThinkingTimer()
   coachAbortController.value?.abort()
 })
@@ -310,23 +350,189 @@ function showMore() {
   if (hasMoreRuns.value) visibleCount.value += 10
 }
 
-function groupRunsByMonth(runs: RunLog[]) {
-  const groups: Array<{ key: string; title: string; runs: RunLog[] }> = []
+function setupRunMonthStickyOffset() {
+  cleanupRunMonthStickyOffset()
+  const header = document.querySelector<HTMLElement>('.app-header')
+  runMonthStickyOffsetResizeObserver = new ResizeObserver(scheduleRunMonthStickyOffsetSync)
+  if (header) runMonthStickyOffsetResizeObserver.observe(header)
+  window.addEventListener('resize', scheduleRunMonthStickyOffsetSync)
+  scheduleRunMonthStickyOffsetSync()
+}
+
+function cleanupRunMonthStickyOffset() {
+  runMonthStickyOffsetResizeObserver?.disconnect()
+  runMonthStickyOffsetResizeObserver = null
+  window.removeEventListener('resize', scheduleRunMonthStickyOffsetSync)
+  if (runMonthStickyOffsetFrame) window.cancelAnimationFrame(runMonthStickyOffsetFrame)
+  runMonthStickyOffsetFrame = 0
+  document.documentElement.style.removeProperty('--run-month-sticky-top')
+}
+
+function scheduleRunMonthStickyOffsetSync() {
+  if (runMonthStickyOffsetFrame) window.cancelAnimationFrame(runMonthStickyOffsetFrame)
+  runMonthStickyOffsetFrame = window.requestAnimationFrame(() => {
+    runMonthStickyOffsetFrame = 0
+    syncRunMonthStickyOffset()
+  })
+}
+
+function syncRunMonthStickyOffset() {
+  const header = document.querySelector<HTMLElement>('.app-header')
+  const headerBottom = header?.getBoundingClientRect().bottom ?? 0
+  document.documentElement.style.setProperty('--run-month-sticky-top', `${Math.max(0, Math.round(headerBottom))}px`)
+  syncRunMonthStickyState()
+}
+
+function setRunMonthGroupRef(key: string, element: Element | ComponentPublicInstance | null) {
+  if (element instanceof HTMLElement) {
+    runMonthGroupRefs.set(key, element)
+    scheduleRunMonthStickyStateSync()
+    return
+  }
+  runMonthGroupRefs.delete(key)
+  scheduleRunMonthStickyStateSync()
+}
+
+function cleanupRunMonthStickyState() {
+  window.removeEventListener('scroll', scheduleRunMonthStickyStateSync)
+  if (runMonthStickyStateFrame) window.cancelAnimationFrame(runMonthStickyStateFrame)
+  runMonthStickyStateFrame = 0
+  runMonthGroupRefs.clear()
+  activeStickyMonth.value = null
+}
+
+function scheduleRunMonthStickyStateSync() {
+  if (runMonthStickyStateFrame) window.cancelAnimationFrame(runMonthStickyStateFrame)
+  runMonthStickyStateFrame = window.requestAnimationFrame(() => {
+    runMonthStickyStateFrame = 0
+    syncRunMonthStickyState()
+  })
+}
+
+function syncRunMonthStickyState() {
+  if (selectedDate.value || !visibleRunGroups.value.length) {
+    activeStickyMonth.value = null
+    return
+  }
+
+  const headerBottom = document.querySelector<HTMLElement>('.app-header')?.getBoundingClientRect().bottom ?? 0
+  const stickyHeight = 48
+  const active = visibleRunGroups.value.find((group) => {
+    const element = runMonthGroupRefs.get(group.key)
+    if (!element) return false
+    const rect = element.getBoundingClientRect()
+    return rect.top <= headerBottom && rect.bottom > headerBottom + stickyHeight
+  }) ?? null
+
+  activeStickyMonth.value = active
+}
+
+function groupRunsByMonth(runs: RunLog[]): RunMonthGroup[] {
+  const groups: RunMonthGroup[] = []
   for (const run of runs) {
     const key = run.date.slice(0, 7)
     let group = groups.find((item) => item.key === key)
     if (!group) {
-      group = { key, title: formatMonthHeading(key), runs: [] }
+      group = { key, title: formatMonthHeading(key), runs: [], summary: createEmptyMonthSummary() }
       groups.push(group)
     }
     group.runs.push(run)
   }
-  return groups
+  return groups.map((group) => ({
+    ...group,
+    summary: summarizeMonthRuns(group.runs)
+  }))
 }
 
 function formatMonthHeading(monthKey: string) {
   const [year, month] = monthKey.split('-')
   return `${year}년 ${Number(month)}월`
+}
+
+function createEmptyMonthSummary(): RunMonthSummary {
+  return {
+    runCount: 0,
+    totalDurationSec: null,
+    avgDurationSec: null,
+    totalCalories: null,
+    avgCalories: null,
+    totalDistanceKm: 0,
+    avgDistanceKm: 0,
+    avgPaceSec: null
+  }
+}
+
+function summarizeMonthRuns(runs: RunLog[]): RunMonthSummary {
+  const runCount = runs.length
+  const durationValues = runs
+    .map((run) => run.durationSec)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0)
+  const calorieValues = runs
+    .map((run) => run.activeEnergyKcal)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+  const totalDurationSec = durationValues.length ? durationValues.reduce((sum, value) => sum + value, 0) : null
+  const totalCalories = calorieValues.length ? calorieValues.reduce((sum, value) => sum + value, 0) : null
+  const totalDistanceKm = runs.reduce((sum, run) => sum + (Number.isFinite(run.distanceKm) ? run.distanceKm : 0), 0)
+
+  return {
+    runCount,
+    totalDurationSec,
+    avgDurationSec: totalDurationSec === null || !durationValues.length ? null : totalDurationSec / durationValues.length,
+    totalCalories,
+    avgCalories: totalCalories === null || !calorieValues.length ? null : totalCalories / calorieValues.length,
+    totalDistanceKm,
+    avgDistanceKm: runCount ? totalDistanceKm / runCount : 0,
+    avgPaceSec: totalDurationSec !== null && totalDistanceKm > 0 ? totalDurationSec / totalDistanceKm : null
+  }
+}
+
+function getMonthSummaryRows(summary: RunMonthSummary): RunMonthSummaryRow[] {
+  return [
+    {
+      id: 'runs',
+      label: '달리기',
+      total: formatInteger(summary.runCount),
+      average: ''
+    },
+    {
+      id: 'duration',
+      label: '시간',
+      total: formatDuration(summary.totalDurationSec),
+      average: formatDuration(summary.avgDurationSec),
+      tone: 'time'
+    },
+    {
+      id: 'calories',
+      label: '킬로칼로리',
+      total: formatInteger(summary.totalCalories),
+      totalUnit: summary.totalCalories === null ? undefined : 'kcal',
+      average: formatInteger(summary.avgCalories),
+      averageUnit: summary.avgCalories === null ? undefined : 'kcal',
+      tone: 'calorie'
+    },
+    {
+      id: 'distance',
+      label: '거리',
+      total: formatDistance(summary.totalDistanceKm),
+      totalUnit: 'km',
+      average: formatDistance(summary.avgDistanceKm),
+      averageUnit: 'km',
+      tone: 'distance'
+    },
+    {
+      id: 'pace',
+      label: '페이스',
+      total: '',
+      average: formatPace(summary.avgPaceSec),
+      averageUnit: summary.avgPaceSec === null ? undefined : '/km',
+      tone: 'pace'
+    }
+  ]
+}
+
+function formatDistance(value: number | null) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-'
+  return value.toFixed(2)
 }
 
 function previousMonth() {
@@ -1036,6 +1242,12 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
       </button>
     </SectionCard>
 
+    <Teleport to="body">
+      <div v-if="activeStickyMonth && !selectedDate" class="run-month-fixed-heading" aria-hidden="true">
+        <h3 class="run-month-heading">{{ activeStickyMonth.title }}</h3>
+      </div>
+    </Teleport>
+
     <SectionGroup :title="selectedDate ? formatDateWithWeekday(selectedDate) : '전체 기록'" :surface="false">
       <template #actions>
         <small class="helper">{{ filteredRuns.length }}개</small>
@@ -1050,8 +1262,30 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
           @select="openDetail"
         />
         <div v-else class="run-month-groups">
-          <section v-for="group in visibleRunGroups" :key="group.key" class="run-month-group">
-            <h3 class="run-month-heading">{{ group.title }}</h3>
+          <section v-for="group in visibleRunGroups" :key="group.key" :ref="(element) => setRunMonthGroupRef(group.key, element)" class="run-month-group">
+            <div class="run-month-heading-sticky">
+              <h3 class="run-month-heading">{{ group.title }}</h3>
+            </div>
+            <dl class="run-month-summary" :aria-label="`${group.title} 요약`">
+              <div class="run-month-summary-head" aria-hidden="true">
+                <span></span>
+                <strong>전체</strong>
+                <strong>평균</strong>
+              </div>
+              <div v-for="row in getMonthSummaryRows(group.summary)" :key="row.id" class="run-month-summary-row" :class="row.tone ? `run-month-summary-row-${row.tone}` : undefined">
+                <dt>{{ row.label }}</dt>
+                <dd>
+                  <template v-if="row.total">
+                    <span>{{ row.total }}</span><small v-if="row.totalUnit">{{ row.totalUnit }}</small>
+                  </template>
+                </dd>
+                <dd>
+                  <template v-if="row.average">
+                    <span>{{ row.average }}</span><small v-if="row.averageUnit">{{ row.averageUnit }}</small>
+                  </template>
+                </dd>
+              </div>
+            </dl>
             <RunSessionList :runs="group.runs" :weekly-pattern="memoryStore.memory.weeklyPattern" interactive @select="openDetail" />
           </section>
         </div>
