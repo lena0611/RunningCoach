@@ -78,6 +78,11 @@ export type TrendLensResult = {
   prescriptionImpact: TrendPrescriptionImpact
 }
 
+export type TrendAnalysis = {
+  lensResults: Record<TrendLensKey, TrendLensResult>
+  overallSummary: TrendOverallSummary
+}
+
 type TrendInput = {
   lens: TrendLensKey
   period: TrendPeriod
@@ -136,8 +141,24 @@ export function buildTrendLensResult(input: TrendInput): TrendLensResult {
   return buildRecoveryLens(window)
 }
 
+export function buildTrendAnalysis(input: Omit<TrendInput, 'lens'>): TrendAnalysis {
+  const rawResults = buildTrendLensResults(input)
+  const gatedResults = applyTrendSafetyGate(rawResults)
+  return {
+    lensResults: Object.fromEntries(gatedResults.map((result) => [result.lens, result])) as Record<TrendLensKey, TrendLensResult>,
+    overallSummary: buildTrendOverallSummaryFromResults(input, gatedResults)
+  }
+}
+
 export function buildTrendOverallSummary(input: Omit<TrendInput, 'lens'>): TrendOverallSummary {
-  const lensResults = lensOrder.map((lens) => buildTrendLensResult({ ...input, lens }))
+  return buildTrendAnalysis(input).overallSummary
+}
+
+function buildTrendLensResults(input: Omit<TrendInput, 'lens'>) {
+  return lensOrder.map((lens) => buildTrendLensResult({ ...input, lens }))
+}
+
+function buildTrendOverallSummaryFromResults(input: Omit<TrendInput, 'lens'>, lensResults: TrendLensResult[]): TrendOverallSummary {
   if (!input.runs.length) {
     return {
       title: '기록을 쌓으면 판단합니다',
@@ -154,7 +175,7 @@ export function buildTrendOverallSummary(input: Omit<TrendInput, 'lens'>): Trend
   const good = pickLensResult(lensResults, goodLensPriority, (result) => result.hero.tone === 'good')
   const reduce = pickLensResult(lensResults, warningLensPriority, (result) => result.prescriptionImpact.status === 'reduce-or-recover')
   const raise = pickLensResult(lensResults, goodLensPriority, (result) => result.prescriptionImpact.status === 'raise-candidate')
-  const raiseBlocker = raise ? raiseBlockerResult(lensResults) : undefined
+  const raiseBlocker = raiseBlockerResult(lensResults)
   const dataReadyCount = lensResults.filter((result) => result.hero.confidence !== 'low').length
   const goodCount = lensResults.filter((result) => result.hero.tone === 'good').length
   const warningCount = lensResults.filter((result) => result.hero.tone === 'warning').length
@@ -756,9 +777,32 @@ function pickLensResult(results: TrendLensResult[], priority: TrendLensKey[], pr
   return undefined
 }
 
+function applyTrendSafetyGate(results: TrendLensResult[]) {
+  const raiseBlocker = raiseBlockerResult(results)
+  if (!raiseBlocker) return results
+  return results.map((result) => {
+    if (result.prescriptionImpact.status !== 'raise-candidate') return result
+    return {
+      ...result,
+      prescriptionImpact: blockedRaisePrescription(result, raiseBlocker)
+    }
+  })
+}
+
 function raiseBlockerResult(results: TrendLensResult[]) {
   return results.find((result) => result.lens === 'recovery' && result.hero.tone === 'warning')
     ?? results.find((result) => result.lens === 'intensity' && result.hero.tone === 'warning')
+}
+
+function blockedRaisePrescription(result: TrendLensResult, raiseBlocker: TrendLensResult): TrendPrescriptionImpact {
+  return prescription(
+    'maintain',
+    '현재 처방 유지 후 1회 더 확인',
+    [
+      `${lensQuestionLabels[result.lens]} 신호는 좋지만 ${lensQuestionLabels[raiseBlocker.lens]} 렌즈가 주의 신호라 상향 후보를 바로 적용하지 않습니다.`,
+      '좋은 신호는 유지하되 회복/부하 게이트가 안정된 뒤 다시 확인합니다.'
+    ]
+  )
 }
 
 function overallItem(label: string, title: string, detail: string, tone: TrendInsightTone, lens?: TrendLensKey): TrendOverallItem {

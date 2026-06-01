@@ -480,3 +480,10 @@
 - 선택 이유: 계산 가능한 판단은 코드가 책임지고, OpenAI는 그 판단을 설명/코칭 언어로 바꾸는 역할로 좁혀야 개인화 품질과 재현성이 올라간다.
 - 검증: 중요 경로 `supabase/functions/coach-run/index.ts`는 `npm run supabase:functions:check`로 Deno 타입 체크를 통과시킨다. 전체 변경은 `npm run test:run`, `npm run build`, `npm run harness:check`로 확인한다.
 - 적용 범위: `supabase/functions/coach-run/index.ts`, `src/entities/training-memory/model.ts`, `.harness/project/ai-coaching-goal.md`, `.harness/project/running-coaching-standards.md`, `.harness/project/architecture-rules.md`, `.harness/project/domain-rules.md`.
+
+## 2026-06-02 - 추세 Lens 원본 신호와 표시용 처방 게이트 분리
+- 문제: 종합 판단은 회복/강도 safety gate로 상향 후보를 막지만, 개별 Lens의 `다음 처방 영향`에는 원본 `raise-candidate`가 남아 사용자가 개별 Lens만 보고 즉시 상향으로 오해할 수 있었다.
+- 결정: `buildTrendLensResult`는 단일 Lens의 원본 분석 신호로 유지하고, 화면에서는 `buildTrendAnalysis`가 5개 Lens를 함께 계산한 뒤 recovery/intensity warning을 전역 safety gate로 적용한 표시용 결과를 사용한다. 좋은 신호의 hero/explanation은 유지하되, 최종 처방 문구는 게이트 통과 여부를 반영한다.
+- 선택 이유: Lens별 좋은 신호는 코칭 근거로 보존해야 하지만, 실행 처방은 회복/부하/부상 게이트와 일관되어야 한다. 원본 분석과 표시용 처방을 분리하면 테스트와 UI가 둘 다 명확해진다.
+- 포기한 대안: 각 Lens 계산 함수에 다른 Lens 상태를 직접 주입하는 방식은 Lens 독립성과 단위 테스트 경계를 흐리므로 채택하지 않는다.
+- 적용 범위: `src/shared/lib/trendInsights.ts`, `src/pages/trends/TrendsPage.vue`, `.harness/project/domain-rules.md`.

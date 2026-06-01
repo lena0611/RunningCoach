@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RunLog } from '@/entities/run/model'
 import { initialTrainingMemory } from '@/entities/training-memory/model'
-import { buildTrendLensResult, buildTrendOverallSummary } from '@/shared/lib/trendInsights'
+import { buildTrendAnalysis, buildTrendLensResult, buildTrendOverallSummary } from '@/shared/lib/trendInsights'
 
 function run(input: Partial<RunLog>): RunLog {
   return {
@@ -282,5 +282,77 @@ describe('buildTrendOverallSummary', () => {
     expect(result.cautionSignal.title).toContain('회복됐나')
     expect(result.prescriptionDirection.title).toBe('강도 상향 보류')
     expect(result.prescriptionDirection.tone).toBe('warning')
+  })
+})
+
+describe('buildTrendAnalysis', () => {
+  it('gates an efficiency raise candidate when recovery is warning', () => {
+    const runs = [
+      run({ id: 'old-1', date: '2026-01-10', type: 'Easy', avgHeartRate: 140, avgPaceSec: 410 }),
+      run({ id: 'old-2', date: '2026-01-20', type: 'Easy', avgHeartRate: 142, avgPaceSec: 400 }),
+      run({ id: 'old-3', date: '2026-02-10', type: 'Easy', avgHeartRate: 141, avgPaceSec: 405 }),
+      run({ id: 'new-1', date: '2026-04-10', type: 'Easy', avgHeartRate: 140, avgPaceSec: 380 }),
+      run({ id: 'new-2', date: '2026-04-20', type: 'Easy', avgHeartRate: 142, avgPaceSec: 378 }),
+      run({ id: 'new-3', date: '2026-05-10', type: 'Easy', avgHeartRate: 141, avgPaceSec: 382 }),
+      run({ id: 'tempo-1', date: '2026-05-20', type: 'Tempo', distanceKm: 6, avgPaceSec: 350 }),
+      run({ id: 'easy-after', date: '2026-05-22', type: 'Easy', distanceKm: 4, avgPaceSec: 430, painNote: '햄스트링 뻣뻣함', rpe: 7 })
+    ]
+
+    const analysis = buildTrendAnalysis({
+      period: '90d',
+      baseline: 'previous-period',
+      runs,
+      memory: initialTrainingMemory,
+      today: new Date('2026-06-01T00:00:00')
+    })
+
+    expect(analysis.lensResults.efficiency.hero.tone).toBe('good')
+    expect(analysis.lensResults.efficiency.prescriptionImpact.status).toBe('maintain')
+    expect(analysis.lensResults.efficiency.prescriptionImpact.title).toBe('현재 처방 유지 후 1회 더 확인')
+    expect(analysis.lensResults.efficiency.prescriptionImpact.reasons.join(' ')).toContain('회복됐나')
+    expect(analysis.overallSummary.prescriptionDirection.title).toBe('강도 상향 보류')
+  })
+
+  it('gates a quality raise candidate when intensity is warning', () => {
+    const runs = [
+      run({ id: 'tempo-1', date: '2026-05-27', type: 'Tempo', distanceKm: 6, avgPaceSec: 350 }),
+      run({ id: 'long-1', date: '2026-05-29', type: 'LSD', distanceKm: 12, avgHeartRate: 151, avgPaceSec: 430, rpe: 7 }),
+      run({ id: 'race-1', date: '2026-05-31', type: 'Race', distanceKm: 5, avgPaceSec: 330 })
+    ]
+
+    const analysis = buildTrendAnalysis({
+      period: '90d',
+      baseline: 'previous-period',
+      runs,
+      memory: initialTrainingMemory,
+      today: new Date('2026-06-01T00:00:00')
+    })
+
+    expect(analysis.lensResults.quality.hero.tone).toBe('good')
+    expect(analysis.lensResults.intensity.hero.tone).toBe('warning')
+    expect(analysis.lensResults.quality.prescriptionImpact.status).toBe('maintain')
+    expect(analysis.lensResults.quality.prescriptionImpact.reasons.join(' ')).toContain('무리했나')
+  })
+
+  it('keeps a raise candidate when recovery and intensity gates are clear', () => {
+    const runs = [
+      run({ id: 'old-1', date: '2026-01-10', type: 'Easy', avgHeartRate: 140, avgPaceSec: 410 }),
+      run({ id: 'old-2', date: '2026-01-20', type: 'Easy', avgHeartRate: 142, avgPaceSec: 400 }),
+      run({ id: 'old-3', date: '2026-02-10', type: 'Easy', avgHeartRate: 141, avgPaceSec: 405 }),
+      run({ id: 'new-1', date: '2026-04-10', type: 'Easy', avgHeartRate: 140, avgPaceSec: 380 }),
+      run({ id: 'new-2', date: '2026-04-20', type: 'Easy', avgHeartRate: 142, avgPaceSec: 378 }),
+      run({ id: 'new-3', date: '2026-05-10', type: 'Easy', avgHeartRate: 141, avgPaceSec: 382 })
+    ]
+
+    const analysis = buildTrendAnalysis({
+      period: '90d',
+      baseline: 'previous-period',
+      runs,
+      memory: initialTrainingMemory,
+      today: new Date('2026-06-01T00:00:00')
+    })
+
+    expect(analysis.lensResults.efficiency.prescriptionImpact.status).toBe('raise-candidate')
+    expect(analysis.overallSummary.prescriptionDirection.title).toBe('Easy 또는 Tempo 처방 소폭 상향 후보')
   })
 })

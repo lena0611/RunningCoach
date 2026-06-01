@@ -4,8 +4,7 @@ import { useRouter } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import {
-  buildTrendOverallSummary,
-  buildTrendLensResult,
+  buildTrendAnalysis,
   type TrendBaseline,
   type TrendEvidenceRun,
   type TrendInsightConfidence,
@@ -53,9 +52,8 @@ const baselineOptions: BottomSheetSelectOption[] = [
   { value: 'first-run', label: '초기 기록', description: '초기 절반과 최근 절반 비교' }
 ]
 
-const result = computed(() =>
-  buildTrendLensResult({
-    lens: selectedLens.value,
+const trendAnalysis = computed(() =>
+  buildTrendAnalysis({
     period: selectedPeriod.value,
     baseline: selectedBaseline.value,
     runs: runStore.sortedRuns,
@@ -63,13 +61,10 @@ const result = computed(() =>
   })
 )
 
+const result = computed(() => trendAnalysis.value.lensResults[selectedLens.value])
+
 const overallSummary = computed(() =>
-  buildTrendOverallSummary({
-    period: selectedPeriod.value,
-    baseline: selectedBaseline.value,
-    runs: runStore.sortedRuns,
-    memory: memoryStore.memory
-  })
+  trendAnalysis.value.overallSummary
 )
 
 const overallItems = computed<TrendOverallItem[]>(() => [
