@@ -94,7 +94,22 @@ type DateWindow = {
   baselineLabel: string
 }
 
-const hardTypes: RunType[] = ['Tempo', 'LSD', 'Steady Long', 'Race']
+type EfficiencyBandSummary = {
+  count: number
+  medianPaceSec: number
+  avgTemperature: number | null
+  avgElevationPerKm: number | null
+  dominantCourseType: RunLog['courseType'] | null
+}
+
+type LoadSignal = {
+  run: RunLog
+  hard: boolean
+  watch: boolean
+  reason: string
+}
+
+const hardTypes: RunType[] = ['Tempo', 'Steady Long', 'Race']
 const qualityTypes: RunType[] = ['Easy + Strides', 'Tempo', 'LSD', 'Steady Long', 'Race']
 const lensOrder: TrendLensKey[] = ['goal', 'efficiency', 'intensity', 'quality', 'recovery']
 const lensQuestionLabels: Record<TrendLensKey, string> = {
@@ -139,6 +154,7 @@ export function buildTrendOverallSummary(input: Omit<TrendInput, 'lens'>): Trend
   const good = pickLensResult(lensResults, goodLensPriority, (result) => result.hero.tone === 'good')
   const reduce = pickLensResult(lensResults, warningLensPriority, (result) => result.prescriptionImpact.status === 'reduce-or-recover')
   const raise = pickLensResult(lensResults, goodLensPriority, (result) => result.prescriptionImpact.status === 'raise-candidate')
+  const raiseBlocker = raise ? raiseBlockerResult(lensResults) : undefined
   const dataReadyCount = lensResults.filter((result) => result.hero.confidence !== 'low').length
   const goodCount = lensResults.filter((result) => result.hero.tone === 'good').length
   const warningCount = lensResults.filter((result) => result.hero.tone === 'warning').length
@@ -161,7 +177,7 @@ export function buildTrendOverallSummary(input: Omit<TrendInput, 'lens'>): Trend
     cautionSignal: warning
       ? resultItem('가장 조심할 신호', warning, '다음 처방을 보수적으로 만드는 신호입니다.')
       : overallItem('가장 조심할 신호', '큰 경고 없음', '현재 렌즈 조합에서는 강하게 낮춰야 할 경고가 크지 않습니다.', 'good'),
-    prescriptionDirection: prescriptionDirectionItem(reduce, raise)
+    prescriptionDirection: prescriptionDirectionItem(reduce, raiseBlocker ? undefined : raise, raiseBlocker)
   }
 }
 
@@ -232,8 +248,10 @@ function buildEfficiencyLens(window: DateWindow): TrendLensResult {
   const baseValue = baseline[currentBest.band]
   const currentValue = current[currentBest.band]
   const delta = baseValue && currentValue ? baseValue.medianPaceSec - currentValue.medianPaceSec : null
-  const tone: TrendInsightTone = delta === null ? 'neutral' : delta >= 8 ? 'good' : delta <= -8 ? 'warning' : 'watch'
-  const confidence = Math.min(currentValue?.count ?? 0, baseValue?.count ?? 0) >= 3 ? 'high' : 'medium'
+  const sampleCount = Math.min(currentValue?.count ?? 0, baseValue?.count ?? 0)
+  const contextWarnings = baseValue && currentValue ? efficiencyContextWarnings(currentValue, baseValue) : []
+  const tone = efficiencyTone(delta, sampleCount, contextWarnings)
+  const confidence: TrendInsightConfidence = sampleCount >= 3 && !contextWarnings.length ? 'high' : sampleCount >= 2 ? 'medium' : 'low'
 
   return {
     lens: 'efficiency',
@@ -242,20 +260,22 @@ function buildEfficiencyLens(window: DateWindow): TrendLensResult {
     hero: {
       value: delta === null ? '비교 부족' : `${delta > 0 ? '+' : ''}${Math.round(delta)}초/km`,
       label: `${currentBest.label} 효율 변화`,
-      detail: `${window.currentLabel} vs ${window.baselineLabel}`,
+      detail: `${window.currentLabel} vs ${window.baselineLabel}${contextWarnings.length ? ` · ${contextWarnings[0]}` : ''}`,
       tone,
       confidence
     },
     cards: Object.entries(current).slice(0, 4).map(([band, item]) => {
       const base = baseline[band]
       const diff = base ? base.medianPaceSec - item.medianPaceSec : null
+      const bandSampleCount = Math.min(item.count, base?.count ?? 0)
+      const bandContextWarnings = base ? efficiencyContextWarnings(item, base) : []
       return card(
         band,
         heartRateBandLabel(band),
         diff === null ? '비교 부족' : `${diff > 0 ? '+' : ''}${Math.round(diff)}`,
         diff === null ? '' : '초/km',
         `${item.count}개 point · 현재 ${formatPace(item.medianPaceSec)}/km`,
-        diff === null ? 'neutral' : diff >= 8 ? 'good' : diff <= -8 ? 'warning' : 'watch'
+        efficiencyTone(diff, bandSampleCount, bandContextWarnings)
       )
     }),
     chart: efficiencyChartPoints(window.current),
@@ -277,11 +297,12 @@ function buildIntensityLens(window: DateWindow, today: Date): TrendLensResult {
   const currentDistance = sumDistance(window.current)
   const baselineDistance = sumDistance(window.baseline)
   const easyRatio = getEasyRatio(window.current)
-  const hardCount = window.current.filter((run) => hardTypes.includes(run.type)).length
+  const loadSignals = window.current.map(loadSignalForRun)
+  const loadWatchCount = loadSignals.filter((item) => item.hard || item.watch).length
   const current7 = sumDistance(getRunsWithinDays(window.current, 7, today))
   const previous7 = sumDistance(getRunsWithinDays(window.current, 14, today).filter((run) => !getRunsWithinDays(window.current, 7, today).some((recent) => recent.id === run.id)))
   const loadDelta = previous7 > 0 ? ((current7 - previous7) / previous7) * 100 : null
-  const tone: TrendInsightTone = hardCount >= 3 || (loadDelta !== null && loadDelta >= 35) ? 'warning' : easyRatio >= 70 ? 'good' : 'watch'
+  const tone: TrendInsightTone = loadWatchCount >= 3 || (loadDelta !== null && loadDelta >= 35) ? 'warning' : easyRatio >= 70 ? 'good' : 'watch'
 
   return {
     lens: 'intensity',
@@ -290,23 +311,26 @@ function buildIntensityLens(window: DateWindow, today: Date): TrendLensResult {
     hero: {
       value: `${easyRatio}%`,
       label: 'Easy 비율',
-      detail: `강훈련 ${hardCount}회 · ${window.currentLabel}`,
+      detail: `부하 주의 ${loadWatchCount}회 · ${window.currentLabel}`,
       tone,
       confidence: window.current.length >= 5 ? 'high' : 'medium'
     },
     cards: [
       card('distance', '거리 변화', signedNumber(currentDistance - baselineDistance, 'km'), '', `${window.baselineLabel} 대비`, currentDistance >= baselineDistance ? 'good' : 'watch'),
       card('easy', 'Easy 비율', String(easyRatio), '%', '랩/페이스 기반', easyRatio >= 70 ? 'good' : easyRatio < 55 ? 'warning' : 'watch'),
-      card('hard', '강훈련', String(hardCount), '회', 'Tempo/LSD/Steady/Race', hardCount >= 3 ? 'warning' : 'watch'),
+      card('hard', '부하 주의', String(loadWatchCount), '회', '강훈련 또는 LSD 부하 신호', loadWatchCount >= 3 ? 'warning' : 'watch'),
       card('load', '최근 부하', loadDelta === null ? '비교 부족' : `${Math.round(loadDelta)}%`, '', '최근 7일 vs 이전 7일', loadDelta !== null && loadDelta >= 35 ? 'warning' : 'neutral')
     ],
     chart: typeDistributionPoints(window.current),
     explanations: [
       'Easy 비율은 RunType만으로 계산하지 않고 가능한 경우 랩/페이스를 우선합니다.',
       '최근 부하 증가는 부상 예측 공식이 아니라 스케줄 보수성 조절 신호입니다.',
-      hardCount >= 3 ? '강훈련이 한 주에 몰려 다음 처방 상향은 보류하는 편이 낫습니다.' : '강훈련 과밀 신호는 크지 않습니다.'
+      loadWatchCount >= 3 ? '부하 신호가 한 주에 몰려 다음 처방 상향은 보류하는 편이 낫습니다.' : '강훈련 과밀 신호는 크지 않습니다.'
     ],
-    evidenceRuns: evidenceFromRuns(window.current.filter((run) => hardTypes.includes(run.type)).slice(-4), 'warning', '강도 밀도 판단에 사용한 품질 세션입니다.'),
+    evidenceRuns: loadSignals
+      .filter((item) => item.hard || item.watch)
+      .slice(-4)
+      .map((item) => ({ runId: item.run.id, role: 'warning', reason: item.reason })),
     prescriptionImpact: prescription(
       tone === 'warning' ? 'reduce-or-recover' : 'maintain',
       tone === 'warning' ? '다음 세션 회복 또는 Easy 우선' : '주간 강도 분포 유지',
@@ -387,7 +411,7 @@ function buildRecoveryLens(window: DateWindow): TrendLensResult {
       card('quiet', '조용한 회복', String(quiet), '회', '다음 기록 반응 기준', quiet >= highCost.length ? 'good' : 'watch'),
       card('cost', '주의 반응', String(highCost.length), '회', '통증/RPE/공백 후보', highCost.length ? 'warning' : 'neutral'),
       card('pain', '통증 연결', String(checks.filter((item) => item.reason.includes('통증')).length), '회', 'painNote 기준', 'warning'),
-      card('gap', '긴 공백', String(checks.filter((item) => item.reason.includes('공백')).length), '회', '3일 이상', 'watch')
+      card('gap', '긴 공백', String(checks.filter((item) => item.reason.includes('공백')).length), '회', '4일 이상', 'watch')
     ],
     chart: checks.map((item) => ({
       id: item.run.id,
@@ -453,28 +477,31 @@ function getDateWindow(runs: RunLog[], period: TrendPeriod, baseline: TrendBasel
 }
 
 function comparableHeartRatePace(runs: RunLog[]) {
-  const bands: Record<string, number[]> = {}
+  const bands: Record<string, RunLog[]> = {}
   for (const run of runs) {
     if (!run.avgHeartRate || !run.avgPaceSec) continue
     const band = heartRateBand(run.avgHeartRate)
     const list = bands[band] ?? []
-    list.push(run.avgPaceSec)
+    list.push(run)
     bands[band] = list
   }
   return Object.fromEntries(
-    Object.entries(bands).map(([band, values]) => [
+    Object.entries(bands).map(([band, runs]) => [
       band,
       {
-        count: values.length,
-        medianPaceSec: median(values)
+        count: runs.length,
+        medianPaceSec: median(runs.map((run) => run.avgPaceSec).filter((value): value is number => value !== null)),
+        avgTemperature: averageNullable(runs.map((run) => run.temperature)),
+        avgElevationPerKm: averageNullable(runs.map((run) => run.elevationGainM !== null && run.distanceKm > 0 ? run.elevationGainM / run.distanceKm : null)),
+        dominantCourseType: dominantCourseType(runs)
       }
     ])
-  ) as Record<string, { count: number; medianPaceSec: number }>
+  ) as Record<string, EfficiencyBandSummary>
 }
 
 function chooseEfficiencyBand(
-  current: Record<string, { count: number; medianPaceSec: number }>,
-  baseline: Record<string, { count: number; medianPaceSec: number }>
+  current: Record<string, EfficiencyBandSummary>,
+  baseline: Record<string, EfficiencyBandSummary>
 ) {
   const candidates = ['z2', 'z3', 'z4', 'z1', 'z5']
   const band = candidates.find((key) => current[key] && baseline[key]) ?? Object.keys(current)[0]
@@ -497,15 +524,23 @@ function efficiencyChartPoints(runs: RunLog[]): TrendChartPoint[] {
 }
 
 function typeDistributionPoints(runs: RunLog[]): TrendChartPoint[] {
-  const byType = new Map<RunType, number>()
-  for (const run of runs) byType.set(run.type, (byType.get(run.type) ?? 0) + run.distanceKm)
-  return Array.from(byType.entries()).map(([type, distance]) => ({
+  const byType = new Map<RunType, { distance: number; status: TrendInsightTone }>()
+  for (const run of runs) {
+    const previous = byType.get(run.type)
+    const signal = loadSignalForRun(run)
+    const status: TrendInsightTone = signal.hard || signal.watch ? 'watch' : 'good'
+    byType.set(run.type, {
+      distance: (previous?.distance ?? 0) + run.distanceKm,
+      status: previous?.status === 'watch' || status === 'watch' ? 'watch' : 'good'
+    })
+  }
+  return Array.from(byType.entries()).map(([type, item]) => ({
     id: type,
     label: type,
     date: '',
-    value: Math.round(distance * 10) / 10,
-    detail: `${type} ${distance.toFixed(1)}km`,
-    status: hardTypes.includes(type) ? 'watch' : 'good',
+    value: Math.round(item.distance * 10) / 10,
+    detail: `${type} ${item.distance.toFixed(1)}km`,
+    status: item.status,
     confidence: 'medium'
   }))
 }
@@ -549,8 +584,12 @@ function recoveryCost(run: RunLog, runs: RunLog[]) {
     reasons.push('컨디션 낮음')
   }
   if (gap !== null && gap >= 4) {
-    cost += 1
-    reasons.push(`${gap}일 공백`)
+    if (cost > 0) {
+      cost += 1
+      reasons.push(`${gap}일 공백 동반`)
+    } else {
+      reasons.push(`${gap}일 공백 단독 관찰`)
+    }
   }
   return {
     run,
@@ -561,15 +600,111 @@ function recoveryCost(run: RunLog, runs: RunLog[]) {
 }
 
 function estimateNumericDrift(run: RunLog) {
+  return evaluateLapDrift(run).level
+}
+
+function evaluateLapDrift(run: RunLog) {
   const laps = run.laps.filter((lap) => lap.avgHeartRate && lap.paceSec)
-  if (laps.length < 2) return 1
-  const first = laps[0]
-  const last = laps[laps.length - 1]
-  const hrDiff = (last.avgHeartRate ?? 0) - (first.avgHeartRate ?? 0)
-  const paceDiff = (last.paceSec ?? 0) - (first.paceSec ?? 0)
-  if (hrDiff > 8 && paceDiff > 15) return 3
-  if (hrDiff > 5 || paceDiff > 20) return 2
-  return 0
+  if (laps.length < 2) return { level: 1, heartRateDriftBpm: null, paceDeltaSec: null }
+  const splitIndex = Math.ceil(laps.length / 2)
+  const firstHalf = laps.slice(0, splitIndex)
+  const secondHalf = laps.slice(splitIndex)
+  if (!secondHalf.length) return { level: 1, heartRateDriftBpm: null, paceDeltaSec: null }
+  const firstHalfHeartRate = averageNullable(firstHalf.map((lap) => lap.avgHeartRate))
+  const secondHalfHeartRate = averageNullable(secondHalf.map((lap) => lap.avgHeartRate))
+  const firstHalfPace = weightedLapPace(firstHalf)
+  const secondHalfPace = weightedLapPace(secondHalf)
+  const heartRateDriftBpm = firstHalfHeartRate !== null && secondHalfHeartRate !== null
+    ? Math.round(secondHalfHeartRate - firstHalfHeartRate)
+    : null
+  const paceDeltaSec = firstHalfPace !== null && secondHalfPace !== null
+    ? Math.round(secondHalfPace - firstHalfPace)
+    : null
+  const largeHeartRateDrift = heartRateDriftBpm !== null && heartRateDriftBpm > 10
+  const lateFade = paceDeltaSec !== null && paceDeltaSec >= 18
+  const moderateHeartRateDrift = heartRateDriftBpm !== null && heartRateDriftBpm > 4
+  if (largeHeartRateDrift && lateFade) return { level: 3, heartRateDriftBpm, paceDeltaSec }
+  if (largeHeartRateDrift || lateFade) return { level: 2, heartRateDriftBpm, paceDeltaSec }
+  if (moderateHeartRateDrift) return { level: 1, heartRateDriftBpm, paceDeltaSec }
+  return { level: 0, heartRateDriftBpm, paceDeltaSec }
+}
+
+function loadSignalForRun(run: RunLog): LoadSignal {
+  if (hardTypes.includes(run.type)) {
+    return { run, hard: true, watch: true, reason: `${run.type} 강훈련 세션` }
+  }
+  if (run.type !== 'LSD') {
+    return { run, hard: false, watch: false, reason: '저강도 또는 일반 세션' }
+  }
+
+  const drift = evaluateLapDrift(run)
+  const reasons = [
+    (run.avgHeartRate ?? 0) > 145 ? 'LSD 평균심박 상승' : '',
+    (run.rpe ?? 0) >= 6 ? 'LSD RPE 높음' : '',
+    drift.level >= 2 ? 'LSD 후반 드리프트 큼' : ''
+  ].filter(Boolean)
+  if (!reasons.length) {
+    return { run, hard: false, watch: false, reason: '낮은 심박/RPE의 LSD' }
+  }
+  return { run, hard: false, watch: true, reason: reasons.join(' · ') }
+}
+
+function efficiencyTone(delta: number | null, sampleCount: number, contextWarnings: string[]): TrendInsightTone {
+  if (delta === null) return 'neutral'
+  if (delta <= -8) return 'warning'
+  if (delta >= 8) return sampleCount >= 3 && !contextWarnings.length ? 'good' : 'watch'
+  return 'watch'
+}
+
+function efficiencyContextWarnings(current: EfficiencyBandSummary, baseline: EfficiencyBandSummary) {
+  const warnings: string[] = []
+  if (
+    current.avgTemperature !== null
+    && baseline.avgTemperature !== null
+    && Math.abs(current.avgTemperature - baseline.avgTemperature) >= 5
+  ) {
+    warnings.push('기온 차이 큼')
+  }
+  if (
+    current.avgElevationPerKm !== null
+    && baseline.avgElevationPerKm !== null
+    && Math.abs(current.avgElevationPerKm - baseline.avgElevationPerKm) >= 8
+  ) {
+    warnings.push('고도 차이 큼')
+  }
+  if (
+    current.dominantCourseType
+    && baseline.dominantCourseType
+    && current.dominantCourseType !== 'Unknown'
+    && baseline.dominantCourseType !== 'Unknown'
+    && current.dominantCourseType !== baseline.dominantCourseType
+  ) {
+    warnings.push('코스 차이 큼')
+  }
+  return warnings
+}
+
+function averageNullable(values: Array<number | null | undefined>) {
+  const valid = values.filter((value): value is number => value !== null && value !== undefined && Number.isFinite(value))
+  if (!valid.length) return null
+  return valid.reduce((sum, value) => sum + value, 0) / valid.length
+}
+
+function dominantCourseType(runs: RunLog[]) {
+  const counts = new Map<RunLog['courseType'], number>()
+  for (const run of runs) counts.set(run.courseType, (counts.get(run.courseType) ?? 0) + 1)
+  const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])
+  return sorted[0]?.[0] ?? null
+}
+
+function weightedLapPace(laps: RunLog['laps']) {
+  const paceLaps = laps.filter((lap) => lap.paceSec !== null)
+  if (!paceLaps.length) return null
+  const distance = paceLaps.reduce((sum, lap) => sum + (lap.distanceKm ?? 0), 0)
+  if (distance > 0) {
+    return paceLaps.reduce((sum, lap) => sum + (lap.paceSec ?? 0) * (lap.distanceKm ?? 0), 0) / distance
+  }
+  return averageNullable(paceLaps.map((lap) => lap.paceSec))
 }
 
 function heartRateBand(value: number) {
@@ -621,6 +756,11 @@ function pickLensResult(results: TrendLensResult[], priority: TrendLensKey[], pr
   return undefined
 }
 
+function raiseBlockerResult(results: TrendLensResult[]) {
+  return results.find((result) => result.lens === 'recovery' && result.hero.tone === 'warning')
+    ?? results.find((result) => result.lens === 'intensity' && result.hero.tone === 'warning')
+}
+
 function overallItem(label: string, title: string, detail: string, tone: TrendInsightTone, lens?: TrendLensKey): TrendOverallItem {
   return { label, title, detail, tone, lens }
 }
@@ -635,7 +775,7 @@ function resultItem(label: string, result: TrendLensResult, fallback: string): T
   )
 }
 
-function prescriptionDirectionItem(reduce?: TrendLensResult, raise?: TrendLensResult): TrendOverallItem {
+function prescriptionDirectionItem(reduce?: TrendLensResult, raise?: TrendLensResult, raiseBlocker?: TrendLensResult): TrendOverallItem {
   if (reduce) {
     return overallItem(
       '다음 처방 방향',
@@ -652,6 +792,15 @@ function prescriptionDirectionItem(reduce?: TrendLensResult, raise?: TrendLensRe
       raise.prescriptionImpact.reasons[0] ?? '회복 비용이 조용하면 같은 유형의 처방을 소폭 올릴 수 있습니다.',
       'good',
       raise.lens
+    )
+  }
+  if (raiseBlocker) {
+    return overallItem(
+      '다음 처방 방향',
+      '현재 처방 유지 후 1회 더 확인',
+      `${lensQuestionLabels[raiseBlocker.lens]} 렌즈가 주의 신호라 상향 후보를 바로 적용하지 않습니다.`,
+      'watch',
+      raiseBlocker.lens
     )
   }
   return overallItem('다음 처방 방향', '현재 루틴 유지', '뚜렷한 상향 또는 하향 신호보다 같은 처방을 반복 확인할 근거가 큽니다.', 'watch')
