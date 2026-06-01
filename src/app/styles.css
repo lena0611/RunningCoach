@@ -1761,7 +1761,31 @@ button.stat-card {
 
 .run-month-group {
   display: grid;
-  gap: 10px;
+  gap: 12px;
+  isolation: isolate;
+}
+
+.run-month-heading-sticky {
+  position: relative;
+  z-index: 1;
+}
+
+.run-month-fixed-heading {
+  position: fixed;
+  top: var(--run-month-sticky-top, 0px);
+  left: 50%;
+  z-index: 18;
+  width: min(1080px, calc(100vw - 28px));
+  padding: 0 2px 20px;
+  background: linear-gradient(
+    180deg,
+    var(--color-header-bg) 0%,
+    color-mix(in srgb, var(--color-header-bg) 72%, transparent) 58%,
+    transparent 100%
+  );
+  backdrop-filter: blur(16px);
+  transform: translateX(-50%);
+  pointer-events: none;
 }
 
 .run-month-heading {
@@ -1771,6 +1795,76 @@ button.stat-card {
   font-weight: 800;
   line-height: 1.15;
   letter-spacing: 0;
+}
+
+.run-month-summary {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 12px;
+}
+
+.run-month-summary-head,
+.run-month-summary-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 1fr) minmax(0, 0.78fr) minmax(0, 0.86fr);
+  column-gap: 12px;
+  align-items: baseline;
+}
+
+.run-month-summary-head strong {
+  color: var(--color-muted);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.run-month-summary-row dt {
+  min-width: 0;
+  color: var(--color-text);
+  font-size: 19px;
+  font-weight: 720;
+  line-height: 1.2;
+}
+
+.run-month-summary-row dd {
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 0;
+  gap: 2px;
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.run-month-summary-row dd span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.run-month-summary-row dd small {
+  font-size: 0.76em;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.run-month-summary-row-time dd {
+  color: var(--color-warning-text);
+}
+
+.run-month-summary-row-calorie dd {
+  color: var(--color-danger);
+}
+
+.run-month-summary-row-distance dd {
+  color: var(--color-accent);
+}
+
+.run-month-summary-row-pace dd {
+  color: color-mix(in srgb, var(--color-accent) 70%, var(--color-primary));
 }
 
 .run-session-row {
