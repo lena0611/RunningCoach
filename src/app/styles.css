@@ -266,6 +266,7 @@
   padding: var(--space-3);
   border-radius: var(--radius-card);
   background: var(--color-field);
+  touch-action: pan-y;
 }
 
 .trend-lens-echart {

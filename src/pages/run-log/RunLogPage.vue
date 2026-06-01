@@ -32,6 +32,7 @@ const healthKitSyncStore = useHealthKitSyncStore()
 const weatherStore = useWeatherStore()
 const route = useRoute()
 const router = useRouter()
+const isRunLogRoute = computed(() => route.path === '/runs')
 const selectedTypes = ref<RunType[]>([...runTypes])
 const selectedMetaTags = ref<string[]>([])
 const metaAllSelected = ref(true)
@@ -1243,7 +1244,7 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
     </SectionCard>
 
     <Teleport to="body">
-      <div v-if="activeStickyMonth && !selectedDate" class="run-month-fixed-heading" aria-hidden="true">
+      <div v-if="isRunLogRoute && activeStickyMonth && !selectedDate" class="run-month-fixed-heading" aria-hidden="true">
         <h3 class="run-month-heading">{{ activeStickyMonth.title }}</h3>
       </div>
     </Teleport>

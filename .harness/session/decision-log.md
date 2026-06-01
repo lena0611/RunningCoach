@@ -467,3 +467,9 @@
 - 결정: tab-local fixed chrome은 비활성 `.tab-swipe-panel[aria-hidden='true']` 아래에서 숨기고, 이 기준을 UI guideline에 명시한다.
 - 선택 이유: fixed 요소는 부모 패널의 overflow와 시각 위치를 벗어나므로 z-index 조정만으로는 다른 탭 누수를 막을 수 없다. root pager의 mounted 구조를 유지하려면 active panel scoping이 필요하다.
 - 적용 범위: `src/app/styles.css`, `.harness/project/ui-guidelines.md`.
+
+## 2026-06-01 - Teleport fixed 요소는 route 조건으로 렌더링 제한
+- 문제: Run Log 월 heading은 `Teleport to="body"`로 렌더링되어 비활성 tab panel의 하위 선택자 숨김 규칙이 적용되지 않았다.
+- 결정: Run Log의 월 fixed heading은 현재 route가 `/runs`일 때만 렌더링한다. 차트처럼 좌우 드래그가 가능한 tab-local UI는 `data-no-swipe`와 pointer/touch stop으로 root pager에 이벤트가 전달되지 않게 한다.
+- 선택 이유: Teleport 요소는 DOM상 root tab panel 밖에 있으므로 CSS descendant scoping으로 안전하게 막을 수 없다. route 조건 렌더링이 실제 누수를 차단하는 단일 기준이다.
+- 적용 범위: `src/pages/run-log/RunLogPage.vue`, `src/shared/ui/TrendLensChart.vue`, `.harness/project/ui-guidelines.md`.
