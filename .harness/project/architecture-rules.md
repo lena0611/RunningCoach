@@ -10,6 +10,7 @@
 - `src/entities`: `RunLog`, `Lap`, `TrainingMemory` 같은 도메인 타입과 상수를 담당한다.
 - `TrainingMemory` normalization은 `src/entities/training-memory/model.ts`의 `normalizeTrainingMemory`를 기준으로 통일한다. legacy `goal` 문자열은 active goal title로 변환해 호환한다.
 - 훈련법/문헌 기반 지식은 `TrainingMemory`에 직접 섞지 않고 Supabase `training_knowledge_*` 테이블에 분리한다. `TrainingMemory`는 사용자별 상태와 개인화 보정값, `TrainingKnowledge`는 승인된 공통 지식이다.
+- `TrainingMemory.runnerIdentity`는 러너의 장기 특성 계층이고, `TrainingMemory.coachBeliefs`는 반복 확인된 코치 가설 계층이다. 둘 다 단일 코칭 이벤트 기록을 대체하지 않고 `coach_memory_items`보다 구조화된 장기 컨텍스트로 사용한다.
 - `training_knowledge_requests` 저장은 사용자 backlog 등록만 담당한다. 프론트에서 요청을 저장할 때 OpenAI Edge Function을 호출하지 않고, 비용이 드는 조사/요약/구조화는 별도 관리 작업으로 분리한다.
 - AI 처방 컨텍스트는 `TrainingKnowledge`의 구조화 rule을 먼저 검색하고, 이후 `adaptiveTrainingProfile`으로 사용자별 보정을 적용한다. 지식 검색은 activeGoal 거리, 세션 타입, 훈련 단계, 부상/주의 조건을 기준으로 좁혀야 한다.
 - RAG/벡터 검색은 `training_knowledge_chunks`의 승인된 요약 chunk만 대상으로 한다. 책/유료 콘텐츠 원문 전문이나 긴 발췌를 저장하지 않는다.
@@ -51,8 +52,10 @@
 - AI 코칭 요청 -> Supabase Edge Function -> DB에서 `TrainingMemory`, `RunLog`, `coach_memory_items` 조회 -> OpenAI 호출 -> `coach_reports`, 새 `coach_memory_items`, 필요한 경우 갱신된 `training_memory.memory.weeklyPattern` 저장
 - AI 코칭 컨텍스트는 비용을 통제한다. 같은 세션 대화 thread는 이어서 넣되, 다른 세션 대화는 전체 전문이 아니라 유사 세션 snippet과 `coach_memory_items` 중심으로 주입한다.
 - AI 코칭 Edge Function은 OpenAI context에 원본 RunLog 대용량 배열을 직접 넣지 않는다. `metric_samples`, `route_points`, `laps`, `fast_segments`는 서버 내부 계산 근거로만 쓰고, 모델에는 선택 세션/최근 세션 요약과 계산된 흐름 신호만 전달한다.
+- AI 코칭 Edge Function은 `runningAnalysisEngine`에서 HR drift, 부하 증가율, 회복 상태, 부상 위험, 과훈련 경고, 훈련 적합성 점수를 먼저 계산하고, OpenAI는 이 판단을 설명하는 역할을 맡는다.
+- AI 코칭 Edge Function은 Responses API strict JSON schema를 사용해 `report`, `memoryItems`, `trainingMemoryPatch`, `injuryUpdateProposal` 응답 구조를 강제한다. 프롬프트만으로 JSON을 기대하지 않는다.
 - `coach-run`의 사용자 요청 1회는 OpenAI 모델 호출 1회를 원칙으로 한다. 스트리밍 파서 fallback이나 오류 복구가 두 번째 모델 호출을 만들면 429를 증폭할 수 있으므로, fallback은 같은 응답 payload 안에서만 처리한다.
-- 장기기억 컨텍스트는 `coach_memory_items` 최근 목록을 그대로 넣지 않고, 선택 세션/메모 태그, 반복 패턴 키워드, 중요 러닝 맥락, 최근성을 점수화해 최대 소량만 넣는다.
+- 장기기억 컨텍스트는 `coach_memory_items` 최근 목록을 그대로 넣지 않고, 선택 세션/메모 태그, activeGoal, activeInjuryItem, runnerIdentity, coachBeliefs, 반복 패턴 키워드, 중요 러닝 맥락, 최근성을 점수화해 최대 소량만 넣는다.
 - 장기 확장: Strava activity fetch -> `RunLog` 후보 생성 -> 사용자 확인/저장
 
 ## 화면 로딩과 스토어 규칙

@@ -195,6 +195,7 @@ Easy 5km
 - `lapProcess`: 랩/샘플 기반 페이스 흐름, 심박 흐름, 전후반 변화, 초반 통제 여부, 심박 드리프트
 - `prescriptionCompliance`: 세션 유형별 처방 경계 준수 여부와 넘긴 지점
 - `goalProjectionCheck`: 목표 예상 기록, 개선/정체 방향, 신뢰도와 한계
+- `engineCheck`: 코드가 먼저 계산한 HR drift, 최근 7일 부하 변화, 회복 상태, 부상 위험, 과훈련 경고, 훈련 적합성 점수
 - `routineUpdateCheck`: 주간 루틴 유지/상향/하향/보류 판단과 근거
 
 답변에서는 이 보드를 그대로 복붙하지 않는다. 대신 다음 위치에 자연스럽게 녹인다.
@@ -203,6 +204,15 @@ Easy 5km
 - `## 오늘 해석`: 세션 의도와 실행 품질
 - `## 다음 훈련`: 처방 준수 결과에 따른 다음 체크포인트
 - `## 루틴 업데이트`: 목표 달성 관점에서 루틴을 유지할지 조정할지
+
+## 러너 정체성과 코치 믿음
+
+`TrainingMemory`는 단일 이벤트 기억과 별도로 구조화된 장기 개인화 계층을 가진다.
+
+- `runnerIdentity`: strengths, weaknesses, riskFactors, coachingStyle로 이 사용자가 어떤 러너인지 저장한다.
+- `coachBeliefs`: 반복 확인된 코치의 가설을 belief, category, confidence, supportCount, contradictionCount, evidenceRunIds, status로 저장한다.
+- 단일 세션 감상은 `confirmed` belief로 승격하지 않는다. 같은 유형 2회 이상 반복되거나 사용자 명시 피드백이 있을 때 candidate를 보강한다.
+- OpenAI 컨텍스트에는 모든 기억을 최신순으로 넣지 않고 activeGoal, activeInjuryItem, runnerIdentity, 높은 confidence belief와 관련 있는 항목만 선별한다.
 
 ## 스트리밍과 컨텍스트 예산
 
@@ -224,6 +234,8 @@ Easy 5km
 - 최근 14일 전체 RunLog 원본 목록
 
 2026-05-28 장애 대응 후 운영 기준은 단일 호출 스트리밍이다. OpenAI 호출은 서버에서 `stream: true`로 한 번만 수행하고, 모델이 반환하는 JSON 텍스트에서 `"report"` 문자열 내부를 추출해 SSE `delta`로 즉시 내려보낸다. 스트림이 끝나면 같은 응답에서 모은 전체 JSON만 파싱해 저장한다.
+
+2026-06-01부터 `coach-run`은 Responses API `text.format.json_schema` strict structured output을 사용한다. 응답 객체는 `report`, `memoryItems`, `trainingMemoryPatch`, `injuryUpdateProposal`만 허용하고, 구조화 실패를 프롬프트 문구에만 의존하지 않는다. 다만 저장 직전에는 기존처럼 서버 정규화와 fallback 검증을 한 번 더 수행한다.
 
 스트리밍 fallback은 같은 사용자 요청에서 두 번째 OpenAI 호출을 만들면 안 된다. `response.output_text.delta` 등 delta 이벤트가 충분하면 report를 토큰 단위로 표시하고, delta가 없고 `response.completed`/done 계열 이벤트에만 완성 텍스트가 있으면 마지막에 한 번만 report를 보낸다.
 
