@@ -20,7 +20,7 @@ function navigate(to: string) {
 </script>
 
 <template>
-  <nav class="bottom-nav" aria-label="주요 화면">
+  <nav class="bottom-nav" :style="{ '--bottom-nav-count': items.length }" aria-label="주요 화면">
     <button
       v-for="item in items"
       :key="item.to"
