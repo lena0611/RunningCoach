@@ -431,3 +431,9 @@
 - 결정: MVP 배포 자동 완료는 Issue 생성/재사용과 Issue worktree/branch 분리 이후에만 시작되는 후속 단계로 재정의한다. `.githooks/pre-commit`과 `.githooks/pre-push`에서 기준 작업트리 `main` 직접 commit/push를 차단하고, 사용자 명시 승인 예외만 `HARNESS_ALLOW_MAIN_COMMIT=1` 또는 `HARNESS_ALLOW_MAIN_PUSH=1`로 1회 우회한다.
 - 선택 이유: 문서 안내만으로는 긴 대화나 예외 규칙 충돌에서 누락될 수 있다. 실행 단계 hook이 main 직접 기록을 막아야 Issue/worktree 선행 게이트가 실제 운영 기준이 된다.
 - 적용 범위: `CLAUDE.md`, `AGENTS.md`, `.codex/hooks/inject-context.sh`, `.githooks/pre-commit`, `.githooks/pre-push`, `.harness/bin/guard-main-worktree.mjs`, `.harness/session/session-start-alert.md`, `.harness/session/active-context.md`, `.harness/session/next-session-reminder.md`, `.harness/session/project-memory.md`, `.harness/project/workflow-rules.md`, `.harness/project/commit-push-rules.md`.
+
+## 2026-06-01 - HealthKit 과거 이관 임시 UI
+- 문제: Issue #25의 날짜 범위 HealthKit 이관 경로는 웹 store와 네이티브 브리지에는 연결됐지만, 사용자가 실제 iPhone 앱에서 2025-11~2026-04 범위를 실행할 화면 진입점이 없었다.
+- 결정: 정식 데이터 관리 화면을 새로 설계하지 않고, 기록 페이지의 `전체 기록` 섹션 바로 위에 삭제 예정인 임시 마이그레이션 UI를 둔다. 버튼은 `2025-11-01`부터 `2026-04-30`까지 고정 범위로 `requestHistoricalMigration()`을 호출한다.
+- 선택 이유: 이번 목적은 1회성 MVP 데이터 이관 실행이다. 영구 기능처럼 설정/범위 입력/관리 화면을 만들면 삭제 비용과 사용자 혼란이 커진다.
+- 제거 조건: 사용자가 실제 데이터 이관 결과를 확인하고 #25 완료를 승인한 뒤 해당 임시 UI를 제거한다.
