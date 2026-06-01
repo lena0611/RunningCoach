@@ -20,6 +20,8 @@ export type TrainingMemory = {
   activeInjuryItemId: string | null
   athleteProfile: AthleteProfile
   adaptiveTrainingProfile: AdaptiveTrainingProfile
+  runnerIdentity: RunnerIdentity
+  coachBeliefs: CoachBelief[]
   weeklyPattern: string[]
   longRunStrategy: string
   currentVolumeNote: string
@@ -27,6 +29,34 @@ export type TrainingMemory = {
   runningStyle: string[]
   heatStrategy: string[]
   aiNotes: string[]
+}
+
+export type RunnerIdentity = {
+  strengths: RunnerIdentityTrait[]
+  weaknesses: RunnerIdentityTrait[]
+  riskFactors: RunnerIdentityTrait[]
+  coachingStyle: string[]
+}
+
+export type RunnerIdentityTrait = {
+  label: string
+  evidence: string[]
+  confidence: number
+  source: 'engine' | 'coach' | 'user' | 'mixed'
+  updatedAt: string | null
+}
+
+export type CoachBelief = {
+  id: string
+  belief: string
+  category: 'recovery' | 'injury' | 'load' | 'pacing' | 'routine' | 'weather' | 'preference' | 'other'
+  confidence: number
+  supportCount: number
+  contradictionCount: number
+  evidenceRunIds: string[]
+  status: 'candidate' | 'confirmed' | 'retired'
+  source: 'engine' | 'coach' | 'user' | 'mixed'
+  updatedAt: string | null
 }
 
 export type TrainingGoal = {
@@ -346,6 +376,37 @@ export const initialTrainingMemory: TrainingMemory = {
     compliancePatterns: [],
     sessionGuides: []
   },
+  runnerIdentity: {
+    strengths: [
+      {
+        label: 'Easy 기반을 꾸준히 쌓는 러너',
+        evidence: ['기본 루틴이 Easy, Tempo, Long Run 조합으로 구성되어 있음'],
+        confidence: 0.62,
+        source: 'coach',
+        updatedAt: null
+      }
+    ],
+    weaknesses: [
+      {
+        label: '강훈련/롱런 뒤 햄스트링 반응을 보수적으로 확인해야 함',
+        evidence: ['좌측 근위부 햄스트링 monitoring 항목이 있음'],
+        confidence: 0.72,
+        source: 'user',
+        updatedAt: null
+      }
+    ],
+    riskFactors: [
+      {
+        label: '더위에서 심박이 쉽게 오를 수 있음',
+        evidence: ['knownIssues와 heatStrategy에 더위 대응 기준이 있음'],
+        confidence: 0.7,
+        source: 'user',
+        updatedAt: null
+      }
+    ],
+    coachingStyle: ['부상 예방 우선', '장기 성장 중심', '페이스보다 심박/RPE 우선']
+  },
+  coachBeliefs: [],
   weeklyPattern: [
     '화요일: Easy + Strides',
     '목요일: Tempo',
@@ -395,7 +456,9 @@ export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null |
       ...base.athleteProfile,
       ...(memory?.athleteProfile ?? {})
     },
-    adaptiveTrainingProfile: normalizeAdaptiveTrainingProfile(memory?.adaptiveTrainingProfile)
+    adaptiveTrainingProfile: normalizeAdaptiveTrainingProfile(memory?.adaptiveTrainingProfile),
+    runnerIdentity: normalizeRunnerIdentity(memory?.runnerIdentity ?? base.runnerIdentity, memory ?? base),
+    coachBeliefs: normalizeCoachBeliefs(memory?.coachBeliefs ?? base.coachBeliefs)
   }
 
   const goals = normalizeGoals(memory)
@@ -414,6 +477,147 @@ export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null |
     activeInjuryItemId,
     goal: activeGoal.title
   }
+}
+
+function normalizeRunnerIdentity(value: unknown, memory: Partial<TrainingMemory> | null | undefined): RunnerIdentity {
+  const raw = value && typeof value === 'object' ? value as Partial<RunnerIdentity> : {}
+  const strengths = normalizeRunnerIdentityTraits(raw.strengths, 10)
+  const weaknesses = normalizeRunnerIdentityTraits(raw.weaknesses, 10)
+  const riskFactors = normalizeRunnerIdentityTraits(raw.riskFactors, 10)
+  const legacyRisks = normalizeStringArray(memory?.knownIssues)
+    .map((label) => createRunnerIdentityTrait(label, 'user', 0.68))
+  const legacyStyles = normalizeStringArray(memory?.runningStyle)
+    .map((label) => createRunnerIdentityTrait(label, 'user', 0.66))
+  const heatStyle = normalizeStringArray(memory?.heatStrategy)
+
+  return {
+    strengths: mergeRunnerIdentityTraits(strengths, legacyStyles, 10),
+    weaknesses,
+    riskFactors: mergeRunnerIdentityTraits(riskFactors, legacyRisks, 10),
+    coachingStyle: mergeUniqueStrings(normalizeStringArray(raw.coachingStyle), heatStyle, 12)
+  }
+}
+
+function normalizeRunnerIdentityTraits(value: unknown, limit: number): RunnerIdentityTrait[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => {
+      if (typeof item === 'string') return createRunnerIdentityTrait(item, 'coach', 0.62)
+      if (!item || typeof item !== 'object') return null
+      const raw = item as Partial<RunnerIdentityTrait>
+      const label = typeof raw.label === 'string' ? raw.label.trim() : ''
+      if (!label) return null
+      return {
+        label,
+        evidence: normalizeStringArray(raw.evidence).slice(0, 6),
+        confidence: normalizeConfidence(raw.confidence, 0.65),
+        source: normalizeMemorySource(raw.source),
+        updatedAt: typeof raw.updatedAt === 'string' && raw.updatedAt ? raw.updatedAt : null
+      }
+    })
+    .filter((item): item is RunnerIdentityTrait => Boolean(item))
+    .slice(0, limit)
+}
+
+function createRunnerIdentityTrait(label: string, source: RunnerIdentityTrait['source'], confidence: number): RunnerIdentityTrait {
+  return {
+    label: label.trim(),
+    evidence: [],
+    confidence,
+    source,
+    updatedAt: null
+  }
+}
+
+function mergeRunnerIdentityTraits(next: RunnerIdentityTrait[], current: RunnerIdentityTrait[], limit: number) {
+  const byKey = new Map<string, RunnerIdentityTrait>()
+  for (const trait of [...current, ...next]) {
+    const key = trait.label.replace(/\s+/g, '').toLowerCase()
+    if (!key) continue
+    const existing = byKey.get(key)
+    if (!existing || trait.confidence >= existing.confidence) {
+      byKey.set(key, {
+        ...trait,
+        evidence: mergeUniqueStrings(trait.evidence, existing?.evidence ?? [], 6),
+        confidence: Math.max(trait.confidence, existing?.confidence ?? 0)
+      })
+    }
+  }
+  return [...byKey.values()].sort((a, b) => b.confidence - a.confidence).slice(0, limit)
+}
+
+function normalizeCoachBeliefs(value: unknown): CoachBelief[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map(normalizeCoachBelief)
+    .filter((item): item is CoachBelief => Boolean(item))
+    .filter((belief) => belief.status !== 'retired')
+    .sort((a, b) => b.confidence - a.confidence || b.supportCount - a.supportCount)
+    .slice(0, 30)
+}
+
+function normalizeCoachBelief(value: unknown): CoachBelief | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Partial<CoachBelief>
+  const belief = typeof raw.belief === 'string' ? raw.belief.trim() : ''
+  if (!belief) return null
+  const supportCount = Number.isFinite(raw.supportCount) ? Math.max(0, Math.round(Number(raw.supportCount))) : 1
+  const confidence = normalizeConfidence(raw.confidence, supportCount >= 2 ? 0.68 : 0.58)
+  return {
+    id: typeof raw.id === 'string' && raw.id ? raw.id : `belief-${belief.replace(/[^\p{L}\p{N}]+/gu, '').toLowerCase().slice(0, 48)}`,
+    belief,
+    category: normalizeBeliefCategory(raw.category),
+    confidence,
+    supportCount,
+    contradictionCount: Number.isFinite(raw.contradictionCount) ? Math.max(0, Math.round(Number(raw.contradictionCount))) : 0,
+    evidenceRunIds: normalizeStringArray(raw.evidenceRunIds).slice(0, 10),
+    status: normalizeBeliefStatus(raw.status, confidence, supportCount),
+    source: normalizeMemorySource(raw.source),
+    updatedAt: typeof raw.updatedAt === 'string' && raw.updatedAt ? raw.updatedAt : null
+  }
+}
+
+function normalizeConfidence(value: unknown, fallback: number) {
+  const numberValue = Number(value)
+  if (!Number.isFinite(numberValue)) return fallback
+  return Math.max(0, Math.min(1, Math.round(numberValue * 100) / 100))
+}
+
+function normalizeMemorySource(value: unknown): RunnerIdentityTrait['source'] {
+  return value === 'engine' || value === 'coach' || value === 'user' || value === 'mixed' ? value : 'coach'
+}
+
+function normalizeBeliefCategory(value: unknown): CoachBelief['category'] {
+  return value === 'recovery' ||
+    value === 'injury' ||
+    value === 'load' ||
+    value === 'pacing' ||
+    value === 'routine' ||
+    value === 'weather' ||
+    value === 'preference' ||
+    value === 'other'
+    ? value
+    : 'other'
+}
+
+function normalizeBeliefStatus(value: unknown, confidence: number, supportCount: number): CoachBelief['status'] {
+  if (value === 'retired') return 'retired'
+  if (value === 'confirmed' || confidence >= 0.82 || supportCount >= 3) return 'confirmed'
+  return 'candidate'
+}
+
+function mergeUniqueStrings(next: string[], current: string[], limit: number) {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const item of [...next, ...current]) {
+    const text = item.trim()
+    const key = text.toLowerCase()
+    if (!text || seen.has(key)) continue
+    seen.add(key)
+    result.push(text)
+    if (result.length >= limit) break
+  }
+  return result
 }
 
 function normalizeAdaptiveTrainingProfile(value: unknown): AdaptiveTrainingProfile {

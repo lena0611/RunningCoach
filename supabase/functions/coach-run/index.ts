@@ -108,6 +108,36 @@ type CurrentWeatherContext = {
   }
 }
 
+type RunnerIdentityTrait = {
+  label: string
+  evidence: string[]
+  confidence: number
+  source: 'engine' | 'coach' | 'user' | 'mixed'
+  updatedAt: string | null
+}
+
+type RunnerIdentityPatch = {
+  strengths?: RunnerIdentityTrait[]
+  weaknesses?: RunnerIdentityTrait[]
+  riskFactors?: RunnerIdentityTrait[]
+  coachingStyle?: string[]
+}
+
+type CoachBelief = {
+  id: string
+  belief: string
+  category: 'recovery' | 'injury' | 'load' | 'pacing' | 'routine' | 'weather' | 'preference' | 'other'
+  confidence: number
+  supportCount: number
+  contradictionCount: number
+  evidenceRunIds: string[]
+  status: 'candidate' | 'confirmed' | 'retired'
+  source: 'engine' | 'coach' | 'user' | 'mixed'
+  updatedAt: string | null
+}
+
+type CoachBeliefPatch = Partial<CoachBelief>
+
 type SupabaseAdminClient = any
 
 const corsHeaders = {
@@ -334,6 +364,24 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     latestTempo: summarizeRunForCoach(latestTempo),
     latestLong: summarizeRunForCoach(latestLong)
   }
+  const runningAnalysisEngine = buildRunningAnalysisEngine({
+    runRows,
+    selectedRun,
+    selectedRunLapAnalysis,
+    recentPrescriptionComplianceSignals,
+    prescriptionComplianceSummary,
+    summaryStats,
+    activeInjuryItem,
+    activeGoal
+  })
+  const runnerIdentity = getRunnerIdentity(trainingMemory)
+  const coachBeliefs = selectRelevantCoachBeliefs(getCoachBeliefs(trainingMemory), {
+    selectedRun,
+    activeGoal,
+    activeInjuryItem,
+    userNote,
+    runningAnalysisEngine
+  })
   const coachingDecisionBoard = buildCoachingDecisionBoard({
     selectedRun,
     selectedRunLapAnalysis,
@@ -345,7 +393,10 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     activeGoal,
     activeInjuryItem,
     trainingKnowledge,
-    adaptiveTrainingProfile
+    adaptiveTrainingProfile,
+    runnerIdentity,
+    coachBeliefs,
+    runningAnalysisEngine
   })
   const injuryCheckInPolicy = buildInjuryCheckInPolicy(activeInjuryItem)
 
@@ -430,6 +481,16 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     goals,
     activeGoal,
     performanceProjection,
+    runnerIdentity,
+    coachBeliefs,
+    memorySelectionPolicy: {
+      principle:
+        'coachMemoryItems는 최신순 전체가 아니라 목표/부상/반복 패턴/높은 confidence belief와의 관련도를 우선해 고른 장기 기억 일부다.',
+      priority: ['activeGoal 관련', 'activeInjuryItem 또는 riskFactors 관련', '반복 출현 패턴', 'confirmed/high confidence coachBeliefs', '최근 명시 피드백']
+    },
+    runningAnalysisEngine,
+    runningAnalysisEngineInstruction:
+      'runningAnalysisEngine은 코드가 먼저 계산한 훈련 판단이다. AI는 이 값을 재계산하지 말고 설명과 처방 언어로 번역한다. 단일 세션 감상보다 hrDrift/loadTrend/recoveryStatus/injuryRisk/overtrainingWarning/trainingSuitabilityScore를 우선 확인한다.',
     coachingDecisionBoard,
     coachingDecisionBoardInstruction:
       'coachingDecisionBoard는 이번 답변의 판단 보드다. 답변 전에 selectedRunEvidence, lapProcess, prescriptionCompliance, goalProjectionCheck, routineUpdateCheck를 먼저 확인하고, 핵심 지표/오늘 해석/루틴 업데이트에 그 근거를 반영한다. 이 보드와 원본 RunLog가 충돌하면 원본 RunLog를 우선하되, 보드는 설명 구조를 잡는 데 사용한다.',
@@ -439,7 +500,12 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     injuryTemporalPolicy: selectedRun
       ? 'injuryItems와 activeInjuryItem은 selectedRun.date 이전 또는 당일에 이미 발생/등록된 항목만 포함한다. 여기에 없는 현재 active 부상은 선택 세션 당시에는 아직 발생하지 않은 것으로 보고 언급하지 마라.'
       : '현재 흐름 코칭이므로 현재 active/monitoring 부상 항목을 사용할 수 있다.',
-    coachMemoryItems: buildRelevantCoachMemoryItems(memoryRows, selectedRun, userNote),
+    coachMemoryItems: buildRelevantCoachMemoryItems(memoryRows, selectedRun, userNote, {
+      activeGoal,
+      activeInjuryItem,
+      coachBeliefs,
+      runnerIdentity
+    }),
     recentCoachReports: reportRows.slice(0, 5).map((report) => ({
       selectedRunId: report.selected_run_id,
       userNote: report.user_note,
@@ -485,6 +551,8 @@ type TrainingMemoryPatch = {
   activeGoalStrategyNotes?: string
   aiNotes?: string[]
   adaptiveTrainingProfile?: AdaptiveTrainingProfilePatch
+  runnerIdentity?: RunnerIdentityPatch
+  coachBeliefs?: CoachBeliefPatch[]
 }
 
 type InjuryUpdateProposal = {
@@ -563,7 +631,8 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     body: JSON.stringify({
       model,
       instructions,
-      input: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context, null, 2)}`
+      input: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context, null, 2)}`,
+      text: buildCoachResponseTextFormat()
     })
   })
 
@@ -658,6 +727,10 @@ function buildCoachInstructions() {
     '현재 Easy + Strides 기본 루틴은 10분 워밍업 + 8개의 스트라이드 가속 인터벌(20초 가속 + 1분40초 회복) + 15분 쿨다운이다. 다만 HealthKit/GPS 데이터는 타이트하게 들어오지 않으므로 20초/100초를 기계적으로 요구하지 않는다. route/speed에서 6~45초 정도의 짧은 가속이 4개 이상 반복되고 시작 간격이 대략 1~3.5분이면 Easy + Strides 성격으로 관용적으로 본다.',
     '앱 로그가 적어도 TrainingMemory나 coachMemoryItems의 장기 맥락을 부정하지 않는다. 로그가 덜 들어온 상태로 보고 조심스럽게 해석한다.',
     'context.coachMemoryItems는 장기기억 전체가 아니라 현재 선택 세션과 관련도 높은 일부만 선별한 것이다. 여기에 없다고 사용자가 그런 성향이 없다고 단정하지 않는다.',
+    'context.runnerIdentity는 단일 이벤트가 아니라 이 사용자가 어떤 러너인지 압축한 장기 정체성 계층이다. strengths/weaknesses/riskFactors/coachingStyle을 현재 기록 해석과 다음 처방 톤에 반영한다.',
+    'context.coachBeliefs는 반복 확인된 코치의 가설/믿음이다. confidence와 supportCount가 높은 항목을 우선하고, 단일 세션 감상으로 confirmed belief를 만들지 않는다.',
+    'context.runningAnalysisEngine은 코드가 먼저 계산한 HR drift, 부하 추세, 회복 상태, 부상 위험, 과훈련 경고, 훈련 적합성 점수다. AI는 이 값을 재계산하지 말고 사용자에게 이해되는 코칭 설명으로 바꾼다.',
+    'runningAnalysisEngine.memoryCandidates는 장기기억 후보일 뿐이다. 반복 근거가 약하면 저장하지 말고, 저장할 때는 runnerIdentity 또는 coachBeliefs에 구조화한다.',
     '최근 14일 앱 로그가 적다는 이유만으로 훈련 성과를 판단할 수 없다고 길게 말하지 않는다.',
     '템포 뒤 9분대 조깅, 심박 125~128, 배우자 동행런 맥락이면 추가 강훈련보다 회복 조깅으로 해석한다.',
     '더위, 케이던스/호흡 성향, 과거 좌측 근위부 햄스트링 이슈, 격주 롱런 패턴을 필요한 때만 짧게 연결한다.',
@@ -709,6 +782,8 @@ function buildCoachInstructions() {
     '루틴 변경이 필요하면 trainingMemoryPatch.weeklyPattern에 새 주간 루틴을 전체 배열로 넣는다. 일부만 넣지 말고 전체 주간 패턴을 반환한다.',
     '루틴 변경이 activeGoal의 목표관리에도 반영되어야 하면 trainingMemoryPatch.activeGoalStrategyNotes에 활성 목표의 새 strategyNotes 문장을 넣는다. 이 값은 activeGoal.strategyNotes에 저장된다.',
     '롱런 전략이나 현재 볼륨 노트도 바뀌어야 하면 trainingMemoryPatch.longRunStrategy, trainingMemoryPatch.currentVolumeNote에 반영한다.',
+    '사용자의 장기 정체성이 반복 근거로 보강되면 trainingMemoryPatch.runnerIdentity에 strengths/weaknesses/riskFactors/coachingStyle을 반환한다. 단일 세션만으로 "이 사람은 항상"이라고 단정하지 않는다.',
+    '반복 패턴이 2회 이상 확인되거나 기존 belief를 보강/반박할 근거가 있으면 trainingMemoryPatch.coachBeliefs에 belief, category, confidence, supportCount, contradictionCount, evidenceRunIds, status를 넣는다.',
     '루틴을 바꾼 이유는 report에 짧게 설명하고, aiNotes에는 장기적으로 기억할 계획 변경 근거만 1~3개 넣는다.',
     'trainingMemoryPatch는 RunLog 원본 값이나 injuryItems를 바꾸는 용도가 아니다. 훈련 계획과 코칭 메모리만 갱신한다.',
     '긴 문단, 같은 말 반복, 모든 맥락 나열, 의료 진단, 부상 위험 단정, 목표 달성 보장, 원본 RunLog 임의 수정은 금지한다.',
@@ -721,9 +796,218 @@ function buildCoachInstructions() {
     'memoryItems에 단일 세션의 거리/페이스/심박, "오늘 잘했다", "다음 훈련은 휴식" 같은 일회성 코멘트를 넣지 않는다.',
     '이미 context.coachMemoryItems나 trainingMemory에 같은 의미가 있으면 memoryItems에 다시 넣지 않는다.',
     '스트리밍 UI가 report를 먼저 표시하므로 JSON 객체의 키 순서는 반드시 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal 순서로 둔다.',
-    'JSON만 반환한다. 형식: {"report":"사용자에게 보여줄 마크다운 코칭","memoryItems":["장기 기억으로 저장할 짧은 문장"],"trainingMemoryPatch":null 또는 {"weeklyPattern":["화요일: ..."],"longRunStrategy":"...","currentVolumeNote":"...","activeGoalStrategyNotes":"활성 목표 전략 메모","aiNotes":["..."],"adaptiveTrainingProfile":{"trainingPhase":{"currentPhase":"Base","startedAt":null,"goal":"...","focus":["..."],"nextPhase":"Build","reviewAfter":"..."},"progressionCriteria":[{"id":"easy-hr-stability","label":"Easy 심박 안정","status":"watch","evidence":"...","action":"..."}],"prescriptionTemplates":[{"id":"tempo-ceiling-165","name":"Tempo 상한주","phase":"Build","sessionType":"Tempo","purpose":"...","workout":["..."],"useWhen":["..."],"avoidWhen":["..."],"progressionTrigger":"..."}],"compliancePatterns":["반복 패턴"],"sessionGuides":[{"type":"Tempo","boundary":"현재 사용자에게 맞는 처방 경계","adjustment":"maintain","evidence":"반복 근거","nextCheck":"다음 확인 기준"}]}},"injuryUpdateProposal":null 또는 {"injuryItemId":"...","proposalType":"check_in_update","suggestedStatus":"monitoring","suggestedPainLevel":1,"rationale":"...","userApprovalPrompt":"앱에서 이 부상 상태를 갱신할까요?","safetyNotes":["사용자 승인 전에는 저장하지 않는다"]}}'
+    'Responses API structured output schema가 JSON 구조를 강제한다. JSON 외 텍스트를 붙이지 말고, 업데이트가 없으면 trainingMemoryPatch와 injuryUpdateProposal은 null, memoryItems는 빈 배열로 둔다.'
   ].join('\n')
 
+}
+
+function buildCoachResponseTextFormat() {
+  return {
+    format: {
+      type: 'json_schema',
+      name: 'pace_lab_coach_response',
+      strict: true,
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['report', 'memoryItems', 'trainingMemoryPatch', 'injuryUpdateProposal'],
+        properties: {
+          report: { type: 'string' },
+          memoryItems: {
+            type: 'array',
+            items: { type: 'string' }
+          },
+          trainingMemoryPatch: {
+            anyOf: [
+              { type: 'null' },
+              {
+                type: 'object',
+                additionalProperties: false,
+                required: [
+                  'weeklyPattern',
+                  'longRunStrategy',
+                  'currentVolumeNote',
+                  'activeGoalStrategyNotes',
+                  'aiNotes',
+                  'adaptiveTrainingProfile',
+                  'runnerIdentity',
+                  'coachBeliefs'
+                ],
+                properties: {
+                  weeklyPattern: { type: 'array', items: { type: 'string' } },
+                  longRunStrategy: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                  currentVolumeNote: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                  activeGoalStrategyNotes: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                  aiNotes: { type: 'array', items: { type: 'string' } },
+                  adaptiveTrainingProfile: buildAdaptiveTrainingProfileSchema(),
+                  runnerIdentity: buildRunnerIdentitySchema(),
+                  coachBeliefs: { type: 'array', items: buildCoachBeliefSchema() }
+                }
+              }
+            ]
+          },
+          injuryUpdateProposal: {
+            anyOf: [
+              { type: 'null' },
+              {
+                type: 'object',
+                additionalProperties: false,
+                required: ['injuryItemId', 'proposalType', 'suggestedStatus', 'suggestedPainLevel', 'rationale', 'userApprovalPrompt', 'safetyNotes'],
+                properties: {
+                  injuryItemId: { type: 'string' },
+                  proposalType: { type: 'string', enum: ['check_in_update', 'resolve_candidate', 'status_change_candidate'] },
+                  suggestedStatus: { anyOf: [{ type: 'string', enum: ['active', 'monitoring', 'resolved'] }, { type: 'null' }] },
+                  suggestedPainLevel: { anyOf: [{ type: 'number' }, { type: 'null' }] },
+                  rationale: { type: 'string' },
+                  userApprovalPrompt: { type: 'string' },
+                  safetyNotes: { type: 'array', items: { type: 'string' } }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}
+
+function buildAdaptiveTrainingProfileSchema(): Record<string, unknown> {
+  return {
+    anyOf: [
+      { type: 'null' },
+      {
+        type: 'object',
+        additionalProperties: false,
+        required: ['methodologyVersion', 'updatedAt', 'trainingPhase', 'progressionCriteria', 'prescriptionTemplates', 'compliancePatterns', 'sessionGuides'],
+        properties: {
+          methodologyVersion: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+          updatedAt: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+          trainingPhase: {
+            anyOf: [
+              { type: 'null' },
+              {
+                type: 'object',
+                additionalProperties: false,
+                required: ['currentPhase', 'startedAt', 'goal', 'focus', 'nextPhase', 'reviewAfter'],
+                properties: {
+                  currentPhase: { type: 'string', enum: ['Base', 'Build', 'Threshold', 'Race Specific', 'Taper', 'Recovery'] },
+                  startedAt: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                  goal: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                  focus: { type: 'array', items: { type: 'string' } },
+                  nextPhase: { anyOf: [{ type: 'string', enum: ['Base', 'Build', 'Threshold', 'Race Specific', 'Taper', 'Recovery'] }, { type: 'null' }] },
+                  reviewAfter: { anyOf: [{ type: 'string' }, { type: 'null' }] }
+                }
+              }
+            ]
+          },
+          progressionCriteria: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['id', 'label', 'status', 'evidence', 'action'],
+              properties: {
+                id: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                label: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                status: { anyOf: [{ type: 'string', enum: ['ready', 'watch', 'blocked'] }, { type: 'null' }] },
+                evidence: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                action: { anyOf: [{ type: 'string' }, { type: 'null' }] }
+              }
+            }
+          },
+          prescriptionTemplates: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['id', 'name', 'phase', 'sessionType', 'purpose', 'workout', 'useWhen', 'avoidWhen', 'progressionTrigger'],
+              properties: {
+                id: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                name: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                phase: { anyOf: [{ type: 'string', enum: ['Any', 'Base', 'Build', 'Threshold', 'Race Specific', 'Taper', 'Recovery'] }, { type: 'null' }] },
+                sessionType: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                purpose: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                workout: { type: 'array', items: { type: 'string' } },
+                useWhen: { type: 'array', items: { type: 'string' } },
+                avoidWhen: { type: 'array', items: { type: 'string' } },
+                progressionTrigger: { anyOf: [{ type: 'string' }, { type: 'null' }] }
+              }
+            }
+          },
+          compliancePatterns: { type: 'array', items: { type: 'string' } },
+          sessionGuides: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['type', 'boundary', 'adjustment', 'evidence', 'nextCheck'],
+              properties: {
+                type: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                boundary: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                adjustment: { anyOf: [{ type: 'string', enum: ['maintain', 'raise', 'lower', 'watch'] }, { type: 'null' }] },
+                evidence: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                nextCheck: { anyOf: [{ type: 'string' }, { type: 'null' }] }
+              }
+            }
+          }
+        }
+      }
+    ]
+  }
+}
+
+function buildRunnerIdentitySchema(): Record<string, unknown> {
+  return {
+    anyOf: [
+      { type: 'null' },
+      {
+        type: 'object',
+        additionalProperties: false,
+        required: ['strengths', 'weaknesses', 'riskFactors', 'coachingStyle'],
+        properties: {
+          strengths: { type: 'array', items: buildRunnerIdentityTraitSchema() },
+          weaknesses: { type: 'array', items: buildRunnerIdentityTraitSchema() },
+          riskFactors: { type: 'array', items: buildRunnerIdentityTraitSchema() },
+          coachingStyle: { type: 'array', items: { type: 'string' } }
+        }
+      }
+    ]
+  }
+}
+
+function buildRunnerIdentityTraitSchema(): Record<string, unknown> {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: ['label', 'evidence', 'confidence', 'source', 'updatedAt'],
+    properties: {
+      label: { type: 'string' },
+      evidence: { type: 'array', items: { type: 'string' } },
+      confidence: { type: 'number' },
+      source: { type: 'string', enum: ['engine', 'coach', 'user', 'mixed'] },
+      updatedAt: { anyOf: [{ type: 'string' }, { type: 'null' }] }
+    }
+  }
+}
+
+function buildCoachBeliefSchema(): Record<string, unknown> {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id', 'belief', 'category', 'confidence', 'supportCount', 'contradictionCount', 'evidenceRunIds', 'status', 'source', 'updatedAt'],
+    properties: {
+      id: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+      belief: { type: 'string' },
+      category: { type: 'string', enum: ['recovery', 'injury', 'load', 'pacing', 'routine', 'weather', 'preference', 'other'] },
+      confidence: { type: 'number' },
+      supportCount: { type: 'number' },
+      contradictionCount: { type: 'number' },
+      evidenceRunIds: { type: 'array', items: { type: 'string' } },
+      status: { type: 'string', enum: ['candidate', 'confirmed', 'retired'] },
+      source: { type: 'string', enum: ['engine', 'coach', 'user', 'mixed'] },
+      updatedAt: { anyOf: [{ type: 'string' }, { type: 'null' }] }
+    }
+  }
 }
 
 function streamCoachRun(
@@ -781,6 +1065,7 @@ async function callOpenAIStream(
       model,
       instructions: buildCoachInstructions(),
       input: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context, null, 2)}`,
+      text: buildCoachResponseTextFormat(),
       stream: true
     })
   })
@@ -1502,6 +1787,9 @@ function buildCoachingDecisionBoard(args: {
   activeInjuryItem: unknown
   trainingKnowledge: ReturnType<typeof buildRelevantTrainingKnowledge>
   adaptiveTrainingProfile: unknown
+  runnerIdentity: unknown
+  coachBeliefs: CoachBelief[]
+  runningAnalysisEngine: ReturnType<typeof buildRunningAnalysisEngine>
 }) {
   const selectedCompliance = args.selectedRun
     ? classifyPrescriptionCompliance(args.selectedRun, args.selectedRunLapAnalysis)
@@ -1521,6 +1809,19 @@ function buildCoachingDecisionBoard(args: {
     ),
     goalProjectionCheck: buildGoalProjectionEvidence(args.performanceProjection, args.selectedRun, args.activeGoal),
     injuryCheck,
+    engineCheck: {
+      recommendedDecision: args.runningAnalysisEngine.recommendedDecision,
+      trainingSuitabilityScore: args.runningAnalysisEngine.trainingSuitabilityScore,
+      hrDrift: args.runningAnalysisEngine.hrDrift,
+      loadTrend: args.runningAnalysisEngine.loadTrend,
+      recoveryStatus: args.runningAnalysisEngine.recoveryStatus,
+      injuryRisk: args.runningAnalysisEngine.injuryRisk,
+      overtrainingWarning: args.runningAnalysisEngine.overtrainingWarning,
+      relevantBeliefCount: args.coachBeliefs.length,
+      runnerIdentityPresent: Boolean(args.runnerIdentity),
+      instruction:
+        '코드 엔진이 먼저 계산한 판단이다. 루틴 업데이트와 다음 훈련 제안은 이 값과 충돌하지 않게 설명한다.'
+    },
     routineUpdateCheck: buildRoutineUpdateEvidence({
       selectedRun: args.selectedRun,
       selectedCompliance,
@@ -1966,6 +2267,200 @@ function hasAvailableLapAnalysis(analysis: ReturnType<typeof buildLapProgression
   return Boolean(analysis && analysis.available)
 }
 
+function buildRunningAnalysisEngine(args: {
+  runRows: RunLogRow[]
+  selectedRun: RunLogRow | null
+  selectedRunLapAnalysis: ReturnType<typeof buildLapProgressionAnalysis>
+  recentPrescriptionComplianceSignals: ReturnType<typeof buildPrescriptionComplianceSignals>
+  prescriptionComplianceSummary: ReturnType<typeof summarizePrescriptionCompliance>
+  summaryStats: SummaryStatsForCoaching
+  activeInjuryItem: unknown
+  activeGoal: unknown
+}) {
+  const recent7 = withinDaysFromAnchor(args.runRows, 7, args.selectedRun?.date ?? currentDateInSeoul())
+  const previous7 = args.runRows.filter((run) => {
+    const anchor = args.selectedRun?.date ?? currentDateInSeoul()
+    const days = diffDays(run.date, anchor)
+    return days > 7 && days <= 14
+  })
+  const recent7DistanceKm = sumDistance(recent7)
+  const previous7DistanceKm = sumDistance(previous7)
+  const loadIncreasePct = previous7DistanceKm > 0
+    ? Math.round(((recent7DistanceKm - previous7DistanceKm) / previous7DistanceKm) * 100)
+    : null
+  const selectedCompliance = args.selectedRun
+    ? args.recentPrescriptionComplianceSignals.find((signal) => signal.id === args.selectedRun?.id)?.compliance ?? 'unknown'
+    : 'unknown'
+  const injuryEvidence = buildInjuryCheckEvidence(args.activeInjuryItem)
+  const activePainLevel = injuryEvidence.available ? injuryEvidence.maxPainLevel ?? null : null
+  const hrDriftBpm = hasAvailableLapAnalysis(args.selectedRunLapAnalysis)
+    ? args.selectedRunLapAnalysis.heartRateDriftBpmSecondHalfMinusFirstHalf ?? null
+    : null
+  const hrDriftStatus = hrDriftBpm === null
+    ? 'unknown'
+    : hrDriftBpm <= 8
+      ? 'stable'
+      : hrDriftBpm <= 12
+        ? 'watch'
+        : 'high'
+  const loadStatus = loadIncreasePct === null
+    ? 'unknown'
+    : loadIncreasePct >= 45
+      ? 'spike'
+      : loadIncreasePct >= 25
+        ? 'rising'
+        : loadIncreasePct <= -35
+          ? 'dropping'
+          : 'stable'
+  const selectedRun = args.selectedRun
+  const highRpe = selectedRun?.rpe !== null && selectedRun?.rpe !== undefined && selectedRun.rpe >= 8
+  const lowSleep = selectedRun?.sleep_quality !== null && selectedRun?.sleep_quality !== undefined && selectedRun.sleep_quality <= 2
+  const lowCondition = selectedRun?.condition_score !== null && selectedRun?.condition_score !== undefined && selectedRun.condition_score <= 2
+  const painNote = selectedRun?.pain_note?.trim() ?? ''
+  const selectedMissedBoundary = selectedCompliance.startsWith('missed_')
+  const pressureGroups = args.prescriptionComplianceSummary.filter((group) => group.dominantPattern === 'watch_boundary_pressure' || group.dominantPattern === 'repeated_boundary_miss')
+
+  let recoveryStatus: 'ready' | 'watch' | 'reduce' | 'unknown' = 'unknown'
+  if (selectedRun) {
+    recoveryStatus = 'ready'
+    if (highRpe || lowSleep || lowCondition || selectedMissedBoundary || hrDriftStatus === 'watch') recoveryStatus = 'watch'
+    if (activePainLevel !== null && activePainLevel >= 3) recoveryStatus = 'reduce'
+    if (hrDriftStatus === 'high' || (highRpe && lowSleep)) recoveryStatus = 'reduce'
+  }
+
+  let injuryRisk: 'low' | 'watch' | 'high' | 'unknown' = injuryEvidence.available ? 'watch' : 'low'
+  if (!selectedRun && !injuryEvidence.available) injuryRisk = 'unknown'
+  if (activePainLevel !== null && activePainLevel >= 3) injuryRisk = 'high'
+  else if (activePainLevel !== null && activePainLevel >= 2) injuryRisk = 'watch'
+  else if (painNote || loadStatus === 'spike') injuryRisk = 'watch'
+  if (activePainLevel !== null && activePainLevel >= 4) injuryRisk = 'high'
+
+  let overtrainingWarning: 'none' | 'watch' | 'warning' = 'none'
+  const pressureCount = [
+    args.summaryStats.hardSessionsLast7 >= 3,
+    loadStatus === 'spike',
+    highRpe,
+    lowSleep,
+    lowCondition,
+    hrDriftStatus === 'high',
+    pressureGroups.length >= 2
+  ].filter(Boolean).length
+  if (pressureCount >= 3) overtrainingWarning = 'warning'
+  else if (pressureCount >= 1) overtrainingWarning = 'watch'
+
+  let trainingSuitabilityScore = 78
+  if (hrDriftStatus === 'watch') trainingSuitabilityScore -= 8
+  if (hrDriftStatus === 'high') trainingSuitabilityScore -= 15
+  if (loadStatus === 'rising') trainingSuitabilityScore -= 6
+  if (loadStatus === 'spike') trainingSuitabilityScore -= 16
+  if (recoveryStatus === 'watch') trainingSuitabilityScore -= 10
+  if (recoveryStatus === 'reduce') trainingSuitabilityScore -= 22
+  if (injuryRisk === 'watch') trainingSuitabilityScore -= 10
+  if (injuryRisk === 'high') trainingSuitabilityScore -= 25
+  if (overtrainingWarning === 'watch') trainingSuitabilityScore -= 6
+  if (overtrainingWarning === 'warning') trainingSuitabilityScore -= 14
+  if (selectedCompliance.startsWith('met_')) trainingSuitabilityScore += 5
+  trainingSuitabilityScore = Math.max(0, Math.min(100, Math.round(trainingSuitabilityScore)))
+
+  let recommendedDecision: 'raise' | 'maintain' | 'watch' | 'lower' | 'recover' = 'maintain'
+  if (injuryRisk === 'high' || recoveryStatus === 'reduce') recommendedDecision = 'recover'
+  else if (trainingSuitabilityScore < 45 || overtrainingWarning === 'warning') recommendedDecision = 'lower'
+  else if (trainingSuitabilityScore < 68 || injuryRisk === 'watch' || recoveryStatus === 'watch') recommendedDecision = 'watch'
+  else if (selectedCompliance.startsWith('met_') && pressureGroups.length === 0 && args.summaryStats.hardSessionsLast7 <= 2) recommendedDecision = 'maintain'
+
+  const evidence = [
+    `HR drift: ${hrDriftBpm === null ? 'unknown' : `${hrDriftBpm}bpm`} / ${hrDriftStatus}`,
+    `7일 부하 변화: ${loadIncreasePct === null ? 'unknown' : `${loadIncreasePct}%`} / ${loadStatus}`,
+    `회복 상태: ${recoveryStatus}`,
+    `부상 위험: ${injuryRisk}${activePainLevel !== null ? ` / pain ${activePainLevel}` : ''}`,
+    `처방 준수: ${selectedCompliance}`
+  ]
+
+  const memoryCandidates = buildEngineMemoryCandidates({
+    selectedRun,
+    selectedCompliance,
+    hrDriftStatus,
+    recoveryStatus,
+    injuryRisk,
+    pressureGroups
+  })
+
+  return {
+    version: 'pacelab-running-engine-2026-06-v1',
+    principle: '데이터에서 계산 가능한 판단은 코드가 먼저 만들고, AI는 그 판단을 한국어 코칭으로 설명한다.',
+    hrDrift: {
+      bpmSecondHalfMinusFirstHalf: hrDriftBpm,
+      status: hrDriftStatus
+    },
+    loadTrend: {
+      recent7DistanceKm,
+      previous7DistanceKm,
+      increasePct: loadIncreasePct,
+      status: loadStatus
+    },
+    recoveryStatus,
+    injuryRisk,
+    overtrainingWarning,
+    trainingSuitabilityScore,
+    recommendedDecision,
+    activeGoalTitle: readString((args.activeGoal as Record<string, unknown> | null)?.title),
+    evidence,
+    memoryCandidates
+  }
+}
+
+function buildEngineMemoryCandidates(args: {
+  selectedRun: RunLogRow | null
+  selectedCompliance: string
+  hrDriftStatus: string
+  recoveryStatus: string
+  injuryRisk: string
+  pressureGroups: { type: string; dominantPattern: string }[]
+}) {
+  const candidates: {
+    type: 'strength' | 'weakness' | 'risk' | 'belief'
+    label: string
+    confidence: number
+    evidenceRunIds: string[]
+  }[] = []
+  const evidenceRunIds = args.selectedRun ? [args.selectedRun.id] : []
+
+  if (args.selectedCompliance.startsWith('met_') && args.hrDriftStatus === 'stable') {
+    candidates.push({
+      type: 'strength',
+      label: '처방 경계를 지키면서 후반 심박 상승을 안정적으로 관리하는 세션이 있다',
+      confidence: 0.65,
+      evidenceRunIds
+    })
+  }
+  if (args.pressureGroups.length) {
+    candidates.push({
+      type: 'belief',
+      label: `최근 ${args.pressureGroups.map((group) => group.type).join(', ')} 세션에서 처방 경계 압력이 반복된다`,
+      confidence: 0.72,
+      evidenceRunIds
+    })
+  }
+  if (args.injuryRisk === 'watch' || args.injuryRisk === 'high') {
+    candidates.push({
+      type: 'risk',
+      label: '부상/통증 신호가 있을 때는 강훈련 상향보다 회복 게이트가 먼저다',
+      confidence: args.injuryRisk === 'high' ? 0.86 : 0.68,
+      evidenceRunIds
+    })
+  }
+  if (args.recoveryStatus === 'reduce') {
+    candidates.push({
+      type: 'weakness',
+      label: '회복 신호가 나쁘면 다음 처방을 낮춰야 하는 패턴 후보가 있다',
+      confidence: 0.64,
+      evidenceRunIds
+    })
+  }
+
+  return candidates.slice(0, 5)
+}
+
 function normalizeTrainingMemoryPatch(patch: TrainingMemoryPatch | null): TrainingMemoryPatch | null {
   if (!patch || typeof patch !== 'object') return null
   const normalized: TrainingMemoryPatch = {}
@@ -1989,6 +2484,10 @@ function normalizeTrainingMemoryPatch(patch: TrainingMemoryPatch | null): Traini
   }
   const adaptiveTrainingProfile = normalizeAdaptiveTrainingProfilePatch(patch.adaptiveTrainingProfile)
   if (adaptiveTrainingProfile) normalized.adaptiveTrainingProfile = adaptiveTrainingProfile
+  const runnerIdentity = normalizeRunnerIdentityPatch(patch.runnerIdentity)
+  if (runnerIdentity) normalized.runnerIdentity = runnerIdentity
+  const coachBeliefs = normalizeCoachBeliefsPatch(patch.coachBeliefs)
+  if (coachBeliefs.length) normalized.coachBeliefs = coachBeliefs
 
   return Object.keys(normalized).length ? normalized : null
 }
@@ -2057,7 +2556,9 @@ function mergeTrainingMemoryPatch(memory: CoachContext['trainingMemory'], patch:
     ...(patch.aiNotes ? { aiNotes: mergeAiNotes(current.aiNotes, patch.aiNotes) } : {}),
     ...(patch.adaptiveTrainingProfile
       ? { adaptiveTrainingProfile: mergeAdaptiveTrainingProfile(current.adaptiveTrainingProfile, patch.adaptiveTrainingProfile) }
-      : {})
+      : {}),
+    ...(patch.runnerIdentity ? { runnerIdentity: mergeRunnerIdentity(current.runnerIdentity, patch.runnerIdentity) } : {}),
+    ...(patch.coachBeliefs ? { coachBeliefs: mergeCoachBeliefs(current.coachBeliefs, patch.coachBeliefs) } : {})
   }
 }
 
@@ -2098,8 +2599,278 @@ function mergeStringLists(next: string[], current: string[], limit: number) {
   return result
 }
 
-function buildRelevantCoachMemoryItems(memoryItems: CoachMemoryItemRow[], selectedRun: RunLogRow | null, userNote: string) {
+function getRunnerIdentity(memory: unknown) {
+  const current = memory && typeof memory === 'object' ? memory as Record<string, unknown> : {}
+  const rawIdentity = current.runnerIdentity && typeof current.runnerIdentity === 'object'
+    ? current.runnerIdentity as Record<string, unknown>
+    : {}
+  const identity = normalizeRunnerIdentityPatch(rawIdentity) ?? {
+    strengths: [],
+    weaknesses: [],
+    riskFactors: [],
+    coachingStyle: []
+  }
+  const knownIssues = normalizeStringArray(current.knownIssues, 8, 160).map((label) => makeIdentityTrait(label, 'user', 0.68))
+  const runningStyle = normalizeStringArray(current.runningStyle, 8, 160).map((label) => makeIdentityTrait(label, 'user', 0.7))
+  const heatStrategy = normalizeStringArray(current.heatStrategy, 6, 160)
+
+  return {
+    strengths: mergeIdentityTraits(identity.strengths ?? [], runningStyle, 10),
+    weaknesses: identity.weaknesses ?? [],
+    riskFactors: mergeIdentityTraits(identity.riskFactors ?? [], knownIssues, 10),
+    coachingStyle: mergeStringLists(identity.coachingStyle ?? [], heatStrategy, 12)
+  }
+}
+
+function getCoachBeliefs(memory: unknown): CoachBelief[] {
+  const current = memory && typeof memory === 'object' ? memory as Record<string, unknown> : {}
+  return normalizeCoachBeliefsPatch(current.coachBeliefs)
+    .sort((a, b) => scoreCoachBeliefForSelection(b, new Set()) - scoreCoachBeliefForSelection(a, new Set()))
+    .slice(0, 30)
+}
+
+function selectRelevantCoachBeliefs(
+  beliefs: CoachBelief[],
+  context: {
+    selectedRun: RunLogRow | null
+    activeGoal: unknown
+    activeInjuryItem: unknown
+    userNote: string
+    runningAnalysisEngine: ReturnType<typeof buildRunningAnalysisEngine>
+  }
+) {
+  const tags = extractContextTags([
+    context.selectedRun?.session_title ?? '',
+    context.selectedRun?.type ?? '',
+    context.selectedRun?.memo ?? '',
+    context.userNote,
+    readString((context.activeGoal as Record<string, unknown> | null)?.title),
+    readString((context.activeGoal as Record<string, unknown> | null)?.strategyNotes),
+    readString((context.activeInjuryItem as Record<string, unknown> | null)?.title),
+    context.runningAnalysisEngine.recommendedDecision,
+    context.runningAnalysisEngine.injuryRisk,
+    context.runningAnalysisEngine.recoveryStatus
+  ].join(' '))
+
+  return beliefs
+    .filter((belief) => belief.status !== 'retired')
+    .map((belief) => ({
+      belief,
+      score: scoreCoachBeliefForSelection(belief, tags)
+    }))
+    .filter((item) => item.score >= 3)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 12)
+    .map((item) => item.belief)
+}
+
+function normalizeRunnerIdentityPatch(value: unknown): RunnerIdentityPatch | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Record<string, unknown>
+  const strengths = normalizeIdentityTraits(raw.strengths, 8)
+  const weaknesses = normalizeIdentityTraits(raw.weaknesses, 8)
+  const riskFactors = normalizeIdentityTraits(raw.riskFactors, 8)
+  const coachingStyle = normalizeStringArray(raw.coachingStyle, 8, 160)
+  const patch: RunnerIdentityPatch = {}
+  if (strengths.length) patch.strengths = strengths
+  if (weaknesses.length) patch.weaknesses = weaknesses
+  if (riskFactors.length) patch.riskFactors = riskFactors
+  if (coachingStyle.length) patch.coachingStyle = coachingStyle
+  return Object.keys(patch).length ? patch : null
+}
+
+function normalizeIdentityTraits(value: unknown, limit: number): RunnerIdentityTrait[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => {
+      if (typeof item === 'string') return makeIdentityTrait(item, 'coach', 0.62)
+      if (!item || typeof item !== 'object') return null
+      const raw = item as Record<string, unknown>
+      const label = readString(raw.label).slice(0, 160)
+      if (!label) return null
+      return {
+        label,
+        evidence: normalizeStringArray(raw.evidence, 5, 180),
+        confidence: normalizeConfidence(raw.confidence, 0.65),
+        source: normalizeMemorySource(raw.source),
+        updatedAt: readString(raw.updatedAt) || new Date().toISOString()
+      }
+    })
+    .filter((item): item is RunnerIdentityTrait => Boolean(item))
+    .slice(0, limit)
+}
+
+function makeIdentityTrait(label: string, source: RunnerIdentityTrait['source'], confidence: number): RunnerIdentityTrait {
+  return {
+    label: label.trim().slice(0, 160),
+    evidence: [],
+    confidence,
+    source,
+    updatedAt: null
+  }
+}
+
+function mergeRunnerIdentity(current: unknown, patch: RunnerIdentityPatch) {
+  const base = getRunnerIdentity(current && typeof current === 'object' && 'runnerIdentity' in current ? current : { runnerIdentity: current })
+  return {
+    strengths: mergeIdentityTraits(patch.strengths ?? [], base.strengths, 10),
+    weaknesses: mergeIdentityTraits(patch.weaknesses ?? [], base.weaknesses, 10),
+    riskFactors: mergeIdentityTraits(patch.riskFactors ?? [], base.riskFactors, 10),
+    coachingStyle: mergeStringLists(patch.coachingStyle ?? [], base.coachingStyle, 12)
+  }
+}
+
+function mergeIdentityTraits(next: RunnerIdentityTrait[], current: RunnerIdentityTrait[], limit: number) {
+  const byKey = new Map<string, RunnerIdentityTrait>()
+  for (const trait of [...current, ...next]) {
+    const key = normalizeMemoryKey(trait.label)
+    if (!key) continue
+    const existing = byKey.get(key)
+    if (!existing || trait.confidence >= existing.confidence) {
+      byKey.set(key, {
+        ...trait,
+        evidence: mergeStringLists(trait.evidence, existing?.evidence ?? [], 6),
+        confidence: Math.max(trait.confidence, existing?.confidence ?? 0),
+        updatedAt: trait.updatedAt ?? existing?.updatedAt ?? null
+      })
+    }
+  }
+  return [...byKey.values()]
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, limit)
+}
+
+function normalizeCoachBeliefsPatch(value: unknown): CoachBelief[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map(normalizeCoachBelief)
+    .filter((item): item is CoachBelief => Boolean(item))
+    .filter((belief) => belief.confidence >= 0.55 || belief.supportCount >= 2 || belief.source === 'user')
+    .slice(0, 30)
+}
+
+function normalizeCoachBelief(value: unknown): CoachBelief | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Record<string, unknown>
+  const belief = readString(raw.belief).slice(0, 220)
+  if (!belief) return null
+  const id = readString(raw.id) || createBeliefId(belief)
+  const supportCount = Math.max(0, Math.round(Number(raw.supportCount ?? 1) || 1))
+  const contradictionCount = Math.max(0, Math.round(Number(raw.contradictionCount ?? 0) || 0))
+  const confidence = normalizeConfidence(raw.confidence, supportCount >= 2 ? 0.68 : 0.58)
+  return {
+    id: id.slice(0, 80),
+    belief,
+    category: normalizeBeliefCategory(raw.category),
+    confidence,
+    supportCount,
+    contradictionCount,
+    evidenceRunIds: normalizeStringArray(raw.evidenceRunIds, 8, 80),
+    status: normalizeBeliefStatus(raw.status, confidence, supportCount),
+    source: normalizeMemorySource(raw.source),
+    updatedAt: readString(raw.updatedAt) || new Date().toISOString()
+  }
+}
+
+function mergeCoachBeliefs(current: unknown, next: CoachBeliefPatch[]) {
+  const currentItems = normalizeCoachBeliefsPatch(current)
+  const nextItems = normalizeCoachBeliefsPatch(next)
+  const byKey = new Map<string, CoachBelief>()
+  for (const belief of [...currentItems, ...nextItems]) {
+    const key = belief.id || createBeliefId(belief.belief)
+    const existing = byKey.get(key)
+    if (!existing) {
+      byKey.set(key, belief)
+      continue
+    }
+    const supportCount = Math.max(existing.supportCount, belief.supportCount)
+    const contradictionCount = Math.max(existing.contradictionCount, belief.contradictionCount)
+    byKey.set(key, {
+      ...existing,
+      ...belief,
+      confidence: Math.max(existing.confidence, belief.confidence),
+      supportCount,
+      contradictionCount,
+      evidenceRunIds: mergeStringLists(belief.evidenceRunIds, existing.evidenceRunIds, 10),
+      status: normalizeBeliefStatus(belief.status, Math.max(existing.confidence, belief.confidence), supportCount),
+      updatedAt: belief.updatedAt ?? existing.updatedAt
+    })
+  }
+  return [...byKey.values()]
+    .filter((belief) => belief.status !== 'retired')
+    .sort((a, b) => scoreCoachBeliefForSelection(b, new Set()) - scoreCoachBeliefForSelection(a, new Set()))
+    .slice(0, 30)
+}
+
+function scoreCoachBeliefForSelection(belief: CoachBelief, tags: Set<string>) {
+  let score = belief.confidence * 10 + Math.min(belief.supportCount, 5)
+  if (belief.status === 'confirmed') score += 4
+  if (belief.category === 'injury' || belief.category === 'routine' || belief.category === 'load') score += 2
+  const beliefTags = extractContextTags(belief.belief)
+  for (const tag of tags) {
+    if (beliefTags.has(tag)) score += 5
+  }
+  if (belief.contradictionCount > belief.supportCount) score -= 5
+  return score
+}
+
+function normalizeConfidence(value: unknown, fallback: number) {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return fallback
+  return Math.max(0, Math.min(1, Math.round(num * 100) / 100))
+}
+
+function normalizeMemorySource(value: unknown): RunnerIdentityTrait['source'] {
+  if (value === 'engine' || value === 'coach' || value === 'user' || value === 'mixed') return value
+  return 'coach'
+}
+
+function normalizeBeliefCategory(value: unknown): CoachBelief['category'] {
+  if (
+    value === 'recovery' ||
+    value === 'injury' ||
+    value === 'load' ||
+    value === 'pacing' ||
+    value === 'routine' ||
+    value === 'weather' ||
+    value === 'preference' ||
+    value === 'other'
+  ) return value
+  return 'other'
+}
+
+function normalizeBeliefStatus(value: unknown, confidence: number, supportCount: number): CoachBelief['status'] {
+  if (value === 'retired') return 'retired'
+  if (value === 'confirmed' || confidence >= 0.82 || supportCount >= 3) return 'confirmed'
+  return 'candidate'
+}
+
+function createBeliefId(belief: string) {
+  return `belief-${normalizeMemoryKey(belief).slice(0, 48)}`
+}
+
+function buildRelevantCoachMemoryItems(
+  memoryItems: CoachMemoryItemRow[],
+  selectedRun: RunLogRow | null,
+  userNote: string,
+  options?: {
+    activeGoal: unknown
+    activeInjuryItem: unknown
+    coachBeliefs: CoachBelief[]
+    runnerIdentity: ReturnType<typeof getRunnerIdentity>
+  }
+) {
   const contextTags = extractContextTags(`${selectedRun?.session_title ?? ''} ${selectedRun?.type ?? ''} ${selectedRun?.memo ?? ''} ${userNote}`)
+  for (const text of [
+    readString((options?.activeGoal as Record<string, unknown> | null)?.title),
+    readString((options?.activeGoal as Record<string, unknown> | null)?.strategyNotes),
+    readString((options?.activeInjuryItem as Record<string, unknown> | null)?.title),
+    ...(options?.coachBeliefs ?? []).map((belief) => belief.belief),
+    ...(options?.runnerIdentity?.riskFactors ?? []).map((trait) => trait.label),
+    ...(options?.runnerIdentity?.strengths ?? []).map((trait) => trait.label)
+  ]) {
+    for (const tag of extractContextTags(text)) contextTags.add(tag)
+  }
   const seen = new Set<string>()
 
   return memoryItems

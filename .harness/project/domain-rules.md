@@ -7,6 +7,8 @@
 - `Trend Lens`: 누적 `RunLog`와 `TrainingMemory`를 특정 러너 질문 기준으로 재해석하는 분석 단위다. 목표 진전, 유산소 효율, 강도 분포, 세션 품질, 회복 비용처럼 사용자가 발전/퇴보와 다음 처방 영향을 이해할 수 있는 Lens를 제공한다.
 - `TrainingMemory`: 목표 목록, 활성 목표, 부상관리 항목, 활성 부상관리 항목, 주간 패턴, 장거리 전략, 부상/더위 이슈, 러닝 스타일 같은 장기 맥락이다.
 - `AdaptiveTrainingProfile`: 문헌 기반 코칭 기준선 위에 얹는 사용자별 개인화 보정값이다. 반복 처방 준수 패턴과 세션별 경계 조정 가이드를 저장한다.
+- `RunnerIdentity`: 단일 세션 이벤트가 아니라 strengths, weaknesses, riskFactors, coachingStyle로 이 러너가 어떤 사람인지 구조화한 장기 특성 계층이다.
+- `CoachBelief`: AI 코치가 반복적으로 확인한 패턴 가설이다. belief, category, confidence, supportCount, contradictionCount, evidenceRunIds, status를 갖고 candidate에서 confirmed로 승격될 수 있다.
 - `TrainingKnowledge`: 승인된 훈련법, 문헌 출처, 처방 규칙, RAG용 chunk를 구조화한 지식 보관소다. AI가 처방할 때 activeGoal과 세션 타입에 맞는 규칙만 검색해 사용한다.
 - `TrainingKnowledgeRequest`: 사용자가 새 훈련법이나 출처를 지식화 검토 요청으로 저장하는 단위다. 요청 상태는 `requested/reviewing/approved/rejected`로 관리하며 승인 전에는 처방에 사용하지 않는다.
 - `AthleteProfile`: 나이, 성별, 러닝 경력, 주간 목표 러닝 횟수, 선호 롱런 요일, 거리별 PB 같은 개인화 입력이다.
@@ -24,7 +26,7 @@
 - `FastSegment`: route/speed 샘플에서 계산한 짧은 고속 구간 요약이다. 시작 시각, 지속 시간, 거리, 평균/최고 페이스를 가진다.
 - `RunMetricSample`: HealthKit/FIT에서 받은 심박, 페이스, 케이던스의 시간축 downsample 데이터다. Apple Fitness형 세부 차트와 코칭의 중간 과정 분석에 사용한다.
 - `RunRoutePoint`: 원본 route 전체가 아니라 표시를 위해 downsample한 좌표 샘플이다. 세션 상세 지도형 경로, 시작/종료 노드, 선택 구간 표시 용도다.
-- `TrainingMemory`: legacy `goal`, `goals`, `activeGoalId`, `injuryItems`, `activeInjuryItemId`, AthleteProfile, 주간 루틴, 장거리 전략, 현재 볼륨 노트, known issues, running style, heat strategy, ai notes를 가진다. `goal`은 기존 호환용이며 활성 목표 제목과 동기화한다.
+- `TrainingMemory`: legacy `goal`, `goals`, `activeGoalId`, `injuryItems`, `activeInjuryItemId`, AthleteProfile, RunnerIdentity, CoachBeliefs, 주간 루틴, 장거리 전략, 현재 볼륨 노트, known issues, running style, heat strategy, ai notes를 가진다. `goal`은 기존 호환용이며 활성 목표 제목과 동기화한다.
 - `AdaptiveTrainingProfile`: `methodologyVersion`, `updatedAt`, `compliancePatterns`, `sessionGuides`를 가진다. AI 코칭이 반복 근거를 찾았을 때만 갱신하며, 소스 코드나 원본 RunLog를 바꾸는 용도가 아니다.
 - `TrainingKnowledgeSource`: 훈련 지식의 출처 메타데이터다. 저자, URL, 신뢰도, 라이선스 주의, 요약을 가진다.
 - `TrainingMethod`: MAF, Daniels, Hanson 같은 훈련법 단위다. 적용 거리, 러너 수준, 주간 훈련 가능 횟수, 주의사항을 가진다.
@@ -123,6 +125,7 @@
 - 코칭 알고리즘은 문헌 기반 기준선을 먼저 적용하고, 사용자 데이터와 대화로 확인된 반복 패턴만 `adaptiveTrainingProfile`에 저장해 개인화한다. “스스로 진화”는 소스 코드 수정이 아니라 이 구조화된 개인화 프로필 갱신을 의미한다.
 - `adaptiveTrainingProfile`은 `trainingPhase`, `progressionCriteria`, `prescriptionTemplates`, `compliancePatterns`, `sessionGuides`로 구성한다. 훈련 단계는 현재 블록, 승급 조건은 상향/유지/하향 판단 게이트, 처방 템플릿은 사용자가 Workoutdoors에 옮겨 실행할 세부 지침이다.
 - `adaptiveTrainingProfile`은 단일 세션으로 크게 바꾸지 않는다. 같은 유형 2~3회 이상의 반복 준수/이탈, 또는 사용자의 명시 피드백이 있을 때만 갱신한다.
+- `runnerIdentity`와 `coachBeliefs`도 단일 세션 감상으로 과도하게 갱신하지 않는다. 단일 세션은 candidate 근거로만 쓰고, 반복 확인 또는 사용자 명시 피드백이 있을 때 장기 특성/confirmed belief로 승격한다.
 - 5km TT, 10km TT, 크루즈 인터벌, 진짜 인터벌 같은 상위 품질 훈련은 `progressionCriteria`가 ready이고 active injury/회복 게이트가 막히지 않을 때만 처방한다.
 - 처방 템플릿이 바뀌면 `trainingPhase`와 `progressionCriteria`도 함께 검토한다. 새로운 템플릿만 추가하고 승급 근거를 남기지 않는 변경은 금지한다.
 - 날씨, 동반주, 과거 기록 리뷰, 데이터 부족 같은 일시적 요인은 개인화 경계 변경 근거로 쓰지 않는다.

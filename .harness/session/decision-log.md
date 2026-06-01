@@ -473,3 +473,10 @@
 - 결정: Run Log의 월 fixed heading은 현재 route가 `/runs`일 때만 렌더링한다. 차트처럼 좌우 드래그가 가능한 tab-local UI는 `data-no-swipe`와 pointer/touch stop으로 root pager에 이벤트가 전달되지 않게 한다.
 - 선택 이유: Teleport 요소는 DOM상 root tab panel 밖에 있으므로 CSS descendant scoping으로 안전하게 막을 수 없다. route 조건 렌더링이 실제 누수를 차단하는 단일 기준이다.
 - 적용 범위: `src/pages/run-log/RunLogPage.vue`, `src/shared/ui/TrendLensChart.vue`, `.harness/project/ui-guidelines.md`.
+
+## 2026-06-01 - AI 코칭은 코드 판단 엔진과 구조화 장기기억을 분리
+- 문제: AI 코칭이 장기 컨텍스트를 사용하고 있었지만, 러너 정체성/반복 belief 같은 구조화 계층과 코드가 먼저 계산하는 판단 엔진이 명확히 분리되어 있지 않았다.
+- 결정: `coach-run`에서 `runningAnalysisEngine`을 만들어 HR drift, 부하 변화, 회복 상태, 부상 위험, 과훈련 경고, 훈련 적합성 점수를 먼저 계산한다. `TrainingMemory`에는 `runnerIdentity`와 `coachBeliefs`를 추가하고, OpenAI 응답은 Responses API strict JSON schema로 강제한다.
+- 선택 이유: 계산 가능한 판단은 코드가 책임지고, OpenAI는 그 판단을 설명/코칭 언어로 바꾸는 역할로 좁혀야 개인화 품질과 재현성이 올라간다.
+- 검증: 중요 경로 `supabase/functions/coach-run/index.ts`는 `npm run supabase:functions:check`로 Deno 타입 체크를 통과시킨다. 전체 변경은 `npm run test:run`, `npm run build`, `npm run harness:check`로 확인한다.
+- 적용 범위: `supabase/functions/coach-run/index.ts`, `src/entities/training-memory/model.ts`, `.harness/project/ai-coaching-goal.md`, `.harness/project/running-coaching-standards.md`, `.harness/project/architecture-rules.md`, `.harness/project/domain-rules.md`.
