@@ -487,3 +487,10 @@
 - 선택 이유: Lens별 좋은 신호는 코칭 근거로 보존해야 하지만, 실행 처방은 회복/부하/부상 게이트와 일관되어야 한다. 원본 분석과 표시용 처방을 분리하면 테스트와 UI가 둘 다 명확해진다.
 - 포기한 대안: 각 Lens 계산 함수에 다른 Lens 상태를 직접 주입하는 방식은 Lens 독립성과 단위 테스트 경계를 흐리므로 채택하지 않는다.
 - 적용 범위: `src/shared/lib/trendInsights.ts`, `src/pages/trends/TrendsPage.vue`, `.harness/project/domain-rules.md`.
+
+## 2026-06-02 - 추세 종합 판단 클릭은 렌즈 선택만 수행
+- 문제: 종합 판단 항목 클릭 시 해당 Lens를 선택한 뒤 `scrollIntoView({ block: 'start' })`로 Lens 상세까지 강제 이동하면서 모바일 화면 위치가 튀거나 사용자가 현재 맥락을 잃는 회귀가 생겼다.
+- 결정: 종합 판단 항목 클릭은 관련 Lens 탭 선택만 수행한다. Lens 상세 영역으로의 강제 자동 스크롤은 제거하고, 버튼 기본 브라우저 스타일 영향은 CSS에서 명시적으로 차단한다.
+- 선택 이유: 종합 판단 카드와 Lens 탭은 상하로 인접해 있어 선택 변경만으로도 연결성이 유지된다. 반면 자동 스크롤은 모바일 WebView와 root tab pager 맥락에서 화면 위치를 예측하기 어렵게 만든다.
+- 포기한 대안: `scrollIntoView` 옵션을 `nearest`로 약화하는 방식은 브라우저/viewport 상태에 따라 여전히 위치 이동이 달라질 수 있어 채택하지 않는다.
+- 적용 범위: `src/pages/trends/TrendsPage.vue`, `src/app/styles.css`.

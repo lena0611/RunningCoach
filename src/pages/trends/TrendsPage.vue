@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
@@ -29,7 +29,6 @@ const router = useRouter()
 const selectedLens = ref<TrendLensKey>('goal')
 const selectedPeriod = ref<TrendPeriod>('90d')
 const selectedBaseline = ref<TrendBaseline>('previous-period')
-const lensDetailRef = ref<HTMLElement | null>(null)
 
 const lensOptions: Array<{ key: TrendLensKey; label: string; description: string }> = [
   { key: 'goal', label: '목표까지', description: '목표에 가까워졌는지' },
@@ -114,11 +113,9 @@ function selectLens(key: TrendLensKey) {
   selectedLens.value = key
 }
 
-async function selectOverallItem(item: TrendOverallItem) {
+function selectOverallItem(item: TrendOverallItem) {
   if (!item.lens) return
   selectLens(item.lens)
-  await nextTick()
-  lensDetailRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 function openRun(runId: string) {
@@ -213,17 +210,15 @@ function evidenceRoleLabel(role: TrendEvidenceRun['role']) {
       <BottomSheetSelect v-model="selectedBaseline" compact label="비교" :options="baselineOptions" />
     </div>
 
-    <div ref="lensDetailRef" class="trend-lens-detail-anchor">
-      <SectionCard class="trend-hero-card" :class="`trend-hero-${result.hero.tone}`">
-        <div>
-          <span class="trend-hero-label">{{ heroToneLabel }}</span>
-          <h3>{{ result.hero.value }}</h3>
-          <strong>{{ result.hero.label }}</strong>
-          <p>{{ result.hero.detail }}</p>
-        </div>
-        <span class="trend-confidence">{{ heroConfidenceLabel }}</span>
-      </SectionCard>
-    </div>
+    <SectionCard class="trend-hero-card" :class="`trend-hero-${result.hero.tone}`">
+      <div>
+        <span class="trend-hero-label">{{ heroToneLabel }}</span>
+        <h3>{{ result.hero.value }}</h3>
+        <strong>{{ result.hero.label }}</strong>
+        <p>{{ result.hero.detail }}</p>
+      </div>
+      <span class="trend-confidence">{{ heroConfidenceLabel }}</span>
+    </SectionCard>
 
     <MetricGrid v-if="result.cards.length">
       <StatCard

@@ -208,6 +208,7 @@
 }
 
 .trend-overall-row {
+  appearance: none;
   display: grid;
   grid-template-columns: minmax(76px, 0.34fr) 1fr;
   gap: var(--space-3);
@@ -226,6 +227,8 @@
 
 .trend-overall-row-action {
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .trend-overall-row-action:focus-visible {
@@ -264,10 +267,6 @@
   font-size: var(--text-caption-size);
   font-weight: var(--font-weight-bold);
   line-height: var(--text-caption-line);
-}
-
-.trend-lens-detail-anchor {
-  scroll-margin-top: var(--space-4);
 }
 
 .trend-hero-card {
