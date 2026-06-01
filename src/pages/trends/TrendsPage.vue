@@ -13,6 +13,7 @@ import { formatDateWithWeekday } from '@/shared/lib/format'
 import BottomSheetSelect, { type BottomSheetSelectOption } from '@/shared/ui/BottomSheetSelect.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import MetricGrid from '@/shared/ui/MetricGrid.vue'
+import ListRow from '@/shared/ui/ListRow.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
@@ -71,6 +72,13 @@ const heroToneLabel = computed(() => {
   if (tone === 'warning') return '주의'
   if (tone === 'watch') return '관찰'
   return '데이터 확인'
+})
+
+const chartUnit = computed(() => {
+  if (selectedLens.value === 'efficiency') return '초/km'
+  if (selectedLens.value === 'intensity') return 'km'
+  if (selectedLens.value === 'goal' || selectedLens.value === 'quality') return '점'
+  return '점'
 })
 
 onMounted(() => {
@@ -144,8 +152,8 @@ function isMetricValue(value: string) {
       />
     </MetricGrid>
 
-    <SectionGroup title="시각화">
-      <TrendLensChart v-if="result.chart.length" :points="result.chart" />
+    <SectionGroup title="시각화" :surface="false">
+      <TrendLensChart v-if="result.chart.length" :points="result.chart" :unit="chartUnit" />
       <EmptyState v-else title="표시할 추세가 없습니다." description="이 Lens에서 비교 가능한 기록이 아직 부족합니다." />
     </SectionGroup>
 
@@ -155,7 +163,7 @@ function isMetricValue(value: string) {
       </div>
     </SectionGroup>
 
-    <SectionGroup title="다음 처방 영향">
+    <SectionGroup title="다음 처방 영향" :surface="false">
       <div class="trend-prescription-card" :class="`trend-prescription-${result.prescriptionImpact.status}`">
         <strong>{{ result.prescriptionImpact.title }}</strong>
         <p v-for="reason in result.prescriptionImpact.reasons" :key="reason">{{ reason }}</p>
@@ -164,17 +172,16 @@ function isMetricValue(value: string) {
 
     <SectionGroup v-if="evidenceRuns.length" title="근거 세션" :surface="false">
       <div class="trend-evidence-list">
-        <button
+        <ListRow
           v-for="item in evidenceRuns"
           :key="`${item.runId}-${item.role}`"
-          type="button"
-          class="trend-evidence-row"
+          clickable
+          :kicker="item.role"
+          :title="item.run.sessionTitle || item.run.type"
+          :detail="`${formatDateWithWeekday(item.run.date)} · ${item.reason}`"
+          tone="primary"
           @click="openRun(item.runId)"
-        >
-          <span>{{ item.role }}</span>
-          <strong>{{ item.run.sessionTitle || item.run.type }}</strong>
-          <small>{{ formatDateWithWeekday(item.run.date) }} · {{ item.reason }}</small>
-        </button>
+        />
       </div>
     </SectionGroup>
 

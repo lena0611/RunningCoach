@@ -1,15 +1,30 @@
 <script setup lang="ts">
-defineProps<{
+const props = defineProps<{
   kicker?: string
   title: string
   detail?: string
   metric?: string
   tone?: 'default' | 'primary' | 'warning' | 'danger'
+  clickable?: boolean
 }>()
+
+const emit = defineEmits<{
+  click: [event: MouseEvent]
+}>()
+
+function handleClick(event: MouseEvent) {
+  if (props.clickable) emit('click', event)
+}
 </script>
 
 <template>
-  <article class="list-row" :class="[`list-row-${tone || 'default'}`, { 'list-row-has-leading': $slots.leading }]">
+  <component
+    :is="clickable ? 'button' : 'article'"
+    class="list-row"
+    :class="[`list-row-${tone || 'default'}`, { 'list-row-has-leading': $slots.leading, 'list-row-clickable': clickable }]"
+    :type="clickable ? 'button' : undefined"
+    @click="handleClick"
+  >
     <div v-if="$slots.leading" class="list-row-leading">
       <slot name="leading" />
     </div>
@@ -23,5 +38,5 @@ defineProps<{
       <strong v-if="metric" class="list-row-metric">{{ metric }}</strong>
       <slot name="addon" />
     </div>
-  </article>
+  </component>
 </template>

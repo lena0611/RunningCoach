@@ -1,46 +1,155 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import type { ECharts, EChartsOption } from 'echarts'
+import { getChartDomain, inferChartMetricKind } from '@/shared/lib/chartAxis'
+import { formatInteger, formatNumberWithCommas } from '@/shared/lib/format'
 import type { TrendChartPoint } from '@/shared/lib/trendInsights'
+
+type EchartsRuntime = {
+  init: (element: HTMLElement, theme?: string, options?: { renderer?: 'canvas' }) => ECharts
+}
 
 const props = defineProps<{
   points: TrendChartPoint[]
   unit?: string
 }>()
 
-const chartPoints = computed(() => {
-  const values = props.points.map((point) => point.value).filter((value) => Number.isFinite(value))
-  const min = values.length ? Math.min(...values) : 0
-  const max = values.length ? Math.max(...values) : 1
-  const span = Math.max(max - min, 1)
-  return props.points.map((point, index) => ({
-    ...point,
-    x: props.points.length <= 1 ? 50 : (index / (props.points.length - 1)) * 100,
-    y: 88 - ((point.value - min) / span) * 70
-  }))
+const chartRef = ref<HTMLElement | null>(null)
+let chart: ECharts | null = null
+let resizeObserver: ResizeObserver | null = null
+let echartsRuntime: EchartsRuntime | null = null
+
+const values = computed(() => props.points.map((point) => point.value))
+const labels = computed(() => props.points.map((point) => point.label))
+const latestPoint = computed(() => props.points[props.points.length - 1] ?? null)
+
+onMounted(async () => {
+  await nextTick()
+  if (!chartRef.value) return
+  const runtime = await loadEcharts()
+  if (!chartRef.value) return
+  chart = runtime.init(chartRef.value, undefined, { renderer: 'canvas' })
+  resizeObserver = new ResizeObserver(() => chart?.resize())
+  resizeObserver.observe(chartRef.value)
+  renderChart()
 })
 
-const polyline = computed(() => chartPoints.value.map((point) => `${point.x},${point.y}`).join(' '))
-const latestPoint = computed(() => chartPoints.value[chartPoints.value.length - 1] ?? null)
+watch(
+  () => [props.points, props.unit],
+  () => renderChart(),
+  { deep: true }
+)
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  chart?.dispose()
+  chart = null
+})
+
+function getColor(name: string) {
+  if (!chartRef.value) return ''
+  return getComputedStyle(chartRef.value).getPropertyValue(name).trim()
+}
+
+async function loadEcharts() {
+  if (echartsRuntime) return echartsRuntime
+  const [
+    chartsModule,
+    componentsModule,
+    coreModule,
+    rendererModule
+  ] = await Promise.all([
+    import('echarts/charts'),
+    import('echarts/components'),
+    import('echarts/core'),
+    import('echarts/renderers')
+  ])
+  coreModule.use([
+    chartsModule.LineChart,
+    componentsModule.GridComponent,
+    componentsModule.TooltipComponent,
+    rendererModule.CanvasRenderer
+  ])
+  echartsRuntime = { init: coreModule.init as EchartsRuntime['init'] }
+  return echartsRuntime
+}
+
+function formatValue(value: number) {
+  if (!Number.isFinite(value)) return '-'
+  const rounded = Math.abs(value) >= 10 ? formatInteger(value) : formatNumberWithCommas(value, { maximumFractionDigits: 1 })
+  return `${rounded}${props.unit ?? ''}`
+}
+
+function renderChart() {
+  if (!chart) return
+  const primary = getColor('--color-primary') || '#4ade80'
+  const text = getColor('--color-text') || '#f4f7fb'
+  const muted = getColor('--color-muted') || '#8b98a8'
+  const subtle = getColor('--color-subtle-2') || 'rgba(255,255,255,0.08)'
+  const domain = getChartDomain(values.value, inferChartMetricKind(props.unit))
+
+  const option: EChartsOption = {
+    animationDuration: 480,
+    grid: { left: 8, right: 8, top: 12, bottom: 18, containLabel: true },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'line', lineStyle: { color: subtle, width: 1.5 } },
+      confine: true,
+      borderWidth: 0,
+      backgroundColor: getColor('--color-surface') || '#141a21',
+      textStyle: { color: text },
+      extraCssText: 'z-index:1; pointer-events:none;',
+      formatter: (params) => {
+        const list = Array.isArray(params) ? params : [params]
+        const first = list[0] as { axisValue?: string | number; dataIndex?: number; value?: number } | undefined
+        const point = typeof first?.dataIndex === 'number' ? props.points[first.dataIndex] : null
+        const value = Number(first?.value)
+        if (!Number.isFinite(value)) return ''
+        return `<strong>${first?.axisValue ?? ''}</strong><div style="display:grid;gap:4px;margin-top:6px"><span>${point?.detail ?? ''}</span><strong>${formatValue(value)}</strong></div>`
+      }
+    },
+    xAxis: {
+      type: 'category',
+      data: labels.value,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: muted, fontWeight: 700 }
+    },
+    yAxis: {
+      type: 'value',
+      min: domain?.min,
+      max: domain?.max,
+      interval: domain?.interval,
+      splitLine: { lineStyle: { color: subtle } },
+      axisLabel: {
+        color: muted,
+        fontWeight: 700,
+        formatter: (value: number) => formatValue(value)
+      }
+    },
+    series: [
+      {
+        type: 'line',
+        data: values.value,
+        smooth: true,
+        showSymbol: false,
+        symbol: 'none',
+        lineStyle: { width: 2.4, color: primary },
+        itemStyle: { color: primary },
+        areaStyle: { opacity: 0.08, color: primary },
+        connectNulls: false
+      }
+    ]
+  }
+  chart.setOption(option, true)
+}
 </script>
 
 <template>
-  <div class="trend-lens-chart" role="img" aria-label="추세 렌즈 차트">
-    <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-      <line x1="0" y1="88" x2="100" y2="88" class="trend-lens-axis" />
-      <line x1="0" y1="52" x2="100" y2="52" class="trend-lens-grid" />
-      <polyline v-if="chartPoints.length > 1" :points="polyline" class="trend-lens-line" />
-      <circle
-        v-for="point in chartPoints"
-        :key="point.id"
-        :cx="point.x"
-        :cy="point.y"
-        r="2.6"
-        class="trend-lens-dot"
-        :class="point.status ? `trend-lens-dot-${point.status}` : ''"
-      />
-    </svg>
+  <div class="trend-lens-chart" role="img" aria-label="추세 렌즈 라인 차트">
+    <div ref="chartRef" class="trend-lens-echart" aria-hidden="true" />
     <div v-if="latestPoint" class="trend-lens-latest">
-      <strong>{{ latestPoint.value }}{{ unit ?? '' }}</strong>
+      <strong>{{ formatValue(latestPoint.value) }}</strong>
       <span>{{ latestPoint.detail || latestPoint.label }}</span>
     </div>
   </div>
