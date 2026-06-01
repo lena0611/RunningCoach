@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
@@ -7,6 +7,8 @@ import {
   buildTrendOverallSummary,
   buildTrendLensResult,
   type TrendBaseline,
+  type TrendEvidenceRun,
+  type TrendInsightConfidence,
   type TrendLensKey,
   type TrendOverallItem,
   type TrendPeriod
@@ -28,6 +30,7 @@ const router = useRouter()
 const selectedLens = ref<TrendLensKey>('goal')
 const selectedPeriod = ref<TrendPeriod>('90d')
 const selectedBaseline = ref<TrendBaseline>('previous-period')
+const lensDetailRef = ref<HTMLElement | null>(null)
 
 const lensOptions: Array<{ key: TrendLensKey; label: string; description: string }> = [
   { key: 'goal', label: '목표까지', description: '목표에 가까워졌는지' },
@@ -93,6 +96,8 @@ const heroToneLabel = computed(() => {
 })
 
 const overallToneLabel = computed(() => toneLabel(overallSummary.value.tone))
+const overallConfidenceLabel = computed(() => confidenceLabel(overallSummary.value.confidence, '판단 신뢰도'))
+const heroConfidenceLabel = computed(() => confidenceLabel(result.value.hero.confidence, '신뢰도'))
 
 const chartUnit = computed(() => {
   if (selectedLens.value === 'efficiency') return '초/km'
@@ -114,6 +119,13 @@ function selectLens(key: TrendLensKey) {
   selectedLens.value = key
 }
 
+async function selectOverallItem(item: TrendOverallItem) {
+  if (!item.lens) return
+  selectLens(item.lens)
+  await nextTick()
+  lensDetailRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
 function openRun(runId: string) {
   router.push({ path: '/runs', query: { runId } })
 }
@@ -127,6 +139,19 @@ function toneLabel(tone: string) {
   if (tone === 'warning') return '주의'
   if (tone === 'watch') return '관찰'
   return '데이터 확인'
+}
+
+function confidenceLabel(confidence: TrendInsightConfidence, prefix: string) {
+  const label = confidence === 'high' ? '높음' : confidence === 'medium' ? '보통' : '낮음'
+  return `${prefix}: ${label}`
+}
+
+function evidenceRoleLabel(role: TrendEvidenceRun['role']) {
+  if (role === 'current') return '현재 기준 기록'
+  if (role === 'baseline') return '비교 기준 기록'
+  if (role === 'supporting') return '판단에 사용한 기록'
+  if (role === 'warning') return '주의 신호 기록'
+  return '비교 제외 기록'
 }
 </script>
 
@@ -143,18 +168,34 @@ function toneLabel(tone: string) {
         <div>
           <span class="trend-hero-label">종합 판단</span>
           <h3>{{ overallSummary.title }}</h3>
-          <p>{{ overallSummary.confidence }} confidence · 선택한 기간/비교 기준</p>
+          <p>{{ overallConfidenceLabel }} · 선택한 기간/비교 기준</p>
         </div>
         <span class="trend-confidence">{{ overallToneLabel }}</span>
       </div>
       <div class="trend-overall-list">
-        <div v-for="item in overallItems" :key="item.label" class="trend-overall-row">
-          <span>{{ item.label }}</span>
-          <div>
-            <strong>{{ item.title }}</strong>
-            <p>{{ item.detail }}</p>
+        <template v-for="item in overallItems" :key="item.label">
+          <button
+            v-if="item.lens"
+            type="button"
+            class="trend-overall-row trend-overall-row-action"
+            :aria-label="`${item.label}: ${item.title} 렌즈 보기`"
+            @click="selectOverallItem(item)"
+          >
+            <span>{{ item.label }}</span>
+            <div>
+              <strong>{{ item.title }}</strong>
+              <p>{{ item.detail }}</p>
+              <small>렌즈 보기</small>
+            </div>
+          </button>
+          <div v-else class="trend-overall-row">
+            <span>{{ item.label }}</span>
+            <div>
+              <strong>{{ item.title }}</strong>
+              <p>{{ item.detail }}</p>
+            </div>
           </div>
-        </div>
+        </template>
       </div>
     </SectionCard>
 
@@ -177,15 +218,17 @@ function toneLabel(tone: string) {
       <BottomSheetSelect v-model="selectedBaseline" compact label="비교" :options="baselineOptions" />
     </div>
 
-    <SectionCard class="trend-hero-card" :class="`trend-hero-${result.hero.tone}`">
-      <div>
-        <span class="trend-hero-label">{{ heroToneLabel }}</span>
-        <h3>{{ result.hero.value }}</h3>
-        <strong>{{ result.hero.label }}</strong>
-        <p>{{ result.hero.detail }}</p>
-      </div>
-      <span class="trend-confidence">{{ result.hero.confidence }}</span>
-    </SectionCard>
+    <div ref="lensDetailRef" class="trend-lens-detail-anchor">
+      <SectionCard class="trend-hero-card" :class="`trend-hero-${result.hero.tone}`">
+        <div>
+          <span class="trend-hero-label">{{ heroToneLabel }}</span>
+          <h3>{{ result.hero.value }}</h3>
+          <strong>{{ result.hero.label }}</strong>
+          <p>{{ result.hero.detail }}</p>
+        </div>
+        <span class="trend-confidence">{{ heroConfidenceLabel }}</span>
+      </SectionCard>
+    </div>
 
     <MetricGrid v-if="result.cards.length">
       <StatCard
@@ -223,7 +266,7 @@ function toneLabel(tone: string) {
           v-for="item in evidenceRuns"
           :key="`${item.runId}-${item.role}`"
           clickable
-          :kicker="item.role"
+          :kicker="evidenceRoleLabel(item.role)"
           :title="item.run.sessionTitle || item.run.type"
           :detail="`${formatDateWithWeekday(item.run.date)} · ${item.reason}`"
           tone="primary"
