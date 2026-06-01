@@ -443,3 +443,9 @@
 - 결정: 사용자-facing 임시 UI만 제거하고, 웹 `requestHistoricalMigration()`/`requestHealthKitRunsInRange()`와 네이티브 `requestRunningWorkoutsInRange` 처리 로직은 유지한다.
 - 선택 이유: 향후 다른 날짜 범위 이관이나 운영성 복구가 필요할 수 있고, 비노출 브리지/저장 로직은 자동 동기화와 분리되어 일반 사용자 흐름을 방해하지 않는다.
 - 포기한 대안: 마이그레이션 로직 전체 제거는 나중에 같은 문제가 생겼을 때 네이티브와 웹 계약을 다시 복원해야 하므로 채택하지 않는다.
+
+## 2026-06-01 - 완료된 Issue worktree 정리 기준
+- 문제: Issue가 `Closed`/Project `Done`까지 끝나도 로컬 Issue worktree가 남아 작업 목록이 누적됐다. 완료 처리와 worktree 정리가 별도 단계였지만 정리 조건과 보류 조건이 문서화되어 있지 않았다.
+- 결정: 완료된 Issue worktree는 `Issue Closed`, Project Status `Done`, worktree clean, 후속 확인 불필요 조건을 모두 만족할 때 정리 대상 후보로 본다. `Open` 또는 `Deployed` 상태 worktree는 사용자 최종 완료 확인 전까지 보류한다. 미커밋 변경이 있으면 임의 삭제하지 않고 보고하며, 사용자가 특정 경로 삭제를 명시한 경우에만 변경 소실을 알리고 force 제거할 수 있다.
+- 선택 이유: 완료된 작업의 로컬 잔여물을 줄이되, 배포 확인 대기나 미커밋 변경 같은 상태를 삭제로 잃지 않기 위해서다.
+- 적용 범위: `.harness/project/workflow-rules.md`, `.harness/project/github-issue-management-guide.md`, `.harness/project/commit-push-rules.md`.

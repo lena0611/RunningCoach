@@ -22,6 +22,7 @@ commit/push 단계에서 동작하는 git hook, 커밋 템플릿, 최종 검증 
 - feature branch 변경은 PR을 통해 `main`으로 머지합니다.
 - `main`에 머지된 뒤에만 GitHub Pages 배포 또는 운영 배포의 기준 변경으로 봅니다.
 - 하네스/운영 문서처럼 짧고 독립적인 변경도 원칙적으로 Issue worktree/branch를 권장합니다. 사용자가 명시적으로 `main` 직접 커밋을 승인한 경우에만 직접 커밋할 수 있습니다.
+- Issue가 `Closed`이고 Project Status가 `Done`이며 해당 worktree가 clean이면 로컬 Issue worktree는 완료 후 정리 대상입니다. `Open` 또는 `Deployed` 상태 worktree는 사용자 최종 완료 확인 전까지 기본 보류합니다.
 
 ## hook 설치 기준
 - `npm run hooks:install`은 `core.hooksPath`를 `.githooks`로 설정합니다.
