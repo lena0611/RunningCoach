@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RunLog } from '@/entities/run/model'
 import { initialTrainingMemory } from '@/entities/training-memory/model'
-import { buildTrendLensResult } from '@/shared/lib/trendInsights'
+import { buildTrendLensResult, buildTrendOverallSummary } from '@/shared/lib/trendInsights'
 
 function run(input: Partial<RunLog>): RunLog {
   return {
@@ -123,5 +123,48 @@ describe('buildTrendLensResult', () => {
 
     expect(result.hero.tone).toBe('warning')
     expect(result.cards.find((item) => item.id === 'pain')?.value).toBe('1')
+  })
+})
+
+describe('buildTrendOverallSummary', () => {
+  it('summarizes missing data without inventing a signal', () => {
+    const result = buildTrendOverallSummary({
+      period: '90d',
+      baseline: 'previous-period',
+      runs: [],
+      memory: initialTrainingMemory,
+      today: new Date('2026-06-01T00:00:00')
+    })
+
+    expect(result.tone).toBe('neutral')
+    expect(result.confidence).toBe('low')
+    expect(result.bestSignal.title).toBe('아직 없음')
+    expect(result.prescriptionDirection.title).toBe('기록 확보 우선')
+  })
+
+  it('prioritizes recovery caution over an efficiency raise candidate', () => {
+    const runs = [
+      run({ id: 'old-1', date: '2026-01-10', type: 'Easy', avgHeartRate: 140, avgPaceSec: 410 }),
+      run({ id: 'old-2', date: '2026-01-20', type: 'Easy', avgHeartRate: 142, avgPaceSec: 400 }),
+      run({ id: 'old-3', date: '2026-02-10', type: 'Easy', avgHeartRate: 141, avgPaceSec: 405 }),
+      run({ id: 'new-1', date: '2026-04-10', type: 'Easy', avgHeartRate: 140, avgPaceSec: 380 }),
+      run({ id: 'new-2', date: '2026-04-20', type: 'Easy', avgHeartRate: 142, avgPaceSec: 378 }),
+      run({ id: 'new-3', date: '2026-05-10', type: 'Easy', avgHeartRate: 141, avgPaceSec: 382 }),
+      run({ id: 'tempo-1', date: '2026-05-20', type: 'Tempo', distanceKm: 6, avgPaceSec: 350, maxHeartRate: 170 }),
+      run({ id: 'easy-after', date: '2026-05-22', type: 'Easy', distanceKm: 4, avgPaceSec: 430, painNote: '햄스트링 뻣뻣함', rpe: 7 })
+    ]
+
+    const result = buildTrendOverallSummary({
+      period: '90d',
+      baseline: 'previous-period',
+      runs,
+      memory: initialTrainingMemory,
+      today: new Date('2026-06-01T00:00:00')
+    })
+
+    expect(result.bestSignal.title).toContain('같은 심박에서')
+    expect(result.cautionSignal.title).toContain('회복됐나')
+    expect(result.prescriptionDirection.title).toBe('강도 상향 보류')
+    expect(result.prescriptionDirection.tone).toBe('warning')
   })
 })
