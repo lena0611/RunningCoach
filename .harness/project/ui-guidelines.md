@@ -73,6 +73,7 @@ Use a screen stack when the user is drilling into a deeper flow without changing
 - Dashboard and Coach must surface the active goal and active injury context near the top. The user should not have to infer which goal or restriction the recommendation used.
 - Upload: simple HealthKit/FIT/manual import flow with large upload/import cards.
 - Run Log: chronological cards, run type badges, distance/pace/HR summary, edit/delete actions.
+- Trends: 전문 러닝 인사이트 화면. Lens selector, 기간/비교 기준, 핵심 변화 hero, 3~4개 요약 카드, 시각화, 해석, 근거 세션, 다음 처방 영향을 순서대로 보여준다. 통계표보다 발전/퇴보와 처방 조정 신호를 우선한다.
 - Memory: training context only: goal management, injury management, AI-managed weekly routine, long-run strategy, heat/style notes. Do not mix account registration controls into this screen. Weekly routine is shown as AI-managed context, not as a freeform user-authored plan.
 - Memory goal and injury management must use separated flows: overview card -> list -> edit or new item screen. Do not place active selection, edit fields, creation fields, and full lists in one long mixed form.
 - Memory overview should summarize the current coaching basis first, then provide drill-in cards for goal and injury management. Deep edit fields belong only on focused edit/create screens.

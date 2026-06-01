@@ -6,6 +6,7 @@ export const router = createRouter({
     { path: '/', component: () => import('@/pages/dashboard/DashboardPage.vue') },
     { path: '/upload', component: () => import('@/pages/upload-run/UploadRunPage.vue') },
     { path: '/runs', component: () => import('@/pages/run-log/RunLogPage.vue') },
+    { path: '/trends', component: () => import('@/pages/trends/TrendsPage.vue') },
     { path: '/memory', component: () => import('@/pages/memory/MemoryPage.vue') },
     { path: '/coach', redirect: '/runs' },
     { path: '/auth', component: () => import('@/pages/auth/AuthPage.vue') },
