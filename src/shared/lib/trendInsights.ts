@@ -42,6 +42,24 @@ export type TrendPrescriptionImpact = {
   reasons: string[]
 }
 
+export type TrendOverallItem = {
+  label: string
+  title: string
+  detail: string
+  tone: TrendInsightTone
+  lens?: TrendLensKey
+}
+
+export type TrendOverallSummary = {
+  title: string
+  tone: TrendInsightTone
+  confidence: TrendInsightConfidence
+  recentFlow: TrendOverallItem
+  bestSignal: TrendOverallItem
+  cautionSignal: TrendOverallItem
+  prescriptionDirection: TrendOverallItem
+}
+
 export type TrendLensResult = {
   lens: TrendLensKey
   title: string
@@ -78,6 +96,16 @@ type DateWindow = {
 
 const hardTypes: RunType[] = ['Tempo', 'LSD', 'Steady Long', 'Race']
 const qualityTypes: RunType[] = ['Easy + Strides', 'Tempo', 'LSD', 'Steady Long', 'Race']
+const lensOrder: TrendLensKey[] = ['goal', 'efficiency', 'intensity', 'quality', 'recovery']
+const lensQuestionLabels: Record<TrendLensKey, string> = {
+  goal: '목표까지',
+  efficiency: '같은 심박에서',
+  intensity: '무리했나',
+  quality: '잘 수행했나',
+  recovery: '회복됐나'
+}
+const warningLensPriority: TrendLensKey[] = ['recovery', 'intensity', 'goal', 'quality', 'efficiency']
+const goodLensPriority: TrendLensKey[] = ['goal', 'recovery', 'quality', 'efficiency', 'intensity']
 const dayMs = 24 * 60 * 60 * 1000
 
 export function buildTrendLensResult(input: TrendInput): TrendLensResult {
@@ -91,6 +119,50 @@ export function buildTrendLensResult(input: TrendInput): TrendLensResult {
   if (input.lens === 'intensity') return buildIntensityLens(window, today)
   if (input.lens === 'quality') return buildQualityLens(window)
   return buildRecoveryLens(window)
+}
+
+export function buildTrendOverallSummary(input: Omit<TrendInput, 'lens'>): TrendOverallSummary {
+  const lensResults = lensOrder.map((lens) => buildTrendLensResult({ ...input, lens }))
+  if (!input.runs.length) {
+    return {
+      title: '기록을 쌓으면 판단합니다',
+      tone: 'neutral',
+      confidence: 'low',
+      recentFlow: overallItem('최근 흐름', '데이터 부족', '러닝 기록이 저장되면 목표, 효율, 강도, 품질, 회복을 함께 봅니다.', 'neutral'),
+      bestSignal: overallItem('가장 좋은 신호', '아직 없음', '좋은 신호를 고르기에는 비교 가능한 기록이 부족합니다.', 'neutral'),
+      cautionSignal: overallItem('가장 조심할 신호', '아직 없음', '주의 신호도 기록이 쌓인 뒤 판단합니다.', 'neutral'),
+      prescriptionDirection: overallItem('다음 처방 방향', '기록 확보 우선', 'HealthKit 또는 수동 기록을 저장한 뒤 다음 훈련 조정 신호를 확인합니다.', 'neutral')
+    }
+  }
+
+  const warning = pickLensResult(lensResults, warningLensPriority, (result) => result.hero.tone === 'warning')
+  const good = pickLensResult(lensResults, goodLensPriority, (result) => result.hero.tone === 'good')
+  const reduce = pickLensResult(lensResults, warningLensPriority, (result) => result.prescriptionImpact.status === 'reduce-or-recover')
+  const raise = pickLensResult(lensResults, goodLensPriority, (result) => result.prescriptionImpact.status === 'raise-candidate')
+  const dataReadyCount = lensResults.filter((result) => result.hero.confidence !== 'low').length
+  const goodCount = lensResults.filter((result) => result.hero.tone === 'good').length
+  const warningCount = lensResults.filter((result) => result.hero.tone === 'warning').length
+  const tone: TrendInsightTone = reduce || warningCount >= 2 ? 'warning' : goodCount >= 2 && !warning ? 'good' : warning ? 'watch' : 'watch'
+  const confidence: TrendInsightConfidence = dataReadyCount >= 4 ? 'high' : dataReadyCount >= 2 ? 'medium' : 'low'
+
+  return {
+    title: overallTitle(tone, goodCount, warningCount),
+    tone,
+    confidence,
+    recentFlow: overallItem(
+      '최근 흐름',
+      recentFlowTitle(tone, goodCount, warningCount),
+      recentFlowDetail(lensResults, goodCount, warningCount, dataReadyCount),
+      tone
+    ),
+    bestSignal: good
+      ? resultItem('가장 좋은 신호', good, '좋은 쪽으로 확인된 신호입니다.')
+      : overallItem('가장 좋은 신호', '확실한 상승 신호 부족', '좋은 흐름을 고르기에는 아직 관찰 또는 데이터 부족 신호가 더 큽니다.', 'watch'),
+    cautionSignal: warning
+      ? resultItem('가장 조심할 신호', warning, '다음 처방을 보수적으로 만드는 신호입니다.')
+      : overallItem('가장 조심할 신호', '큰 경고 없음', '현재 렌즈 조합에서는 강하게 낮춰야 할 경고가 크지 않습니다.', 'good'),
+    prescriptionDirection: prescriptionDirectionItem(reduce, raise)
+  }
 }
 
 function buildGoalLens(runs: RunLog[], memory: TrainingMemory, today: Date): TrendLensResult {
@@ -539,6 +611,75 @@ function card(id: string, label: string, value: string, unit: string, hint: stri
 
 function prescription(status: TrendPrescriptionImpact['status'], title: string, reasons: string[]): TrendPrescriptionImpact {
   return { status, title, reasons }
+}
+
+function pickLensResult(results: TrendLensResult[], priority: TrendLensKey[], predicate: (result: TrendLensResult) => boolean) {
+  for (const lens of priority) {
+    const result = results.find((item) => item.lens === lens)
+    if (result && predicate(result)) return result
+  }
+  return undefined
+}
+
+function overallItem(label: string, title: string, detail: string, tone: TrendInsightTone, lens?: TrendLensKey): TrendOverallItem {
+  return { label, title, detail, tone, lens }
+}
+
+function resultItem(label: string, result: TrendLensResult, fallback: string): TrendOverallItem {
+  return overallItem(
+    label,
+    `${lensQuestionLabels[result.lens]} · ${result.hero.label}`,
+    result.explanations[0] ?? result.hero.detail ?? fallback,
+    result.hero.tone,
+    result.lens
+  )
+}
+
+function prescriptionDirectionItem(reduce?: TrendLensResult, raise?: TrendLensResult): TrendOverallItem {
+  if (reduce) {
+    return overallItem(
+      '다음 처방 방향',
+      reduce.prescriptionImpact.title,
+      reduce.prescriptionImpact.reasons[0] ?? '회복 또는 Easy 우선으로 다음 세션을 보수적으로 봅니다.',
+      'warning',
+      reduce.lens
+    )
+  }
+  if (raise) {
+    return overallItem(
+      '다음 처방 방향',
+      raise.prescriptionImpact.title,
+      raise.prescriptionImpact.reasons[0] ?? '회복 비용이 조용하면 같은 유형의 처방을 소폭 올릴 수 있습니다.',
+      'good',
+      raise.lens
+    )
+  }
+  return overallItem('다음 처방 방향', '현재 루틴 유지', '뚜렷한 상향 또는 하향 신호보다 같은 처방을 반복 확인할 근거가 큽니다.', 'watch')
+}
+
+function overallTitle(tone: TrendInsightTone, goodCount: number, warningCount: number) {
+  if (tone === 'warning') return '상향보다 회복 확인이 먼저입니다'
+  if (tone === 'good') return '좋은 흐름이 여러 축에서 보입니다'
+  if (warningCount > 0) return '좋은 신호와 주의 신호가 함께 있습니다'
+  if (goodCount > 0) return '좋은 신호를 유지하며 관찰합니다'
+  return '조금 더 기록을 보며 판단합니다'
+}
+
+function recentFlowTitle(tone: TrendInsightTone, goodCount: number, warningCount: number) {
+  if (tone === 'warning') return '주의 쪽으로 기울었습니다'
+  if (tone === 'good') return '전반적으로 좋아지는 중'
+  if (goodCount > 0 && warningCount > 0) return '좋은 신호와 주의 신호가 공존'
+  if (goodCount > 0) return '일부 좋은 신호 확인'
+  return '관찰 유지'
+}
+
+function recentFlowDetail(results: TrendLensResult[], goodCount: number, warningCount: number, dataReadyCount: number) {
+  const goodLabels = results.filter((result) => result.hero.tone === 'good').map((result) => lensQuestionLabels[result.lens])
+  const warningLabels = results.filter((result) => result.hero.tone === 'warning').map((result) => lensQuestionLabels[result.lens])
+  if (warningLabels.length) return `${warningLabels.join(', ')} 렌즈는 조심하고, ${goodLabels.length ? `${goodLabels.join(', ')} 신호는 유지합니다.` : '상향 판단은 보류합니다.'}`
+  if (goodLabels.length) return `${goodLabels.join(', ')} 렌즈에서 좋은 신호가 보입니다. 회복 비용이 커지지 않는지 함께 봅니다.`
+  if (dataReadyCount < 2) return '비교 가능한 렌즈가 아직 적어 최근 흐름을 확정하지 않습니다.'
+  return `좋은 신호 ${goodCount}개, 주의 신호 ${warningCount}개로 현재는 유지 관찰이 적절합니다.`
 }
 
 function evidenceFromRuns(runs: RunLog[], role: TrendEvidenceRun['role'], reason: string): TrendEvidenceRun[] {

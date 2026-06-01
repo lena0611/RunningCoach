@@ -4,9 +4,11 @@ import { useRouter } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import {
+  buildTrendOverallSummary,
   buildTrendLensResult,
   type TrendBaseline,
   type TrendLensKey,
+  type TrendOverallItem,
   type TrendPeriod
 } from '@/shared/lib/trendInsights'
 import { formatDateWithWeekday } from '@/shared/lib/format'
@@ -28,11 +30,11 @@ const selectedPeriod = ref<TrendPeriod>('90d')
 const selectedBaseline = ref<TrendBaseline>('previous-period')
 
 const lensOptions: Array<{ key: TrendLensKey; label: string; description: string }> = [
-  { key: 'goal', label: '목표', description: '목표까지 가까워지는 축과 병목' },
-  { key: 'efficiency', label: '효율', description: '같은 심박대에서 빨라지는 흐름' },
-  { key: 'intensity', label: '강도', description: 'Easy 기반과 강훈련 밀도' },
-  { key: 'quality', label: '품질', description: '세션 의도와 실제 수행 안정성' },
-  { key: 'recovery', label: '회복', description: '좋은 훈련 뒤 남은 회복 비용' }
+  { key: 'goal', label: '목표까지', description: '목표에 가까워졌는지' },
+  { key: 'efficiency', label: '같은 심박에서', description: '비슷한 심박으로 더 잘 달리는지' },
+  { key: 'intensity', label: '무리했나', description: '강훈련과 부하가 몰렸는지' },
+  { key: 'quality', label: '잘 수행했나', description: '처방 의도대로 뛰었는지' },
+  { key: 'recovery', label: '회복됐나', description: '좋은 훈련 뒤 무리가 남았는지' }
 ]
 
 const periodOptions: BottomSheetSelectOption[] = [
@@ -58,6 +60,22 @@ const result = computed(() =>
   })
 )
 
+const overallSummary = computed(() =>
+  buildTrendOverallSummary({
+    period: selectedPeriod.value,
+    baseline: selectedBaseline.value,
+    runs: runStore.sortedRuns,
+    memory: memoryStore.memory
+  })
+)
+
+const overallItems = computed<TrendOverallItem[]>(() => [
+  overallSummary.value.recentFlow,
+  overallSummary.value.bestSignal,
+  overallSummary.value.cautionSignal,
+  overallSummary.value.prescriptionDirection
+])
+
 const evidenceRuns = computed(() =>
   result.value.evidenceRuns
     .flatMap((evidence) => {
@@ -73,6 +91,8 @@ const heroToneLabel = computed(() => {
   if (tone === 'watch') return '관찰'
   return '데이터 확인'
 })
+
+const overallToneLabel = computed(() => toneLabel(overallSummary.value.tone))
 
 const chartUnit = computed(() => {
   if (selectedLens.value === 'efficiency') return '초/km'
@@ -101,6 +121,13 @@ function openRun(runId: string) {
 function isMetricValue(value: string) {
   return /^[+-]?[0-9.,]+/.test(value)
 }
+
+function toneLabel(tone: string) {
+  if (tone === 'good') return '좋은 흐름'
+  if (tone === 'warning') return '주의'
+  if (tone === 'watch') return '관찰'
+  return '데이터 확인'
+}
 </script>
 
 <template>
@@ -110,6 +137,26 @@ function isMetricValue(value: string) {
       <h2>훈련 변화와 다음 처방</h2>
       <p class="helper">누적 기록에서 좋아진 축, 막힌 축, 다음 훈련 조정 신호를 봅니다.</p>
     </section>
+
+    <SectionCard class="trend-overall-card" :class="`trend-overall-${overallSummary.tone}`">
+      <div class="trend-overall-header">
+        <div>
+          <span class="trend-hero-label">종합 판단</span>
+          <h3>{{ overallSummary.title }}</h3>
+          <p>{{ overallSummary.confidence }} confidence · 선택한 기간/비교 기준</p>
+        </div>
+        <span class="trend-confidence">{{ overallToneLabel }}</span>
+      </div>
+      <div class="trend-overall-list">
+        <div v-for="item in overallItems" :key="item.label" class="trend-overall-row">
+          <span>{{ item.label }}</span>
+          <div>
+            <strong>{{ item.title }}</strong>
+            <p>{{ item.detail }}</p>
+          </div>
+        </div>
+      </div>
+    </SectionCard>
 
     <section class="trend-lens-tabs" aria-label="추세 렌즈 선택">
       <button
