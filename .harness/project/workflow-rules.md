@@ -97,6 +97,28 @@ Issue final comment에는 항상 아래 항목을 포함합니다.
 
 이 게이트를 통과한 뒤 완료 요약 댓글, `재발 방지 기록`, Project `Done`, Issue close를 처리합니다.
 
+## 완료 후 Issue worktree 정리 게이트
+
+Issue 완료 책임 창은 Project `Done`과 Issue close까지 끝낸 뒤 로컬 Issue worktree 정리 여부를 확인합니다.
+
+- 삭제 대상 조건:
+  - GitHub Issue가 `Closed` 상태다.
+  - GitHub Project `PaceLAB Development`의 Status가 `Done`이다.
+  - 해당 worktree에서 `git status --short`가 비어 있다.
+  - 해당 worktree가 배포 확인, 사용자 확인, 후속 디버깅, handoff에 더 이상 필요하지 않다.
+- 실행 순서:
+  - 기준 작업트리 `/Users/smart-tn-083/practice/run-ai`에서 `git worktree list`로 대상 경로를 확인한다.
+  - 대상 worktree에서 `git status -sb`로 미커밋 변경이 없는지 확인한다.
+  - `git worktree remove <경로>`를 실행한다.
+  - `git worktree prune`을 실행한다.
+  - `git worktree list`로 제거 결과를 확인한다.
+- 보류 조건:
+  - Issue가 `Open`, Project Status가 `Deployed`, `Review`, `Verify`, `In Progress` 중 하나면 기본적으로 삭제하지 않는다.
+  - 미커밋 변경이 있으면 임의로 삭제하지 않고 변경 파일과 삭제 위험을 보고한다.
+  - 사용자가 특정 worktree 삭제를 명시하면 미커밋 변경이 있어도 해당 지시를 우선하되, 실행 전 변경 소실을 짧게 알린다.
+
+완료 댓글 또는 후속 정리 댓글에는 worktree 제거 여부를 남깁니다. 정리하지 않았다면 `Open/Deployed`, 미커밋 변경, 후속 확인 필요 같은 보류 사유를 적습니다.
+
 작업 유형별 시작 문서:
 
 | 작업 유형 | 먼저 읽을 문서 |
