@@ -69,6 +69,7 @@ const savingGoalProposal = ref(false)
 const dismissedInjuryProposalIds = ref<string[]>([])
 const savingInjuryProposalId = ref('')
 const error = ref('')
+const temporaryMigrationStarted = ref(false)
 const calendarMonth = ref(toMonthKey(new Date()))
 const schedulingHelpOpen = ref(false)
 const deleteSheetDrag = useBottomSheetDrag(() => {
@@ -205,6 +206,7 @@ const selectedReports = computed(() => {
     .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
 })
 const coachHistoryLoading = computed(() => Boolean(coachRun.value && isSupabaseConfigured && reportsLoading.value && !reportsLoaded.value))
+const canRequestTemporaryHealthKitMigration = computed(() => hasNativeBridge() && !healthKitSyncStore.syncing)
 const coachCommandQuery = computed(() => {
   const text = coachNote.value.trimStart()
   return text.startsWith('/') ? text.slice(1).trim().toLowerCase() : ''
@@ -499,6 +501,12 @@ function detailCoachButtonLabel(run: RunLog) {
 
 function canRefreshFromHealthKit(_run: RunLog) {
   return hasNativeBridge()
+}
+
+function requestTemporaryHealthKitMigration() {
+  if (!canRequestTemporaryHealthKitMigration.value) return
+  temporaryMigrationStarted.value = true
+  void healthKitSyncStore.requestHistoricalMigration('2025-11-01', '2026-04-30')
 }
 
 function closeCoach() {
@@ -1034,6 +1042,25 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
       <button v-if="selectedDate" class="ghost full compact-action" type="button" @click="selectedDate = null">
         전체 기록 보기
       </button>
+    </SectionCard>
+
+    <SectionCard class="healthkit-migration-card">
+      <div>
+        <small>임시 마이그레이션</small>
+        <h2>HealthKit 2025.11-2026.04 가져오기</h2>
+        <p>완료 확인 후 삭제 예정인 임시 실행 UI입니다.</p>
+      </div>
+      <button
+        class="healthkit-migration-button"
+        type="button"
+        :disabled="!canRequestTemporaryHealthKitMigration"
+        @click="requestTemporaryHealthKitMigration"
+      >
+        {{ healthKitSyncStore.syncing ? '가져오는 중' : '마이그레이션 시작' }}
+      </button>
+      <p v-if="!hasNativeBridge()" class="helper">iPhone 앱에서만 실행할 수 있습니다.</p>
+      <p v-if="temporaryMigrationStarted && healthKitSyncStore.status" class="helper">{{ healthKitSyncStore.status }}</p>
+      <p v-if="temporaryMigrationStarted && healthKitSyncStore.error" class="error">{{ healthKitSyncStore.error }}</p>
     </SectionCard>
 
     <SectionGroup :title="selectedDate ? formatDateWithWeekday(selectedDate) : '전체 기록'" :surface="false">
