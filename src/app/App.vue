@@ -63,6 +63,7 @@ let activePanelMeasureFrame: number | null = null
 let activePanelViewportCleanup: (() => void) | null = null
 let keyboardInsetCleanup: (() => void) | null = null
 let injuryCheckInCleanup: (() => void) | null = null
+let touchZoomCleanup: (() => void) | null = null
 let swipeReleaseTimer: number | null = null
 
 function getNavIndex(path: string) {
@@ -122,6 +123,7 @@ watch(
 
 onMounted(() => {
   attachKeyboardInsetTracking()
+  attachTouchZoomGuard()
   attachActivePanelViewportTracking()
   healthKitSyncStore.init()
   healthKitSyncStore.attachActivationListeners()
@@ -140,6 +142,8 @@ onBeforeUnmount(() => {
   weatherStore.dispose()
   keyboardInsetCleanup?.()
   keyboardInsetCleanup = null
+  touchZoomCleanup?.()
+  touchZoomCleanup = null
   injuryCheckInCleanup?.()
   injuryCheckInCleanup = null
   activePanelObserver?.disconnect()
@@ -177,6 +181,31 @@ function attachKeyboardInsetTracking() {
     window.visualViewport?.removeEventListener('scroll', updateKeyboardInset)
     window.removeEventListener('orientationchange', updateKeyboardInset)
     document.documentElement.style.setProperty('--keyboard-inset-bottom', '0px')
+  }
+}
+
+function attachTouchZoomGuard() {
+  let lastTouchEndedAt = 0
+
+  const preventGestureZoom = (event: Event) => {
+    event.preventDefault()
+  }
+
+  const preventDoubleTapZoom = (event: TouchEvent) => {
+    if (event.touches.length > 0) return
+    const now = Date.now()
+    if (now - lastTouchEndedAt < 320) event.preventDefault()
+    lastTouchEndedAt = now
+  }
+
+  document.addEventListener('gesturestart', preventGestureZoom)
+  document.addEventListener('gesturechange', preventGestureZoom)
+  document.addEventListener('touchend', preventDoubleTapZoom, { passive: false })
+
+  touchZoomCleanup = () => {
+    document.removeEventListener('gesturestart', preventGestureZoom)
+    document.removeEventListener('gesturechange', preventGestureZoom)
+    document.removeEventListener('touchend', preventDoubleTapZoom)
   }
 }
 
@@ -412,7 +441,7 @@ function isSwipeBlockedTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) return true
   if (
     target.closest(
-      'a, button, input, textarea, select, option, label, [role="button"], [role="tab"], [role="slider"], [contenteditable="true"], .bottom-sheet-layer, .side-drawer-layer, .memory-stack-layer, .coach-input-bar, .trend-lens-tabs, .trend-overall-summary-row-action, .trend-chart, .trend-echart, .trend-lens-chart, .trend-lens-echart, [data-horizontal-scroll], [data-no-swipe]'
+      'input, textarea, select, option, label, [role="slider"], [contenteditable="true"], .bottom-sheet-layer, .side-drawer-layer, .memory-stack-layer, .coach-input-bar, .trend-lens-tabs, [data-horizontal-scroll], [data-no-swipe]'
     )
   ) {
     return true
