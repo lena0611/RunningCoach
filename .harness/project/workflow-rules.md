@@ -206,7 +206,7 @@ Issue 완료 책임 창은 Project `Done`과 Issue close까지 끝낸 뒤 로컬
 - 코칭/채팅 입력 UI는 한 줄 기본, 최대 3줄 자동 확장, 입력 지우기 버튼, 원형 아이콘 전송 버튼을 기본 패턴으로 검토한다. 텍스트 전송 버튼이나 2줄 고정 textarea로 돌아가면 모바일 공간을 낭비하는 회귀로 본다.
 - 스플릿/랩 목록처럼 모바일 폭이 좁은 표는 모든 주요 컬럼이 한 화면에서 최소한 일부 보이는지 확인한다. 컬럼 폭, gap, 숫자 폰트가 커져 케이던스/심박 같은 후행 컬럼이 사라지면 회귀로 본다.
 - 라우팅/접근 제어/모바일 셸이 바뀌면 Playwright E2E smoke를 갱신한다.
-- 하단 네비, lazy route import, GitHub Pages/iOS WebView 배포 캐시 복구를 건드리면 `요약 -> 기록 -> 기억 -> 요약` route 이동 E2E를 통과시킨다.
+- 하단 네비, lazy route import, GitHub Pages/iOS WebView 배포 캐시 복구를 건드리면 `요약 -> 기록 -> 기억 -> 요약` route 이동 E2E를 통과시킨다. 하단 네비 위치나 breakpoint를 바꾸면 900px 경계에서도 실제 좌표를 계측해 네비가 의도한 하단 fixed 위치를 유지하는지 확인한다.
 - Supabase, HealthKit, OpenAI 같은 외부 경계는 직접 호출하지 않고 adapter/mock 경계로 테스트한다. store 단위 테스트가 로컬 저장 동작을 검증한다면 `VITE_SUPABASE_*` 환경변수 유무에 결과가 달라지지 않도록 Supabase 설정 모듈이나 repository 경계를 명시적으로 mock한다.
 - 신규 기능이 회귀 위험이 높은 화면 흐름을 추가하면 `build`만으로 완료하지 않고 `test:run` 또는 `e2e` 중 최소 하나를 함께 통과시킨다.
 
