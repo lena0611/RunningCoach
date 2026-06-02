@@ -16,6 +16,7 @@ declare global {
 
 const sessionStorageKey = 'pacelab.appSession'
 const refreshSkewMs = 2 * 60 * 1000
+const deviceCheckUnavailableMessage = 'iOS 앱 실행 검증 브리지가 연결되어 있지 않습니다.'
 
 let pendingDeviceToken:
   | {
@@ -34,7 +35,10 @@ export async function getAppSessionToken() {
   const authToken = data.session?.access_token
   if (!authToken) throw new Error('로그인이 필요합니다.')
 
-  const deviceToken = await requestDeviceCheckToken()
+  const deviceToken = await requestDeviceCheckToken().catch((error) => {
+    if (error instanceof Error && error.message === deviceCheckUnavailableMessage) return ''
+    throw error
+  })
   const response = await fetch(getSupabaseFunctionUrl('app-session'), {
     method: 'POST',
     headers: {
@@ -42,7 +46,7 @@ export async function getAppSessionToken() {
       apikey: getSupabaseAnonKey(),
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ deviceToken })
+    body: JSON.stringify(deviceToken ? { deviceToken } : {})
   })
 
   const payload = await response.json().catch(() => ({})) as AppSessionResponse & { error?: string }
@@ -63,7 +67,7 @@ function requestDeviceCheckToken() {
       }
     | undefined
   const handler = handlers?.runContextAppSecurity
-  if (!handler) throw new Error('iOS 앱 실행 검증 브리지가 연결되어 있지 않습니다.')
+  if (!handler) throw new Error(deviceCheckUnavailableMessage)
 
   installAppSecurityReceiver()
   if (pendingDeviceToken) {

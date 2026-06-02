@@ -51,7 +51,7 @@
 - 날씨 확장 기본값: iOS 앱은 네이티브 CoreLocation -> 무료 Open-Meteo forecast API 호출 -> `WeatherSnapshot` 전달, 일반 브라우저/localhost는 웹 geolocation -> 무료 Open-Meteo 호출 -> 홈의 다음 세션 준비 카드에서 체감온도/강수확률/강수량/강수시간 표시
 - `TrainingMemory` 수정 -> Supabase `training_memory` 저장 -> AI Coach 컨텍스트 생성에 반영
 - AI 코칭 요청 -> Supabase Edge Function -> DB에서 `TrainingMemory`, `RunLog`, `coach_memory_items` 조회 -> OpenAI 호출 -> `coach_reports`, 새 `coach_memory_items`, 필요한 경우 갱신된 `training_memory.memory.weeklyPattern` 저장
-- AI 코칭 Edge Function은 OpenAI 호출 전에 `x-pacelab-app-session`을 검증한다. 앱 세션은 iOS 네이티브 DeviceCheck/App Attest 계열 검증과 사용자 allowlist를 통과한 뒤 서버가 짧은 수명으로 발급하며, 토큰 원문은 저장하지 않고 해시만 저장한다.
+- AI 코칭 Edge Function은 OpenAI 호출 전에 `x-pacelab-app-session`을 검증한다. MVP 임시 모드에서는 승인 사용자 allowlist를 통과한 인증 사용자에게 서버가 짧은 수명의 앱 세션을 발급하고, 토큰 원문은 저장하지 않고 해시만 저장한다. 이 모드는 비용성 기능 통제용이며 "iOS 앱에서 실행된 기기" 증명은 아니다. 정식 기기 증명은 유료 Apple Developer DeviceCheck/App Attest 키를 준비한 뒤 `APP_SECURITY_MODE=devicecheck` 또는 App Attest 검증으로 전환한다.
 - AI 코칭 컨텍스트는 비용을 통제한다. 같은 세션 대화 thread는 이어서 넣되, 다른 세션 대화는 전체 전문이 아니라 유사 세션 snippet과 `coach_memory_items` 중심으로 주입한다.
 - AI 코칭 Edge Function은 OpenAI context에 원본 RunLog 대용량 배열을 직접 넣지 않는다. `metric_samples`, `route_points`, `laps`, `fast_segments`는 서버 내부 계산 근거로만 쓰고, 모델에는 선택 세션/최근 세션 요약과 계산된 흐름 신호만 전달한다.
 - AI 코칭 Edge Function은 `runningAnalysisEngine`에서 HR drift, 부하 증가율, 회복 상태, 부상 위험, 과훈련 경고, 훈련 적합성 점수를 먼저 계산하고, OpenAI는 이 판단을 설명하는 역할을 맡는다.

@@ -11,6 +11,7 @@
 - 일반 공개 브라우저는 네이티브 bridge가 없으면 기능 화면이 아니라 접근 안내 화면으로 보낸다.
 - 네이티브 bridge 존재 여부는 브라우저 UX 차단 신호일 뿐 보안 수단이 아니다. 사용자가 개발자도구나 스크립트로 `window.webkit`/`NativeBridge` 모양을 흉내낼 수 있으므로, 서버 기능 접근은 Edge Function에서 별도 검증한다.
 - iOS 앱에서 실행된 사용자만 비용성 서버 기능을 쓰게 하려면 네이티브 DeviceCheck 또는 App Attest 계열 검증, 서버 발급 앱 세션, 승인 사용자 allowlist, Edge Function rate limit을 조합한다.
+- Personal Team 또는 DeviceCheck key 미준비 상태의 MVP 임시 운영은 `APP_SECURITY_MODE=allowlist`로 둔다. 이때 서버는 승인된 로그인 사용자에게만 짧은 수명의 앱 세션을 발급하고 rate limit을 적용하지만, 기기 attestation은 수행하지 않는다.
 - localhost는 개발 편의를 위해 기능 화면 접근을 허용한다.
 - Supabase 데이터 접근은 RLS를 기본 경계로 삼고, 앱 인증 세션의 `auth.uid()`/`user_id` 컨텍스트로 조회/수정한다. 에이전트는 인증 없는 직접 DB 조회나 service role/admin 우회를 먼저 시도한 뒤 앱 컨텍스트로 fallback하지 않는다.
 
@@ -116,6 +117,7 @@
   - `APP_SECURITY_MODE`
   - `PACELAB_ALLOWED_EMAILS`
   - `COACH_RUN_RATE_LIMIT_PER_HOUR`
+  - DeviceCheck hardening을 켤 때만 필요한 값:
   - `APPLE_TEAM_ID`
   - `APPLE_DEVICECHECK_KEY_ID`
   - `APPLE_DEVICECHECK_PRIVATE_KEY`
@@ -185,6 +187,8 @@
 - HealthKit, 파일 import 같은 네이티브/로컬 기능은 사용자 확인 후 저장한다.
 - `runContextAppSecurity` bridge는 DeviceCheck 토큰 발급 요청만 처리하고, WebView 메시지는 `https://lena0611.github.io/RunningCoach/` origin에서 온 것만 신뢰한다.
 - 프론트는 AI 코칭 요청 전에 `app-session` Edge Function에서 짧은 수명의 앱 세션을 발급받고, `coach-run`에는 `x-pacelab-app-session` header를 함께 보낸다.
+- `APP_SECURITY_MODE=allowlist`에서는 `runContextAppSecurity` bridge가 없어도 `app-session` 요청을 보낼 수 있다. 서버 allowlist와 rate limit이 비용성 기능 통제 경계이며, 기존 앱 빌드 호환을 유지하기 위한 임시 모드다.
+- `APP_SECURITY_MODE=devicecheck`로 전환하면 프론트는 `runContextAppSecurity` bridge에서 받은 DeviceCheck token을 함께 보내야 하므로 새 iOS 앱 빌드가 필요하다.
 
 ## 장애 대응 체크리스트
 - GitHub Pages source가 `GitHub Actions`인가?

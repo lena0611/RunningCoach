@@ -75,7 +75,11 @@ Deno.serve(async (req) => {
 })
 
 async function verifyAppInstance(deviceToken: string, appAttest: unknown): Promise<{ ok: true, method: string } | { ok: false, status: number, error: string }> {
-  const mode = Deno.env.get('APP_SECURITY_MODE') || 'devicecheck'
+  const mode = Deno.env.get('APP_SECURITY_MODE') || 'allowlist'
+  if (mode === 'allowlist') {
+    return { ok: true, method: 'allowlist-session' }
+  }
+
   if (mode === 'development') {
     const expected = Deno.env.get('APP_SECURITY_DEVELOPMENT_TOKEN') || ''
     if (!expected || deviceToken !== expected) {
