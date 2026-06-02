@@ -123,14 +123,13 @@
 }
 
 .trend-lens-row {
-  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   width: 100%;
   min-height: 76px;
-  padding: var(--space-3) 40px var(--space-3) var(--space-3);
+  padding: var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   background: var(--color-surface-card);
@@ -180,8 +179,8 @@
 }
 
 .trend-lens-row-arrow {
-  top: 50%;
-  transform: translateY(-50%);
+  position: static;
+  flex: 0 0 auto;
 }
 
 .trend-lens-row-good {
@@ -202,7 +201,7 @@
 
 .trend-control-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: var(--space-2);
 }
 
@@ -1726,10 +1725,19 @@ button.stat-card {
   line-height: 1;
 }
 
-.stat-card-text-value {
+.stat-card strong.stat-card-text-value {
+  display: block;
   font-size: clamp(17px, 4.8vw, 22px);
-  line-height: 1.18;
+  line-height: 1.25;
   white-space: normal;
+  word-break: keep-all;
+}
+
+.stat-card strong.stat-card-text-value .unit-value,
+.stat-card strong.stat-card-text-value .unit-value-number {
+  display: inline;
+  white-space: normal;
+  line-height: inherit;
 }
 
 .stat-card-value {

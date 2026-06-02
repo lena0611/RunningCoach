@@ -28,8 +28,7 @@ const runStore = useRunStore()
 const memoryStore = useMemoryStore()
 const router = useRouter()
 const openLens = ref<TrendLensKey | null>(null)
-const selectedPeriod = ref<TrendPeriod>('90d')
-const selectedBaseline = ref<TrendBaseline>('previous-period')
+const selectedCompare = ref('recent-90')
 
 const lensOptions: Array<{ key: TrendLensKey; label: string; description: string }> = [
   { key: 'goal', label: '목표까지', description: '목표에 가까워졌는지' },
@@ -39,23 +38,30 @@ const lensOptions: Array<{ key: TrendLensKey; label: string; description: string
   { key: 'recovery', label: '회복됐나', description: '좋은 훈련 뒤 무리가 남았는지' }
 ]
 
-const periodOptions: BottomSheetSelectOption[] = [
-  { value: '90d', label: '90일', description: '최근 흐름을 빠르게 확인' },
-  { value: '180d', label: '6개월', description: '훈련 블록 단위 비교' },
-  { value: '365d', label: '1년', description: '장기 발전/퇴보 확인' },
-  { value: 'all', label: '전체', description: '누적 기록 전체 기준' }
+type ComparePreset = {
+  value: string
+  label: string
+  description: string
+  period: TrendPeriod
+  baseline: TrendBaseline
+}
+
+const comparePresets: ComparePreset[] = [
+  { value: 'recent-90', label: '최근 90일 vs 직전 90일', description: '최근 3개월이 그 전 3개월보다 나아졌는지', period: '90d', baseline: 'previous-period' },
+  { value: 'recent-180', label: '최근 6개월 vs 직전 6개월', description: '훈련 블록 단위로 변화를 확인', period: '180d', baseline: 'previous-period' },
+  { value: 'recent-365', label: '최근 1년 vs 직전 1년', description: '장기 발전과 퇴보를 확인', period: '365d', baseline: 'previous-period' },
+  { value: 'goal-start', label: '최근 90일 vs 목표 시작 전', description: '활성 목표를 세운 뒤 좋아졌는지', period: '90d', baseline: 'goal-start' },
+  { value: 'half-split', label: '최근 절반 vs 초기 절반', description: '전체 기록을 반으로 나눠 비교', period: 'all', baseline: 'first-run' }
 ]
 
-const baselineOptions: BottomSheetSelectOption[] = [
-  { value: 'previous-period', label: '이전 동일 기간', description: '최근 기간과 바로 직전 기간 비교' },
-  { value: 'goal-start', label: '목표 시작 전', description: '활성 목표 시작 전 기록과 비교' },
-  { value: 'first-run', label: '초기 기록', description: '초기 절반과 최근 절반 비교' }
-]
+const compareOptions: BottomSheetSelectOption[] = comparePresets.map(({ value, label, description }) => ({ value, label, description }))
+
+const activeCompare = computed(() => comparePresets.find((preset) => preset.value === selectedCompare.value) ?? comparePresets[0])
 
 const trendAnalysis = computed(() =>
   buildTrendAnalysis({
-    period: selectedPeriod.value,
-    baseline: selectedBaseline.value,
+    period: activeCompare.value.period,
+    baseline: activeCompare.value.baseline,
     runs: runStore.sortedRuns,
     memory: memoryStore.memory
   })
@@ -91,9 +97,6 @@ const evidenceRuns = computed(() =>
 )
 
 const heroToneLabel = computed(() => toneLabel(result.value.hero.tone))
-
-const selectedPeriodLabel = computed(() => periodOptions.find((option) => option.value === selectedPeriod.value)?.label ?? '')
-const selectedBaselineLabel = computed(() => baselineOptions.find((option) => option.value === selectedBaseline.value)?.label ?? '')
 
 const overallToneLabel = computed(() => toneLabel(overallSummary.value.tone))
 const overallConfidenceLabel = computed(() => confidenceLabel(overallSummary.value.confidence, '판단 신뢰도'))
@@ -186,7 +189,7 @@ function evidenceRoleTone(role: TrendEvidenceRun['role']) {
     <section class="trends-page-header">
       <p class="eyebrow">추세</p>
       <h2>훈련 변화와 다음 처방</h2>
-      <p class="helper">기간과 비교 기준을 고르면 아래 모든 판단이 그 기준으로 다시 계산됩니다.</p>
+      <p class="helper">비교 방법을 고르면 아래 모든 판단이 그 기준으로 계산됩니다.</p>
     </section>
 
     <SectionGroup v-if="!runStore.sortedRuns.length && !runStore.loading" title="시작하기">
@@ -195,8 +198,7 @@ function evidenceRoleTone(role: TrendEvidenceRun['role']) {
 
     <template v-else>
       <div class="trend-control-row">
-        <BottomSheetSelect v-model="selectedPeriod" compact label="기간" :options="periodOptions" />
-        <BottomSheetSelect v-model="selectedBaseline" compact label="비교" :options="baselineOptions" />
+        <BottomSheetSelect v-model="selectedCompare" compact label="비교 방법" :options="compareOptions" />
       </div>
 
       <SectionCard class="trend-overall-card" :class="`trend-overall-${overallSummary.tone}`">
@@ -204,7 +206,7 @@ function evidenceRoleTone(role: TrendEvidenceRun['role']) {
           <div>
             <span class="trend-hero-label">종합 판단</span>
             <h3>{{ overallSummary.title }}</h3>
-            <p>{{ overallConfidenceLabel }} · {{ selectedPeriodLabel }} · {{ selectedBaselineLabel }} 기준</p>
+            <p>{{ overallConfidenceLabel }} · {{ activeCompare.label }}</p>
           </div>
           <span class="trend-confidence">{{ overallToneLabel }}</span>
         </div>
