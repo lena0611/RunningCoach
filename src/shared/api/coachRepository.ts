@@ -1,4 +1,5 @@
 import { getSupabaseAnonKey, getSupabaseFunctionUrl, requireSupabase } from '@/shared/api/supabase'
+import { getAppSessionToken } from '@/shared/api/appSecurity'
 import type { WeatherSnapshot } from '@/features/import-weatherkit/weatherKitBridge'
 
 export type CoachReport = {
@@ -32,8 +33,21 @@ type CoachReportRow = {
 }
 
 export async function requestCoachRun(selectedRunId: string | null, userNote: string, currentWeather: WeatherSnapshot | null = null): Promise<CoachReport> {
-  const { data, error } = await requireSupabase().functions.invoke('coach-run', {
-    body: {
+  const client = requireSupabase()
+  const { data } = await client.auth.getSession()
+  const token = data.session?.access_token
+  if (!token) throw new Error('로그인이 필요합니다.')
+  const appSessionToken = await getAppSessionToken()
+
+  const response = await fetch(getSupabaseFunctionUrl('coach-run'), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      apikey: getSupabaseAnonKey(),
+      'Content-Type': 'application/json',
+      'x-pacelab-app-session': appSessionToken
+    },
+    body: JSON.stringify({
       selectedRunId,
       userNote,
       currentWeather: summarizeWeatherForCoach(currentWeather),
@@ -46,11 +60,12 @@ export async function requestCoachRun(selectedRunId: string | null, userNote: st
         maxParagraphSentences: 2,
         maxBulletsPerSection: 5
       }
-    }
+    })
   })
-  if (error) throw error
-  if (!data?.report) throw new Error('AI 코칭 응답이 비어 있습니다.')
-  return data.report as CoachReport
+  const payload = await response.json().catch(() => ({})) as { report?: CoachReport, error?: string }
+  if (!response.ok) throw new Error(payload.error || `AI 코칭 요청 실패: ${response.status}`)
+  if (!payload.report) throw new Error('AI 코칭 응답이 비어 있습니다.')
+  return payload.report
 }
 
 export async function requestCoachRunStream(
@@ -66,13 +81,15 @@ export async function requestCoachRunStream(
   const { data } = await client.auth.getSession()
   const token = data.session?.access_token
   if (!token) throw new Error('로그인이 필요합니다.')
+  const appSessionToken = await getAppSessionToken()
 
   const response = await fetch(getSupabaseFunctionUrl('coach-run'), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
       apikey: getSupabaseAnonKey(),
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'x-pacelab-app-session': appSessionToken
     },
     body: JSON.stringify({
       selectedRunId,

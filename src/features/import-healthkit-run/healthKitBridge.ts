@@ -81,6 +81,9 @@ declare global {
         runContextNotifications?: {
           postMessage: (message: unknown) => void
         }
+        runContextAppSecurity?: {
+          postMessage: (message: unknown) => void
+        }
       }
     }
   }

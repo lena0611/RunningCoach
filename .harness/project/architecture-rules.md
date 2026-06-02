@@ -23,6 +23,7 @@
 - 상위 레이어는 하위 레이어를 사용할 수 있지만, 하위 레이어가 pages/widgets에 의존하지 않는다.
 - 도메인 타입은 `entities`에 두고 계산 유틸은 `shared/lib` 또는 관련 `features`에 둔다.
 - 정적 프론트는 직접 secret을 갖지 않는다. DB/Auth/AI 호출은 Supabase public client와 Edge Function 경계로만 수행한다.
+- 브라우저의 `window.webkit`/`NativeBridge` 존재 여부는 UX 접근 차단 신호일 뿐 보안 경계가 아니다. 비용이 들거나 민감 데이터에 접근하는 서버 기능은 Supabase Edge Function에서 사용자 인증, 서버 발급 앱 세션, 승인 사용자 allowlist, rate limit을 검증해야 한다.
 - Supabase 데이터 접근은 RLS를 우회하지 않고 앱 인증 세션의 `auth.uid()`/`user_id` 컨텍스트를 1차 경로로 사용한다. 에이전트 디버깅도 인증 없는 직접 조회나 service role/admin 우회를 먼저 시도하지 않고, 앱 repository/store 경계 또는 동일한 사용자 세션 조건으로 재현한다.
 
 ## 공개 API 경계
@@ -50,6 +51,7 @@
 - 날씨 확장 기본값: iOS 앱은 네이티브 CoreLocation -> 무료 Open-Meteo forecast API 호출 -> `WeatherSnapshot` 전달, 일반 브라우저/localhost는 웹 geolocation -> 무료 Open-Meteo 호출 -> 홈의 다음 세션 준비 카드에서 체감온도/강수확률/강수량/강수시간 표시
 - `TrainingMemory` 수정 -> Supabase `training_memory` 저장 -> AI Coach 컨텍스트 생성에 반영
 - AI 코칭 요청 -> Supabase Edge Function -> DB에서 `TrainingMemory`, `RunLog`, `coach_memory_items` 조회 -> OpenAI 호출 -> `coach_reports`, 새 `coach_memory_items`, 필요한 경우 갱신된 `training_memory.memory.weeklyPattern` 저장
+- AI 코칭 Edge Function은 OpenAI 호출 전에 `x-pacelab-app-session`을 검증한다. 앱 세션은 iOS 네이티브 DeviceCheck/App Attest 계열 검증과 사용자 allowlist를 통과한 뒤 서버가 짧은 수명으로 발급하며, 토큰 원문은 저장하지 않고 해시만 저장한다.
 - AI 코칭 컨텍스트는 비용을 통제한다. 같은 세션 대화 thread는 이어서 넣되, 다른 세션 대화는 전체 전문이 아니라 유사 세션 snippet과 `coach_memory_items` 중심으로 주입한다.
 - AI 코칭 Edge Function은 OpenAI context에 원본 RunLog 대용량 배열을 직접 넣지 않는다. `metric_samples`, `route_points`, `laps`, `fast_segments`는 서버 내부 계산 근거로만 쓰고, 모델에는 선택 세션/최근 세션 요약과 계산된 흐름 신호만 전달한다.
 - AI 코칭 Edge Function은 `runningAnalysisEngine`에서 HR drift, 부하 증가율, 회복 상태, 부상 위험, 과훈련 경고, 훈련 적합성 점수를 먼저 계산하고, OpenAI는 이 판단을 설명하는 역할을 맡는다.

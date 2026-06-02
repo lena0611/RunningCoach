@@ -494,3 +494,12 @@
 - 선택 이유: 종합 판단 카드와 Lens 탭은 상하로 인접해 있어 선택 변경만으로도 연결성이 유지된다. 반면 자동 스크롤은 모바일 WebView와 root tab pager 맥락에서 화면 위치를 예측하기 어렵게 만든다.
 - 포기한 대안: `scrollIntoView` 옵션을 `nearest`로 약화하는 방식은 브라우저/viewport 상태에 따라 여전히 위치 이동이 달라질 수 있어 채택하지 않는다.
 - 적용 범위: `src/pages/trends/TrendsPage.vue`, `src/app/styles.css`.
+
+## 2026-06-02 - 브릿지 체크는 UX 차단, 서버 앱 세션은 보안 경계
+- 문제: GitHub Pages 공개 프론트에서 `window.webkit`/`NativeBridge` 존재 여부만 확인하면 사용자가 브라우저 개발자도구나 스크립트로 bridge 모양을 흉내내 서버 기능을 호출할 수 있다.
+- 결정: 프론트 bridge 체크는 일반 브라우저 UX 차단으로만 유지한다. AI 코칭처럼 OpenAI 비용과 사용자 러닝 데이터 접근이 있는 Edge Function은 사용자 인증 뒤 `app-session` Edge Function이 발급한 짧은 수명의 서버 앱 세션, 승인 사용자 allowlist, 함수별 rate limit을 추가로 검증한다.
+- 구현 기준: MVP에서는 iOS 네이티브 `DeviceCheck` 토큰을 `app-session`에서 Apple DeviceCheck API로 검증하고 HMAC 서명 앱 세션을 발급한다. App Attest는 더 강한 production hardening 후보로 남기되, 구현 전에는 App Attest payload를 성공 처리하지 않는다.
+- 선택 이유: `window` 객체 검사는 클라이언트 자가 주장이라 보안 경계가 될 수 없다. 서버가 Apple 검증 결과와 사용자 allowlist를 기준으로 짧은 수명 세션을 발급해야 공개 GitHub Pages 환경에서도 비용성 서버 기능을 통제할 수 있다.
+- 포기한 대안: 프론트 난독화, bridge 이름 숨기기, route guard 강화만으로 서버 기능을 보호하는 방식은 공개 번들과 DevTools 조작을 막지 못하므로 채택하지 않는다.
+- 검증: `npm run supabase:functions:check`, `npm run test:run`, `npm run build`, `npm run harness:check`를 실행했다. `config-contract.md` 변경이 `common.runtime.minimum-node` sync gap으로 잡혔지만, 이번 변경은 Node 최소 버전 계약이 아니라 서버 secret/앱 세션 설정 계약 추가이므로 harness runtime 구현 변경은 필요 없다.
+- 적용 범위: `supabase/functions/app-session/index.ts`, `supabase/functions/coach-run/index.ts`, `src/shared/api/appSecurity.ts`, `src/shared/api/coachRepository.ts`, iOS `RunContextWebView.swift`, `.harness/project/architecture-rules.md`, `.harness/project/config-contract.md`, `.harness/project/github-pages-supabase-playbook.md`.
