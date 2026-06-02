@@ -1507,6 +1507,25 @@ body.tab-swiping {
   letter-spacing: 0;
 }
 
+button.hero-card {
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  text-shadow: none;
+  font-weight: inherit;
+}
+
+.hero-card-interactive {
+  position: relative;
+  cursor: pointer;
+}
+
+.hero-weather-line {
+  margin-top: 6px;
+  color: var(--color-text);
+  font-weight: 700;
+}
+
 .hero-metric {
   display: grid;
   gap: 4px;
@@ -1762,26 +1781,34 @@ button.stat-card {
   line-height: var(--text-caption-line);
 }
 
-.dashboard-projection-card strong {
-  display: block;
-  font-size: var(--text-metric-size);
-  font-weight: 700;
-  line-height: 1;
-  -webkit-line-clamp: unset;
-}
-
-.dashboard-projection-card-wide {
-  grid-column: span 2;
+.dashboard-goal-card {
   min-height: 148px;
 }
 
-.dashboard-projection-card-wide strong {
-  margin-top: 10px;
-  font-size: clamp(42px, 12vw, 58px);
+.dashboard-goal-card .stat-card-data {
+  gap: 6px;
 }
 
-.dashboard-projection-card-wide small {
-  max-width: 78%;
+.dashboard-goal-card strong {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.dashboard-goal-card small {
+  color: var(--color-muted);
+  font-size: var(--text-caption-size);
+  font-weight: 650;
+  line-height: var(--text-caption-line);
+}
+
+.dashboard-goal-projection {
+  color: var(--color-accent);
 }
 
 .projection-detail-metric {
@@ -1934,12 +1961,6 @@ button.stat-card {
 
 .run-session-distance .unit-value-unit {
   font-size: 0.5em;
-}
-
-.two-column {
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
-  gap: 18px;
 }
 
 .stack,
@@ -6207,10 +6228,6 @@ button.run-session-row {
 }
 
 @media (max-width: 760px) {
-  .two-column {
-    grid-template-columns: 1fr;
-  }
-
   .context-strip {
     grid-template-columns: 1fr;
   }
