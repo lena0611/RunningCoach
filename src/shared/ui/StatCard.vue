@@ -6,6 +6,7 @@ const props = defineProps<{
   label: string
   value: string
   hint?: string
+  unit?: string
   tone?: 'primary' | 'accent' | 'warning'
   interactive?: boolean
   loading?: boolean
@@ -16,7 +17,8 @@ const emit = defineEmits<{ click: [] }>()
 
 const parsedValue = computed(() => {
   if (props.valueKind === 'text') return { amount: props.value, unit: '' }
-  const match = props.value.match(/^([0-9.,]+)(.*)$/)
+  if (props.unit !== undefined) return { amount: props.value, unit: props.unit }
+  const match = props.value.match(/^([+-]?[0-9.,]+)(.*)$/)
   if (!match) return { amount: props.value, unit: '' }
   return {
     amount: match[1],

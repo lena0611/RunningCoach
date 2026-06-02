@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import {
   buildTrendAnalysis,
   type TrendBaseline,
   type TrendEvidenceRun,
+  type TrendInsightCard,
   type TrendInsightConfidence,
   type TrendLensKey,
   type TrendOverallItem,
@@ -26,7 +27,7 @@ import TrendLensChart from '@/shared/ui/TrendLensChart.vue'
 const runStore = useRunStore()
 const memoryStore = useMemoryStore()
 const router = useRouter()
-const selectedLens = ref<TrendLensKey>('goal')
+const openLens = ref<TrendLensKey | null>(null)
 const selectedPeriod = ref<TrendPeriod>('90d')
 const selectedBaseline = ref<TrendBaseline>('previous-period')
 
@@ -60,7 +61,15 @@ const trendAnalysis = computed(() =>
   })
 )
 
-const result = computed(() => trendAnalysis.value.lensResults[selectedLens.value])
+const lensSummaries = computed(() =>
+  lensOptions.map((option) => ({
+    ...option,
+    hero: trendAnalysis.value.lensResults[option.key].hero
+  }))
+)
+
+const openLensOption = computed(() => lensOptions.find((option) => option.key === openLens.value) ?? null)
+const result = computed(() => trendAnalysis.value.lensResults[openLens.value ?? 'goal'])
 
 const overallSummary = computed(() =>
   trendAnalysis.value.overallSummary
@@ -81,22 +90,18 @@ const evidenceRuns = computed(() =>
     })
 )
 
-const heroToneLabel = computed(() => {
-  const tone = result.value.hero.tone
-  if (tone === 'good') return '좋은 신호'
-  if (tone === 'warning') return '주의'
-  if (tone === 'watch') return '관찰'
-  return '데이터 확인'
-})
+const heroToneLabel = computed(() => toneLabel(result.value.hero.tone))
+
+const selectedPeriodLabel = computed(() => periodOptions.find((option) => option.value === selectedPeriod.value)?.label ?? '')
+const selectedBaselineLabel = computed(() => baselineOptions.find((option) => option.value === selectedBaseline.value)?.label ?? '')
 
 const overallToneLabel = computed(() => toneLabel(overallSummary.value.tone))
 const overallConfidenceLabel = computed(() => confidenceLabel(overallSummary.value.confidence, '판단 신뢰도'))
 const heroConfidenceLabel = computed(() => confidenceLabel(result.value.hero.confidence, '신뢰도'))
 
 const chartUnit = computed(() => {
-  if (selectedLens.value === 'efficiency') return '초/km'
-  if (selectedLens.value === 'intensity') return 'km'
-  if (selectedLens.value === 'goal' || selectedLens.value === 'quality') return '점'
+  if (openLens.value === 'efficiency') return '초/km'
+  if (openLens.value === 'intensity') return 'km'
   return '점'
 })
 
@@ -109,13 +114,32 @@ onMounted(() => {
   }
 })
 
-function selectLens(key: TrendLensKey) {
-  selectedLens.value = key
+watch(
+  () => Boolean(openLens.value),
+  (open) => {
+    document.body.classList.toggle('memory-stack-open', open)
+  }
+)
+
+onBeforeUnmount(() => {
+  document.body.classList.remove('memory-stack-open')
+})
+
+onBeforeRouteLeave(() => {
+  closeLensDetail()
+})
+
+function openLensDetail(key: TrendLensKey) {
+  openLens.value = key
+}
+
+function closeLensDetail() {
+  openLens.value = null
 }
 
 function selectOverallItem(item: TrendOverallItem) {
   if (!item.lens) return
-  selectLens(item.lens)
+  openLensDetail(item.lens)
 }
 
 function openRun(runId: string) {
@@ -124,6 +148,10 @@ function openRun(runId: string) {
 
 function isMetricValue(value: string) {
   return /^[+-]?[0-9.,]+/.test(value)
+}
+
+function cardValueKind(card: TrendInsightCard) {
+  return /^[+-]?[0-9.,]+$/.test(card.value) ? 'metric' : 'text'
 }
 
 function toneLabel(tone: string) {
@@ -145,6 +173,12 @@ function evidenceRoleLabel(role: TrendEvidenceRun['role']) {
   if (role === 'warning') return '주의 신호 기록'
   return '비교 제외 기록'
 }
+
+function evidenceRoleTone(role: TrendEvidenceRun['role']) {
+  if (role === 'warning') return 'warning'
+  if (role === 'current') return 'primary'
+  return 'default'
+}
 </script>
 
 <template>
@@ -152,120 +186,150 @@ function evidenceRoleLabel(role: TrendEvidenceRun['role']) {
     <section class="trends-page-header">
       <p class="eyebrow">추세</p>
       <h2>훈련 변화와 다음 처방</h2>
-      <p class="helper">누적 기록에서 좋아진 축, 막힌 축, 다음 훈련 조정 신호를 봅니다.</p>
+      <p class="helper">기간과 비교 기준을 고르면 아래 모든 판단이 그 기준으로 다시 계산됩니다.</p>
     </section>
-
-    <SectionCard class="trend-overall-card" :class="`trend-overall-${overallSummary.tone}`">
-      <div class="trend-overall-header">
-        <div>
-          <span class="trend-hero-label">종합 판단</span>
-          <h3>{{ overallSummary.title }}</h3>
-          <p>{{ overallConfidenceLabel }} · 선택한 기간/비교 기준</p>
-        </div>
-        <span class="trend-confidence">{{ overallToneLabel }}</span>
-      </div>
-      <div class="trend-overall-summary-list">
-        <template v-for="item in overallItems" :key="item.label">
-          <button
-            v-if="item.lens"
-            type="button"
-            class="trend-overall-summary-row trend-overall-summary-row-action"
-            :class="`trend-overall-summary-${item.tone}`"
-            :aria-label="`${item.label}: ${item.title} 렌즈 보기`"
-            @click="selectOverallItem(item)"
-          >
-            <span class="trend-overall-summary-label">{{ item.label }}</span>
-            <strong>{{ item.title }}</strong>
-            <span class="trend-overall-summary-cta">보기</span>
-          </button>
-          <div
-            v-else
-            class="trend-overall-summary-row"
-            :class="`trend-overall-summary-${item.tone}`"
-          >
-            <span class="trend-overall-summary-label">{{ item.label }}</span>
-            <strong>{{ item.title }}</strong>
-          </div>
-        </template>
-      </div>
-    </SectionCard>
-
-    <section class="trend-lens-tabs" aria-label="추세 렌즈 선택">
-      <button
-        v-for="item in lensOptions"
-        :key="item.key"
-        type="button"
-        class="trend-lens-tab"
-        :class="{ 'trend-lens-tab-active': selectedLens === item.key }"
-        @click="selectLens(item.key)"
-      >
-        <strong>{{ item.label }}</strong>
-        <span>{{ item.description }}</span>
-      </button>
-    </section>
-
-    <div class="trend-control-row">
-      <BottomSheetSelect v-model="selectedPeriod" compact label="기간" :options="periodOptions" />
-      <BottomSheetSelect v-model="selectedBaseline" compact label="비교" :options="baselineOptions" />
-    </div>
-
-    <SectionCard class="trend-hero-card" :class="`trend-hero-${result.hero.tone}`">
-      <div>
-        <span class="trend-hero-label">{{ heroToneLabel }}</span>
-        <h3>{{ result.hero.value }}</h3>
-        <strong>{{ result.hero.label }}</strong>
-        <p>{{ result.hero.detail }}</p>
-      </div>
-      <span class="trend-confidence">{{ heroConfidenceLabel }}</span>
-    </SectionCard>
-
-    <MetricGrid v-if="result.cards.length">
-      <StatCard
-        v-for="card in result.cards"
-        :key="card.id"
-        :label="card.label"
-        :value="`${card.value}${card.unit ?? ''}`"
-        :hint="card.hint"
-        :tone="card.tone === 'good' ? 'primary' : card.tone === 'warning' ? 'warning' : undefined"
-        :value-kind="isMetricValue(card.value) ? 'metric' : 'text'"
-      />
-    </MetricGrid>
-
-    <SectionGroup title="시각화" :surface="false">
-      <TrendLensChart v-if="result.chart.length" :points="result.chart" :unit="chartUnit" />
-      <EmptyState v-else title="표시할 추세가 없습니다." description="이 Lens에서 비교 가능한 기록이 아직 부족합니다." />
-    </SectionGroup>
-
-    <SectionGroup title="해석">
-      <div class="trend-explanation-list">
-        <p v-for="item in result.explanations" :key="item">{{ item }}</p>
-      </div>
-    </SectionGroup>
-
-    <SectionGroup title="다음 처방 영향" :surface="false">
-      <div class="trend-prescription-card" :class="`trend-prescription-${result.prescriptionImpact.status}`">
-        <strong>{{ result.prescriptionImpact.title }}</strong>
-        <p v-for="reason in result.prescriptionImpact.reasons" :key="reason">{{ reason }}</p>
-      </div>
-    </SectionGroup>
-
-    <SectionGroup v-if="evidenceRuns.length" title="근거 세션" :surface="false">
-      <div class="trend-evidence-list">
-        <ListRow
-          v-for="item in evidenceRuns"
-          :key="`${item.runId}-${item.role}`"
-          clickable
-          :kicker="evidenceRoleLabel(item.role)"
-          :title="item.run.sessionTitle || item.run.type"
-          :detail="`${formatDateWithWeekday(item.run.date)} · ${item.reason}`"
-          tone="primary"
-          @click="openRun(item.runId)"
-        />
-      </div>
-    </SectionGroup>
 
     <SectionGroup v-if="!runStore.sortedRuns.length && !runStore.loading" title="시작하기">
       <EmptyState title="러닝 기록이 필요합니다." description="HealthKit 또는 수동 기록이 쌓이면 추세 Lens가 자동으로 계산됩니다." />
     </SectionGroup>
+
+    <template v-else>
+      <div class="trend-control-row">
+        <BottomSheetSelect v-model="selectedPeriod" compact label="기간" :options="periodOptions" />
+        <BottomSheetSelect v-model="selectedBaseline" compact label="비교" :options="baselineOptions" />
+      </div>
+
+      <SectionCard class="trend-overall-card" :class="`trend-overall-${overallSummary.tone}`">
+        <div class="trend-overall-header">
+          <div>
+            <span class="trend-hero-label">종합 판단</span>
+            <h3>{{ overallSummary.title }}</h3>
+            <p>{{ overallConfidenceLabel }} · {{ selectedPeriodLabel }} · {{ selectedBaselineLabel }} 기준</p>
+          </div>
+          <span class="trend-confidence">{{ overallToneLabel }}</span>
+        </div>
+        <div class="trend-overall-summary-list">
+          <template v-for="item in overallItems" :key="item.label">
+            <button
+              v-if="item.lens"
+              type="button"
+              class="trend-overall-summary-row trend-overall-summary-row-action"
+              :class="`trend-overall-summary-${item.tone}`"
+              :aria-label="`${item.label}: ${item.title} 렌즈 보기`"
+              @click="selectOverallItem(item)"
+            >
+              <span class="trend-overall-summary-label">{{ item.label }}</span>
+              <strong>{{ item.title }}</strong>
+              <span class="trend-overall-summary-cta">보기</span>
+            </button>
+            <div
+              v-else
+              class="trend-overall-summary-row"
+              :class="`trend-overall-summary-${item.tone}`"
+            >
+              <span class="trend-overall-summary-label">{{ item.label }}</span>
+              <strong>{{ item.title }}</strong>
+            </div>
+          </template>
+        </div>
+      </SectionCard>
+
+      <SectionGroup title="렌즈" :surface="false">
+        <div class="trend-lens-list" aria-label="추세 렌즈 선택">
+          <button
+            v-for="item in lensSummaries"
+            :key="item.key"
+            type="button"
+            class="trend-lens-row"
+            :class="`trend-lens-row-${item.hero.tone}`"
+            @click="openLensDetail(item.key)"
+          >
+            <div class="trend-lens-row-main">
+              <strong>{{ item.label }}</strong>
+              <span>{{ item.description }}</span>
+            </div>
+            <div class="trend-lens-row-value">
+              <strong>{{ item.hero.value }}</strong>
+              <span>{{ toneLabel(item.hero.tone) }}</span>
+            </div>
+            <svg class="card-arrow trend-lens-row-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+          </button>
+        </div>
+      </SectionGroup>
+    </template>
+
+    <Teleport to="body">
+      <Transition name="stack-page">
+        <div v-if="openLens" class="memory-stack-layer" data-no-swipe>
+          <section class="memory-stack-page">
+            <header class="memory-stack-header">
+              <div>
+                <h2>{{ openLensOption?.label }}</h2>
+              </div>
+              <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeLensDetail">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+              </button>
+            </header>
+            <main class="memory-stack-content">
+              <SectionCard class="trend-hero-card" :class="`trend-hero-${result.hero.tone}`">
+                <div>
+                  <span class="trend-hero-label">{{ heroToneLabel }}</span>
+                  <h3 :class="{ 'trend-hero-text-value': !isMetricValue(result.hero.value) }">{{ result.hero.value }}</h3>
+                  <strong>{{ result.hero.label }}</strong>
+                  <p>{{ result.hero.detail }}</p>
+                </div>
+                <span class="trend-confidence">{{ heroConfidenceLabel }}</span>
+              </SectionCard>
+
+              <MetricGrid v-if="result.cards.length">
+                <StatCard
+                  v-for="card in result.cards"
+                  :key="card.id"
+                  :label="card.label"
+                  :value="card.value"
+                  :unit="card.unit ?? ''"
+                  :hint="card.hint"
+                  :tone="card.tone === 'good' ? 'primary' : card.tone === 'warning' ? 'warning' : undefined"
+                  :value-kind="cardValueKind(card)"
+                />
+              </MetricGrid>
+
+              <SectionGroup title="시각화" :surface="false">
+                <TrendLensChart v-if="result.chart.length" :points="result.chart" :unit="chartUnit" />
+                <EmptyState v-else title="표시할 추세가 없습니다." description="이 Lens에서 비교 가능한 기록이 아직 부족합니다." />
+              </SectionGroup>
+
+              <SectionGroup title="해석">
+                <div class="trend-explanation-list">
+                  <p v-for="item in result.explanations" :key="item">{{ item }}</p>
+                </div>
+              </SectionGroup>
+
+              <SectionGroup title="다음 처방 영향" :surface="false">
+                <div class="trend-prescription-card" :class="`trend-prescription-${result.prescriptionImpact.status}`">
+                  <strong>{{ result.prescriptionImpact.title }}</strong>
+                  <p v-for="reason in result.prescriptionImpact.reasons" :key="reason">{{ reason }}</p>
+                </div>
+              </SectionGroup>
+
+              <SectionGroup v-if="evidenceRuns.length" title="근거 세션" :surface="false">
+                <div class="trend-evidence-list">
+                  <ListRow
+                    v-for="item in evidenceRuns"
+                    :key="`${item.runId}-${item.role}`"
+                    clickable
+                    :kicker="evidenceRoleLabel(item.role)"
+                    :title="item.run.sessionTitle || item.run.type"
+                    :detail="`${formatDateWithWeekday(item.run.date)} · ${item.reason}`"
+                    :tone="evidenceRoleTone(item.role)"
+                    @click="openRun(item.runId)"
+                  />
+                </div>
+              </SectionGroup>
+            </main>
+          </section>
+        </div>
+      </Transition>
+    </Teleport>
   </PageLayout>
 </template>
