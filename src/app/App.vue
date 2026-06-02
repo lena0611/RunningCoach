@@ -34,6 +34,16 @@ const navItems: BottomNavItem[] = [
 const route = useRoute()
 const transitionName = ref('page-slide-forward')
 const mainTabRoutes = ['/', '/runs', '/trends', '/memory']
+const SWIPE_INTENT_MIN_DISTANCE = 12
+const SWIPE_VERTICAL_MIN_DISTANCE = 8
+const SWIPE_VERTICAL_DOMINANCE = 0.75
+const SWIPE_HORIZONTAL_DOMINANCE = 1.45
+const SWIPE_DISTANCE_RATIO = 0.32
+const SWIPE_DISTANCE_MAX = 132
+const SWIPE_VELOCITY_THRESHOLD = 0.65
+const SWIPE_VELOCITY_MIN_DISTANCE = 42
+const SWIPE_RELEASE_ANIMATION_MS = 230
+const TAB_VIEWPORT_VERTICAL_RESERVE = 170
 const tabPanelRefs = ref<HTMLElement[]>([])
 const tabViewportHeight = ref(0)
 const swipeStartX = ref(0)
@@ -42,13 +52,18 @@ const swipeStartAt = ref(0)
 const swipePointerId = ref<number | null>(null)
 const swipeOffset = ref(0)
 const swipeLocked = ref<'pending' | 'horizontal' | 'vertical' | null>(null)
+const swipeTrackIndex = ref<number | null>(null)
 const isTabDragging = ref(false)
+const isTabAnimating = ref(false)
 const suppressNextTabClick = ref(false)
 const injuryCheckInItemId = ref('')
 const injuryCheckInSaving = ref(false)
 let activePanelObserver: ResizeObserver | null = null
+let activePanelMeasureFrame: number | null = null
+let activePanelViewportCleanup: (() => void) | null = null
 let keyboardInsetCleanup: (() => void) | null = null
 let injuryCheckInCleanup: (() => void) | null = null
+let swipeReleaseTimer: number | null = null
 
 function getNavIndex(path: string) {
   return navItems.findIndex((item) => item.to === path)
@@ -57,9 +72,12 @@ function getNavIndex(path: string) {
 const currentTabIndex = computed(() => mainTabRoutes.indexOf(route.path))
 const isMainTabRoute = computed(() => currentTabIndex.value !== -1)
 const injuryCheckInItem = computed(() => memoryStore.memory.injuryItems.find((item) => item.id === injuryCheckInItemId.value) ?? null)
-const tabTrackStyle = computed(() => ({
-  transform: `translate3d(calc(${-currentTabIndex.value * 100}% + ${swipeOffset.value}px), 0, 0)`
-}))
+const tabTrackStyle = computed(() => {
+  const index = swipeTrackIndex.value ?? currentTabIndex.value
+  return {
+    transform: `translate3d(calc(${-index * 100}% + ${swipeOffset.value}px), 0, 0)`
+  }
+})
 
 watch(
   () => route.path,
@@ -75,8 +93,11 @@ watch(
 )
 
 watch(currentTabIndex, () => {
-  resetSwipeState()
-  void nextTick(observeActivePanel)
+  if (!isTabAnimating.value) resetSwipeState()
+  void nextTick(() => {
+    observeActivePanel()
+    scheduleActivePanelHeightUpdate()
+  })
 })
 
 watch(
@@ -101,6 +122,7 @@ watch(
 
 onMounted(() => {
   attachKeyboardInsetTracking()
+  attachActivePanelViewportTracking()
   healthKitSyncStore.init()
   healthKitSyncStore.attachActivationListeners()
   weatherStore.init()
@@ -121,6 +143,13 @@ onBeforeUnmount(() => {
   injuryCheckInCleanup?.()
   injuryCheckInCleanup = null
   activePanelObserver?.disconnect()
+  if (activePanelMeasureFrame !== null) {
+    window.cancelAnimationFrame(activePanelMeasureFrame)
+    activePanelMeasureFrame = null
+  }
+  activePanelViewportCleanup?.()
+  activePanelViewportCleanup = null
+  clearSwipeReleaseTimer()
   document.body.classList.remove('tab-swiping')
 })
 
@@ -148,6 +177,18 @@ function attachKeyboardInsetTracking() {
     window.visualViewport?.removeEventListener('scroll', updateKeyboardInset)
     window.removeEventListener('orientationchange', updateKeyboardInset)
     document.documentElement.style.setProperty('--keyboard-inset-bottom', '0px')
+  }
+}
+
+function attachActivePanelViewportTracking() {
+  const schedule = () => scheduleActivePanelHeightUpdate()
+
+  window.visualViewport?.addEventListener('resize', schedule)
+  window.addEventListener('orientationchange', schedule)
+
+  activePanelViewportCleanup = () => {
+    window.visualViewport?.removeEventListener('resize', schedule)
+    window.removeEventListener('orientationchange', schedule)
   }
 }
 
@@ -347,19 +388,31 @@ function observeActivePanel() {
   const panel = tabPanelRefs.value[currentTabIndex.value]
   if (!panel) return
 
-  const updateHeight = () => {
-    tabViewportHeight.value = Math.max(panel.getBoundingClientRect().height, window.innerHeight - 170)
-  }
+  const updateHeight = () => updateActivePanelHeight(panel)
   updateHeight()
+  scheduleActivePanelHeightUpdate()
   activePanelObserver = new ResizeObserver(updateHeight)
   activePanelObserver.observe(panel)
+}
+
+function updateActivePanelHeight(panel = tabPanelRefs.value[currentTabIndex.value]) {
+  if (!panel || !isMainTabRoute.value) return
+  tabViewportHeight.value = Math.max(panel.getBoundingClientRect().height, window.innerHeight - TAB_VIEWPORT_VERTICAL_RESERVE)
+}
+
+function scheduleActivePanelHeightUpdate() {
+  if (activePanelMeasureFrame !== null) window.cancelAnimationFrame(activePanelMeasureFrame)
+  activePanelMeasureFrame = window.requestAnimationFrame(() => {
+    activePanelMeasureFrame = null
+    updateActivePanelHeight()
+  })
 }
 
 function isSwipeBlockedTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) return true
   if (
     target.closest(
-      'a, input, textarea, select, option, label, [contenteditable="true"], .bottom-sheet-layer, .side-drawer-layer, .memory-stack-layer, .coach-input-bar, [data-no-swipe]'
+      'a, button, input, textarea, select, option, label, [role="button"], [role="tab"], [role="slider"], [contenteditable="true"], .bottom-sheet-layer, .side-drawer-layer, .memory-stack-layer, .coach-input-bar, .trend-lens-tabs, .trend-overall-summary-row-action, .trend-chart, .trend-echart, .trend-lens-chart, .trend-lens-echart, [data-horizontal-scroll], [data-no-swipe]'
     )
   ) {
     return true
@@ -378,12 +431,13 @@ function isSwipeBlockedTarget(target: EventTarget | null) {
 }
 
 function onTabPointerDown(event: PointerEvent) {
-  if (!isMainTabRoute.value || !event.isPrimary || isSwipeBlockedTarget(event.target)) return
+  if (!isMainTabRoute.value || isTabAnimating.value || !event.isPrimary || isSwipeBlockedTarget(event.target)) return
 
   swipeStartX.value = event.clientX
   swipeStartY.value = event.clientY
   swipeStartAt.value = Date.now()
   swipePointerId.value = event.pointerId
+  swipeTrackIndex.value = currentTabIndex.value
   swipeLocked.value = 'pending'
   ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
 }
@@ -395,9 +449,18 @@ function onTabPointerMove(event: PointerEvent) {
   const deltaY = event.clientY - swipeStartY.value
 
   if (swipeLocked.value === 'pending') {
-    if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) < 9) return
-    swipeLocked.value = Math.abs(deltaX) > Math.abs(deltaY) * 1.18 ? 'horizontal' : 'vertical'
-    if (swipeLocked.value === 'vertical') return
+    const absX = Math.abs(deltaX)
+    const absY = Math.abs(deltaY)
+    if (Math.max(absX, absY) < SWIPE_INTENT_MIN_DISTANCE) return
+    if (absY >= SWIPE_VERTICAL_MIN_DISTANCE && absY >= absX * SWIPE_VERTICAL_DOMINANCE) {
+      swipeLocked.value = 'vertical'
+      return
+    }
+    if (absX > absY * SWIPE_HORIZONTAL_DOMINANCE) {
+      swipeLocked.value = 'horizontal'
+    } else {
+      return
+    }
   }
 
   if (swipeLocked.value !== 'horizontal') return
@@ -416,13 +479,13 @@ function onTabPointerEnd(event: PointerEvent) {
 
   const deltaX = event.clientX - swipeStartX.value
   const elapsed = Math.max(Date.now() - swipeStartAt.value, 1)
-  const width = window.innerWidth || 390
-  const shouldNavigate = swipeLocked.value === 'horizontal' && (Math.abs(deltaX) > Math.min(120, width * 0.26) || Math.abs(deltaX / elapsed) > 0.52)
+  const viewportWidth = (event.currentTarget as HTMLElement).clientWidth || window.innerWidth || 390
+  const absDeltaX = Math.abs(deltaX)
+  const distanceThreshold = Math.min(SWIPE_DISTANCE_MAX, viewportWidth * SWIPE_DISTANCE_RATIO)
+  const isDistanceNavigation = absDeltaX > distanceThreshold
+  const isVelocityNavigation = Math.abs(deltaX / elapsed) > SWIPE_VELOCITY_THRESHOLD && absDeltaX > SWIPE_VELOCITY_MIN_DISTANCE
+  const shouldNavigate = swipeLocked.value === 'horizontal' && (isDistanceNavigation || isVelocityNavigation)
   const nextIndex = deltaX < 0 ? currentTabIndex.value + 1 : currentTabIndex.value - 1
-
-  if (shouldNavigate && mainTabRoutes[nextIndex]) {
-    void router.push(mainTabRoutes[nextIndex])
-  }
 
   if (swipeLocked.value === 'horizontal') {
     suppressNextTabClick.value = true
@@ -430,6 +493,18 @@ function onTabPointerEnd(event: PointerEvent) {
       suppressNextTabClick.value = false
     }, 0)
   }
+
+  if (shouldNavigate && mainTabRoutes[nextIndex]) {
+    const targetOffset = nextIndex > currentTabIndex.value ? -viewportWidth : viewportWidth
+    animateTabRelease(targetOffset, mainTabRoutes[nextIndex])
+    return
+  }
+
+  if (swipeLocked.value === 'horizontal') {
+    animateTabRelease(0, null)
+    return
+  }
+
   resetSwipeState()
 }
 
@@ -441,12 +516,38 @@ function onTabClickCapture(event: MouseEvent) {
 }
 
 function resetSwipeState() {
+  clearSwipeReleaseTimer()
   swipePointerId.value = null
   swipeLocked.value = null
+  swipeTrackIndex.value = null
   swipeOffset.value = 0
   swipeStartAt.value = 0
   isTabDragging.value = false
+  isTabAnimating.value = false
   document.body.classList.remove('tab-swiping')
+}
+
+function clearSwipeReleaseTimer() {
+  if (swipeReleaseTimer === null) return
+  window.clearTimeout(swipeReleaseTimer)
+  swipeReleaseTimer = null
+}
+
+function animateTabRelease(targetOffset: number, targetRoute: string | null) {
+  clearSwipeReleaseTimer()
+  isTabAnimating.value = true
+  isTabDragging.value = false
+  document.body.classList.remove('tab-swiping')
+  swipeOffset.value = targetOffset
+
+  swipeReleaseTimer = window.setTimeout(() => {
+    swipeReleaseTimer = null
+    if (!targetRoute) {
+      resetSwipeState()
+      return
+    }
+    void router.push(targetRoute).catch(() => undefined).finally(resetSwipeState)
+  }, SWIPE_RELEASE_ANIMATION_MS)
 }
 </script>
 

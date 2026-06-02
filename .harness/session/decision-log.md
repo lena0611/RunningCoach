@@ -503,3 +503,10 @@
 - 포기한 대안: 프론트 난독화, bridge 이름 숨기기, route guard 강화만으로 서버 기능을 보호하는 방식은 공개 번들과 DevTools 조작을 막지 못하므로 채택하지 않는다.
 - 검증: `npm run supabase:functions:check`, `npm run test:run`, `npm run build`, `npm run harness:check`를 실행했다. `config-contract.md` 변경이 `common.runtime.minimum-node` sync gap으로 잡혔지만, 이번 변경은 Node 최소 버전 계약이 아니라 서버 secret/앱 세션 설정 계약 추가이므로 harness runtime 구현 변경은 필요 없다.
 - 적용 범위: `supabase/functions/app-session/index.ts`, `supabase/functions/coach-run/index.ts`, `src/shared/api/appSecurity.ts`, `src/shared/api/coachRepository.ts`, iOS `RunContextWebView.swift`, `.harness/project/architecture-rules.md`, `.harness/project/config-contract.md`, `.harness/project/github-pages-supabase-playbook.md`.
+
+## 2026-06-02 - Root tab swipe release animation은 route 전환보다 먼저 수행
+- 문제: Issue #92에서 스와이프 판정 직후 `router.push`가 먼저 실행되고, track은 아직 dragging 상태라 CSS transition이 꺼져 있었다. 그 결과 손을 뗀 offset 지점에서 다음 패널까지 이어지는 애니메이션 없이 route index가 즉시 바뀌어 화면이 확 넘어갔다.
+- 결정: root tab swipe는 release 단계에서 `swipeTrackIndex`로 현재 시각 기준 index를 고정하고, `swipeOffset`을 패널 폭 끝까지 transition시킨 뒤 route를 변경한다. route 변경 후 reset은 시각 위치가 같은 상태에서 수행한다.
+- 선택 이유: 사용자가 손을 뗀 순간의 offset은 다음 장면 전환의 시작점이어야 한다. route 변경을 먼저 하면 Vue route index 변경과 dragging transition off 상태가 결합해 전환 애니메이션을 볼 수 없다.
+- 운영 보정: 사용자 최종 완료 승인 전 Issue close가 금지되어 있으므로 PR 본문에 `Closes #...`를 넣지 않는다. #92는 이전 PR 본문의 `Closes #92` 때문에 조기 close되어 다시 열었다.
+- 적용 범위: `src/app/App.vue`, GitHub Issue/PR 운영 문구.
