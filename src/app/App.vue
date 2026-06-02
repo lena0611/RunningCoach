@@ -42,6 +42,7 @@ const SWIPE_DISTANCE_RATIO = 0.32
 const SWIPE_DISTANCE_MAX = 132
 const SWIPE_VELOCITY_THRESHOLD = 0.65
 const SWIPE_VELOCITY_MIN_DISTANCE = 42
+const SWIPE_RELEASE_ANIMATION_MS = 230
 const TAB_VIEWPORT_VERTICAL_RESERVE = 170
 const tabPanelRefs = ref<HTMLElement[]>([])
 const tabViewportHeight = ref(0)
@@ -51,6 +52,7 @@ const swipeStartAt = ref(0)
 const swipePointerId = ref<number | null>(null)
 const swipeOffset = ref(0)
 const swipeLocked = ref<'pending' | 'horizontal' | 'vertical' | null>(null)
+const swipeTrackIndex = ref<number | null>(null)
 const isTabDragging = ref(false)
 const isTabAnimating = ref(false)
 const suppressNextTabClick = ref(false)
@@ -61,6 +63,7 @@ let activePanelMeasureFrame: number | null = null
 let activePanelViewportCleanup: (() => void) | null = null
 let keyboardInsetCleanup: (() => void) | null = null
 let injuryCheckInCleanup: (() => void) | null = null
+let swipeReleaseTimer: number | null = null
 
 function getNavIndex(path: string) {
   return navItems.findIndex((item) => item.to === path)
@@ -69,9 +72,12 @@ function getNavIndex(path: string) {
 const currentTabIndex = computed(() => mainTabRoutes.indexOf(route.path))
 const isMainTabRoute = computed(() => currentTabIndex.value !== -1)
 const injuryCheckInItem = computed(() => memoryStore.memory.injuryItems.find((item) => item.id === injuryCheckInItemId.value) ?? null)
-const tabTrackStyle = computed(() => ({
-  transform: `translate3d(calc(${-currentTabIndex.value * 100}% + ${swipeOffset.value}px), 0, 0)`
-}))
+const tabTrackStyle = computed(() => {
+  const index = swipeTrackIndex.value ?? currentTabIndex.value
+  return {
+    transform: `translate3d(calc(${-index * 100}% + ${swipeOffset.value}px), 0, 0)`
+  }
+})
 
 watch(
   () => route.path,
@@ -143,6 +149,7 @@ onBeforeUnmount(() => {
   }
   activePanelViewportCleanup?.()
   activePanelViewportCleanup = null
+  clearSwipeReleaseTimer()
   document.body.classList.remove('tab-swiping')
 })
 
@@ -430,6 +437,7 @@ function onTabPointerDown(event: PointerEvent) {
   swipeStartY.value = event.clientY
   swipeStartAt.value = Date.now()
   swipePointerId.value = event.pointerId
+  swipeTrackIndex.value = currentTabIndex.value
   swipeLocked.value = 'pending'
   ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
 }
@@ -471,9 +479,9 @@ function onTabPointerEnd(event: PointerEvent) {
 
   const deltaX = event.clientX - swipeStartX.value
   const elapsed = Math.max(Date.now() - swipeStartAt.value, 1)
-  const width = window.innerWidth || 390
+  const viewportWidth = (event.currentTarget as HTMLElement).clientWidth || window.innerWidth || 390
   const absDeltaX = Math.abs(deltaX)
-  const distanceThreshold = Math.min(SWIPE_DISTANCE_MAX, width * SWIPE_DISTANCE_RATIO)
+  const distanceThreshold = Math.min(SWIPE_DISTANCE_MAX, viewportWidth * SWIPE_DISTANCE_RATIO)
   const isDistanceNavigation = absDeltaX > distanceThreshold
   const isVelocityNavigation = Math.abs(deltaX / elapsed) > SWIPE_VELOCITY_THRESHOLD && absDeltaX > SWIPE_VELOCITY_MIN_DISTANCE
   const shouldNavigate = swipeLocked.value === 'horizontal' && (isDistanceNavigation || isVelocityNavigation)
@@ -487,8 +495,13 @@ function onTabPointerEnd(event: PointerEvent) {
   }
 
   if (shouldNavigate && mainTabRoutes[nextIndex]) {
-    isTabAnimating.value = true
-    void router.push(mainTabRoutes[nextIndex]).catch(() => undefined).finally(resetSwipeState)
+    const targetOffset = nextIndex > currentTabIndex.value ? -viewportWidth : viewportWidth
+    animateTabRelease(targetOffset, mainTabRoutes[nextIndex])
+    return
+  }
+
+  if (swipeLocked.value === 'horizontal') {
+    animateTabRelease(0, null)
     return
   }
 
@@ -503,13 +516,38 @@ function onTabClickCapture(event: MouseEvent) {
 }
 
 function resetSwipeState() {
+  clearSwipeReleaseTimer()
   swipePointerId.value = null
   swipeLocked.value = null
+  swipeTrackIndex.value = null
   swipeOffset.value = 0
   swipeStartAt.value = 0
   isTabDragging.value = false
   isTabAnimating.value = false
   document.body.classList.remove('tab-swiping')
+}
+
+function clearSwipeReleaseTimer() {
+  if (swipeReleaseTimer === null) return
+  window.clearTimeout(swipeReleaseTimer)
+  swipeReleaseTimer = null
+}
+
+function animateTabRelease(targetOffset: number, targetRoute: string | null) {
+  clearSwipeReleaseTimer()
+  isTabAnimating.value = true
+  isTabDragging.value = false
+  document.body.classList.remove('tab-swiping')
+  swipeOffset.value = targetOffset
+
+  swipeReleaseTimer = window.setTimeout(() => {
+    swipeReleaseTimer = null
+    if (!targetRoute) {
+      resetSwipeState()
+      return
+    }
+    void router.push(targetRoute).catch(() => undefined).finally(resetSwipeState)
+  }, SWIPE_RELEASE_ANIMATION_MS)
 }
 </script>
 
