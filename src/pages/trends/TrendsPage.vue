@@ -164,28 +164,27 @@ function evidenceRoleLabel(role: TrendEvidenceRun['role']) {
         </div>
         <span class="trend-confidence">{{ overallToneLabel }}</span>
       </div>
-      <div class="trend-overall-list">
+      <div class="trend-overall-summary-list">
         <template v-for="item in overallItems" :key="item.label">
           <button
             v-if="item.lens"
             type="button"
-            class="trend-overall-row trend-overall-row-action"
+            class="trend-overall-summary-row trend-overall-summary-row-action"
+            :class="`trend-overall-summary-${item.tone}`"
             :aria-label="`${item.label}: ${item.title} 렌즈 보기`"
             @click="selectOverallItem(item)"
           >
-            <span>{{ item.label }}</span>
-            <div>
-              <strong>{{ item.title }}</strong>
-              <p>{{ item.detail }}</p>
-              <small>렌즈 보기</small>
-            </div>
+            <span class="trend-overall-summary-label">{{ item.label }}</span>
+            <strong>{{ item.title }}</strong>
+            <span class="trend-overall-summary-cta">보기</span>
           </button>
-          <div v-else class="trend-overall-row">
-            <span>{{ item.label }}</span>
-            <div>
-              <strong>{{ item.title }}</strong>
-              <p>{{ item.detail }}</p>
-            </div>
+          <div
+            v-else
+            class="trend-overall-summary-row"
+            :class="`trend-overall-summary-${item.tone}`"
+          >
+            <span class="trend-overall-summary-label">{{ item.label }}</span>
+            <strong>{{ item.title }}</strong>
           </div>
         </template>
       </div>
