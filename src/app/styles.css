@@ -1075,16 +1075,25 @@ label {
 .bottom-nav {
   --bottom-nav-count: 4;
   position: fixed;
+  width: calc(100% - 28px);
+  max-width: 430px;
+  box-sizing: border-box;
+  padding-left: 12px;
+  padding-right: 12px;
+  margin-left: auto;
+  margin-right: auto;
   left: 50%;
   right: auto;
   bottom: max(calc(env(safe-area-inset-bottom) - 4px), 8px);
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(var(--bottom-nav-count), minmax(0, 1fr));
+  grid-template-columns: repeat(4, 1fr);
+  justify-content: stretch;
   gap: 4px;
-  width: min(430px, calc(100vw - 32px));
+  margin: 0;
   min-height: 72px;
-  padding: 7px;
+  padding-top: 7px;
+  padding-bottom: 7px;
   border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--color-nav-bg) 84%, transparent);
@@ -1118,8 +1127,9 @@ label {
   grid-template-rows: 25px auto;
   place-items: center;
   gap: 3px;
-  min-width: 0;
+  min-width: 70px;
   min-height: 60px;
+  flex: 1 1 0%;
   padding: 7px 6px 6px;
   border: 0;
   color: var(--color-muted);
@@ -1141,6 +1151,8 @@ label {
 }
 
 .bottom-nav-item.router-link-active {
+  min-width: 70px;
+  flex: 1 1 0%;
   background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface-2) 88%, transparent), color-mix(in srgb, var(--color-surface) 76%, transparent));
   color: var(--color-primary);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 10px 24px rgba(0, 0, 0, 0.22);
