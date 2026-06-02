@@ -6187,36 +6187,8 @@ button.run-session-row {
     padding-right: 28px;
   }
 
-  .bottom-nav {
-    position: sticky;
-    top: 84px;
-    min-height: auto;
-    max-width: 1080px;
-    margin: 0 auto;
-    grid-template-columns: repeat(var(--bottom-nav-count), auto);
-    justify-content: start;
-    padding: 12px 18px;
-    border: 0;
-    background: transparent;
-    backdrop-filter: none;
-  }
-
-  .bottom-nav-scrim {
-    display: none;
-  }
-
-  .bottom-nav-item {
-    min-width: 110px;
-    background: var(--color-subtle);
-    border: 1px solid var(--color-border);
-  }
-
-  .bottom-nav-item.router-link-active {
-    background: var(--color-primary-soft);
-  }
-
   .app-main {
-    padding: 24px 28px 48px;
+    padding: 24px 28px var(--bottom-nav-reserve);
   }
 
   .metric-grid {

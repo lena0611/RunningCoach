@@ -24,6 +24,47 @@ test('bottom navigation loads lazy feature routes', async ({ page }) => {
   await expect(page).toHaveURL(/#\/?$/)
 })
 
+test('bottom navigation remains bottom aligned at the 900px viewport boundary', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 700 })
+  await page.goto('/')
+
+  const metrics = await page.locator('.bottom-nav').evaluate((nav) => {
+    const style = getComputedStyle(nav)
+    const rect = nav.getBoundingClientRect()
+    const itemRects = [...nav.querySelectorAll('.bottom-nav-item')].map((item) => {
+      const itemStyle = getComputedStyle(item)
+      const itemRect = item.getBoundingClientRect()
+      return {
+        minWidth: itemStyle.minWidth,
+        flex: itemStyle.flex,
+        width: itemRect.width
+      }
+    })
+
+    return {
+      position: style.position,
+      top: Math.round(rect.top),
+      width: rect.width,
+      bottomGap: Math.round(window.innerHeight - rect.bottom),
+      gridColumnCount: style.gridTemplateColumns.split(' ').length,
+      itemRects
+    }
+  })
+
+  expect(metrics.position).toBe('fixed')
+  expect(metrics.top).toBeGreaterThan(600)
+  expect(metrics.width).toBeLessThanOrEqual(431)
+  expect(metrics.bottomGap).toBeGreaterThanOrEqual(0)
+  expect(metrics.bottomGap).toBeLessThanOrEqual(16)
+  expect(metrics.gridColumnCount).toBe(4)
+  expect(metrics.itemRects).toHaveLength(4)
+  for (const item of metrics.itemRects) {
+    expect(item.minWidth).toBe('70px')
+    expect(item.flex).toBe('1 1 0%')
+    expect(item.width).toBeGreaterThanOrEqual(70)
+  }
+})
+
 test('main tabs support interactive horizontal swipe navigation', async ({ page }) => {
   await page.goto('/')
 
