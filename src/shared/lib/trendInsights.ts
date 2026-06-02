@@ -295,7 +295,7 @@ function buildEfficiencyLens(window: DateWindow): TrendLensResult {
         heartRateBandLabel(band),
         diff === null ? '비교 부족' : `${diff > 0 ? '+' : ''}${Math.round(diff)}`,
         diff === null ? '' : '초/km',
-        `${item.count}개 point · 현재 ${formatPace(item.medianPaceSec)}/km`,
+        `${item.count}개 기록 · 현재 ${formatPace(item.medianPaceSec)}/km`,
         efficiencyTone(diff, bandSampleCount, bandContextWarnings)
       )
     }),

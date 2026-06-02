@@ -117,47 +117,87 @@
   line-height: var(--text-title-line);
 }
 
-.trend-lens-tabs {
+.trend-lens-list {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(128px, 1fr);
   gap: var(--space-2);
-  margin: 2px calc(var(--space-4) * -1) 0;
-  overflow-x: auto;
-  padding: 0 var(--space-4) var(--space-1);
-  scrollbar-width: none;
 }
 
-.trend-lens-tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.trend-lens-tab {
+.trend-lens-row {
+  position: relative;
   display: grid;
-  gap: 4px;
-  min-height: 78px;
-  padding: var(--space-3);
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 76px;
+  padding: var(--space-3) 40px var(--space-3) var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
   background: var(--color-surface-card);
   color: var(--color-text);
   text-align: left;
+  cursor: pointer;
 }
 
-.trend-lens-tab strong {
+.trend-lens-row-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.trend-lens-row-main strong {
   font-size: var(--text-body-size);
   line-height: 1.2;
 }
 
-.trend-lens-tab span {
+.trend-lens-row-main span {
   color: var(--color-muted);
   font-size: var(--text-caption-size);
   line-height: var(--text-caption-line);
 }
 
-.trend-lens-tab-active {
-  border-color: color-mix(in srgb, var(--color-primary) 62%, transparent);
-  background: var(--color-primary-soft);
+.trend-lens-row-value {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+}
+
+.trend-lens-row-value strong {
+  max-width: 132px;
+  overflow: hidden;
+  font-size: var(--text-body-size);
+  line-height: 1.2;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trend-lens-row-value span {
+  color: var(--color-muted);
+  font-size: var(--text-caption-size);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--text-caption-line);
+}
+
+.trend-lens-row-arrow {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.trend-lens-row-good {
+  border-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
+}
+
+.trend-lens-row-good .trend-lens-row-value span {
+  color: var(--color-primary);
+}
+
+.trend-lens-row-warning {
+  border-color: color-mix(in srgb, var(--color-warning) 48%, transparent);
+}
+
+.trend-lens-row-warning .trend-lens-row-value span {
+  color: var(--color-warning);
 }
 
 .trend-control-row {
@@ -252,14 +292,15 @@
 }
 
 .trend-overall-summary-row strong {
+  display: -webkit-box;
   min-width: 0;
   overflow: hidden;
   color: var(--color-text);
   font-size: 15px;
   font-weight: var(--font-weight-bold);
   line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .trend-overall-summary-cta {
@@ -299,6 +340,12 @@
   font-size: clamp(2rem, 12vw, 3.1rem);
   line-height: 1;
   letter-spacing: 0;
+}
+
+.trend-hero-card h3.trend-hero-text-value {
+  font-size: clamp(1.35rem, 6vw, 1.8rem);
+  line-height: 1.2;
+  word-break: keep-all;
 }
 
 .trend-hero-card strong {
