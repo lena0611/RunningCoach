@@ -40,7 +40,8 @@ export function getRaceProjection(
   runs: RunLog[],
   activeGoal: TrainingGoal | null | undefined,
   today = new Date(),
-  activeInjury?: TrainingInjuryItem | null
+  activeInjury?: TrainingInjuryItem | null,
+  ageWeight = 0
 ): RaceProjection | null {
   const targetDistanceKm = activeGoal?.distanceKm
   if (!targetDistanceKm || targetDistanceKm <= 0) return null
@@ -56,7 +57,7 @@ export function getRaceProjection(
 
   const current = chooseCurrentSignal(signals, activeGoal?.targetDurationSec ?? null)
   const previous = signals.filter((signal) => signal.runId !== current.runId).find((signal) => signal.date < current.date) ?? null
-  const factors = buildReadinessFactors(runs, targetDistanceKm, activeGoal?.targetDurationSec ?? null, current, today, activeInjury ?? null)
+  const factors = buildReadinessFactors(runs, targetDistanceKm, activeGoal?.targetDurationSec ?? null, current, today, activeInjury ?? null, ageWeight)
   const readinessScore = weightedReadinessScore(factors)
   const readinessLevel = getReadinessLevel(readinessScore)
 
@@ -96,7 +97,8 @@ function buildReadinessFactors(
   targetDurationSec: number | null,
   current: RaceProjectionSignal,
   today: Date,
-  activeInjury: TrainingInjuryItem | null
+  activeInjury: TrainingInjuryItem | null,
+  ageWeight = 0
 ): ProjectionReadinessFactor[] {
   const recent7 = runsWithinDays(runs, 7, today)
   const recent14 = runsWithinDays(runs, 14, today)
@@ -109,7 +111,7 @@ function buildReadinessFactors(
     getAerobicBaseFactor(recent30, targetDistanceKm),
     getLongRunFactor(recent42, targetDistanceKm, today),
     getConsistencyFactor(recent30, recent14, recent7),
-    getInjuryRecoveryFactor(activeInjury, recent14)
+    getInjuryRecoveryFactor(activeInjury, recent14, ageWeight)
   ]
 }
 
@@ -207,20 +209,22 @@ function getConsistencyFactor(recent30: RunLog[], recent14: RunLog[], recent7: R
   )
 }
 
-function getInjuryRecoveryFactor(activeInjury: TrainingInjuryItem | null, recent14: RunLog[]): ProjectionReadinessFactor {
+function getInjuryRecoveryFactor(activeInjury: TrainingInjuryItem | null, recent14: RunLog[], ageWeight = 0): ProjectionReadinessFactor {
+  const ageDetail = ageWeight >= 2 ? ' 나이대를 고려해 회복 게이트를 더 보수적으로 봅니다.' : ''
   if (!activeInjury || activeInjury.status === 'resolved' || activeInjury.status === 'archived') {
-    return factor('injuryRecovery', '부상/회복 게이트', 85, '활성 제한 없음', '현재 활성 부상 제한이 없으면 목표 예상의 회복 게이트는 크게 막지 않습니다.')
+    const score = clamp(85 - ageWeight * 2, 0, 100)
+    return factor('injuryRecovery', '부상/회복 게이트', score, ageWeight >= 2 ? '활성 제한 없음 · 회복 보수' : '활성 제한 없음', `현재 활성 부상 제한이 없으면 목표 예상의 회복 게이트는 크게 막지 않습니다.${ageDetail}`)
   }
   const severity = activeInjury.severity ?? 2
   const painMentions = recent14.filter((run) => run.painNote.trim()).length
-  const score = clamp(92 - severity * 12 - Math.min(20, painMentions * 5), 20, 82)
+  const score = clamp(92 - severity * 12 - Math.min(20, painMentions * 5) - ageWeight * 3, 20, 82)
   const area = activeInjury.area || '관리 부위'
   return factor(
     'injuryRecovery',
     '부상/회복 게이트',
     score,
     `${area} · ${activeInjury.status}${activeInjury.severity ? ` · ${activeInjury.severity}/5` : ''}`,
-    '활성 부상이나 통증 메모가 있으면 예측 기록을 그대로 믿지 않고 강도 상향과 목표 준비도를 보수적으로 낮춥니다.'
+    `활성 부상이나 통증 메모가 있으면 예측 기록을 그대로 믿지 않고 강도 상향과 목표 준비도를 보수적으로 낮춥니다.${ageDetail}`
   )
 }
 

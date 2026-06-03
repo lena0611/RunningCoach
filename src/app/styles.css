@@ -6048,6 +6048,15 @@ button.run-session-row {
   line-height: var(--text-info-line);
 }
 
+.next-session-load-note {
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-field));
+  border-color: color-mix(in srgb, var(--color-accent) 38%, transparent);
+}
+
+.next-session-load-note strong {
+  color: var(--color-accent);
+}
+
 .recommendation-card strong {
   color: var(--color-accent);
   font-size: 24px;

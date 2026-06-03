@@ -10,7 +10,7 @@ import type { RunLog } from '@/entities/run/model'
 import RunSummaryCard from '@/widgets/run-summary-card/RunSummaryCard.vue'
 import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
 import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
-import { getEasyRatio, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, getVolumeWarning, sumDistance } from '@/shared/lib/runStats'
+import { getAgeLoadWeight, getEasyRatio, getFatigueWarning, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, sumDistance } from '@/shared/lib/runStats'
 import { formatDateWithWeekday, formatDuration } from '@/shared/lib/format'
 import { getRaceProjection } from '@/shared/lib/performanceProjection'
 import { formatWeatherNumber, weatherSymbolToEmoji } from '@/shared/lib/weather'
@@ -56,7 +56,8 @@ const easyRatio = computed(() => getEasyRatio(getRunsWithinDays(runs.value, 30, 
 const nextSession = computed(() => getNextSessionRecommendation(memoryStore.memory, runs.value, today.value))
 const activeGoal = computed(() => getActiveGoal(memoryStore.memory))
 const activeInjury = computed(() => getActiveInjuryItem(memoryStore.memory))
-const raceProjection = computed(() => getRaceProjection(runs.value, activeGoal.value, today.value, activeInjury.value))
+const ageLoadWeight = computed(() => getAgeLoadWeight(memoryStore.memory.athleteProfile.birthYear, today.value))
+const raceProjection = computed(() => getRaceProjection(runs.value, activeGoal.value, today.value, activeInjury.value, ageLoadWeight.value))
 
 watch(
   () => route.path,
@@ -135,8 +136,9 @@ const goalProjectionText = computed(() => {
   return `예상 ${formatDuration(projection.current.projectedSec)} · ${raceProjectionHint.value}`
 })
 
-const volumeWarning = computed(() => getVolumeWarning(runs.value, today.value))
-const volumeCaution = computed(() => !volumeWarning.value.startsWith('급격한 볼륨 증가는 보이지 않습니다'))
+const fatigueWarning = computed(() => getFatigueWarning(runs.value, today.value, ageLoadWeight.value))
+const volumeWarning = computed(() => fatigueWarning.value.message)
+const volumeCaution = computed(() => fatigueWarning.value.caution)
 
 const trendTitle = computed(() => {
   if (trendMetric.value === 'month') return '이번 달 거리 추이'
@@ -343,6 +345,10 @@ function formatDateOnly(value: Date) {
                 <div v-if="nextSession.injuryAdjusted" class="next-session-injury-note">
                   <strong>부상 조정</strong>
                   <p>{{ nextSession.injuryNote }}</p>
+                </div>
+                <div v-if="nextSession.loadCaution" class="next-session-injury-note next-session-load-note">
+                  <strong>부하 주의</strong>
+                  <p>{{ nextSession.loadNote }}</p>
                 </div>
                 <p>{{ nextSession.reason }}</p>
                 <p class="helper">{{ nextSession.intensity }}</p>
