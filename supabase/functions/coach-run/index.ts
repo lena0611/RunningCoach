@@ -537,6 +537,10 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     selectedRunExecutionGuide,
     lapAnalysisInstruction:
       'selectedRunLapAnalysis와 selectedRunExecutionGuide가 있으면 반드시 코칭에 반영한다. 핵심 지표에는 페이스 흐름과 심박 흐름을 화살표로 짧게 보여주고, 해석 섹션에는 초반 오버페이스 여부, 심박이 터졌는지/잘 눌렸는지, 세션 유형별 심박/페이스 경계 초과 여부, 후반 페이스-심박 품질을 짚는다. 랩 데이터가 없을 때만 평균값 중심으로 말한다.',
+    contextFactorInstruction:
+      '세션 품질을 페이스/심박 숫자만으로 단독 평가하지 않는다. 그 기록을 유발한 외부 요인과 내부 요인을 함께 보고 "이 결과가 왜 이렇게 나왔는지"를 설명한다. 외부 요인: selectedRun.weather(기온/습도/바람), courseType(고도/지형), companion(동반주), 시간대. 내부 요인: activeInjuryItem/pain_note(부상·통증), sleep_quality(수면), condition_score(컨디션), stress_level(스트레스), rpe, recent7/14/30 누적과 중장기 부하 추세(최근 부하/피로). 과거 세션 복기든 최근 7일 현재 흐름이든 동일하게 적용한다.',
+    contextFactorHeatInstruction:
+      '특히 그날 기온이 높거나(대략 25도 이상) 습도가 높으면 같은 페이스에도 심박이 올라가므로, 심박 상승이나 페이스 저하를 실력 저하로 단정하지 않고 더위 맥락으로 설명한다. 직전 볼륨이 급증했거나 강훈련이 몰렸으면 후반 저하를 피로 맥락으로 본다. 수면 부족/낮은 컨디션/높은 스트레스도 같은 방식으로 그날 결과를 설명하는 요인으로 쓴다. 단 해당 요인 데이터가 없으면 억지로 끌어오거나 추측하지 않는다.',
     prescriptionAdjustmentInstruction:
       '선택 세션을 단순 기록이 아니라 이전 처방을 수행한 결과로 본다. selectedRunExecutionGuide에 맞게 훈련했는지 먼저 평가하고, 잘 지켰으면 유지 또는 소폭 상향 조건을 말한다. 경계를 반복적으로 넘었거나 회복/부상 신호가 있으면 다음 처방을 낮추거나 기준을 바꾼다. 조정 필요성이 명확하면 trainingMemoryPatch에 반영한다.',
     recentPrescriptionComplianceSignals,
@@ -638,7 +642,7 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     body: JSON.stringify({
       model,
       instructions,
-      input: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context, null, 2)}`,
+      input: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context)}`,
       text: buildCoachResponseTextFormat()
     })
   })
@@ -1077,7 +1081,7 @@ async function callOpenAIStream(
     body: JSON.stringify({
       model,
       instructions: buildCoachInstructions(),
-      input: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context, null, 2)}`,
+      input: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context)}`,
       text: buildCoachResponseTextFormat(),
       stream: true
     })
