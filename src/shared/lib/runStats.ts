@@ -1,5 +1,6 @@
 import type { Lap, RunLog, RunType } from '@/entities/run/model'
-import type { TrainingMemory } from '@/entities/training-memory/model'
+import type { TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
+import { getActiveInjuryItem } from '@/entities/training-memory/model'
 import { formatDateWithWeekday } from '@/shared/lib/format'
 
 const dayMs = 24 * 60 * 60 * 1000
@@ -95,7 +96,11 @@ export type NextSessionRecommendation = {
   intensity: string
   plannedDate: string
   dayName: string
+  injuryAdjusted: boolean
+  injuryNote: string
 }
+
+const qualitySessionKeywords = ['Tempo', 'Interval', 'LSD', 'Steady Long', 'Race', 'Strides', 'Threshold', 'Repetition']
 
 export function getNextSessionRecommendation(memory: TrainingMemory, runs: RunLog[], today = new Date()): NextSessionRecommendation {
   const sorted = [...runs].sort((a, b) => b.date.localeCompare(a.date))
@@ -103,10 +108,11 @@ export function getNextSessionRecommendation(memory: TrainingMemory, runs: RunLo
   const lastRun = sorted[0] ?? null
   const lastRunSchedule = lastRun ? getPlannedWorkoutOnDate(memory, lastRun.date) : null
 
+  let base: NextSessionRecommendation
   if (upcoming.dayName === memory.athleteProfile.preferredLongRunDay || upcoming.pattern.includes('LSD') || upcoming.pattern.includes('Long')) {
     const recentLong = getRecentSaturdayLongRun(sorted)
     const longType = chooseNextLongRunType(recentLong)
-    return {
+    base = {
       title: `${upcoming.dayName} ${longType}`,
       plannedDate: upcoming.date,
       dayName: upcoming.dayName,
@@ -115,20 +121,75 @@ export function getNextSessionRecommendation(memory: TrainingMemory, runs: RunLo
         getLastRunContextText(lastRun, lastRunSchedule),
         recentLong ? `최근 토요일 10km+ 기록은 ${formatDateWithWeekday(recentLong.date)} ${recentLong.distanceKm}km입니다.` : '최근 토요일 10km+ 기준 기록은 아직 부족합니다.'
       ].join(' '),
-      intensity: describeLongRunIntensity(longType, recentLong)
+      intensity: describeLongRunIntensity(longType, recentLong),
+      injuryAdjusted: false,
+      injuryNote: ''
+    }
+  } else {
+    base = {
+      title: upcoming.workout || 'Easy + Strides',
+      plannedDate: upcoming.date,
+      dayName: upcoming.dayName,
+      reason: [
+        upcoming.pattern ? `주간 루틴상 다음 세션은 ${upcoming.pattern}입니다.` : '주간 루틴 기준 다음 세션입니다.',
+        getLastRunContextText(lastRun, lastRunSchedule)
+      ].join(' '),
+      intensity: '추천 세션 자체는 주간 훈련 스케줄을 기준으로 안내합니다. 컨디션과 통증 신호가 있으면 강도만 조절하세요.',
+      injuryAdjusted: false,
+      injuryNote: ''
+    }
+  }
+
+  return applyInjuryGate(base, getActiveInjuryItem(memory))
+}
+
+function applyInjuryGate(base: NextSessionRecommendation, injury: TrainingInjuryItem | null): NextSessionRecommendation {
+  if (!injury || (injury.status !== 'active' && injury.status !== 'monitoring')) return base
+  const severity = injury.severity ?? 0
+  const area = injury.area || '관리 부위'
+  if (severity <= 1) return base
+
+  if (severity >= 4) {
+    return {
+      ...base,
+      title: 'Recovery 또는 휴식',
+      injuryAdjusted: true,
+      injuryNote: `${area} 통증 ${severity}/5로 강한 신호입니다. 예정 세션보다 회복주나 휴식을 우선하고, 달리며 악화되면 휴식과 전문가 상담을 먼저 고려하세요.`,
+      reason: `${base.reason} 활성 부상 ${severity}/5로 예정 강도를 보류하고 회복을 우선 추천합니다.`,
+      intensity: `${area} ${severity}/5는 러닝 강도 하향 또는 중단 검토가 필요한 신호입니다. 통증이 가라앉기 전에는 강훈련/롱런을 미루세요.`
+    }
+  }
+
+  if (severity >= 3 && isQualitySessionTitle(base.title)) {
+    return {
+      ...base,
+      title: 'Easy 또는 Recovery',
+      injuryAdjusted: true,
+      injuryNote: `${area} 통증 ${severity}/5로 Tempo·Strides·Steady Long 같은 상위 세션은 보류합니다. 통증이 0~2/5로 가라앉으면 예정 세션으로 복귀하세요.`,
+      reason: `${base.reason} 활성 부상 ${severity}/5라 예정 품질 세션 대신 Easy/Recovery로 낮춰 추천합니다.`,
+      intensity: '심박 안정 위주의 낮은 강도로 진행하고, 통증이 커지면 중단하세요.'
+    }
+  }
+
+  if (severity >= 3) {
+    return {
+      ...base,
+      injuryAdjusted: true,
+      injuryNote: `${area} 통증 ${severity}/5라 강도 상향은 보류합니다. 예정 세션은 유지하되 통증 신호를 보며 보수적으로 진행하세요.`,
+      reason: `${base.reason} 활성 부상 ${severity}/5라 강도 상향은 보류합니다.`
     }
   }
 
   return {
-    title: upcoming.workout || 'Easy + Strides',
-    plannedDate: upcoming.date,
-    dayName: upcoming.dayName,
-    reason: [
-      upcoming.pattern ? `주간 루틴상 다음 세션은 ${upcoming.pattern}입니다.` : '주간 루틴 기준 다음 세션입니다.',
-      getLastRunContextText(lastRun, lastRunSchedule)
-    ].join(' '),
-    intensity: '추천 세션 자체는 주간 훈련 스케줄을 기준으로 안내합니다. 컨디션과 통증 신호가 있으면 강도만 조절하세요.'
+    ...base,
+    injuryAdjusted: true,
+    injuryNote: `${area} 통증 ${severity}/5입니다. 강훈련 전 체크포인트로 통증 변화를 먼저 확인하고, 악화되면 강도를 낮추세요.`,
+    reason: `${base.reason} 활성 부상 ${severity}/5라 강훈련 전 체크포인트를 권합니다.`
   }
+}
+
+function isQualitySessionTitle(title: string): boolean {
+  return qualitySessionKeywords.some((keyword) => title.includes(keyword))
 }
 
 function round(value: number): number {

@@ -340,6 +340,10 @@ function formatDateOnly(value: Date) {
                   <strong>{{ nextSession.title }}</strong>
                   <span>{{ formatDateWithWeekday(nextSession.plannedDate) }} · {{ nextSession.dayName }}</span>
                 </div>
+                <div v-if="nextSession.injuryAdjusted" class="next-session-injury-note">
+                  <strong>부상 조정</strong>
+                  <p>{{ nextSession.injuryNote }}</p>
+                </div>
                 <p>{{ nextSession.reason }}</p>
                 <p class="helper">{{ nextSession.intensity }}</p>
                 <WeatherCard
