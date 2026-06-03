@@ -6026,6 +6026,28 @@ button.run-session-row {
   background: transparent;
 }
 
+.next-session-injury-note {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--color-warning) 12%, var(--color-field));
+  border: 1px solid color-mix(in srgb, var(--color-warning) 40%, transparent);
+}
+
+.next-session-injury-note strong {
+  color: var(--color-warning);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.next-session-injury-note p {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: var(--text-info-line);
+}
+
 .recommendation-card strong {
   color: var(--color-accent);
   font-size: 24px;
