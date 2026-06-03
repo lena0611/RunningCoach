@@ -410,6 +410,9 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     contextMode: selectedRun ? 'selected_run_review' : 'current_flow_review',
     selectedRunTiming,
     selectedRunAgeDays,
+    nextTrainingAdviceRelevant: selectedRunAgeDays !== null && selectedRunAgeDays <= 7 && runsAfterSelected.length === 0,
+    nextTrainingAdvicePolicy:
+      'nextTrainingAdviceRelevant는 이 세션의 "다음 훈련/루틴 업데이트"를 현재 처방으로 줘도 되는지다. 세션이 7일 이내이고(ATL 7일 시간상수 기준) 그 이후 새 기록이 없을 때만 true다. false이면(7일 넘게 지났거나 그 세션 이후 이미 다른 기록이 있으면) 다음 훈련은 그 세션 다음 스텝 회고로 한 줄만 쓰고, 루틴 업데이트는 단일 과거 세션으로 현재 루틴을 판단하지 않는다고 짧게 말한다.',
     anchorDateForWindowStats: anchorDate,
     anchorDateForWindowStatsDisplay: formatDateWithWeekday(anchorDate),
     instructionForDateHandling:
@@ -497,7 +500,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       'chronicLoadTrend는 최근 30일 누적과 직전 30일을 비교한 중장기 부하다. 7일 급성 부하(loadTrend)가 안정적이어도 한 달에 걸쳐 누적이 천천히 spike로 늘었으면 부상 위험과 회복을 보수적으로 본다. 단 부상 예측 공식이 아니라 강도 조절 신호로만 쓴다.',
     coachingDecisionBoard,
     coachingDecisionBoardInstruction:
-      'coachingDecisionBoard는 이번 답변의 판단 보드다. 답변 전에 selectedRunEvidence, lapProcess, prescriptionCompliance, goalProjectionCheck, routineUpdateCheck를 먼저 확인하고, 핵심 지표/오늘 해석/루틴 업데이트에 그 근거를 반영한다. 이 보드와 원본 RunLog가 충돌하면 원본 RunLog를 우선하되, 보드는 설명 구조를 잡는 데 사용한다.',
+      'coachingDecisionBoard는 이번 답변의 판단 보드다. 답변 전에 selectedRunEvidence, lapProcess, prescriptionCompliance, goalProjectionCheck, routineUpdateCheck를 먼저 확인하고, 핵심 지표/해석 섹션/루틴 업데이트에 그 근거를 반영한다. 이 보드와 원본 RunLog가 충돌하면 원본 RunLog를 우선하되, 보드는 설명 구조를 잡는 데 사용한다.',
     injuryItems,
     activeInjuryItem,
     injuryCheckInPolicy,
@@ -533,7 +536,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     selectedRunLapAnalysis,
     selectedRunExecutionGuide,
     lapAnalysisInstruction:
-      'selectedRunLapAnalysis와 selectedRunExecutionGuide가 있으면 반드시 코칭에 반영한다. 핵심 지표에는 페이스 흐름과 심박 흐름을 화살표로 짧게 보여주고, 오늘 해석에는 초반 오버페이스 여부, 심박이 터졌는지/잘 눌렸는지, 세션 유형별 심박/페이스 경계 초과 여부, 후반 페이스-심박 품질을 짚는다. 랩 데이터가 없을 때만 평균값 중심으로 말한다.',
+      'selectedRunLapAnalysis와 selectedRunExecutionGuide가 있으면 반드시 코칭에 반영한다. 핵심 지표에는 페이스 흐름과 심박 흐름을 화살표로 짧게 보여주고, 해석 섹션에는 초반 오버페이스 여부, 심박이 터졌는지/잘 눌렸는지, 세션 유형별 심박/페이스 경계 초과 여부, 후반 페이스-심박 품질을 짚는다. 랩 데이터가 없을 때만 평균값 중심으로 말한다.',
     prescriptionAdjustmentInstruction:
       '선택 세션을 단순 기록이 아니라 이전 처방을 수행한 결과로 본다. selectedRunExecutionGuide에 맞게 훈련했는지 먼저 평가하고, 잘 지켰으면 유지 또는 소폭 상향 조건을 말한다. 경계를 반복적으로 넘었거나 회복/부상 신호가 있으면 다음 처방을 낮추거나 기준을 바꾼다. 조정 필요성이 명확하면 trainingMemoryPatch에 반영한다.',
     recentPrescriptionComplianceSignals,
@@ -663,7 +666,7 @@ function buildCoachInstructions() {
     '숫자는 근거로 쓰되, 사람처럼 해석한다.',
     '핵심 지표는 짧은 목록으로만 보여준다. 문장 속에 숫자를 길게 묻지 않는다.',
     'context.coachingDecisionBoard는 이번 답변의 판단 보드다. 답변 전에 selectedRunEvidence, lapProcess, prescriptionCompliance, goalProjectionCheck, routineUpdateCheck를 먼저 확인한다.',
-    'coachingDecisionBoard.lapProcess가 있으면 평균값만 반복하지 말고, 페이스 흐름/심박 흐름/전후반 변화/초반 통제 여부를 핵심 지표와 오늘 해석에 넣는다.',
+    'coachingDecisionBoard.lapProcess가 있으면 평균값만 반복하지 말고, 페이스 흐름/심박 흐름/전후반 변화/초반 통제 여부를 핵심 지표와 해석 섹션에 넣는다.',
     'coachingDecisionBoard.prescriptionCompliance는 세션별 처방 준수 판정이다. "잘했다/아쉽다"가 아니라 어떤 경계를 지켰거나 넘겼는지 말한다.',
     'coachingDecisionBoard.goalProjectionCheck는 목표 예상과 루틴 상향 가능성을 보는 보조 근거다. 예측값 하나만 믿지 말고 역치훈련, Easy 기반, Long Run 지속성, 회복/부상 게이트와 함께 본다.',
     'coachingDecisionBoard.routineUpdateCheck는 루틴 유지/상향/하향/보류 결론의 초안이다. "## 루틴 업데이트"에서는 이 결론과 근거를 1~3개만 짧게 말한다.',
@@ -699,7 +702,7 @@ function buildCoachInstructions() {
     'Long Run/LSD/Steady Long에서는 후반 페이스 급락, 심박 드리프트, 전후반 심박 차이를 보고 지속성과 품질을 말한다.',
     '답변 우선순위는 오늘 세션의 정체, 사용자가 의도한 훈련과 맞는지, 중요한 지표 2~3개, 최근 맥락, 조심할 점, 다음 훈련 순서다.',
     '모든 데이터를 다 설명하지 말고 오늘 기록에서 가장 중요한 의미 1개를 먼저 말한다.',
-    '답변 구조는 가능한 한 다음 순서를 따른다: 반응, 핵심 지표, 오늘 해석, 조심할 점, 다음 훈련, 루틴 업데이트, 한 줄 요약.',
+    '답변 구조는 가능한 한 다음 순서를 따른다: 반응, 핵심 지표, (오늘 또는 세션) 해석, 조심할 점, 다음 훈련, 루틴 업데이트, 한 줄 요약. 해석 섹션 제목은 selectedRunTiming이 today/yesterday이거나 현재 흐름이면 "## 오늘 해석", past이면 "## 세션 해석"으로 쓴다.',
     '전체 report는 기본 600~900자 안팎으로 제한한다. 한 문단은 최대 2문장으로 짧게 쓴다.',
     '각 섹션 bullet은 최대 5개로 제한한다.',
     '답변이 텍스트 문단만 길게 이어지지 않게 한다. 답변마다 필요에 따라 표, 인용문, 짧은 코드블록 중 1~2개만 섞는다.',
@@ -715,7 +718,8 @@ function buildCoachInstructions() {
     '대신 이렇게 말한다: "이건 ~로 보는 게 맞다", "오늘은 ~가 제일 좋다", "지금은 ~만 보면 된다", "이 정도면 잘 눌렀다", "데이터도 그걸 보여준다".',
     '반드시 currentDateDisplay, selectedRun.dateDisplay, selectedRunTiming을 확인한 뒤 말한다.',
     'report에 날짜를 쓸 때는 가능한 한 2026-05-24(일)처럼 요일을 붙인다.',
-    'selectedRunTiming이 past이면 "오늘", "방금", "이번 훈련 이후"처럼 현재 훈련처럼 보이는 표현을 쓰지 말고, 과거 기록을 복기하는 톤으로 말한다.',
+    'selectedRunTiming이 past이면 "오늘", "방금", "이번 훈련 이후"처럼 현재 훈련처럼 보이는 표현을 쓰지 말고, 과거 기록을 복기하는 톤으로 말한다. 해석 섹션 제목도 "오늘 해석"이 아니라 "세션 해석"으로 쓴다.',
+    'nextTrainingAdviceRelevant가 false이면 "다음 훈련"과 "루틴 업데이트"를 현재 처방으로 단정하지 않는다. "다음 훈련"은 "그 세션 다음에는 ~로 갔으면 좋았다"처럼 그 시점 다음 스텝 회고 한 줄로 줄이고, "루틴 업데이트"는 "이 과거 세션 하나로 지금 루틴을 바꾸거나 유지로 단정하지 않는다"처럼 짧게 말한다. nextTrainingAdviceRelevant가 true이면(세션이 7일 이내이고 그 이후 새 기록이 없으면) 기존처럼 현재 처방으로 다음 훈련/루틴을 제안한다.',
     'coach_reports.created_at이나 최근 코칭 시각을 훈련 날짜로 착각하지 않는다. 마지막 코칭 이후에 뛴 기록이라고 단정하지 않는다.',
     'currentWeather는 현재/다음 세션 준비용 날씨다. 과거 RunLog 평가에서는 해당 과거 훈련의 날씨로 쓰지 않는다.',
     'currentWeather가 있고 사용자가 다음 훈련, 오늘 러닝, 강도 조절을 묻는 경우 체감온도, 강수확률, 강수량, 비 가능 시간대를 짧게 반영한다.',
