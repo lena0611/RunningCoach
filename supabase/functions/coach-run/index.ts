@@ -400,7 +400,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     coachBeliefs,
     runningAnalysisEngine
   })
-  const injuryCheckInPolicy = buildInjuryCheckInPolicy(activeInjuryItem)
+  const injuryCheckInPolicy = buildInjuryCheckInPolicy(activeInjuryItem, selectedRunInjuryContext(selectedRun))
 
   return {
     userNote,
@@ -1799,7 +1799,7 @@ function buildCoachingDecisionBoard(args: {
   const selectedCompliance = args.selectedRun
     ? classifyPrescriptionCompliance(args.selectedRun, args.selectedRunLapAnalysis)
     : 'no_selected_run'
-  const injuryCheck = buildInjuryCheckEvidence(args.activeInjuryItem)
+  const injuryCheck = buildInjuryCheckEvidence(args.activeInjuryItem, selectedRunInjuryContext(args.selectedRun))
 
   return {
     purpose:
@@ -1853,7 +1853,7 @@ function buildCoachingDecisionBoard(args: {
   }
 }
 
-function buildInjuryCheckInPolicy(activeInjuryItem: unknown) {
+function buildInjuryCheckInPolicy(activeInjuryItem: unknown, selectedRunContext?: { date: string; timing: string }) {
   return {
     active: Boolean(activeInjuryItem),
     painScale:
@@ -1868,11 +1868,37 @@ function buildInjuryCheckInPolicy(activeInjuryItem: unknown) {
       '보강운동은 치료 처방이 아니라 러닝 부하 조절 보조다. strengthPlanDetails의 useWhen/stopWhen/source 요약을 짧게 반영하고, 통증 0~2/5에서만 수행하도록 말한다.',
     approvalPolicy:
       'AI는 injuryItems를 자동 갱신하지 않는다. 통증 변경, monitoring/resolved 후보, 완치 후보는 injuryUpdateProposal로만 반환하고 사용자가 승인해야 저장된다.',
-    activeInjuryEvidence: buildInjuryCheckEvidence(activeInjuryItem)
+    activeInjuryEvidence: buildInjuryCheckEvidence(activeInjuryItem, selectedRunContext)
   }
 }
 
-function buildInjuryCheckEvidence(activeInjuryItem: unknown) {
+type InjuryCheckEvidence = {
+  available: boolean
+  instruction?: string
+  id?: string
+  title?: string
+  status?: string
+  maxPainLevel?: number | null
+  pointInTimeUnknown?: boolean
+  pointInTime?: { basis: string; checkedAt: string; painLevel: number | null }
+  intensityGuidance?: string
+  areaPainLevels?: Array<{ areaId: string; painLevel: number | null }>
+  latestCheckIn?: {
+    checkedAt: string
+    painLevel: number | null
+    worsenedDuringOrAfterRun: boolean | null
+    dailyActivityPain: boolean | null
+    readyForQualitySession: boolean | null
+    note: string
+  } | null
+  restrictions?: string[]
+  returnToRunCriteria?: string
+  strengthPlan?: string[]
+  strengthPlanDetails?: unknown[]
+  updateProposalGuidance?: string
+}
+
+function buildInjuryCheckEvidence(activeInjuryItem: unknown, selectedRunContext?: { date: string; timing: string }): InjuryCheckEvidence {
   if (!activeInjuryItem || typeof activeInjuryItem !== 'object') {
     return {
       available: false,
@@ -1881,6 +1907,54 @@ function buildInjuryCheckEvidence(activeInjuryItem: unknown) {
   }
 
   const item = activeInjuryItem as Record<string, unknown>
+  const strengthPlanDetails = Array.isArray(item.strengthPlanDetails) ? item.strengthPlanDetails : []
+  const strengthPlan = Array.isArray(item.strengthPlan) ? item.strengthPlan : []
+  const sharedFields = {
+    id: typeof item.id === 'string' ? item.id : '',
+    title: typeof item.title === 'string' ? item.title : '',
+    status: typeof item.status === 'string' ? item.status : '',
+    restrictions: normalizeStringArray(item.restrictions, 8, 180),
+    returnToRunCriteria: readString(item.returnToRunCriteria).slice(0, 300),
+    strengthPlan: strengthPlan.filter((entry): entry is string => typeof entry === 'string').slice(0, 6),
+    strengthPlanDetails: strengthPlanDetails.map(formatStrengthPlanDetailForCoach).filter(Boolean).slice(0, 6),
+    updateProposalGuidance:
+      '상태 변경은 자동 저장하지 않는다. 0~1/5가 반복되고 일상/러닝/강훈련 뒤 조용한 경우에만 resolved 후보를, 그 외 통증 변화는 check_in_update 후보를 injuryUpdateProposal로 반환한다.'
+  }
+
+  // 과거 세션 코칭: 그 시점 통증을 checkInHistory에서 찾고, 없으면 판단 불가로 둔다(현재 통증 소급 금지).
+  if (selectedRunContext && selectedRunContext.timing === 'past') {
+    const pit = findPointInTimeCheckIn(item, selectedRunContext.date)
+    if (!pit) {
+      return {
+        available: true,
+        ...sharedFields,
+        maxPainLevel: null,
+        pointInTimeUnknown: true,
+        intensityGuidance: '이 세션 당시의 부상 통증 정보가 없습니다. 현재 통증을 과거 세션에 소급 적용하지 말고, 그때 부상이 어땠는지는 알 수 없다고 밝힌 뒤 일반 회복 신호와 pain_note로만 보조 판단하세요.',
+        instruction: '과거 세션 시점 부상 통증 정보 없음 — 강도 단정 불가. 현재 active 부상 통증을 이 과거 세션 평가에 적용하지 않는다.'
+      }
+    }
+    const pitAreaPainLevels = normalizePitAreaPainLevels(pit)
+    const pitCandidates = [
+      ...pitAreaPainLevels.map((area) => area.painLevel),
+      normalizePainLevelValue(pit.painLevel)
+    ].filter((value): value is number => value !== null)
+    const pitMaxPainLevel = pitCandidates.length ? Math.max(...pitCandidates) : null
+    return {
+      available: true,
+      ...sharedFields,
+      maxPainLevel: pitMaxPainLevel,
+      pointInTime: {
+        basis: 'closest_checkin_after_session',
+        checkedAt: readString(pit.checkedAt),
+        painLevel: normalizePainLevelValue(pit.painLevel)
+      },
+      intensityGuidance: `${describePainLevelGuidance(pitMaxPainLevel)} 이 값은 세션 직후 체크인 기준의 당시 추정 통증이며, 현재 통증이 아닙니다.`,
+      areaPainLevels: pitAreaPainLevels,
+      instruction: '과거 세션 시점에 가장 가까운 체크인 통증을 사용한다. 현재 통증으로 과거를 소급 판단하지 않는다.'
+    }
+  }
+
   const normalizedAreas = Array.isArray(item.normalizedAreas) ? item.normalizedAreas : []
   const areaPainLevels = normalizedAreas
     .map((area) => {
@@ -1899,14 +1973,10 @@ function buildInjuryCheckEvidence(activeInjuryItem: unknown) {
   ].filter((value): value is number => value !== null)
   const maxPainLevel = painCandidates.length ? Math.max(...painCandidates) : null
   const latestCheckIn = getLatestCheckIn(item)
-  const strengthPlanDetails = Array.isArray(item.strengthPlanDetails) ? item.strengthPlanDetails : []
-  const strengthPlan = Array.isArray(item.strengthPlan) ? item.strengthPlan : []
 
   return {
     available: true,
-    id: typeof item.id === 'string' ? item.id : '',
-    title: typeof item.title === 'string' ? item.title : '',
-    status: typeof item.status === 'string' ? item.status : '',
+    ...sharedFields,
     maxPainLevel,
     intensityGuidance: describePainLevelGuidance(maxPainLevel),
     areaPainLevels,
@@ -1919,14 +1989,38 @@ function buildInjuryCheckEvidence(activeInjuryItem: unknown) {
           readyForQualitySession: typeof latestCheckIn.readyForQualitySession === 'boolean' ? latestCheckIn.readyForQualitySession : null,
           note: readString(latestCheckIn.note)
         }
-      : null,
-    restrictions: normalizeStringArray(item.restrictions, 8, 180),
-    returnToRunCriteria: readString(item.returnToRunCriteria).slice(0, 300),
-    strengthPlan: strengthPlan.filter((entry): entry is string => typeof entry === 'string').slice(0, 6),
-    strengthPlanDetails: strengthPlanDetails.map(formatStrengthPlanDetailForCoach).filter(Boolean).slice(0, 6),
-    updateProposalGuidance:
-      '상태 변경은 자동 저장하지 않는다. 0~1/5가 반복되고 일상/러닝/강훈련 뒤 조용한 경우에만 resolved 후보를, 그 외 통증 변화는 check_in_update 후보를 injuryUpdateProposal로 반환한다.'
+      : null
   }
+}
+
+function selectedRunInjuryContext(selectedRun: RunLogRow | null): { date: string; timing: string } | undefined {
+  if (!selectedRun) return undefined
+  return { date: selectedRun.date, timing: describeTiming(diffDays(selectedRun.date, currentDateInSeoul())) }
+}
+
+function findPointInTimeCheckIn(item: Record<string, unknown>, sessionDate: string): Record<string, unknown> | null {
+  const history = Array.isArray(item.checkInHistory) ? item.checkInHistory : []
+  const sessionDay = sessionDate.slice(0, 10)
+  const candidates = history
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object')
+    .map((entry) => ({ entry, day: readString(entry.checkedAt).slice(0, 10) }))
+    .filter((row) => row.day && row.day >= sessionDay && diffDays(sessionDate, row.day) <= 10)
+    .sort((a, b) => a.day.localeCompare(b.day))
+  return candidates[0]?.entry ?? null
+}
+
+function normalizePitAreaPainLevels(checkIn: Record<string, unknown>) {
+  const areas = Array.isArray(checkIn.areaPainLevels) ? checkIn.areaPainLevels : []
+  return areas
+    .map((area) => {
+      if (!area || typeof area !== 'object') return null
+      const record = area as Record<string, unknown>
+      return {
+        areaId: typeof record.areaId === 'string' ? record.areaId : '',
+        painLevel: normalizePainLevelValue(record.painLevel)
+      }
+    })
+    .filter((area): area is { areaId: string; painLevel: number | null } => Boolean(area))
 }
 
 function getLatestCheckIn(item: Record<string, unknown>) {
@@ -2206,7 +2300,7 @@ function buildRoutineUpdateEvidence(args: {
   const selectedSignal = args.selectedRun
     ? args.recentPrescriptionComplianceSignals.find((signal) => signal.id === args.selectedRun?.id) ?? null
     : null
-  const injuryEvidence = buildInjuryCheckEvidence(args.activeInjuryItem)
+  const injuryEvidence = buildInjuryCheckEvidence(args.activeInjuryItem, selectedRunInjuryContext(args.selectedRun))
   const injuryPainLevel = injuryEvidence.available ? injuryEvidence.maxPainLevel ?? null : null
   const hasActiveInjury = injuryEvidence.available
   const projection = args.performanceProjection
@@ -2317,7 +2411,7 @@ function buildRunningAnalysisEngine(args: {
   const selectedCompliance = args.selectedRun
     ? args.recentPrescriptionComplianceSignals.find((signal) => signal.id === args.selectedRun?.id)?.compliance ?? 'unknown'
     : 'unknown'
-  const injuryEvidence = buildInjuryCheckEvidence(args.activeInjuryItem)
+  const injuryEvidence = buildInjuryCheckEvidence(args.activeInjuryItem, selectedRunInjuryContext(args.selectedRun))
   const activePainLevel = injuryEvidence.available ? injuryEvidence.maxPainLevel ?? null : null
   const hrDriftBpm = hasAvailableLapAnalysis(args.selectedRunLapAnalysis)
     ? args.selectedRunLapAnalysis.heartRateDriftBpmSecondHalfMinusFirstHalf ?? null
