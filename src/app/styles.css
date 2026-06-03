@@ -5653,6 +5653,91 @@ button.run-session-row {
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
 }
 
+.injury-screening-layer {
+  z-index: var(--z-confirm-sheet);
+}
+
+.injury-screening-sheet {
+  gap: 12px;
+  max-height: min(80vh, 640px);
+}
+
+.injury-screening-sheet .bottom-sheet-heading > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.injury-screening-sheet h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 22px;
+  line-height: 1.25;
+  word-break: keep-all;
+}
+
+.injury-screening-content {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.injury-screening-content p {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-body-size);
+  line-height: var(--text-info-line);
+}
+
+.injury-screening-content p.helper {
+  color: var(--color-muted);
+  font-size: 14px;
+}
+
+.injury-screening-choices {
+  display: grid;
+  gap: 10px;
+}
+
+.injury-screening-choice {
+  display: grid;
+  gap: 3px;
+  min-height: 64px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  text-align: left;
+}
+
+.injury-screening-choice strong {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.injury-screening-choice span {
+  font-size: 13px;
+  font-weight: 650;
+  opacity: 0.85;
+}
+
+.injury-screening-benefits {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--color-text);
+  font-size: 14px;
+  line-height: var(--text-info-line);
+}
+
+.injury-screening-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 9px;
+}
+
 .goal-intent-card {
   display: grid;
   gap: 8px;

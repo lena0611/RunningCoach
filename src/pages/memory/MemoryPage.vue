@@ -279,6 +279,11 @@ function openRoutePanel() {
     return
   }
   if (target === 'injuries' && panel.value !== 'injuries') {
+    if (route.query.new === '1') {
+      stack.value = ['injuries']
+      openInjuryNew()
+      return
+    }
     stack.value = ['injuries']
   }
 }
