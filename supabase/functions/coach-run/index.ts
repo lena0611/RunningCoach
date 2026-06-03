@@ -630,6 +630,29 @@ type CoachAiResult = {
   injuryUpdateProposal: InjuryUpdateProposal | null
 }
 
+// 과거 세션 리뷰(selected_run_review)이고 nextTrainingAdviceRelevant=false면
+// LLM이 지침을 어기고 넣은 "## 다음 훈련"·"## 루틴 업데이트" 섹션을 코드로 제거한다.
+// 현재 흐름 코칭(current_flow_review)은 selectedRun이 없어 relevant=false여도 제거하지 않는다.
+function shouldStripPastSections(context: unknown): boolean {
+  if (!context || typeof context !== 'object') return false
+  const record = context as Record<string, unknown>
+  return record.contextMode === 'selected_run_review' && record.nextTrainingAdviceRelevant === false
+}
+
+function stripPastSessionSections(report: string): string {
+  if (!report) return report
+  return report
+    .replace(/\n*##\s*다음 훈련[\s\S]*?(?=\n##\s|\s*$)/g, '')
+    .replace(/\n*##\s*루틴 업데이트[\s\S]*?(?=\n##\s|\s*$)/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function applyPastSectionPolicy(ai: CoachAiResult, context: unknown): CoachAiResult {
+  if (!shouldStripPastSections(context)) return ai
+  return { ...ai, report: stripPastSessionSections(ai.report) }
+}
+
 async function callOpenAI(apiKey: string, model: string, context: unknown): Promise<CoachAiResult> {
   const instructions = buildCoachInstructions()
 
@@ -650,7 +673,7 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
   if (!response.ok) throw new Error(`OpenAI API failed: ${response.status}`)
   const payload = await response.json()
   const text = extractOpenAIResponseText(payload)
-  return parseCoachAiText(text)
+  return applyPastSectionPolicy(parseCoachAiText(text), context)
 }
 
 function buildCoachInstructions() {
@@ -1094,6 +1117,7 @@ async function callOpenAIStream(
   const decoder = new TextDecoder()
   const reader = response.body.getReader()
   const reportExtractor = createReportStreamExtractor()
+  const stripSections = shouldStripPastSections(context)
   let sseBuffer = ''
   let fullText = ''
   let completedText = ''
@@ -1109,7 +1133,8 @@ async function callOpenAIStream(
     const reportDelta = reportExtractor.push(delta)
     if (!reportDelta) return
     streamedReport += reportDelta
-    onReportDelta(reportDelta)
+    // 과거 세션(strip 대상)은 섹션이 잘릴 수 있어 실시간 델타를 흘리지 않고 끝에 정리본을 한 번에 보낸다.
+    if (!stripSections) onReportDelta(reportDelta)
   }
 
   while (true) {
@@ -1128,6 +1153,11 @@ async function callOpenAIStream(
   }
 
   const ai = parseCoachAiText(completedText || fullText, streamedReport)
+  if (stripSections) {
+    const cleaned = stripPastSessionSections(ai.report)
+    onReportDelta(cleaned)
+    return { ...ai, report: cleaned }
+  }
   if (!streamedReport) {
     onReportDelta(ai.report)
   } else if (ai.report.startsWith(streamedReport) && ai.report.length > streamedReport.length) {
