@@ -86,6 +86,65 @@ export function getVolumeWarning(runs: RunLog[], today = new Date()): string {
   return '급격한 볼륨 증가는 보이지 않습니다.'
 }
 
+export type ChronicLoadStatus = 'spike' | 'rising' | 'stable' | 'unknown'
+
+export type ChronicLoadTrend = {
+  status: ChronicLoadStatus
+  increasePct: number | null
+  last30Km: number
+  prev30Km: number
+  spikeThreshold: number
+  risingThreshold: number
+}
+
+const chronicLoadMinBaselineKm = 15
+
+// birthYear로 나이대 가중치를 만든다. 0(<40) / 1(40대) / 2(50대) / 3(60+). 미입력/비현실 값은 0.
+export function getAgeLoadWeight(birthYear: number | null | undefined, today = new Date()): number {
+  if (typeof birthYear !== 'number' || !Number.isFinite(birthYear)) return 0
+  const age = today.getFullYear() - birthYear
+  if (age < 18 || age > 100) return 0
+  if (age < 40) return 0
+  if (age < 50) return 1
+  if (age < 60) return 2
+  return 3
+}
+
+// 최근 30일 누적과 직전 30일(31~60일) 누적을 비교한 중장기 부하 추세.
+// 나이대가 높을수록 경고 임계값을 낮춰 더 보수적으로 본다.
+export function getChronicLoadTrend(runs: RunLog[], today = new Date(), ageWeight = 0): ChronicLoadTrend {
+  const last30Runs = getRunsWithinDays(runs, 30, today)
+  const last30Km = round(sumDistance(last30Runs))
+  const prev30Km = round(
+    sumDistance(getRunsWithinDays(runs, 60, today).filter((run) => !last30Runs.some((recent) => recent.id === run.id)))
+  )
+  const spikeThreshold = 50 - ageWeight * 5
+  const risingThreshold = 30 - ageWeight * 3
+
+  if (prev30Km < chronicLoadMinBaselineKm) {
+    return { status: 'unknown', increasePct: null, last30Km, prev30Km, spikeThreshold, risingThreshold }
+  }
+
+  const increasePct = Math.round(((last30Km - prev30Km) / prev30Km) * 100)
+  const status: ChronicLoadStatus = increasePct >= spikeThreshold ? 'spike' : increasePct >= risingThreshold ? 'rising' : 'stable'
+  return { status, increasePct, last30Km, prev30Km, spikeThreshold, risingThreshold }
+}
+
+// 7일 급성 경고와 30일 중장기 경고를 합쳐 요약 피로 카드용 한 줄을 만든다.
+export function getFatigueWarning(runs: RunLog[], today = new Date(), ageWeight = 0): { caution: boolean; message: string } {
+  const chronic = getChronicLoadTrend(runs, today, ageWeight)
+  const acute = getVolumeWarning(runs, today)
+  const acuteCaution = !acute.startsWith('급격한 볼륨 증가는 보이지 않습니다')
+  if (chronic.status === 'spike') {
+    return { caution: true, message: `최근 30일 누적 ${chronic.last30Km}km로 이전 30일(${chronic.prev30Km}km) 대비 ${chronic.increasePct}% 증가했습니다. 회복 주간을 고려하세요.` }
+  }
+  if (acuteCaution) return { caution: true, message: acute }
+  if (chronic.status === 'rising') {
+    return { caution: true, message: `최근 30일 누적이 이전 30일 대비 ${chronic.increasePct}% 늘고 있습니다. 증가 속도를 관찰하세요.` }
+  }
+  return { caution: false, message: '급격한 볼륨 증가는 보이지 않습니다.' }
+}
+
 export function getLatestByTypes(runs: RunLog[], types: RunType[]): RunLog | null {
   return [...runs].sort((a, b) => b.date.localeCompare(a.date)).find((run) => types.includes(run.type)) ?? null
 }
@@ -98,6 +157,8 @@ export type NextSessionRecommendation = {
   dayName: string
   injuryAdjusted: boolean
   injuryNote: string
+  loadCaution: boolean
+  loadNote: string
 }
 
 const qualitySessionKeywords = ['Tempo', 'Interval', 'LSD', 'Steady Long', 'Race', 'Strides', 'Threshold', 'Repetition']
@@ -123,7 +184,9 @@ export function getNextSessionRecommendation(memory: TrainingMemory, runs: RunLo
       ].join(' '),
       intensity: describeLongRunIntensity(longType, recentLong),
       injuryAdjusted: false,
-      injuryNote: ''
+      injuryNote: '',
+      loadCaution: false,
+      loadNote: ''
     }
   } else {
     base = {
@@ -136,11 +199,44 @@ export function getNextSessionRecommendation(memory: TrainingMemory, runs: RunLo
       ].join(' '),
       intensity: '추천 세션 자체는 주간 훈련 스케줄을 기준으로 안내합니다. 컨디션과 통증 신호가 있으면 강도만 조절하세요.',
       injuryAdjusted: false,
-      injuryNote: ''
+      injuryNote: '',
+      loadCaution: false,
+      loadNote: ''
     }
   }
 
-  return applyInjuryGate(base, getActiveInjuryItem(memory))
+  const injury = getActiveInjuryItem(memory)
+  const ageWeight = getAgeLoadWeight(memory.athleteProfile.birthYear, today)
+  const chronic = getChronicLoadTrend(runs, today, ageWeight)
+  return applyChronicLoad(applyInjuryGate(base, injury), chronic, injury, ageWeight)
+}
+
+function applyChronicLoad(
+  rec: NextSessionRecommendation,
+  chronic: ChronicLoadTrend,
+  injury: TrainingInjuryItem | null,
+  ageWeight: number
+): NextSessionRecommendation {
+  if (chronic.status !== 'spike' && chronic.status !== 'rising') return rec
+  const agePrefix = ageWeight >= 2 ? '나이대를 고려해 더 보수적으로 봅니다. ' : ''
+  const trendText = `최근 30일 누적 ${chronic.last30Km}km로 이전 30일(${chronic.prev30Km}km) 대비 ${chronic.increasePct}% ${chronic.status === 'spike' ? '급증' : '증가'}했습니다.`
+
+  if (chronic.status === 'rising') {
+    return {
+      ...rec,
+      loadCaution: true,
+      loadNote: `${agePrefix}${trendText} 부상 예측은 아니지만 증가 속도를 관찰하며 강도 상향은 천천히 가져가세요.`
+    }
+  }
+
+  // spike: 부하 급증은 보수적 경고로만 쓴다. 강도 강제 하향은 부상 게이트(통증)가 담당하고,
+  // 여기서는 통증과 겹칠 때 문구만 강화한다.
+  const severity = injury && (injury.status === 'active' || injury.status === 'monitoring') ? injury.severity ?? 0 : 0
+  const note = severity >= 2
+    ? `${agePrefix}${trendText} 활성 통증 ${severity}/5와 겹쳐 다음 한 주기는 회복과 강도 유지를 우선하세요.`
+    : `${agePrefix}${trendText} 부상 예측은 아니지만 회복주를 넣거나 다음 주기 거리 증가를 멈추는 편이 안전합니다.`
+
+  return { ...rec, loadCaution: true, loadNote: note }
 }
 
 function applyInjuryGate(base: NextSessionRecommendation, injury: TrainingInjuryItem | null): NextSessionRecommendation {

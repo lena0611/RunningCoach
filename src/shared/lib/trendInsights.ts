@@ -1,7 +1,7 @@
 import type { RunLog, RunType } from '@/entities/run/model'
 import { getActiveGoal, getActiveInjuryItem, type TrainingMemory } from '@/entities/training-memory/model'
 import { formatDuration, formatPace } from '@/shared/lib/format'
-import { getEasyRatio, getRunsWithinDays, sumDistance } from '@/shared/lib/runStats'
+import { getAgeLoadWeight, getEasyRatio, getRunsWithinDays, sumDistance } from '@/shared/lib/runStats'
 import { getRaceProjection } from '@/shared/lib/performanceProjection'
 
 export type TrendLensKey = 'goal' | 'efficiency' | 'intensity' | 'quality' | 'recovery'
@@ -204,7 +204,7 @@ function buildTrendOverallSummaryFromResults(input: Omit<TrendInput, 'lens'>, le
 
 function buildGoalLens(runs: RunLog[], memory: TrainingMemory, today: Date): TrendLensResult {
   const activeGoal = getActiveGoal(memory)
-  const projection = getRaceProjection(runs, activeGoal, today, getActiveInjuryItem(memory))
+  const projection = getRaceProjection(runs, activeGoal, today, getActiveInjuryItem(memory), getAgeLoadWeight(memory.athleteProfile.birthYear, today))
   if (!activeGoal || !projection) {
     return emptyResult('goal', '목표 신호 부족', '활성 목표와 품질 세션이 더 쌓이면 목표 진전 추세를 계산합니다.')
   }

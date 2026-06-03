@@ -364,6 +364,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     latestTempo: summarizeRunForCoach(latestTempo),
     latestLong: summarizeRunForCoach(latestLong)
   }
+  const athleteAgeWeight = getAgeLoadWeightForCoach(trainingMemory, currentDate)
   const runningAnalysisEngine = buildRunningAnalysisEngine({
     runRows,
     selectedRun,
@@ -372,7 +373,8 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     prescriptionComplianceSummary,
     summaryStats,
     activeInjuryItem,
-    activeGoal
+    activeGoal,
+    ageWeight: athleteAgeWeight
   })
   const runnerIdentity = getRunnerIdentity(trainingMemory)
   const coachBeliefs = selectRelevantCoachBeliefs(getCoachBeliefs(trainingMemory), {
@@ -490,7 +492,9 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     },
     runningAnalysisEngine,
     runningAnalysisEngineInstruction:
-      'runningAnalysisEngine은 코드가 먼저 계산한 훈련 판단이다. AI는 이 값을 재계산하지 말고 설명과 처방 언어로 번역한다. 단일 세션 감상보다 hrDrift/loadTrend/recoveryStatus/injuryRisk/overtrainingWarning/trainingSuitabilityScore를 우선 확인한다.',
+      'runningAnalysisEngine은 코드가 먼저 계산한 훈련 판단이다. AI는 이 값을 재계산하지 말고 설명과 처방 언어로 번역한다. 단일 세션 감상보다 hrDrift/loadTrend/chronicLoadTrend/recoveryStatus/injuryRisk/overtrainingWarning/trainingSuitabilityScore를 우선 확인한다.',
+    chronicLoadTrendInstruction:
+      'chronicLoadTrend는 최근 30일 누적과 직전 30일을 비교한 중장기 부하다. 7일 급성 부하(loadTrend)가 안정적이어도 한 달에 걸쳐 누적이 천천히 spike로 늘었으면 부상 위험과 회복을 보수적으로 본다. 단 부상 예측 공식이 아니라 강도 조절 신호로만 쓴다.',
     coachingDecisionBoard,
     coachingDecisionBoardInstruction:
       'coachingDecisionBoard는 이번 답변의 판단 보드다. 답변 전에 selectedRunEvidence, lapProcess, prescriptionCompliance, goalProjectionCheck, routineUpdateCheck를 먼저 확인하고, 핵심 지표/오늘 해석/루틴 업데이트에 그 근거를 반영한다. 이 보드와 원본 RunLog가 충돌하면 원본 RunLog를 우선하되, 보드는 설명 구조를 잡는 데 사용한다.',
@@ -778,6 +782,7 @@ function buildCoachInstructions() {
     '루틴 업데이트 섹션에서는 이대로 activeGoal을 향해 가도 되는지, 주간 루틴을 유지할지, 변경이 필요한 시점인지 한두 문장으로 말한다.',
     '유지가 맞으면 "루틴은 유지"라고 짧게 말하고 trainingMemoryPatch는 null로 둔다. 조정이 필요하면 weeklyPattern 전체를 업데이트한다.',
     '매 코칭 요청마다 부상/주의 상태도 확인한다. pain_note, activeInjuryItem, 최근 강훈련/롱런 이후 회복 반응을 보고 다음 세션 강도에 반영하되 의료 진단처럼 말하지 않는다.',
+    'chronicLoadTrend.ageWeight가 1 이상이면 나이대를 고려해 회복을 더 보수적으로 본다(40대 1, 50대 2, 60대+ 3). 나이가 많을수록 같은 부하 증가에도 회복 여유를 더 주고 강도 상향을 천천히 권한다. 단 나이를 이유로 단정적으로 제한하지 말고 회복 보수성 근거로만 쓴다.',
     '루틴 변경이 필요 없으면 trainingMemoryPatch는 null로 둔다.',
     '루틴 변경이 필요하면 trainingMemoryPatch.weeklyPattern에 새 주간 루틴을 전체 배열로 넣는다. 일부만 넣지 말고 전체 주간 패턴을 반환한다.',
     '루틴 변경이 activeGoal의 목표관리에도 반영되어야 하면 trainingMemoryPatch.activeGoalStrategyNotes에 활성 목표의 새 strategyNotes 문장을 넣는다. 이 값은 activeGoal.strategyNotes에 저장된다.',
@@ -2276,10 +2281,12 @@ function buildRunningAnalysisEngine(args: {
   summaryStats: SummaryStatsForCoaching
   activeInjuryItem: unknown
   activeGoal: unknown
+  ageWeight: number
 }) {
-  const recent7 = withinDaysFromAnchor(args.runRows, 7, args.selectedRun?.date ?? currentDateInSeoul())
+  const anchorForLoad = args.selectedRun?.date ?? currentDateInSeoul()
+  const recent7 = withinDaysFromAnchor(args.runRows, 7, anchorForLoad)
   const previous7 = args.runRows.filter((run) => {
-    const anchor = args.selectedRun?.date ?? currentDateInSeoul()
+    const anchor = anchorForLoad
     const days = diffDays(run.date, anchor)
     return days > 7 && days <= 14
   })
@@ -2288,6 +2295,25 @@ function buildRunningAnalysisEngine(args: {
   const loadIncreasePct = previous7DistanceKm > 0
     ? Math.round(((recent7DistanceKm - previous7DistanceKm) / previous7DistanceKm) * 100)
     : null
+
+  // 중장기 부하: 최근 30일 vs 직전 30일(31~60일). 나이대가 높으면 경고 임계값을 낮춘다.
+  const last30Runs = withinDaysFromAnchor(args.runRows, 30, anchorForLoad)
+  const last30Ids = new Set(last30Runs.map((run) => run.id))
+  const prev30Runs = withinDaysFromAnchor(args.runRows, 60, anchorForLoad).filter((run) => !last30Ids.has(run.id))
+  const last30DistanceKm = sumDistance(last30Runs)
+  const prev30DistanceKm = sumDistance(prev30Runs)
+  const chronicSpikeThreshold = 50 - args.ageWeight * 5
+  const chronicRisingThreshold = 30 - args.ageWeight * 3
+  const chronicLoadIncreasePct = prev30DistanceKm >= 15
+    ? Math.round(((last30DistanceKm - prev30DistanceKm) / prev30DistanceKm) * 100)
+    : null
+  const chronicLoadStatus: 'spike' | 'rising' | 'stable' | 'unknown' = chronicLoadIncreasePct === null
+    ? 'unknown'
+    : chronicLoadIncreasePct >= chronicSpikeThreshold
+      ? 'spike'
+      : chronicLoadIncreasePct >= chronicRisingThreshold
+        ? 'rising'
+        : 'stable'
   const selectedCompliance = args.selectedRun
     ? args.recentPrescriptionComplianceSignals.find((signal) => signal.id === args.selectedRun?.id)?.compliance ?? 'unknown'
     : 'unknown'
@@ -2332,13 +2358,14 @@ function buildRunningAnalysisEngine(args: {
   if (!selectedRun && !injuryEvidence.available) injuryRisk = 'unknown'
   if (activePainLevel !== null && activePainLevel >= 3) injuryRisk = 'high'
   else if (activePainLevel !== null && activePainLevel >= 2) injuryRisk = 'watch'
-  else if (painNote || loadStatus === 'spike') injuryRisk = 'watch'
+  else if (painNote || loadStatus === 'spike' || chronicLoadStatus === 'spike') injuryRisk = 'watch'
   if (activePainLevel !== null && activePainLevel >= 4) injuryRisk = 'high'
 
   let overtrainingWarning: 'none' | 'watch' | 'warning' = 'none'
   const pressureCount = [
     args.summaryStats.hardSessionsLast7 >= 3,
     loadStatus === 'spike',
+    chronicLoadStatus === 'spike',
     highRpe,
     lowSleep,
     lowCondition,
@@ -2353,6 +2380,8 @@ function buildRunningAnalysisEngine(args: {
   if (hrDriftStatus === 'high') trainingSuitabilityScore -= 15
   if (loadStatus === 'rising') trainingSuitabilityScore -= 6
   if (loadStatus === 'spike') trainingSuitabilityScore -= 16
+  if (chronicLoadStatus === 'rising') trainingSuitabilityScore -= 4
+  if (chronicLoadStatus === 'spike') trainingSuitabilityScore -= 10
   if (recoveryStatus === 'watch') trainingSuitabilityScore -= 10
   if (recoveryStatus === 'reduce') trainingSuitabilityScore -= 22
   if (injuryRisk === 'watch') trainingSuitabilityScore -= 10
@@ -2371,6 +2400,7 @@ function buildRunningAnalysisEngine(args: {
   const evidence = [
     `HR drift: ${hrDriftBpm === null ? 'unknown' : `${hrDriftBpm}bpm`} / ${hrDriftStatus}`,
     `7일 부하 변화: ${loadIncreasePct === null ? 'unknown' : `${loadIncreasePct}%`} / ${loadStatus}`,
+    `30일 누적 부하 변화: ${chronicLoadIncreasePct === null ? 'unknown' : `${chronicLoadIncreasePct}%`} / ${chronicLoadStatus} (최근 30일 ${last30DistanceKm}km vs 이전 30일 ${prev30DistanceKm}km)`,
     `회복 상태: ${recoveryStatus}`,
     `부상 위험: ${injuryRisk}${activePainLevel !== null ? ` / pain ${activePainLevel}` : ''}`,
     `처방 준수: ${selectedCompliance}`
@@ -2397,6 +2427,14 @@ function buildRunningAnalysisEngine(args: {
       previous7DistanceKm,
       increasePct: loadIncreasePct,
       status: loadStatus
+    },
+    chronicLoadTrend: {
+      last30DistanceKm,
+      prev30DistanceKm,
+      increasePct: chronicLoadIncreasePct,
+      status: chronicLoadStatus,
+      ageWeight: args.ageWeight,
+      note: '최근 30일 누적과 직전 30일을 비교한 중장기 부하다. 7일 급성 부하와 함께 보고, 한 달에 걸쳐 천천히 누적이 늘어난 경우도 부상 위험으로 본다. 나이대가 높으면 경고 임계값을 낮춘다.'
     },
     recoveryStatus,
     injuryRisk,
@@ -3064,6 +3102,20 @@ function truncateText(value: string | null | undefined, maxLength: number) {
   const text = (value ?? '').replace(/\s+/g, ' ').trim()
   if (text.length <= maxLength) return text
   return `${text.slice(0, maxLength).trim()}...`
+}
+
+function getAgeLoadWeightForCoach(memory: unknown, currentDate: string): number {
+  if (!memory || typeof memory !== 'object') return 0
+  const profile = (memory as Record<string, unknown>).athleteProfile
+  if (!profile || typeof profile !== 'object') return 0
+  const birthYear = (profile as Record<string, unknown>).birthYear
+  if (typeof birthYear !== 'number' || !Number.isFinite(birthYear)) return 0
+  const age = Number(currentDate.slice(0, 4)) - birthYear
+  if (age < 18 || age > 100) return 0
+  if (age < 40) return 0
+  if (age < 50) return 1
+  if (age < 60) return 2
+  return 3
 }
 
 function withinDaysFromAnchor(runs: RunLogRow[], days: number, anchorDate: string) {
