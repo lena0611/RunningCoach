@@ -507,6 +507,14 @@
 - 적용 범위: `supabase/functions/app-session/index.ts`(신규), `supabase/functions/coach-run/index.ts`, `supabase/migrations/202606020001_app_security_sessions.sql`(신규), `src/shared/api/appSecurity.ts`(신규), `src/shared/api/coachRepository.ts`, `src/features/import-healthkit-run/healthKitBridge.ts`(Window 타입), `.env.example`, `package.json`, `.harness/project/architecture-rules.md`, `.harness/project/config-contract.md`, `.harness/project/github-pages-supabase-playbook.md`. iOS 네이티브(`RunContextWebView.swift`)는 무료 계정 전제상 이번 MVP 범위에서 변경하지 않았고 devicecheck 전환 시점으로 보류한다.
 - 배포 순서 주의: `coach-run`이 `x-pacelab-app-session` 검증을 강제하므로 프론트 배포 전에 (1) Supabase secret(`APP_SESSION_HMAC_SECRET`, `APP_SECURITY_MODE=allowlist`, `PACELAB_ALLOWED_EMAILS`, `COACH_RUN_RATE_LIMIT_PER_HOUR`) 설정, (2) `app_sessions`/`edge_function_rate_limits` 마이그레이션 적용, (3) `app-session`·`coach-run` Edge Function 배포가 선행돼야 한다. 순서가 어긋나면 모든 사용자의 AI 코칭이 403/500으로 끊긴다.
 
+## 2026-06-04 - Edge Function 인증/토큰 변경은 배포 후 실제 흐름 스모크가 완료 조건
+- 문제: #93 보안 강화 배포 후 코칭이 연속으로 막혔다. (1) `appSecurity.ts`의 `requestDeviceCheckToken`이 브리지 미연결 시 동기 `throw`라 호출부 `.catch()` 폴백이 무력화됐고(브리지 없는 모든 환경에서 차단), (2) `app-session` 토큰을 `'.'`로 join했는데 `expiresAt`(toISOString)의 밀리초 `.` 때문에 `coach-run`의 `split('.')` 조각 수가 6을 넘어 모든 토큰이 403으로 거부됐다.
+- 공통 원인: 두 버그 모두 `deno check`, `vue-tsc build`, vitest unit test를 통과했다. 타입·빌드·단위 테스트는 런타임 비동기 폴백, 토큰 직렬화/서명/검증 같은 실제 인증 흐름 버그를 잡지 못한다.
+- 결정: Edge Function의 인증·세션·토큰·rate limit 같은 보안 경계를 추가/변경하면, 타입체크와 빌드만으로 완료로 보지 않는다. 배포 후 승인 사용자 로그인 상태에서 실제 코칭 1회(또는 보호 대상 호출 1회)를 스모크 검증하는 것을 완료 조건에 포함한다. 캐시된 옛 토큰이 있으면 클라이언트 캐시를 비운 뒤 검증한다.
+- 선택 이유: 보안 경계 변경은 happy-path 단위 테스트가 거의 없고, 토큰 포맷/서명/구분자 충돌은 정적 검사로 드러나지 않아 프로덕션에서야 노출된다. 스모크 1회가 가장 싸고 확실한 게이트다.
+- 포기한 대안: Edge 런타임 통합 테스트 하네스 구축은 MVP 단계 비용이 커서 보류하고, 배포 후 수동 스모크로 대체한다.
+- 적용 범위: `src/shared/api/appSecurity.ts`(PR #156), `supabase/functions/app-session/index.ts`·`supabase/functions/coach-run/index.ts`(PR #158), `.harness/project/workflow-rules.md` 검증 규칙.
+
 ## 2026-06-02 - Root tab swipe release animation은 route 전환보다 먼저 수행
 - 문제: Issue #92에서 스와이프 판정 직후 `router.push`가 먼저 실행되고, track은 아직 dragging 상태라 CSS transition이 꺼져 있었다. 그 결과 손을 뗀 offset 지점에서 다음 패널까지 이어지는 애니메이션 없이 route index가 즉시 바뀌어 화면이 확 넘어갔다.
 - 결정: root tab swipe는 release 단계에서 `swipeTrackIndex`로 현재 시각 기준 index를 고정하고, `swipeOffset`을 패널 폭 끝까지 transition시킨 뒤 route를 변경한다. route 변경 후 reset은 시각 위치가 같은 상태에서 수행한다.
