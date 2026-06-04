@@ -141,7 +141,7 @@ Issue 완료 책임 창은 Project `Done`과 Issue close까지 끝낸 뒤 로컬
   - `git worktree remove <경로>`를 실행한다.
   - `git worktree prune`을 실행한다.
   - `git worktree list`로 제거 결과를 확인한다.
-  - 머지된 브랜치를 정리한다. 원격은 저장소 `deleteBranchOnMerge=true`로 PR 머지 시 자동 삭제되지만, 자동 삭제가 꺼져 있거나 `gh pr merge`에 `--delete-branch`를 쓰지 않았으면 `git push origin --delete <branch>`로 원격을 지운다.
+  - 머지된 브랜치를 정리한다. 원격은 저장소 `deleteBranchOnMerge=true`로 PR 머지 시 자동 삭제되는 것이 정상 경로다. 설정 이전에 머지된 옛 브랜치 등 원격에 남은 ref를 수동으로 지울 때는 `gh api -X DELETE repos/<owner>/<repo>/git/refs/heads/<branch>`를 쓴다. 기준 작업트리가 `main`에 있으면 pre-push 가드가 `git push origin --delete <branch>`(delete push)도 main push로 보고 차단하므로, `git push --delete` 대신 `gh api` 경로를 기본으로 한다.
   - 로컬 브랜치는 기준 작업트리에서 `git branch -d <branch>`로 지운다(머지 완료라 `-d`로 충분하고, `-D` 강제 삭제는 미머지 확신이 있을 때만).
   - `git branch --merged main | grep issue-`로 남은 머지된 브랜치를 확인한다.
 - PR 머지 시 기본 동작:
