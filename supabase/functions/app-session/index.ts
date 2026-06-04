@@ -43,15 +43,16 @@ Deno.serve(async (req) => {
     const now = Date.now()
     const expiresAt = new Date(now + appSessionTtlMs).toISOString()
     const nonce = crypto.randomUUID()
+    // delimiter는 '~'를 쓴다. expiresAt(ISO)에 '.'(밀리초)가 들어 있어 '.'로 join하면 verify 측 split('.') 조각 수가 6을 넘어 토큰이 무조건 거부된다.
     const tokenPayload = [
       'v1',
       userData.user.id,
       expiresAt,
       nonce,
       verification.method
-    ].join('.')
+    ].join('~')
     const signature = await hmacSha256Base64Url(appSessionSecret, tokenPayload)
-    const token = `${tokenPayload}.${signature}`
+    const token = `${tokenPayload}~${signature}`
     const tokenHash = await sha256Hex(token)
     const deviceTokenHash = deviceToken ? await sha256Hex(deviceToken) : null
 
