@@ -214,6 +214,7 @@ Issue 완료 책임 창은 Project `Done`과 Issue close까지 끝낸 뒤 로컬
 - 하네스 문맥 확인이 필요한 큰 변경: `npm run harness:context -- "<작업 설명>"`
 - 검증 순서는 변경 성격에 맞는 단위/컴포넌트 테스트 또는 E2E 테스트 추가 여부를 먼저 판단하고, 필요한 테스트를 추가/갱신해 통과시킨 뒤 `npm run harness:check`로 간다. 하네스 체크는 테스트 필요성 판단을 대체하지 않는다.
 - `supabase/functions/**`를 변경하면 `npm run harness:check`가 `supabase:functions:check`를 자동 호출한다. 그래도 Edge Function만 빠르게 확인할 때는 같은 Node 준비 절차 후 `npm run supabase:functions:check`를 직접 실행한다.
+- Edge Function의 인증·세션·토큰·서명·rate limit 같은 보안 경계를 추가/변경하면 `deno check`/`build`/unit test 통과만으로 완료로 보지 않는다. 배포 후 승인 사용자 로그인 상태에서 실제 보호 대상 호출(예: AI 코칭 1회)을 스모크 검증하는 것이 완료 조건이다. 캐시된 옛 토큰이 있으면 클라이언트 캐시(sessionStorage 등)를 비운 뒤 검증한다. 근거: #93에서 동기 throw 폴백 무력화·토큰 구분자 `.` 충돌 2건이 정적 검사를 통과하고 프로덕션에서야 403/에러로 드러났다(`.harness/session/decision-log.md` 2026-06-04 참고).
 
 ## 테스트 전략 선택지
 테스트 루트나 `test` script가 없다면 아래 중 하나를 선택해 이 문서 또는 `decision-log.md`에 기록합니다.
