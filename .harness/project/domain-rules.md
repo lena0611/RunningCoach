@@ -97,11 +97,13 @@
 - Dashboard/요약 페이지는 앱을 오래 켜둔 상태에서도 진입, 포커스 복귀, visibility 복귀 시 항상 오늘 날짜를 다시 계산한다. 주간/월간/최근 7일/최근 30일/다음 추천 세션/날씨 타겟은 이 갱신된 날짜 기준으로 계산해야 한다.
 - Dashboard의 다음 세션 준비에는 날씨가 있으면 체감온도, 강수확률, 강수량, 강수시간을 함께 보여준다. 30도 이상 체감온도나 높은 강수확률은 페이스/강도 조절 근거로만 쓰고 안전을 보장하지 않는다.
 - `TrainingMemory.weeklyPattern`은 사용자가 직접 세우는 정적 루틴이 아니다. AI 코칭이 계정 목표와 누적 RunLog를 보고 유지/수정하는 훈련 계획이며, 사용자는 목표/프로필/개인 맥락을 제공한다.
+- `AthleteProfile.weeklyRunDaysTarget`은 사용자가 실제로 달릴 수 있는 **주간 가용 일수 제약**이다(데이터로 도출 불가한 생활 제약이라 사용자 입력 유지). AI는 weeklyPattern의 러닝 세션 수가 이 값을 넘지 않도록 처방·조정하고(초과 시 우선순위 낮은 추가 Easy부터 축소), 목표상 더 필요해도 가용 한도 내에서만 배치한다. 미입력(null)이면 제약 없이 목표·회복 기준으로 과훈련을 피해 처방한다. coach-run은 이를 `weeklyAvailability` 컨텍스트로 전달한다.
 - AI 코칭은 세션 평가와 동시에 주간 루틴 유지/수정 필요성을 판단한다. 루틴 변경이 필요하면 Edge Function이 `training_memory.memory.weeklyPattern` 전체를 갱신하고, 변경 근거를 report와 `aiNotes`에 짧게 남긴다.
 - AI가 제안한 세션은 사용자가 믿고 따른 훈련 처방이다. 이후 저장된 `RunLog`는 “사용자가 임의로 한 운동”이 아니라 직전 목표/스케줄/코칭 처방을 실행한 결과일 수 있으므로, 코칭은 해당 세션이 계획 의도에 맞게 수행됐는지 먼저 평가하고 다음 처방을 조정한다.
 - 세션별 처방 숫자는 영구 고정값이 아니다. Easy 145bpm, Tempo max 165bpm, Easy + Strides 구조는 현재 사용자 확인 기준이며, AI 코칭은 누적 수행 품질과 회복 반응을 보고 사용자가 Workoutdoors에 바로 세팅할 새 기준을 주도적으로 제안할 수 있다.
 - 심박 존은 개인 최대심박/역치심박이 입력되기 전까지 현재 사용자 확인 기준을 기본값으로 쓴다. Z0 비훈련/매우 낮음은 99bpm 이하, Z1 회복은 100~130bpm, Z2 이지는 131~145bpm, Z3 이지 상단/스테디 초입은 146~155bpm, Z4 템포는 156~165bpm, Z5 고강도는 166bpm 이상이다. 개인 max HR, threshold HR, lactate threshold 같은 기준값이 생기면 이 기본값보다 개인화 존을 우선한다.
 - 심박존·템포/이지/회복 상한은 **개인 anchor(역치심박, LTHR)에서만 파생**하며 165 같은 개인 상수를 코드 어디에도 두지 않는다. 165는 과거 개발자 개인값(ChatGPT 1회 응답)이라 다른 사용자에게 무용지물이었다. 산출은 `src/shared/lib/heartRateZones.ts`의 `deriveHeartRateModel`(웹)과 `supabase/functions/coach-run/index.ts`의 `deriveCoachHeartRateModel`(Edge)에서 동일 공식으로 한다.
+- 심박 상한의 유일 출처는 `heartRateModel`이다. 훈련 지식소(`trainingKnowledge.prescriptionRules`)나 저장 처방 텍스트에 절대 심박 숫자(예: max HR 165)가 등재돼 있어도 그 숫자를 심박 상한으로 쓰지 않는다. 지식소 규칙은 세션 구조·상향/하향 조건·금기 같은 처방 논리에만 반영하고, 심박 상한은 항상 개인 파생값으로 덮어쓴다.
 - 우선순위는 `AthleteProfile.heartRateMode`에 따른다. `manual`이면 LTHR > 측정 `maxHeartRate`(직접 입력), `auto`(기본)면 **Tanaka(208−0.7×나이) 나이 추정 + 누적 RunLog 관측 최대심박 보정**을 쓴다. 보정은 `보정 maxHR = max(Tanaka, 관측 max)`로 올리는 방향으로만 적용한다(실제 도달 심박은 진짜 max의 하한). LT≈0.9×maxHR, 템포 상한=anchor(=LT). 존 경계는 anchor의 %LTHR 비율(Z1 0.79·Z2 0.88·Z3 0.94·Z4 1.0)로 만든다. 36세는 공식상 anchor≈165가 자연 산출된다(상수가 아님).
 - LTHR·측정 HRmax·나이·HR 기록이 **모두 없으면 상한은 null(미설정)**이다. 165 등 상수로 fallback하지 않고, 코칭/추세/목표예상은 심박 상한 없이 페이스·RPE·드리프트로 평가하며 UI는 나이/심박 입력을 권한다.
 - 앱 추천값과 사용자 직접입력값은 분리 관리한다(러너레벨 auto/manual과 동일 패턴). `heartRateMode`로 추천(자동)과 직접 입력을 토글하고, 직접 입력값은 보존돼 언제든 추천으로 되돌릴 수 있다. UI(`AppHeader`/`MemoryPage`)는 현재 적용값·추천값·source와 함께 산출식과 외부 근거(Tanaka, Friel LTHR, ASICS)를 보여줘 신뢰를 준다.
