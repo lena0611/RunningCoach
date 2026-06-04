@@ -50,12 +50,12 @@ const resultCount = computed(() => filteredGroups.value.reduce((sum, group) => s
       <div v-if="open" class="memory-stack-layer" data-no-swipe>
         <section class="memory-stack-page">
           <header class="memory-stack-header">
+            <button class="stack-icon-button" type="button" aria-label="계정 정보로 돌아가기" @click="emit('close')">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+            </button>
             <div>
               <h2>용어 안내</h2>
             </div>
-            <button class="stack-icon-button" type="button" aria-label="닫기" @click="emit('close')">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
-            </button>
           </header>
 
           <main class="memory-stack-content glossary-content">
