@@ -78,6 +78,34 @@ Issue final comment에는 항상 아래 항목을 포함합니다.
 - 해당 없음: 일회성 문구 수정이며 반복 규칙이나 공유 계약 변경 없음
 ```
 
+## 완료 전 용어 안내 반영 게이트 (필수)
+
+완료 책임 창은 정식 Issue를 `Done`으로 닫기 전에, 이번 작업이 **앱 사용자에게 보이는 용어/개념**을 추가·변경·삭제했는지 반드시 점검하고 필요하면 용어 안내 화면을 함께 갱신합니다. 이 게이트는 선택이 아니라 완료 전 필수 점검입니다.
+
+용어 사전의 정본은 Supabase 마이그레이션 시드 `supabase/migrations/*_glossary_terms.sql`(또는 후속 시드 마이그레이션)이며, 웹 번들 fallback `src/entities/glossary/glossaryTerms.ts`와 화면(`src/pages/glossary/GlossaryPage.vue`)이 같은 내용을 미러링합니다.
+
+- 점검 질문: 이번 변경으로 새 용어/약어/지표/세션 유형/심박·부하·부상·코칭 개념이 생겼거나, 기존 정의·기준 숫자·표현이 바뀌었는가?
+- 하나라도 해당하면:
+  - 새 시드 마이그레이션(`YYYYMMDDNN_glossary_terms_*.sql`)으로 용어를 추가/갱신한다(정본).
+  - `src/entities/glossary/glossaryTerms.ts` 번들 fallback을 같은 내용으로 갱신한다.
+  - 필요하면 카테고리 메타(`src/entities/glossary/model.ts`)와 정합성 테스트(`glossary.test.ts`)도 함께 갱신한다.
+  - 시드와 번들 fallback의 slug/정의가 어긋나지 않게 한다.
+- 해당 없으면 생략 사유를 Issue final comment에 남긴다.
+
+Issue final comment에는 항상 아래 한 줄을 추가합니다.
+
+```text
+용어 안내 반영:
+- 반영: supabase/migrations/<새 시드>.sql, src/entities/glossary/glossaryTerms.ts (+ 필요 시 model.ts, glossary.test.ts)
+```
+
+또는 변경이 없을 때:
+
+```text
+용어 안내 반영:
+- 해당 없음: 앱 사용자 노출 용어/개념 변경 없음
+```
+
 ## 완료 확인 후 기준 main 최신화 게이트
 
 완료 책임 창은 배포 또는 배포 생략 확인 뒤 사용자가 완료를 명시하면 GitHub Issue/Project를 `Done` 또는 `Closed`로 바꾸기 전에 기준 작업트리의 `main`을 최신화합니다.
