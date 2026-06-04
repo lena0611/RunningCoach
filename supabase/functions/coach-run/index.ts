@@ -438,6 +438,14 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     runnerLevel,
     runnerLevelGuide: buildRunnerLevelGuide(runnerLevel),
     dataAvailability,
+    weeklyAvailability: {
+      targetRunDays: getWeeklyRunDaysTarget(trainingMemory),
+      currentWeeklyPatternDays: Array.isArray((trainingMemory as Record<string, unknown> | null)?.weeklyPattern)
+        ? ((trainingMemory as Record<string, unknown>).weeklyPattern as unknown[]).length
+        : 0,
+      policy:
+        'targetRunDays는 사용자가 실제로 달릴 수 있는 주간 가용 일수 제약이다(데이터로 도출 불가한 생활 제약). weeklyPattern(주간 루틴)의 러닝 세션 수가 이 값을 넘지 않도록 처방·조정한다. currentWeeklyPatternDays가 targetRunDays보다 많으면 세션 수를 줄여 맞추고(우선순위 낮은 추가 Easy부터 축소), 적으면 목표에 필요할 때만 가용 한도 내에서 늘린다. targetRunDays가 null(미입력)이면 제약 없이 목표와 회복을 보고 과훈련을 피하는 선에서 처방한다.',
+    },
     heartRateModel: {
       tempoCeilingBpm: coachHeartRateModel.tempoCeilingBpm,
       easyCeilingBpm: coachHeartRateModel.easyCeilingBpm,
@@ -814,7 +822,7 @@ function buildCoachInstructions(context: unknown) {
     'recentPrescriptionComplianceSignals를 보고 최근 여러 세션에서 처방 준수율 패턴이 있는지 활용한다. 반복적으로 잘 지키는 기준은 다음 처방 상향 근거가 되고, 반복적으로 넘는 기준은 처방 하향/보류 근거가 된다.',
     'context.trainingMethodology는 외부 러닝/지구력 훈련 문헌을 앱 기준선으로 압축한 것이다. 이 기준선을 무시하지 말고, Easy 기반, 제한된 강훈련, 점진적 과부하, 목표 특이성, 회복 게이트를 기본 알고리즘으로 삼는다.',
     'context.trainingKnowledge는 Supabase 지식 보관소에서 activeGoal과 selectedRun에 맞춰 검색한 승인된 훈련법/처방 규칙이다. 일반 모델 지식보다 이 승인된 규칙을 우선한다.',
-    'trainingKnowledge.prescriptionRules가 있으면 세션 평가와 루틴 업데이트에서 해당 규칙의 prescription, raiseCondition, lowerCondition, contraindications를 반영한다.',
+    'trainingKnowledge.prescriptionRules가 있으면 세션 평가와 루틴 업데이트에서 해당 규칙의 prescription, raiseCondition, lowerCondition, contraindications를 반영한다. 단, 규칙 텍스트에 절대 심박 숫자(예: max HR 165)가 적혀 있어도 그 숫자를 심박 상한으로 쓰지 않는다. 심박 상한의 유일 출처는 heartRateModel이며, 규칙은 세션 구조·상향/하향 조건·금기 같은 처방 논리에만 반영한다.',
     'trainingKnowledge는 원문 전문이 아니라 저작권 문제를 피한 구조화 요약이다. 답변에서는 출처명을 짧게 언급할 수 있지만 원문 문구를 길게 재현하지 않는다.',
     'context.adaptiveTrainingProfile은 사용자 데이터와 대화로 누적된 개인화 레이어다. 문헌 기준선 위에 얹는 보정값이며, 단일 세션을 보고 즉흥적으로 덮어쓰지 않는다.',
     'adaptiveTrainingProfile.trainingPhase는 현재 훈련 블록이다. Base/Build/Threshold/Race Specific/Taper/Recovery 중 하나로 보고, activeGoal까지 남은 기간과 최근 수행 품질에 맞춰 다음 단계 후보를 판단한다.',
@@ -897,6 +905,7 @@ function buildCoachInstructions(context: unknown) {
     '통증 수치가 없으면 단정하지 않는다. 예: "통증 강도가 안 나와 있으니 크게 단정하진 말자. 다만 다음 착지감은 체크하자."',
     '코칭은 해당 러닝 세션 평가에서 끝나지 않는다. 반드시 계정의 목표와 누적 데이터를 보고 현재 weeklyPattern을 유지할지 수정할지 판단한다.',
     'weeklyPattern은 사용자가 직접 세우는 고정 루틴이 아니라 AI가 목표, 최근 14/30일 누적, 강훈련 빈도, 롱런 상태, Easy + Strides 수행 여부, 회복 신호를 보고 관리하는 훈련 계획이다.',
+    'weeklyPattern의 주간 러닝 세션 수는 weeklyAvailability.targetRunDays(사용자 가용 일수 제약)를 넘지 않는다. 초과하면 우선순위 낮은 추가 Easy부터 줄여 한도에 맞추고, 목표상 더 필요해도 가용 한도 내에서만 배치한다. targetRunDays가 null이면 제약 없이 목표·회복 기준으로 과훈련을 피해 처방한다. 가용 일수는 생활 제약이므로 임의로 늘리라고 강요하지 않는다.',
     'AI가 제안한 세션은 사용자가 믿고 따른 처방일 수 있다. selectedRun은 단순 기록이 아니라 직전 목표/스케줄/코칭 처방의 실행 결과일 수 있으므로, 계획 의도에 맞게 수행됐는지 먼저 보고 다음 처방을 조정한다.',
     '루틴 업데이트 판단은 context.routineUpdatePolicy를 기준으로 한다. 단일 세션 하나만으로 루틴을 자주 바꾸지 말고, 최근 7/14/30일 흐름과 목표일까지 남은 기간, 회복/부상 신호, 핵심 세션 수행 여부를 함께 본다.',
     '스케줄 처방은 반드시 context.routineUpdatePolicy.coachingDecisionBasis의 우선순위에 근거한다. 단순히 "느낌상" 또는 일반론으로 루틴을 바꾸지 않는다.',
@@ -3359,6 +3368,14 @@ function truncateText(value: string | null | undefined, maxLength: number) {
   const text = (value ?? '').replace(/\s+/g, ' ').trim()
   if (text.length <= maxLength) return text
   return `${text.slice(0, maxLength).trim()}...`
+}
+
+function getWeeklyRunDaysTarget(memory: unknown): number | null {
+  if (!memory || typeof memory !== 'object') return null
+  const profile = (memory as Record<string, unknown>).athleteProfile
+  if (!profile || typeof profile !== 'object') return null
+  const value = (profile as Record<string, unknown>).weeklyRunDaysTarget
+  return typeof value === 'number' && Number.isFinite(value) && value >= 1 && value <= 14 ? Math.round(value) : null
 }
 
 function getAgeLoadWeightForCoach(memory: unknown, currentDate: string): number {
