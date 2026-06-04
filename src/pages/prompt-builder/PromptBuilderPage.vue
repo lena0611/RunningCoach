@@ -7,6 +7,7 @@ import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/m
 import { fetchCoachReports, requestCoachRun, type CoachReport } from '@/shared/api/coachRepository'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, formatPace } from '@/shared/lib/format'
+import { resolveRunnerLevel } from '@/shared/lib/runnerLevel'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import CoachMessage from '@/shared/ui/CoachMessage.vue'
@@ -51,7 +52,8 @@ async function coach() {
   loading.value = true
   error.value = ''
   try {
-    const report = await requestCoachRun(selectedRunId.value || null, userNote.value, weatherStore.snapshot)
+    const runnerLevel = resolveRunnerLevel(memoryStore.memory.athleteProfile, runStore.sortedRuns).level
+    const report = await requestCoachRun(selectedRunId.value || null, userNote.value, weatherStore.snapshot, runnerLevel)
     reports.value = [
       report,
       ...reports.value.filter((item) => {

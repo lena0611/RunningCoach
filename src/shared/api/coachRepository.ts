@@ -1,5 +1,6 @@
 import { getSupabaseAnonKey, getSupabaseFunctionUrl, requireSupabase } from '@/shared/api/supabase'
 import type { WeatherSnapshot } from '@/features/import-weatherkit/weatherKitBridge'
+import type { RunnerLevel } from '@/entities/training-memory/model'
 
 export type CoachReport = {
   id: string
@@ -31,12 +32,13 @@ type CoachReportRow = {
   updated_at?: string
 }
 
-export async function requestCoachRun(selectedRunId: string | null, userNote: string, currentWeather: WeatherSnapshot | null = null): Promise<CoachReport> {
+export async function requestCoachRun(selectedRunId: string | null, userNote: string, currentWeather: WeatherSnapshot | null = null, runnerLevel: RunnerLevel = 'beginner'): Promise<CoachReport> {
   const { data, error } = await requireSupabase().functions.invoke('coach-run', {
     body: {
       selectedRunId,
       userNote,
       currentWeather: summarizeWeatherForCoach(currentWeather),
+      runnerLevel,
       responseStyle: {
         tone: 'conversational_coach',
         format: 'sectioned_markdown',
@@ -60,6 +62,7 @@ export async function requestCoachRunStream(
   options: {
     signal?: AbortSignal
     onDelta: (delta: string) => void
+    runnerLevel?: RunnerLevel
   }
 ): Promise<CoachReport> {
   const client = requireSupabase()
@@ -79,6 +82,7 @@ export async function requestCoachRunStream(
       userNote,
       currentWeather: summarizeWeatherForCoach(currentWeather),
       stream: true,
+      runnerLevel: options.runnerLevel ?? 'beginner',
       responseStyle: {
         tone: 'conversational_coach',
         format: 'sectioned_markdown',
