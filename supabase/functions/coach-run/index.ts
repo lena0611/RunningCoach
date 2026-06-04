@@ -44,8 +44,12 @@ type CoachReportRow = {
 }
 
 type CoachMemoryItemRow = {
+  id?: string
   content: string
   created_at: string
+  importance?: number | null
+  last_referenced_at?: string | null
+  reference_count?: number | null
 }
 
 type TrainingKnowledgeSourceRow = {
@@ -201,7 +205,7 @@ async function persistCoachResult(
   context: CoachContext,
   ai: { report: string; memoryItems: string[]; trainingMemoryPatch: TrainingMemoryPatch | null; injuryUpdateProposal: InjuryUpdateProposal | null }
 ) {
-    const durableMemoryItems = normalizeMemoryItems(ai.memoryItems, context.coachMemoryItems)
+    const durableMemoryItems = normalizeMemoryItems(ai.memoryItems, [...(context.coreMemoryItems ?? []), ...context.coachMemoryItems])
     const memoryPatch = normalizeTrainingMemoryPatch(ai.trainingMemoryPatch)
     const injuryUpdateProposal = normalizeInjuryUpdateProposal(ai.injuryUpdateProposal, context.activeInjuryItem)
     const updatedMemory = memoryPatch ? mergeTrainingMemoryPatch(context.trainingMemory, memoryPatch) : null
@@ -230,7 +234,8 @@ async function persistCoachResult(
     const memoryItems = durableMemoryItems.map((content) => ({
       user_id: userId,
       content,
-      source_report_id: reportRow.id
+      source_report_id: reportRow.id,
+      importance: deriveMemoryImportance(content)
     }))
     if (memoryItems.length) {
       const { error } = await admin.from('coach_memory_items').insert(memoryItems)
@@ -328,10 +333,12 @@ function normalizeCurrentWeather(value: unknown): CurrentWeatherContext | null {
 }
 
 async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner') {
+  const memorySelect = 'id, content, created_at, importance, last_referenced_at, reference_count'
   const [
     { data: memoryRow },
     { data: runs },
     { data: memoryItems },
+    { data: activeMemoryItems },
     { data: reports },
     { data: knowledgeSources },
     { data: trainingMethods },
@@ -339,7 +346,10 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
   ] = await Promise.all([
     admin.from('training_memory').select('memory').eq('user_id', userId).maybeSingle(),
     admin.from('run_logs').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(120),
-    admin.from('coach_memory_items').select('content, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(80),
+    // 최근성 풀(되새김 후보)
+    admin.from('coach_memory_items').select(memorySelect).eq('user_id', userId).order('created_at', { ascending: false }).limit(160),
+    // 활성 후보: 오래돼도 중요한 기억이 풀 잘림에 안 묻히도록 별도로 중요도순 조회
+    admin.from('coach_memory_items').select(memorySelect).eq('user_id', userId).order('importance', { ascending: false }).order('last_referenced_at', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false }).limit(24),
     admin.from('coach_reports').select('selected_run_id, user_note, report, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(80),
     admin.from('training_knowledge_sources').select('id, title, author, source_type, url, reliability, summary').eq('approved', true),
     admin.from('training_methods').select('id, source_id, name, slug, family, summary, target_distances, suitable_levels, weekly_days_min, weekly_days_max, caution_notes').eq('approved', true),
@@ -347,7 +357,9 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
   ])
   const runRows = (runs ?? []) as RunLogRow[]
   const reportRows = (reports ?? []) as CoachReportRow[]
-  const memoryRows = (memoryItems ?? []) as CoachMemoryItemRow[]
+  // 최근성 풀 + 활성(중요도순) 후보를 id 기준으로 합친다(중복 제거).
+  const memoryRowPool = mergeMemoryRows((memoryItems ?? []) as CoachMemoryItemRow[], (activeMemoryItems ?? []) as CoachMemoryItemRow[])
+  const memoryRows = memoryRowPool
   const knowledgeSourceRows = (knowledgeSources ?? []) as TrainingKnowledgeSourceRow[]
   const trainingMethodRows = (trainingMethods ?? []) as TrainingMethodRow[]
   const prescriptionRuleRows = (prescriptionRules ?? []) as TrainingPrescriptionRuleRow[]
@@ -412,6 +424,24 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     userNote,
     runningAnalysisEngine
   })
+  // 장기기억 2계층: 활성(항상 탑재) + 되새김(관련 시 소환).
+  const tieredMemory = buildTieredCoachMemory(memoryRows, selectedRun, userNote, {
+    activeGoal,
+    activeInjuryItem,
+    coachBeliefs,
+    runnerIdentity
+  })
+  // 컨텍스트에 올라간 기억은 참조 시각을 갱신해 되새김 정리 신호로 쓴다(best-effort, 실패해도 코칭은 진행).
+  if (tieredMemory.referencedIds.length) {
+    try {
+      await admin
+        .from('coach_memory_items')
+        .update({ last_referenced_at: new Date().toISOString() })
+        .in('id', tieredMemory.referencedIds)
+    } catch (_err) {
+      // 참조 갱신 실패는 무시한다.
+    }
+  }
   const coachingDecisionBoard = buildCoachingDecisionBoard({
     selectedRun,
     selectedRunLapAnalysis,
@@ -590,12 +620,10 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     injuryTemporalPolicy: selectedRun
       ? 'injuryItems와 activeInjuryItem은 selectedRun.date 이전 또는 당일에 이미 발생/등록된 항목만 포함한다. 여기에 없는 현재 active 부상은 선택 세션 당시에는 아직 발생하지 않은 것으로 보고 언급하지 마라.'
       : '현재 흐름 코칭이므로 현재 active/monitoring 부상 항목을 사용할 수 있다.',
-    coachMemoryItems: buildRelevantCoachMemoryItems(memoryRows, selectedRun, userNote, {
-      activeGoal,
-      activeInjuryItem,
-      coachBeliefs,
-      runnerIdentity
-    }),
+    coreMemoryItems: tieredMemory.coreMemoryItems,
+    coreMemoryItemsInstruction:
+      'coreMemoryItems는 이 사용자를 대할 때 항상 안고 가는 활성 핵심 기억이다(사람으로 치면 늘 떠올리는 그 사람의 주요 서사·목표·동기·정체성·중요 제약). 매 답변의 기본 전제로 삼아 일관되게 사용자를 대한다. 사용자의 want to/하고 싶다/원한다 같은 욕구와 목표 서사를 특히 잊지 말고, 관련될 때 자연스럽게 이어 말해 신뢰를 쌓는다. 단 매번 통째로 나열하지 말고 맥락에 맞게 녹인다.',
+    coachMemoryItems: tieredMemory.coachMemoryItems,
     recentCoachReports: reportRows.slice(0, 5).map((report) => ({
       selectedRunId: report.selected_run_id,
       userNote: report.user_note,
@@ -910,6 +938,7 @@ function buildCoachInstructions(context: unknown) {
     'fast_segments는 route/speed 기반 짧은 고속 구간 요약이다. Easy + Strides 판단에서는 세션 타입명보다 요일 루틴, lap 심박/페이스, fast_segments를 우선한다.',
     '현재 Easy + Strides 기본 루틴은 10분 워밍업 + 8개의 스트라이드 가속 인터벌(20초 가속 + 1분40초 회복) + 15분 쿨다운이다. 다만 HealthKit/GPS 데이터는 타이트하게 들어오지 않으므로 20초/100초를 기계적으로 요구하지 않는다. route/speed에서 6~45초 정도의 짧은 가속이 4개 이상 반복되고 시작 간격이 대략 1~3.5분이면 Easy + Strides 성격으로 관용적으로 본다.',
     '앱 로그가 적어도 TrainingMemory나 coachMemoryItems의 장기 맥락을 부정하지 않는다. 로그가 덜 들어온 상태로 보고 조심스럽게 해석한다.',
+    'context.coreMemoryItems는 이 사용자를 대할 때 항상 안고 가는 활성 핵심 기억(주요 서사·목표·욕구·정체성·중요 제약)이다. context.coreMemoryItemsInstruction을 따라 매 답변의 기본 전제로 일관되게 반영하고, 사용자의 want to/하고 싶다/원한다 같은 욕구를 잊지 않는다. coachMemoryItems(되새김)와 달리 관련성과 무관하게 늘 의식한다.',
     'context.coachMemoryItems는 장기기억 전체가 아니라 현재 선택 세션과 관련도 높은 일부만 선별한 것이다. 여기에 없다고 사용자가 그런 성향이 없다고 단정하지 않는다.',
     'coachMemoryItems에 사용자가 과거에 말한 개인 맥락(목표/동기/선호/생활 맥락)이 있으면, 관련될 때 답변에 자연스럽게 녹여 "나를 기억하고 있다"는 느낌을 준다. 예: "저번에 5km 30분 안에 들어오고 싶다고 했었지." 단, 매번 기계적으로 나열하지 말고 지금 대화/세션과 이어질 때만 한두 개를 가볍게 언급한다.',
     'context.runnerIdentity는 단일 이벤트가 아니라 이 사용자가 어떤 러너인지 압축한 장기 정체성 계층이다. strengths/weaknesses/riskFactors/coachingStyle을 현재 기록 해석과 다음 처방 톤에 반영한다.',
@@ -981,7 +1010,7 @@ function buildCoachInstructions(context: unknown) {
     '오래된 과거 세션(selectedRunTiming=past, nextTrainingAdviceRelevant=false) 올바른 출력 예시 — "다음 훈련"과 "루틴 업데이트" 섹션이 아예 없다: "초반을 서두르지 않고 들어가서 템포 상한만 살짝 넘긴 템포였다.\\n\\n## 핵심 지표\\n- 세션: Tempo / 5.12km / 31:54\\n- 페이스: 7분03초 → 6분02초 → ... → 6분27초\\n- 심박: max 169 (템포 상한 초과)\\n\\n## 세션 해석\\n초반 통제는 좋았고 후반 페이스도 살아 있었는데, 템포 핵심인 상한을 끝내 넘긴 게 이 세션의 포인트였다.\\n\\n## 조심할 점\\n그날의 교훈은 페이스보다 심박 상한이 먼저였다는 점이다.\\n\\n## 한 줄 요약\\n그날은 잘 달렸지만 템포의 문턱은 아직 상한 아래였다." — past+false에서는 "다음 훈련"·"루틴 업데이트" 섹션 자체를 넣지 않고 한 줄 요약으로 끝낸다.',
     'context.responseStyle이 있으면 반드시 따른다. tone=conversational_coach, firstSentence=reaction_before_analysis, avoid=report_style/medical_diagnosis/long_paragraphs를 강하게 우선한다.',
     'memoryItems는 0~3개만 반환한다. 반복 패턴, 성향, 부상/더위/회복 기준, 계획 변경처럼 다음 코칭에도 쓸 장기 기억만 넣는다.',
-    '훈련 준수 패턴뿐 아니라, 사용자가 대화(userNote)에서 직접 말한 개인 맥락도 장기기억 대상이다: 본인이 밝힌 목표/동기("오랜만에 5km 30분 도전하고 싶다"), 선호("아내와 함께 이지런을 좋아한다"), 생활/환경 제약, 반복되는 컨디션·통증 호소, 코칭 톤 선호 등. 다음에 사용자를 더 잘 이해하는 데 쓸 안정적인 사실만 1인칭 사용자 관점으로 간결히 적는다. 예: "사용자는 오랜만에 5km를 30분 안에 들어오는 걸 목표로 의식한다."',
+    '훈련 준수 패턴뿐 아니라, 사용자가 대화(userNote)에서 직접 말한 개인 맥락과 주요 서사도 장기기억 대상이다: 본인이 밝힌 욕구·목표("오랜만에 5km 30분 도전하고 싶다", want to/하고 싶다/원한다 류), 동기와 이유, 선호("아내와 함께 이지런을 좋아한다"), 생활/환경 제약, 반복되는 컨디션·통증 호소, 코칭 톤 선호 등. 특히 사용자의 욕구·목표 서사는 코치가 오래 기억할수록 신뢰가 쌓이는 이 앱의 핵심이므로 잘 포착한다. 다음에 사용자를 더 잘 이해하는 데 쓸 안정적인 사실만 1인칭 사용자 관점으로 간결히 적는다. 예: "사용자는 오랜만에 5km를 30분 안에 들어오는 걸 목표로 의식한다."',
     'memoryItems에 단일 세션의 거리/페이스/심박, "오늘 잘했다", "다음 훈련은 휴식" 같은 일회성 코멘트를 넣지 않는다. 개인 맥락도 한 번의 가벼운 언급이면 저장하지 말고, 명시적 목표/선호이거나 반복해서 나온 것만 저장한다.',
     '이미 context.coachMemoryItems나 trainingMemory에 같은 의미가 있으면 memoryItems에 다시 넣지 않는다.',
     '스트리밍 UI가 report를 먼저 표시하므로 JSON 객체의 키 순서는 반드시 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal 순서로 둔다.',
@@ -3190,8 +3219,7 @@ function createBeliefId(belief: string) {
   return `belief-${normalizeMemoryKey(belief).slice(0, 48)}`
 }
 
-function buildRelevantCoachMemoryItems(
-  memoryItems: CoachMemoryItemRow[],
+function collectMemoryContextTags(
   selectedRun: RunLogRow | null,
   userNote: string,
   options?: {
@@ -3212,23 +3240,124 @@ function buildRelevantCoachMemoryItems(
   ]) {
     for (const tag of extractContextTags(text)) contextTags.add(tag)
   }
-  const seen = new Set<string>()
+  return contextTags
+}
 
-  return memoryItems
-    .map((item, index) => {
-      const content = truncateText(item.content, 260)
-      const key = normalizeMemoryKey(content)
-      if (!content || seen.has(key) || !looksLikeDurableMemory(content)) return null
-      seen.add(key)
-      return {
-        content,
-        score: scoreMemoryItem(content, item.created_at, contextTags, index)
+// 중요도 1~5. 사용자의 욕구(want to/하고 싶다/원한다)·목표·서사·정체성·부상은 시간이 지나도 잊으면 안 되므로 높게,
+// 선호/생활 맥락은 그 다음, 일반 반복 패턴은 중간, 그 외는 낮게. (#179, #177)
+function deriveMemoryImportance(content: string): number {
+  const text = content.toLowerCase()
+  if (containsAny(text, [
+    '하고 싶', '하고싶', '원한', '원해', '바란', '목표', '도전', 'want to', '꿈', '서사', '이유는',
+    '부상', '통증', '발바닥', '햄스트링', '완치', '재발'
+  ])) return 5
+  if (containsAny(text, [
+    '선호', '좋아', '싫어', '동기', '아내', '배우자', '와이프', '가족', '직장', '생활', '수면', '스트레스', '습관', '성향', '정체성'
+  ])) return 4
+  if (containsAny(text, ['패턴', '반복', '기준', '전략', '루틴', '주의', '관리', '템포', 'lsd', 'steady', '롱런', '회복'])) return 3
+  return 2
+}
+
+function normalizeImportance(value: number | null | undefined): number {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) return 3
+  return Math.min(5, Math.max(1, Math.round(n)))
+}
+
+// 보존 점수: 중요도가 높으면 오래돼도 남고, 낮으면 시간이 지나며 잊힌다(사람 기억 모델).
+function memoryRetentionScore(importance: number, ageDays: number): number {
+  const imp = normalizeImportance(importance)
+  const base = imp * 2 // 2..10: 중요도가 만드는 기본 보존력
+  let recency = 0 // 최근성 보너스(시간 지나면 사라짐)
+  if (ageDays <= 14) recency = 4
+  else if (ageDays <= 45) recency = 2.5
+  else if (ageDays <= 120) recency = 1
+  let agePenalty = 0 // 저중요도 노후는 빠르게 잊힘
+  if (imp <= 2) {
+    if (ageDays > 120) agePenalty = 6
+    else if (ageDays > 45) agePenalty = 3
+  } else if (imp === 3 && ageDays > 365) {
+    agePenalty = 2
+  }
+  return base + recency - agePenalty
+}
+
+function mergeMemoryRows(...lists: CoachMemoryItemRow[][]): CoachMemoryItemRow[] {
+  const byId = new Map<string, CoachMemoryItemRow>()
+  const noId: CoachMemoryItemRow[] = []
+  for (const list of lists) {
+    for (const row of list) {
+      if (row.id) {
+        if (!byId.has(row.id)) byId.set(row.id, row)
+      } else {
+        noId.push(row)
       }
-    })
-    .filter((item): item is { content: string; score: number } => Boolean(item))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 18)
-    .map((item) => item.content)
+    }
+  }
+  return [...byId.values(), ...noId]
+}
+
+type ScoredMemory = {
+  row: CoachMemoryItemRow
+  content: string
+  key: string
+  importance: number
+  ageDays: number
+  retention: number
+}
+
+// 2계층 회수: 활성(보존 점수 상위, 항상 탑재) + 되새김(나머지에서 현재 맥락 관련 시 소환).
+function buildTieredCoachMemory(
+  rows: CoachMemoryItemRow[],
+  selectedRun: RunLogRow | null,
+  userNote: string,
+  options?: {
+    activeGoal: unknown
+    activeInjuryItem: unknown
+    coachBeliefs: CoachBelief[]
+    runnerIdentity: ReturnType<typeof getRunnerIdentity>
+  }
+): { coreMemoryItems: string[]; coachMemoryItems: string[]; referencedIds: string[] } {
+  const today = currentDateInSeoul()
+  const seen = new Set<string>()
+  const items: ScoredMemory[] = []
+  for (const row of rows) {
+    const content = truncateText(row.content, 260)
+    if (!content || !looksLikeDurableMemory(content)) continue
+    const key = normalizeMemoryKey(content)
+    if (seen.has(key)) continue
+    seen.add(key)
+    const ageDays = Math.max(0, diffDays(String(row.created_at).slice(0, 10), today))
+    const importance = normalizeImportance(row.importance)
+    items.push({ row, content, key, importance, ageDays, retention: memoryRetentionScore(importance, ageDays) })
+  }
+
+  // 활성: 보존 점수 임계 이상 중 상위 6개(항상 탑재).
+  const active = items
+    .filter((x) => x.retention >= 6)
+    .sort((a, b) => b.retention - a.retention)
+    .slice(0, 6)
+  const activeKeys = new Set(active.map((x) => x.key))
+
+  // 되새김: 활성 제외 + 아직 잊히지 않은(retention>0) 것 중 현재 맥락 관련도 높은 것만 소환.
+  const contextTags = collectMemoryContextTags(selectedRun, userNote, options)
+  const recalled = items
+    .filter((x) => !activeKeys.has(x.key) && x.retention > 0)
+    .map((x, index) => ({ x, rel: scoreMemoryItem(x.content, String(x.row.created_at), contextTags, index) }))
+    .filter((e) => e.rel >= 8)
+    .sort((a, b) => b.rel - a.rel)
+    .slice(0, 10)
+
+  const referencedIds = [
+    ...active.map((x) => x.row.id),
+    ...recalled.map((e) => e.x.row.id)
+  ].filter((id): id is string => Boolean(id))
+
+  return {
+    coreMemoryItems: active.map((x) => x.content),
+    coachMemoryItems: recalled.map((e) => e.x.content),
+    referencedIds
+  }
 }
 
 function normalizeMemoryItems(items: string[], existingItems: string[]) {
