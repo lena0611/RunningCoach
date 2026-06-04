@@ -82,6 +82,9 @@ declare global {
         runContextNotifications?: {
           postMessage: (message: unknown) => void
         }
+        runContextAuth?: {
+          postMessage: (message: unknown) => void
+        }
       }
     }
   }
