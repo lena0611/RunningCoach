@@ -17,6 +17,7 @@ import {
 import { mergeHealthKitRefreshRun } from '@/features/import-healthkit-run/mergeHealthKitRefreshRun'
 import { notifyHealthKitNewRuns } from '@/features/sync-native-notifications/notificationBridge'
 import { hasNativeBridge } from '@/shared/lib/runtime'
+import { deriveHeartRateModel, deriveObservedMaxHr, type HeartRateModel } from '@/shared/lib/heartRateZones'
 
 const defaultLookbackDays = 90
 const maxLookbackDays = 365
@@ -168,14 +169,15 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
 
         const latestDate = getLatestSavedDate()
         const memoryStore = useMemoryStore()
-        const repaired = await repairExistingHealthKitRuns(runs, memoryStore.memory.weeklyPattern)
+        const heartRateModel = buildInferenceHeartRateModel()
+        const repaired = await repairExistingHealthKitRuns(runs, memoryStore.memory.weeklyPattern, heartRateModel)
         const newRuns = runs
           .filter((candidate) => isAfterLatestSaved(candidate, latestDate))
           .filter((candidate) => !isAlreadySaved(candidate))
           .sort((a, b) => a.date.localeCompare(b.date) || a.startAt.localeCompare(b.startAt))
 
         if (newRuns.length) {
-          const inserted = await runStore.addRuns(newRuns.map((candidate) => toExtractedRunData(candidate, memoryStore.memory.weeklyPattern)), 'healthkit')
+          const inserted = await runStore.addRuns(newRuns.map((candidate) => toExtractedRunData(candidate, memoryStore.memory.weeklyPattern, heartRateModel)), 'healthkit')
           const insertedCount = inserted.length
           notifyHealthKitNewRuns(useSettingsStore().notificationSettings, insertedCount)
           const skipped = newRuns.length - insertedCount
@@ -223,10 +225,11 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         const rangeRuns = runs
           .filter((candidate) => isWithinRange(candidate, range))
           .sort((a, b) => a.date.localeCompare(b.date) || a.startAt.localeCompare(b.startAt))
-        const repaired = await repairExistingHealthKitRuns(rangeRuns, memoryStore.memory.weeklyPattern)
+        const heartRateModel = buildInferenceHeartRateModel()
+        const repaired = await repairExistingHealthKitRuns(rangeRuns, memoryStore.memory.weeklyPattern, heartRateModel)
         const newRuns = rangeRuns.filter((candidate) => !isAlreadySaved(candidate))
 
-        const inserted = await runStore.addRuns(newRuns.map((candidate) => toExtractedRunData(candidate, memoryStore.memory.weeklyPattern)), 'healthkit')
+        const inserted = await runStore.addRuns(newRuns.map((candidate) => toExtractedRunData(candidate, memoryStore.memory.weeklyPattern, heartRateModel)), 'healthkit')
         const skipped = Math.max(0, rangeRuns.length - inserted.length - repaired.length)
         const outsideRange = Math.max(0, runs.length - rangeRuns.length)
         const parts = [
@@ -265,7 +268,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         if (!target) throw new Error('갱신할 RunLog를 찾지 못했습니다.')
 
         const memoryStore = useMemoryStore()
-        const extracted = toExtractedRunData(candidate, memoryStore.memory.weeklyPattern)
+        const extracted = toExtractedRunData(candidate, memoryStore.memory.weeklyPattern, buildInferenceHeartRateModel())
         const updated = await runStore.updateRun(mergeHealthKitRefreshRun(target, extracted))
         this.status = `${updated.date} HealthKit 세션 갱신 완료`
         this.error = ''
@@ -347,13 +350,21 @@ function isAlreadySaved(candidate: HealthKitRunCandidate) {
   })
 }
 
-async function repairExistingHealthKitRuns(candidates: HealthKitRunCandidate[], weeklyPattern: string[]) {
+// 자동 유형 판정용 개인 심박 모델. 누적 RunLog 관측 최대심박으로 나이 추정을 보정한다.
+function buildInferenceHeartRateModel(): HeartRateModel {
+  const memoryStore = useMemoryStore()
+  const runStore = useRunStore()
+  const observed = deriveObservedMaxHr(runStore.sortedRuns.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })))
+  return deriveHeartRateModel(memoryStore.memory.athleteProfile, new Date().getFullYear(), observed)
+}
+
+async function repairExistingHealthKitRuns(candidates: HealthKitRunCandidate[], weeklyPattern: string[], heartRateModel: HeartRateModel | null = null) {
   const runStore = useRunStore()
   const repaired: RunLog[] = []
   for (const candidate of candidates) {
     const target = findRepairableHealthKitRun(candidate)
     if (!target) continue
-    const extracted = toExtractedRunData(candidate, weeklyPattern)
+    const extracted = toExtractedRunData(candidate, weeklyPattern, heartRateModel)
     const updated = await runStore.updateRun({
       ...target,
       externalId: extracted.externalId ?? target.externalId,

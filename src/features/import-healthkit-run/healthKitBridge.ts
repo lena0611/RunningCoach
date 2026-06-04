@@ -2,6 +2,7 @@ import type { ExtractedRunData, FastSegment, Lap, RunMetricSample, RunRoutePoint
 import { createSessionTitle } from '@/features/create-session-title/createSessionTitle'
 import { inferCourseType } from '@/features/infer-course-type/inferCourseType'
 import { inferRunType } from '@/features/infer-run-type/inferRunType'
+import type { HeartRateModel } from '@/shared/lib/heartRateZones'
 
 export type HealthKitRunCandidate = {
   externalId: string
@@ -152,7 +153,11 @@ export function requestHealthKitRunUpdate(run: HealthKitRunUpdateRequest) {
   })
 }
 
-export function toExtractedRunData(candidate: HealthKitRunCandidate, weeklyPattern: string[] = []): ExtractedRunData {
+export function toExtractedRunData(
+  candidate: HealthKitRunCandidate,
+  weeklyPattern: string[] = [],
+  heartRateModel: HeartRateModel | null = null
+): ExtractedRunData {
   const distanceKm = candidate.distanceKm ?? 0
   const durationSec = candidate.durationSec
   const type = inferRunType({
@@ -164,6 +169,7 @@ export function toExtractedRunData(candidate: HealthKitRunCandidate, weeklyPatte
     metricSamples: candidate.metricSamples ?? [],
     routePoints: candidate.routePoints ?? [],
     weeklyPattern,
+    heartRateModel,
     date: candidate.date
   })
   const elevationGainM = candidate.elevationGainM

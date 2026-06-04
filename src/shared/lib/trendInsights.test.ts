@@ -3,6 +3,12 @@ import type { RunLog } from '@/entities/run/model'
 import { initialTrainingMemory } from '@/entities/training-memory/model'
 import { buildTrendAnalysis, buildTrendLensResult, buildTrendOverallSummary } from '@/shared/lib/trendInsights'
 
+// 직접입력 LTHR=165(easy 145 / Z4 156~165) 기준 — 심박존 의존 Lens를 기존 경계로 검증한다.
+const initialTrainingMemory165 = {
+  ...initialTrainingMemory,
+  athleteProfile: { ...initialTrainingMemory.athleteProfile, heartRateMode: 'manual' as const, lactateThresholdHr: 165 }
+}
+
 function run(input: Partial<RunLog>): RunLog {
   return {
     id: input.id ?? crypto.randomUUID(),
@@ -52,7 +58,7 @@ describe('buildTrendLensResult', () => {
       period: '90d',
       baseline: 'previous-period',
       runs: [],
-      memory: initialTrainingMemory,
+      memory: initialTrainingMemory165,
       today: new Date('2026-06-01T00:00:00')
     })
 
@@ -75,7 +81,7 @@ describe('buildTrendLensResult', () => {
       period: '90d',
       baseline: 'previous-period',
       runs,
-      memory: initialTrainingMemory,
+      memory: initialTrainingMemory165,
       today: new Date('2026-06-01T00:00:00')
     })
 
@@ -97,7 +103,7 @@ describe('buildTrendLensResult', () => {
       period: '90d',
       baseline: 'previous-period',
       runs,
-      memory: initialTrainingMemory,
+      memory: initialTrainingMemory165,
       today: new Date('2026-06-01T00:00:00')
     })
 
@@ -119,7 +125,7 @@ describe('buildTrendLensResult', () => {
       period: '90d',
       baseline: 'previous-period',
       runs,
-      memory: initialTrainingMemory,
+      memory: initialTrainingMemory165,
       today: new Date('2026-06-01T00:00:00')
     })
 
@@ -138,7 +144,7 @@ describe('buildTrendLensResult', () => {
       period: '90d',
       baseline: 'previous-period',
       runs,
-      memory: initialTrainingMemory,
+      memory: initialTrainingMemory165,
       today: new Date('2026-06-01T00:00:00')
     })
 
@@ -163,7 +169,7 @@ describe('buildTrendLensResult', () => {
       period: '90d',
       baseline: 'previous-period',
       runs,
-      memory: initialTrainingMemory,
+      memory: initialTrainingMemory165,
       today: new Date('2026-06-01T00:00:00')
     })
 
@@ -182,7 +188,7 @@ describe('buildTrendLensResult', () => {
       period: '90d',
       baseline: 'previous-period',
       runs,
-      memory: initialTrainingMemory,
+      memory: initialTrainingMemory165,
       today: new Date('2026-06-01T00:00:00')
     })
 
@@ -201,7 +207,7 @@ describe('buildTrendLensResult', () => {
       period: '90d',
       baseline: 'previous-period',
       runs,
-      memory: initialTrainingMemory,
+      memory: initialTrainingMemory165,
       today: new Date('2026-06-01T00:00:00')
     })
 
@@ -233,7 +239,7 @@ describe('buildTrendLensResult', () => {
       period: '90d',
       baseline: 'previous-period',
       runs,
-      memory: initialTrainingMemory,
+      memory: initialTrainingMemory165,
       today: new Date('2026-06-01T00:00:00')
     })
 
@@ -248,7 +254,7 @@ describe('buildTrendOverallSummary', () => {
       period: '90d',
       baseline: 'previous-period',
       runs: [],
-      memory: initialTrainingMemory,
+      memory: initialTrainingMemory165,
       today: new Date('2026-06-01T00:00:00')
     })
 
@@ -274,7 +280,7 @@ describe('buildTrendOverallSummary', () => {
       period: '90d',
       baseline: 'previous-period',
       runs,
-      memory: initialTrainingMemory,
+      memory: initialTrainingMemory165,
       today: new Date('2026-06-01T00:00:00')
     })
 
@@ -302,7 +308,7 @@ describe('buildTrendAnalysis', () => {
       period: '90d',
       baseline: 'previous-period',
       runs,
-      memory: initialTrainingMemory,
+      memory: initialTrainingMemory165,
       today: new Date('2026-06-01T00:00:00')
     })
 
@@ -324,7 +330,7 @@ describe('buildTrendAnalysis', () => {
       period: '90d',
       baseline: 'previous-period',
       runs,
-      memory: initialTrainingMemory,
+      memory: initialTrainingMemory165,
       today: new Date('2026-06-01T00:00:00')
     })
 
@@ -348,7 +354,7 @@ describe('buildTrendAnalysis', () => {
       period: '90d',
       baseline: 'previous-period',
       runs,
-      memory: initialTrainingMemory,
+      memory: initialTrainingMemory165,
       today: new Date('2026-06-01T00:00:00')
     })
 

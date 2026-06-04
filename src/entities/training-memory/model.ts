@@ -125,11 +125,12 @@ export type AthleteProfile = {
   preferredLongRunDay: string
   personalBests: PersonalBest[]
   runnerLevel: RunnerLevelSetting
-  // 개인 심박 기준. 입력 시 심박존/템포 상한을 상수 대신 개인화 환산값으로 파생한다.
-  // 우선순위: lactateThresholdHr > maxHeartRate(측정) > Tanaka(birthYear) 추정 > 상수 fallback.
+  // 개인 심박 기준. 심박존/템포 상한을 상수 대신 개인 anchor에서 파생한다.
+  // heartRateMode가 'manual'이고 입력값이 있으면 그것을 우선, 아니면 앱 추천값(나이+누적데이터)을 쓴다.
   maxHeartRate: number | null
   restingHeartRate: number | null
   lactateThresholdHr: number | null
+  heartRateMode: 'auto' | 'manual'
 }
 
 export type PersonalBest = {
@@ -378,7 +379,8 @@ export const initialTrainingMemory: TrainingMemory = {
     runnerLevel: 'auto',
     maxHeartRate: null,
     restingHeartRate: null,
-    lactateThresholdHr: null
+    lactateThresholdHr: null,
+    heartRateMode: 'auto'
   },
   adaptiveTrainingProfile: {
     methodologyVersion: 'pacelab-2026-05-v1',
@@ -471,7 +473,8 @@ export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null |
       runnerLevel: normalizeRunnerLevelSetting(memory?.athleteProfile?.runnerLevel),
       maxHeartRate: normalizeHeartRateInput(memory?.athleteProfile?.maxHeartRate),
       restingHeartRate: normalizeHeartRateInput(memory?.athleteProfile?.restingHeartRate),
-      lactateThresholdHr: normalizeHeartRateInput(memory?.athleteProfile?.lactateThresholdHr)
+      lactateThresholdHr: normalizeHeartRateInput(memory?.athleteProfile?.lactateThresholdHr),
+      heartRateMode: normalizeHeartRateMode(memory?.athleteProfile?.heartRateMode)
     },
     adaptiveTrainingProfile: normalizeAdaptiveTrainingProfile(memory?.adaptiveTrainingProfile),
     runnerIdentity: normalizeRunnerIdentity(memory?.runnerIdentity ?? base.runnerIdentity, memory ?? base),
@@ -498,6 +501,10 @@ export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null |
 
 function normalizeRunnerLevelSetting(value: unknown): RunnerLevelSetting {
   return value === 'beginner' || value === 'intermediate' || value === 'advanced' ? value : 'auto'
+}
+
+function normalizeHeartRateMode(value: unknown): 'auto' | 'manual' {
+  return value === 'manual' ? 'manual' : 'auto'
 }
 
 // 개인 심박 입력은 30~240bpm 범위의 유한한 양수만 허용하고, 그 외(빈 문자열/0/비정상값)는 미입력(null)으로 본다.

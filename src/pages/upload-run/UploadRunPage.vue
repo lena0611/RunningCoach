@@ -2,7 +2,9 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
+import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
 import RunImageUploader from '@/widgets/run-image-uploader/RunImageUploader.vue'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import ContentStack from '@/shared/ui/ContentStack.vue'
@@ -16,6 +18,7 @@ const props = defineProps<{ stackMode?: boolean }>()
 const emit = defineEmits<{ saved: [] }>()
 const router = useRouter()
 const runStore = useRunStore()
+const memoryStore = useMemoryStore()
 const healthKitSyncStore = useHealthKitSyncStore()
 const uploader = ref<InstanceType<typeof RunImageUploader> | null>(null)
 const file = ref<File | null>(null)
@@ -37,7 +40,9 @@ async function analyze() {
   loading.value = true
   error.value = ''
   try {
-    form.value = await extractRunDataFromFile(file.value)
+    const observed = deriveObservedMaxHr(runStore.sortedRuns.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })))
+    const heartRateModel = deriveHeartRateModel(memoryStore.memory.athleteProfile, new Date().getFullYear(), observed)
+    form.value = await extractRunDataFromFile(file.value, heartRateModel)
   } catch (err) {
     error.value = err instanceof Error ? err.message : '파일 분석 실패'
   } finally {
