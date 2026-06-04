@@ -15,6 +15,7 @@ import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import ClearableField from '@/shared/ui/ClearableField.vue'
 import FormGrid from '@/shared/ui/FormGrid.vue'
 import HeartRateHelpSheet from '@/shared/ui/HeartRateHelpSheet.vue'
+import HeartRateTestGuideSheet from '@/shared/ui/HeartRateTestGuideSheet.vue'
 
 defineProps<{ isAuthenticated: boolean }>()
 const emit = defineEmits<{ signOut: [] }>()
@@ -26,6 +27,7 @@ const settingsStore = useSettingsStore()
 const router = useRouter()
 const drawerOpen = ref(false)
 const heartRateHelpOpen = ref(false)
+const heartRateTestGuideOpen = ref(false)
 const drawerPanel = ref<'account' | 'profile' | 'settings'>('account')
 const saving = ref(false)
 const error = ref('')
@@ -432,7 +434,9 @@ function goDashboard() {
             </div>
             <template v-if="heartRateModeValue === 'manual'">
               <label>
-                역치심박 LTHR
+                <span class="hr-field-label-row">역치심박 LTHR
+                  <button type="button" class="hr-measure-link" @click="heartRateTestGuideOpen = true">측정 방법</button>
+                </span>
                 <ClearableField v-model="lactateThresholdHrValue" type="number" number inputmode="numeric" placeholder="30분 테스트 평균" />
               </label>
               <label>
@@ -557,4 +561,6 @@ function goDashboard() {
   </Teleport>
 
   <HeartRateHelpSheet :open="heartRateHelpOpen" @close="heartRateHelpOpen = false" />
+
+  <HeartRateTestGuideSheet :open="heartRateTestGuideOpen" @close="heartRateTestGuideOpen = false" />
 </template>

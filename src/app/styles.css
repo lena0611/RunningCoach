@@ -4539,6 +4539,23 @@ button.run-session-row {
   font-size: 12px;
 }
 
+.hr-field-label-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hr-measure-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent, #2f6df6);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .bottom-sheet-trigger {
   display: flex;
   align-items: center;
