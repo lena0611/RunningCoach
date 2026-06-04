@@ -4237,9 +4237,9 @@ async function requireAppSession(admin: SupabaseAdminClient, req: Request, userI
 }
 
 async function verifyAppSessionToken(token: string): Promise<{ ok: true, userId: string, expiresAt: string } | { ok: false, status: number, error: string }> {
-  const parts = token.split('.')
+  const parts = token.split('~')
   if (parts.length !== 6 || parts[0] !== 'v1') return { ok: false, status: 403, error: 'Invalid app session format' }
-  const payload = parts.slice(0, 5).join('.')
+  const payload = parts.slice(0, 5).join('~')
   const expected = await hmacSha256Base64Url(requiredEnv('APP_SESSION_HMAC_SECRET'), payload)
   if (!timingSafeEqual(expected, parts[5])) return { ok: false, status: 403, error: 'Invalid app session signature' }
   return { ok: true, userId: parts[1], expiresAt: parts[2] }
