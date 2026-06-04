@@ -1010,6 +1010,7 @@ label {
   color: var(--color-text);
   text-align: left;
   cursor: pointer;
+  box-shadow: none;
 }
 
 .drawer-link-icon svg {
