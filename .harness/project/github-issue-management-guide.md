@@ -342,7 +342,9 @@ git worktree prune
 git worktree list
 # 머지된 브랜치 정리 (worktree remove는 브랜치 ref를 지우지 않음)
 git branch -d issue-4/github-issue-guard           # 로컬
-git push origin --delete issue-4/github-issue-guard # 원격(--delete-branch 머지나 자동삭제로 이미 지워졌으면 생략)
+# 원격: --delete-branch 머지나 deleteBranchOnMerge로 이미 지워졌으면 생략.
+# 남은 옛 브랜치는 gh api로 지운다. (main 작업트리에서 git push --delete는 pre-push 가드에 막힘)
+gh api -X DELETE repos/lena0611/RunningCoach/git/refs/heads/issue-4/github-issue-guard
 ```
 
 worktree 운영 기준:
@@ -356,7 +358,7 @@ worktree 운영 기준:
 - stash는 예외적 임시 조치입니다. 정상 운영에서는 Issue worktree로 분리해 stash 사용을 최소화합니다.
 - 완료된 Issue worktree 정리 기준은 `Issue Closed`, Project Status `Done`, worktree clean, 후속 확인 불필요입니다. `Open` 또는 `Deployed` Issue의 worktree는 기본 보류합니다.
 - 미커밋 변경이 있는 worktree는 임의로 제거하지 않습니다. 변경 소실 위험을 보고하고, 사용자가 해당 경로 삭제를 명시한 경우에만 `git worktree remove --force <경로>`를 사용합니다.
-- worktree 제거는 브랜치 ref를 남기므로, `main`에 머지된 feature 브랜치는 로컬 `git branch -d <branch>`, 원격 `git push origin --delete <branch>`로 함께 정리합니다. 원격은 저장소 `deleteBranchOnMerge=true`와 `gh pr merge --delete-branch`로 머지 시 자동 정리되는 것이 1차 방어선입니다. 상세 절차는 `.harness/project/workflow-rules.md`의 완료 후 정리 게이트를 따릅니다.
+- worktree 제거는 브랜치 ref를 남기므로, `main`에 머지된 feature 브랜치는 로컬 `git branch -d <branch>`로 정리하고, 원격에 남은 ref는 `gh api -X DELETE repos/<owner>/<repo>/git/refs/heads/<branch>`로 지웁니다. 기준 작업트리가 `main`에 있으면 `git push origin --delete <branch>`는 pre-push 가드에 막히므로 `gh api` 경로를 씁니다. 원격은 저장소 `deleteBranchOnMerge=true`와 `gh pr merge --delete-branch`로 머지 시 자동 정리되는 것이 1차 방어선입니다. 상세 절차는 `.harness/project/workflow-rules.md`의 완료 후 정리 게이트를 따릅니다.
 
 branch 이름은 `issue-<번호>/<짧은-설명>`을 기본으로 합니다.
 
