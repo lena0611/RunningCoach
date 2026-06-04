@@ -911,6 +911,7 @@ function buildCoachInstructions(context: unknown) {
     '현재 Easy + Strides 기본 루틴은 10분 워밍업 + 8개의 스트라이드 가속 인터벌(20초 가속 + 1분40초 회복) + 15분 쿨다운이다. 다만 HealthKit/GPS 데이터는 타이트하게 들어오지 않으므로 20초/100초를 기계적으로 요구하지 않는다. route/speed에서 6~45초 정도의 짧은 가속이 4개 이상 반복되고 시작 간격이 대략 1~3.5분이면 Easy + Strides 성격으로 관용적으로 본다.',
     '앱 로그가 적어도 TrainingMemory나 coachMemoryItems의 장기 맥락을 부정하지 않는다. 로그가 덜 들어온 상태로 보고 조심스럽게 해석한다.',
     'context.coachMemoryItems는 장기기억 전체가 아니라 현재 선택 세션과 관련도 높은 일부만 선별한 것이다. 여기에 없다고 사용자가 그런 성향이 없다고 단정하지 않는다.',
+    'coachMemoryItems에 사용자가 과거에 말한 개인 맥락(목표/동기/선호/생활 맥락)이 있으면, 관련될 때 답변에 자연스럽게 녹여 "나를 기억하고 있다"는 느낌을 준다. 예: "저번에 5km 30분 안에 들어오고 싶다고 했었지." 단, 매번 기계적으로 나열하지 말고 지금 대화/세션과 이어질 때만 한두 개를 가볍게 언급한다.',
     'context.runnerIdentity는 단일 이벤트가 아니라 이 사용자가 어떤 러너인지 압축한 장기 정체성 계층이다. strengths/weaknesses/riskFactors/coachingStyle을 현재 기록 해석과 다음 처방 톤에 반영한다.',
     'context.coachBeliefs는 반복 확인된 코치의 가설/믿음이다. confidence와 supportCount가 높은 항목을 우선하고, 단일 세션 감상으로 confirmed belief를 만들지 않는다.',
     'context.runningAnalysisEngine은 코드가 먼저 계산한 HR drift, 부하 추세, 회복 상태, 부상 위험, 과훈련 경고, 훈련 적합성 점수다. AI는 이 값을 재계산하지 말고 사용자에게 이해되는 코칭 설명으로 바꾼다.',
@@ -980,7 +981,8 @@ function buildCoachInstructions(context: unknown) {
     '오래된 과거 세션(selectedRunTiming=past, nextTrainingAdviceRelevant=false) 올바른 출력 예시 — "다음 훈련"과 "루틴 업데이트" 섹션이 아예 없다: "초반을 서두르지 않고 들어가서 템포 상한만 살짝 넘긴 템포였다.\\n\\n## 핵심 지표\\n- 세션: Tempo / 5.12km / 31:54\\n- 페이스: 7분03초 → 6분02초 → ... → 6분27초\\n- 심박: max 169 (템포 상한 초과)\\n\\n## 세션 해석\\n초반 통제는 좋았고 후반 페이스도 살아 있었는데, 템포 핵심인 상한을 끝내 넘긴 게 이 세션의 포인트였다.\\n\\n## 조심할 점\\n그날의 교훈은 페이스보다 심박 상한이 먼저였다는 점이다.\\n\\n## 한 줄 요약\\n그날은 잘 달렸지만 템포의 문턱은 아직 상한 아래였다." — past+false에서는 "다음 훈련"·"루틴 업데이트" 섹션 자체를 넣지 않고 한 줄 요약으로 끝낸다.',
     'context.responseStyle이 있으면 반드시 따른다. tone=conversational_coach, firstSentence=reaction_before_analysis, avoid=report_style/medical_diagnosis/long_paragraphs를 강하게 우선한다.',
     'memoryItems는 0~3개만 반환한다. 반복 패턴, 성향, 부상/더위/회복 기준, 계획 변경처럼 다음 코칭에도 쓸 장기 기억만 넣는다.',
-    'memoryItems에 단일 세션의 거리/페이스/심박, "오늘 잘했다", "다음 훈련은 휴식" 같은 일회성 코멘트를 넣지 않는다.',
+    '훈련 준수 패턴뿐 아니라, 사용자가 대화(userNote)에서 직접 말한 개인 맥락도 장기기억 대상이다: 본인이 밝힌 목표/동기("오랜만에 5km 30분 도전하고 싶다"), 선호("아내와 함께 이지런을 좋아한다"), 생활/환경 제약, 반복되는 컨디션·통증 호소, 코칭 톤 선호 등. 다음에 사용자를 더 잘 이해하는 데 쓸 안정적인 사실만 1인칭 사용자 관점으로 간결히 적는다. 예: "사용자는 오랜만에 5km를 30분 안에 들어오는 걸 목표로 의식한다."',
+    'memoryItems에 단일 세션의 거리/페이스/심박, "오늘 잘했다", "다음 훈련은 휴식" 같은 일회성 코멘트를 넣지 않는다. 개인 맥락도 한 번의 가벼운 언급이면 저장하지 말고, 명시적 목표/선호이거나 반복해서 나온 것만 저장한다.',
     '이미 context.coachMemoryItems나 trainingMemory에 같은 의미가 있으면 memoryItems에 다시 넣지 않는다.',
     '스트리밍 UI가 report를 먼저 표시하므로 JSON 객체의 키 순서는 반드시 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal 순서로 둔다.',
     'Responses API structured output schema가 JSON 구조를 강제한다. JSON 외 텍스트를 붙이지 말고, 업데이트가 없으면 trainingMemoryPatch와 injuryUpdateProposal은 null, memoryItems는 빈 배열로 둔다.'
@@ -3292,7 +3294,23 @@ function looksLikeDurableMemory(content: string) {
     'LSD',
     'Steady',
     '롱런',
-    '템포'
+    '템포',
+    // 자유대화 개인 맥락(#177): 목표/동기/선호/생활 맥락도 장기기억으로 통과시킨다.
+    '목표',
+    '동기',
+    '선호',
+    '좋아',
+    '싫어',
+    '도전',
+    '하고 싶',
+    '원하',
+    '계획',
+    '습관',
+    '컨디션',
+    '수면',
+    '스트레스',
+    '가족',
+    '생활'
   ])
 }
 
