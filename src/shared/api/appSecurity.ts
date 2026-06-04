@@ -58,7 +58,7 @@ export async function getAppSessionToken() {
   return payload.token
 }
 
-function requestDeviceCheckToken() {
+function requestDeviceCheckToken(): Promise<string> {
   const handlers = window.webkit?.messageHandlers as
     | {
         runContextAppSecurity?: {
@@ -67,7 +67,8 @@ function requestDeviceCheckToken() {
       }
     | undefined
   const handler = handlers?.runContextAppSecurity
-  if (!handler) throw new Error(deviceCheckUnavailableMessage)
+  // 브리지가 없으면 동기 throw 대신 rejected Promise로 돌려보내, 호출부의 .catch() 폴백(allowlist 모드에서 deviceToken 없이 진행)이 실제로 동작하게 한다.
+  if (!handler) return Promise.reject(new Error(deviceCheckUnavailableMessage))
 
   installAppSecurityReceiver()
   if (pendingDeviceToken) {
