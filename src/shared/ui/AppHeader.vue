@@ -115,18 +115,19 @@ const heartRateModeOptions = [
 const observedMaxHr = computed(() =>
   deriveObservedMaxHr(runStore.sortedRuns.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })))
 )
+// 편집 중 draft 기준으로 계산해 토글/입력이 즉시 반영되게 한다(draft는 drawer 열 때 memory에서 동기화).
 const activeHeartRateModel = computed(() =>
-  deriveHeartRateModel(memoryStore.memory.athleteProfile, new Date().getFullYear(), observedMaxHr.value)
+  deriveHeartRateModel(draft.athleteProfile, new Date().getFullYear(), observedMaxHr.value)
 )
 const recommendedHeartRateModel = computed(() =>
-  deriveRecommendedHeartRateModel(memoryStore.memory.athleteProfile, new Date().getFullYear(), observedMaxHr.value)
+  deriveRecommendedHeartRateModel(draft.athleteProfile, new Date().getFullYear(), observedMaxHr.value)
 )
 function describeHeartRateModel(model: ReturnType<typeof deriveHeartRateModel>): string {
   if (model.tempoCeilingBpm === null) return '미설정 (나이 또는 심박 입력 필요)'
   return `템포 ${model.tempoCeilingBpm} · 이지 ${model.easyCeilingBpm} · 회복 ${model.recoveryCeilingBpm}bpm (${HEART_RATE_SOURCE_LABEL[model.source] ?? model.source})`
 }
 const heartRateModeValue = computed({
-  get: () => memoryStore.memory.athleteProfile.heartRateMode === 'manual' ? 'manual' : 'auto',
+  get: () => draft.athleteProfile.heartRateMode === 'manual' ? 'manual' : 'auto',
   set: (value: string | string[]) => {
     if (Array.isArray(value)) return
     draft.athleteProfile.heartRateMode = value === 'manual' ? 'manual' : 'auto'
