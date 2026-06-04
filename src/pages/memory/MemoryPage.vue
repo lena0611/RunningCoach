@@ -166,9 +166,14 @@ const rulesByMethod = computed(() => {
   }
   return groups
 })
+// 루틴 카드 심박 숫자는 계정정보·코칭과 동일한 개인화 heartRateModel에서 가져온다(하드코딩 165/145/130 금지).
+const routineHeartRateModel = computed(() => {
+  const observed = deriveObservedMaxHr(runStore.sortedRuns.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })))
+  return deriveHeartRateModel(draft.athleteProfile, new Date().getFullYear(), observed)
+})
 const weeklyRoutineGuides = computed(() => draft.weeklyPattern.map((item) => ({
   item,
-  ...getWeeklyRoutineGuide(item)
+  ...getWeeklyRoutineGuide(item, routineHeartRateModel.value)
 })))
 const trainingPhase = computed(() => draft.adaptiveTrainingProfile.trainingPhase)
 const progressionCriteria = computed(() => draft.adaptiveTrainingProfile.progressionCriteria)
@@ -443,12 +448,16 @@ function methodMeta(method: TrainingMethod) {
   return `${distances} · ${days}`
 }
 
-function getWeeklyRoutineGuide(item: string) {
+function getWeeklyRoutineGuide(item: string, hr: ReturnType<typeof deriveHeartRateModel>) {
   const value = item.toLowerCase()
+  // 심박 숫자는 개인화 heartRateModel에서만 가져온다. 상한이 null이면 고정 숫자 대신 페이스/RPE 표현.
+  const tempo = hr.tempoCeilingBpm
+  const easy = hr.easyCeilingBpm
+  const recovery = hr.recoveryCeilingBpm
   if (value.includes('easy + strides') || value.includes('strides') || value.includes('스트라이드')) {
     return {
       title: 'Easy + Strides',
-      metric: '현재: 145bpm 이하 + 짧은 가속',
+      metric: easy !== null ? `현재: ${easy}bpm 이하 + 짧은 가속` : '현재: 페이스·RPE로 이지 유지 + 짧은 가속',
       details: [
         '워밍업 10분',
         '20초 가속 + 1분40초 회복 x 8',
@@ -461,10 +470,10 @@ function getWeeklyRoutineGuide(item: string) {
   if (value.includes('tempo') || value.includes('템포')) {
     return {
       title: 'Tempo',
-      metric: '현재: max 165bpm 넘기지 않기',
+      metric: tempo !== null ? `현재: max ${tempo}bpm 넘기지 않기` : '현재: 페이스·심박 드리프트로 관리',
       details: [
         '페이스보다 최대 심박 상한 우선',
-        '랩별 심박이 165를 넘는지 확인',
+        tempo !== null ? `구간 심박이 ${tempo}를 넘는지 확인` : '구간 심박이 흔들리는지 확인',
         '넘기면 다음 템포는 초반 진입을 낮춤',
         '잘 지키면 지속 시간/품질을 소폭 상향 검토'
       ]
@@ -473,7 +482,7 @@ function getWeeklyRoutineGuide(item: string) {
   if (value.includes('recovery') || value.includes('회복')) {
     return {
       title: 'Recovery',
-      metric: '현재: 130bpm 전후로 아주 낮게',
+      metric: recovery !== null ? `현재: ${recovery}bpm 전후로 아주 낮게` : '현재: 아주 낮은 강도로 회복',
       details: [
         '거리 욕심 없이 회복 반응 확인',
         '전날 롱런/템포 피로를 풀어주는 목적',
@@ -495,7 +504,7 @@ function getWeeklyRoutineGuide(item: string) {
   if (value.includes('easy') || value.includes('이지')) {
     return {
       title: 'Easy',
-      metric: '현재: 145bpm 넘기지 않기',
+      metric: easy !== null ? `현재: ${easy}bpm 넘기지 않기` : '현재: 페이스보다 심박·RPE 우선',
       details: [
         '페이스보다 심박 우선',
         '대화 가능한 강도',
