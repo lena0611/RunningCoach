@@ -125,14 +125,15 @@ Issue final comment에는 항상 아래 한 줄을 추가합니다.
 
 이 게이트를 통과한 뒤 완료 요약 댓글, `재발 방지 기록`, Project `Done`, Issue close를 처리합니다.
 
-## 완료 후 Issue worktree 정리 게이트
+## 완료 후 Issue worktree·브랜치 정리 게이트
 
-Issue 완료 책임 창은 Project `Done`과 Issue close까지 끝낸 뒤 로컬 Issue worktree 정리 여부를 확인합니다.
+Issue 완료 책임 창은 Project `Done`과 Issue close까지 끝낸 뒤 로컬 Issue worktree와 머지된 feature 브랜치 정리 여부를 확인합니다. `git worktree remove`는 작업 폴더만 지우고 브랜치 ref는 남기므로, worktree 정리와 브랜치 정리를 같이 처리합니다.
 
 - 삭제 대상 조건:
   - GitHub Issue가 `Closed` 상태다.
   - GitHub Project `PaceLAB Development`의 Status가 `Done`이다.
   - 해당 worktree에서 `git status --short`가 비어 있다.
+  - feature 브랜치가 `main`에 머지 완료됐다.
   - 해당 worktree가 배포 확인, 사용자 확인, 후속 디버깅, handoff에 더 이상 필요하지 않다.
 - 실행 순서:
   - 기준 작업트리 `/Users/smart-tn-083/practice/run-ai`에서 `git worktree list`로 대상 경로를 확인한다.
@@ -140,12 +141,19 @@ Issue 완료 책임 창은 Project `Done`과 Issue close까지 끝낸 뒤 로컬
   - `git worktree remove <경로>`를 실행한다.
   - `git worktree prune`을 실행한다.
   - `git worktree list`로 제거 결과를 확인한다.
+  - 머지된 브랜치를 정리한다. 원격은 저장소 `deleteBranchOnMerge=true`로 PR 머지 시 자동 삭제되지만, 자동 삭제가 꺼져 있거나 `gh pr merge`에 `--delete-branch`를 쓰지 않았으면 `git push origin --delete <branch>`로 원격을 지운다.
+  - 로컬 브랜치는 기준 작업트리에서 `git branch -d <branch>`로 지운다(머지 완료라 `-d`로 충분하고, `-D` 강제 삭제는 미머지 확신이 있을 때만).
+  - `git branch --merged main | grep issue-`로 남은 머지된 브랜치를 확인한다.
+- PR 머지 시 기본 동작:
+  - `gh pr merge <번호> --merge --delete-branch`처럼 `--delete-branch`를 기본으로 붙여 머지 직후 브랜치를 정리한다.
+  - 저장소 설정은 `deleteBranchOnMerge=true`를 유지한다(`gh repo edit <repo> --delete-branch-on-merge`). 이 설정이 원격 브랜치 누적을 막는 1차 방어선이다.
 - 보류 조건:
   - Issue가 `Open`, Project Status가 `Deployed`, `Review`, `Verify`, `In Progress` 중 하나면 기본적으로 삭제하지 않는다.
   - 미커밋 변경이 있으면 임의로 삭제하지 않고 변경 파일과 삭제 위험을 보고한다.
   - 사용자가 특정 worktree 삭제를 명시하면 미커밋 변경이 있어도 해당 지시를 우선하되, 실행 전 변경 소실을 짧게 알린다.
+  - 브랜치가 `main`에 머지되지 않았으면 로컬/원격 브랜치를 임의로 삭제하지 않는다.
 
-완료 댓글 또는 후속 정리 댓글에는 worktree 제거 여부를 남깁니다. 정리하지 않았다면 `Open/Deployed`, 미커밋 변경, 후속 확인 필요 같은 보류 사유를 적습니다.
+완료 댓글 또는 후속 정리 댓글에는 worktree와 브랜치 제거 여부를 남깁니다. 정리하지 않았다면 `Open/Deployed`, 미커밋 변경, 미머지, 후속 확인 필요 같은 보류 사유를 적습니다.
 
 작업 유형별 시작 문서:
 
