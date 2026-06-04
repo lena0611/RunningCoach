@@ -60,6 +60,7 @@ Use a screen stack when the user is drilling into a deeper flow without changing
 - Nested stack transitions must be visible. When a stack page opens another detail/create/edit page, wrap the keyed page body in a right-to-left `Transition` instead of swapping conditional content in place.
 - Stack headers use compact icon buttons to preserve title space on mobile. Titles are Korean-only, left aligned, and placed immediately to the right of Back when Back is present.
 - Stack and drawer headers must use icon-only Back/Close buttons with accessible `aria-label`; do not show literal text buttons such as "뒤로" or "닫기" in header chrome.
+- Custom non-primary buttons (chips, list rows, tabs, ghost surfaces built on `<button>`) must reset `box-shadow: none`. The global `button` rule applies a green primary glow (`--shadow-button`); leaving it produces an odd drop shadow on surface-styled controls. This has recurred on `.drawer-link-row` and `.glossary-chip` — always reset the shadow when restyling a `<button>` as a surface/chip/tab.
 - Edit/create stack pages use a fixed full-width bottom action bar for saving. Save is disabled until dirty state is detected.
 - Destructive actions ask for confirmation in a bottom sheet, not `window.confirm`.
 - User consent for app-state changes such as saving detected goals, routine updates, or coaching-basis changes must use a bottom sheet confirmation. Do not ask the user to confirm those changes as ordinary chat text.

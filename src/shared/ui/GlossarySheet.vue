@@ -140,6 +140,7 @@ const resultCount = computed(() => filteredGroups.value.reduce((sum, group) => s
   padding: 6px 12px;
   font-size: 0.82rem;
   cursor: pointer;
+  box-shadow: none;
 }
 
 .glossary-chip.active {
