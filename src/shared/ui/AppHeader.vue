@@ -201,11 +201,13 @@ function openDrawer() {
   resetDraft()
   drawerOpen.value = true
   drawerPanel.value = 'account'
+  document.body.classList.add('memory-stack-open')
 }
 
 function closeDrawer() {
   drawerOpen.value = false
   drawerPanel.value = 'account'
+  document.body.classList.remove('memory-stack-open')
 }
 
 function parsePersonalBests(value: string) {
@@ -348,90 +350,100 @@ function goGlossary() {
   </header>
 
   <Teleport to="body">
-    <div v-if="drawerOpen" class="side-drawer-layer" @click.self="closeDrawer">
-      <aside class="side-drawer" aria-label="계정 정보">
-        <section class="side-drawer-panel account-panel">
-          <div class="drawer-heading">
+    <Transition name="stack-page">
+      <div v-if="drawerOpen" class="memory-stack-layer" data-no-swipe>
+        <section class="memory-stack-page">
+          <header class="memory-stack-header">
             <div>
               <h2>계정 정보</h2>
             </div>
-            <div class="drawer-heading-actions">
-              <button class="stack-icon-button" type="button" aria-label="설정 열기" @click="drawerPanel = 'settings'">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
-                  <path d="M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1 1.6V21a2 2 0 0 1-4 0v-.1a1.8 1.8 0 0 0-1-1.6 1.8 1.8 0 0 0-2 .4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.8 1.8 0 0 0 .4-2 1.8 1.8 0 0 0-1.6-1H3a2 2 0 0 1 0-4h.1a1.8 1.8 0 0 0 1.6-1 1.8 1.8 0 0 0-.4-2l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.8 1.8 0 0 0 2 .4 1.8 1.8 0 0 0 1-1.6V3a2 2 0 0 1 4 0v.1a1.8 1.8 0 0 0 1 1.6 1.8 1.8 0 0 0 2-.4l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.8 1.8 0 0 0-.4 2 1.8 1.8 0 0 0 1.6 1H21a2 2 0 0 1 0 4h-.1a1.8 1.8 0 0 0-1.5 1Z" />
-                </svg>
-              </button>
-              <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeDrawer">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
-              </button>
-            </div>
-          </div>
+            <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeDrawer">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+            </button>
+          </header>
 
-          <div class="account-summary">
-            <div class="account-avatar">{{ accountLabel.slice(0, 1).toUpperCase() }}</div>
-            <div>
-              <strong>{{ accountLabel }}</strong>
-              <span>{{ accountEmail }}</span>
+          <main class="memory-stack-content">
+            <div class="account-summary">
+              <div class="account-avatar">{{ accountLabel.slice(0, 1).toUpperCase() }}</div>
+              <div>
+                <strong>{{ accountLabel }}</strong>
+                <span>{{ accountEmail }}</span>
+              </div>
             </div>
-          </div>
 
-          <dl class="account-details">
-            <div>
-              <dt>목표</dt>
-              <dd>{{ activeGoalTitle }}</dd>
-            </div>
-            <div>
-              <dt>러닝 경력</dt>
-              <dd>{{ formatExperience(memoryStore.memory.athleteProfile.runningExperienceMonths) }}</dd>
-            </div>
-            <div>
-              <dt>러너 레벨</dt>
-              <dd>{{ runnerLevelDisplay }}</dd>
-            </div>
-            <div>
-              <dt>선호 롱런</dt>
-              <dd>{{ memoryStore.memory.athleteProfile.preferredLongRunDay || '미입력' }}</dd>
-            </div>
-            <div>
-              <dt>심박 상한</dt>
-              <dd>{{ activeHeartRateDisplay }}</dd>
-            </div>
-            <div>
-              <dt>부상관리</dt>
-              <dd>{{ activeInjuryTitle }}</dd>
-            </div>
-          </dl>
+            <dl class="account-details">
+              <div>
+                <dt>목표</dt>
+                <dd>{{ activeGoalTitle }}</dd>
+              </div>
+              <div>
+                <dt>러닝 경력</dt>
+                <dd>{{ formatExperience(memoryStore.memory.athleteProfile.runningExperienceMonths) }}</dd>
+              </div>
+              <div>
+                <dt>러너 레벨</dt>
+                <dd>{{ runnerLevelDisplay }}</dd>
+              </div>
+              <div>
+                <dt>선호 롱런</dt>
+                <dd>{{ memoryStore.memory.athleteProfile.preferredLongRunDay || '미입력' }}</dd>
+              </div>
+              <div>
+                <dt>심박 상한</dt>
+                <dd>{{ activeHeartRateDisplay }}</dd>
+              </div>
+              <div>
+                <dt>부상관리</dt>
+                <dd>{{ activeInjuryTitle }}</dd>
+              </div>
+            </dl>
 
-          <button class="drawer-link-row" type="button" @click="goGlossary">
-            <span class="drawer-link-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1.2 1-1.2 1.9" /><path d="M12 16.5h.01" /></svg>
-            </span>
-            <span class="drawer-link-text">
-              <strong>용어 안내</strong>
-              <span>러닝·코칭 용어를 한곳에서 찾아보기</span>
-            </span>
-            <svg class="drawer-link-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
-          </button>
+            <button class="drawer-link-row" type="button" @click="drawerPanel = 'settings'">
+              <span class="drawer-link-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" /><path d="M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1 1.6V21a2 2 0 0 1-4 0v-.1a1.8 1.8 0 0 0-1-1.6 1.8 1.8 0 0 0-2 .4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.8 1.8 0 0 0 .4-2 1.8 1.8 0 0 0-1.6-1H3a2 2 0 0 1 0-4h.1a1.8 1.8 0 0 0 1.6-1 1.8 1.8 0 0 0-.4-2l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.8 1.8 0 0 0 2 .4 1.8 1.8 0 0 0 1-1.6V3a2 2 0 0 1 4 0v.1a1.8 1.8 0 0 0 1 1.6 1.8 1.8 0 0 0 2-.4l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.8 1.8 0 0 0-.4 2 1.8 1.8 0 0 0 1.6 1H21a2 2 0 0 1 0 4h-.1a1.8 1.8 0 0 0-1.5 1Z" /></svg>
+              </span>
+              <span class="drawer-link-text">
+                <strong>설정</strong>
+                <span>화면 테마와 알림을 관리합니다</span>
+              </span>
+              <svg class="drawer-link-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+            </button>
 
-          <ActionGroup class="drawer-actions">
-            <button type="button" @click="drawerPanel = 'profile'">정보수정</button>
-            <button class="ghost" type="button" @click="signOutAndClose">로그아웃</button>
-          </ActionGroup>
+            <button class="drawer-link-row" type="button" @click="goGlossary">
+              <span class="drawer-link-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1.2 1-1.2 1.9" /><path d="M12 16.5h.01" /></svg>
+              </span>
+              <span class="drawer-link-text">
+                <strong>용어 안내</strong>
+                <span>러닝·코칭 용어를 한곳에서 찾아보기</span>
+              </span>
+              <svg class="drawer-link-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+            </button>
+
+            <ActionGroup class="drawer-actions">
+              <button type="button" @click="drawerPanel = 'profile'">정보수정</button>
+              <button class="ghost" type="button" @click="signOutAndClose">로그아웃</button>
+            </ActionGroup>
+          </main>
         </section>
+      </div>
+    </Transition>
 
-        <section v-if="drawerPanel === 'profile'" class="side-drawer-panel edit-panel">
-          <div class="drawer-heading">
+    <Transition name="stack-page">
+      <div v-if="drawerOpen && drawerPanel === 'profile'" class="memory-stack-layer stack-layer-top" data-no-swipe>
+        <section class="memory-stack-page">
+          <header class="memory-stack-header">
             <button class="stack-icon-button" type="button" aria-label="계정 정보로 돌아가기" @click="drawerPanel = 'account'">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
             </button>
             <div>
               <h2>개인정보 수정</h2>
             </div>
-          </div>
+          </header>
 
-          <p v-if="error" class="error">{{ error }}</p>
-          <FormGrid as="form" @submit.prevent="saveProfile">
+          <main class="memory-stack-content">
+            <p v-if="error" class="error">{{ error }}</p>
+            <FormGrid as="form" @submit.prevent="saveProfile">
             <label class="full">
               계정 표시 이름
               <ClearableField v-model="draftName" autocomplete="name" />
@@ -483,18 +495,24 @@ function goGlossary() {
             </label>
             <button class="full" type="submit" :disabled="saving">{{ saving ? '저장 중' : '저장' }}</button>
           </FormGrid>
+          </main>
         </section>
+      </div>
+    </Transition>
 
-        <section v-else-if="drawerPanel === 'settings'" class="side-drawer-panel settings-panel">
-          <div class="drawer-heading">
+    <Transition name="stack-page">
+      <div v-if="drawerOpen && drawerPanel === 'settings'" class="memory-stack-layer stack-layer-top" data-no-swipe>
+        <section class="memory-stack-page">
+          <header class="memory-stack-header">
             <button class="stack-icon-button" type="button" aria-label="계정 정보로 돌아가기" @click="drawerPanel = 'account'">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
             </button>
             <div>
               <h2>설정</h2>
             </div>
-          </div>
+          </header>
 
+          <main class="memory-stack-content">
           <section class="settings-section">
             <div class="settings-section-heading">
               <p class="eyebrow">Theme</p>
@@ -574,9 +592,10 @@ function goGlossary() {
 
             <p class="helper">iPhone에서는 알림 권한을 허용해야 배너가 표시됩니다. 루틴 변경 후에는 가까운 2주 알림을 다시 예약합니다.</p>
           </section>
+          </main>
         </section>
-      </aside>
-    </div>
+      </div>
+    </Transition>
   </Teleport>
 
   <HeartRateHelpSheet :open="heartRateHelpOpen" @close="heartRateHelpOpen = false" />
