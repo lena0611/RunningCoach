@@ -3396,9 +3396,19 @@ function getAgeLoadWeightForCoach(memory: unknown, currentDate: string): number 
 // 우선순위: heartRateMode=manual이면 lactateThresholdHr > 측정 maxHeartRate, 아니면 추천(Tanaka 나이 + 누적 관측 HRmax 보정) > 근거부족 시 null.
 // 165 같은 개인 상수는 코드에 두지 않는다. 36세는 공식상 anchor≈165가 자연 산출된다.
 const COACH_LT_FRACTION_OF_MAX = 0.9
+// 안정심박이 있으면 Karvonen(HRR) 기반 역치 추정 계수(역치/템포 ~80~90% HRR, 중앙값 0.85).
+const COACH_LT_FRACTION_OF_HRR = 0.85
 // 존 상단 경계를 anchor(LTHR)의 비율로 정의(%LTHR). 특정 bpm 상수가 아니다.
 const COACH_EASY_FRACTION_OF_LTHR = 0.88
 const COACH_RECOVERY_FRACTION_OF_LTHR = 0.79
+
+// 최대심박에서 역치심박을 추정. 안정심박이 있으면 Karvonen(HRR), 없으면 %HRmax.
+function coachLtAnchorFromMax(maxHr: number, restingHr: number | null): number {
+  if (restingHr !== null && restingHr < maxHr) {
+    return Math.round(COACH_LT_FRACTION_OF_HRR * (maxHr - restingHr) + restingHr)
+  }
+  return Math.round(maxHr * COACH_LT_FRACTION_OF_MAX)
+}
 
 type CoachHeartRateModel = {
   tempoCeilingBpm: number | null
@@ -3516,7 +3526,7 @@ function deriveCoachHeartRateModel(memory: unknown, currentDate: string, runs: R
       return coachModelFromAnchor(lthr, { estimatedMaxHr: measuredMax, observedMaxHr: null, restingHeartRate, source: 'lthr' })
     }
     if (measuredMax !== null) {
-      return coachModelFromAnchor(Math.round(measuredMax * COACH_LT_FRACTION_OF_MAX), {
+      return coachModelFromAnchor(coachLtAnchorFromMax(measuredMax, restingHeartRate), {
         estimatedMaxHr: measuredMax, observedMaxHr: null, restingHeartRate, source: 'measured_max'
       })
     }
@@ -3530,17 +3540,17 @@ function deriveCoachHeartRateModel(memory: unknown, currentDate: string, runs: R
 
   if (ageMax !== null && observedMaxHr !== null) {
     const corrected = Math.max(ageMax, observedMaxHr)
-    return coachModelFromAnchor(Math.round(corrected * COACH_LT_FRACTION_OF_MAX), {
+    return coachModelFromAnchor(coachLtAnchorFromMax(corrected, restingHeartRate), {
       estimatedMaxHr: corrected, observedMaxHr, restingHeartRate, source: observedMaxHr > ageMax ? 'age_data_corrected' : 'age_estimated'
     })
   }
   if (ageMax !== null) {
-    return coachModelFromAnchor(Math.round(ageMax * COACH_LT_FRACTION_OF_MAX), {
+    return coachModelFromAnchor(coachLtAnchorFromMax(ageMax, restingHeartRate), {
       estimatedMaxHr: ageMax, observedMaxHr: null, restingHeartRate, source: 'age_estimated'
     })
   }
   if (observedMaxHr !== null) {
-    return coachModelFromAnchor(Math.round(observedMaxHr * COACH_LT_FRACTION_OF_MAX), {
+    return coachModelFromAnchor(coachLtAnchorFromMax(observedMaxHr, restingHeartRate), {
       estimatedMaxHr: observedMaxHr, observedMaxHr, restingHeartRate, source: 'observed_data'
     })
   }
