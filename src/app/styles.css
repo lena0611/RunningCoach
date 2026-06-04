@@ -5341,6 +5341,18 @@ button.run-session-row {
   grid-column: 3;
 }
 
+/* 최상위 스택 헤더에 액션 버튼 여러 개(예: 설정 + 닫기)를 둘 때 */
+.memory-stack-header-actions {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.stack-header-actions {
+  display: flex;
+  align-items: center;
+  justify-self: end;
+  gap: 8px;
+}
+
 .memory-stack-header > div {
   min-width: 0;
   text-align: left;

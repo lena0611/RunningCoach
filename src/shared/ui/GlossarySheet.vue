@@ -114,7 +114,8 @@ const resultCount = computed(() => filteredGroups.value.reduce((sum, group) => s
 
 <style scoped>
 .glossary-content {
-  gap: 14px;
+  gap: 18px;
+  padding-top: 20px;
 }
 
 .glossary-intro {
@@ -154,7 +155,7 @@ const resultCount = computed(() => filteredGroups.value.reduce((sum, group) => s
 .glossary-group {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .glossary-group-heading h3 {
@@ -170,13 +171,13 @@ const resultCount = computed(() => filteredGroups.value.reduce((sum, group) => s
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .glossary-term {
   border: 1px solid var(--color-border);
   border-radius: 14px;
-  padding: 12px 14px;
+  padding: 16px 18px;
   background: var(--color-surface);
 }
 
@@ -196,10 +197,10 @@ const resultCount = computed(() => filteredGroups.value.reduce((sum, group) => s
 }
 
 .glossary-term dd {
-  margin: 6px 0 0;
+  margin: 8px 0 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .glossary-short {
