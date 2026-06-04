@@ -2,18 +2,19 @@ import type { ExtractedRunData, RunMetricSample, RunRoutePoint } from '@/entitie
 import { createSessionTitle } from '@/features/create-session-title/createSessionTitle'
 import { inferCourseType } from '@/features/infer-course-type/inferCourseType'
 import { inferRunType } from '@/features/infer-run-type/inferRunType'
+import type { HeartRateModel } from '@/shared/lib/heartRateZones'
 
-export async function extractRunDataFromFile(file: File): Promise<ExtractedRunData> {
+export async function extractRunDataFromFile(file: File, heartRateModel: HeartRateModel | null = null): Promise<ExtractedRunData> {
   const lowerName = file.name.toLowerCase()
 
   if (!lowerName.endsWith('.fit')) {
     throw new Error('현재는 Workoutdoors FIT 파일만 지원합니다.')
   }
 
-  return extractFromFit(await file.arrayBuffer())
+  return extractFromFit(await file.arrayBuffer(), heartRateModel)
 }
 
-async function extractFromFit(buffer: ArrayBuffer): Promise<ExtractedRunData> {
+async function extractFromFit(buffer: ArrayBuffer, heartRateModel: HeartRateModel | null = null): Promise<ExtractedRunData> {
   const { default: FitParser } = await import('fit-file-parser')
   const fitParser = new FitParser({
     force: true,
@@ -70,7 +71,8 @@ async function extractFromFit(buffer: ArrayBuffer): Promise<ExtractedRunData> {
     laps: mappedLaps,
     fastSegments: [],
     metricSamples,
-    routePoints
+    routePoints,
+    heartRateModel
   })
 
   return {

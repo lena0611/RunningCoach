@@ -94,8 +94,11 @@ function confirmMultiple() {
 
 <template>
   <div class="bottom-sheet-select" :class="{ 'bottom-sheet-select-compact': compact }">
-    <span class="bottom-sheet-label">{{ label }}</span>
-    <button class="bottom-sheet-trigger" type="button" @pointerdown.stop @click.stop="openSheet">
+    <span class="bottom-sheet-label-row">
+      <span class="bottom-sheet-label">{{ label }}</span>
+      <slot name="label-suffix" />
+    </span>
+    <button class="bottom-sheet-trigger" type="button" @click.stop="openSheet">
       <span>{{ displayText }}</span>
       <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24">
         <path d="m6 9 6 6 6-6" />

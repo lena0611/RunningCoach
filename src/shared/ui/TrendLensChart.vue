@@ -147,13 +147,8 @@ function renderChart() {
 <template>
   <div
     class="trend-lens-chart"
-    data-no-swipe
     role="img"
     aria-label="추세 렌즈 막대 차트"
-    @pointerdown.stop
-    @pointermove.stop
-    @touchstart.stop
-    @touchmove.stop
   >
     <div ref="chartRef" class="trend-lens-echart" aria-hidden="true" />
     <div v-if="latestPoint" class="trend-lens-latest">

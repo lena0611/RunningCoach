@@ -9,12 +9,12 @@ import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/m
 import type { RunLog } from '@/entities/run/model'
 import RunSummaryCard from '@/widgets/run-summary-card/RunSummaryCard.vue'
 import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
-import FatigueCard from '@/widgets/fatigue-card/FatigueCard.vue'
 import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
-import { getEasyRatio, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, getVolumeWarning, sumDistance } from '@/shared/lib/runStats'
+import { getAgeLoadWeight, getEasyRatio, getFatigueWarning, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, sumDistance } from '@/shared/lib/runStats'
 import { formatDateWithWeekday, formatDuration } from '@/shared/lib/format'
 import { getRaceProjection } from '@/shared/lib/performanceProjection'
-import ContentStack from '@/shared/ui/ContentStack.vue'
+import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
+import { formatWeatherNumber, weatherSymbolToEmoji } from '@/shared/lib/weather'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import MetricGrid from '@/shared/ui/MetricGrid.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
@@ -36,6 +36,7 @@ const route = useRoute()
 const trendMetric = ref<'month' | 'last7' | 'easy' | 'hard' | null>(null)
 const detailRun = ref<RunLog | null>(null)
 const projectionDetailOpen = ref(false)
+const nextSessionDetailOpen = ref(false)
 const today = ref(new Date())
 const todayDate = computed(() => formatDateOnly(today.value))
 
@@ -52,12 +53,19 @@ const memoryDataLoading = computed(() => memoryStore.loading)
 const weekDistance = computed(() => sumDistance(getThisWeekRuns(runs.value, today.value)))
 const monthDistance = computed(() => sumDistance(getThisMonthRuns(runs.value, today.value)))
 const last7 = computed(() => sumDistance(getRunsWithinDays(runs.value, 7, today.value)))
-const last14 = computed(() => sumDistance(getRunsWithinDays(runs.value, 14, today.value)))
 const easyRatio = computed(() => getEasyRatio(getRunsWithinDays(runs.value, 30, today.value)))
 const nextSession = computed(() => getNextSessionRecommendation(memoryStore.memory, runs.value, today.value))
 const activeGoal = computed(() => getActiveGoal(memoryStore.memory))
 const activeInjury = computed(() => getActiveInjuryItem(memoryStore.memory))
-const raceProjection = computed(() => getRaceProjection(runs.value, activeGoal.value, today.value, activeInjury.value))
+const ageLoadWeight = computed(() => getAgeLoadWeight(memoryStore.memory.athleteProfile.birthYear, today.value))
+const observedMaxHr = computed(() => deriveObservedMaxHr(runs.value.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })), today.value))
+const heartRateModel = computed(() => deriveHeartRateModel(memoryStore.memory.athleteProfile, today.value.getFullYear(), observedMaxHr.value))
+const raceProjection = computed(() =>
+  getRaceProjection(runs.value, activeGoal.value, today.value, activeInjury.value, ageLoadWeight.value, {
+    easyCeilingBpm: heartRateModel.value.easyCeilingBpm,
+    tempoCeilingBpm: heartRateModel.value.tempoCeilingBpm
+  })
+)
 
 watch(
   () => route.path,
@@ -102,6 +110,43 @@ const heroTitle = computed(() =>
     : `${formatDateWithWeekday(nextSession.value.plannedDate)} ${nextSession.value.title} 준비입니다.`
 )
 const heroHelper = computed(() => `주간 루틴 기준 · 오늘 ${formatDateWithWeekday(todayDate.value)} · 이번 주 ${weekDistance.value}km 누적`)
+const heroWeatherLine = computed(() => {
+  const snapshot = weatherStore.snapshot
+  if (!snapshot) return ''
+  const target = nextSession.value.plannedDate
+  const daily = snapshot.daily.find((day) => day.date === target)
+  if (target !== todayDate.value && daily) {
+    return `${weatherSymbolToEmoji(daily.symbolName)} 최고 ${formatWeatherNumber(daily.maxTemperatureC, '°')} · 강수 ${Math.round((daily.precipitationChance ?? 0) * 100)}%`
+  }
+  return `${weatherSymbolToEmoji(snapshot.current.symbolName)} 체감 ${formatWeatherNumber(snapshot.current.apparentTemperatureC, '°')}`
+})
+
+const goalDdayText = computed(() => {
+  const target = activeGoal.value.targetDate
+  if (!target) return ''
+  const targetMs = new Date(`${target}T00:00:00`).getTime()
+  const todayMs = new Date(`${todayDate.value}T00:00:00`).getTime()
+  const diffDays = Math.round((targetMs - todayMs) / (24 * 60 * 60 * 1000))
+  if (diffDays === 0) return 'D-Day'
+  return diffDays > 0 ? `D-${diffDays}` : `D+${Math.abs(diffDays)}`
+})
+const goalMetaText = computed(() => {
+  const goal = activeGoal.value
+  const parts: string[] = []
+  if (goal.distanceKm) parts.push(`${goal.distanceKm}km`)
+  if (goal.targetDurationSec) parts.push(`목표 ${formatDuration(goal.targetDurationSec)}`)
+  if (goal.targetDate) parts.push(`${formatDateWithWeekday(goal.targetDate)} ${goalDdayText.value}`)
+  return parts.join(' · ')
+})
+const goalProjectionText = computed(() => {
+  const projection = raceProjection.value
+  if (!projection) return '목표 예상 산출에 필요한 품질 세션이 아직 부족합니다.'
+  return `예상 ${formatDuration(projection.current.projectedSec)} · ${raceProjectionHint.value}`
+})
+
+const fatigueWarning = computed(() => getFatigueWarning(runs.value, today.value, ageLoadWeight.value))
+const volumeWarning = computed(() => fatigueWarning.value.message)
+const volumeCaution = computed(() => fatigueWarning.value.caution)
 
 const trendTitle = computed(() => {
   if (trendMetric.value === 'month') return '이번 달 거리 추이'
@@ -131,7 +176,7 @@ const trendChartPoints = computed<TrendChartPoint[]>(() => {
 })
 
 watch(
-  () => Boolean(trendMetric.value || detailRun.value || projectionDetailOpen.value),
+  () => Boolean(trendMetric.value || detailRun.value || projectionDetailOpen.value || nextSessionDetailOpen.value),
   (open) => {
     document.body.classList.toggle('memory-stack-open', open)
   }
@@ -148,6 +193,7 @@ onBeforeRouteLeave(() => {
   closeTrend()
   closeRunDetail()
   closeProjectionDetail()
+  closeNextSessionDetail()
 })
 
 function closeTrend() {
@@ -168,6 +214,22 @@ function openProjectionDetail() {
 
 function closeProjectionDetail() {
   projectionDetailOpen.value = false
+}
+
+function openNextSessionDetail() {
+  nextSessionDetailOpen.value = true
+}
+
+function closeNextSessionDetail() {
+  nextSessionDetailOpen.value = false
+}
+
+function openGoalCard() {
+  if (raceProjection.value) {
+    openProjectionDetail()
+    return
+  }
+  openMemoryPanel('goals')
 }
 
 function openCoachForRun(run: RunLog) {
@@ -197,13 +259,17 @@ function formatDateOnly(value: Date) {
 
 <template>
   <PageLayout variant="dashboard">
-    <section class="hero-card">
+    <button class="hero-card hero-card-interactive" type="button" @click="openNextSessionDetail">
       <div>
         <p class="eyebrow">{{ heroEyebrow }}</p>
         <h2>{{ heroTitle }}</h2>
         <p class="helper">{{ heroHelper }}</p>
+        <p v-if="heroWeatherLine" class="helper hero-weather-line">
+          {{ heroWeatherLine }} · {{ formatDateWithWeekday(nextSession.plannedDate) }} 기준
+        </p>
       </div>
-    </section>
+      <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+    </button>
 
     <SectionGroup v-if="runStore.loading || runStore.error" title="데이터 상태">
       <template #actions>
@@ -215,58 +281,99 @@ function formatDateOnly(value: Date) {
       <p v-if="runStore.error" class="error">{{ runStore.error }}</p>
     </SectionGroup>
 
-    <MetricGrid>
-      <RunSummaryCard label="이번 달" :value="`${monthDistance}km`" :loading="runDataLoading" interactive @click="trendMetric = 'month'" />
-      <RunSummaryCard label="최근 7일" :value="`${last7}km`" :loading="runDataLoading" interactive @click="trendMetric = 'last7'" />
-      <RunSummaryCard label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 · 랩/페이스 기준" :loading="runDataLoading" interactive @click="trendMetric = 'easy'" />
-      <RunSummaryCard label="강훈련" :value="`${hardSessions}회`" hint="최근 7일" :loading="runDataLoading" interactive @click="trendMetric = 'hard'" />
-      <StatCard
-        class="dashboard-context-card"
-        label="부상 기준"
-        :value="activeInjury?.title || '관리 항목 없음'"
-        :hint="activeInjury ? `${activeInjury.status}${activeInjury.severity ? ` · ${activeInjury.severity}/5` : ''}` : '코칭 제한 없음'"
-        value-kind="text"
-        :loading="memoryDataLoading"
-        interactive
-        @click="openMemoryPanel('injuries')"
-      />
-      <StatCard
-        v-if="runDataLoading || raceProjection"
-        class="dashboard-context-card dashboard-projection-card dashboard-projection-card-wide"
-        label="목표 예상"
-        :value="raceProjection ? formatDuration(raceProjection.current.projectedSec) : ''"
-        :hint="raceProjection ? `${activeGoal.title} · ${raceProjectionHint}` : ''"
-        value-kind="text"
-        :loading="runDataLoading"
-        interactive
-        @click="openProjectionDetail"
-      />
-    </MetricGrid>
+    <button class="stat-card stat-card-interactive dashboard-goal-card" type="button" @click="openGoalCard">
+      <span class="stat-card-label">활성 목표</span>
+      <div v-if="memoryDataLoading || runDataLoading" class="stat-card-data stat-card-skeleton" aria-hidden="true">
+        <span class="skeleton-line skeleton-line-value" />
+        <span class="skeleton-line skeleton-line-hint" />
+      </div>
+      <div v-else class="stat-card-data">
+        <strong class="stat-card-value stat-card-text-value">{{ activeGoal.title }}</strong>
+        <small v-if="goalMetaText">{{ goalMetaText }}</small>
+        <small class="dashboard-goal-projection">{{ goalProjectionText }}</small>
+      </div>
+      <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+    </button>
 
-    <div class="two-column">
-      <RecentRuns :runs="runs.slice(0, 5)" :weekly-pattern="memoryStore.memory.weeklyPattern" @show-all="router.push('/runs')" @select="openRunDetail" />
-      <ContentStack>
-        <FatigueCard :warning="getVolumeWarning(runs, today)" />
-        <SectionGroup title="다음 추천 세션">
-          <div class="recommendation-card">
-            <strong>{{ nextSession.title }}</strong>
-            <span>{{ formatDateWithWeekday(nextSession.plannedDate) }} · {{ nextSession.dayName }}</span>
-          </div>
-          <p>{{ nextSession.reason }}</p>
-          <p class="helper">{{ nextSession.intensity }}</p>
-          <WeatherCard
-            :snapshot="weatherStore.snapshot"
-            :loading="weatherStore.loading"
-            :error="weatherStore.error"
-            :target-date="nextSession.plannedDate"
-            :session-title="nextSession.title"
-            @refresh="weatherStore.requestForecast()"
-          />
-        </SectionGroup>
-      </ContentStack>
-    </div>
+    <SectionGroup title="몸 상태 신호" :surface="false">
+      <MetricGrid>
+        <StatCard
+          class="dashboard-context-card"
+          label="부상 기준"
+          :value="activeInjury?.title || '관리 항목 없음'"
+          :hint="activeInjury ? `${activeInjury.status}${activeInjury.severity ? ` · ${activeInjury.severity}/5` : ''}` : '코칭 제한 없음'"
+          value-kind="text"
+          :loading="memoryDataLoading"
+          interactive
+          @click="openMemoryPanel('injuries')"
+        />
+        <StatCard
+          class="dashboard-context-card"
+          label="피로 경고"
+          :value="volumeCaution ? '주의' : '안정'"
+          :hint="volumeWarning"
+          value-kind="text"
+          :tone="volumeCaution ? 'warning' : undefined"
+          :loading="runDataLoading"
+          interactive
+          @click="trendMetric = 'last7'"
+        />
+      </MetricGrid>
+    </SectionGroup>
+
+    <SectionGroup title="최근 훈련 흐름" :surface="false">
+      <MetricGrid>
+        <RunSummaryCard label="이번 달" :value="`${monthDistance}km`" :loading="runDataLoading" interactive @click="trendMetric = 'month'" />
+        <RunSummaryCard label="최근 7일" :value="`${last7}km`" :loading="runDataLoading" interactive @click="trendMetric = 'last7'" />
+        <RunSummaryCard label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 · 랩/페이스 기준" :loading="runDataLoading" interactive @click="trendMetric = 'easy'" />
+        <RunSummaryCard label="강훈련" :value="`${hardSessions}회`" hint="최근 7일" :loading="runDataLoading" interactive @click="trendMetric = 'hard'" />
+      </MetricGrid>
+    </SectionGroup>
+
+    <RecentRuns :runs="runs.slice(0, 5)" :weekly-pattern="memoryStore.memory.weeklyPattern" @show-all="router.push('/runs')" @select="openRunDetail" />
 
     <Teleport to="body">
+      <Transition name="stack-page">
+        <div v-if="nextSessionDetailOpen" class="memory-stack-layer" data-no-swipe>
+          <section class="memory-stack-page">
+            <header class="memory-stack-header">
+              <div>
+                <h2>다음 훈련</h2>
+              </div>
+              <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeNextSessionDetail">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+              </button>
+            </header>
+            <main class="memory-stack-content">
+              <SectionGroup title="추천 세션">
+                <div class="recommendation-card">
+                  <strong>{{ nextSession.title }}</strong>
+                  <span>{{ formatDateWithWeekday(nextSession.plannedDate) }} · {{ nextSession.dayName }}</span>
+                </div>
+                <div v-if="nextSession.injuryAdjusted" class="next-session-injury-note">
+                  <strong>부상 조정</strong>
+                  <p>{{ nextSession.injuryNote }}</p>
+                </div>
+                <div v-if="nextSession.loadCaution" class="next-session-injury-note next-session-load-note">
+                  <strong>부하 주의</strong>
+                  <p>{{ nextSession.loadNote }}</p>
+                </div>
+                <p>{{ nextSession.reason }}</p>
+                <p class="helper">{{ nextSession.intensity }}</p>
+                <WeatherCard
+                  :snapshot="weatherStore.snapshot"
+                  :loading="weatherStore.loading"
+                  :error="weatherStore.error"
+                  :target-date="nextSession.plannedDate"
+                  :session-title="nextSession.title"
+                  @refresh="weatherStore.requestForecast()"
+                />
+              </SectionGroup>
+            </main>
+          </section>
+        </div>
+      </Transition>
+
       <Transition name="stack-page">
         <div v-if="trendMetric" class="memory-stack-layer" data-no-swipe>
           <section class="memory-stack-page">

@@ -33,17 +33,28 @@ export type RaceProjection = {
 }
 
 const dayMs = 24 * 60 * 60 * 1000
-const lowHeartRateCeiling = 145
-const thresholdHeartRateCeiling = 165
+
+// 개인 심박 기준에서 파생한 상한. 개인 기준이 없으면(데이터 부족) null이고, 그 경우 HR 기반 게이트는 건너뛴다.
+export type ProjectionHeartRateCeilings = {
+  easyCeilingBpm: number | null
+  tempoCeilingBpm: number | null
+}
 
 export function getRaceProjection(
   runs: RunLog[],
   activeGoal: TrainingGoal | null | undefined,
   today = new Date(),
-  activeInjury?: TrainingInjuryItem | null
+  activeInjury?: TrainingInjuryItem | null,
+  ageWeight = 0,
+  heartRateCeilings?: ProjectionHeartRateCeilings | null
 ): RaceProjection | null {
   const targetDistanceKm = activeGoal?.distanceKm
   if (!targetDistanceKm || targetDistanceKm <= 0) return null
+
+  const ceilings: ProjectionHeartRateCeilings = {
+    easyCeilingBpm: heartRateCeilings?.easyCeilingBpm ?? null,
+    tempoCeilingBpm: heartRateCeilings?.tempoCeilingBpm ?? null
+  }
 
   const signals = runs
     .filter((run) => run.durationSec && run.distanceKm >= Math.max(3, targetDistanceKm * 0.35))
@@ -56,7 +67,7 @@ export function getRaceProjection(
 
   const current = chooseCurrentSignal(signals, activeGoal?.targetDurationSec ?? null)
   const previous = signals.filter((signal) => signal.runId !== current.runId).find((signal) => signal.date < current.date) ?? null
-  const factors = buildReadinessFactors(runs, targetDistanceKm, activeGoal?.targetDurationSec ?? null, current, today, activeInjury ?? null)
+  const factors = buildReadinessFactors(runs, targetDistanceKm, activeGoal?.targetDurationSec ?? null, current, today, activeInjury ?? null, ageWeight, ceilings)
   const readinessScore = weightedReadinessScore(factors)
   const readinessLevel = getReadinessLevel(readinessScore)
 
@@ -96,7 +107,9 @@ function buildReadinessFactors(
   targetDurationSec: number | null,
   current: RaceProjectionSignal,
   today: Date,
-  activeInjury: TrainingInjuryItem | null
+  activeInjury: TrainingInjuryItem | null,
+  ageWeight = 0,
+  ceilings: ProjectionHeartRateCeilings = { easyCeilingBpm: null, tempoCeilingBpm: null }
 ): ProjectionReadinessFactor[] {
   const recent7 = runsWithinDays(runs, 7, today)
   const recent14 = runsWithinDays(runs, 14, today)
@@ -105,11 +118,11 @@ function buildReadinessFactors(
 
   return [
     getPerformanceFactor(current, targetDistanceKm, targetDurationSec),
-    getThresholdFactor(recent30),
-    getAerobicBaseFactor(recent30, targetDistanceKm),
+    getThresholdFactor(recent30, ceilings),
+    getAerobicBaseFactor(recent30, targetDistanceKm, ceilings.easyCeilingBpm),
     getLongRunFactor(recent42, targetDistanceKm, today),
     getConsistencyFactor(recent30, recent14, recent7),
-    getInjuryRecoveryFactor(activeInjury, recent14)
+    getInjuryRecoveryFactor(activeInjury, recent14, ageWeight)
   ]
 }
 
@@ -128,10 +141,13 @@ function getPerformanceFactor(current: RaceProjectionSignal, targetDistanceKm: n
   return factor('performance', '수행능력 신호', score, `${current.type} ${current.distanceKm.toFixed(2)}km 환산`, detail)
 }
 
-function getThresholdFactor(runs: RunLog[]): ProjectionReadinessFactor {
-  const thresholdRuns = runs.filter(isThresholdSignal)
+function getThresholdFactor(runs: RunLog[], ceilings: ProjectionHeartRateCeilings): ProjectionReadinessFactor {
+  const thresholdRuns = runs.filter((run) => isThresholdSignal(run, ceilings))
   const meaningful = thresholdRuns.filter((run) => run.distanceKm >= 4 || (run.durationSec ?? 0) >= 20 * 60)
-  const capped = meaningful.filter((run) => !run.maxHeartRate || run.maxHeartRate <= thresholdHeartRateCeiling)
+  // 템포 상한 미설정(개인 기준 없음)이면 상한 준수 여부를 판단하지 않고 횟수만 본다.
+  const capped = ceilings.tempoCeilingBpm === null
+    ? meaningful
+    : meaningful.filter((run) => !run.maxHeartRate || run.maxHeartRate <= ceilings.tempoCeilingBpm!)
   const countScore = clamp(Math.round((meaningful.length / 3) * 75), 0, 75)
   const qualityBonus = meaningful.length ? Math.round((capped.length / meaningful.length) * 25) : 0
   const score = clamp(countScore + qualityBonus, 0, 100)
@@ -147,11 +163,11 @@ function getThresholdFactor(runs: RunLog[]): ProjectionReadinessFactor {
   )
 }
 
-function getAerobicBaseFactor(runs: RunLog[], targetDistanceKm: number): ProjectionReadinessFactor {
+function getAerobicBaseFactor(runs: RunLog[], targetDistanceKm: number, easyCeilingBpm: number | null): ProjectionReadinessFactor {
   const distance = sumDistance(runs)
   const weeklyAvg = distance / (30 / 7)
   const targetWeeklyDistance = Math.max(targetDistanceKm * 3, 20)
-  const easyDistance = runs.reduce((sum, run) => sum + getLowIntensityDistance(run), 0)
+  const easyDistance = runs.reduce((sum, run) => sum + getLowIntensityDistance(run, easyCeilingBpm), 0)
   const easyRatio = distance > 0 ? easyDistance / distance : 0
   const volumeScore = clamp(Math.round((weeklyAvg / targetWeeklyDistance) * 60), 0, 60)
   const easyScore = clamp(Math.round((easyRatio / 0.75) * 40), 0, 40)
@@ -207,20 +223,22 @@ function getConsistencyFactor(recent30: RunLog[], recent14: RunLog[], recent7: R
   )
 }
 
-function getInjuryRecoveryFactor(activeInjury: TrainingInjuryItem | null, recent14: RunLog[]): ProjectionReadinessFactor {
+function getInjuryRecoveryFactor(activeInjury: TrainingInjuryItem | null, recent14: RunLog[], ageWeight = 0): ProjectionReadinessFactor {
+  const ageDetail = ageWeight >= 2 ? ' 나이대를 고려해 회복 게이트를 더 보수적으로 봅니다.' : ''
   if (!activeInjury || activeInjury.status === 'resolved' || activeInjury.status === 'archived') {
-    return factor('injuryRecovery', '부상/회복 게이트', 85, '활성 제한 없음', '현재 활성 부상 제한이 없으면 목표 예상의 회복 게이트는 크게 막지 않습니다.')
+    const score = clamp(85 - ageWeight * 2, 0, 100)
+    return factor('injuryRecovery', '부상/회복 게이트', score, ageWeight >= 2 ? '활성 제한 없음 · 회복 보수' : '활성 제한 없음', `현재 활성 부상 제한이 없으면 목표 예상의 회복 게이트는 크게 막지 않습니다.${ageDetail}`)
   }
   const severity = activeInjury.severity ?? 2
   const painMentions = recent14.filter((run) => run.painNote.trim()).length
-  const score = clamp(92 - severity * 12 - Math.min(20, painMentions * 5), 20, 82)
+  const score = clamp(92 - severity * 12 - Math.min(20, painMentions * 5) - ageWeight * 3, 20, 82)
   const area = activeInjury.area || '관리 부위'
   return factor(
     'injuryRecovery',
     '부상/회복 게이트',
     score,
     `${area} · ${activeInjury.status}${activeInjury.severity ? ` · ${activeInjury.severity}/5` : ''}`,
-    '활성 부상이나 통증 메모가 있으면 예측 기록을 그대로 믿지 않고 강도 상향과 목표 준비도를 보수적으로 낮춥니다.'
+    `활성 부상이나 통증 메모가 있으면 예측 기록을 그대로 믿지 않고 강도 상향과 목표 준비도를 보수적으로 낮춥니다.${ageDetail}`
   )
 }
 
@@ -290,18 +308,25 @@ function getProjectionConfidence(run: RunLog): RaceProjectionSignal['confidence'
   return 'low'
 }
 
-function isThresholdSignal(run: RunLog): boolean {
+function isThresholdSignal(run: RunLog, ceilings: ProjectionHeartRateCeilings): boolean {
   if (run.type === 'Tempo' || run.type === 'Race') return true
   if (run.rpe !== null && run.rpe >= 6 && run.distanceKm >= 4) return true
-  return Boolean(run.avgHeartRate && run.avgHeartRate >= 150 && run.avgHeartRate <= thresholdHeartRateCeiling && run.distanceKm >= 4)
+  // 개인 심박 상한이 없으면 HR 기반 역치 추정은 건너뛴다(타입/RPE만 사용).
+  if (ceilings.easyCeilingBpm === null || ceilings.tempoCeilingBpm === null) return false
+  // 역치 신호로 보는 평균심박 하한은 Easy 상단 + 5bpm.
+  const lowerBound = ceilings.easyCeilingBpm + 5
+  return Boolean(run.avgHeartRate && run.avgHeartRate >= lowerBound && run.avgHeartRate <= ceilings.tempoCeilingBpm && run.distanceKm >= 4)
 }
 
-function getLowIntensityDistance(run: RunLog): number {
-  const lapsWithHeartRate = run.laps.filter((lap) => lap.distanceKm && lap.avgHeartRate)
-  if (lapsWithHeartRate.length) {
-    return lapsWithHeartRate.reduce((sum, lap) => sum + ((lap.avgHeartRate ?? 999) <= lowHeartRateCeiling ? lap.distanceKm ?? 0 : 0), 0)
+function getLowIntensityDistance(run: RunLog, easyCeilingBpm: number | null): number {
+  // 개인 심박 상한이 없으면 HR로 저강도 거리를 가르지 않고 세션 타입으로만 본다.
+  if (easyCeilingBpm !== null) {
+    const lapsWithHeartRate = run.laps.filter((lap) => lap.distanceKm && lap.avgHeartRate)
+    if (lapsWithHeartRate.length) {
+      return lapsWithHeartRate.reduce((sum, lap) => sum + ((lap.avgHeartRate ?? 999) <= easyCeilingBpm ? lap.distanceKm ?? 0 : 0), 0)
+    }
+    if (run.avgHeartRate && run.avgHeartRate <= easyCeilingBpm) return run.distanceKm
   }
-  if (run.avgHeartRate && run.avgHeartRate <= lowHeartRateCeiling) return run.distanceKm
   if (['Recovery', 'Easy', 'Easy + Strides', 'LSD'].includes(run.type)) return run.distanceKm
   return 0
 }

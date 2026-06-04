@@ -1,8 +1,9 @@
 import type { RunLog, RunType } from '@/entities/run/model'
 import { getActiveGoal, getActiveInjuryItem, type TrainingMemory } from '@/entities/training-memory/model'
 import { formatDuration, formatPace } from '@/shared/lib/format'
-import { getEasyRatio, getRunsWithinDays, sumDistance } from '@/shared/lib/runStats'
+import { getAgeLoadWeight, getEasyRatio, getRunsWithinDays, sumDistance } from '@/shared/lib/runStats'
 import { getRaceProjection } from '@/shared/lib/performanceProjection'
+import { deriveHeartRateModel, deriveObservedMaxHr, type HeartRateModel } from '@/shared/lib/heartRateZones'
 
 export type TrendLensKey = 'goal' | 'efficiency' | 'intensity' | 'quality' | 'recovery'
 export type TrendPeriod = '90d' | '180d' | '365d' | 'all'
@@ -134,10 +135,12 @@ export function buildTrendLensResult(input: TrendInput): TrendLensResult {
   if (!runs.length) return emptyResult(input.lens, '러닝 기록이 필요합니다.', '추세를 보려면 먼저 기록을 저장해야 합니다.')
 
   const window = getDateWindow(runs, input.period, input.baseline, input.memory, today)
-  if (input.lens === 'goal') return buildGoalLens(runs, input.memory, today)
-  if (input.lens === 'efficiency') return buildEfficiencyLens(window)
-  if (input.lens === 'intensity') return buildIntensityLens(window, today)
-  if (input.lens === 'quality') return buildQualityLens(window)
+  const observed = deriveObservedMaxHr(runs.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })), today)
+  const hr = deriveHeartRateModel(input.memory.athleteProfile, today.getFullYear(), observed)
+  if (input.lens === 'goal') return buildGoalLens(runs, input.memory, today, hr)
+  if (input.lens === 'efficiency') return buildEfficiencyLens(window, hr)
+  if (input.lens === 'intensity') return buildIntensityLens(window, today, hr)
+  if (input.lens === 'quality') return buildQualityLens(window, hr)
   return buildRecoveryLens(window)
 }
 
@@ -202,9 +205,16 @@ function buildTrendOverallSummaryFromResults(input: Omit<TrendInput, 'lens'>, le
   }
 }
 
-function buildGoalLens(runs: RunLog[], memory: TrainingMemory, today: Date): TrendLensResult {
+function buildGoalLens(runs: RunLog[], memory: TrainingMemory, today: Date, hr: HeartRateModel): TrendLensResult {
   const activeGoal = getActiveGoal(memory)
-  const projection = getRaceProjection(runs, activeGoal, today, getActiveInjuryItem(memory))
+  const projection = getRaceProjection(
+    runs,
+    activeGoal,
+    today,
+    getActiveInjuryItem(memory),
+    getAgeLoadWeight(memory.athleteProfile.birthYear, today),
+    { easyCeilingBpm: hr.easyCeilingBpm, tempoCeilingBpm: hr.tempoCeilingBpm }
+  )
   if (!activeGoal || !projection) {
     return emptyResult('goal', '목표 신호 부족', '활성 목표와 품질 세션이 더 쌓이면 목표 진전 추세를 계산합니다.')
   }
@@ -260,10 +270,13 @@ function buildGoalLens(runs: RunLog[], memory: TrainingMemory, today: Date): Tre
   }
 }
 
-function buildEfficiencyLens(window: DateWindow): TrendLensResult {
-  const current = comparableHeartRatePace(window.current)
-  const baseline = comparableHeartRatePace(window.baseline)
-  const currentBest = chooseEfficiencyBand(current, baseline)
+function buildEfficiencyLens(window: DateWindow, hr: HeartRateModel): TrendLensResult {
+  if (!hr.zones.length) {
+    return emptyResult('efficiency', '심박 기준 데이터 부족', '나이 또는 심박(역치/최대) 정보가 있어야 같은 심박대 효율을 비교합니다.')
+  }
+  const current = comparableHeartRatePace(window.current, hr)
+  const baseline = comparableHeartRatePace(window.baseline, hr)
+  const currentBest = chooseEfficiencyBand(current, baseline, hr)
   if (!currentBest) return emptyResult('efficiency', '효율 비교 데이터 부족', '심박과 페이스가 함께 있는 기록이 더 필요합니다.')
 
   const baseValue = baseline[currentBest.band]
@@ -292,10 +305,10 @@ function buildEfficiencyLens(window: DateWindow): TrendLensResult {
       const bandContextWarnings = base ? efficiencyContextWarnings(item, base) : []
       return card(
         band,
-        heartRateBandLabel(band),
+        heartRateBandLabel(band, hr),
         diff === null ? '비교 부족' : `${diff > 0 ? '+' : ''}${Math.round(diff)}`,
         diff === null ? '' : '초/km',
-        `${item.count}개 point · 현재 ${formatPace(item.medianPaceSec)}/km`,
+        `${item.count}개 기록 · 현재 ${formatPace(item.medianPaceSec)}/km`,
         efficiencyTone(diff, bandSampleCount, bandContextWarnings)
       )
     }),
@@ -314,11 +327,11 @@ function buildEfficiencyLens(window: DateWindow): TrendLensResult {
   }
 }
 
-function buildIntensityLens(window: DateWindow, today: Date): TrendLensResult {
+function buildIntensityLens(window: DateWindow, today: Date, hr: HeartRateModel): TrendLensResult {
   const currentDistance = sumDistance(window.current)
   const baselineDistance = sumDistance(window.baseline)
   const easyRatio = getEasyRatio(window.current)
-  const loadSignals = window.current.map(loadSignalForRun)
+  const loadSignals = window.current.map((run) => loadSignalForRun(run, hr.easyCeilingBpm))
   const loadWatchCount = loadSignals.filter((item) => item.hard || item.watch).length
   const current7 = sumDistance(getRunsWithinDays(window.current, 7, today))
   const previous7 = sumDistance(getRunsWithinDays(window.current, 14, today).filter((run) => !getRunsWithinDays(window.current, 7, today).some((recent) => recent.id === run.id)))
@@ -342,7 +355,7 @@ function buildIntensityLens(window: DateWindow, today: Date): TrendLensResult {
       card('hard', '부하 주의', String(loadWatchCount), '회', '강훈련 또는 LSD 부하 신호', loadWatchCount >= 3 ? 'warning' : 'watch'),
       card('load', '최근 부하', loadDelta === null ? '비교 부족' : `${Math.round(loadDelta)}%`, '', '최근 7일 vs 이전 7일', loadDelta !== null && loadDelta >= 35 ? 'warning' : 'neutral')
     ],
-    chart: typeDistributionPoints(window.current),
+    chart: typeDistributionPoints(window.current, hr.easyCeilingBpm),
     explanations: [
       'Easy 비율은 RunType만으로 계산하지 않고 가능한 경우 랩/페이스를 우선합니다.',
       '최근 부하 증가는 부상 예측 공식이 아니라 스케줄 보수성 조절 신호입니다.',
@@ -360,10 +373,10 @@ function buildIntensityLens(window: DateWindow, today: Date): TrendLensResult {
   }
 }
 
-function buildQualityLens(window: DateWindow): TrendLensResult {
+function buildQualityLens(window: DateWindow, hr: HeartRateModel): TrendLensResult {
   const qualityRuns = window.current.filter((run) => qualityTypes.includes(run.type))
   if (!qualityRuns.length) return emptyResult('quality', '품질 세션 부족', 'Tempo, Long Run, Easy + Strides 같은 품질 세션이 쌓이면 안정성을 봅니다.')
-  const evaluations = qualityRuns.map(evaluateQualityRun)
+  const evaluations = qualityRuns.map((run) => evaluateQualityRun(run, hr))
   const stableCount = evaluations.filter((item) => item.stable).length
   const ratio = Math.round((stableCount / evaluations.length) * 100)
   const tone: TrendInsightTone = ratio >= 70 ? 'good' : ratio < 45 ? 'warning' : 'watch'
@@ -497,11 +510,11 @@ function getDateWindow(runs: RunLog[], period: TrendPeriod, baseline: TrendBasel
   }
 }
 
-function comparableHeartRatePace(runs: RunLog[]) {
+function comparableHeartRatePace(runs: RunLog[], hr: HeartRateModel) {
   const bands: Record<string, RunLog[]> = {}
   for (const run of runs) {
     if (!run.avgHeartRate || !run.avgPaceSec) continue
-    const band = heartRateBand(run.avgHeartRate)
+    const band = heartRateBand(run.avgHeartRate, hr)
     const list = bands[band] ?? []
     list.push(run)
     bands[band] = list
@@ -522,11 +535,12 @@ function comparableHeartRatePace(runs: RunLog[]) {
 
 function chooseEfficiencyBand(
   current: Record<string, EfficiencyBandSummary>,
-  baseline: Record<string, EfficiencyBandSummary>
+  baseline: Record<string, EfficiencyBandSummary>,
+  hr: HeartRateModel
 ) {
   const candidates = ['z2', 'z3', 'z4', 'z1', 'z5']
   const band = candidates.find((key) => current[key] && baseline[key]) ?? Object.keys(current)[0]
-  return band ? { band, label: heartRateBandLabel(band) } : null
+  return band ? { band, label: heartRateBandLabel(band, hr) } : null
 }
 
 function efficiencyChartPoints(runs: RunLog[]): TrendChartPoint[] {
@@ -544,11 +558,11 @@ function efficiencyChartPoints(runs: RunLog[]): TrendChartPoint[] {
     }))
 }
 
-function typeDistributionPoints(runs: RunLog[]): TrendChartPoint[] {
+function typeDistributionPoints(runs: RunLog[], easyCeilingBpm: number | null): TrendChartPoint[] {
   const byType = new Map<RunType, { distance: number; status: TrendInsightTone }>()
   for (const run of runs) {
     const previous = byType.get(run.type)
-    const signal = loadSignalForRun(run)
+    const signal = loadSignalForRun(run, easyCeilingBpm)
     const status: TrendInsightTone = signal.hard || signal.watch ? 'watch' : 'good'
     byType.set(run.type, {
       distance: (previous?.distance ?? 0) + run.distanceKm,
@@ -566,10 +580,11 @@ function typeDistributionPoints(runs: RunLog[]): TrendChartPoint[] {
   }))
 }
 
-function evaluateQualityRun(run: RunLog) {
+function evaluateQualityRun(run: RunLog, hr: HeartRateModel) {
   const drift = estimateNumericDrift(run)
-  const hrCeilingExceeded = run.type === 'Tempo' && (run.maxHeartRate ?? 0) > 165
-  const easyExceeded = run.type === 'Easy' && (run.maxHeartRate ?? run.avgHeartRate ?? 0) > 150
+  // 개인 심박 상한이 없으면 상한 초과 판정은 하지 않고 드리프트/거리만 본다.
+  const hrCeilingExceeded = hr.tempoCeilingBpm !== null && run.type === 'Tempo' && (run.maxHeartRate ?? 0) > hr.tempoCeilingBpm
+  const easyExceeded = hr.easyCeilingBpm !== null && run.type === 'Easy' && (run.maxHeartRate ?? run.avgHeartRate ?? 0) > hr.easyCeilingBpm + 5
   const longEnough = run.type === 'LSD' || run.type === 'Steady Long' ? run.distanceKm >= 10 : true
   const stable = !hrCeilingExceeded && !easyExceeded && longEnough && drift < 2
   const score = Math.max(0, 100 - (hrCeilingExceeded ? 25 : 0) - (easyExceeded ? 20 : 0) - (!longEnough ? 20 : 0) - drift * 12)
@@ -650,7 +665,7 @@ function evaluateLapDrift(run: RunLog) {
   return { level: 0, heartRateDriftBpm, paceDeltaSec }
 }
 
-function loadSignalForRun(run: RunLog): LoadSignal {
+function loadSignalForRun(run: RunLog, easyCeilingBpm: number | null): LoadSignal {
   if (hardTypes.includes(run.type)) {
     return { run, hard: true, watch: true, reason: `${run.type} 강훈련 세션` }
   }
@@ -660,7 +675,7 @@ function loadSignalForRun(run: RunLog): LoadSignal {
 
   const drift = evaluateLapDrift(run)
   const reasons = [
-    (run.avgHeartRate ?? 0) > 145 ? 'LSD 평균심박 상승' : '',
+    easyCeilingBpm !== null && (run.avgHeartRate ?? 0) > easyCeilingBpm ? 'LSD 평균심박 상승' : '',
     (run.rpe ?? 0) >= 6 ? 'LSD RPE 높음' : '',
     drift.level >= 2 ? 'LSD 후반 드리프트 큼' : ''
   ].filter(Boolean)
@@ -728,23 +743,37 @@ function weightedLapPace(laps: RunLog['laps']) {
   return averageNullable(paceLaps.map((lap) => lap.paceSec))
 }
 
-function heartRateBand(value: number) {
-  if (value <= 130) return 'z1'
-  if (value <= 145) return 'z2'
-  if (value <= 155) return 'z3'
-  if (value <= 165) return 'z4'
-  return 'z5'
+function heartRateBand(value: number, hr: HeartRateModel) {
+  const zone = hr.zones.find((item) => (item.minBpm === null || value >= item.minBpm) && (item.maxBpm === null || value <= item.maxBpm))
+  // Z0는 효율 비교에서 z1 밴드로 합친다(아주 낮은 회복/이동 구간).
+  switch (zone?.zone) {
+    case 'Z0':
+    case 'Z1':
+      return 'z1'
+    case 'Z2':
+      return 'z2'
+    case 'Z3':
+      return 'z3'
+    case 'Z4':
+      return 'z4'
+    default:
+      return 'z5'
+  }
 }
 
-function heartRateBandLabel(value: string) {
-  const labels: Record<string, string> = {
-    z1: '100~130bpm',
-    z2: '131~145bpm',
-    z3: '146~155bpm',
-    z4: '156~165bpm',
-    z5: '166bpm+'
+function heartRateBandLabel(value: string, hr: HeartRateModel) {
+  const zoneByBand: Record<string, HeartRateModel['zones'][number]['zone']> = {
+    z1: 'Z1',
+    z2: 'Z2',
+    z3: 'Z3',
+    z4: 'Z4',
+    z5: 'Z5'
   }
-  return labels[value] ?? value
+  const zone = hr.zones.find((item) => item.zone === zoneByBand[value])
+  if (!zone) return value
+  // z1 밴드는 Z0(아주 낮음)를 흡수하므로 하한은 Z1 minBpm을 그대로 쓴다.
+  if (zone.maxBpm === null) return `${zone.minBpm}bpm+`
+  return `${zone.minBpm}~${zone.maxBpm}bpm`
 }
 
 function periodDays(period: TrendPeriod) {

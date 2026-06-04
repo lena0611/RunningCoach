@@ -499,11 +499,13 @@
 - 문제: GitHub Pages 공개 프론트에서 `window.webkit`/`NativeBridge` 존재 여부만 확인하면 사용자가 브라우저 개발자도구나 스크립트로 bridge 모양을 흉내내 서버 기능을 호출할 수 있다.
 - 결정: 프론트 bridge 체크는 일반 브라우저 UX 차단으로만 유지한다. AI 코칭처럼 OpenAI 비용과 사용자 러닝 데이터 접근이 있는 Edge Function은 사용자 인증 뒤 `app-session` Edge Function이 발급한 짧은 수명의 서버 앱 세션, 승인 사용자 allowlist, 함수별 rate limit을 추가로 검증한다.
 - 구현 기준: MVP 임시 운영은 `APP_SECURITY_MODE=allowlist`로 둔다. 서버는 승인된 로그인 사용자에게만 HMAC 서명 앱 세션을 발급하고, `coach-run`은 앱 세션과 rate limit을 통과해야 OpenAI 호출을 수행한다. 이 모드는 기존 앱 빌드와 호환되지만 기기 attestation은 수행하지 않는다.
-- 향후 hardening: 유료 Apple Developer DeviceCheck key id와 `.p8` private key가 준비되면 `APP_SECURITY_MODE=devicecheck`로 전환하고, iOS 네이티브 `runContextAppSecurity` bridge에서 받은 DeviceCheck token을 `app-session`에서 Apple API로 검증한다. App Attest는 더 강한 production hardening 후보로 남기되, 구현 전에는 App Attest payload를 성공 처리하지 않는다.
+- 무료 Apple 계정 전제: 현재 Apple Developer 계정이 무료(Personal Team)라 DeviceCheck/App Attest용 key id와 `.p8` private key를 발급할 수 없다. 따라서 MVP는 `allowlist` 모드만 운영하며, allowlist 모드는 deviceToken 없이 통과하므로 iOS 네이티브 코드 변경(예: `runContextAppSecurity` 핸들러, `RunContextWebView.swift`)이 필요 없다. 웹 프론트는 브리지가 없으면 deviceToken 없이 앱 세션을 요청한다.
+- 향후 hardening: 유료 Apple Developer 계정으로 전환해 DeviceCheck key id와 `.p8` private key가 준비되면 `APP_SECURITY_MODE=devicecheck`로 바꾸고, 그때 iOS 네이티브 `runContextAppSecurity` bridge에서 받은 DeviceCheck token을 `app-session`에서 Apple API로 검증한다(서버 측 `verifyDeviceCheckToken` 경로는 이미 구현됨, 네이티브 브리지만 추가 필요). App Attest는 더 강한 production hardening 후보로 남기되, 구현 전에는 App Attest payload를 성공 처리하지 않는다(501).
 - 선택 이유: `window` 객체 검사는 클라이언트 자가 주장이라 보안 경계가 될 수 없다. 현재 Personal Team/DeviceCheck key 미준비 상태에서는 기기 증명을 바로 운영할 수 없으므로, 먼저 서버 allowlist, 짧은 수명 앱 세션, rate limit으로 비용성 기능 통제를 강화한다.
 - 포기한 대안: 프론트 난독화, bridge 이름 숨기기, route guard 강화만으로 서버 기능을 보호하는 방식은 공개 번들과 DevTools 조작을 막지 못하므로 채택하지 않는다.
 - 검증: `npm run supabase:functions:check`, `npm run test:run`, `npm run build`, `npm run harness:check`를 실행했다. `config-contract.md` 변경이 `common.runtime.minimum-node` sync gap으로 잡혔지만, 이번 변경은 Node 최소 버전 계약이 아니라 서버 secret/앱 세션 설정 계약 추가이므로 harness runtime 구현 변경은 필요 없다. `APP_SECURITY_MODE=allowlist` 임시 운영 전환 뒤에도 같은 검증을 재실행했다.
-- 적용 범위: `supabase/functions/app-session/index.ts`, `supabase/functions/coach-run/index.ts`, `src/shared/api/appSecurity.ts`, `src/shared/api/coachRepository.ts`, iOS `RunContextWebView.swift`, `.harness/project/architecture-rules.md`, `.harness/project/config-contract.md`, `.harness/project/github-pages-supabase-playbook.md`.
+- 적용 범위: `supabase/functions/app-session/index.ts`(신규), `supabase/functions/coach-run/index.ts`, `supabase/migrations/202606020001_app_security_sessions.sql`(신규), `src/shared/api/appSecurity.ts`(신규), `src/shared/api/coachRepository.ts`, `src/features/import-healthkit-run/healthKitBridge.ts`(Window 타입), `.env.example`, `package.json`, `.harness/project/architecture-rules.md`, `.harness/project/config-contract.md`, `.harness/project/github-pages-supabase-playbook.md`. iOS 네이티브(`RunContextWebView.swift`)는 무료 계정 전제상 이번 MVP 범위에서 변경하지 않았고 devicecheck 전환 시점으로 보류한다.
+- 배포 순서 주의: `coach-run`이 `x-pacelab-app-session` 검증을 강제하므로 프론트 배포 전에 (1) Supabase secret(`APP_SESSION_HMAC_SECRET`, `APP_SECURITY_MODE=allowlist`, `PACELAB_ALLOWED_EMAILS`, `COACH_RUN_RATE_LIMIT_PER_HOUR`) 설정, (2) `app_sessions`/`edge_function_rate_limits` 마이그레이션 적용, (3) `app-session`·`coach-run` Edge Function 배포가 선행돼야 한다. 순서가 어긋나면 모든 사용자의 AI 코칭이 403/500으로 끊긴다.
 
 ## 2026-06-02 - Root tab swipe release animation은 route 전환보다 먼저 수행
 - 문제: Issue #92에서 스와이프 판정 직후 `router.push`가 먼저 실행되고, track은 아직 dragging 상태라 CSS transition이 꺼져 있었다. 그 결과 손을 뗀 offset 지점에서 다음 패널까지 이어지는 애니메이션 없이 route index가 즉시 바뀌어 화면이 확 넘어갔다.
@@ -511,3 +513,36 @@
 - 선택 이유: 사용자가 손을 뗀 순간의 offset은 다음 장면 전환의 시작점이어야 한다. route 변경을 먼저 하면 Vue route index 변경과 dragging transition off 상태가 결합해 전환 애니메이션을 볼 수 없다.
 - 운영 보정: 사용자 최종 완료 승인 전 Issue close가 금지되어 있으므로 PR 본문에 `Closes #...`를 넣지 않는다. #92는 이전 PR 본문의 `Closes #92` 때문에 조기 close되어 다시 열었다.
 - 적용 범위: `src/app/App.vue`, GitHub Issue/PR 운영 문구.
+
+## 2026-06-02 - Root tab swipe 차단은 내부 horizontal gesture만 opt-out
+- 문제: Issue #92 후속 확인에서 root swipe 차단 selector가 `button`, `[role="button"]`, 일반 차트까지 포함해 요약의 최근 세션 같은 일반 버튼형 카드에서 홈 간 스와이프가 시작되지 않았다.
+- 결정: 일반 button/card/list row/summary row/non-interactive chart는 root tab swipe를 막지 않는다. 실제 내부 좌우 드래그나 horizontal scroll을 가진 컴포넌트만 `data-no-swipe`, `[data-horizontal-scroll]`, `role="slider"`, overflow-x scroll 감지로 opt-out한다.
+- 선택 이유: root pager의 click suppression은 horizontal swipe 후 accidental click을 막을 수 있다. 터치 시작점이 pressable이라는 이유만으로 root swipe를 차단하면 모바일 앱의 기본 탭 이동 제스처가 깨진다.
+- 추가 결정: iOS/WebView에서 double-tap zoom은 웹 viewport/touch guard와 네이티브 WKWebView zoom gesture 비활성화를 함께 적용한다. iOS 앱 orientation은 Info.plist 생성 설정과 AppDelegate supported orientation을 portrait로 고정한다.
+- 적용 범위: `src/app/App.vue`, `src/shared/ui/BottomSheetSelect.vue`, `src/shared/ui/TrendLensChart.vue`, `index.html`, `src/app/styles.css`, `/Users/smart-tn-083/practice/RunningCoach`.
+
+## 2026-06-04 - 템포 심박 상한·심박존을 개인 심박 기준으로 공식 파생 (Issue #123 조사 → #127 구현)
+- 배경: #123 조사 결과 템포 상한 165와 Z0~Z5 존이 개발자 개인값으로 4곳(`heartRateZones` Z4, `coach-run` tempoHeartRateCeilingBpm/boundary, `performanceProjection`, `trendInsights`)에 하드코딩돼 있었고, `AthleteProfile`에 개인 심박 입력 필드·환산식·개인화 경로가 전혀 없었다(문서 약속만 존재). 랩 "8랩"은 1km 분할이 아니라 소스(FIT/HealthKit) lap 레코드를 1:1 저장한 순번임도 확인.
+- 결정: 심박존·템포/이지/회복 상한을 단일 공식으로 파생한다. 우선순위는 **LTHR > 측정 HRmax > Tanaka(208−0.7×나이) 추정 > 상수 fallback**. anchor=LTHR, 측정/추정 HRmax에서는 LT≈0.9×HRmax(역치 88~92% HRmax 중앙값). 존 경계는 anchor를 기준 상수 비율로 만들어 anchor=165면 기존 상수와 정확히 일치(미입력 회귀 0).
+- 웹 근거: 템포 ~75~85% HRmax, 역치 ~85~92% HRmax / ~80~88% HRR; Tanaka 식이 220−나이보다 정확(특히 40세+); Friel LTHR(30분 단독 TT 마지막 20분 평균) 기반 존; Karvonen %HRR. (ASICS, Marathon Handbook, Tanaka PMC5862813, Joe Friel, RunReps)
+- 포기한 대안: Karvonen(%HRR) 중심 — 사용자가 LTHR 우선을 선택. 안정심박은 입력은 받아 코칭 맥락으로 보존하되 anchor 산출엔 직접 쓰지 않음(추후 HRR 확장 여지). 랩 거리 정규화는 별도 decision 후보로 보류(route 기반 fastSegments 우선 정책 유지).
+- 안전: Tanaka 추정은 단정 근거가 아니라 보수 신호로만 쓰고 측정/역치 입력을 권유. 레벨·나이로 안전 상한을 낮추지 않는다. 의료 단정 금지.
+- 적용 범위: `src/entities/training-memory/model.ts`(AthleteProfile 3필드+normalize), `src/shared/lib/heartRateZones.ts`(deriveHeartRateModel), `src/shared/lib/performanceProjection.ts`, `src/shared/lib/trendInsights.ts`, `src/pages/dashboard/DashboardPage.vue`, `src/shared/ui/AppHeader.vue`, `src/pages/memory/MemoryPage.vue`, `supabase/functions/coach-run/index.ts`(deriveCoachHeartRateModel), `.harness/project/domain-rules.md`.
+
+## 2026-06-04 - 심박 상한 165 상수 완전 제거 + 데이터 보정 + auto/manual + 근거 표시 (Issue #127 v2)
+- 배경: 사용자가 #127 1차(merge/배포) 후 확인. (1) 나이만 입력해도 156으로 자동 적용되는 것을 보고 "나이 베이스 + 누적 데이터 보정"을 원했고, (2) 165는 2달 전 ChatGPT에서 받은 개발자 개인값을 상수로 박은 것이라 "코드 어디에도 165 상수를 두면 안 된다"고 못박았으며, (3) 앱 화면에 산출식·외부 근거를 보여 신뢰를 줄 것, (4) 추천값 vs 사용자 지정값 분리·선택을 요구.
+- 결정:
+  - 165/145/130 상수를 **코드 전역에서 제거**(heartRateZones·coach-run·performanceProjection·trendInsights·inferRunType). 존 경계는 anchor(LTHR)의 %LTHR 비율로만 정의(Z1 0.79·Z2 0.88·Z3 0.94·Z4 1.0). 36세는 공식상 anchor≈165가 자연 산출.
+  - 추천(auto) anchor = max(Tanaka 나이추정, 누적 RunLog 관측 최대심박)×0.9. 관측은 표본 3개↑(4개↑면 최고 1개 제외)로 강건 추정, 올리는 방향으로만 보정. 직접입력(manual)은 LTHR > 측정 HRmax.
+  - 근거 데이터 전무 시 상한 null(미설정). 165 fallback 없음 → 페이스/RPE/드리프트로 평가 + 입력 권유.
+  - `AthleteProfile.heartRateMode: 'auto'|'manual'` 추가(러너레벨 패턴과 동일). 직접값 보존·토글. UI에 현재값/추천값/source + 산출식 + 외부 근거 링크(Tanaka PMID 11153730, Joe Friel LTHR, ASICS).
+  - inferRunType은 store에서 모델을 주입받아 상수 없이 판정. 테스트는 anchor=165 모델(manual+LTHR 165)을 주입해 기존 판정 회귀를 막음.
+- 포기/주의: 나이 추정을 그대로 게이트로 쓰면 fit한 50세가 156에 갇히는 문제 → 관측 보정으로 해소. 나이/추정은 보수 신호로만, 레벨·나이로 안전 상한 안 낮춤, 의료 단정 금지.
+- 적용 범위: 위 5개 코드 파일 + `src/entities/training-memory/model.ts`(heartRateMode) + 3개 UI(AppHeader/MemoryPage/Dashboard) + import 경로(healthKitSyncStore/UploadRunPage/localFileExtractor/healthKitBridge) + `.harness/project/domain-rules.md`.
+
+## 2026-06-04 - 저장 처방의 stale 심박 상한(165) 잔재 정리 (Issue #127 후속)
+- 증상: 심박 추천(예 156)으로 설정해도 코칭/주간 루틴 템포 처방에 옛 165가 그대로 나옴.
+- 원인: 프로필 "심박 상한"은 deriveHeartRateModel로 live 계산이지만, weeklyPattern/adaptiveTrainingProfile.prescriptionTemplates/progressionCriteria/sessionGuides는 과거 AI/기본값이 박은 "165bpm" 텍스트를 그대로 보존(normalize가 저장 배열 유지). coach-run은 그 템플릿을 우선 사용하라고 지시해 새 코칭도 165를 에코.
+- 데이터 구조 확인: 처방·루틴은 `training_memory.memory` 단일 JSON에 **upsert(덮어쓰기) → 이력 없음, 항상 최신본**. coach_reports만 append 이력. 따라서 stale 165는 "과거 기록"이 아니라 현재 최신 처방의 잔재라 **이력 훼손 없이 load 시 정규화 가능**.
+- 결정: (1) `stripStaleHeartRateCeilings`로 정규화(load) 시 처방/루틴 텍스트의 130/145/165/168을 일반 표현("회복/이지/템포 상한")으로 치환(웹 normalizeTrainingMemory + coach-run sanitizeMemoryHeartRateCeilings). (2) coach-run 지침에서 심박 상한 숫자는 저장 텍스트가 아니라 항상 heartRateModel을 유일 출처로 사용하도록 명시. coach_reports 과거 이력은 불변(새 턴부터 정합).
+- 적용 범위: `src/entities/training-memory/model.ts`(sanitizer + 정규화 적용), `supabase/functions/coach-run/index.ts`(sanitizeMemoryHeartRateCeilings + 지침), 테스트 추가.

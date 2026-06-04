@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { inferRunType } from '@/features/infer-run-type/inferRunType'
+import { deriveHeartRateModel } from '@/shared/lib/heartRateZones'
 import type { FastSegment, Lap, RunRoutePoint } from '@/entities/run/model'
+
+// anchor=165 모델(easy 145 / Z4 156~165) — 기존 판정 기준과 동일한 개인 심박 모델로 주입한다.
+const hrModel = deriveHeartRateModel({ heartRateMode: 'manual', lactateThresholdHr: 165 }, 2026)
+function infer(input: Parameters<typeof inferRunType>[0]) {
+  return inferRunType({ ...input, heartRateModel: hrModel })
+}
 
 describe('inferRunType', () => {
   it('treats low-heart-rate running as Easy before pace-based Tempo', () => {
@@ -11,7 +18,7 @@ describe('inferRunType', () => {
       { index: 4, distanceKm: 1, paceSec: 384, avgHeartRate: 137, cadence: 166 }
     ]
 
-    expect(inferRunType({
+    expect(infer({
       date: '2026-05-19',
       distanceKm: 4,
       avgPaceSec: 378,
@@ -31,7 +38,7 @@ describe('inferRunType', () => {
       bestPaceSec: 240 + (index % 4) * 12
     }))
 
-    expect(inferRunType({
+    expect(infer({
       date: '2026-05-26',
       distanceKm: 6.2,
       avgPaceSec: 455,
@@ -57,7 +64,7 @@ describe('inferRunType', () => {
       { index: 4, startSec: 830, durationSec: 29, distanceKm: 0.08, avgPaceSec: 320, bestPaceSec: 292 }
     ]
 
-    expect(inferRunType({
+    expect(infer({
       date: '2026-05-26',
       distanceKm: 5.8,
       avgPaceSec: 470,
@@ -83,7 +90,7 @@ describe('inferRunType', () => {
       { index: 6, startSec: 1215, durationSec: 18, distanceKm: 0.07, avgPaceSec: 257, bestPaceSec: 236 }
     ]
 
-    expect(inferRunType({
+    expect(infer({
       date: '2026-05-26',
       distanceKm: 5.2,
       avgPaceSec: 470,
@@ -101,7 +108,7 @@ describe('inferRunType', () => {
   })
 
   it('does not force Easy + Strides from HealthKit 1km splits when route fast segments are missing', () => {
-    expect(inferRunType({
+    expect(infer({
       date: '2026-05-26',
       distanceKm: 5.2,
       avgPaceSec: 470,
@@ -139,7 +146,7 @@ describe('inferRunType', () => {
       { index: 17, distanceKm: 1.95, paceSec: 490, avgHeartRate: 132, cadence: 162 }
     ]
 
-    expect(inferRunType({
+    expect(infer({
       date: '2026-05-26',
       distanceKm: 5.19,
       avgPaceSec: 470,
@@ -151,7 +158,7 @@ describe('inferRunType', () => {
   })
 
   it('detects 2026-05-26 style Easy + Strides from route points when HealthKit does not provide fastSegments', () => {
-    expect(inferRunType({
+    expect(infer({
       date: '2026-05-26',
       distanceKm: 5.37,
       avgPaceSec: 460,
@@ -170,7 +177,7 @@ describe('inferRunType', () => {
   })
 
   it('keeps steady route point data as Easy when repeated route accelerations are missing', () => {
-    expect(inferRunType({
+    expect(infer({
       date: '2026-05-26',
       distanceKm: 5.3,
       avgPaceSec: 470,

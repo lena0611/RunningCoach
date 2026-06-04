@@ -1,6 +1,7 @@
 import { getSupabaseAnonKey, getSupabaseFunctionUrl, requireSupabase } from '@/shared/api/supabase'
 import { getAppSessionToken } from '@/shared/api/appSecurity'
 import type { WeatherSnapshot } from '@/features/import-weatherkit/weatherKitBridge'
+import type { RunnerLevel } from '@/entities/training-memory/model'
 
 export type CoachReport = {
   id: string
@@ -32,25 +33,17 @@ type CoachReportRow = {
   updated_at?: string
 }
 
-export async function requestCoachRun(selectedRunId: string | null, userNote: string, currentWeather: WeatherSnapshot | null = null): Promise<CoachReport> {
-  const client = requireSupabase()
-  const { data } = await client.auth.getSession()
-  const token = data.session?.access_token
-  if (!token) throw new Error('로그인이 필요합니다.')
+export async function requestCoachRun(selectedRunId: string | null, userNote: string, currentWeather: WeatherSnapshot | null = null, runnerLevel: RunnerLevel = 'beginner'): Promise<CoachReport> {
   const appSessionToken = await getAppSessionToken()
-
-  const response = await fetch(getSupabaseFunctionUrl('coach-run'), {
-    method: 'POST',
+  const { data, error } = await requireSupabase().functions.invoke('coach-run', {
     headers: {
-      Authorization: `Bearer ${token}`,
-      apikey: getSupabaseAnonKey(),
-      'Content-Type': 'application/json',
       'x-pacelab-app-session': appSessionToken
     },
-    body: JSON.stringify({
+    body: {
       selectedRunId,
       userNote,
       currentWeather: summarizeWeatherForCoach(currentWeather),
+      runnerLevel,
       responseStyle: {
         tone: 'conversational_coach',
         format: 'sectioned_markdown',
@@ -60,12 +53,11 @@ export async function requestCoachRun(selectedRunId: string | null, userNote: st
         maxParagraphSentences: 2,
         maxBulletsPerSection: 5
       }
-    })
+    }
   })
-  const payload = await response.json().catch(() => ({})) as { report?: CoachReport, error?: string }
-  if (!response.ok) throw new Error(payload.error || `AI 코칭 요청 실패: ${response.status}`)
-  if (!payload.report) throw new Error('AI 코칭 응답이 비어 있습니다.')
-  return payload.report
+  if (error) throw error
+  if (!data?.report) throw new Error('AI 코칭 응답이 비어 있습니다.')
+  return data.report as CoachReport
 }
 
 export async function requestCoachRunStream(
@@ -75,6 +67,7 @@ export async function requestCoachRunStream(
   options: {
     signal?: AbortSignal
     onDelta: (delta: string) => void
+    runnerLevel?: RunnerLevel
   }
 ): Promise<CoachReport> {
   const client = requireSupabase()
@@ -96,6 +89,7 @@ export async function requestCoachRunStream(
       userNote,
       currentWeather: summarizeWeatherForCoach(currentWeather),
       stream: true,
+      runnerLevel: options.runnerLevel ?? 'beginner',
       responseStyle: {
         tone: 'conversational_coach',
         format: 'sectioned_markdown',

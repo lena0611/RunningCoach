@@ -114,6 +114,9 @@ export type TrainingInjuryCheckIn = {
 export type TrainingStrengthPlanDetail = InjuryStrengthPlanDetail
 export type TrainingStrengthPlanSource = InjuryStrengthPlanSource
 
+export type RunnerLevel = 'beginner' | 'intermediate' | 'advanced'
+export type RunnerLevelSetting = 'auto' | RunnerLevel
+
 export type AthleteProfile = {
   birthYear: number | null
   sex: 'male' | 'female' | 'other' | 'unknown'
@@ -121,6 +124,13 @@ export type AthleteProfile = {
   weeklyRunDaysTarget: number | null
   preferredLongRunDay: string
   personalBests: PersonalBest[]
+  runnerLevel: RunnerLevelSetting
+  // 개인 심박 기준. 심박존/템포 상한을 상수 대신 개인 anchor에서 파생한다.
+  // heartRateMode가 'manual'이고 입력값이 있으면 그것을 우선, 아니면 앱 추천값(나이+누적데이터)을 쓴다.
+  maxHeartRate: number | null
+  restingHeartRate: number | null
+  lactateThresholdHr: number | null
+  heartRateMode: 'auto' | 'manual'
 }
 
 export type PersonalBest = {
@@ -365,7 +375,12 @@ export const initialTrainingMemory: TrainingMemory = {
     runningExperienceMonths: null,
     weeklyRunDaysTarget: 4,
     preferredLongRunDay: '토요일',
-    personalBests: []
+    personalBests: [],
+    runnerLevel: 'auto',
+    maxHeartRate: null,
+    restingHeartRate: null,
+    lactateThresholdHr: null,
+    heartRateMode: 'auto'
   },
   adaptiveTrainingProfile: {
     methodologyVersion: 'pacelab-2026-05-v1',
@@ -454,7 +469,12 @@ export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null |
     ...(memory ?? {}),
     athleteProfile: {
       ...base.athleteProfile,
-      ...(memory?.athleteProfile ?? {})
+      ...(memory?.athleteProfile ?? {}),
+      runnerLevel: normalizeRunnerLevelSetting(memory?.athleteProfile?.runnerLevel),
+      maxHeartRate: normalizeHeartRateInput(memory?.athleteProfile?.maxHeartRate),
+      restingHeartRate: normalizeHeartRateInput(memory?.athleteProfile?.restingHeartRate),
+      lactateThresholdHr: normalizeHeartRateInput(memory?.athleteProfile?.lactateThresholdHr),
+      heartRateMode: normalizeHeartRateMode(memory?.athleteProfile?.heartRateMode)
     },
     adaptiveTrainingProfile: normalizeAdaptiveTrainingProfile(memory?.adaptiveTrainingProfile),
     runnerIdentity: normalizeRunnerIdentity(memory?.runnerIdentity ?? base.runnerIdentity, memory ?? base),
@@ -471,12 +491,54 @@ export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null |
 
   return {
     ...merged,
+    weeklyPattern: stripStaleHeartRateCeilingsList(merged.weeklyPattern ?? []),
     goals,
     activeGoalId,
     injuryItems,
     activeInjuryItemId,
     goal: activeGoal.title
   }
+}
+
+function normalizeRunnerLevelSetting(value: unknown): RunnerLevelSetting {
+  return value === 'beginner' || value === 'intermediate' || value === 'advanced' ? value : 'auto'
+}
+
+function normalizeHeartRateMode(value: unknown): 'auto' | 'manual' {
+  return value === 'manual' ? 'manual' : 'auto'
+}
+
+// 처방/루틴 텍스트에 과거 개발자 상수로 박힌 심박 상한 숫자(회복 130 / 이지 145 / 템포 165·168)를 일반 표현으로 치환한다.
+// 처방·루틴은 항상 최신본만 저장되므로(이력 없음) 안전하게 정규화한다. 실제 숫자는 표시/코칭 시 개인 heartRateModel에서 가져온다.
+const STALE_HEART_RATE_CEILINGS = new Map<string, string>([
+  ['130', '회복 상한'],
+  ['145', '이지 상한'],
+  ['165', '템포 상한'],
+  ['168', '템포 상한']
+])
+export function stripStaleHeartRateCeilings(text: string): string {
+  if (!text || !/\d/.test(text)) return text
+  return text
+    // "165bpm", "최대 심박 145bpm" 등 → bpm 동반 숫자
+    .replace(/(\d{2,3})\s*bpm/gi, (match, num: string) => STALE_HEART_RATE_CEILINGS.get(num) ?? match)
+    // "심박 165", "최대 심박 145", "max HR 130"
+    .replace(/((?:최대\s*)?심박|max\s*hr)\s*(\d{2,3})/gi, (match, keyword: string, num: string) =>
+      STALE_HEART_RATE_CEILINGS.has(num) ? `${keyword} ${STALE_HEART_RATE_CEILINGS.get(num)}` : match)
+    // "165 이하", "165 초과", "165 상한", "165를 넘", "165 넘기지"
+    .replace(/(\d{2,3})(\s*(?:이하|초과|상한)|\s*를?\s*넘기?지?)/g, (match, num: string, rest: string) =>
+      STALE_HEART_RATE_CEILINGS.has(num) ? `${STALE_HEART_RATE_CEILINGS.get(num)}${rest}` : match)
+}
+
+function stripStaleHeartRateCeilingsList(items: string[]): string[] {
+  return items.map((item) => stripStaleHeartRateCeilings(item))
+}
+
+// 개인 심박 입력은 30~240bpm 범위의 유한한 양수만 허용하고, 그 외(빈 문자열/0/비정상값)는 미입력(null)으로 본다.
+function normalizeHeartRateInput(value: unknown): number | null {
+  const num = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(num)) return null
+  const rounded = Math.round(num)
+  return rounded >= 30 && rounded <= 240 ? rounded : null
 }
 
 function normalizeRunnerIdentity(value: unknown, memory: Partial<TrainingMemory> | null | undefined): RunnerIdentity {
@@ -636,7 +698,7 @@ function normalizeAdaptiveTrainingProfile(value: unknown): AdaptiveTrainingProfi
     progressionCriteria: normalizeProgressionCriteria(raw.progressionCriteria),
     prescriptionTemplates: normalizePrescriptionTemplates(raw.prescriptionTemplates),
     compliancePatterns: Array.isArray(raw.compliancePatterns)
-      ? raw.compliancePatterns.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()).slice(0, 20)
+      ? raw.compliancePatterns.filter((item) => typeof item === 'string' && item.trim()).map((item) => stripStaleHeartRateCeilings(item.trim())).slice(0, 20)
       : [],
     sessionGuides
   }
@@ -679,8 +741,8 @@ function normalizeProgressionCriterion(value: Partial<ProgressionCriterion>, ind
     id: typeof value.id === 'string' && value.id.trim() ? value.id.trim() : `criterion-${index + 1}`,
     label,
     status: normalizeProgressionStatus(value.status),
-    evidence,
-    action
+    evidence: stripStaleHeartRateCeilings(evidence),
+    action: stripStaleHeartRateCeilings(action)
   }
 }
 
@@ -707,11 +769,11 @@ function normalizePrescriptionTemplate(value: Partial<PrescriptionTemplate>, ind
     name,
     phase: normalizePrescriptionTemplatePhase(value.phase),
     sessionType,
-    purpose,
-    workout: normalizeStringArray(value.workout).slice(0, 8),
+    purpose: stripStaleHeartRateCeilings(purpose),
+    workout: stripStaleHeartRateCeilingsList(normalizeStringArray(value.workout).slice(0, 8)),
     useWhen: normalizeStringArray(value.useWhen).slice(0, 8),
-    avoidWhen: normalizeStringArray(value.avoidWhen).slice(0, 8),
-    progressionTrigger: typeof value.progressionTrigger === 'string' ? value.progressionTrigger.trim() : ''
+    avoidWhen: stripStaleHeartRateCeilingsList(normalizeStringArray(value.avoidWhen).slice(0, 8)),
+    progressionTrigger: stripStaleHeartRateCeilings(typeof value.progressionTrigger === 'string' ? value.progressionTrigger.trim() : '')
   }
 }
 
@@ -726,10 +788,10 @@ function normalizeAdaptiveSessionGuide(value: Partial<AdaptiveSessionGuide>): Ad
   if (!type || !boundary || !evidence) return null
   return {
     type,
-    boundary,
+    boundary: stripStaleHeartRateCeilings(boundary),
     adjustment: normalizeAdaptiveAdjustment(value.adjustment),
-    evidence,
-    nextCheck: typeof value.nextCheck === 'string' ? value.nextCheck.trim() : ''
+    evidence: stripStaleHeartRateCeilings(evidence),
+    nextCheck: stripStaleHeartRateCeilings(typeof value.nextCheck === 'string' ? value.nextCheck.trim() : '')
   }
 }
 

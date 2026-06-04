@@ -11,6 +11,7 @@ import { detectGoalIntent, type GoalIntentProposal } from '@/features/detect-goa
 import UploadRunPage from '@/pages/upload-run/UploadRunPage.vue'
 import { fetchCoachReports, requestCoachRunStream, type CoachInjuryUpdateProposal, type CoachReport } from '@/shared/api/coachRepository'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
+import { resolveRunnerLevel } from '@/shared/lib/runnerLevel'
 import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, formatInteger, formatNumberWithCommas, formatPace } from '@/shared/lib/format'
 import { getRunFilterTags, hasRunFilterTag, isScheduledSession, type RunFilterTag } from '@/shared/lib/runMetaChips'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
@@ -843,7 +844,8 @@ async function sendCoachRequest(note: string) {
   try {
     const report = await requestCoachRunStream(coachRun.value.id, note, weatherStore.snapshot, {
       signal: controller.signal,
-      onDelta: enqueueCoachDelta
+      onDelta: enqueueCoachDelta,
+      runnerLevel: resolveRunnerLevel(memoryStore.memory.athleteProfile, runStore.sortedRuns).level
     })
     await revealChain
     reports.value = [report, ...reports.value.filter((item) => item.id !== report.id)]

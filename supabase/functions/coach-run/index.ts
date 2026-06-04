@@ -168,7 +168,8 @@ Deno.serve(async (req) => {
     const selectedRunId = typeof body.selectedRunId === 'string' && body.selectedRunId ? body.selectedRunId : null
     const userNote = typeof body.userNote === 'string' ? body.userNote.slice(0, 2000) : ''
     const currentWeather = normalizeCurrentWeather(body.currentWeather)
-    const responseStyle = normalizeResponseStyle(body.responseStyle)
+    const runnerLevel = normalizeRunnerLevel(body.runnerLevel)
+    const responseStyle = normalizeResponseStyle(body.responseStyle, runnerLevel)
     const shouldStream = body.stream === true
 
     const access = await requireAppSession(admin, req, userId)
@@ -177,7 +178,7 @@ Deno.serve(async (req) => {
     const rateLimit = await consumeRateLimit(admin, userId, 'coach-run')
     if (!rateLimit.ok) return json({ error: rateLimit.error, retryAfterSec: rateLimit.retryAfterSec }, 429)
 
-    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather)
+    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel)
     const ownedSelectedRunId = context.selectedRun?.id ?? null
     if (shouldStream) {
       return streamCoachRun(admin, userId, ownedSelectedRunId, userNote, openaiKey, model, context)
@@ -253,6 +254,12 @@ async function persistCoachResult(
     }
 }
 
+type RunnerLevel = 'beginner' | 'intermediate' | 'advanced'
+
+function normalizeRunnerLevel(value: unknown): RunnerLevel {
+  return value === 'beginner' || value === 'intermediate' || value === 'advanced' ? value : 'beginner'
+}
+
 type ResponseStyle = {
   tone: 'conversational_coach'
   format: 'sectioned_markdown'
@@ -261,10 +268,20 @@ type ResponseStyle = {
   firstSentence: 'reaction_before_analysis'
   maxParagraphSentences: number
   maxBulletsPerSection: number
+  runnerLevel: RunnerLevel
+  verbosity: 'guided' | 'standard' | 'compact'
 }
 
-function normalizeResponseStyle(value: unknown): ResponseStyle {
+// 레벨별 표현 밀도 프리셋. 초급은 풀어서·짧은 처방, 고급은 간결·고밀도. (Issue #100)
+const RESPONSE_STYLE_PRESET: Record<RunnerLevel, { maxParagraphSentences: number; maxBulletsPerSection: number; verbosity: ResponseStyle['verbosity'] }> = {
+  beginner: { maxParagraphSentences: 3, maxBulletsPerSection: 4, verbosity: 'guided' },
+  intermediate: { maxParagraphSentences: 2, maxBulletsPerSection: 5, verbosity: 'standard' },
+  advanced: { maxParagraphSentences: 2, maxBulletsPerSection: 6, verbosity: 'compact' }
+}
+
+function normalizeResponseStyle(value: unknown, runnerLevel: RunnerLevel = 'beginner'): ResponseStyle {
   const item = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  const preset = RESPONSE_STYLE_PRESET[runnerLevel]
   return {
     tone: item.tone === 'conversational_coach' ? 'conversational_coach' : 'conversational_coach',
     format: item.format === 'sectioned_markdown' ? 'sectioned_markdown' : 'sectioned_markdown',
@@ -273,8 +290,10 @@ function normalizeResponseStyle(value: unknown): ResponseStyle {
       : ['report_style', 'medical_diagnosis', 'long_paragraphs'],
     emojiPolicy: item.emojiPolicy === 'contextual_0_to_3' ? 'contextual_0_to_3' : 'contextual_0_to_3',
     firstSentence: item.firstSentence === 'reaction_before_analysis' ? 'reaction_before_analysis' : 'reaction_before_analysis',
-    maxParagraphSentences: Number.isFinite(Number(item.maxParagraphSentences)) ? Math.max(1, Math.min(Number(item.maxParagraphSentences), 3)) : 2,
-    maxBulletsPerSection: Number.isFinite(Number(item.maxBulletsPerSection)) ? Math.max(3, Math.min(Number(item.maxBulletsPerSection), 6)) : 5
+    maxParagraphSentences: preset.maxParagraphSentences,
+    maxBulletsPerSection: preset.maxBulletsPerSection,
+    runnerLevel,
+    verbosity: preset.verbosity
   }
 }
 
@@ -308,7 +327,7 @@ function normalizeCurrentWeather(value: unknown): CurrentWeatherContext | null {
   }
 }
 
-async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null) {
+async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner') {
   const [
     { data: memoryRow },
     { data: runs },
@@ -343,7 +362,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
   const currentMonth = inCurrentMonth(runRows)
   const latestTempo = runRows.find((run) => run.type === 'Tempo') ?? null
   const latestLong = runRows.find((run) => ['LSD', 'Steady Long'].includes(run.type)) ?? null
-  const trainingMemory = memoryRow?.memory ?? null
+  const trainingMemory = sanitizeMemoryHeartRateCeilings(memoryRow?.memory ?? null)
   const goals = getGoals(trainingMemory)
   const activeGoal = getActiveGoal(trainingMemory, goals)
   const performanceProjection = getPerformanceProjection(runRows, activeGoal)
@@ -351,9 +370,10 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
   const selectedRunDateForTemporalContext = selectedRun?.date ?? null
   const injuryItems = filterInjuryItemsForRunDate(allInjuryItems, selectedRunDateForTemporalContext)
   const activeInjuryItem = getActiveInjuryItemForRunDate(trainingMemory, allInjuryItems, selectedRunDateForTemporalContext)
-  const selectedRunLapAnalysis = buildLapProgressionAnalysis(selectedRun)
-  const selectedRunExecutionGuide = buildSessionExecutionGuide(selectedRun, activeGoal)
-  const recentPrescriptionComplianceSignals = buildPrescriptionComplianceSignals(recent14)
+  const coachHeartRateModel = deriveCoachHeartRateModel(trainingMemory, currentDate, runRows)
+  const selectedRunLapAnalysis = buildLapProgressionAnalysis(selectedRun, coachHeartRateModel.tempoCeilingBpm)
+  const selectedRunExecutionGuide = buildSessionExecutionGuide(selectedRun, activeGoal, coachHeartRateModel)
+  const recentPrescriptionComplianceSignals = buildPrescriptionComplianceSignals(recent14, coachHeartRateModel)
   const prescriptionComplianceSummary = summarizePrescriptionCompliance(recentPrescriptionComplianceSignals)
   const adaptiveTrainingProfile = getAdaptiveTrainingProfile(trainingMemory)
   const trainingKnowledge = buildRelevantTrainingKnowledge(knowledgeSourceRows, trainingMethodRows, prescriptionRuleRows, activeGoal, selectedRun)
@@ -371,6 +391,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     latestTempo: summarizeRunForCoach(latestTempo),
     latestLong: summarizeRunForCoach(latestLong)
   }
+  const athleteAgeWeight = getAgeLoadWeightForCoach(trainingMemory, currentDate)
   const runningAnalysisEngine = buildRunningAnalysisEngine({
     runRows,
     selectedRun,
@@ -379,7 +400,8 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     prescriptionComplianceSummary,
     summaryStats,
     activeInjuryItem,
-    activeGoal
+    activeGoal,
+    ageWeight: athleteAgeWeight
   })
   const runnerIdentity = getRunnerIdentity(trainingMemory)
   const coachBeliefs = selectRelevantCoachBeliefs(getCoachBeliefs(trainingMemory), {
@@ -403,18 +425,54 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     adaptiveTrainingProfile,
     runnerIdentity,
     coachBeliefs,
-    runningAnalysisEngine
+    runningAnalysisEngine,
+    runnerLevel,
+    heartRateModel: coachHeartRateModel
   })
-  const injuryCheckInPolicy = buildInjuryCheckInPolicy(activeInjuryItem)
+  const injuryCheckInPolicy = buildInjuryCheckInPolicy(activeInjuryItem, selectedRunInjuryContext(selectedRun))
+  const dataAvailability = {
+    hasSelectedRun: Boolean(selectedRun),
+    selectedRunType: selectedRun?.type ?? null,
+    hasLapData: Boolean(selectedRunLapAnalysis),
+    recent30RunCount: recent30.length,
+    recent30DistanceKm: summaryStats.recent30DistanceKm,
+    isSparse: recent30.length < 4
+  }
 
   return {
     userNote,
     responseStyle,
+    runnerLevel,
+    runnerLevelGuide: buildRunnerLevelGuide(runnerLevel),
+    dataAvailability,
+    weeklyAvailability: {
+      targetRunDays: getWeeklyRunDaysTarget(trainingMemory),
+      currentWeeklyPatternDays: Array.isArray((trainingMemory as Record<string, unknown> | null)?.weeklyPattern)
+        ? ((trainingMemory as Record<string, unknown>).weeklyPattern as unknown[]).length
+        : 0,
+      policy:
+        'targetRunDays는 사용자가 실제로 달릴 수 있는 주간 가용 일수 제약이다(데이터로 도출 불가한 생활 제약). weeklyPattern(주간 루틴)의 러닝 세션 수가 이 값을 넘지 않도록 처방·조정한다. currentWeeklyPatternDays가 targetRunDays보다 많으면 세션 수를 줄여 맞추고(우선순위 낮은 추가 Easy부터 축소), 적으면 목표에 필요할 때만 가용 한도 내에서 늘린다. targetRunDays가 null(미입력)이면 제약 없이 목표와 회복을 보고 과훈련을 피하는 선에서 처방한다.',
+    },
+    heartRateModel: {
+      tempoCeilingBpm: coachHeartRateModel.tempoCeilingBpm,
+      easyCeilingBpm: coachHeartRateModel.easyCeilingBpm,
+      recoveryCeilingBpm: coachHeartRateModel.recoveryCeilingBpm,
+      estimatedMaxHr: coachHeartRateModel.estimatedMaxHr,
+      observedMaxHr: coachHeartRateModel.observedMaxHr,
+      restingHeartRate: coachHeartRateModel.restingHeartRate,
+      source: coachHeartRateModel.source,
+      policy:
+        '심박 상한(템포/이지/회복)은 개인 심박 기준에서 파생한 값이다. 본문에 특정 기본 숫자(예: 165)를 임의로 쓰지 말고 이 상한 값만 쓴다. source=insufficient(상한 null)이면 심박 상한을 말하지 말고 페이스/RPE/심박 드리프트로 평가하며, "나이나 역치/최대심박을 입력하면 개인화된 심박 기준으로 코칭한다"고 한 번 안내한다. source=age_estimated 또는 age_data_corrected는 추정이므로 단정하지 말고, 더 정확히 하려면 30분 역치 테스트(LTHR) 입력을 권하면 좋다고 한 번만 덧붙인다. lthr/measured_max는 사용자가 직접 입력한 값이다.',
+    },
+    responseTemplatePolicy: buildResponseTemplatePolicy(),
     currentDate,
     currentDateDisplay: formatDateWithWeekday(currentDate),
     contextMode: selectedRun ? 'selected_run_review' : 'current_flow_review',
     selectedRunTiming,
     selectedRunAgeDays,
+    nextTrainingAdviceRelevant: selectedRunAgeDays !== null && selectedRunAgeDays <= 7 && runsAfterSelected.length === 0,
+    nextTrainingAdvicePolicy:
+      'nextTrainingAdviceRelevant는 이 세션의 "다음 훈련/루틴 업데이트"를 현재 처방으로 줘도 되는지다. 세션이 7일 이내이고(ATL 7일 시간상수 기준) 그 이후 새 기록이 없을 때만 true다. false이면(7일 넘게 지났거나 그 세션 이후 이미 다른 기록이 있으면) 다음 훈련은 그 세션 다음 스텝 회고로 한 줄만 쓰고, 루틴 업데이트는 단일 과거 세션으로 현재 루틴을 판단하지 않는다고 짧게 말한다.',
     anchorDateForWindowStats: anchorDate,
     anchorDateForWindowStatsDisplay: formatDateWithWeekday(anchorDate),
     instructionForDateHandling:
@@ -430,7 +488,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       coachingDecisionBasis: [
         '1순위: activeGoal의 목표 거리, 목표 기록, 목표일, 성공 기준, 전략 메모',
         '2순위: 선택 세션의 실제 수행 데이터(distance, duration, pace, HR, cadence, laps, fast_segments, RPE, memo)',
-        '2.5순위: selectedRunExecutionGuide 대비 실제 수행 일치도. 처방된 심박/페이스/패턴 경계를 지켰는지, 경계를 넘었다면 어느 랩부터 왜 넘었는지',
+        '2.5순위: selectedRunExecutionGuide 대비 실제 수행 일치도. 처방된 심박/페이스/패턴 경계를 지켰는지, 경계를 넘었다면 어느 구간부터 왜 넘었는지',
         '3순위: 최근 7/14/30일 누적 거리, Easy 비율, 강훈련 빈도, Long Run/Tempo 수행 여부',
         '4순위: weeklyPattern 대비 실제 소화율과 누락/대체/추가런 패턴',
         '5순위: activeInjuryItem, pain_note, workout_feeling, 회복 신호',
@@ -481,7 +539,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       doNotUpdateWhen: [
         '단일 세션 하나만 좋거나 나쁘다.',
         '날씨, 동반주, 과거 기록 리뷰처럼 일시적 맥락으로 설명된다.',
-        '랩/심박/RPE 데이터가 부족하다.',
+        '구간/심박/RPE 데이터가 부족하다.',
         '목표 달성 보장을 암시해야만 설명 가능한 변경이다.'
       ]
     },
@@ -497,10 +555,12 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     },
     runningAnalysisEngine,
     runningAnalysisEngineInstruction:
-      'runningAnalysisEngine은 코드가 먼저 계산한 훈련 판단이다. AI는 이 값을 재계산하지 말고 설명과 처방 언어로 번역한다. 단일 세션 감상보다 hrDrift/loadTrend/recoveryStatus/injuryRisk/overtrainingWarning/trainingSuitabilityScore를 우선 확인한다.',
+      'runningAnalysisEngine은 코드가 먼저 계산한 훈련 판단이다. AI는 이 값을 재계산하지 말고 설명과 처방 언어로 번역한다. 단일 세션 감상보다 hrDrift/loadTrend/chronicLoadTrend/recoveryStatus/injuryRisk/overtrainingWarning/trainingSuitabilityScore를 우선 확인한다.',
+    chronicLoadTrendInstruction:
+      'chronicLoadTrend는 최근 30일 누적과 직전 30일을 비교한 중장기 부하다. 7일 급성 부하(loadTrend)가 안정적이어도 한 달에 걸쳐 누적이 천천히 spike로 늘었으면 부상 위험과 회복을 보수적으로 본다. 단 부상 예측 공식이 아니라 강도 조절 신호로만 쓴다.',
     coachingDecisionBoard,
     coachingDecisionBoardInstruction:
-      'coachingDecisionBoard는 이번 답변의 판단 보드다. 답변 전에 selectedRunEvidence, lapProcess, prescriptionCompliance, goalProjectionCheck, routineUpdateCheck를 먼저 확인하고, 핵심 지표/오늘 해석/루틴 업데이트에 그 근거를 반영한다. 이 보드와 원본 RunLog가 충돌하면 원본 RunLog를 우선하되, 보드는 설명 구조를 잡는 데 사용한다.',
+      'coachingDecisionBoard는 이번 답변의 판단 보드다. 답변 전에 selectedRunEvidence, lapProcess, prescriptionCompliance, goalProjectionCheck, routineUpdateCheck를 먼저 확인하고, 핵심 지표/해석 섹션/루틴 업데이트에 그 근거를 반영한다. 이 보드와 원본 RunLog가 충돌하면 원본 RunLog를 우선하되, 보드는 설명 구조를 잡는 데 사용한다.',
     injuryItems,
     activeInjuryItem,
     injuryCheckInPolicy,
@@ -536,13 +596,17 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     selectedRunLapAnalysis,
     selectedRunExecutionGuide,
     lapAnalysisInstruction:
-      'selectedRunLapAnalysis와 selectedRunExecutionGuide가 있으면 반드시 코칭에 반영한다. 핵심 지표에는 페이스 흐름과 심박 흐름을 화살표로 짧게 보여주고, 오늘 해석에는 초반 오버페이스 여부, 심박이 터졌는지/잘 눌렸는지, 세션 유형별 심박/페이스 경계 초과 여부, 후반 페이스-심박 품질을 짚는다. 랩 데이터가 없을 때만 평균값 중심으로 말한다.',
+      'selectedRunLapAnalysis와 selectedRunExecutionGuide가 있으면 반드시 코칭에 반영한다. 핵심 지표에는 페이스 흐름과 심박 흐름을 화살표로 짧게 보여주고, 해석 섹션에는 초반 오버페이스 여부, 심박이 터졌는지/잘 눌렸는지, 세션 유형별 심박/페이스 경계 초과 여부, 후반 페이스-심박 품질을 짚는다. 구간 데이터가 없을 때만 평균값 중심으로 말한다.',
+    contextFactorInstruction:
+      '세션 품질을 페이스/심박 숫자만으로 단독 평가하지 않는다. 그 기록을 유발한 외부 요인과 내부 요인을 함께 보고 "이 결과가 왜 이렇게 나왔는지"를 설명한다. 외부 요인: selectedRun.weather(기온/습도/바람), courseType(고도/지형), companion(동반주), 시간대. 내부 요인: activeInjuryItem/pain_note(부상·통증), sleep_quality(수면), condition_score(컨디션), stress_level(스트레스), rpe, recent7/14/30 누적과 중장기 부하 추세(최근 부하/피로). 과거 세션 복기든 최근 7일 현재 흐름이든 동일하게 적용한다.',
+    contextFactorHeatInstruction:
+      '특히 그날 기온이 높거나(대략 25도 이상) 습도가 높으면 같은 페이스에도 심박이 올라가므로, 심박 상승이나 페이스 저하를 실력 저하로 단정하지 않고 더위 맥락으로 설명한다. 직전 볼륨이 급증했거나 강훈련이 몰렸으면 후반 저하를 피로 맥락으로 본다. 수면 부족/낮은 컨디션/높은 스트레스도 같은 방식으로 그날 결과를 설명하는 요인으로 쓴다. 단 해당 요인 데이터가 없으면 억지로 끌어오거나 추측하지 않는다.',
     prescriptionAdjustmentInstruction:
       '선택 세션을 단순 기록이 아니라 이전 처방을 수행한 결과로 본다. selectedRunExecutionGuide에 맞게 훈련했는지 먼저 평가하고, 잘 지켰으면 유지 또는 소폭 상향 조건을 말한다. 경계를 반복적으로 넘었거나 회복/부상 신호가 있으면 다음 처방을 낮추거나 기준을 바꾼다. 조정 필요성이 명확하면 trainingMemoryPatch에 반영한다.',
     recentPrescriptionComplianceSignals,
     prescriptionComplianceSummary,
     prescriptionMemoryInstruction:
-      'recentPrescriptionComplianceSignals는 최근 세션들이 각 유형별 처방 기준을 얼마나 지켰는지 보는 신호다. 단일 세션 결과를 장기기억으로 저장하지 말고, 최근 여러 세션에서 반복되는 준수/이탈 패턴만 memoryItems에 저장한다. 예: "최근 Tempo는 165 상한을 대체로 지키지만 후반 1~2랩에서 흔들린다", "Recovery는 심박을 잘 누르는 편이다".',
+      'recentPrescriptionComplianceSignals는 최근 세션들이 각 유형별 처방 기준을 얼마나 지켰는지 보는 신호다. 단일 세션 결과를 장기기억으로 저장하지 말고, 최근 여러 세션에서 반복되는 준수/이탈 패턴만 memoryItems에 저장한다. 예: "최근 Tempo는 템포 상한을 대체로 지키지만 후반 1~2구간에서 흔들린다", "Recovery는 심박을 잘 누르는 편이다".',
     runsAfterSelectedRun: runsAfterSelected.slice(0, 10).map(summarizeRunForCoach),
     recent14: recent14.slice(0, 20).map(summarizeRunForCoach),
     summaryStats
@@ -626,8 +690,31 @@ type CoachAiResult = {
   injuryUpdateProposal: InjuryUpdateProposal | null
 }
 
+// 과거 세션 리뷰(selected_run_review)이고 nextTrainingAdviceRelevant=false면
+// LLM이 지침을 어기고 넣은 "## 다음 훈련"·"## 루틴 업데이트" 섹션을 코드로 제거한다.
+// 현재 흐름 코칭(current_flow_review)은 selectedRun이 없어 relevant=false여도 제거하지 않는다.
+function shouldStripPastSections(context: unknown): boolean {
+  if (!context || typeof context !== 'object') return false
+  const record = context as Record<string, unknown>
+  return record.contextMode === 'selected_run_review' && record.nextTrainingAdviceRelevant === false
+}
+
+function stripPastSessionSections(report: string): string {
+  if (!report) return report
+  return report
+    .replace(/\n*##\s*다음 훈련[\s\S]*?(?=\n##\s|\s*$)/g, '')
+    .replace(/\n*##\s*루틴 업데이트[\s\S]*?(?=\n##\s|\s*$)/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function applyPastSectionPolicy(ai: CoachAiResult, context: unknown): CoachAiResult {
+  if (!shouldStripPastSections(context)) return ai
+  return { ...ai, report: stripPastSessionSections(ai.report) }
+}
+
 async function callOpenAI(apiKey: string, model: string, context: unknown): Promise<CoachAiResult> {
-  const instructions = buildCoachInstructions()
+  const instructions = buildCoachInstructions(context)
 
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
@@ -638,7 +725,7 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     body: JSON.stringify({
       model,
       instructions,
-      input: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context, null, 2)}`,
+      input: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context)}`,
       text: buildCoachResponseTextFormat()
     })
   })
@@ -646,12 +733,70 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
   if (!response.ok) throw new Error(`OpenAI API failed: ${response.status}`)
   const payload = await response.json()
   const text = extractOpenAIResponseText(payload)
-  return parseCoachAiText(text)
+  return applyPastSectionPolicy(parseCoachAiText(text), context)
 }
 
-function buildCoachInstructions() {
+function buildRunnerLevelGuide(level: RunnerLevel) {
+  const common = 'runnerLevel은 표현 방식과 코칭 톤만 조정한다. 심박 상한·부상 게이트 같은 안전 기준은 레벨과 무관하게 동일하게 적용한다.'
+  if (level === 'beginner') {
+    return {
+      level,
+      termDepth: '전문 용어(역치, 심박 드리프트, ACWR 등)는 쓰되 바로 옆에 쉬운 말로 풀어준다. 예: "심박 드리프트(후반에 심박이 슬슬 올라가는 것)".',
+      focus: '한 답변에서 핵심 한두 가지에만 집중한다. 처방은 단순하고 바로 실행 가능한 한 가지로 준다.',
+      tone: '겁주지 않고 격려 중심으로 말한다. 잘한 점을 먼저 분명히 짚는다.',
+      common
+    }
+  }
+  if (level === 'advanced') {
+    return {
+      level,
+      termDepth: '전문 용어를 그대로 써도 된다. 불필요한 해설은 줄이고 숫자와 경계 중심으로 말한다.',
+      focus: '군더더기 설명을 빼고 핵심 판단과 처방 조정 조건을 압축한다. 근거가 충분하면 상향 제안도 더 적극적으로 한다.',
+      tone: '간결하고 직설적으로 말한다. 사용자가 이미 아는 기본기는 반복하지 않는다.',
+      common
+    }
+  }
+  return {
+    level,
+    termDepth: '전문 용어를 쓰되 한 번씩 짧은 해설을 곁들인다.',
+    focus: '핵심 지표와 처방 준수, 다음 한 가지 조정에 집중한다.',
+    tone: '현재 기본 코칭 톤을 유지한다.',
+    common
+  }
+}
+
+function buildResponseTemplatePolicy() {
+  return {
+    principle:
+      '고정 6섹션을 매번 채우지 않는다. 필수 최소만 항상 쓰고, 나머지 섹션은 세션 유형·runnerLevel·dataAvailability에 따라 필요할 때만 넣는다.',
+    requiredSections: ['첫 문장 반응(분석/숫자로 시작 금지)', '오늘 또는 그 세션의 핵심 판단 1개(가장 중요한 의미)'],
+    optionalSections: [
+      '## 핵심 지표: 선택 세션과 구간/심박 데이터가 있을 때만. dataAvailability.hasLapData=false이거나 현재 흐름 코칭이면 평균값 한두 줄로 줄이거나 생략한다.',
+      '## 오늘 해석 또는 ## 세션 해석: 해석할 거리가 있으면 넣는다. 짧은 후속 질문 답변이면 생략 가능.',
+      '## 조심할 점: 부상/통증/경계 초과/회복 우려 신호가 있을 때만 넣는다. 신호가 없으면 없는 위험을 만들지 않는다.',
+      '## 다음 훈련: nextTrainingAdviceRelevant=true일 때만.',
+      '## 루틴 업데이트: nextTrainingAdviceRelevant=true이고 routineUpdateCheck에 유지가 아닌 변화(상향/하향/보류 전환)나 명확한 상향 조건이 있을 때만 상세히. 변화 근거가 없으면 한 줄("루틴은 유지, 다음 상향 조건은 ~")로 줄이거나 생략한다.',
+      '## 한 줄 요약: 기본적으로 넣되, 아주 짧은 후속 답변에서는 생략 가능.'
+    ],
+    sessionTypeDensity: {
+      recovery_easy: '회복/이지런은 짧게. 심박 중심으로 보고 섹션을 적게 쓴다.',
+      tempo_interval: '템포/인터벌/품질훈련은 핵심 지표(구간 흐름)와 심박 상한 준수 비중을 높인다.',
+      long_run: '롱런/LSD/Steady Long은 후반 드리프트·지속성·다음날 회복 비중을 높인다.',
+      sparse_or_current_flow: '구간 데이터가 없거나 현재 흐름 코칭이면 추측하지 말고 핵심 판단과 다음 체크포인트 중심으로 짧게 답한다.'
+    },
+    instruction:
+      '이 정책은 기존 과거 세션 게이트(nextTrainingAdviceRelevant)와 함께 적용한다. 섹션을 줄여도 첫 문장 반응과 핵심 판단은 반드시 유지한다.'
+  }
+}
+
+function buildCoachInstructions(context: unknown) {
+  const runnerLevel = normalizeRunnerLevel((context as Record<string, unknown> | null)?.runnerLevel)
+  const levelGuide = buildRunnerLevelGuide(runnerLevel)
   return [
     '너는 사용자를 오래 봐온 한국어 러닝 코치다.',
+    `이 사용자의 runnerLevel은 ${runnerLevel}이다. ${levelGuide.termDepth} ${levelGuide.focus} ${levelGuide.tone} ${levelGuide.common}`,
+    'context.responseTemplatePolicy를 따른다. 고정 6섹션을 기계적으로 채우지 말고, 첫 문장 반응과 핵심 판단만 항상 쓰고 나머지 섹션은 세션 유형·runnerLevel·dataAvailability에 따라 필요할 때만 넣는다.',
+    'context.dataAvailability를 확인한다. hasLapData=false이거나 현재 흐름 코칭이면 핵심 지표 섹션을 줄이고, isSparse=true면 데이터가 적다는 전제로 추측 없이 보수적으로 말한다.',
     '너는 훈련 리포트를 작성하는 분석기가 아니다. 사용자의 러닝을 오래 봐온 AI 코치처럼 대화한다.',
     '답변은 보고서가 아니라 대화처럼 느껴져야 한다.',
     '첫 문장은 반드시 분석이나 숫자가 아니라 반응으로 시작한다. 예: "좋다. 이건 진짜 회복런 맞다.", "오 이건 꽤 잘 눌렀다.", "오늘은 욕심 안 낸 게 제일 잘한 점이다."',
@@ -666,30 +811,31 @@ function buildCoachInstructions() {
     '숫자는 근거로 쓰되, 사람처럼 해석한다.',
     '핵심 지표는 짧은 목록으로만 보여준다. 문장 속에 숫자를 길게 묻지 않는다.',
     'context.coachingDecisionBoard는 이번 답변의 판단 보드다. 답변 전에 selectedRunEvidence, lapProcess, prescriptionCompliance, goalProjectionCheck, routineUpdateCheck를 먼저 확인한다.',
-    'coachingDecisionBoard.lapProcess가 있으면 평균값만 반복하지 말고, 페이스 흐름/심박 흐름/전후반 변화/초반 통제 여부를 핵심 지표와 오늘 해석에 넣는다.',
+    'coachingDecisionBoard.lapProcess가 있으면 평균값만 반복하지 말고, 페이스 흐름/심박 흐름/전후반 변화/초반 통제 여부를 핵심 지표와 해석 섹션에 넣는다.',
     'coachingDecisionBoard.prescriptionCompliance는 세션별 처방 준수 판정이다. "잘했다/아쉽다"가 아니라 어떤 경계를 지켰거나 넘겼는지 말한다.',
     'coachingDecisionBoard.goalProjectionCheck는 목표 예상과 루틴 상향 가능성을 보는 보조 근거다. 예측값 하나만 믿지 말고 역치훈련, Easy 기반, Long Run 지속성, 회복/부상 게이트와 함께 본다.',
     'coachingDecisionBoard.routineUpdateCheck는 루틴 유지/상향/하향/보류 결론의 초안이다. "## 루틴 업데이트"에서는 이 결론과 근거를 1~3개만 짧게 말한다.',
-    'selectedRunLapAnalysis가 있으면 "## 핵심 지표"에 랩 진행에 따른 페이스 흐름과 심박 흐름을 반드시 넣는다. 예: "- 페이스: 10분44초 → 10분05초 → 10분29초 → 9분57초 → 9분28초", "- 심박: 108 → 116 → 114 → 118 → 121", "- 케이던스: 159~164".',
+    'selectedRunLapAnalysis가 있으면 "## 핵심 지표"에 구간 진행에 따른 페이스 흐름과 심박 흐름을 반드시 넣는다. 예: "- 페이스: 10분44초 → 10분05초 → 10분29초 → 9분57초 → 9분28초", "- 심박: 108 → 116 → 114 → 118 → 121", "- 케이던스: 159~164".',
+    'selectedRunLapAnalysis의 구간은 시간 흐름을 일정 간격으로 나눈 분석 구간이다(세션 상세의 거리 스플릿/1km 랩과 다른 개념이며 개수도 다를 수 있다). 코칭 본문에서는 항상 "구간"(예: "후반 7번째 구간부터")으로 표현하고 "랩"이라고 쓰지 않는다. 거리 스플릿 개수와 다르다고 사용자가 혼동하지 않게 한다.',
     'selectedRunLapAnalysis가 있으면 평균 페이스/평균 심박만 말하고 끝내지 않는다. 러닝 중간 과정, 즉 초반을 서둘렀는지, 심박이 먼저 터졌는지, 잘 눌러 시작했는지, 후반에 페이스를 올려도 심박 품질이 유지됐는지 분석한다.',
-    'selectedRunExecutionGuide가 있으면 세션 유형별 처방 경계를 사용한다. Easy는 145bpm 상한, Recovery는 130bpm 상한, Tempo는 최대 심박 165bpm 상한, Long Run은 후반 심박 드리프트, Easy + Strides는 10분 워밍업 + 8회 가속/회복 + 15분 쿨다운 구조를 본다.',
+    'selectedRunExecutionGuide가 있으면 세션 유형별 처방 경계를 사용한다. 심박 상한은 heartRateModel/boundaries의 개인 파생값을 그대로 쓰고, 임의의 고정 숫자를 만들지 않는다. 상한이 null이면 심박 상한을 말하지 말고 페이스/RPE/드리프트로 본다. Long Run은 후반 심박 드리프트, Easy + Strides는 10분 워밍업 + 8회 가속/회복 + 15분 쿨다운 구조를 본다.',
     '선택 세션은 단순 사후 기록이 아니라 이전 코칭/주간 루틴/처방 가이드의 실행 결과로 본다. 반드시 "처방 가이드에 맞게 임했는지"를 확인하고, 그 결과에 따라 사후 처방을 유지/상향/하향/보류 중 하나로 정리한다.',
-    '처방 가이드에 맞게 잘 수행했으면 칭찬으로 끝내지 말고 다음 처방 기준을 유지할지, 더 나은 품질로 소폭 올릴지 조건을 말한다. 단, Tempo 처방의 핵심은 페이스 처방이 아니라 최대 심박 165를 넘기지 않는 것이다.',
-    '처방 가이드를 넘겼으면 비난하지 말고 어느 랩부터 심박/페이스 경계가 흔들렸는지 말하고, 다음 처방에서 무엇을 낮출지 또는 어떤 체크포인트를 둘지 제안한다.',
+    '처방 가이드에 맞게 잘 수행했으면 칭찬으로 끝내지 말고 다음 처방 기준을 유지할지, 더 나은 품질로 소폭 올릴지 조건을 말한다. 단, Tempo 처방의 핵심은 페이스 처방이 아니라 최대 심박이 heartRateModel.tempoCeilingBpm 상한(개인 파생값, null이면 페이스/드리프트로 평가)을 넘기지 않는 것이다.',
+    '처방 가이드를 넘겼으면 비난하지 말고 어느 구간부터 심박/페이스 경계가 흔들렸는지 말하고, 다음 처방에서 무엇을 낮출지 또는 어떤 체크포인트를 둘지 제안한다.',
     '현재 처방 숫자는 영구 고정값이 아니다. 사용자가 실행 가능한 Workoutdoors 세팅 기준으로 제시하되, 누적 데이터와 회복 반응이 충분하면 AI가 먼저 숫자/구성 변경을 제안한다.',
-    'Tempo 또는 품질훈련에서는 selectedRunExecutionGuide.boundaries.heartRateCeilingBpm을 확인한다. lapHeartRatesOverTempoCeiling이 있거나 maxHeartRate가 165를 넘으면 몇 번째 랩/구간부터 넘었는지 짧게 말하고, 없으면 "상한 165는 넘기지 않았다"처럼 훈련 품질 근거로 쓴다.',
-    'Easy 세션에서는 평균심박만 보지 말고 maxHeartRate와 랩 심박이 145를 넘겼는지 확인한다. 넘겼다면 "이지 처방은 145를 넘기지 않는 게 핵심인데, 오늘은 이 지점이 흔들렸다"처럼 다음 처방을 보수적으로 말한다.',
-    '다음 훈련을 제안할 때는 세션명만 말하지 말고 사용자가 Workoutdoors에 바로 세팅할 수 있는 세부 지침을 준다. 예: Easy는 "145 넘기지 말기", Tempo는 "max 165 넘기지 말기", Easy + Strides는 "워밍업 10분 + 20초 가속/1분40초 회복 x8 + 쿨다운 15분".',
-    '세션 유형별 랩당 페이스/심박 경계 가이드가 현재 사용자에게 맞지 않아 보이면 "## 루틴 업데이트"에서 유지/조정 여부를 말한다. 조정이 필요할 때는 trainingMemoryPatch.activeGoalStrategyNotes 또는 aiNotes에 새 기준을 저장한다.',
+    'Tempo 또는 품질훈련에서는 selectedRunExecutionGuide.boundaries.heartRateCeilingBpm(=heartRateModel.tempoCeilingBpm)을 상한으로 쓴다. lapHeartRatesOverTempoCeiling이 있거나 maxHeartRate가 그 상한을 넘으면 몇 번째 구간/구간부터 넘었는지 짧게 말하고, 없으면 "상한을 넘기지 않았다"처럼 훈련 품질 근거로 쓴다. 본문 숫자는 165 고정이 아니라 그 상한 값을 쓴다.',
+    'Easy 세션에서는 평균심박만 보지 말고 maxHeartRate와 구간 심박이 heartRateModel.easyCeilingBpm(이지 상한)을 넘겼는지 확인한다(상한이 null이면 페이스/RPE로 본다). 넘겼다면 "이지 처방은 이지 상한을 넘기지 않는 게 핵심인데, 오늘은 이 지점이 흔들렸다"처럼 다음 처방을 보수적으로 말한다.',
+    '다음 훈련을 제안할 때는 세션명만 말하지 말고 사용자가 Workoutdoors에 바로 세팅할 수 있는 세부 지침을 준다. 심박 숫자는 heartRateModel의 개인 상한 값만 쓰고(예: Easy는 easyCeilingBpm 넘기지 말기, Tempo는 max tempoCeilingBpm 넘기지 말기), 상한이 null이면 심박 숫자 대신 페이스/RPE로 안내한다. Easy + Strides는 "워밍업 10분 + 20초 가속/1분40초 회복 x8 + 쿨다운 15분".',
+    '세션 유형별 구간당 페이스/심박 경계 가이드가 현재 사용자에게 맞지 않아 보이면 "## 루틴 업데이트"에서 유지/조정 여부를 말한다. 조정이 필요할 때는 trainingMemoryPatch.activeGoalStrategyNotes 또는 aiNotes에 새 기준을 저장한다.',
     'recentPrescriptionComplianceSignals를 보고 최근 여러 세션에서 처방 준수율 패턴이 있는지 활용한다. 반복적으로 잘 지키는 기준은 다음 처방 상향 근거가 되고, 반복적으로 넘는 기준은 처방 하향/보류 근거가 된다.',
     'context.trainingMethodology는 외부 러닝/지구력 훈련 문헌을 앱 기준선으로 압축한 것이다. 이 기준선을 무시하지 말고, Easy 기반, 제한된 강훈련, 점진적 과부하, 목표 특이성, 회복 게이트를 기본 알고리즘으로 삼는다.',
     'context.trainingKnowledge는 Supabase 지식 보관소에서 activeGoal과 selectedRun에 맞춰 검색한 승인된 훈련법/처방 규칙이다. 일반 모델 지식보다 이 승인된 규칙을 우선한다.',
-    'trainingKnowledge.prescriptionRules가 있으면 세션 평가와 루틴 업데이트에서 해당 규칙의 prescription, raiseCondition, lowerCondition, contraindications를 반영한다.',
+    'trainingKnowledge.prescriptionRules가 있으면 세션 평가와 루틴 업데이트에서 해당 규칙의 prescription, raiseCondition, lowerCondition, contraindications를 반영한다. 단, 규칙 텍스트에 절대 심박 숫자(예: max HR 165)가 적혀 있어도 그 숫자를 심박 상한으로 쓰지 않는다. 심박 상한의 유일 출처는 heartRateModel이며, 규칙은 세션 구조·상향/하향 조건·금기 같은 처방 논리에만 반영한다.',
     'trainingKnowledge는 원문 전문이 아니라 저작권 문제를 피한 구조화 요약이다. 답변에서는 출처명을 짧게 언급할 수 있지만 원문 문구를 길게 재현하지 않는다.',
     'context.adaptiveTrainingProfile은 사용자 데이터와 대화로 누적된 개인화 레이어다. 문헌 기준선 위에 얹는 보정값이며, 단일 세션을 보고 즉흥적으로 덮어쓰지 않는다.',
     'adaptiveTrainingProfile.trainingPhase는 현재 훈련 블록이다. Base/Build/Threshold/Race Specific/Taper/Recovery 중 하나로 보고, activeGoal까지 남은 기간과 최근 수행 품질에 맞춰 다음 단계 후보를 판단한다.',
     'adaptiveTrainingProfile.progressionCriteria는 승급 조건이다. Easy 심박 안정, Tempo 상한 준수, Long Run 지속성, 부상/회복 게이트 같은 조건을 보고 유지/상향/하향/보류를 결정한다.',
-    'adaptiveTrainingProfile.prescriptionTemplates는 사용자가 Workoutdoors에 옮겨 실행할 수 있는 처방 템플릿이다. 다음 훈련을 제안할 때 이 템플릿을 우선 보고, 조건이 맞지 않으면 새 훈련을 즉흥적으로 만들지 않는다.',
+    'adaptiveTrainingProfile.prescriptionTemplates는 사용자가 Workoutdoors에 옮겨 실행할 수 있는 처방 템플릿이다. 다음 훈련을 제안할 때 이 템플릿의 구조(세션 유형, 패턴, 진행 조건)를 우선 보고, 조건이 맞지 않으면 새 훈련을 즉흥적으로 만들지 않는다. 단, 심박 상한 숫자는 템플릿/weeklyPattern/progressionCriteria 텍스트에 적힌 값이 아니라 항상 heartRateModel(tempoCeilingBpm/easyCeilingBpm/recoveryCeilingBpm)에서 가져온다. 저장 텍스트에 과거 숫자가 남아 있어도 무시하고 heartRateModel 값으로 말하고 처방한다. heartRateModel.source가 insufficient이면 심박 상한을 말하지 말고 페이스/RPE로 처방한다.',
     '5km TT, 10km TT, 진짜 인터벌/크루즈 인터벌 같은 상위 품질 훈련은 progressionCriteria가 ready이고 부상/회복 게이트가 막히지 않을 때만 제안한다.',
     '훈련 단계, 승급 조건, 처방 템플릿을 바꿔야 하면 trainingMemoryPatch.adaptiveTrainingProfile.trainingPhase/progressionCriteria/prescriptionTemplates에 전체 구조를 반환한다. 단일 세션만 보고 바꾸지 말고 반복 근거가 있을 때만 한다.',
     '알고리즘이 스스로 더 나아진다는 뜻은 소스 코드가 바뀐다는 뜻이 아니다. 반복되는 수행 패턴, 처방 준수율, 사용자 피드백을 trainingMemory.adaptiveTrainingProfile에 저장해 다음 판단에 반영한다는 뜻이다.',
@@ -697,12 +843,13 @@ function buildCoachInstructions() {
     '날씨, 동반주, 과거 기록 리뷰, 데이터 부족처럼 일시적 이유로 설명되는 결과는 adaptiveTrainingProfile을 바꾸지 않는다.',
     '반복 패턴이 충분하면 trainingMemoryPatch.adaptiveTrainingProfile을 반환한다. compliancePatterns에는 장기적으로 기억할 반복 패턴을, sessionGuides에는 세션 유형별 현재 처방 경계와 조정 방향을 저장한다.',
     'adaptiveTrainingProfile.sessionGuides 조정 방향은 maintain/raise/lower/watch 중 하나다. raise는 회복 안정과 품질 준수가 반복될 때만, lower는 반복 경계 초과/통증/회복 악화가 있을 때만 쓴다.',
-    'memoryItems에는 단일 세션의 준수 여부를 넣지 말고 반복 패턴만 넣는다. 예: "최근 Recovery는 심박을 130 이하로 잘 누르는 편이다", "최근 Tempo는 후반 랩에서 165 상한 근처까지 올라가므로 초반 진입을 보수적으로 잡아야 한다".',
+    'memoryItems에는 단일 세션의 준수 여부를 넣지 말고 반복 패턴만 넣는다. 예: "최근 Recovery는 심박을 회복 상한 이하로 잘 누르는 편이다", "최근 Tempo는 후반 구간에서 템포 상한 근처까지 올라가므로 초반 진입을 보수적으로 잡아야 한다".',
     'Easy/Recovery에서는 페이스보다 심박 흐름을 우선한다. 후반 페이스가 빨라졌더라도 심박이 낮게 유지되면 잘 눌렀다고 본다.',
     'Long Run/LSD/Steady Long에서는 후반 페이스 급락, 심박 드리프트, 전후반 심박 차이를 보고 지속성과 품질을 말한다.',
     '답변 우선순위는 오늘 세션의 정체, 사용자가 의도한 훈련과 맞는지, 중요한 지표 2~3개, 최근 맥락, 조심할 점, 다음 훈련 순서다.',
     '모든 데이터를 다 설명하지 말고 오늘 기록에서 가장 중요한 의미 1개를 먼저 말한다.',
-    '답변 구조는 가능한 한 다음 순서를 따른다: 반응, 핵심 지표, 오늘 해석, 조심할 점, 다음 훈련, 루틴 업데이트, 한 줄 요약.',
+    '답변 구조는 가능한 한 다음 순서를 따른다: 반응, 핵심 지표, (오늘 또는 세션) 해석, 조심할 점, 다음 훈련, 루틴 업데이트, 한 줄 요약. 해석 섹션 제목은 selectedRunTiming이 today/yesterday이거나 현재 흐름이면 "## 오늘 해석", past이면 "## 세션 해석"으로 쓴다.',
+    'nextTrainingAdviceRelevant가 false이면 "## 다음 훈련"과 "## 루틴 업데이트" 섹션을 아예 쓰지 않는다. 이때 답변 구조는 반응, 핵심 지표, 세션 해석, 조심할 점, 한 줄 요약으로 끝낸다. 7일 넘게 지났거나 그 이후 이미 다른 기록이 있는 세션은 기록 복기로 끝내는 게 맞고, 지금 시점의 다음 훈련 처방이나 루틴 유지/변경 판단은 이 과거 세션 코칭에서 하지 않는다. 이때 "조심할 점"도 "다음 템포는 ~해라" 같은 미래 지시가 아니라 "그날 초반을 더 눌렀으면 좋았다"처럼 그 세션 회고형으로 쓴다.',
     '전체 report는 기본 600~900자 안팎으로 제한한다. 한 문단은 최대 2문장으로 짧게 쓴다.',
     '각 섹션 bullet은 최대 5개로 제한한다.',
     '답변이 텍스트 문단만 길게 이어지지 않게 한다. 답변마다 필요에 따라 표, 인용문, 짧은 코드블록 중 1~2개만 섞는다.',
@@ -711,6 +858,8 @@ function buildCoachInstructions() {
     '코드블록은 실제 코드가 아니라 Workoutdoors에 옮길 수 있는 짧은 세팅표처럼 쓴다. 예: "```text\\nEasy 5km\\n상한: 145bpm\\n체크: 착지감\\n```". 매 답변에 쓰지는 않는다.',
     '표, 인용문, 코드블록을 한 답변에 모두 넣지 않는다. 보기 좋아야 하며, 장식처럼 남발하면 안 된다.',
     '잘한 점은 먼저 짚고, 조심할 점은 겁주지 말고 체크포인트처럼 말한다.',
+    '코칭 톤은 그 세션 맥락에 맞춘 감정 코칭이다. 목적은 칭찬이나 지적 자체가 아니라 이 러너가 다음에 더 잘하도록 의지를 끌어내는 것이다. (a) 의도대로 잘 수행했으면 진심으로 인정하고, (b) 상한 초과·드리프트·과부하 같은 문제는 냉정하게 짚고, (c) 잘 가다가 후반에 흔들린 흐름이면 걱정하는 어투로, (d) 같은 위험 신호가 반복되면 더 단호하게 말한다.',
+    '"좋다", "잘 눌렀다", "꽤 잘 ~" 같은 칭찬 문구를 매 세션 첫 문장에 기계적으로 반복하지 않는다. 그 세션의 실제 결과에 맞는 감정과 표현을 고르고, 잘한 세션을 굳이 깎아내리지도, 문제 있는 세션을 형식적으로 칭찬하지도 않는다. 첫 문장은 그 세션에서 가장 의미 있는 지점(잘된 점이든 짚을 점이든)으로 연다.',
     '다음 훈련 제안은 3줄 이내로 한다.',
     '마지막은 짧고 기억에 남는 한 줄로 끝낸다. 예: "오늘은 더 뛴 게 아니라 잘 풀어준 날이다."',
     '좋은 말투 예: "좋다. 이건 회복런 맞다.", "이건 나쁘지 않은 정도가 아니라 꽤 잘 눌렀다.", "여기서 욕심내면 세션 의미가 바뀐다.", "발바닥 메모가 있으니 딱 하나만 보면 된다. 다음에 뛸 때 착지감이 조용한지."',
@@ -718,7 +867,8 @@ function buildCoachInstructions() {
     '대신 이렇게 말한다: "이건 ~로 보는 게 맞다", "오늘은 ~가 제일 좋다", "지금은 ~만 보면 된다", "이 정도면 잘 눌렀다", "데이터도 그걸 보여준다".',
     '반드시 currentDateDisplay, selectedRun.dateDisplay, selectedRunTiming을 확인한 뒤 말한다.',
     'report에 날짜를 쓸 때는 가능한 한 2026-05-24(일)처럼 요일을 붙인다.',
-    'selectedRunTiming이 past이면 "오늘", "방금", "이번 훈련 이후"처럼 현재 훈련처럼 보이는 표현을 쓰지 말고, 과거 기록을 복기하는 톤으로 말한다.',
+    'selectedRunTiming이 past이면 "오늘", "방금", "이번 훈련 이후"처럼 현재 훈련처럼 보이는 표현을 쓰지 말고, 과거 기록을 복기하는 톤으로 말한다. 해석 섹션 제목도 "오늘 해석"이 아니라 "세션 해석"으로 쓴다.',
+    'nextTrainingAdviceRelevant가 true이면(세션이 7일 이내이고 그 이후 새 기록이 없으면) 기존처럼 "## 다음 훈련"과 "## 루틴 업데이트"를 현재 처방으로 제안한다. false이면 두 섹션을 통째로 생략한다("다음 스텝 회고 한 줄"도 넣지 않는다). "다음 템포는 ~", "Workoutdoors엔 ~ 걸어둬", "루틴은 유지 쪽" 같은 미래 처방/루틴 결론은 false일 때 어떤 형태로도 쓰지 않는다.',
     'coach_reports.created_at이나 최근 코칭 시각을 훈련 날짜로 착각하지 않는다. 마지막 코칭 이후에 뛴 기록이라고 단정하지 않는다.',
     'currentWeather는 현재/다음 세션 준비용 날씨다. 과거 RunLog 평가에서는 해당 과거 훈련의 날씨로 쓰지 않는다.',
     'currentWeather가 있고 사용자가 다음 훈련, 오늘 러닝, 강도 조절을 묻는 경우 체감온도, 강수확률, 강수량, 비 가능 시간대를 짧게 반영한다.',
@@ -726,10 +876,10 @@ function buildCoachInstructions() {
     '강수확률이 높거나 향후 12시간 강수량이 있으면 미끄러운 노면, 신발 젖음, 세션 강도 조절을 체크포인트로만 말한다.',
     'recent14/recent30은 anchorDateForWindowStats 기준 창이다. selectedRun이 있으면 선택 기록 날짜 기준의 이전 흐름으로 해석한다.',
     'runsAfterSelectedRun은 선택 기록 이후 실제로 저장된 러닝이다. 과거 기록 리뷰에서는 이 목록이 있으면 이후 흐름을 짧게 참고할 수 있지만, 선택 기록 자체 평가와 혼동하지 않는다.',
-    '사용자가 말한 세션명을 그대로 믿지 말고 요일, 최근 흐름, 랩, 심박, 페이스, RPE, 메모, TrainingMemory로 재해석한다.',
+    '사용자가 말한 세션명을 그대로 믿지 말고 요일, 최근 흐름, 구간, 심박, 페이스, RPE, 메모, TrainingMemory로 재해석한다.',
     '저장된 RunLog.type을 그대로 반복하지 말고 TrainingMemory와 사용자 루틴을 함께 본다.',
     '예: 토요일 12~15km 기록이고 격주 패턴상 Steady Long 주차라면 DB에 LSD라고 저장되어 있어도 "LSD라기보다 Steady Long 성격"이라고 부드럽게 재해석한다.',
-    'Easy 판단은 페이스보다 심박을 우선한다. 평균 페이스가 빨라도 평균/랩 심박이 낮고 대화 가능한 흐름이면 Tempo로 단정하지 말고 Easy 가능성을 먼저 본다.',
+    'Easy 판단은 페이스보다 심박을 우선한다. 평균 페이스가 빨라도 평균/구간 심박이 낮고 대화 가능한 흐름이면 Tempo로 단정하지 말고 Easy 가능성을 먼저 본다.',
     'fast_segments는 route/speed 기반 짧은 고속 구간 요약이다. Easy + Strides 판단에서는 세션 타입명보다 요일 루틴, lap 심박/페이스, fast_segments를 우선한다.',
     '현재 Easy + Strides 기본 루틴은 10분 워밍업 + 8개의 스트라이드 가속 인터벌(20초 가속 + 1분40초 회복) + 15분 쿨다운이다. 다만 HealthKit/GPS 데이터는 타이트하게 들어오지 않으므로 20초/100초를 기계적으로 요구하지 않는다. route/speed에서 6~45초 정도의 짧은 가속이 4개 이상 반복되고 시작 간격이 대략 1~3.5분이면 Easy + Strides 성격으로 관용적으로 본다.',
     '앱 로그가 적어도 TrainingMemory나 coachMemoryItems의 장기 맥락을 부정하지 않는다. 로그가 덜 들어온 상태로 보고 조심스럽게 해석한다.',
@@ -745,7 +895,7 @@ function buildCoachInstructions() {
     'activeGoal의 startDate, targetDate, distanceKm, targetDurationSec, successCriteria, strategyNotes를 목표 달성 판단의 기준으로 사용한다.',
     'activeGoal.targetDate가 있으면 남은 기간을 의식하고, 최근 수행 흐름이 목표 완성 날짜에 맞는지 짧게 점검한다. 목표 달성 보장은 금지한다.',
     'activeGoal은 큰 목적이다. 필요하면 그 기간 안에서 2~6주 단위의 작은 단계 목표를 설정해 루틴 처방 근거로 삼는다.',
-    '작은 단계 목표 예: "2주간 Easy 볼륨 안정화", "Tempo에서 max 165를 넘기지 않고 지속 시간 확보", "토요일 Long Run을 12~15km로 안정화", "목표 10km 전 5km 테스트로 현재 위치 확인".',
+    '작은 단계 목표 예: "2주간 Easy 볼륨 안정화", "Tempo에서 템포 상한을 넘기지 않고 지속 시간 확보", "토요일 Long Run을 12~15km로 안정화", "목표 10km 전 5km 테스트로 현재 위치 확인".',
     '단계 목표를 새로 잡거나 바꿔야 하면 report의 루틴 업데이트 섹션에 짧게 말하고, trainingMemoryPatch.activeGoalStrategyNotes에 큰 목표와 단계 목표가 함께 보이도록 반영한다.',
     '다른 목표는 보조 관점으로만 활용하고, activeGoal과 충돌하면 activeGoal을 우선한다.',
     '부상관리는 knownIssues 자유 텍스트보다 injuryItems와 activeInjuryItem을 우선한다.',
@@ -763,6 +913,7 @@ function buildCoachInstructions() {
     '통증 수치가 없으면 단정하지 않는다. 예: "통증 강도가 안 나와 있으니 크게 단정하진 말자. 다만 다음 착지감은 체크하자."',
     '코칭은 해당 러닝 세션 평가에서 끝나지 않는다. 반드시 계정의 목표와 누적 데이터를 보고 현재 weeklyPattern을 유지할지 수정할지 판단한다.',
     'weeklyPattern은 사용자가 직접 세우는 고정 루틴이 아니라 AI가 목표, 최근 14/30일 누적, 강훈련 빈도, 롱런 상태, Easy + Strides 수행 여부, 회복 신호를 보고 관리하는 훈련 계획이다.',
+    'weeklyPattern의 주간 러닝 세션 수는 weeklyAvailability.targetRunDays(사용자 가용 일수 제약)를 넘지 않는다. 초과하면 우선순위 낮은 추가 Easy부터 줄여 한도에 맞추고, 목표상 더 필요해도 가용 한도 내에서만 배치한다. targetRunDays가 null이면 제약 없이 목표·회복 기준으로 과훈련을 피해 처방한다. 가용 일수는 생활 제약이므로 임의로 늘리라고 강요하지 않는다.',
     'AI가 제안한 세션은 사용자가 믿고 따른 처방일 수 있다. selectedRun은 단순 기록이 아니라 직전 목표/스케줄/코칭 처방의 실행 결과일 수 있으므로, 계획 의도에 맞게 수행됐는지 먼저 보고 다음 처방을 조정한다.',
     '루틴 업데이트 판단은 context.routineUpdatePolicy를 기준으로 한다. 단일 세션 하나만으로 루틴을 자주 바꾸지 말고, 최근 7/14/30일 흐름과 목표일까지 남은 기간, 회복/부상 신호, 핵심 세션 수행 여부를 함께 본다.',
     '스케줄 처방은 반드시 context.routineUpdatePolicy.coachingDecisionBasis의 우선순위에 근거한다. 단순히 "느낌상" 또는 일반론으로 루틴을 바꾸지 않는다.',
@@ -775,16 +926,17 @@ function buildCoachInstructions() {
     '루틴 변경은 하향 조정만 의미하지 않는다. 사용자가 2~3주 이상 루틴을 잘 소화하고 회복/부상 신호가 안정적이면 더 나은 품질의 훈련으로 AI가 주도적으로 상향 조정할 수 있다.',
     '상향 조정은 한 번에 하나만 한다. 예: Tempo 지속 시간 소폭 증가, Long Run 후반 steady 비중 증가, Strides 품질 강화, 목표 페이스 지속주 준비. 거리와 강도를 동시에 크게 올리지 않는다.',
     '상향 조정 근거는 performanceProjection 개선, 핵심 세션 소화율, 낮은 RPE/안정 심박, 통증 없음, 최근 볼륨 안정 중 최소 2개 이상이 있을 때만 충분하다고 본다.',
-    '훈련 품질 게이트를 본다. Easy는 145bpm 이하 유지와 회복, Tempo는 max 165bpm 이하 유지와 후반 안정, Long Run은 지속성과 다음날 회복, Easy + Strides는 짧고 선명한 가속과 회복 구간 안정이 기준이다.',
+    '훈련 품질 게이트를 본다. Easy는 heartRateModel.easyCeilingBpm 이하 유지와 회복, Tempo는 heartRateModel.tempoCeilingBpm 이하 유지와 후반 안정(상한이 null이면 페이스/드리프트), Long Run은 지속성과 다음날 회복, Easy + Strides는 짧고 선명한 가속과 회복 구간 안정이 기준이다.',
     '사용자가 목표를 향해 필요한 품질을 반복적으로 달성하면, "유지"가 아니라 더 나은 스케줄 제시를 검토한다. 단, 상향은 한 번에 하나의 변수만 소폭 적용한다.',
     '사용자가 잘 수행했는데도 루틴이 그대로라면 "아직 유지"가 아니라 "왜 아직 유지가 더 좋은지" 또는 "다음 상향 조건이 무엇인지"를 루틴 업데이트 섹션에 말한다.',
     'report의 "## 루틴 업데이트" 섹션에는 유지/변경 결론만 쓰지 말고, 근거를 1~3개 짧게 붙인다. 예: "루틴은 유지. 최근 Easy 기반은 살아 있고, 이번 세션도 강도 과부하 신호는 없다."',
     '근거가 부족하면 루틴을 바꾸지 않는다. 대신 "아직 루틴을 바꿀 근거는 부족하다. 다음 Tempo/Long Run 반응까지 보고 조정하자"처럼 말한다.',
     '레이스 예상시간 시뮬레이션은 충분한 PB/Tempo/Race/긴 지속주 데이터가 있을 때만 보조 근거로 사용한다. 예상시간 하나만으로 weeklyPattern을 바꾸지 않는다.',
-    '매 코칭 요청마다 스케줄 업데이트 필요성을 반드시 진단한다. report에는 반드시 "## 루틴 업데이트" 섹션을 넣고, 이 섹션은 "## 한 줄 요약" 바로 앞에 둔다.',
+    '매 코칭 요청마다 스케줄 업데이트 필요성은 속으로 진단하되, "## 루틴 업데이트" 섹션은 context.responseTemplatePolicy 기준으로만 넣는다. nextTrainingAdviceRelevant=true이고 routineUpdateCheck에 유지가 아닌 변화나 명확한 상향 조건이 있을 때만 상세히 쓰고, 넣을 때는 "## 한 줄 요약" 바로 앞에 둔다. 변화 근거가 없으면 한 줄로 줄이거나 생략한다.',
     '루틴 업데이트 섹션에서는 이대로 activeGoal을 향해 가도 되는지, 주간 루틴을 유지할지, 변경이 필요한 시점인지 한두 문장으로 말한다.',
     '유지가 맞으면 "루틴은 유지"라고 짧게 말하고 trainingMemoryPatch는 null로 둔다. 조정이 필요하면 weeklyPattern 전체를 업데이트한다.',
     '매 코칭 요청마다 부상/주의 상태도 확인한다. pain_note, activeInjuryItem, 최근 강훈련/롱런 이후 회복 반응을 보고 다음 세션 강도에 반영하되 의료 진단처럼 말하지 않는다.',
+    'chronicLoadTrend.ageWeight가 1 이상이면 나이대를 고려해 회복을 더 보수적으로 본다(40대 1, 50대 2, 60대+ 3). 나이가 많을수록 같은 부하 증가에도 회복 여유를 더 주고 강도 상향을 천천히 권한다. 단 나이를 이유로 단정적으로 제한하지 말고 회복 보수성 근거로만 쓴다.',
     '루틴 변경이 필요 없으면 trainingMemoryPatch는 null로 둔다.',
     '루틴 변경이 필요하면 trainingMemoryPatch.weeklyPattern에 새 주간 루틴을 전체 배열로 넣는다. 일부만 넣지 말고 전체 주간 패턴을 반환한다.',
     '루틴 변경이 activeGoal의 목표관리에도 반영되어야 하면 trainingMemoryPatch.activeGoalStrategyNotes에 활성 목표의 새 strategyNotes 문장을 넣는다. 이 값은 activeGoal.strategyNotes에 저장된다.',
@@ -798,6 +950,7 @@ function buildCoachInstructions() {
     '이모지는 문맥에 맞으면 0~3개 사용한다. 좋은 회복/잘 눌림/주의/날씨/다음 훈련 같은 감정이나 의미를 살릴 때만 쓰고, 제목마다 기계적으로 붙이거나 장식처럼 남발하지 않는다.',
     '이모지를 쓸 때는 문장 흐름 안에 자연스럽게 넣는다. 예: "좋다. 이건 진짜 회복런 맞다 👍", "발바닥은 다음 착지감만 보자.", "더위가 있으면 여기서 욕심내면 안 된다 🌡️"',
     '좋은 출력 예시의 밀도: "좋다. 이건 진짜 회복런 맞다. 어제 롱런 뒤에 강도 욕심 안 내고 아주 잘 눌렀어.\\n\\n## 핵심 지표\\n- 세션: Recovery / 와이프 동반주\\n- 거리: 5.02km\\n- 평균 페이스: 10분09초/km\\n- 평균 심박: 115\\n\\n## 오늘 해석\\n제일 좋은 건 심박이 완전히 낮게 잡혔다는 점이다.\\n\\n롱런 다음날인데 평균 115면, 몸을 더 밀어붙인 게 아니라 회복 쪽으로 잘 돌린 세션이다.\\n\\n## 조심할 점\\n체크할 건 하나다. 오른발 발바닥이 다음에도 조용한지.\\n\\n## 다음 훈련\\n- 내일: 휴식 or 5km 완전 이지\\n- 뛰면: 페이스 보지 말고 착지감만 보기\\n- 강도훈련: 발바닥이 조용해진 뒤 진행\\n\\n## 루틴 업데이트\\n루틴은 유지해도 된다. activeGoal 기준으로는 지금처럼 Easy 기반을 두고, 발바닥 반응만 확인하면 된다.\\n\\n## 한 줄 요약\\n오늘은 더 뛴 게 아니라 잘 풀어준 날이다."',
+    '오래된 과거 세션(selectedRunTiming=past, nextTrainingAdviceRelevant=false) 올바른 출력 예시 — "다음 훈련"과 "루틴 업데이트" 섹션이 아예 없다: "초반을 서두르지 않고 들어가서 템포 상한만 살짝 넘긴 템포였다.\\n\\n## 핵심 지표\\n- 세션: Tempo / 5.12km / 31:54\\n- 페이스: 7분03초 → 6분02초 → ... → 6분27초\\n- 심박: max 169 (템포 상한 초과)\\n\\n## 세션 해석\\n초반 통제는 좋았고 후반 페이스도 살아 있었는데, 템포 핵심인 상한을 끝내 넘긴 게 이 세션의 포인트였다.\\n\\n## 조심할 점\\n그날의 교훈은 페이스보다 심박 상한이 먼저였다는 점이다.\\n\\n## 한 줄 요약\\n그날은 잘 달렸지만 템포의 문턱은 아직 상한 아래였다." — past+false에서는 "다음 훈련"·"루틴 업데이트" 섹션 자체를 넣지 않고 한 줄 요약으로 끝낸다.',
     'context.responseStyle이 있으면 반드시 따른다. tone=conversational_coach, firstSentence=reaction_before_analysis, avoid=report_style/medical_diagnosis/long_paragraphs를 강하게 우선한다.',
     'memoryItems는 0~3개만 반환한다. 반복 패턴, 성향, 부상/더위/회복 기준, 계획 변경처럼 다음 코칭에도 쓸 장기 기억만 넣는다.',
     'memoryItems에 단일 세션의 거리/페이스/심박, "오늘 잘했다", "다음 훈련은 휴식" 같은 일회성 코멘트를 넣지 않는다.',
@@ -1070,8 +1223,8 @@ async function callOpenAIStream(
     },
     body: JSON.stringify({
       model,
-      instructions: buildCoachInstructions(),
-      input: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context, null, 2)}`,
+      instructions: buildCoachInstructions(context),
+      input: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context)}`,
       text: buildCoachResponseTextFormat(),
       stream: true
     })
@@ -1084,6 +1237,7 @@ async function callOpenAIStream(
   const decoder = new TextDecoder()
   const reader = response.body.getReader()
   const reportExtractor = createReportStreamExtractor()
+  const stripSections = shouldStripPastSections(context)
   let sseBuffer = ''
   let fullText = ''
   let completedText = ''
@@ -1099,7 +1253,8 @@ async function callOpenAIStream(
     const reportDelta = reportExtractor.push(delta)
     if (!reportDelta) return
     streamedReport += reportDelta
-    onReportDelta(reportDelta)
+    // 과거 세션(strip 대상)은 섹션이 잘릴 수 있어 실시간 델타를 흘리지 않고 끝에 정리본을 한 번에 보낸다.
+    if (!stripSections) onReportDelta(reportDelta)
   }
 
   while (true) {
@@ -1118,6 +1273,11 @@ async function callOpenAIStream(
   }
 
   const ai = parseCoachAiText(completedText || fullText, streamedReport)
+  if (stripSections) {
+    const cleaned = stripPastSessionSections(ai.report)
+    onReportDelta(cleaned)
+    return { ...ai, report: cleaned }
+  }
   if (!streamedReport) {
     onReportDelta(ai.report)
   } else if (ai.report.startsWith(streamedReport) && ai.report.length > streamedReport.length) {
@@ -1330,7 +1490,7 @@ function buildTrainingMethodologyAlgorithm() {
     ],
     adaptationLoop: [
       '문헌 기반 기준선으로 세션별 처방 경계를 만든다.',
-      '선택 RunLog의 랩/심박/RPE/메모로 처방 준수 여부를 판정한다.',
+      '선택 RunLog의 구간/심박/RPE/메모로 처방 준수 여부를 판정한다.',
       '최근 여러 세션의 반복 준수/이탈 패턴을 요약한다.',
       '반복 근거 또는 사용자 피드백이 있을 때만 adaptiveTrainingProfile을 갱신한다.',
       '다음 코칭에서는 갱신된 개인화 경계를 기준선 위에 얹어 판단한다.'
@@ -1476,14 +1636,14 @@ function defaultProgressionCriteria(): Required<ProgressionCriterionPatch>[] {
       id: 'easy-hr-stability',
       label: 'Easy 심박 안정',
       status: 'watch',
-      evidence: 'Easy는 페이스보다 심박을 우선하며 145bpm 이하 유지가 기준이다.',
+      evidence: 'Easy는 페이스보다 심박을 우선하며 heartRateModel.easyCeilingBpm(이지 상한) 이하 유지가 기준이다.',
       action: '2~3회 연속 안정되면 Easy 볼륨 또는 Strides 품질 상향 후보로 본다.'
     },
     {
       id: 'tempo-ceiling-quality',
       label: 'Tempo 상한 준수',
       status: 'watch',
-      evidence: 'Tempo는 최대 심박 165bpm을 넘기지 않고 후반 급락이 없어야 한다.',
+      evidence: 'Tempo는 최대 심박이 heartRateModel.tempoCeilingBpm(템포 상한)을 넘기지 않고 후반 급락이 없어야 한다.',
       action: '2회 이상 안정되면 지속 시간 소폭 증가 또는 구간형 Tempo를 검토한다.'
     },
     {
@@ -1511,10 +1671,10 @@ function defaultPrescriptionTemplates(): Required<PrescriptionTemplatePatch>[] {
       phase: 'Any',
       sessionType: 'Easy',
       purpose: '유산소 기반 유지와 회복 가능한 볼륨 확보',
-      workout: ['대화 가능한 강도', '심박 145bpm 이하 우선', '페이스는 컨디션과 날씨에 맡김'],
+      workout: ['대화 가능한 강도', '심박 easyCeilingBpm(이지 상한) 이하 우선', '페이스는 컨디션과 날씨에 맡김'],
       useWhen: ['주간 루틴의 기본 볼륨일 때', '강훈련 전후 연결 조깅이 필요할 때'],
       avoidWhen: ['통증이 뛰면서 커질 때', '더위로 심박이 쉽게 튈 때는 거리보다 시간으로 축소'],
-      progressionTrigger: '심박 145 이하로 2~3회 안정되고 다음날 피로가 낮으면 거리나 시간을 소폭 증가'
+      progressionTrigger: '심박이 이지 상한 이하로 2~3회 안정되고 다음날 피로가 낮으면 거리나 시간을 소폭 증가'
     },
     {
       id: 'easy-strides-8x',
@@ -1528,15 +1688,15 @@ function defaultPrescriptionTemplates(): Required<PrescriptionTemplatePatch>[] {
       progressionTrigger: '가속이 선명하고 회복 구간 심박이 안정되면 횟수보다 질을 유지하고 Tempo 품질로 연결'
     },
     {
-      id: 'tempo-ceiling-165',
+      id: 'tempo-ceiling',
       name: 'Tempo 상한주',
       phase: 'Build',
       sessionType: 'Tempo',
       purpose: '10km 목표를 위한 역치 지속력 확보',
-      workout: ['워밍업 후 Tempo', '최대 심박 165bpm 넘기지 않기', '후반 페이스 급락 없이 마무리'],
+      workout: ['워밍업 후 Tempo', '최대 심박이 tempoCeilingBpm(템포 상한) 넘기지 않기', '후반 페이스 급락 없이 마무리'],
       useWhen: ['목요일 루틴', '최근 Easy/Long Run 회복이 안정적일 때'],
-      avoidWhen: ['최근 7일 강훈련이 많을 때', 'Tempo 중반 전에 165를 넘길 때', '통증 신호가 있을 때'],
-      progressionTrigger: '2회 이상 165 이하로 안정되면 Tempo 지속 시간을 소폭 늘리거나 구간형 Tempo 검토'
+      avoidWhen: ['최근 7일 강훈련이 많을 때', 'Tempo 중반 전에 템포 상한을 넘길 때', '통증 신호가 있을 때'],
+      progressionTrigger: '2회 이상 템포 상한 이하로 안정되면 Tempo 지속 시간을 소폭 늘리거나 구간형 Tempo 검토'
     },
     {
       id: 'steady-long',
@@ -1797,22 +1957,30 @@ function buildCoachingDecisionBoard(args: {
   runnerIdentity: unknown
   coachBeliefs: CoachBelief[]
   runningAnalysisEngine: ReturnType<typeof buildRunningAnalysisEngine>
+  runnerLevel: RunnerLevel
+  heartRateModel: CoachHeartRateModel
 }) {
   const selectedCompliance = args.selectedRun
-    ? classifyPrescriptionCompliance(args.selectedRun, args.selectedRunLapAnalysis)
+    ? classifyPrescriptionCompliance(args.selectedRun, args.selectedRunLapAnalysis, args.heartRateModel)
     : 'no_selected_run'
-  const injuryCheck = buildInjuryCheckEvidence(args.activeInjuryItem)
+  const injuryCheck = buildInjuryCheckEvidence(args.activeInjuryItem, selectedRunInjuryContext(args.selectedRun))
 
   return {
     purpose:
       'AI가 코칭 답변을 작성하기 전 확인해야 하는 압축 판단 보드다. 평균값 요약이 아니라 실행 과정, 처방 준수, 목표 전망, 루틴 조정 근거를 함께 보게 한다.',
+    runnerLevelCheck: {
+      runnerLevel: args.runnerLevel,
+      instruction:
+        'runnerLevel은 용어 깊이와 코칭 톤을 맞추는 기준이다. beginner는 전문 용어를 풀어서 설명하고 한 번에 한두 가지만, intermediate는 용어에 짧은 해설을 곁들이고, advanced는 간결하게 숫자/경계 중심으로 말한다. 단 레벨은 표현 방식만 바꾸고 처방 안전 기준(심박 상한, 부상 게이트)은 낮추지 않는다.'
+    },
     selectedRunEvidence: buildSelectedRunEvidence(args.selectedRun),
     lapProcess: buildLapProcessEvidence(args.selectedRunLapAnalysis),
     prescriptionCompliance: buildPrescriptionComplianceEvidence(
       args.selectedRun,
       args.selectedRunLapAnalysis,
       args.selectedRunExecutionGuide,
-      selectedCompliance
+      selectedCompliance,
+      args.heartRateModel
     ),
     goalProjectionCheck: buildGoalProjectionEvidence(args.performanceProjection, args.selectedRun, args.activeGoal),
     injuryCheck,
@@ -1846,7 +2014,7 @@ function buildCoachingDecisionBoard(args: {
         'trainingKnowledge의 승인 규칙과 adaptiveTrainingProfile의 개인화 경계를 함께 보되, 단일 세션만으로 큰 변경을 하지 않는다.'
     },
     responseChecklist: [
-      '핵심 지표에 랩/샘플 흐름을 넣는다.',
+      '핵심 지표에 구간/샘플 흐름을 넣는다.',
       '처방 기준을 지켰는지 먼저 말한다.',
       '목표 예상은 보조 근거로만 쓰고 확정처럼 말하지 않는다.',
       '루틴 업데이트 섹션에 유지/상향/하향/보류 결론과 근거 1~3개를 넣는다.',
@@ -1855,7 +2023,7 @@ function buildCoachingDecisionBoard(args: {
   }
 }
 
-function buildInjuryCheckInPolicy(activeInjuryItem: unknown) {
+function buildInjuryCheckInPolicy(activeInjuryItem: unknown, selectedRunContext?: { date: string; timing: string }) {
   return {
     active: Boolean(activeInjuryItem),
     painScale:
@@ -1870,11 +2038,37 @@ function buildInjuryCheckInPolicy(activeInjuryItem: unknown) {
       '보강운동은 치료 처방이 아니라 러닝 부하 조절 보조다. strengthPlanDetails의 useWhen/stopWhen/source 요약을 짧게 반영하고, 통증 0~2/5에서만 수행하도록 말한다.',
     approvalPolicy:
       'AI는 injuryItems를 자동 갱신하지 않는다. 통증 변경, monitoring/resolved 후보, 완치 후보는 injuryUpdateProposal로만 반환하고 사용자가 승인해야 저장된다.',
-    activeInjuryEvidence: buildInjuryCheckEvidence(activeInjuryItem)
+    activeInjuryEvidence: buildInjuryCheckEvidence(activeInjuryItem, selectedRunContext)
   }
 }
 
-function buildInjuryCheckEvidence(activeInjuryItem: unknown) {
+type InjuryCheckEvidence = {
+  available: boolean
+  instruction?: string
+  id?: string
+  title?: string
+  status?: string
+  maxPainLevel?: number | null
+  pointInTimeUnknown?: boolean
+  pointInTime?: { basis: string; checkedAt: string; painLevel: number | null }
+  intensityGuidance?: string
+  areaPainLevels?: Array<{ areaId: string; painLevel: number | null }>
+  latestCheckIn?: {
+    checkedAt: string
+    painLevel: number | null
+    worsenedDuringOrAfterRun: boolean | null
+    dailyActivityPain: boolean | null
+    readyForQualitySession: boolean | null
+    note: string
+  } | null
+  restrictions?: string[]
+  returnToRunCriteria?: string
+  strengthPlan?: string[]
+  strengthPlanDetails?: unknown[]
+  updateProposalGuidance?: string
+}
+
+function buildInjuryCheckEvidence(activeInjuryItem: unknown, selectedRunContext?: { date: string; timing: string }): InjuryCheckEvidence {
   if (!activeInjuryItem || typeof activeInjuryItem !== 'object') {
     return {
       available: false,
@@ -1883,6 +2077,54 @@ function buildInjuryCheckEvidence(activeInjuryItem: unknown) {
   }
 
   const item = activeInjuryItem as Record<string, unknown>
+  const strengthPlanDetails = Array.isArray(item.strengthPlanDetails) ? item.strengthPlanDetails : []
+  const strengthPlan = Array.isArray(item.strengthPlan) ? item.strengthPlan : []
+  const sharedFields = {
+    id: typeof item.id === 'string' ? item.id : '',
+    title: typeof item.title === 'string' ? item.title : '',
+    status: typeof item.status === 'string' ? item.status : '',
+    restrictions: normalizeStringArray(item.restrictions, 8, 180),
+    returnToRunCriteria: readString(item.returnToRunCriteria).slice(0, 300),
+    strengthPlan: strengthPlan.filter((entry): entry is string => typeof entry === 'string').slice(0, 6),
+    strengthPlanDetails: strengthPlanDetails.map(formatStrengthPlanDetailForCoach).filter(Boolean).slice(0, 6),
+    updateProposalGuidance:
+      '상태 변경은 자동 저장하지 않는다. 0~1/5가 반복되고 일상/러닝/강훈련 뒤 조용한 경우에만 resolved 후보를, 그 외 통증 변화는 check_in_update 후보를 injuryUpdateProposal로 반환한다.'
+  }
+
+  // 과거 세션 코칭: 그 시점 통증을 checkInHistory에서 찾고, 없으면 판단 불가로 둔다(현재 통증 소급 금지).
+  if (selectedRunContext && selectedRunContext.timing === 'past') {
+    const pit = findPointInTimeCheckIn(item, selectedRunContext.date)
+    if (!pit) {
+      return {
+        available: true,
+        ...sharedFields,
+        maxPainLevel: null,
+        pointInTimeUnknown: true,
+        intensityGuidance: '이 세션 당시의 부상 통증 정보가 없습니다. 현재 통증을 과거 세션에 소급 적용하지 말고, 그때 부상이 어땠는지는 알 수 없다고 밝힌 뒤 일반 회복 신호와 pain_note로만 보조 판단하세요.',
+        instruction: '과거 세션 시점 부상 통증 정보 없음 — 강도 단정 불가. 현재 active 부상 통증을 이 과거 세션 평가에 적용하지 않는다.'
+      }
+    }
+    const pitAreaPainLevels = normalizePitAreaPainLevels(pit)
+    const pitCandidates = [
+      ...pitAreaPainLevels.map((area) => area.painLevel),
+      normalizePainLevelValue(pit.painLevel)
+    ].filter((value): value is number => value !== null)
+    const pitMaxPainLevel = pitCandidates.length ? Math.max(...pitCandidates) : null
+    return {
+      available: true,
+      ...sharedFields,
+      maxPainLevel: pitMaxPainLevel,
+      pointInTime: {
+        basis: 'closest_checkin_after_session',
+        checkedAt: readString(pit.checkedAt),
+        painLevel: normalizePainLevelValue(pit.painLevel)
+      },
+      intensityGuidance: `${describePainLevelGuidance(pitMaxPainLevel)} 이 값은 세션 직후 체크인 기준의 당시 추정 통증이며, 현재 통증이 아닙니다.`,
+      areaPainLevels: pitAreaPainLevels,
+      instruction: '과거 세션 시점에 가장 가까운 체크인 통증을 사용한다. 현재 통증으로 과거를 소급 판단하지 않는다.'
+    }
+  }
+
   const normalizedAreas = Array.isArray(item.normalizedAreas) ? item.normalizedAreas : []
   const areaPainLevels = normalizedAreas
     .map((area) => {
@@ -1901,14 +2143,10 @@ function buildInjuryCheckEvidence(activeInjuryItem: unknown) {
   ].filter((value): value is number => value !== null)
   const maxPainLevel = painCandidates.length ? Math.max(...painCandidates) : null
   const latestCheckIn = getLatestCheckIn(item)
-  const strengthPlanDetails = Array.isArray(item.strengthPlanDetails) ? item.strengthPlanDetails : []
-  const strengthPlan = Array.isArray(item.strengthPlan) ? item.strengthPlan : []
 
   return {
     available: true,
-    id: typeof item.id === 'string' ? item.id : '',
-    title: typeof item.title === 'string' ? item.title : '',
-    status: typeof item.status === 'string' ? item.status : '',
+    ...sharedFields,
     maxPainLevel,
     intensityGuidance: describePainLevelGuidance(maxPainLevel),
     areaPainLevels,
@@ -1921,14 +2159,38 @@ function buildInjuryCheckEvidence(activeInjuryItem: unknown) {
           readyForQualitySession: typeof latestCheckIn.readyForQualitySession === 'boolean' ? latestCheckIn.readyForQualitySession : null,
           note: readString(latestCheckIn.note)
         }
-      : null,
-    restrictions: normalizeStringArray(item.restrictions, 8, 180),
-    returnToRunCriteria: readString(item.returnToRunCriteria).slice(0, 300),
-    strengthPlan: strengthPlan.filter((entry): entry is string => typeof entry === 'string').slice(0, 6),
-    strengthPlanDetails: strengthPlanDetails.map(formatStrengthPlanDetailForCoach).filter(Boolean).slice(0, 6),
-    updateProposalGuidance:
-      '상태 변경은 자동 저장하지 않는다. 0~1/5가 반복되고 일상/러닝/강훈련 뒤 조용한 경우에만 resolved 후보를, 그 외 통증 변화는 check_in_update 후보를 injuryUpdateProposal로 반환한다.'
+      : null
   }
+}
+
+function selectedRunInjuryContext(selectedRun: RunLogRow | null): { date: string; timing: string } | undefined {
+  if (!selectedRun) return undefined
+  return { date: selectedRun.date, timing: describeTiming(diffDays(selectedRun.date, currentDateInSeoul())) }
+}
+
+function findPointInTimeCheckIn(item: Record<string, unknown>, sessionDate: string): Record<string, unknown> | null {
+  const history = Array.isArray(item.checkInHistory) ? item.checkInHistory : []
+  const sessionDay = sessionDate.slice(0, 10)
+  const candidates = history
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object')
+    .map((entry) => ({ entry, day: readString(entry.checkedAt).slice(0, 10) }))
+    .filter((row) => row.day && row.day >= sessionDay && diffDays(sessionDate, row.day) <= 10)
+    .sort((a, b) => a.day.localeCompare(b.day))
+  return candidates[0]?.entry ?? null
+}
+
+function normalizePitAreaPainLevels(checkIn: Record<string, unknown>) {
+  const areas = Array.isArray(checkIn.areaPainLevels) ? checkIn.areaPainLevels : []
+  return areas
+    .map((area) => {
+      if (!area || typeof area !== 'object') return null
+      const record = area as Record<string, unknown>
+      return {
+        areaId: typeof record.areaId === 'string' ? record.areaId : '',
+        painLevel: normalizePainLevelValue(record.painLevel)
+      }
+    })
+    .filter((area): area is { areaId: string; painLevel: number | null } => Boolean(area))
 }
 
 function getLatestCheckIn(item: Record<string, unknown>) {
@@ -2011,7 +2273,7 @@ function buildSelectedRunEvidence(run: RunLogRow | null) {
     tags: run.tags,
     memo: truncateText(run.memo, 180),
     instruction:
-      'storedType은 출발점일 뿐이다. 메모, 요일, 랩/샘플 흐름, 심박 경계, fast_segments로 실제 세션 성격을 재해석한다.'
+      'storedType은 출발점일 뿐이다. 메모, 요일, 구간/샘플 흐름, 심박 경계, fast_segments로 실제 세션 성격을 재해석한다.'
   }
 }
 
@@ -2019,8 +2281,8 @@ function buildLapProcessEvidence(analysis: ReturnType<typeof buildLapProgression
   if (!hasAvailableLapAnalysis(analysis)) {
     return {
       available: false,
-      reason: analysis?.reason ?? '랩/샘플 데이터가 부족하다.',
-      instruction: '랩 데이터가 없을 때만 평균값 중심으로 말한다.'
+      reason: analysis?.reason ?? '구간/샘플 데이터가 부족하다.',
+      instruction: '구간 데이터가 없을 때만 평균값 중심으로 말한다.'
     }
   }
 
@@ -2062,7 +2324,7 @@ function buildLapCoachingFocus(analysis: AvailableLapAnalysis) {
 
   const lapsOverTempoCeiling = analysis.lapHeartRatesOverTempoCeiling ?? []
   if (lapsOverTempoCeiling.length > 0) {
-    focus.push(`템포 상한 165를 넘긴 구간이 ${lapsOverTempoCeiling.length}개 있다.`)
+    focus.push(`템포 상한 ${analysis.tempoHeartRateCeilingBpm}를 넘긴 구간이 ${lapsOverTempoCeiling.length}개 있다.`)
   }
 
   return focus.length ? focus : ['페이스 흐름과 심박 흐름을 함께 보고 세션 품질을 짧게 해석한다.']
@@ -2072,7 +2334,8 @@ function buildPrescriptionComplianceEvidence(
   run: RunLogRow | null,
   analysis: ReturnType<typeof buildLapProgressionAnalysis>,
   guide: ReturnType<typeof buildSessionExecutionGuide>,
-  selectedCompliance: string
+  selectedCompliance: string,
+  hr: CoachHeartRateModel = COACH_DEFAULT_HEART_RATE_MODEL
 ) {
   if (!run) {
     return {
@@ -2089,7 +2352,7 @@ function buildPrescriptionComplianceEvidence(
     boundary: guide?.boundaries ?? null,
     verdict: selectedCompliance,
     verdictLabel: describeComplianceVerdict(selectedCompliance),
-    evidence: buildComplianceEvidenceBullets(run, analysis, selectedCompliance),
+    evidence: buildComplianceEvidenceBullets(run, analysis, selectedCompliance, hr),
     postPrescriptionAction: suggestPostPrescriptionAction(selectedCompliance)
   }
 }
@@ -2097,25 +2360,34 @@ function buildPrescriptionComplianceEvidence(
 function buildComplianceEvidenceBullets(
   run: RunLogRow,
   analysis: ReturnType<typeof buildLapProgressionAnalysis>,
-  selectedCompliance: string
+  selectedCompliance: string,
+  hr: CoachHeartRateModel = COACH_DEFAULT_HEART_RATE_MODEL
 ) {
   const bullets: string[] = []
   if (run.type === 'Tempo') {
-    bullets.push(`Tempo 처방 핵심은 max HR 165 이하. 세션 max HR ${run.max_heart_rate ?? '-'}.`)
-    if (hasAvailableLapAnalysis(analysis)) {
-      const over = (analysis.lapHeartRatesOverTempoCeiling ?? []).map((lap) => `${lap.index}번 ${lap.avgHeartRate}`)
-      bullets.push(over.length ? `165 초과 랩: ${over.join(', ')}` : '랩 평균 기준으로 165 초과 구간은 없다.')
+    if (hr.tempoCeilingBpm === null) {
+      bullets.push(`개인 심박 상한 미설정(나이/심박 입력 필요). 템포 품질은 페이스 흐름과 후반 안정으로만 본다. 세션 max HR ${run.max_heart_rate ?? '-'}.`)
+    } else {
+      bullets.push(`Tempo 처방 핵심은 max HR ${hr.tempoCeilingBpm} 이하. 세션 max HR ${run.max_heart_rate ?? '-'}.`)
+      if (hasAvailableLapAnalysis(analysis)) {
+        const over = (analysis.lapHeartRatesOverTempoCeiling ?? []).map((lap) => `${lap.index}번 ${lap.avgHeartRate}`)
+        bullets.push(over.length ? `${hr.tempoCeilingBpm} 초과 구간: ${over.join(', ')}` : `구간 평균 기준으로 ${hr.tempoCeilingBpm} 초과 구간은 없다.`)
+      }
     }
   } else if (run.type === 'Easy' || run.type === 'Recovery') {
-    const ceiling = run.type === 'Recovery' ? 130 : 145
-    bullets.push(`${run.type} 처방 핵심은 페이스보다 HR ${ceiling} 이하 유지.`)
-    bullets.push(`세션 HR ${run.avg_heart_rate ?? '-'}/${run.max_heart_rate ?? '-'}${selectedCompliance.startsWith('met_') ? '로 기준 안쪽.' : '로 기준 확인 필요.'}`)
+    const ceiling = run.type === 'Recovery' ? hr.recoveryCeilingBpm : hr.easyCeilingBpm
+    if (ceiling === null) {
+      bullets.push(`${run.type} 개인 심박 상한 미설정. 페이스와 RPE, 심박 흐름으로 판단한다. 세션 HR ${run.avg_heart_rate ?? '-'}/${run.max_heart_rate ?? '-'}.`)
+    } else {
+      bullets.push(`${run.type} 처방 핵심은 페이스보다 HR ${ceiling} 이하 유지.`)
+      bullets.push(`세션 HR ${run.avg_heart_rate ?? '-'}/${run.max_heart_rate ?? '-'}${selectedCompliance.startsWith('met_') ? '로 기준 안쪽.' : '로 기준 확인 필요.'}`)
+    }
   } else if (run.type === 'LSD' || run.type === 'Steady Long') {
     if (hasAvailableLapAnalysis(analysis)) {
       bullets.push(`전후반 심박 드리프트 ${analysis.heartRateDriftBpmSecondHalfMinusFirstHalf ?? '-'}bpm.`)
       bullets.push(`페이스 흐름은 ${analysis.paceTrend}, 심박 품질은 ${analysis.heartRateQuality}.`)
     } else {
-      bullets.push('랩 드리프트 근거가 부족해 장거리 품질 판정은 보수적으로 한다.')
+      bullets.push('구간 드리프트 근거가 부족해 장거리 품질 판정은 보수적으로 한다.')
     }
   } else if (run.type === 'Easy + Strides') {
     const count = Array.isArray(run.fast_segments) ? run.fast_segments.length : 0
@@ -2208,7 +2480,7 @@ function buildRoutineUpdateEvidence(args: {
   const selectedSignal = args.selectedRun
     ? args.recentPrescriptionComplianceSignals.find((signal) => signal.id === args.selectedRun?.id) ?? null
     : null
-  const injuryEvidence = buildInjuryCheckEvidence(args.activeInjuryItem)
+  const injuryEvidence = buildInjuryCheckEvidence(args.activeInjuryItem, selectedRunInjuryContext(args.selectedRun))
   const injuryPainLevel = injuryEvidence.available ? injuryEvidence.maxPainLevel ?? null : null
   const hasActiveInjury = injuryEvidence.available
   const projection = args.performanceProjection
@@ -2283,10 +2555,12 @@ function buildRunningAnalysisEngine(args: {
   summaryStats: SummaryStatsForCoaching
   activeInjuryItem: unknown
   activeGoal: unknown
+  ageWeight: number
 }) {
-  const recent7 = withinDaysFromAnchor(args.runRows, 7, args.selectedRun?.date ?? currentDateInSeoul())
+  const anchorForLoad = args.selectedRun?.date ?? currentDateInSeoul()
+  const recent7 = withinDaysFromAnchor(args.runRows, 7, anchorForLoad)
   const previous7 = args.runRows.filter((run) => {
-    const anchor = args.selectedRun?.date ?? currentDateInSeoul()
+    const anchor = anchorForLoad
     const days = diffDays(run.date, anchor)
     return days > 7 && days <= 14
   })
@@ -2295,10 +2569,29 @@ function buildRunningAnalysisEngine(args: {
   const loadIncreasePct = previous7DistanceKm > 0
     ? Math.round(((recent7DistanceKm - previous7DistanceKm) / previous7DistanceKm) * 100)
     : null
+
+  // 중장기 부하: 최근 30일 vs 직전 30일(31~60일). 나이대가 높으면 경고 임계값을 낮춘다.
+  const last30Runs = withinDaysFromAnchor(args.runRows, 30, anchorForLoad)
+  const last30Ids = new Set(last30Runs.map((run) => run.id))
+  const prev30Runs = withinDaysFromAnchor(args.runRows, 60, anchorForLoad).filter((run) => !last30Ids.has(run.id))
+  const last30DistanceKm = sumDistance(last30Runs)
+  const prev30DistanceKm = sumDistance(prev30Runs)
+  const chronicSpikeThreshold = 50 - args.ageWeight * 5
+  const chronicRisingThreshold = 30 - args.ageWeight * 3
+  const chronicLoadIncreasePct = prev30DistanceKm >= 15
+    ? Math.round(((last30DistanceKm - prev30DistanceKm) / prev30DistanceKm) * 100)
+    : null
+  const chronicLoadStatus: 'spike' | 'rising' | 'stable' | 'unknown' = chronicLoadIncreasePct === null
+    ? 'unknown'
+    : chronicLoadIncreasePct >= chronicSpikeThreshold
+      ? 'spike'
+      : chronicLoadIncreasePct >= chronicRisingThreshold
+        ? 'rising'
+        : 'stable'
   const selectedCompliance = args.selectedRun
     ? args.recentPrescriptionComplianceSignals.find((signal) => signal.id === args.selectedRun?.id)?.compliance ?? 'unknown'
     : 'unknown'
-  const injuryEvidence = buildInjuryCheckEvidence(args.activeInjuryItem)
+  const injuryEvidence = buildInjuryCheckEvidence(args.activeInjuryItem, selectedRunInjuryContext(args.selectedRun))
   const activePainLevel = injuryEvidence.available ? injuryEvidence.maxPainLevel ?? null : null
   const hrDriftBpm = hasAvailableLapAnalysis(args.selectedRunLapAnalysis)
     ? args.selectedRunLapAnalysis.heartRateDriftBpmSecondHalfMinusFirstHalf ?? null
@@ -2339,13 +2632,14 @@ function buildRunningAnalysisEngine(args: {
   if (!selectedRun && !injuryEvidence.available) injuryRisk = 'unknown'
   if (activePainLevel !== null && activePainLevel >= 3) injuryRisk = 'high'
   else if (activePainLevel !== null && activePainLevel >= 2) injuryRisk = 'watch'
-  else if (painNote || loadStatus === 'spike') injuryRisk = 'watch'
+  else if (painNote || loadStatus === 'spike' || chronicLoadStatus === 'spike') injuryRisk = 'watch'
   if (activePainLevel !== null && activePainLevel >= 4) injuryRisk = 'high'
 
   let overtrainingWarning: 'none' | 'watch' | 'warning' = 'none'
   const pressureCount = [
     args.summaryStats.hardSessionsLast7 >= 3,
     loadStatus === 'spike',
+    chronicLoadStatus === 'spike',
     highRpe,
     lowSleep,
     lowCondition,
@@ -2360,6 +2654,8 @@ function buildRunningAnalysisEngine(args: {
   if (hrDriftStatus === 'high') trainingSuitabilityScore -= 15
   if (loadStatus === 'rising') trainingSuitabilityScore -= 6
   if (loadStatus === 'spike') trainingSuitabilityScore -= 16
+  if (chronicLoadStatus === 'rising') trainingSuitabilityScore -= 4
+  if (chronicLoadStatus === 'spike') trainingSuitabilityScore -= 10
   if (recoveryStatus === 'watch') trainingSuitabilityScore -= 10
   if (recoveryStatus === 'reduce') trainingSuitabilityScore -= 22
   if (injuryRisk === 'watch') trainingSuitabilityScore -= 10
@@ -2378,6 +2674,7 @@ function buildRunningAnalysisEngine(args: {
   const evidence = [
     `HR drift: ${hrDriftBpm === null ? 'unknown' : `${hrDriftBpm}bpm`} / ${hrDriftStatus}`,
     `7일 부하 변화: ${loadIncreasePct === null ? 'unknown' : `${loadIncreasePct}%`} / ${loadStatus}`,
+    `30일 누적 부하 변화: ${chronicLoadIncreasePct === null ? 'unknown' : `${chronicLoadIncreasePct}%`} / ${chronicLoadStatus} (최근 30일 ${last30DistanceKm}km vs 이전 30일 ${prev30DistanceKm}km)`,
     `회복 상태: ${recoveryStatus}`,
     `부상 위험: ${injuryRisk}${activePainLevel !== null ? ` / pain ${activePainLevel}` : ''}`,
     `처방 준수: ${selectedCompliance}`
@@ -2404,6 +2701,14 @@ function buildRunningAnalysisEngine(args: {
       previous7DistanceKm,
       increasePct: loadIncreasePct,
       status: loadStatus
+    },
+    chronicLoadTrend: {
+      last30DistanceKm,
+      prev30DistanceKm,
+      increasePct: chronicLoadIncreasePct,
+      status: chronicLoadStatus,
+      ageWeight: args.ageWeight,
+      note: '최근 30일 누적과 직전 30일을 비교한 중장기 부하다. 7일 급성 부하와 함께 보고, 한 달에 걸쳐 천천히 누적이 늘어난 경우도 부상 위험으로 본다. 나이대가 높으면 경고 임계값을 낮춘다.'
     },
     recoveryStatus,
     injuryRisk,
@@ -3073,6 +3378,193 @@ function truncateText(value: string | null | undefined, maxLength: number) {
   return `${text.slice(0, maxLength).trim()}...`
 }
 
+function getWeeklyRunDaysTarget(memory: unknown): number | null {
+  if (!memory || typeof memory !== 'object') return null
+  const profile = (memory as Record<string, unknown>).athleteProfile
+  if (!profile || typeof profile !== 'object') return null
+  const value = (profile as Record<string, unknown>).weeklyRunDaysTarget
+  return typeof value === 'number' && Number.isFinite(value) && value >= 1 && value <= 14 ? Math.round(value) : null
+}
+
+function getAgeLoadWeightForCoach(memory: unknown, currentDate: string): number {
+  if (!memory || typeof memory !== 'object') return 0
+  const profile = (memory as Record<string, unknown>).athleteProfile
+  if (!profile || typeof profile !== 'object') return 0
+  const birthYear = (profile as Record<string, unknown>).birthYear
+  if (typeof birthYear !== 'number' || !Number.isFinite(birthYear)) return 0
+  const age = Number(currentDate.slice(0, 4)) - birthYear
+  if (age < 18 || age > 100) return 0
+  if (age < 40) return 0
+  if (age < 50) return 1
+  if (age < 60) return 2
+  return 3
+}
+
+// 개인 심박 기준에서 템포/이지/회복 상한을 파생한다. (웹 src/shared/lib/heartRateZones.ts deriveHeartRateModel과 동일 공식)
+// 우선순위: heartRateMode=manual이면 lactateThresholdHr > 측정 maxHeartRate, 아니면 추천(Tanaka 나이 + 누적 관측 HRmax 보정) > 근거부족 시 null.
+// 165 같은 개인 상수는 코드에 두지 않는다. 36세는 공식상 anchor≈165가 자연 산출된다.
+const COACH_LT_FRACTION_OF_MAX = 0.9
+// 안정심박이 있으면 Karvonen(HRR) 기반 역치 추정 계수(역치/템포 ~80~90% HRR, 중앙값 0.85).
+const COACH_LT_FRACTION_OF_HRR = 0.85
+// 존 상단 경계를 anchor(LTHR)의 비율로 정의(%LTHR). 특정 bpm 상수가 아니다.
+const COACH_EASY_FRACTION_OF_LTHR = 0.88
+const COACH_RECOVERY_FRACTION_OF_LTHR = 0.79
+
+// 최대심박에서 역치심박을 추정. 안정심박이 있으면 Karvonen(HRR), 없으면 %HRmax.
+function coachLtAnchorFromMax(maxHr: number, restingHr: number | null): number {
+  if (restingHr !== null && restingHr < maxHr) {
+    return Math.round(COACH_LT_FRACTION_OF_HRR * (maxHr - restingHr) + restingHr)
+  }
+  return Math.round(maxHr * COACH_LT_FRACTION_OF_MAX)
+}
+
+type CoachHeartRateModel = {
+  tempoCeilingBpm: number | null
+  easyCeilingBpm: number | null
+  recoveryCeilingBpm: number | null
+  estimatedMaxHr: number | null
+  observedMaxHr: number | null
+  restingHeartRate: number | null
+  source: 'lthr' | 'measured_max' | 'observed_data' | 'age_estimated' | 'age_data_corrected' | 'insufficient'
+}
+
+// 처방/루틴 텍스트에 과거 개발자 상수로 박힌 심박 상한(회복 130 / 이지 145 / 템포 165·168)을 일반 표현으로 치환한다.
+// (웹 src/entities/training-memory/model.ts stripStaleHeartRateCeilings와 동일 규칙) 실제 숫자는 heartRateModel에서 가져온다.
+const STALE_COACH_HR_CEILINGS = new Map<string, string>([
+  ['130', '회복 상한'],
+  ['145', '이지 상한'],
+  ['165', '템포 상한'],
+  ['168', '템포 상한']
+])
+function stripStaleHrCeilings(text: unknown): string {
+  if (typeof text !== 'string' || !/\d/.test(text)) return typeof text === 'string' ? text : ''
+  return text
+    .replace(/(\d{2,3})\s*bpm/gi, (match, num: string) => STALE_COACH_HR_CEILINGS.get(num) ?? match)
+    .replace(/((?:최대\s*)?심박|max\s*hr)\s*(\d{2,3})/gi, (match, keyword: string, num: string) =>
+      STALE_COACH_HR_CEILINGS.has(num) ? `${keyword} ${STALE_COACH_HR_CEILINGS.get(num)}` : match)
+    .replace(/(\d{2,3})(\s*(?:이하|초과|상한)|\s*를?\s*넘기?지?)/g, (match, num: string, rest: string) =>
+      STALE_COACH_HR_CEILINGS.has(num) ? `${STALE_COACH_HR_CEILINGS.get(num)}${rest}` : match)
+}
+function stripStaleHrList(value: unknown): unknown {
+  return Array.isArray(value) ? value.map((item) => (typeof item === 'string' ? stripStaleHrCeilings(item) : item)) : value
+}
+// 컨텍스트로 AI에 보내기 전, 저장된 처방/루틴 텍스트의 stale 심박 숫자를 제거해 165 잔재가 코칭에 재등장하지 않게 한다.
+function sanitizeMemoryHeartRateCeilings(memory: unknown): unknown {
+  if (!memory || typeof memory !== 'object') return memory
+  const mem = memory as Record<string, unknown>
+  if (Array.isArray(mem.weeklyPattern)) mem.weeklyPattern = stripStaleHrList(mem.weeklyPattern)
+  const atp = mem.adaptiveTrainingProfile as Record<string, unknown> | undefined
+  if (atp && typeof atp === 'object') {
+    if (Array.isArray(atp.prescriptionTemplates)) {
+      atp.prescriptionTemplates = atp.prescriptionTemplates.map((tpl) => {
+        if (!tpl || typeof tpl !== 'object') return tpl
+        const t = tpl as Record<string, unknown>
+        return {
+          ...t,
+          purpose: stripStaleHrCeilings(t.purpose),
+          workout: stripStaleHrList(t.workout),
+          avoidWhen: stripStaleHrList(t.avoidWhen),
+          progressionTrigger: stripStaleHrCeilings(t.progressionTrigger)
+        }
+      })
+    }
+    if (Array.isArray(atp.progressionCriteria)) {
+      atp.progressionCriteria = atp.progressionCriteria.map((crit) => {
+        if (!crit || typeof crit !== 'object') return crit
+        const c = crit as Record<string, unknown>
+        return { ...c, evidence: stripStaleHrCeilings(c.evidence), action: stripStaleHrCeilings(c.action) }
+      })
+    }
+    if (Array.isArray(atp.sessionGuides)) {
+      atp.sessionGuides = atp.sessionGuides.map((g) => {
+        if (!g || typeof g !== 'object') return g
+        const s = g as Record<string, unknown>
+        return { ...s, boundary: stripStaleHrCeilings(s.boundary), evidence: stripStaleHrCeilings(s.evidence) }
+      })
+    }
+    if (Array.isArray(atp.compliancePatterns)) atp.compliancePatterns = stripStaleHrList(atp.compliancePatterns)
+  }
+  return mem
+}
+
+function normalizeCoachBpm(value: unknown): number | null {
+  const num = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(num)) return null
+  const rounded = Math.round(num)
+  return rounded >= 30 && rounded <= 240 ? rounded : null
+}
+
+// 누적 RunLog의 max_heart_rate에서 강건한 관측 최대심박을 추정한다(표본 3개↑, 4개↑면 최고값 1개는 센서 튐으로 제외).
+function deriveCoachObservedMaxHr(runs: RunLogRow[]): number | null {
+  const values = runs
+    .map((run) => normalizeCoachBpm(run.max_heart_rate))
+    .filter((value): value is number => value !== null && value >= 120)
+    .sort((a, b) => b - a)
+  if (values.length < 3) return null
+  return values.length >= 4 ? values[1] : values[0]
+}
+
+function coachModelFromAnchor(
+  anchor: number | null,
+  partial: Omit<CoachHeartRateModel, 'tempoCeilingBpm' | 'easyCeilingBpm' | 'recoveryCeilingBpm'>
+): CoachHeartRateModel {
+  if (anchor === null) {
+    return { tempoCeilingBpm: null, easyCeilingBpm: null, recoveryCeilingBpm: null, ...partial }
+  }
+  return {
+    tempoCeilingBpm: anchor,
+    easyCeilingBpm: Math.round(COACH_EASY_FRACTION_OF_LTHR * anchor),
+    recoveryCeilingBpm: Math.round(COACH_RECOVERY_FRACTION_OF_LTHR * anchor),
+    ...partial
+  }
+}
+
+function deriveCoachHeartRateModel(memory: unknown, currentDate: string, runs: RunLogRow[] = []): CoachHeartRateModel {
+  const profile = memory && typeof memory === 'object'
+    ? (memory as Record<string, unknown>).athleteProfile as Record<string, unknown> | undefined
+    : undefined
+  const restingHeartRate = normalizeCoachBpm(profile?.restingHeartRate)
+  const mode = profile?.heartRateMode === 'manual' ? 'manual' : 'auto'
+
+  // 직접입력(manual): LTHR > 측정 HRmax
+  if (mode === 'manual') {
+    const lthr = normalizeCoachBpm(profile?.lactateThresholdHr)
+    const measuredMax = normalizeCoachBpm(profile?.maxHeartRate)
+    if (lthr !== null) {
+      return coachModelFromAnchor(lthr, { estimatedMaxHr: measuredMax, observedMaxHr: null, restingHeartRate, source: 'lthr' })
+    }
+    if (measuredMax !== null) {
+      return coachModelFromAnchor(coachLtAnchorFromMax(measuredMax, restingHeartRate), {
+        estimatedMaxHr: measuredMax, observedMaxHr: null, restingHeartRate, source: 'measured_max'
+      })
+    }
+  }
+
+  // 추천(auto): Tanaka 나이 베이스 + 누적 관측 HRmax로 상향 보정
+  const birthYear = typeof profile?.birthYear === 'number' ? profile.birthYear as number : null
+  const age = birthYear !== null ? Number(currentDate.slice(0, 4)) - birthYear : null
+  const ageMax = age !== null && age >= 5 && age <= 100 ? Math.round(208 - 0.7 * age) : null
+  const observedMaxHr = deriveCoachObservedMaxHr(runs)
+
+  if (ageMax !== null && observedMaxHr !== null) {
+    const corrected = Math.max(ageMax, observedMaxHr)
+    return coachModelFromAnchor(coachLtAnchorFromMax(corrected, restingHeartRate), {
+      estimatedMaxHr: corrected, observedMaxHr, restingHeartRate, source: observedMaxHr > ageMax ? 'age_data_corrected' : 'age_estimated'
+    })
+  }
+  if (ageMax !== null) {
+    return coachModelFromAnchor(coachLtAnchorFromMax(ageMax, restingHeartRate), {
+      estimatedMaxHr: ageMax, observedMaxHr: null, restingHeartRate, source: 'age_estimated'
+    })
+  }
+  if (observedMaxHr !== null) {
+    return coachModelFromAnchor(coachLtAnchorFromMax(observedMaxHr, restingHeartRate), {
+      estimatedMaxHr: observedMaxHr, observedMaxHr, restingHeartRate, source: 'observed_data'
+    })
+  }
+  return coachModelFromAnchor(null, { estimatedMaxHr: null, observedMaxHr: null, restingHeartRate, source: 'insufficient' })
+}
+
 function withinDaysFromAnchor(runs: RunLogRow[], days: number, anchorDate: string) {
   const anchor = parseDateOnly(anchorDate)
   const cutoff = new Date(anchor)
@@ -3268,7 +3760,7 @@ type LapMetric = {
   cadence: number | null
 }
 
-function buildLapProgressionAnalysis(run: RunLogRow | null) {
+function buildLapProgressionAnalysis(run: RunLogRow | null, tempoHeartRateCeilingBpm: number | null = null) {
   if (!run) return null
   const lapMetrics = normalizeLapMetrics(run.laps)
   const metricSampleMetrics = normalizeMetricSampleMetrics(run.metric_samples)
@@ -3276,7 +3768,7 @@ function buildLapProgressionAnalysis(run: RunLogRow | null) {
   if (!laps.length) {
     return {
       available: false,
-      reason: '랩 데이터가 없어 평균 페이스/평균 심박 중심으로만 볼 수 있다.'
+      reason: '구간 데이터가 없어 평균 페이스/평균 심박 중심으로만 볼 수 있다.'
     }
   }
 
@@ -3299,9 +3791,8 @@ function buildLapProgressionAnalysis(run: RunLogRow | null) {
     if (lap.avgHeartRate === null) return max
     return max === null ? lap.avgHeartRate : Math.max(max, lap.avgHeartRate)
   }, null)
-  const tempoHeartRateCeilingBpm = 165
   const lapsOverTempoCeiling = heartRateLaps
-    .filter((lap) => (lap.avgHeartRate ?? 0) > tempoHeartRateCeilingBpm)
+    .filter((lap) => tempoHeartRateCeilingBpm !== null && (lap.avgHeartRate ?? 0) > tempoHeartRateCeilingBpm)
     .map((lap) => ({ index: lap.index, avgHeartRate: lap.avgHeartRate }))
   const cadenceValues = cadenceLaps.map((lap) => lap.cadence).filter((value): value is number => value !== null)
 
@@ -3333,20 +3824,37 @@ function buildLapProgressionAnalysis(run: RunLogRow | null) {
     startControlHint: describeStartControl(laps, run.avg_pace_sec),
     interpretationHints: [
       'paceFlowDisplay와 heartRateFlowDisplay를 함께 보고 페이스 상승이 심박 폭발로 이어졌는지 확인한다.',
-      '초반 랩이 평균보다 과하게 빠르고 심박도 빠르게 오르면 서둘러 시작한 것으로 본다.',
+      '초반 구간이 평균보다 과하게 빠르고 심박도 빠르게 오르면 서둘러 시작한 것으로 본다.',
       '후반 페이스가 빨라져도 심박 상승이 작으면 잘 눌러 시작해 품질이 좋은 흐름으로 본다.',
-      '템포/품질훈련은 tempoHeartRateCeilingBpm 초과 랩이 있는지 확인한다.'
+      '템포/품질훈련은 tempoHeartRateCeilingBpm 초과 구간이 있는지 확인한다.'
     ]
   }
 }
 
-function buildSessionExecutionGuide(run: RunLogRow | null, activeGoal: unknown) {
+const COACH_DEFAULT_HEART_RATE_MODEL: CoachHeartRateModel = {
+  tempoCeilingBpm: null,
+  easyCeilingBpm: null,
+  recoveryCeilingBpm: null,
+  estimatedMaxHr: null,
+  observedMaxHr: null,
+  restingHeartRate: null,
+  source: 'insufficient'
+}
+
+function buildSessionExecutionGuide(run: RunLogRow | null, activeGoal: unknown, hr: CoachHeartRateModel = COACH_DEFAULT_HEART_RATE_MODEL) {
   if (!run) return null
   const type = run.type
   const targetPaceSec = getGoalPaceSec(activeGoal)
+  const tempo = hr.tempoCeilingBpm
+  const easyCeiling = hr.easyCeilingBpm
+  const recoveryCeiling = hr.recoveryCeilingBpm
+  const personalizedNote = hr.source === 'insufficient'
+    ? '개인 심박 기준 미설정(나이/심박 입력 필요) → 심박 상한 없이 페이스/RPE/드리프트로 평가.'
+    : `개인 심박 기준(${hr.source}) 기반 환산값.`
   const common = {
     runType: type,
-    purpose: '선택 세션을 평가할 때 랩별 페이스/심박 경계를 보는 기준이다. 사용자의 목표와 누적 반응에 따라 코칭에서 유지/조정될 수 있다.',
+    purpose: '선택 세션을 평가할 때 구간별 페이스/심박 경계를 보는 기준이다. 사용자의 목표와 누적 반응에 따라 코칭에서 유지/조정될 수 있다.',
+    heartRateModelSource: hr.source,
     updateRule:
       '같은 유형의 세션이 2~3주 이상 안정적으로 소화되고 회복/부상 신호가 좋으면 경계를 소폭 상향할 수 있다. 반대로 심박/RPE/통증이 반복적으로 높으면 경계를 낮춘다.'
   }
@@ -3354,14 +3862,17 @@ function buildSessionExecutionGuide(run: RunLogRow | null, activeGoal: unknown) 
   if (type === 'Tempo') {
     return {
       ...common,
-      primaryMetric: 'heart_rate_ceiling',
+      primaryMetric: tempo === null ? 'pace_and_drift' : 'heart_rate_ceiling',
       boundaries: {
-        heartRateCeilingBpm: 165,
-        paceRule: '페이스는 보조 지표다. 현재 템포 처방의 핵심은 max HR 165bpm을 넘기지 않는 것이다.',
+        heartRateCeilingBpm: tempo,
+        paceRule: tempo === null
+          ? `심박 상한이 미설정이다. (${personalizedNote}) 템포 품질은 페이스 흐름과 후반 안정으로 본다.`
+          : `페이스는 보조 지표다. 템포 처방의 핵심은 max HR ${tempo}bpm을 넘기지 않는 것이다. (${personalizedNote})`,
         targetPaceSecPerKm: targetPaceSec,
         targetPaceDisplay: targetPaceSec ? formatPaceForCoach(targetPaceSec) : null,
-        allowedLapInterpretation:
-          '템포 랩은 165bpm 상한을 넘겼는지 먼저 본다. 후반 페이스가 빨라져도 심박이 165를 넘지 않으면 품질이 좋고, 넘겼다면 다음 템포는 초반 진입을 낮춘다.'
+        allowedLapInterpretation: tempo === null
+          ? '심박 상한 없이, 초반 오버페이스 여부와 후반 페이스/심박 드리프트로 품질을 본다. 사용자에게 나이 또는 심박 입력을 권한다.'
+          : `템포 구간은 ${tempo}bpm 상한을 넘겼는지 먼저 본다. 후반 페이스가 빨라져도 심박이 ${tempo}를 넘지 않으면 품질이 좋고, 넘겼다면 다음 템포는 초반 진입을 낮춘다.`
       }
     }
   }
@@ -3369,13 +3880,15 @@ function buildSessionExecutionGuide(run: RunLogRow | null, activeGoal: unknown) 
   if (type === 'Easy' || type === 'Recovery') {
     return {
       ...common,
-      primaryMetric: 'heart_rate',
+      primaryMetric: (type === 'Recovery' ? recoveryCeiling : easyCeiling) === null ? 'pace_and_feel' : 'heart_rate',
       boundaries: {
-        easyHeartRateCeilingBpm: type === 'Recovery' ? 130 : 145,
-        recoveryHeartRateCeilingBpm: 130,
-        maxHeartRateRule: type === 'Recovery'
-          ? 'Recovery는 평균뿐 아니라 max/lap 심박도 130 근처에서 조용한지 본다.'
-          : 'Easy는 평균보다 max/lap 심박이 145bpm을 넘지 않았는지 먼저 본다.',
+        easyHeartRateCeilingBpm: type === 'Recovery' ? recoveryCeiling : easyCeiling,
+        recoveryHeartRateCeilingBpm: recoveryCeiling,
+        maxHeartRateRule: (type === 'Recovery' ? recoveryCeiling : easyCeiling) === null
+          ? `${type} 심박 상한 미설정. (${personalizedNote}) 페이스와 RPE, 심박이 안정적인지로 본다.`
+          : type === 'Recovery'
+            ? `Recovery는 평균뿐 아니라 max/lap 심박도 ${recoveryCeiling} 근처에서 조용한지 본다. (${personalizedNote})`
+            : `Easy는 평균보다 max/lap 심박이 ${easyCeiling}bpm을 넘지 않았는지 먼저 본다. (${personalizedNote})`,
         paceRule: '페이스는 보조 지표다. 심박이 낮고 RPE가 낮으면 페이스가 조금 빨라져도 Easy/Recovery로 볼 수 있다.',
         allowedLapInterpretation:
           '후반 페이스 상승보다 심박 안정성을 우선한다. 심박이 낮게 유지되면 잘 눌렀다고 본다.'
@@ -3393,7 +3906,7 @@ function buildSessionExecutionGuide(run: RunLogRow | null, activeGoal: unknown) 
         recoveryWindowToleranceSec: '60~210',
         recoveryHeartRateRule: '가속 뒤 회복 구간에서 심박과 호흡이 내려오는지 본다.',
         allowedLapInterpretation:
-          '랩 단위가 1km라면 스트라이드가 뭉개져 보일 수 있으므로 fast_segments와 심박 회복을 함께 본다.'
+          '구간 단위가 1km라면 스트라이드가 뭉개져 보일 수 있으므로 fast_segments와 심박 회복을 함께 본다.'
       }
     }
   }
@@ -3416,15 +3929,15 @@ function buildSessionExecutionGuide(run: RunLogRow | null, activeGoal: unknown) 
     ...common,
     primaryMetric: 'context_dependent',
     boundaries: {
-      rule: '저장된 타입이 Unknown이면 랩 페이스, 심박, 요일 루틴, 메모로 실제 세션 성격을 먼저 재해석한다.'
+      rule: '저장된 타입이 Unknown이면 구간 페이스, 심박, 요일 루틴, 메모로 실제 세션 성격을 먼저 재해석한다.'
     }
   }
 }
 
-function buildPrescriptionComplianceSignals(runs: RunLogRow[]) {
+function buildPrescriptionComplianceSignals(runs: RunLogRow[], hr: CoachHeartRateModel = COACH_DEFAULT_HEART_RATE_MODEL) {
   return runs.slice(0, 14).map((run) => {
-    const analysis = buildLapProgressionAnalysis(run)
-    const guide = buildSessionExecutionGuide(run, null)
+    const analysis = buildLapProgressionAnalysis(run, hr.tempoCeilingBpm)
+    const guide = buildSessionExecutionGuide(run, null, hr)
     return {
       id: run.id,
       date: run.date,
@@ -3443,17 +3956,24 @@ function buildPrescriptionComplianceSignals(runs: RunLogRow[]) {
   })
 }
 
-function classifyPrescriptionCompliance(run: RunLogRow, analysis: ReturnType<typeof buildLapProgressionAnalysis>) {
+function classifyPrescriptionCompliance(
+  run: RunLogRow,
+  analysis: ReturnType<typeof buildLapProgressionAnalysis>,
+  hr: CoachHeartRateModel = COACH_DEFAULT_HEART_RATE_MODEL
+) {
   const type = run.type
   if (type === 'Tempo') {
+    // 개인 심박 상한이 없으면 HR 게이트로 판정하지 않는다.
+    if (hr.tempoCeilingBpm === null) return 'unknown_no_heart_rate'
     const overCeiling = analysis?.available ? (analysis.lapHeartRatesOverTempoCeiling ?? []).length : 0
-    if (overCeiling > 1 || (run.max_heart_rate ?? 0) > 168) return 'missed_high_heart_rate'
-    if (overCeiling === 1 || (run.max_heart_rate ?? 0) > 165) return 'partial_late_heart_rate_rise'
+    if (overCeiling > 1 || (run.max_heart_rate ?? 0) > hr.tempoCeilingBpm + 3) return 'missed_high_heart_rate'
+    if (overCeiling === 1 || (run.max_heart_rate ?? 0) > hr.tempoCeilingBpm) return 'partial_late_heart_rate_rise'
     return 'met_heart_rate_ceiling'
   }
 
   if (type === 'Easy' || type === 'Recovery') {
-    const ceiling = type === 'Recovery' ? 130 : 145
+    const ceiling = type === 'Recovery' ? hr.recoveryCeilingBpm : hr.easyCeilingBpm
+    if (ceiling === null) return 'unknown_no_heart_rate'
     const avgHeartRate = run.avg_heart_rate
     const maxHeartRate = run.max_heart_rate
     if (avgHeartRate === null && maxHeartRate === null) return 'unknown_no_heart_rate'

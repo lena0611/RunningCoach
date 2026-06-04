@@ -6,9 +6,12 @@ import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
-import type { RunLog } from '@/entities/run/model'
 import type { TrainingInjuryCheckIn, TrainingMemory } from '@/entities/training-memory/model'
-import { createInjuryCheckInDismissKey } from '@/features/injury-check-in/injuryCheckInPrompt'
+import {
+  createInjuryCheckInDismissKey,
+  createInjuryScreeningGuideSeenKey,
+  createInjuryScreeningPromptedKey
+} from '@/features/injury-check-in/injuryCheckInPrompt'
 import DashboardPage from '@/pages/dashboard/DashboardPage.vue'
 import RunLogPage from '@/pages/run-log/RunLogPage.vue'
 import TrendsPage from '@/pages/trends/TrendsPage.vue'
@@ -16,6 +19,7 @@ import MemoryPage from '@/pages/memory/MemoryPage.vue'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import AppShell from '@/shared/ui/AppShell.vue'
 import InjuryCheckInSheet from '@/shared/ui/InjuryCheckInSheet.vue'
+import InjuryScreeningSheet from '@/shared/ui/InjuryScreeningSheet.vue'
 import ToastHost from '@/shared/ui/ToastHost.vue'
 import type { BottomNavItem } from '@/shared/ui/BottomNav.vue'
 
@@ -58,11 +62,14 @@ const isTabAnimating = ref(false)
 const suppressNextTabClick = ref(false)
 const injuryCheckInItemId = ref('')
 const injuryCheckInSaving = ref(false)
+const injuryScreeningOpen = ref(false)
+const SCREENING_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
 let activePanelObserver: ResizeObserver | null = null
 let activePanelMeasureFrame: number | null = null
 let activePanelViewportCleanup: (() => void) | null = null
 let keyboardInsetCleanup: (() => void) | null = null
 let injuryCheckInCleanup: (() => void) | null = null
+let touchZoomCleanup: (() => void) | null = null
 let swipeReleaseTimer: number | null = null
 
 function getNavIndex(path: string) {
@@ -122,6 +129,7 @@ watch(
 
 onMounted(() => {
   attachKeyboardInsetTracking()
+  attachTouchZoomGuard()
   attachActivePanelViewportTracking()
   healthKitSyncStore.init()
   healthKitSyncStore.attachActivationListeners()
@@ -140,6 +148,8 @@ onBeforeUnmount(() => {
   weatherStore.dispose()
   keyboardInsetCleanup?.()
   keyboardInsetCleanup = null
+  touchZoomCleanup?.()
+  touchZoomCleanup = null
   injuryCheckInCleanup?.()
   injuryCheckInCleanup = null
   activePanelObserver?.disconnect()
@@ -180,6 +190,31 @@ function attachKeyboardInsetTracking() {
   }
 }
 
+function attachTouchZoomGuard() {
+  let lastTouchEndedAt = 0
+
+  const preventGestureZoom = (event: Event) => {
+    event.preventDefault()
+  }
+
+  const preventDoubleTapZoom = (event: TouchEvent) => {
+    if (event.touches.length > 0) return
+    const now = Date.now()
+    if (now - lastTouchEndedAt < 320) event.preventDefault()
+    lastTouchEndedAt = now
+  }
+
+  document.addEventListener('gesturestart', preventGestureZoom)
+  document.addEventListener('gesturechange', preventGestureZoom)
+  document.addEventListener('touchend', preventDoubleTapZoom, { passive: false })
+
+  touchZoomCleanup = () => {
+    document.removeEventListener('gesturestart', preventGestureZoom)
+    document.removeEventListener('gesturechange', preventGestureZoom)
+    document.removeEventListener('touchend', preventDoubleTapZoom)
+  }
+}
+
 function attachActivePanelViewportTracking() {
   const schedule = () => scheduleActivePanelHeightUpdate()
 
@@ -211,10 +246,15 @@ function attachInjuryCheckInActivationListeners() {
 }
 
 function requestInjuryCheckInPrompt() {
-  if (!authStore.isAuthenticated || injuryCheckInItemId.value || injuryCheckInSaving.value) return
+  if (!authStore.isAuthenticated || injuryCheckInItemId.value || injuryCheckInSaving.value || injuryScreeningOpen.value) return
   if (memoryStore.loading || runStore.loading || !runStore.loaded) return
-  const item = findDueInjuryCheckIn()
-  if (item) injuryCheckInItemId.value = item.id
+  const hasManagedInjury = memoryStore.memory.injuryItems.some((item) => item.status === 'active' || item.status === 'monitoring')
+  if (hasManagedInjury) {
+    const item = findDueInjuryCheckIn()
+    if (item) injuryCheckInItemId.value = item.id
+    return
+  }
+  if (isInjuryScreeningDue()) injuryScreeningOpen.value = true
 }
 
 function findDueInjuryCheckIn() {
@@ -226,19 +266,45 @@ function findDueInjuryCheckIn() {
     if (isInjuryCheckInDismissed(item.id)) return false
     if (isSameLocalDate(item.lastCheckedAt, new Date())) return false
     if (!item.lastCheckedAt) return true
-    const latestQualityRun = findLatestQualityRun()
-    if (latestQualityRun && compareDateKeys(latestQualityRun.date, item.lastCheckedAt) > 0) return true
+    const latestRun = findLatestRun()
+    if (latestRun && compareDateKeys(latestRun.date, item.lastCheckedAt) > 0) return true
     return Date.now() - Date.parse(item.lastCheckedAt) > 72 * 60 * 60 * 1000
   })
 }
 
-function findLatestQualityRun() {
-  return runStore.sortedRuns.find((run) => isQualitySession(run)) ?? null
+function findLatestRun() {
+  return runStore.sortedRuns[0] ?? null
 }
 
-function isQualitySession(run: RunLog) {
-  return ['Easy + Strides', 'Tempo', 'LSD', 'Steady Long', 'Race'].includes(run.type) || run.distanceKm >= 10
+function isInjuryScreeningDue() {
+  const latestRun = findLatestRun()
+  if (!latestRun) return false
+  const promptedRaw = localStorage.getItem(createInjuryScreeningPromptedKey(memoryStore.selectedUserId))
+  if (!promptedRaw) return true
+  const promptedAt = Date.parse(promptedRaw)
+  if (!Number.isFinite(promptedAt)) return true
+  if (isSameLocalDate(promptedRaw, new Date())) return false
+  if (compareDateKeys(latestRun.date, promptedRaw) <= 0) return false
+  return Date.now() - promptedAt >= SCREENING_INTERVAL_MS
 }
+
+function markInjuryScreeningPrompted() {
+  localStorage.setItem(createInjuryScreeningPromptedKey(memoryStore.selectedUserId), new Date().toISOString())
+}
+
+function dismissInjuryScreening(payload: { sawGuide: boolean }) {
+  if (payload.sawGuide) localStorage.setItem(createInjuryScreeningGuideSeenKey(memoryStore.selectedUserId), '1')
+  markInjuryScreeningPrompted()
+  injuryScreeningOpen.value = false
+}
+
+function openInjuryRegistration() {
+  markInjuryScreeningPrompted()
+  injuryScreeningOpen.value = false
+  void router.push({ path: '/memory', query: { panel: 'injuries', new: '1' } })
+}
+
+const injuryScreeningShowGuide = computed(() => localStorage.getItem(createInjuryScreeningGuideSeenKey(memoryStore.selectedUserId)) !== '1')
 
 function dismissCurrentInjuryCheckIn() {
   const item = injuryCheckInItem.value
@@ -347,7 +413,7 @@ function injuryCheckInDismissKey(item: TrainingMemory['injuryItems'][number]) {
     userId: memoryStore.selectedUserId,
     itemId: item.id,
     todayKey: localDateKey(new Date()),
-    latestQualityRunDate: findLatestQualityRun()?.date ?? null,
+    latestRunDate: findLatestRun()?.date ?? null,
     lastCheckedAt: item.lastCheckedAt
   })
 }
@@ -412,7 +478,7 @@ function isSwipeBlockedTarget(target: EventTarget | null) {
   if (!(target instanceof Element)) return true
   if (
     target.closest(
-      'a, button, input, textarea, select, option, label, [role="button"], [role="tab"], [role="slider"], [contenteditable="true"], .bottom-sheet-layer, .side-drawer-layer, .memory-stack-layer, .coach-input-bar, .trend-lens-tabs, .trend-overall-summary-row-action, .trend-chart, .trend-echart, .trend-lens-chart, .trend-lens-echart, [data-horizontal-scroll], [data-no-swipe]'
+      'input, textarea, select, option, label, [role="slider"], [contenteditable="true"], .bottom-sheet-layer, .side-drawer-layer, .memory-stack-layer, .coach-input-bar, .trend-lens-tabs, [data-horizontal-scroll], [data-no-swipe]'
     )
   ) {
     return true
@@ -560,6 +626,13 @@ function animateTabRelease(targetOffset: number, targetRoute: string | null) {
       :saving="injuryCheckInSaving"
       @close="dismissCurrentInjuryCheckIn"
       @submit="submitInjuryCheckIn"
+    />
+    <InjuryScreeningSheet
+      :open="injuryScreeningOpen"
+      :show-guide="injuryScreeningShowGuide"
+      @close="injuryScreeningOpen = false"
+      @register="openInjuryRegistration"
+      @acknowledge="dismissInjuryScreening"
     />
     <div
       v-if="isMainTabRoute"
