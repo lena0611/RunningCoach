@@ -305,6 +305,11 @@ function syncNotifications(settings: NotificationSettings = settingsStore.notifi
 function goDashboard() {
   router.push('/')
 }
+
+function goGlossary() {
+  closeDrawer()
+  router.push('/glossary')
+}
 </script>
 
 <template>
@@ -392,6 +397,17 @@ function goDashboard() {
               <dd>{{ activeInjuryTitle }}</dd>
             </div>
           </dl>
+
+          <button class="drawer-link-row" type="button" @click="goGlossary">
+            <span class="drawer-link-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1.2 1-1.2 1.9" /><path d="M12 16.5h.01" /></svg>
+            </span>
+            <span class="drawer-link-text">
+              <strong>용어 안내</strong>
+              <span>러닝·코칭 용어를 한곳에서 찾아보기</span>
+            </span>
+            <svg class="drawer-link-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+          </button>
 
           <ActionGroup class="drawer-actions">
             <button type="button" @click="drawerPanel = 'profile'">정보수정</button>
