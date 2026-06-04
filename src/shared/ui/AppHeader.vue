@@ -9,7 +9,7 @@ import { getActiveGoal, getActiveInjuryItem, type PersonalBest, type TrainingMem
 import { syncNativeNotifications } from '@/features/sync-native-notifications/notificationBridge'
 import { formatDateWithWeekday } from '@/shared/lib/format'
 import { RUNNER_LEVEL_LABEL, resolveRunnerLevel } from '@/shared/lib/runnerLevel'
-import { deriveHeartRateModel } from '@/shared/lib/heartRateZones'
+import { deriveHeartRateModel, deriveObservedMaxHr, deriveRecommendedHeartRateModel } from '@/shared/lib/heartRateZones'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import ClearableField from '@/shared/ui/ClearableField.vue'
@@ -99,15 +99,39 @@ const runnerLevelDisplay = computed(() => {
   return derived.source === 'manual' ? `${label} (직접 설정)` : `${label} (자동)`
 })
 const HEART_RATE_SOURCE_LABEL: Record<string, string> = {
-  lthr: '역치심박 기반',
-  measured_max: '측정 최대심박 기반',
+  lthr: '역치심박(직접 입력)',
+  measured_max: '측정 최대심박(직접 입력)',
+  observed_data: '누적 기록 추정',
   age_estimated: '나이 추정',
-  default: '기본값'
+  age_data_corrected: '나이 + 누적 기록 보정',
+  insufficient: '미설정'
 }
-const tempoCeilingDisplay = computed(() => {
-  const model = deriveHeartRateModel(memoryStore.memory.athleteProfile)
-  return `${model.tempoCeilingBpm}bpm (${HEART_RATE_SOURCE_LABEL[model.source] ?? model.source})`
+const heartRateModeOptions = [
+  { label: '추천 (자동)', value: 'auto' },
+  { label: '직접 입력', value: 'manual' }
+]
+const observedMaxHr = computed(() =>
+  deriveObservedMaxHr(runStore.sortedRuns.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })))
+)
+const activeHeartRateModel = computed(() =>
+  deriveHeartRateModel(memoryStore.memory.athleteProfile, new Date().getFullYear(), observedMaxHr.value)
+)
+const recommendedHeartRateModel = computed(() =>
+  deriveRecommendedHeartRateModel(memoryStore.memory.athleteProfile, new Date().getFullYear(), observedMaxHr.value)
+)
+function describeHeartRateModel(model: ReturnType<typeof deriveHeartRateModel>): string {
+  if (model.tempoCeilingBpm === null) return '미설정 (나이 또는 심박 입력 필요)'
+  return `템포 ${model.tempoCeilingBpm} · 이지 ${model.easyCeilingBpm} · 회복 ${model.recoveryCeilingBpm}bpm (${HEART_RATE_SOURCE_LABEL[model.source] ?? model.source})`
+}
+const heartRateModeValue = computed({
+  get: () => memoryStore.memory.athleteProfile.heartRateMode === 'manual' ? 'manual' : 'auto',
+  set: (value: string | string[]) => {
+    if (Array.isArray(value)) return
+    draft.athleteProfile.heartRateMode = value === 'manual' ? 'manual' : 'auto'
+  }
 })
+const activeHeartRateDisplay = computed(() => describeHeartRateModel(activeHeartRateModel.value))
+const recommendedHeartRateDisplay = computed(() => describeHeartRateModel(recommendedHeartRateModel.value))
 const birthYearValue = computed({
   get: () => draft.athleteProfile.birthYear === null ? '' : String(draft.athleteProfile.birthYear),
   set: (value: string | string[]) => {
@@ -357,8 +381,8 @@ function goDashboard() {
               <dd>{{ memoryStore.memory.athleteProfile.preferredLongRunDay || '미입력' }}</dd>
             </div>
             <div>
-              <dt>템포 상한</dt>
-              <dd>{{ tempoCeilingDisplay }}</dd>
+              <dt>심박 상한</dt>
+              <dd>{{ activeHeartRateDisplay }}</dd>
             </div>
             <div>
               <dt>부상관리</dt>
@@ -394,20 +418,35 @@ function goDashboard() {
             <BottomSheetSelect v-model="draft.athleteProfile.runnerLevel" label="러너 레벨" :options="runnerLevelOptions" />
             <BottomSheetSelect v-model="weeklyRunDaysTargetValue" label="목표 주간 러닝 횟수" :options="weeklyRunDaysTargetOptions" />
             <BottomSheetSelect v-model="draft.athleteProfile.preferredLongRunDay" label="선호 롱런 요일" :options="weekdayOptions" />
-            <label>
-              역치심박 LTHR
-              <ClearableField v-model="lactateThresholdHrValue" type="number" number inputmode="numeric" placeholder="예: 165" />
-            </label>
-            <label>
-              최대심박(측정)
-              <ClearableField v-model="maxHeartRateValue" type="number" number inputmode="numeric" placeholder="측정값" />
-            </label>
-            <label>
-              안정심박
-              <ClearableField v-model="restingHeartRateValue" type="number" number inputmode="numeric" placeholder="아침 안정 시" />
-            </label>
+            <BottomSheetSelect v-model="heartRateModeValue" label="심박 기준" :options="heartRateModeOptions" />
+            <div class="full hr-summary">
+              <p><strong>현재 적용</strong> · {{ activeHeartRateDisplay }}</p>
+              <p class="hr-recommended">앱 추천 · {{ recommendedHeartRateDisplay }}</p>
+            </div>
+            <template v-if="heartRateModeValue === 'manual'">
+              <label>
+                역치심박 LTHR
+                <ClearableField v-model="lactateThresholdHrValue" type="number" number inputmode="numeric" placeholder="30분 테스트 평균" />
+              </label>
+              <label>
+                최대심박(측정)
+                <ClearableField v-model="maxHeartRateValue" type="number" number inputmode="numeric" placeholder="측정값" />
+              </label>
+              <label>
+                안정심박
+                <ClearableField v-model="restingHeartRateValue" type="number" number inputmode="numeric" placeholder="아침 안정 시" />
+              </label>
+            </template>
             <p class="full hr-hint">
-              심박존·템포 상한은 LTHR &gt; 측정 최대심박 &gt; 나이 추정 순으로 개인화합니다. 미입력 시 기본값을 씁니다. LTHR은 30분 단독 전력주 마지막 20분 평균심박으로 추정합니다.
+              심박존·심박 상한은 <strong>역치심박(LTHR) &gt; 측정 최대심박 &gt; 나이(Tanaka) + 누적 기록 보정</strong> 순으로 개인화합니다. 추천(자동)은 나이와 그동안 실제로 찍힌 최고 심박으로 보정하고, 직접 입력하면 그 값을 우선합니다.
+              <br />
+              <strong>산출 방식:</strong> 최대심박 ≈ 208 − 0.7 × 나이(Tanaka), 역치심박 ≈ 최대심박의 90%, 템포 상한 = 역치심박. LTHR은 30분 단독 전력주의 마지막 20분 평균심박으로 측정합니다.
+              <br />
+              <strong>근거:</strong>
+              <a href="https://pubmed.ncbi.nlm.nih.gov/11153730/" target="_blank" rel="noopener">Tanaka 2001 (최대심박 식)</a>,
+              <a href="https://joefrieltraining.com/determining-your-lthr/" target="_blank" rel="noopener">Joe Friel — LTHR</a>,
+              <a href="https://www.asics.com/ie/en-ie/running-advice/threshold-and-tempo-runs-all-you-need-to-know/" target="_blank" rel="noopener">ASICS — Threshold/Tempo</a>.
+              개인차가 있으니 정확히 하려면 LTHR 또는 측정 최대심박을 직접 입력하세요. 이 값은 의료 기준이 아니라 훈련 강도 참고용입니다.
             </p>
             <label class="full">
               거리별 PB

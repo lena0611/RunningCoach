@@ -516,3 +516,14 @@
 - 포기한 대안: Karvonen(%HRR) 중심 — 사용자가 LTHR 우선을 선택. 안정심박은 입력은 받아 코칭 맥락으로 보존하되 anchor 산출엔 직접 쓰지 않음(추후 HRR 확장 여지). 랩 거리 정규화는 별도 decision 후보로 보류(route 기반 fastSegments 우선 정책 유지).
 - 안전: Tanaka 추정은 단정 근거가 아니라 보수 신호로만 쓰고 측정/역치 입력을 권유. 레벨·나이로 안전 상한을 낮추지 않는다. 의료 단정 금지.
 - 적용 범위: `src/entities/training-memory/model.ts`(AthleteProfile 3필드+normalize), `src/shared/lib/heartRateZones.ts`(deriveHeartRateModel), `src/shared/lib/performanceProjection.ts`, `src/shared/lib/trendInsights.ts`, `src/pages/dashboard/DashboardPage.vue`, `src/shared/ui/AppHeader.vue`, `src/pages/memory/MemoryPage.vue`, `supabase/functions/coach-run/index.ts`(deriveCoachHeartRateModel), `.harness/project/domain-rules.md`.
+
+## 2026-06-04 - 심박 상한 165 상수 완전 제거 + 데이터 보정 + auto/manual + 근거 표시 (Issue #127 v2)
+- 배경: 사용자가 #127 1차(merge/배포) 후 확인. (1) 나이만 입력해도 156으로 자동 적용되는 것을 보고 "나이 베이스 + 누적 데이터 보정"을 원했고, (2) 165는 2달 전 ChatGPT에서 받은 개발자 개인값을 상수로 박은 것이라 "코드 어디에도 165 상수를 두면 안 된다"고 못박았으며, (3) 앱 화면에 산출식·외부 근거를 보여 신뢰를 줄 것, (4) 추천값 vs 사용자 지정값 분리·선택을 요구.
+- 결정:
+  - 165/145/130 상수를 **코드 전역에서 제거**(heartRateZones·coach-run·performanceProjection·trendInsights·inferRunType). 존 경계는 anchor(LTHR)의 %LTHR 비율로만 정의(Z1 0.79·Z2 0.88·Z3 0.94·Z4 1.0). 36세는 공식상 anchor≈165가 자연 산출.
+  - 추천(auto) anchor = max(Tanaka 나이추정, 누적 RunLog 관측 최대심박)×0.9. 관측은 표본 3개↑(4개↑면 최고 1개 제외)로 강건 추정, 올리는 방향으로만 보정. 직접입력(manual)은 LTHR > 측정 HRmax.
+  - 근거 데이터 전무 시 상한 null(미설정). 165 fallback 없음 → 페이스/RPE/드리프트로 평가 + 입력 권유.
+  - `AthleteProfile.heartRateMode: 'auto'|'manual'` 추가(러너레벨 패턴과 동일). 직접값 보존·토글. UI에 현재값/추천값/source + 산출식 + 외부 근거 링크(Tanaka PMID 11153730, Joe Friel LTHR, ASICS).
+  - inferRunType은 store에서 모델을 주입받아 상수 없이 판정. 테스트는 anchor=165 모델(manual+LTHR 165)을 주입해 기존 판정 회귀를 막음.
+- 포기/주의: 나이 추정을 그대로 게이트로 쓰면 fit한 50세가 156에 갇히는 문제 → 관측 보정으로 해소. 나이/추정은 보수 신호로만, 레벨·나이로 안전 상한 안 낮춤, 의료 단정 금지.
+- 적용 범위: 위 5개 코드 파일 + `src/entities/training-memory/model.ts`(heartRateMode) + 3개 UI(AppHeader/MemoryPage/Dashboard) + import 경로(healthKitSyncStore/UploadRunPage/localFileExtractor/healthKitBridge) + `.harness/project/domain-rules.md`.

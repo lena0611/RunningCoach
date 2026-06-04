@@ -1,5 +1,10 @@
 import type { FastSegment, Lap, RunMetricSample, RunRoutePoint, RunType } from '@/entities/run/model'
-import { isHeartRateAtOrBelowZone2, isRecoveryHeartRateZone } from '@/shared/lib/heartRateZones'
+import {
+  isHeartRateAtOrBelowZone2,
+  isRecoveryHeartRateZone,
+  type HeartRateModel,
+  type HeartRateZoneDefinition
+} from '@/shared/lib/heartRateZones'
 
 type InferRunTypeInput = {
   date: string
@@ -11,10 +16,27 @@ type InferRunTypeInput = {
   metricSamples?: RunMetricSample[]
   routePoints?: RunRoutePoint[]
   weeklyPattern?: string[]
+  // 개인 심박 모델. 자동 유형 판정의 HR 기준은 상수 대신 이 모델에서 파생한다.
+  // 미제공/근거부족(zones 비어있음)이면 HR 기반 분기를 건너뛰고 페이스/거리/스트라이드 패턴으로만 판정한다.
+  heartRateModel?: HeartRateModel | null
 }
 
-const easyHeartRateCeiling = 145
-const recoveryHeartRateCeiling = 130
+// inferRunType 내부에서 HR 판정에 쓰는 개인 기준 컨텍스트. easyCeilingBpm/z4MinBpm이 null이면 해당 HR 분기를 건너뛴다.
+type HrContext = {
+  zones: HeartRateZoneDefinition[]
+  easyCeilingBpm: number | null
+  z4MinBpm: number | null
+}
+
+function toHrContext(model: HeartRateModel | null | undefined): HrContext {
+  const zones = model?.zones ?? []
+  return {
+    zones,
+    easyCeilingBpm: model?.easyCeilingBpm ?? null,
+    z4MinBpm: zones.find((zone) => zone.zone === 'Z4')?.minBpm ?? null
+  }
+}
+
 const strideTimingTolerance = {
   minDurationSec: 6,
   maxDurationSec: 45,
@@ -26,12 +48,13 @@ const strideTimingTolerance = {
 export function inferRunType(input: InferRunTypeInput): RunType {
   const distanceKm = Number(input.distanceKm || 0)
   const avgPaceSec = input.avgPaceSec
-  const easyRatio = getEasyRatio(input.laps, distanceKm, avgPaceSec, input.avgHeartRate)
+  const hr = toHrContext(input.heartRateModel)
+  const easyRatio = getEasyRatio(input.laps, distanceKm, avgPaceSec, input.avgHeartRate, hr)
   const fastSegments = [...input.fastSegments, ...deriveRouteFastSegments(input.routePoints ?? [])]
   const fastSegmentCount = countUsefulFastSegments(fastSegments)
   const hasStridesPattern = hasStrideIntervalPattern(fastSegments)
-  const hasMetricStridesPattern = hasStrideMetricPattern(input.metricSamples ?? [], avgPaceSec, input.avgHeartRate)
-  const hasStrideSplitsPattern = hasStrideLapPattern(input.laps)
+  const hasMetricStridesPattern = hasStrideMetricPattern(input.metricSamples ?? [], avgPaceSec, input.avgHeartRate, hr)
+  const hasStrideSplitsPattern = hasStrideLapPattern(input.laps, hr)
   const tempoDistanceKm = getSustainedTempoDistance(input.laps, distanceKm, avgPaceSec)
   const isSaturday = getWeekday(input.date) === 6
   const scheduledWorkout = getScheduledWorkout(input.date, input.weeklyPattern ?? [])
@@ -40,7 +63,7 @@ export function inferRunType(input: InferRunTypeInput): RunType {
 
   if (distanceKm >= 10) {
     if (isSaturday || distanceKm >= 12) {
-      return isSteadyLong(input.laps, avgPaceSec, input.avgHeartRate) ? 'Steady Long' : 'LSD'
+      return isSteadyLong(input.laps, avgPaceSec, input.avgHeartRate, hr) ? 'Steady Long' : 'LSD'
     }
   }
 
@@ -48,13 +71,13 @@ export function inferRunType(input: InferRunTypeInput): RunType {
     return 'Easy + Strides'
   }
 
-  if (isHeartRateEasy(input.avgHeartRate) && easyRatio >= 0.65) {
-    return isRecoveryHeartRate(input.avgHeartRate) && (avgPaceSec === null || avgPaceSec >= 480) ? 'Recovery' : 'Easy'
+  if (isHeartRateEasy(input.avgHeartRate, hr) && easyRatio >= 0.65) {
+    return isRecoveryHeartRate(input.avgHeartRate, hr) && (avgPaceSec === null || avgPaceSec >= 480) ? 'Recovery' : 'Easy'
   }
 
   if (tempoDistanceKm >= 3 || (distanceKm >= 4 && avgPaceSec !== null && avgPaceSec <= 390)) return 'Tempo'
 
-  if (avgPaceSec !== null && avgPaceSec >= 480 && (input.avgHeartRate === null || input.avgHeartRate <= 140)) return 'Recovery'
+  if (avgPaceSec !== null && avgPaceSec >= 480 && (input.avgHeartRate === null || hr.easyCeilingBpm === null || input.avgHeartRate <= hr.easyCeilingBpm - 5)) return 'Recovery'
 
   if (easyRatio >= 0.65 || (avgPaceSec !== null && avgPaceSec >= 390)) return 'Easy'
 
@@ -78,34 +101,37 @@ function countUsefulFastSegments(segments: FastSegment[]) {
   }).length
 }
 
-function getEasyRatio(laps: Lap[], distanceKm: number, avgPaceSec: number | null, avgHeartRate: number | null) {
+function getEasyRatio(laps: Lap[], distanceKm: number, avgPaceSec: number | null, avgHeartRate: number | null, hr: HrContext) {
   const segments = getLapSegments(laps)
   if (segments.length) {
     const total = segments.reduce((sum, lap) => sum + lap.distanceKm, 0)
     const easy = segments
-      .filter((lap) => isLapEasy(lap, avgHeartRate))
+      .filter((lap) => isLapEasy(lap, avgHeartRate, hr))
       .reduce((sum, lap) => sum + lap.distanceKm, 0)
     return total > 0 ? easy / total : 0
   }
 
-  if (isHeartRateEasy(avgHeartRate)) return 1
+  if (isHeartRateEasy(avgHeartRate, hr)) return 1
   if (distanceKm > 0 && avgPaceSec !== null) return avgPaceSec >= 390 ? 1 : 0
   return 0
 }
 
-function isLapEasy(lap: { paceSec: number; avgHeartRate: number | null }, fallbackHeartRate: number | null) {
+function isLapEasy(lap: { paceSec: number; avgHeartRate: number | null }, fallbackHeartRate: number | null, hr: HrContext) {
   const heartRate = lap.avgHeartRate ?? fallbackHeartRate
-  if (isHeartRateEasy(heartRate)) return true
-  if (heartRate !== null && heartRate > easyHeartRateCeiling + 5) return false
+  if (isHeartRateEasy(heartRate, hr)) return true
+  if (hr.easyCeilingBpm !== null && heartRate !== null && heartRate > hr.easyCeilingBpm + 5) return false
   return lap.paceSec >= 390
 }
 
-function isHeartRateEasy(value: number | null) {
-  return isHeartRateAtOrBelowZone2(value)
+// 개인 심박 존이 없으면(근거 부족) HR로 Easy를 단정하지 않는다.
+function isHeartRateEasy(value: number | null, hr: HrContext) {
+  if (!hr.zones.length) return false
+  return isHeartRateAtOrBelowZone2(value, hr.zones)
 }
 
-function isRecoveryHeartRate(value: number | null) {
-  return isRecoveryHeartRateZone(value)
+function isRecoveryHeartRate(value: number | null, hr: HrContext) {
+  if (!hr.zones.length) return false
+  return isRecoveryHeartRateZone(value, hr.zones)
 }
 
 function hasStrideIntervalPattern(segments: FastSegment[]) {
@@ -134,7 +160,7 @@ function hasStrideIntervalPattern(segments: FastSegment[]) {
   return hasWorkoutWarmup && intervalLikeGaps >= Math.min(4, gaps.length)
 }
 
-function hasStrideMetricPattern(samples: RunMetricSample[], avgPaceSec: number | null, avgHeartRate: number | null) {
+function hasStrideMetricPattern(samples: RunMetricSample[], avgPaceSec: number | null, avgHeartRate: number | null, hr: HrContext) {
   const clean = samples
     .filter((sample) => Number.isFinite(sample.offsetSec) && (isUsablePace(sample.paceSec) || isUsableCadence(sample.cadence)))
     .sort((a, b) => a.offsetSec - b.offsetSec)
@@ -150,7 +176,7 @@ function hasStrideMetricPattern(samples: RunMetricSample[], avgPaceSec: number |
 
   const fastSamples = clean.filter((sample) => {
     const paceFast = isUsablePace(sample.paceSec) && sample.paceSec <= paceThreshold
-    const heartRateOk = sample.heartRate === null || sample.heartRate <= easyHeartRateCeiling + 12
+    const heartRateOk = sample.heartRate === null || hr.easyCeilingBpm === null || sample.heartRate <= hr.easyCeilingBpm + 12
     return heartRateOk && paceFast
   })
   if (fastSamples.length < 4) return false
@@ -163,7 +189,7 @@ function hasStrideMetricPattern(samples: RunMetricSample[], avgPaceSec: number |
   const gaps = starts.slice(1).map((start, index) => start - starts[index])
   const intervalLikeGaps = gaps.filter((gap) => gap >= 40 && gap <= 260).length
   const hasWarmup = firstStart >= strideTimingTolerance.minWarmupSec
-  const notTempo = avgHeartRate === null || avgHeartRate <= easyHeartRateCeiling
+  const notTempo = avgHeartRate === null || hr.easyCeilingBpm === null || avgHeartRate <= hr.easyCeilingBpm
   const easyAveragePace = avgPaceSec === null || avgPaceSec >= 390
 
   return hasWarmup && notTempo && easyAveragePace && intervalLikeGaps >= Math.min(4, gaps.length)
@@ -186,7 +212,7 @@ function clusterFastSamples(samples: RunMetricSample[]) {
   })
 }
 
-function hasStrideLapPattern(laps: Lap[]) {
+function hasStrideLapPattern(laps: Lap[], hr: HrContext) {
   const segments = getLapSegments(laps)
     .map((lap) => ({
       ...lap,
@@ -206,8 +232,8 @@ function hasStrideLapPattern(laps: Lap[]) {
 
   if (shortFastIndexes.length < 4) return false
 
-  const hasEasyBookends = segments.some((lap, index) => index < 3 && lap.durationSec >= 180 && isLapEasy(lap, null)) ||
-    segments.some((lap, index) => index >= segments.length - 3 && lap.durationSec >= 180 && isLapEasy(lap, null))
+  const hasEasyBookends = segments.some((lap, index) => index < 3 && lap.durationSec >= 180 && isLapEasy(lap, null, hr)) ||
+    segments.some((lap, index) => index >= segments.length - 3 && lap.durationSec >= 180 && isLapEasy(lap, null, hr))
 
   const alternatingRecoveries = shortFastIndexes.filter(({ index }) => {
     const next = segments[index + 1]
@@ -312,12 +338,14 @@ function getSustainedTempoDistance(laps: Lap[], distanceKm: number, avgPaceSec: 
   return best
 }
 
-function isSteadyLong(laps: Lap[], avgPaceSec: number | null, avgHeartRate: number | null) {
+function isSteadyLong(laps: Lap[], avgPaceSec: number | null, avgHeartRate: number | null, hr: HrContext) {
+  const easyCeiling = hr.easyCeilingBpm
+  const z4Min = hr.z4MinBpm
   const segments = getLapSegments(laps)
   if (!segments.length) {
-    if (avgHeartRate !== null) {
-      if (avgHeartRate >= easyHeartRateCeiling + 5) return true
-      if (isHeartRateEasy(avgHeartRate)) return false
+    if (avgHeartRate !== null && easyCeiling !== null) {
+      if (avgHeartRate >= easyCeiling + 5) return true
+      if (isHeartRateEasy(avgHeartRate, hr)) return false
     }
     return avgPaceSec !== null && avgPaceSec <= 400
   }
@@ -332,14 +360,15 @@ function isSteadyLong(laps: Lap[], avgPaceSec: number | null, avgHeartRate: numb
   const secondHeartRate = weightedHeartRate(secondHalf)
   const heartRateDrift = firstHeartRate !== null && secondHeartRate !== null ? secondHeartRate - firstHeartRate : 0
   const sessionHeartRate = weightedHeartRate(segments) ?? avgHeartRate
-  const z3PlusRatio = total > 0
+  // 개인 심박 상한이 없으면 HR 기반 비율 신호는 0으로 두고 페이스 신호만 본다.
+  const z3PlusRatio = total > 0 && easyCeiling !== null
     ? segments
-      .filter((lap) => (lap.avgHeartRate ?? sessionHeartRate ?? 0) >= easyHeartRateCeiling + 1)
+      .filter((lap) => (lap.avgHeartRate ?? sessionHeartRate ?? 0) >= easyCeiling + 1)
       .reduce((sum, lap) => sum + lap.distanceKm, 0) / total
     : 0
-  const z4PlusRatio = total > 0
+  const z4PlusRatio = total > 0 && z4Min !== null
     ? segments
-      .filter((lap) => (lap.avgHeartRate ?? sessionHeartRate ?? 0) >= 156)
+      .filter((lap) => (lap.avgHeartRate ?? sessionHeartRate ?? 0) >= z4Min)
       .reduce((sum, lap) => sum + lap.distanceKm, 0) / total
     : 0
   const steadyPaceRatio = total > 0
@@ -348,13 +377,13 @@ function isSteadyLong(laps: Lap[], avgPaceSec: number | null, avgHeartRate: numb
       .reduce((sum, lap) => sum + lap.distanceKm, 0) / total
     : 0
 
-  if (sessionHeartRate !== null && sessionHeartRate <= easyHeartRateCeiling && z3PlusRatio < 0.25 && heartRateDrift <= 8) {
+  if (sessionHeartRate !== null && easyCeiling !== null && sessionHeartRate <= easyCeiling && z3PlusRatio < 0.25 && heartRateDrift <= 8) {
     return false
   }
 
   if (z4PlusRatio >= 0.15) return true
   if (z3PlusRatio >= 0.45) return true
-  if (sessionHeartRate !== null && sessionHeartRate >= easyHeartRateCeiling + 4 && paceGainSec >= 8) return true
+  if (sessionHeartRate !== null && easyCeiling !== null && sessionHeartRate >= easyCeiling + 4 && paceGainSec >= 8) return true
   if (heartRateDrift >= 10 && paceGainSec >= 8) return true
 
   if (sessionHeartRate === null && steadyPaceRatio >= 0.55 && paceGainSec >= 15) return true

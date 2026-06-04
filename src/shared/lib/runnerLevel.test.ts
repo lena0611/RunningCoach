@@ -17,6 +17,7 @@ function profile(overrides: Partial<AthleteProfile> = {}): AthleteProfile {
     maxHeartRate: null,
     restingHeartRate: null,
     lactateThresholdHr: null,
+    heartRateMode: 'auto',
     ...overrides
   }
 }

@@ -17,7 +17,7 @@ import {
 import type { TrainingKnowledgeCatalog, TrainingKnowledgeRequest, TrainingMethod } from '@/entities/training-knowledge/model'
 import { formatDateWithWeekday, formatDuration } from '@/shared/lib/format'
 import { RUNNER_LEVEL_LABEL, resolveRunnerLevel } from '@/shared/lib/runnerLevel'
-import { deriveHeartRateModel } from '@/shared/lib/heartRateZones'
+import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 import { createTrainingKnowledgeRequest, fetchTrainingKnowledgeCatalog } from '@/shared/api/trainingKnowledgeRepository'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
@@ -179,14 +179,18 @@ const runnerLevelFact = computed(() => {
   return derived.source === 'manual' ? `${label} (직접 설정)` : `${label} (자동)`
 })
 const HEART_RATE_SOURCE_LABEL: Record<string, string> = {
-  lthr: '역치심박 기반',
-  measured_max: '측정 최대심박 기반',
+  lthr: '역치심박(직접 입력)',
+  measured_max: '측정 최대심박(직접 입력)',
+  observed_data: '누적 기록 추정',
   age_estimated: '나이 추정',
-  default: '기본값'
+  age_data_corrected: '나이 + 누적 기록 보정',
+  insufficient: '미설정'
 }
 const heartRateModelFact = computed(() => {
-  const model = deriveHeartRateModel(draft.athleteProfile)
-  return `${model.tempoCeilingBpm}bpm (${HEART_RATE_SOURCE_LABEL[model.source] ?? model.source})`
+  const observed = deriveObservedMaxHr(runStore.sortedRuns.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })))
+  const model = deriveHeartRateModel(draft.athleteProfile, new Date().getFullYear(), observed)
+  if (model.tempoCeilingBpm === null) return '미설정 (나이 또는 심박 입력 필요)'
+  return `템포 ${model.tempoCeilingBpm} · 이지 ${model.easyCeilingBpm}bpm (${HEART_RATE_SOURCE_LABEL[model.source] ?? model.source})`
 })
 const profileFacts = computed(() => [
   { label: '러너', value: memoryStore.selectedUser.name || '기본 사용자' },

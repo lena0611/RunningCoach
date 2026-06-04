@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { inferRunType } from './inferRunType'
+import { deriveHeartRateModel } from '@/shared/lib/heartRateZones'
 import type { Lap, RunMetricSample } from '@/entities/run/model'
+
+// anchor=165 모델(easy 145 / recovery 130 / Z4 156~165) — 기존 판정 기준과 동일한 개인 심박 모델로 테스트한다.
+const hrModel = deriveHeartRateModel({ heartRateMode: 'manual', lactateThresholdHr: 165 }, 2026)
 
 describe('inferRunType', () => {
   it('infers Easy + Strides from easy heart rate and repeated pace/cadence spikes', () => {
@@ -14,7 +18,8 @@ describe('inferRunType', () => {
       laps: [],
       fastSegments: [],
       metricSamples,
-      weeklyPattern: ['화요일: Easy + Strides']
+      weeklyPattern: ['화요일: Easy + Strides'],
+      heartRateModel: hrModel
     })).toBe('Easy + Strides')
   })
 
@@ -34,7 +39,8 @@ describe('inferRunType', () => {
       laps: [],
       fastSegments: [],
       metricSamples,
-      weeklyPattern: ['화요일: Easy + Strides']
+      weeklyPattern: ['화요일: Easy + Strides'],
+      heartRateModel: hrModel
     })).toBe('Easy')
   })
 
@@ -57,7 +63,8 @@ describe('inferRunType', () => {
       laps: [],
       fastSegments: [],
       metricSamples,
-      weeklyPattern: ['화요일: Easy + Strides']
+      weeklyPattern: ['화요일: Easy + Strides'],
+      heartRateModel: hrModel
     })).toBe('Easy')
   })
 
@@ -80,7 +87,8 @@ describe('inferRunType', () => {
       laps: [],
       fastSegments: [],
       metricSamples,
-      weeklyPattern: ['화요일: Easy + Strides']
+      weeklyPattern: ['화요일: Easy + Strides'],
+      heartRateModel: hrModel
     })).toBe('Easy')
   })
 
@@ -107,7 +115,8 @@ describe('inferRunType', () => {
       ]),
       fastSegments: [],
       metricSamples: [],
-      weeklyPattern: ['토요일: LSD 또는 Steady Long']
+      weeklyPattern: ['토요일: LSD 또는 Steady Long'],
+      heartRateModel: hrModel
     })).toBe('LSD')
   })
 
@@ -133,7 +142,8 @@ describe('inferRunType', () => {
       ]),
       fastSegments: [],
       metricSamples: [],
-      weeklyPattern: ['토요일: LSD 또는 Steady Long']
+      weeklyPattern: ['토요일: LSD 또는 Steady Long'],
+      heartRateModel: hrModel
     })).toBe('Steady Long')
   })
 })

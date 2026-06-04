@@ -33,7 +33,7 @@ describe('performanceProjection', () => {
       run({ id: 'easy-4', date: '2026-05-05', type: 'Easy', distanceKm: 5.2, durationSec: 2500, avgHeartRate: 134 })
     ]
 
-    const projection = getRaceProjection(runs, goal, new Date('2026-05-27T00:00:00'))
+    const projection = getRaceProjection(runs, goal, new Date('2026-05-27T00:00:00'), null, 0, { easyCeilingBpm: 145, tempoCeilingBpm: 165 })
 
     expect(projection?.factors.map((factor) => factor.key)).toEqual([
       'performance',
@@ -53,7 +53,7 @@ describe('performanceProjection', () => {
       run({ id: 'tempo-only', date: '2026-05-24', type: 'Tempo', distanceKm: 6, durationSec: 2400, avgHeartRate: 158, maxHeartRate: 164, rpe: 7 })
     ]
 
-    const projection = getRaceProjection(runs, goal, new Date('2026-05-27T00:00:00'))
+    const projection = getRaceProjection(runs, goal, new Date('2026-05-27T00:00:00'), null, 0, { easyCeilingBpm: 145, tempoCeilingBpm: 165 })
 
     expect(projection?.readinessScore).toBeLessThan(60)
     expect(projection?.factors.find((factor) => factor.key === 'aerobicBase')?.status).toBe('weak')
