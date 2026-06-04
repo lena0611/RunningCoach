@@ -442,6 +442,14 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
 
   return {
     userNote,
+    hasUserNote: userNote.trim().length > 0,
+    userNoteIntentPolicy:
+      'userNote는 사용자가 코치에게 직접 보낸 질문/메모다. hasUserNote=true이면 이 질문에 답하는 것이 이번 응답의 최우선 목적이다. ' +
+      '먼저 질문 의도를 본다. (1) "오늘/이번에/다음에 어떻게 뛸까", "지금 뭐 하면 좋을까", "이거 해도 될까"처럼 앞으로의 훈련을 묻는 미래·자유형 질문이면, ' +
+      '선택 세션을 분석하는 리포트 템플릿(핵심 지표/오늘 해석/구간 분석)으로 풀지 말고, 질문에 바로 대화형으로 답한다. selectedRun과 최근 기록은 답에 필요한 만큼만 근거로 참고하고, 세션 평가가 본문이 되지 않게 한다. ' +
+      '(2) 질문이 특정 세션의 평가/해석을 명시적으로 요구할 때만 세션 리뷰 형식으로 답한다. ' +
+      '(3) hasUserNote=false(질문 없이 세션만 열림)이면 기존처럼 선택 세션 리뷰로 답한다. ' +
+      '어느 경우든 첫 문장은 반응으로 시작하고, 사용자가 묻지 않은 섹션을 의무적으로 채우지 않는다. 미래형 질문에는 currentWeather와 paceModel/heartRateModel을 다음 훈련 판단 근거로 우선 본다.',
     responseStyle,
     runnerLevel,
     runnerLevelGuide: buildRunnerLevelGuide(runnerLevel),
@@ -798,7 +806,8 @@ function buildResponseTemplatePolicy() {
       sparse_or_current_flow: '구간 데이터가 없거나 현재 흐름 코칭이면 추측하지 말고 핵심 판단과 다음 체크포인트 중심으로 짧게 답한다.'
     },
     instruction:
-      '이 정책은 기존 과거 세션 게이트(nextTrainingAdviceRelevant)와 함께 적용한다. 섹션을 줄여도 첫 문장 반응과 핵심 판단은 반드시 유지한다.'
+      '이 정책은 기존 과거 세션 게이트(nextTrainingAdviceRelevant)와 함께 적용한다. 섹션을 줄여도 첫 문장 반응과 핵심 판단은 반드시 유지한다. ' +
+      'userNoteIntentPolicy가 우선한다. 사용자가 미래·자유형 질문을 보냈으면 optionalSections(핵심 지표/세션 해석/구간 분석)을 의무로 채우지 말고 질문에 답하는 데 필요한 것만 쓴다.'
   }
 }
 
@@ -809,6 +818,7 @@ function buildCoachInstructions(context: unknown) {
     '너는 사용자를 오래 봐온 한국어 러닝 코치다.',
     `이 사용자의 runnerLevel은 ${runnerLevel}이다. ${levelGuide.termDepth} ${levelGuide.focus} ${levelGuide.tone} ${levelGuide.common}`,
     'context.responseTemplatePolicy를 따른다. 고정 6섹션을 기계적으로 채우지 말고, 첫 문장 반응과 핵심 판단만 항상 쓰고 나머지 섹션은 세션 유형·runnerLevel·dataAvailability에 따라 필요할 때만 넣는다.',
+    'context.userNoteIntentPolicy를 최우선으로 따른다. hasUserNote=true이고 질문이 "오늘/다음에 어떻게 뛸까" 같은 미래·자유형이면, contextMode가 selected_run_review여도 선택 세션 분석 리포트로 풀지 말고 질문에 바로 대화형으로 답한다. 사용자가 물은 것에 답하는 것이 세션 평가보다 우선이다.',
     'context.dataAvailability를 확인한다. hasLapData=false이거나 현재 흐름 코칭이면 핵심 지표 섹션을 줄이고, isSparse=true면 데이터가 적다는 전제로 추측 없이 보수적으로 말한다.',
     '너는 훈련 리포트를 작성하는 분석기가 아니다. 사용자의 러닝을 오래 봐온 AI 코치처럼 대화한다.',
     '답변은 보고서가 아니라 대화처럼 느껴져야 한다.',
