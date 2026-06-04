@@ -355,7 +355,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
   const currentMonth = inCurrentMonth(runRows)
   const latestTempo = runRows.find((run) => run.type === 'Tempo') ?? null
   const latestLong = runRows.find((run) => ['LSD', 'Steady Long'].includes(run.type)) ?? null
-  const trainingMemory = memoryRow?.memory ?? null
+  const trainingMemory = sanitizeMemoryHeartRateCeilings(memoryRow?.memory ?? null)
   const goals = getGoals(trainingMemory)
   const activeGoal = getActiveGoal(trainingMemory, goals)
   const performanceProjection = getPerformanceProjection(runRows, activeGoal)
@@ -819,7 +819,7 @@ function buildCoachInstructions(context: unknown) {
     'context.adaptiveTrainingProfile은 사용자 데이터와 대화로 누적된 개인화 레이어다. 문헌 기준선 위에 얹는 보정값이며, 단일 세션을 보고 즉흥적으로 덮어쓰지 않는다.',
     'adaptiveTrainingProfile.trainingPhase는 현재 훈련 블록이다. Base/Build/Threshold/Race Specific/Taper/Recovery 중 하나로 보고, activeGoal까지 남은 기간과 최근 수행 품질에 맞춰 다음 단계 후보를 판단한다.',
     'adaptiveTrainingProfile.progressionCriteria는 승급 조건이다. Easy 심박 안정, Tempo 상한 준수, Long Run 지속성, 부상/회복 게이트 같은 조건을 보고 유지/상향/하향/보류를 결정한다.',
-    'adaptiveTrainingProfile.prescriptionTemplates는 사용자가 Workoutdoors에 옮겨 실행할 수 있는 처방 템플릿이다. 다음 훈련을 제안할 때 이 템플릿을 우선 보고, 조건이 맞지 않으면 새 훈련을 즉흥적으로 만들지 않는다.',
+    'adaptiveTrainingProfile.prescriptionTemplates는 사용자가 Workoutdoors에 옮겨 실행할 수 있는 처방 템플릿이다. 다음 훈련을 제안할 때 이 템플릿의 구조(세션 유형, 패턴, 진행 조건)를 우선 보고, 조건이 맞지 않으면 새 훈련을 즉흥적으로 만들지 않는다. 단, 심박 상한 숫자는 템플릿/weeklyPattern/progressionCriteria 텍스트에 적힌 값이 아니라 항상 heartRateModel(tempoCeilingBpm/easyCeilingBpm/recoveryCeilingBpm)에서 가져온다. 저장 텍스트에 과거 숫자가 남아 있어도 무시하고 heartRateModel 값으로 말하고 처방한다. heartRateModel.source가 insufficient이면 심박 상한을 말하지 말고 페이스/RPE로 처방한다.',
     '5km TT, 10km TT, 진짜 인터벌/크루즈 인터벌 같은 상위 품질 훈련은 progressionCriteria가 ready이고 부상/회복 게이트가 막히지 않을 때만 제안한다.',
     '훈련 단계, 승급 조건, 처방 템플릿을 바꿔야 하면 trainingMemoryPatch.adaptiveTrainingProfile.trainingPhase/progressionCriteria/prescriptionTemplates에 전체 구조를 반환한다. 단일 세션만 보고 바꾸지 말고 반복 근거가 있을 때만 한다.',
     '알고리즘이 스스로 더 나아진다는 뜻은 소스 코드가 바뀐다는 뜻이 아니다. 반복되는 수행 패턴, 처방 준수율, 사용자 피드백을 trainingMemory.adaptiveTrainingProfile에 저장해 다음 판단에 반영한다는 뜻이다.',
@@ -3391,6 +3391,65 @@ type CoachHeartRateModel = {
   observedMaxHr: number | null
   restingHeartRate: number | null
   source: 'lthr' | 'measured_max' | 'observed_data' | 'age_estimated' | 'age_data_corrected' | 'insufficient'
+}
+
+// 처방/루틴 텍스트에 과거 개발자 상수로 박힌 심박 상한(회복 130 / 이지 145 / 템포 165·168)을 일반 표현으로 치환한다.
+// (웹 src/entities/training-memory/model.ts stripStaleHeartRateCeilings와 동일 규칙) 실제 숫자는 heartRateModel에서 가져온다.
+const STALE_COACH_HR_CEILINGS = new Map<string, string>([
+  ['130', '회복 상한'],
+  ['145', '이지 상한'],
+  ['165', '템포 상한'],
+  ['168', '템포 상한']
+])
+function stripStaleHrCeilings(text: unknown): string {
+  if (typeof text !== 'string' || !/\d/.test(text)) return typeof text === 'string' ? text : ''
+  return text
+    .replace(/(\d{2,3})\s*bpm/gi, (match, num: string) => STALE_COACH_HR_CEILINGS.get(num) ?? match)
+    .replace(/((?:최대\s*)?심박|max\s*hr)\s*(\d{2,3})/gi, (match, keyword: string, num: string) =>
+      STALE_COACH_HR_CEILINGS.has(num) ? `${keyword} ${STALE_COACH_HR_CEILINGS.get(num)}` : match)
+    .replace(/(\d{2,3})(\s*(?:이하|초과|상한)|\s*를?\s*넘기?지?)/g, (match, num: string, rest: string) =>
+      STALE_COACH_HR_CEILINGS.has(num) ? `${STALE_COACH_HR_CEILINGS.get(num)}${rest}` : match)
+}
+function stripStaleHrList(value: unknown): unknown {
+  return Array.isArray(value) ? value.map((item) => (typeof item === 'string' ? stripStaleHrCeilings(item) : item)) : value
+}
+// 컨텍스트로 AI에 보내기 전, 저장된 처방/루틴 텍스트의 stale 심박 숫자를 제거해 165 잔재가 코칭에 재등장하지 않게 한다.
+function sanitizeMemoryHeartRateCeilings(memory: unknown): unknown {
+  if (!memory || typeof memory !== 'object') return memory
+  const mem = memory as Record<string, unknown>
+  if (Array.isArray(mem.weeklyPattern)) mem.weeklyPattern = stripStaleHrList(mem.weeklyPattern)
+  const atp = mem.adaptiveTrainingProfile as Record<string, unknown> | undefined
+  if (atp && typeof atp === 'object') {
+    if (Array.isArray(atp.prescriptionTemplates)) {
+      atp.prescriptionTemplates = atp.prescriptionTemplates.map((tpl) => {
+        if (!tpl || typeof tpl !== 'object') return tpl
+        const t = tpl as Record<string, unknown>
+        return {
+          ...t,
+          purpose: stripStaleHrCeilings(t.purpose),
+          workout: stripStaleHrList(t.workout),
+          avoidWhen: stripStaleHrList(t.avoidWhen),
+          progressionTrigger: stripStaleHrCeilings(t.progressionTrigger)
+        }
+      })
+    }
+    if (Array.isArray(atp.progressionCriteria)) {
+      atp.progressionCriteria = atp.progressionCriteria.map((crit) => {
+        if (!crit || typeof crit !== 'object') return crit
+        const c = crit as Record<string, unknown>
+        return { ...c, evidence: stripStaleHrCeilings(c.evidence), action: stripStaleHrCeilings(c.action) }
+      })
+    }
+    if (Array.isArray(atp.sessionGuides)) {
+      atp.sessionGuides = atp.sessionGuides.map((g) => {
+        if (!g || typeof g !== 'object') return g
+        const s = g as Record<string, unknown>
+        return { ...s, boundary: stripStaleHrCeilings(s.boundary), evidence: stripStaleHrCeilings(s.evidence) }
+      })
+    }
+    if (Array.isArray(atp.compliancePatterns)) atp.compliancePatterns = stripStaleHrList(atp.compliancePatterns)
+  }
+  return mem
 }
 
 function normalizeCoachBpm(value: unknown): number | null {
