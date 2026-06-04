@@ -9,6 +9,7 @@ import { getActiveGoal, getActiveInjuryItem, type PersonalBest, type TrainingMem
 import { syncNativeNotifications } from '@/features/sync-native-notifications/notificationBridge'
 import { formatDateWithWeekday } from '@/shared/lib/format'
 import { RUNNER_LEVEL_LABEL, resolveRunnerLevel } from '@/shared/lib/runnerLevel'
+import { deriveHeartRateModel } from '@/shared/lib/heartRateZones'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import ClearableField from '@/shared/ui/ClearableField.vue'
@@ -97,6 +98,16 @@ const runnerLevelDisplay = computed(() => {
   const label = RUNNER_LEVEL_LABEL[derived.level]
   return derived.source === 'manual' ? `${label} (직접 설정)` : `${label} (자동)`
 })
+const HEART_RATE_SOURCE_LABEL: Record<string, string> = {
+  lthr: '역치심박 기반',
+  measured_max: '측정 최대심박 기반',
+  age_estimated: '나이 추정',
+  default: '기본값'
+}
+const tempoCeilingDisplay = computed(() => {
+  const model = deriveHeartRateModel(memoryStore.memory.athleteProfile)
+  return `${model.tempoCeilingBpm}bpm (${HEART_RATE_SOURCE_LABEL[model.source] ?? model.source})`
+})
 const birthYearValue = computed({
   get: () => draft.athleteProfile.birthYear === null ? '' : String(draft.athleteProfile.birthYear),
   set: (value: string | string[]) => {
@@ -116,6 +127,27 @@ const weeklyRunDaysTargetValue = computed({
   set: (value: string | string[]) => {
     if (Array.isArray(value)) return
     draft.athleteProfile.weeklyRunDaysTarget = value === '' ? null : Number(value)
+  }
+})
+const maxHeartRateValue = computed({
+  get: () => draft.athleteProfile.maxHeartRate === null ? '' : String(draft.athleteProfile.maxHeartRate),
+  set: (value: string | string[]) => {
+    if (Array.isArray(value)) return
+    draft.athleteProfile.maxHeartRate = value === '' ? null : Number(value)
+  }
+})
+const restingHeartRateValue = computed({
+  get: () => draft.athleteProfile.restingHeartRate === null ? '' : String(draft.athleteProfile.restingHeartRate),
+  set: (value: string | string[]) => {
+    if (Array.isArray(value)) return
+    draft.athleteProfile.restingHeartRate = value === '' ? null : Number(value)
+  }
+})
+const lactateThresholdHrValue = computed({
+  get: () => draft.athleteProfile.lactateThresholdHr === null ? '' : String(draft.athleteProfile.lactateThresholdHr),
+  set: (value: string | string[]) => {
+    if (Array.isArray(value)) return
+    draft.athleteProfile.lactateThresholdHr = value === '' ? null : Number(value)
   }
 })
 
@@ -325,6 +357,10 @@ function goDashboard() {
               <dd>{{ memoryStore.memory.athleteProfile.preferredLongRunDay || '미입력' }}</dd>
             </div>
             <div>
+              <dt>템포 상한</dt>
+              <dd>{{ tempoCeilingDisplay }}</dd>
+            </div>
+            <div>
               <dt>부상관리</dt>
               <dd>{{ activeInjuryTitle }}</dd>
             </div>
@@ -358,6 +394,21 @@ function goDashboard() {
             <BottomSheetSelect v-model="draft.athleteProfile.runnerLevel" label="러너 레벨" :options="runnerLevelOptions" />
             <BottomSheetSelect v-model="weeklyRunDaysTargetValue" label="목표 주간 러닝 횟수" :options="weeklyRunDaysTargetOptions" />
             <BottomSheetSelect v-model="draft.athleteProfile.preferredLongRunDay" label="선호 롱런 요일" :options="weekdayOptions" />
+            <label>
+              역치심박 LTHR
+              <ClearableField v-model="lactateThresholdHrValue" type="number" number inputmode="numeric" placeholder="예: 165" />
+            </label>
+            <label>
+              최대심박(측정)
+              <ClearableField v-model="maxHeartRateValue" type="number" number inputmode="numeric" placeholder="측정값" />
+            </label>
+            <label>
+              안정심박
+              <ClearableField v-model="restingHeartRateValue" type="number" number inputmode="numeric" placeholder="아침 안정 시" />
+            </label>
+            <p class="full hr-hint">
+              심박존·템포 상한은 LTHR &gt; 측정 최대심박 &gt; 나이 추정 순으로 개인화합니다. 미입력 시 기본값을 씁니다. LTHR은 30분 단독 전력주 마지막 20분 평균심박으로 추정합니다.
+            </p>
             <label class="full">
               거리별 PB
               <ClearableField

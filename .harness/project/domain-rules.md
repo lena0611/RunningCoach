@@ -101,6 +101,7 @@
 - AI가 제안한 세션은 사용자가 믿고 따른 훈련 처방이다. 이후 저장된 `RunLog`는 “사용자가 임의로 한 운동”이 아니라 직전 목표/스케줄/코칭 처방을 실행한 결과일 수 있으므로, 코칭은 해당 세션이 계획 의도에 맞게 수행됐는지 먼저 평가하고 다음 처방을 조정한다.
 - 세션별 처방 숫자는 영구 고정값이 아니다. Easy 145bpm, Tempo max 165bpm, Easy + Strides 구조는 현재 사용자 확인 기준이며, AI 코칭은 누적 수행 품질과 회복 반응을 보고 사용자가 Workoutdoors에 바로 세팅할 새 기준을 주도적으로 제안할 수 있다.
 - 심박 존은 개인 최대심박/역치심박이 입력되기 전까지 현재 사용자 확인 기준을 기본값으로 쓴다. Z0 비훈련/매우 낮음은 99bpm 이하, Z1 회복은 100~130bpm, Z2 이지는 131~145bpm, Z3 이지 상단/스테디 초입은 146~155bpm, Z4 템포는 156~165bpm, Z5 고강도는 166bpm 이상이다. 개인 max HR, threshold HR, lactate threshold 같은 기준값이 생기면 이 기본값보다 개인화 존을 우선한다.
+- 심박존·템포/이지/회복 상한은 `src/shared/lib/heartRateZones.ts`의 `deriveHeartRateModel`(웹)과 `supabase/functions/coach-run/index.ts`의 `deriveCoachHeartRateModel`(Edge)에서 **단일 공식으로 파생**한다. 우선순위는 `AthleteProfile.lactateThresholdHr`(LTHR) > 측정 `maxHeartRate` > Tanaka(208−0.7×나이) 추정 > 상수 fallback이다. anchor=LTHR로 보고, 측정/추정 HRmax에서는 LT≈0.9×HRmax로 환산한다. 존 경계는 anchor를 기준 상수(99/130/145/155/165 대비 165)의 비율로 만들어 anchor=165면 기존 상수와 정확히 일치한다(미입력 회귀 0). Tanaka 추정은 단정 근거가 아니라 보수 신호이며, 코칭은 source가 `age_estimated`면 측정/역치 입력을 권한다. 안정심박은 회복 맥락으로 보존하되(추후 HRR 확장 여지) 현재 anchor 산출에는 직접 쓰지 않는다. 자동 RunType 판정의 존 분류는 과거 판정 안정성을 위해 기본 상수 존을 유지한다.
 - 자동 유형 판정에서 Easy는 “대부분 Z1~Z2 또는 Z3 초입에 머문 낮은 심박”을 핵심 근거로 본다. 평균 페이스가 빠르거나 케이던스가 튀어도 심박이 안정적이면 Tempo로 단정하지 않는다.
 - `Easy + Strides` 판정에서 케이던스 급상승만으로 스트라이드라고 보지 않는다. 케이던스는 보조 신호이며, 페이스 급상승 또는 route/FIT 기반 짧은 고속 구간이 반복되어야 한다.
 - 현재 Easy 처방은 페이스보다 max/lap 심박 145bpm 이하 유지가 핵심이다. 평균심박만 낮다고 Easy 처방을 통과한 것으로 단정하지 않는다.

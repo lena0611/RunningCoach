@@ -14,6 +14,9 @@ function profile(overrides: Partial<AthleteProfile> = {}): AthleteProfile {
     preferredLongRunDay: '토요일',
     personalBests: [],
     runnerLevel: 'auto',
+    maxHeartRate: null,
+    restingHeartRate: null,
+    lactateThresholdHr: null,
     ...overrides
   }
 }
