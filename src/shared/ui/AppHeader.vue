@@ -311,7 +311,8 @@ function goDashboard() {
 }
 
 function goGlossary() {
-  closeDrawer()
+  // 계정 정보 드로어를 닫지 않고 그 위에 스택을 띄운다(--z-stack > 드로어).
+  // 파생 스택의 뒤로(←)가 계정 정보로 복귀하도록 부모 surface를 유지한다.
   glossaryOpen.value = true
 }
 </script>
