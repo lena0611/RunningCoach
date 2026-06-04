@@ -17,6 +17,7 @@ import {
 import type { TrainingKnowledgeCatalog, TrainingKnowledgeRequest, TrainingMethod } from '@/entities/training-knowledge/model'
 import { formatDateWithWeekday, formatDuration } from '@/shared/lib/format'
 import { RUNNER_LEVEL_LABEL, resolveRunnerLevel } from '@/shared/lib/runnerLevel'
+import { deriveHeartRateModel } from '@/shared/lib/heartRateZones'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 import { createTrainingKnowledgeRequest, fetchTrainingKnowledgeCatalog } from '@/shared/api/trainingKnowledgeRepository'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
@@ -177,6 +178,16 @@ const runnerLevelFact = computed(() => {
   const label = RUNNER_LEVEL_LABEL[derived.level]
   return derived.source === 'manual' ? `${label} (직접 설정)` : `${label} (자동)`
 })
+const HEART_RATE_SOURCE_LABEL: Record<string, string> = {
+  lthr: '역치심박 기반',
+  measured_max: '측정 최대심박 기반',
+  age_estimated: '나이 추정',
+  default: '기본값'
+}
+const heartRateModelFact = computed(() => {
+  const model = deriveHeartRateModel(draft.athleteProfile)
+  return `${model.tempoCeilingBpm}bpm (${HEART_RATE_SOURCE_LABEL[model.source] ?? model.source})`
+})
 const profileFacts = computed(() => [
   { label: '러너', value: memoryStore.selectedUser.name || '기본 사용자' },
   { label: '출생연도', value: draft.athleteProfile.birthYear ? `${draft.athleteProfile.birthYear}` : '미입력' },
@@ -184,7 +195,8 @@ const profileFacts = computed(() => [
   { label: '러닝 경력', value: formatExperience(draft.athleteProfile.runningExperienceMonths) },
   { label: '러너 레벨', value: runnerLevelFact.value },
   { label: '주간 목표', value: draft.athleteProfile.weeklyRunDaysTarget ? `${draft.athleteProfile.weeklyRunDaysTarget}회` : '미입력' },
-  { label: '롱런 요일', value: draft.athleteProfile.preferredLongRunDay || '미입력' }
+  { label: '롱런 요일', value: draft.athleteProfile.preferredLongRunDay || '미입력' },
+  { label: '템포 상한', value: heartRateModelFact.value }
 ])
 const personalBestPreview = computed(() => draft.athleteProfile.personalBests
   .slice(0, 4)

@@ -13,6 +13,7 @@ import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
 import { getAgeLoadWeight, getEasyRatio, getFatigueWarning, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, sumDistance } from '@/shared/lib/runStats'
 import { formatDateWithWeekday, formatDuration } from '@/shared/lib/format'
 import { getRaceProjection } from '@/shared/lib/performanceProjection'
+import { deriveHeartRateModel } from '@/shared/lib/heartRateZones'
 import { formatWeatherNumber, weatherSymbolToEmoji } from '@/shared/lib/weather'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import MetricGrid from '@/shared/ui/MetricGrid.vue'
@@ -57,7 +58,13 @@ const nextSession = computed(() => getNextSessionRecommendation(memoryStore.memo
 const activeGoal = computed(() => getActiveGoal(memoryStore.memory))
 const activeInjury = computed(() => getActiveInjuryItem(memoryStore.memory))
 const ageLoadWeight = computed(() => getAgeLoadWeight(memoryStore.memory.athleteProfile.birthYear, today.value))
-const raceProjection = computed(() => getRaceProjection(runs.value, activeGoal.value, today.value, activeInjury.value, ageLoadWeight.value))
+const heartRateModel = computed(() => deriveHeartRateModel(memoryStore.memory.athleteProfile, today.value.getFullYear()))
+const raceProjection = computed(() =>
+  getRaceProjection(runs.value, activeGoal.value, today.value, activeInjury.value, ageLoadWeight.value, {
+    easyCeilingBpm: heartRateModel.value.easyCeilingBpm,
+    tempoCeilingBpm: heartRateModel.value.tempoCeilingBpm
+  })
+)
 
 watch(
   () => route.path,
