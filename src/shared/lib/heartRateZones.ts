@@ -30,6 +30,16 @@ const ZONE_TOP_FRACTION_OF_LTHR: Record<'Z0' | 'Z1' | 'Z2' | 'Z3' | 'Z4', number
 
 // 역치심박(LTHR)을 최대심박의 비율로 추정하는 계수. LT는 보통 HRmax의 88~92% 구간이라 중앙값 0.9를 쓴다.
 const LT_FRACTION_OF_MAX = 0.9
+// 안정심박이 있을 때 Karvonen(HRR) 기반 역치 추정 계수. 역치/템포는 보통 HRR의 80~90%라 중앙값 0.85를 쓴다.
+const LT_FRACTION_OF_HRR = 0.85
+
+// 최대심박에서 역치심박(LTHR)을 추정한다. 안정심박이 있으면 Karvonen(HRR)으로, 없으면 %HRmax로 환산한다.
+function ltAnchorFromMax(maxHr: number, restingHr: number | null): number {
+  if (restingHr !== null && restingHr < maxHr) {
+    return Math.round(LT_FRACTION_OF_HRR * (maxHr - restingHr) + restingHr)
+  }
+  return Math.round(maxHr * LT_FRACTION_OF_MAX)
+}
 // 누적 RunLog에서 관측 최대심박을 추정할 때 필요한 최소 표본 수와 관측 윈도(일).
 const OBSERVED_MIN_SAMPLES = 3
 const OBSERVED_WINDOW_DAYS = 180
@@ -156,7 +166,7 @@ export function deriveRecommendedHeartRateModel(
 
   if (ageMax !== null && observedMaxHr !== null) {
     const corrected = Math.max(ageMax, observedMaxHr)
-    return buildModel(Math.round(corrected * LT_FRACTION_OF_MAX), {
+    return buildModel(ltAnchorFromMax(corrected, restingHeartRate), {
       estimatedMaxHr: corrected,
       observedMaxHr,
       restingHeartRate,
@@ -166,12 +176,12 @@ export function deriveRecommendedHeartRateModel(
     })
   }
   if (ageMax !== null) {
-    return buildModel(Math.round(ageMax * LT_FRACTION_OF_MAX), {
+    return buildModel(ltAnchorFromMax(ageMax, restingHeartRate), {
       estimatedMaxHr: ageMax, observedMaxHr: null, restingHeartRate, source: 'age_estimated', isEstimated: true, isUserOverride: false
     })
   }
   if (observedMaxHr !== null) {
-    return buildModel(Math.round(observedMaxHr * LT_FRACTION_OF_MAX), {
+    return buildModel(ltAnchorFromMax(observedMaxHr, restingHeartRate), {
       estimatedMaxHr: observedMaxHr, observedMaxHr, restingHeartRate, source: 'observed_data', isEstimated: true, isUserOverride: false
     })
   }
@@ -189,7 +199,7 @@ export function deriveManualHeartRateModel(profile: HeartRatePersonalInput | nul
     return buildModel(lthr, { estimatedMaxHr: measuredMax, observedMaxHr: null, restingHeartRate, source: 'lthr', isEstimated: false, isUserOverride: true })
   }
   if (measuredMax !== null) {
-    return buildModel(Math.round(measuredMax * LT_FRACTION_OF_MAX), {
+    return buildModel(ltAnchorFromMax(measuredMax, restingHeartRate), {
       estimatedMaxHr: measuredMax, observedMaxHr: null, restingHeartRate, source: 'measured_max', isEstimated: false, isUserOverride: true
     })
   }

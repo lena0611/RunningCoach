@@ -92,6 +92,31 @@ describe('deriveRecommendedHeartRateModel', () => {
     expect(model.easyCeilingBpm).toBeNull()
     expect(model.zones).toEqual([])
   })
+
+  it('안정심박이 있으면 Karvonen(HRR)으로 역치를 환산한다', () => {
+    // age 50 → Tanaka 173, rest 50 → 0.85×(173-50)+50 = 154.55 → 155
+    const model = deriveRecommendedHeartRateModel({ birthYear: 1976, restingHeartRate: 50 }, 2026)
+    expect(model.tempoCeilingBpm).toBe(Math.round(0.85 * (173 - 50) + 50)) // 155
+  })
+
+  it('안정심박이 없으면 %HRmax(0.9)로 환산한다(현행 유지)', () => {
+    const model = deriveRecommendedHeartRateModel({ birthYear: 1976 }, 2026)
+    expect(model.tempoCeilingBpm).toBe(Math.round(173 * 0.9)) // 156
+  })
+})
+
+describe('Karvonen(HRR) — 직접입력/우선순위', () => {
+  it('manual 측정 HRmax + 안정심박이면 Karvonen으로 환산', () => {
+    const model = deriveHeartRateModel({ heartRateMode: 'manual', maxHeartRate: 190, restingHeartRate: 50 }, 2026)
+    expect(model.source).toBe('measured_max')
+    expect(model.tempoCeilingBpm).toBe(Math.round(0.85 * (190 - 50) + 50)) // 169
+  })
+
+  it('LTHR이 있으면 안정심박과 무관하게 LTHR을 직접 anchor로 쓴다', () => {
+    const model = deriveHeartRateModel({ heartRateMode: 'manual', lactateThresholdHr: 168, restingHeartRate: 50 }, 2026)
+    expect(model.source).toBe('lthr')
+    expect(model.tempoCeilingBpm).toBe(168)
+  })
 })
 
 describe('deriveHeartRateModel (auto/manual 토글)', () => {

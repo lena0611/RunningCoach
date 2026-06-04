@@ -107,7 +107,8 @@
 - 우선순위는 `AthleteProfile.heartRateMode`에 따른다. `manual`이면 LTHR > 측정 `maxHeartRate`(직접 입력), `auto`(기본)면 **Tanaka(208−0.7×나이) 나이 추정 + 누적 RunLog 관측 최대심박 보정**을 쓴다. 보정은 `보정 maxHR = max(Tanaka, 관측 max)`로 올리는 방향으로만 적용한다(실제 도달 심박은 진짜 max의 하한). LT≈0.9×maxHR, 템포 상한=anchor(=LT). 존 경계는 anchor의 %LTHR 비율(Z1 0.79·Z2 0.88·Z3 0.94·Z4 1.0)로 만든다. 36세는 공식상 anchor≈165가 자연 산출된다(상수가 아님).
 - LTHR·측정 HRmax·나이·HR 기록이 **모두 없으면 상한은 null(미설정)**이다. 165 등 상수로 fallback하지 않고, 코칭/추세/목표예상은 심박 상한 없이 페이스·RPE·드리프트로 평가하며 UI는 나이/심박 입력을 권한다.
 - 앱 추천값과 사용자 직접입력값은 분리 관리한다(러너레벨 auto/manual과 동일 패턴). `heartRateMode`로 추천(자동)과 직접 입력을 토글하고, 직접 입력값은 보존돼 언제든 추천으로 되돌릴 수 있다. UI(`AppHeader`/`MemoryPage`)는 현재 적용값·추천값·source와 함께 산출식과 외부 근거(Tanaka, Friel LTHR, ASICS)를 보여줘 신뢰를 준다.
-- Tanaka 나이 추정과 관측 보정은 단정 근거가 아니라 보수 신호이며, 정확히 하려면 30분 LTHR 테스트나 측정 HRmax 입력을 권한다. 레벨·나이로 안전 상한을 낮추지 않는다. 안정심박은 코칭/회복 맥락으로 보존하되(추후 HRR 확장 여지) anchor 산출에는 직접 쓰지 않는다.
+- Tanaka 나이 추정과 관측 보정은 단정 근거가 아니라 보수 신호이며, 정확히 하려면 30분 LTHR 테스트나 측정 HRmax 입력을 권한다. 레벨·나이로 안전 상한을 낮추지 않는다.
+- 안정심박이 입력돼 있으면 최대심박→역치 환산에 Karvonen(HRR)을 쓴다: 역치 ≈ 0.85×(HRmax−HRrest)+HRrest (역치/템포 ~80~90% HRR 중앙값). 안정심박이 없으면 역치 ≈ 0.9×HRmax(%HRmax)로 환산한다. LTHR이 직접 입력되면 안정심박과 무관하게 LTHR을 anchor로 쓴다. 웹 `ltAnchorFromMax`와 coach-run `coachLtAnchorFromMax`가 동일 공식이다.
 - 자동 RunType 판정(`inferRunType`)도 상수 없이 주입된 개인 모델의 존/상한을 쓴다. 모델 상한이 null이면 HR 기반 분기를 건너뛰고 페이스/거리/스트라이드 패턴으로만 판정한다. 모델은 import 시 store(`healthKitSyncStore`/`UploadRunPage`)에서 `athleteProfile`+관측으로 만들어 extractor에 주입한다.
 - 자동 유형 판정에서 Easy는 “대부분 Z1~Z2 또는 Z3 초입에 머문 낮은 심박”을 핵심 근거로 본다. 평균 페이스가 빠르거나 케이던스가 튀어도 심박이 안정적이면 Tempo로 단정하지 않는다.
 - `Easy + Strides` 판정에서 케이던스 급상승만으로 스트라이드라고 보지 않는다. 케이던스는 보조 신호이며, 페이스 급상승 또는 route/FIT 기반 짧은 고속 구간이 반복되어야 한다.
