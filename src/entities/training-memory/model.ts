@@ -491,6 +491,7 @@ export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null |
 
   return {
     ...merged,
+    weeklyPattern: stripStaleHeartRateCeilingsList(merged.weeklyPattern ?? []),
     goals,
     activeGoalId,
     injuryItems,
@@ -505,6 +506,31 @@ function normalizeRunnerLevelSetting(value: unknown): RunnerLevelSetting {
 
 function normalizeHeartRateMode(value: unknown): 'auto' | 'manual' {
   return value === 'manual' ? 'manual' : 'auto'
+}
+
+// 처방/루틴 텍스트에 과거 개발자 상수로 박힌 심박 상한 숫자(회복 130 / 이지 145 / 템포 165·168)를 일반 표현으로 치환한다.
+// 처방·루틴은 항상 최신본만 저장되므로(이력 없음) 안전하게 정규화한다. 실제 숫자는 표시/코칭 시 개인 heartRateModel에서 가져온다.
+const STALE_HEART_RATE_CEILINGS = new Map<string, string>([
+  ['130', '회복 상한'],
+  ['145', '이지 상한'],
+  ['165', '템포 상한'],
+  ['168', '템포 상한']
+])
+export function stripStaleHeartRateCeilings(text: string): string {
+  if (!text || !/\d/.test(text)) return text
+  return text
+    // "165bpm", "최대 심박 145bpm" 등 → bpm 동반 숫자
+    .replace(/(\d{2,3})\s*bpm/gi, (match, num: string) => STALE_HEART_RATE_CEILINGS.get(num) ?? match)
+    // "심박 165", "최대 심박 145", "max HR 130"
+    .replace(/((?:최대\s*)?심박|max\s*hr)\s*(\d{2,3})/gi, (match, keyword: string, num: string) =>
+      STALE_HEART_RATE_CEILINGS.has(num) ? `${keyword} ${STALE_HEART_RATE_CEILINGS.get(num)}` : match)
+    // "165 이하", "165 초과", "165 상한", "165를 넘", "165 넘기지"
+    .replace(/(\d{2,3})(\s*(?:이하|초과|상한)|\s*를?\s*넘기?지?)/g, (match, num: string, rest: string) =>
+      STALE_HEART_RATE_CEILINGS.has(num) ? `${STALE_HEART_RATE_CEILINGS.get(num)}${rest}` : match)
+}
+
+function stripStaleHeartRateCeilingsList(items: string[]): string[] {
+  return items.map((item) => stripStaleHeartRateCeilings(item))
 }
 
 // 개인 심박 입력은 30~240bpm 범위의 유한한 양수만 허용하고, 그 외(빈 문자열/0/비정상값)는 미입력(null)으로 본다.
@@ -672,7 +698,7 @@ function normalizeAdaptiveTrainingProfile(value: unknown): AdaptiveTrainingProfi
     progressionCriteria: normalizeProgressionCriteria(raw.progressionCriteria),
     prescriptionTemplates: normalizePrescriptionTemplates(raw.prescriptionTemplates),
     compliancePatterns: Array.isArray(raw.compliancePatterns)
-      ? raw.compliancePatterns.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()).slice(0, 20)
+      ? raw.compliancePatterns.filter((item) => typeof item === 'string' && item.trim()).map((item) => stripStaleHeartRateCeilings(item.trim())).slice(0, 20)
       : [],
     sessionGuides
   }
@@ -715,8 +741,8 @@ function normalizeProgressionCriterion(value: Partial<ProgressionCriterion>, ind
     id: typeof value.id === 'string' && value.id.trim() ? value.id.trim() : `criterion-${index + 1}`,
     label,
     status: normalizeProgressionStatus(value.status),
-    evidence,
-    action
+    evidence: stripStaleHeartRateCeilings(evidence),
+    action: stripStaleHeartRateCeilings(action)
   }
 }
 
@@ -743,11 +769,11 @@ function normalizePrescriptionTemplate(value: Partial<PrescriptionTemplate>, ind
     name,
     phase: normalizePrescriptionTemplatePhase(value.phase),
     sessionType,
-    purpose,
-    workout: normalizeStringArray(value.workout).slice(0, 8),
+    purpose: stripStaleHeartRateCeilings(purpose),
+    workout: stripStaleHeartRateCeilingsList(normalizeStringArray(value.workout).slice(0, 8)),
     useWhen: normalizeStringArray(value.useWhen).slice(0, 8),
-    avoidWhen: normalizeStringArray(value.avoidWhen).slice(0, 8),
-    progressionTrigger: typeof value.progressionTrigger === 'string' ? value.progressionTrigger.trim() : ''
+    avoidWhen: stripStaleHeartRateCeilingsList(normalizeStringArray(value.avoidWhen).slice(0, 8)),
+    progressionTrigger: stripStaleHeartRateCeilings(typeof value.progressionTrigger === 'string' ? value.progressionTrigger.trim() : '')
   }
 }
 
@@ -762,10 +788,10 @@ function normalizeAdaptiveSessionGuide(value: Partial<AdaptiveSessionGuide>): Ad
   if (!type || !boundary || !evidence) return null
   return {
     type,
-    boundary,
+    boundary: stripStaleHeartRateCeilings(boundary),
     adjustment: normalizeAdaptiveAdjustment(value.adjustment),
-    evidence,
-    nextCheck: typeof value.nextCheck === 'string' ? value.nextCheck.trim() : ''
+    evidence: stripStaleHeartRateCeilings(evidence),
+    nextCheck: stripStaleHeartRateCeilings(typeof value.nextCheck === 'string' ? value.nextCheck.trim() : '')
   }
 }
 
