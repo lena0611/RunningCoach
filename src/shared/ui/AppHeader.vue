@@ -3,10 +3,12 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/app/stores/authStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
+import { useRunStore } from '@/app/stores/runStore'
 import { useSettingsStore, type ManualThemeMode, type NotificationSettings } from '@/app/stores/settingsStore'
 import { getActiveGoal, getActiveInjuryItem, type PersonalBest, type TrainingMemory } from '@/entities/training-memory/model'
 import { syncNativeNotifications } from '@/features/sync-native-notifications/notificationBridge'
 import { formatDateWithWeekday } from '@/shared/lib/format'
+import { RUNNER_LEVEL_LABEL, resolveRunnerLevel } from '@/shared/lib/runnerLevel'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import ClearableField from '@/shared/ui/ClearableField.vue'
@@ -17,6 +19,7 @@ const emit = defineEmits<{ signOut: [] }>()
 
 const authStore = useAuthStore()
 const memoryStore = useMemoryStore()
+const runStore = useRunStore()
 const settingsStore = useSettingsStore()
 const router = useRouter()
 const drawerOpen = ref(false)
@@ -58,6 +61,12 @@ const weeklyRunDaysTargetOptions = [
     return { value: String(count), label: `${count}회` }
   })
 ]
+const runnerLevelOptions = [
+  { value: 'auto', label: '자동 판정', description: '경력·볼륨·PB로 코치가 자동 판정합니다.' },
+  { value: 'beginner', label: '초급' },
+  { value: 'intermediate', label: '중급' },
+  { value: 'advanced', label: '고급' }
+]
 const notificationRows = [
   {
     key: 'workoutMorning',
@@ -83,6 +92,11 @@ const accountLabel = computed(() => {
 const accountEmail = computed(() => authStore.user?.email || '로그인 정보 없음')
 const activeGoalTitle = computed(() => getActiveGoal(memoryStore.memory).title)
 const activeInjuryTitle = computed(() => getActiveInjuryItem(memoryStore.memory)?.title ?? '관리 항목 없음')
+const runnerLevelDisplay = computed(() => {
+  const derived = resolveRunnerLevel(memoryStore.memory.athleteProfile, runStore.sortedRuns)
+  const label = RUNNER_LEVEL_LABEL[derived.level]
+  return derived.source === 'manual' ? `${label} (직접 설정)` : `${label} (자동)`
+})
 const birthYearValue = computed({
   get: () => draft.athleteProfile.birthYear === null ? '' : String(draft.athleteProfile.birthYear),
   set: (value: string | string[]) => {
@@ -303,6 +317,10 @@ function goDashboard() {
               <dd>{{ formatExperience(memoryStore.memory.athleteProfile.runningExperienceMonths) }}</dd>
             </div>
             <div>
+              <dt>러너 레벨</dt>
+              <dd>{{ runnerLevelDisplay }}</dd>
+            </div>
+            <div>
               <dt>선호 롱런</dt>
               <dd>{{ memoryStore.memory.athleteProfile.preferredLongRunDay || '미입력' }}</dd>
             </div>
@@ -337,6 +355,7 @@ function goDashboard() {
             <BottomSheetSelect v-model="birthYearValue" label="출생연도" :options="birthYearOptions" />
             <BottomSheetSelect v-model="draft.athleteProfile.sex" label="성별" :options="sexOptions" />
             <BottomSheetSelect v-model="runningExperienceValue" label="러닝 경력" :options="runningExperienceOptions" />
+            <BottomSheetSelect v-model="draft.athleteProfile.runnerLevel" label="러너 레벨" :options="runnerLevelOptions" />
             <BottomSheetSelect v-model="weeklyRunDaysTargetValue" label="목표 주간 러닝 횟수" :options="weeklyRunDaysTargetOptions" />
             <BottomSheetSelect v-model="draft.athleteProfile.preferredLongRunDay" label="선호 롱런 요일" :options="weekdayOptions" />
             <label class="full">

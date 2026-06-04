@@ -114,6 +114,9 @@ export type TrainingInjuryCheckIn = {
 export type TrainingStrengthPlanDetail = InjuryStrengthPlanDetail
 export type TrainingStrengthPlanSource = InjuryStrengthPlanSource
 
+export type RunnerLevel = 'beginner' | 'intermediate' | 'advanced'
+export type RunnerLevelSetting = 'auto' | RunnerLevel
+
 export type AthleteProfile = {
   birthYear: number | null
   sex: 'male' | 'female' | 'other' | 'unknown'
@@ -121,6 +124,7 @@ export type AthleteProfile = {
   weeklyRunDaysTarget: number | null
   preferredLongRunDay: string
   personalBests: PersonalBest[]
+  runnerLevel: RunnerLevelSetting
 }
 
 export type PersonalBest = {
@@ -365,7 +369,8 @@ export const initialTrainingMemory: TrainingMemory = {
     runningExperienceMonths: null,
     weeklyRunDaysTarget: 4,
     preferredLongRunDay: '토요일',
-    personalBests: []
+    personalBests: [],
+    runnerLevel: 'auto'
   },
   adaptiveTrainingProfile: {
     methodologyVersion: 'pacelab-2026-05-v1',
@@ -454,7 +459,8 @@ export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null |
     ...(memory ?? {}),
     athleteProfile: {
       ...base.athleteProfile,
-      ...(memory?.athleteProfile ?? {})
+      ...(memory?.athleteProfile ?? {}),
+      runnerLevel: normalizeRunnerLevelSetting(memory?.athleteProfile?.runnerLevel)
     },
     adaptiveTrainingProfile: normalizeAdaptiveTrainingProfile(memory?.adaptiveTrainingProfile),
     runnerIdentity: normalizeRunnerIdentity(memory?.runnerIdentity ?? base.runnerIdentity, memory ?? base),
@@ -477,6 +483,10 @@ export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null |
     activeInjuryItemId,
     goal: activeGoal.title
   }
+}
+
+function normalizeRunnerLevelSetting(value: unknown): RunnerLevelSetting {
+  return value === 'beginner' || value === 'intermediate' || value === 'advanced' ? value : 'auto'
 }
 
 function normalizeRunnerIdentity(value: unknown, memory: Partial<TrainingMemory> | null | undefined): RunnerIdentity {

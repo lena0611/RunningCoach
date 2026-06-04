@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
+import { useRunStore } from '@/app/stores/runStore'
 import type { TrainingGoal, TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
 import {
   createConservativeStrengthPlan,
@@ -15,6 +16,7 @@ import {
 } from '@/entities/training-memory/injuryAreas'
 import type { TrainingKnowledgeCatalog, TrainingKnowledgeRequest, TrainingMethod } from '@/entities/training-knowledge/model'
 import { formatDateWithWeekday, formatDuration } from '@/shared/lib/format'
+import { RUNNER_LEVEL_LABEL, resolveRunnerLevel } from '@/shared/lib/runnerLevel'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 import { createTrainingKnowledgeRequest, fetchTrainingKnowledgeCatalog } from '@/shared/api/trainingKnowledgeRepository'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
@@ -32,6 +34,7 @@ import SchedulingHelpSheet from '@/shared/ui/SchedulingHelpSheet.vue'
 type MemoryPanel = 'overview' | 'goals' | 'goal-edit' | 'goal-new' | 'injuries' | 'injury-edit' | 'injury-new' | 'knowledge' | 'knowledge-request'
 
 const memoryStore = useMemoryStore()
+const runStore = useRunStore()
 const route = useRoute()
 const draft = reactive<TrainingMemory>(JSON.parse(JSON.stringify(memoryStore.memory)))
 const stack = ref<MemoryPanel[]>([])
@@ -169,11 +172,17 @@ const weeklyRoutineGuides = computed(() => draft.weeklyPattern.map((item) => ({
 const trainingPhase = computed(() => draft.adaptiveTrainingProfile.trainingPhase)
 const progressionCriteria = computed(() => draft.adaptiveTrainingProfile.progressionCriteria)
 const prescriptionTemplates = computed(() => draft.adaptiveTrainingProfile.prescriptionTemplates)
+const runnerLevelFact = computed(() => {
+  const derived = resolveRunnerLevel(draft.athleteProfile, runStore.sortedRuns)
+  const label = RUNNER_LEVEL_LABEL[derived.level]
+  return derived.source === 'manual' ? `${label} (직접 설정)` : `${label} (자동)`
+})
 const profileFacts = computed(() => [
   { label: '러너', value: memoryStore.selectedUser.name || '기본 사용자' },
   { label: '출생연도', value: draft.athleteProfile.birthYear ? `${draft.athleteProfile.birthYear}` : '미입력' },
   { label: '성별', value: sexLabel(draft.athleteProfile.sex) },
   { label: '러닝 경력', value: formatExperience(draft.athleteProfile.runningExperienceMonths) },
+  { label: '러너 레벨', value: runnerLevelFact.value },
   { label: '주간 목표', value: draft.athleteProfile.weeklyRunDaysTarget ? `${draft.athleteProfile.weeklyRunDaysTarget}회` : '미입력' },
   { label: '롱런 요일', value: draft.athleteProfile.preferredLongRunDay || '미입력' }
 ])

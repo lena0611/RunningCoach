@@ -168,10 +168,11 @@ Deno.serve(async (req) => {
     const selectedRunId = typeof body.selectedRunId === 'string' && body.selectedRunId ? body.selectedRunId : null
     const userNote = typeof body.userNote === 'string' ? body.userNote.slice(0, 2000) : ''
     const currentWeather = normalizeCurrentWeather(body.currentWeather)
-    const responseStyle = normalizeResponseStyle(body.responseStyle)
+    const runnerLevel = normalizeRunnerLevel(body.runnerLevel)
+    const responseStyle = normalizeResponseStyle(body.responseStyle, runnerLevel)
     const shouldStream = body.stream === true
 
-    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather)
+    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel)
     if (shouldStream) {
       return streamCoachRun(admin, userId, selectedRunId, userNote, openaiKey, model, context)
     }
@@ -246,6 +247,12 @@ async function persistCoachResult(
     }
 }
 
+type RunnerLevel = 'beginner' | 'intermediate' | 'advanced'
+
+function normalizeRunnerLevel(value: unknown): RunnerLevel {
+  return value === 'beginner' || value === 'intermediate' || value === 'advanced' ? value : 'beginner'
+}
+
 type ResponseStyle = {
   tone: 'conversational_coach'
   format: 'sectioned_markdown'
@@ -254,10 +261,20 @@ type ResponseStyle = {
   firstSentence: 'reaction_before_analysis'
   maxParagraphSentences: number
   maxBulletsPerSection: number
+  runnerLevel: RunnerLevel
+  verbosity: 'guided' | 'standard' | 'compact'
 }
 
-function normalizeResponseStyle(value: unknown): ResponseStyle {
+// 레벨별 표현 밀도 프리셋. 초급은 풀어서·짧은 처방, 고급은 간결·고밀도. (Issue #100)
+const RESPONSE_STYLE_PRESET: Record<RunnerLevel, { maxParagraphSentences: number; maxBulletsPerSection: number; verbosity: ResponseStyle['verbosity'] }> = {
+  beginner: { maxParagraphSentences: 3, maxBulletsPerSection: 4, verbosity: 'guided' },
+  intermediate: { maxParagraphSentences: 2, maxBulletsPerSection: 5, verbosity: 'standard' },
+  advanced: { maxParagraphSentences: 2, maxBulletsPerSection: 6, verbosity: 'compact' }
+}
+
+function normalizeResponseStyle(value: unknown, runnerLevel: RunnerLevel = 'beginner'): ResponseStyle {
   const item = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  const preset = RESPONSE_STYLE_PRESET[runnerLevel]
   return {
     tone: item.tone === 'conversational_coach' ? 'conversational_coach' : 'conversational_coach',
     format: item.format === 'sectioned_markdown' ? 'sectioned_markdown' : 'sectioned_markdown',
@@ -266,8 +283,10 @@ function normalizeResponseStyle(value: unknown): ResponseStyle {
       : ['report_style', 'medical_diagnosis', 'long_paragraphs'],
     emojiPolicy: item.emojiPolicy === 'contextual_0_to_3' ? 'contextual_0_to_3' : 'contextual_0_to_3',
     firstSentence: item.firstSentence === 'reaction_before_analysis' ? 'reaction_before_analysis' : 'reaction_before_analysis',
-    maxParagraphSentences: Number.isFinite(Number(item.maxParagraphSentences)) ? Math.max(1, Math.min(Number(item.maxParagraphSentences), 3)) : 2,
-    maxBulletsPerSection: Number.isFinite(Number(item.maxBulletsPerSection)) ? Math.max(3, Math.min(Number(item.maxBulletsPerSection), 6)) : 5
+    maxParagraphSentences: preset.maxParagraphSentences,
+    maxBulletsPerSection: preset.maxBulletsPerSection,
+    runnerLevel,
+    verbosity: preset.verbosity
   }
 }
 
@@ -301,7 +320,7 @@ function normalizeCurrentWeather(value: unknown): CurrentWeatherContext | null {
   }
 }
 
-async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null) {
+async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner') {
   const [
     { data: memoryRow },
     { data: runs },
@@ -398,13 +417,26 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     adaptiveTrainingProfile,
     runnerIdentity,
     coachBeliefs,
-    runningAnalysisEngine
+    runningAnalysisEngine,
+    runnerLevel
   })
   const injuryCheckInPolicy = buildInjuryCheckInPolicy(activeInjuryItem, selectedRunInjuryContext(selectedRun))
+  const dataAvailability = {
+    hasSelectedRun: Boolean(selectedRun),
+    selectedRunType: selectedRun?.type ?? null,
+    hasLapData: Boolean(selectedRunLapAnalysis),
+    recent30RunCount: recent30.length,
+    recent30DistanceKm: summaryStats.recent30DistanceKm,
+    isSparse: recent30.length < 4
+  }
 
   return {
     userNote,
     responseStyle,
+    runnerLevel,
+    runnerLevelGuide: buildRunnerLevelGuide(runnerLevel),
+    dataAvailability,
+    responseTemplatePolicy: buildResponseTemplatePolicy(),
     currentDate,
     currentDateDisplay: formatDateWithWeekday(currentDate),
     contextMode: selectedRun ? 'selected_run_review' : 'current_flow_review',
@@ -654,7 +686,7 @@ function applyPastSectionPolicy(ai: CoachAiResult, context: unknown): CoachAiRes
 }
 
 async function callOpenAI(apiKey: string, model: string, context: unknown): Promise<CoachAiResult> {
-  const instructions = buildCoachInstructions()
+  const instructions = buildCoachInstructions(context)
 
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
@@ -676,9 +708,67 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
   return applyPastSectionPolicy(parseCoachAiText(text), context)
 }
 
-function buildCoachInstructions() {
+function buildRunnerLevelGuide(level: RunnerLevel) {
+  const common = 'runnerLevel은 표현 방식과 코칭 톤만 조정한다. 심박 상한·부상 게이트 같은 안전 기준은 레벨과 무관하게 동일하게 적용한다.'
+  if (level === 'beginner') {
+    return {
+      level,
+      termDepth: '전문 용어(역치, 심박 드리프트, ACWR 등)는 쓰되 바로 옆에 쉬운 말로 풀어준다. 예: "심박 드리프트(후반에 심박이 슬슬 올라가는 것)".',
+      focus: '한 답변에서 핵심 한두 가지에만 집중한다. 처방은 단순하고 바로 실행 가능한 한 가지로 준다.',
+      tone: '겁주지 않고 격려 중심으로 말한다. 잘한 점을 먼저 분명히 짚는다.',
+      common
+    }
+  }
+  if (level === 'advanced') {
+    return {
+      level,
+      termDepth: '전문 용어를 그대로 써도 된다. 불필요한 해설은 줄이고 숫자와 경계 중심으로 말한다.',
+      focus: '군더더기 설명을 빼고 핵심 판단과 처방 조정 조건을 압축한다. 근거가 충분하면 상향 제안도 더 적극적으로 한다.',
+      tone: '간결하고 직설적으로 말한다. 사용자가 이미 아는 기본기는 반복하지 않는다.',
+      common
+    }
+  }
+  return {
+    level,
+    termDepth: '전문 용어를 쓰되 한 번씩 짧은 해설을 곁들인다.',
+    focus: '핵심 지표와 처방 준수, 다음 한 가지 조정에 집중한다.',
+    tone: '현재 기본 코칭 톤을 유지한다.',
+    common
+  }
+}
+
+function buildResponseTemplatePolicy() {
+  return {
+    principle:
+      '고정 6섹션을 매번 채우지 않는다. 필수 최소만 항상 쓰고, 나머지 섹션은 세션 유형·runnerLevel·dataAvailability에 따라 필요할 때만 넣는다.',
+    requiredSections: ['첫 문장 반응(분석/숫자로 시작 금지)', '오늘 또는 그 세션의 핵심 판단 1개(가장 중요한 의미)'],
+    optionalSections: [
+      '## 핵심 지표: 선택 세션과 랩/심박 데이터가 있을 때만. dataAvailability.hasLapData=false이거나 현재 흐름 코칭이면 평균값 한두 줄로 줄이거나 생략한다.',
+      '## 오늘 해석 또는 ## 세션 해석: 해석할 거리가 있으면 넣는다. 짧은 후속 질문 답변이면 생략 가능.',
+      '## 조심할 점: 부상/통증/경계 초과/회복 우려 신호가 있을 때만 넣는다. 신호가 없으면 없는 위험을 만들지 않는다.',
+      '## 다음 훈련: nextTrainingAdviceRelevant=true일 때만.',
+      '## 루틴 업데이트: nextTrainingAdviceRelevant=true이고 routineUpdateCheck에 유지가 아닌 변화(상향/하향/보류 전환)나 명확한 상향 조건이 있을 때만 상세히. 변화 근거가 없으면 한 줄("루틴은 유지, 다음 상향 조건은 ~")로 줄이거나 생략한다.',
+      '## 한 줄 요약: 기본적으로 넣되, 아주 짧은 후속 답변에서는 생략 가능.'
+    ],
+    sessionTypeDensity: {
+      recovery_easy: '회복/이지런은 짧게. 심박 중심으로 보고 섹션을 적게 쓴다.',
+      tempo_interval: '템포/인터벌/품질훈련은 핵심 지표(랩 흐름)와 심박 상한 준수 비중을 높인다.',
+      long_run: '롱런/LSD/Steady Long은 후반 드리프트·지속성·다음날 회복 비중을 높인다.',
+      sparse_or_current_flow: '랩 데이터가 없거나 현재 흐름 코칭이면 추측하지 말고 핵심 판단과 다음 체크포인트 중심으로 짧게 답한다.'
+    },
+    instruction:
+      '이 정책은 기존 과거 세션 게이트(nextTrainingAdviceRelevant)와 함께 적용한다. 섹션을 줄여도 첫 문장 반응과 핵심 판단은 반드시 유지한다.'
+  }
+}
+
+function buildCoachInstructions(context: unknown) {
+  const runnerLevel = normalizeRunnerLevel((context as Record<string, unknown> | null)?.runnerLevel)
+  const levelGuide = buildRunnerLevelGuide(runnerLevel)
   return [
     '너는 사용자를 오래 봐온 한국어 러닝 코치다.',
+    `이 사용자의 runnerLevel은 ${runnerLevel}이다. ${levelGuide.termDepth} ${levelGuide.focus} ${levelGuide.tone} ${levelGuide.common}`,
+    'context.responseTemplatePolicy를 따른다. 고정 6섹션을 기계적으로 채우지 말고, 첫 문장 반응과 핵심 판단만 항상 쓰고 나머지 섹션은 세션 유형·runnerLevel·dataAvailability에 따라 필요할 때만 넣는다.',
+    'context.dataAvailability를 확인한다. hasLapData=false이거나 현재 흐름 코칭이면 핵심 지표 섹션을 줄이고, isSparse=true면 데이터가 적다는 전제로 추측 없이 보수적으로 말한다.',
     '너는 훈련 리포트를 작성하는 분석기가 아니다. 사용자의 러닝을 오래 봐온 AI 코치처럼 대화한다.',
     '답변은 보고서가 아니라 대화처럼 느껴져야 한다.',
     '첫 문장은 반드시 분석이나 숫자가 아니라 반응으로 시작한다. 예: "좋다. 이건 진짜 회복런 맞다.", "오 이건 꽤 잘 눌렀다.", "오늘은 욕심 안 낸 게 제일 잘한 점이다."',
@@ -812,7 +902,7 @@ function buildCoachInstructions() {
     'report의 "## 루틴 업데이트" 섹션에는 유지/변경 결론만 쓰지 말고, 근거를 1~3개 짧게 붙인다. 예: "루틴은 유지. 최근 Easy 기반은 살아 있고, 이번 세션도 강도 과부하 신호는 없다."',
     '근거가 부족하면 루틴을 바꾸지 않는다. 대신 "아직 루틴을 바꿀 근거는 부족하다. 다음 Tempo/Long Run 반응까지 보고 조정하자"처럼 말한다.',
     '레이스 예상시간 시뮬레이션은 충분한 PB/Tempo/Race/긴 지속주 데이터가 있을 때만 보조 근거로 사용한다. 예상시간 하나만으로 weeklyPattern을 바꾸지 않는다.',
-    '매 코칭 요청마다 스케줄 업데이트 필요성을 반드시 진단한다. report에는 반드시 "## 루틴 업데이트" 섹션을 넣고, 이 섹션은 "## 한 줄 요약" 바로 앞에 둔다.',
+    '매 코칭 요청마다 스케줄 업데이트 필요성은 속으로 진단하되, "## 루틴 업데이트" 섹션은 context.responseTemplatePolicy 기준으로만 넣는다. nextTrainingAdviceRelevant=true이고 routineUpdateCheck에 유지가 아닌 변화나 명확한 상향 조건이 있을 때만 상세히 쓰고, 넣을 때는 "## 한 줄 요약" 바로 앞에 둔다. 변화 근거가 없으면 한 줄로 줄이거나 생략한다.',
     '루틴 업데이트 섹션에서는 이대로 activeGoal을 향해 가도 되는지, 주간 루틴을 유지할지, 변경이 필요한 시점인지 한두 문장으로 말한다.',
     '유지가 맞으면 "루틴은 유지"라고 짧게 말하고 trainingMemoryPatch는 null로 둔다. 조정이 필요하면 weeklyPattern 전체를 업데이트한다.',
     '매 코칭 요청마다 부상/주의 상태도 확인한다. pain_note, activeInjuryItem, 최근 강훈련/롱런 이후 회복 반응을 보고 다음 세션 강도에 반영하되 의료 진단처럼 말하지 않는다.',
@@ -1103,7 +1193,7 @@ async function callOpenAIStream(
     },
     body: JSON.stringify({
       model,
-      instructions: buildCoachInstructions(),
+      instructions: buildCoachInstructions(context),
       input: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context)}`,
       text: buildCoachResponseTextFormat(),
       stream: true
@@ -1837,6 +1927,7 @@ function buildCoachingDecisionBoard(args: {
   runnerIdentity: unknown
   coachBeliefs: CoachBelief[]
   runningAnalysisEngine: ReturnType<typeof buildRunningAnalysisEngine>
+  runnerLevel: RunnerLevel
 }) {
   const selectedCompliance = args.selectedRun
     ? classifyPrescriptionCompliance(args.selectedRun, args.selectedRunLapAnalysis)
@@ -1846,6 +1937,11 @@ function buildCoachingDecisionBoard(args: {
   return {
     purpose:
       'AI가 코칭 답변을 작성하기 전 확인해야 하는 압축 판단 보드다. 평균값 요약이 아니라 실행 과정, 처방 준수, 목표 전망, 루틴 조정 근거를 함께 보게 한다.',
+    runnerLevelCheck: {
+      runnerLevel: args.runnerLevel,
+      instruction:
+        'runnerLevel은 용어 깊이와 코칭 톤을 맞추는 기준이다. beginner는 전문 용어를 풀어서 설명하고 한 번에 한두 가지만, intermediate는 용어에 짧은 해설을 곁들이고, advanced는 간결하게 숫자/경계 중심으로 말한다. 단 레벨은 표현 방식만 바꾸고 처방 안전 기준(심박 상한, 부상 게이트)은 낮추지 않는다.'
+    },
     selectedRunEvidence: buildSelectedRunEvidence(args.selectedRun),
     lapProcess: buildLapProcessEvidence(args.selectedRunLapAnalysis),
     prescriptionCompliance: buildPrescriptionComplianceEvidence(
