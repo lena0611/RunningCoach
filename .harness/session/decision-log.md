@@ -495,6 +495,18 @@
 - 포기한 대안: `scrollIntoView` 옵션을 `nearest`로 약화하는 방식은 브라우저/viewport 상태에 따라 여전히 위치 이동이 달라질 수 있어 채택하지 않는다.
 - 적용 범위: `src/pages/trends/TrendsPage.vue`, `src/app/styles.css`.
 
+## 2026-06-02 - 브릿지 체크는 UX 차단, 서버 앱 세션은 보안 경계
+- 문제: GitHub Pages 공개 프론트에서 `window.webkit`/`NativeBridge` 존재 여부만 확인하면 사용자가 브라우저 개발자도구나 스크립트로 bridge 모양을 흉내내 서버 기능을 호출할 수 있다.
+- 결정: 프론트 bridge 체크는 일반 브라우저 UX 차단으로만 유지한다. AI 코칭처럼 OpenAI 비용과 사용자 러닝 데이터 접근이 있는 Edge Function은 사용자 인증 뒤 `app-session` Edge Function이 발급한 짧은 수명의 서버 앱 세션, 승인 사용자 allowlist, 함수별 rate limit을 추가로 검증한다.
+- 구현 기준: MVP 임시 운영은 `APP_SECURITY_MODE=allowlist`로 둔다. 서버는 승인된 로그인 사용자에게만 HMAC 서명 앱 세션을 발급하고, `coach-run`은 앱 세션과 rate limit을 통과해야 OpenAI 호출을 수행한다. 이 모드는 기존 앱 빌드와 호환되지만 기기 attestation은 수행하지 않는다.
+- 무료 Apple 계정 전제: 현재 Apple Developer 계정이 무료(Personal Team)라 DeviceCheck/App Attest용 key id와 `.p8` private key를 발급할 수 없다. 따라서 MVP는 `allowlist` 모드만 운영하며, allowlist 모드는 deviceToken 없이 통과하므로 iOS 네이티브 코드 변경(예: `runContextAppSecurity` 핸들러, `RunContextWebView.swift`)이 필요 없다. 웹 프론트는 브리지가 없으면 deviceToken 없이 앱 세션을 요청한다.
+- 향후 hardening: 유료 Apple Developer 계정으로 전환해 DeviceCheck key id와 `.p8` private key가 준비되면 `APP_SECURITY_MODE=devicecheck`로 바꾸고, 그때 iOS 네이티브 `runContextAppSecurity` bridge에서 받은 DeviceCheck token을 `app-session`에서 Apple API로 검증한다(서버 측 `verifyDeviceCheckToken` 경로는 이미 구현됨, 네이티브 브리지만 추가 필요). App Attest는 더 강한 production hardening 후보로 남기되, 구현 전에는 App Attest payload를 성공 처리하지 않는다(501).
+- 선택 이유: `window` 객체 검사는 클라이언트 자가 주장이라 보안 경계가 될 수 없다. 현재 Personal Team/DeviceCheck key 미준비 상태에서는 기기 증명을 바로 운영할 수 없으므로, 먼저 서버 allowlist, 짧은 수명 앱 세션, rate limit으로 비용성 기능 통제를 강화한다.
+- 포기한 대안: 프론트 난독화, bridge 이름 숨기기, route guard 강화만으로 서버 기능을 보호하는 방식은 공개 번들과 DevTools 조작을 막지 못하므로 채택하지 않는다.
+- 검증: `npm run supabase:functions:check`, `npm run test:run`, `npm run build`, `npm run harness:check`를 실행했다. `config-contract.md` 변경이 `common.runtime.minimum-node` sync gap으로 잡혔지만, 이번 변경은 Node 최소 버전 계약이 아니라 서버 secret/앱 세션 설정 계약 추가이므로 harness runtime 구현 변경은 필요 없다. `APP_SECURITY_MODE=allowlist` 임시 운영 전환 뒤에도 같은 검증을 재실행했다.
+- 적용 범위: `supabase/functions/app-session/index.ts`(신규), `supabase/functions/coach-run/index.ts`, `supabase/migrations/202606020001_app_security_sessions.sql`(신규), `src/shared/api/appSecurity.ts`(신규), `src/shared/api/coachRepository.ts`, `src/features/import-healthkit-run/healthKitBridge.ts`(Window 타입), `.env.example`, `package.json`, `.harness/project/architecture-rules.md`, `.harness/project/config-contract.md`, `.harness/project/github-pages-supabase-playbook.md`. iOS 네이티브(`RunContextWebView.swift`)는 무료 계정 전제상 이번 MVP 범위에서 변경하지 않았고 devicecheck 전환 시점으로 보류한다.
+- 배포 순서 주의: `coach-run`이 `x-pacelab-app-session` 검증을 강제하므로 프론트 배포 전에 (1) Supabase secret(`APP_SESSION_HMAC_SECRET`, `APP_SECURITY_MODE=allowlist`, `PACELAB_ALLOWED_EMAILS`, `COACH_RUN_RATE_LIMIT_PER_HOUR`) 설정, (2) `app_sessions`/`edge_function_rate_limits` 마이그레이션 적용, (3) `app-session`·`coach-run` Edge Function 배포가 선행돼야 한다. 순서가 어긋나면 모든 사용자의 AI 코칭이 403/500으로 끊긴다.
+
 ## 2026-06-02 - Root tab swipe release animation은 route 전환보다 먼저 수행
 - 문제: Issue #92에서 스와이프 판정 직후 `router.push`가 먼저 실행되고, track은 아직 dragging 상태라 CSS transition이 꺼져 있었다. 그 결과 손을 뗀 offset 지점에서 다음 패널까지 이어지는 애니메이션 없이 route index가 즉시 바뀌어 화면이 확 넘어갔다.
 - 결정: root tab swipe는 release 단계에서 `swipeTrackIndex`로 현재 시각 기준 index를 고정하고, `swipeOffset`을 패널 폭 끝까지 transition시킨 뒤 route를 변경한다. route 변경 후 reset은 시각 위치가 같은 상태에서 수행한다.

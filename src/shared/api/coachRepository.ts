@@ -1,4 +1,5 @@
 import { getSupabaseAnonKey, getSupabaseFunctionUrl, requireSupabase } from '@/shared/api/supabase'
+import { getAppSessionToken } from '@/shared/api/appSecurity'
 import type { WeatherSnapshot } from '@/features/import-weatherkit/weatherKitBridge'
 import type { RunnerLevel } from '@/entities/training-memory/model'
 
@@ -33,7 +34,11 @@ type CoachReportRow = {
 }
 
 export async function requestCoachRun(selectedRunId: string | null, userNote: string, currentWeather: WeatherSnapshot | null = null, runnerLevel: RunnerLevel = 'beginner'): Promise<CoachReport> {
+  const appSessionToken = await getAppSessionToken()
   const { data, error } = await requireSupabase().functions.invoke('coach-run', {
+    headers: {
+      'x-pacelab-app-session': appSessionToken
+    },
     body: {
       selectedRunId,
       userNote,
@@ -69,13 +74,15 @@ export async function requestCoachRunStream(
   const { data } = await client.auth.getSession()
   const token = data.session?.access_token
   if (!token) throw new Error('로그인이 필요합니다.')
+  const appSessionToken = await getAppSessionToken()
 
   const response = await fetch(getSupabaseFunctionUrl('coach-run'), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
       apikey: getSupabaseAnonKey(),
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'x-pacelab-app-session': appSessionToken
     },
     body: JSON.stringify({
       selectedRunId,
