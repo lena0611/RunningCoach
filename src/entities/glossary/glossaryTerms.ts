@@ -552,5 +552,27 @@ export const GLOSSARY_FALLBACK_TERMS: GlossaryTerm[] = [
     detail: '수행능력 신호가 있는 기록에 한해 목표 가능성의 참고 지표로만 씁니다. 확정 규칙이 아닙니다.',
     relatedSlugs: ['readiness', 'pb', 'race-tt'],
     orderIndex: 70
+  },
+  {
+    id: 'vo2max',
+    slug: 'vo2max',
+    term: 'VO2max (심폐 체력)',
+    aka: ['vo2max', 'vo2 max', '심폐 체력', '심폐지구력'],
+    category: 'data',
+    shortDef: '체중 1kg당 1분 동안 쓸 수 있는 최대 산소량(mL/kg·min).',
+    detail: 'Apple Watch가 야외 러닝에서 자동 추정해 건강 앱에 저장합니다. PaceLAB은 있으면 VDOT 페이스 추정의 보조 신호로만 쓰고, 심박 상한은 만들지 않습니다. 없으면 사용하지 않습니다.',
+    relatedSlugs: ['vdot', 'healthkit', 'pb'],
+    orderIndex: 80
+  },
+  {
+    id: 'vdot',
+    slug: 'vdot',
+    term: 'VDOT (페이스 추정)',
+    aka: ['vdot', 'daniels', '다니엘스'],
+    category: 'data',
+    shortDef: '경기력 또는 VO2max로 환산한 체력 지표. 강도별 목표 페이스를 만든다.',
+    detail: 'PB/레이스가 있으면 그 기록에서, 없으면 VO2max에서 추정합니다(추정은 신뢰도가 낮음). 템포·이지 페이스와 레이스 예상에 쓰되, 실제 강도 기준은 심박 상한이고 페이스는 보조입니다.',
+    relatedSlugs: ['vo2max', 'pb', 'riegel'],
+    orderIndex: 90
   }
 ]

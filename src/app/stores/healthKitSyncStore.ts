@@ -10,9 +10,11 @@ import {
   requestHealthKitRuns,
   requestHealthKitRunsInRange,
   requestHealthKitRunUpdate,
+  requestLatestVo2Max,
   toExtractedRunData,
   unregisterHealthKitBridge,
-  type HealthKitRunCandidate
+  type HealthKitRunCandidate,
+  type HealthKitVo2MaxSample
 } from '@/features/import-healthkit-run/healthKitBridge'
 import { mergeHealthKitRefreshRun } from '@/features/import-healthkit-run/mergeHealthKitRefreshRun'
 import { notifyHealthKitNewRuns } from '@/features/sync-native-notifications/notificationBridge'
@@ -38,7 +40,10 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
     lastCompletedAt: 0,
     lastChangedAt: 0,
     syncFeedbackMode: 'toast' as SyncFeedbackMode,
-    historicalMigrationRange: null as HistoricalMigrationRange | null
+    historicalMigrationRange: null as HistoricalMigrationRange | null,
+    vo2MaxRequesting: false,
+    lastVo2MaxAt: 0,
+    lastVo2MaxSample: null as HealthKitVo2MaxSample | null
   }),
   actions: {
     init() {
@@ -48,7 +53,9 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         onRunUpdate: (run) => void this.handleRunUpdate(run),
         onHealthKitChanged: () => void this.syncAfterNativeChange(),
         onError: (message) => this.handleError(message),
-        onRunUpdateError: (externalId, message) => this.handleRunUpdateError(externalId, message)
+        onRunUpdateError: (externalId, message) => this.handleRunUpdateError(externalId, message),
+        onVo2Max: (sample) => void this.handleVo2Max(sample),
+        onVo2MaxError: (message) => this.handleVo2MaxError(message)
       })
       this.initialized = true
     },
@@ -287,6 +294,33 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
       this.status = ''
       this.error = message || 'HealthKit 세션 갱신 실패'
       showSyncToast('error', this.error, 4200)
+    },
+    // 프로필 화면의 'VO2max 갱신' 버튼이 호출한다. 네이티브가 receiveVo2Max로 응답한다.
+    requestVo2Max() {
+      this.init()
+      try {
+        this.vo2MaxRequesting = true
+        requestLatestVo2Max()
+      } catch (err) {
+        this.vo2MaxRequesting = false
+        showSyncToast('error', err instanceof Error ? err.message : 'VO2max 조회 요청 실패', 4200)
+      }
+    },
+    // 받은 샘플은 state에만 둔다. 프로필 화면이 watch해서 draft에 채우고, 사용자가 저장할 때 영속화한다.
+    // (여기서 바로 memory.update를 하면 프로필 편집 중인 draft가 초기화될 수 있다.)
+    handleVo2Max(sample: HealthKitVo2MaxSample) {
+      this.vo2MaxRequesting = false
+      this.lastVo2MaxSample = sample
+      this.lastVo2MaxAt = Date.now()
+      if (sample.value === null) {
+        showSyncToast('neutral', 'HealthKit에 VO2max(심폐 체력) 기록이 아직 없습니다.', 3600)
+        return
+      }
+      showSyncToast('success', `VO2max ${sample.value} mL/kg·min 불러옴 · 저장을 눌러 반영`, 3600)
+    },
+    handleVo2MaxError(message: string) {
+      this.vo2MaxRequesting = false
+      showSyncToast('error', message || 'HealthKit VO2max 조회 실패', 4200)
     }
   }
 })
