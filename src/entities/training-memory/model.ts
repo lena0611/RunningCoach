@@ -131,6 +131,11 @@ export type AthleteProfile = {
   restingHeartRate: number | null
   lactateThresholdHr: number | null
   heartRateMode: 'auto' | 'manual'
+  // 심폐 체력(VO2max, mL/kg·min). HealthKit 최신 샘플이 있으면 채우고, 없으면 null로 미사용.
+  // 심박 상한 파생에는 쓰지 않는다. VDOT 페이스 추정의 보조 신호로만 쓴다. (vdotPaces.ts)
+  vo2Max: number | null
+  vo2MaxSampleDate: string | null
+  vo2MaxSource: 'healthkit' | 'manual' | null
 }
 
 export type PersonalBest = {
@@ -380,7 +385,10 @@ export const initialTrainingMemory: TrainingMemory = {
     maxHeartRate: null,
     restingHeartRate: null,
     lactateThresholdHr: null,
-    heartRateMode: 'auto'
+    heartRateMode: 'auto',
+    vo2Max: null,
+    vo2MaxSampleDate: null,
+    vo2MaxSource: null
   },
   adaptiveTrainingProfile: {
     methodologyVersion: 'pacelab-2026-05-v1',
@@ -474,7 +482,10 @@ export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null |
       maxHeartRate: normalizeHeartRateInput(memory?.athleteProfile?.maxHeartRate),
       restingHeartRate: normalizeHeartRateInput(memory?.athleteProfile?.restingHeartRate),
       lactateThresholdHr: normalizeHeartRateInput(memory?.athleteProfile?.lactateThresholdHr),
-      heartRateMode: normalizeHeartRateMode(memory?.athleteProfile?.heartRateMode)
+      heartRateMode: normalizeHeartRateMode(memory?.athleteProfile?.heartRateMode),
+      vo2Max: normalizeVo2Max(memory?.athleteProfile?.vo2Max),
+      vo2MaxSampleDate: normalizeIsoDateOrNull(memory?.athleteProfile?.vo2MaxSampleDate),
+      vo2MaxSource: normalizeVo2MaxSource(memory?.athleteProfile?.vo2MaxSource)
     },
     adaptiveTrainingProfile: normalizeAdaptiveTrainingProfile(memory?.adaptiveTrainingProfile),
     runnerIdentity: normalizeRunnerIdentity(memory?.runnerIdentity ?? base.runnerIdentity, memory ?? base),
@@ -539,6 +550,26 @@ function normalizeHeartRateInput(value: unknown): number | null {
   if (!Number.isFinite(num)) return null
   const rounded = Math.round(num)
   return rounded >= 30 && rounded <= 240 ? rounded : null
+}
+
+// VO2max는 mL/kg·min. 사람 러너의 현실 범위(약 15~95)만 허용하고, 그 외/비정상은 미입력(null)으로 본다.
+// 소수 한 자리까지 유지한다(Apple Watch는 42.5 같은 값을 보고).
+function normalizeVo2Max(value: unknown): number | null {
+  const num = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(num)) return null
+  const rounded = Math.round(num * 10) / 10
+  return rounded >= 15 && rounded <= 95 ? rounded : null
+}
+
+function normalizeVo2MaxSource(value: unknown): 'healthkit' | 'manual' | null {
+  return value === 'healthkit' || value === 'manual' ? value : null
+}
+
+// ISO 날짜/시각 문자열만 통과시키고, 파싱 불가하면 null.
+function normalizeIsoDateOrNull(value: unknown): string | null {
+  if (typeof value !== 'string' || value.trim() === '') return null
+  const t = Date.parse(value)
+  return Number.isNaN(t) ? null : value
 }
 
 function normalizeRunnerIdentity(value: unknown, memory: Partial<TrainingMemory> | null | undefined): RunnerIdentity {

@@ -51,12 +51,22 @@ export type HealthKitRunRangeRequest = {
   endDate: string
 }
 
+// VO2max는 워크아웃에 묶이지 않는 프로필 레벨 최신 샘플이라 러닝 후보 흐름과 분리한다.
+export type HealthKitVo2MaxSample = {
+  value: number | null
+  unit: string | null
+  sampleDate: string | null
+  sourceName: string | null
+}
+
 type HealthKitBridgeHandlers = {
   onRuns: (runs: HealthKitRunCandidate[]) => void
   onRunUpdate: (run: HealthKitRunCandidate) => void
   onHealthKitChanged: (reason?: string) => void
   onError: (message: string) => void
   onRunUpdateError: (externalId: string | null, message: string) => void
+  onVo2Max?: (sample: HealthKitVo2MaxSample) => void
+  onVo2MaxError?: (message: string) => void
 }
 
 declare global {
@@ -67,6 +77,8 @@ declare global {
       receiveHealthKitChanged: (reason?: string) => void
       receiveError: (message: string) => void
       receiveRunUpdateError: (externalId: string | null, message: string) => void
+      receiveVo2Max: (sample: HealthKitVo2MaxSample) => void
+      receiveVo2MaxError: (message: string) => void
     }
     webkit?: {
       messageHandlers?: {
@@ -109,7 +121,22 @@ export function registerHealthKitBridge(handlers: HealthKitBridgeHandlers) {
     },
     receiveRunUpdateError(externalId, message) {
       handlers.onRunUpdateError(externalId, message || 'HealthKit 세션 갱신 실패')
+    },
+    receiveVo2Max(sample) {
+      handlers.onVo2Max?.(normalizeVo2MaxSample(sample))
+    },
+    receiveVo2MaxError(message) {
+      handlers.onVo2MaxError?.(message || 'HealthKit VO2max 조회 실패')
     }
+  }
+}
+
+function normalizeVo2MaxSample(sample: HealthKitVo2MaxSample | null | undefined): HealthKitVo2MaxSample {
+  return {
+    value: normalizeNumber(sample?.value ?? null),
+    unit: typeof sample?.unit === 'string' ? sample.unit : null,
+    sampleDate: typeof sample?.sampleDate === 'string' ? sample.sampleDate : null,
+    sourceName: typeof sample?.sourceName === 'string' ? sample.sourceName : null
   }
 }
 
@@ -157,6 +184,19 @@ export function requestHealthKitRunUpdate(run: HealthKitRunUpdateRequest) {
     distanceKm: run.distanceKm,
     durationSec: run.durationSec
   })
+}
+
+export function requestLatestVo2Max() {
+  const handler = window.webkit?.messageHandlers?.runContextHealthKit
+  if (!handler) {
+    throw new Error('iOS HealthKit 브리지가 연결되어 있지 않습니다. VO2max는 iOS 앱에서만 가져올 수 있습니다.')
+  }
+
+  handler.postMessage({ type: 'requestLatestVo2Max' })
+}
+
+export function isHealthKitBridgeAvailable(): boolean {
+  return Boolean(window.webkit?.messageHandlers?.runContextHealthKit)
 }
 
 export function toExtractedRunData(

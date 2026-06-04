@@ -371,6 +371,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
   const injuryItems = filterInjuryItemsForRunDate(allInjuryItems, selectedRunDateForTemporalContext)
   const activeInjuryItem = getActiveInjuryItemForRunDate(trainingMemory, allInjuryItems, selectedRunDateForTemporalContext)
   const coachHeartRateModel = deriveCoachHeartRateModel(trainingMemory, currentDate, runRows)
+  const coachPaceModel = deriveCoachPaceModel(trainingMemory)
   const selectedRunLapAnalysis = buildLapProgressionAnalysis(selectedRun, coachHeartRateModel.tempoCeilingBpm)
   const selectedRunExecutionGuide = buildSessionExecutionGuide(selectedRun, activeGoal, coachHeartRateModel)
   const recentPrescriptionComplianceSignals = buildPrescriptionComplianceSignals(recent14, coachHeartRateModel)
@@ -463,6 +464,18 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       source: coachHeartRateModel.source,
       policy:
         '심박 상한(템포/이지/회복)은 개인 심박 기준에서 파생한 값이다. 본문에 특정 기본 숫자(예: 165)를 임의로 쓰지 말고 이 상한 값만 쓴다. source=insufficient(상한 null)이면 심박 상한을 말하지 말고 페이스/RPE/심박 드리프트로 평가하며, "나이나 역치/최대심박을 입력하면 개인화된 심박 기준으로 코칭한다"고 한 번 안내한다. source=age_estimated 또는 age_data_corrected는 추정이므로 단정하지 말고, 더 정확히 하려면 30분 역치 테스트(LTHR) 입력을 권하면 좋다고 한 번만 덧붙인다. lthr/measured_max는 사용자가 직접 입력한 값이다.',
+    },
+    paceModel: {
+      vdot: coachPaceModel.vdot,
+      source: coachPaceModel.source,
+      confidence: coachPaceModel.confidence,
+      thresholdPaceSec: coachPaceModel.thresholdPaceSec,
+      easyPaceRangeSec: coachPaceModel.easyPaceRangeSec,
+      marathonPaceSec: coachPaceModel.marathonPaceSec,
+      intervalPaceSec: coachPaceModel.intervalPaceSec,
+      basis: coachPaceModel.basis,
+      policy:
+        '페이스 모델은 보조 신호다. 강도의 권위 기준은 항상 heartRateModel의 심박 상한이고, 페이스는 그 하위에서 참고 타깃으로만 쓴다. source=insufficient면 페이스 타깃을 만들지 말고 심박/RPE로만 말한다. confidence=estimate(VO2max 기반)면 "추정치"임을 한 번 밝히고 단정하지 않는다. confidence=measured(PB/레이스 환산)는 더 신뢰할 수 있다. 다음 훈련에 페이스를 제시할 때도 "심박 상한을 넘기지 않는 선에서 템포 ~분/km 참고" 식으로 심박 상한을 우선한다. 레이스 예상 언급은 기존 racePredictionPolicy를 따른다.',
     },
     responseTemplatePolicy: buildResponseTemplatePolicy(),
     currentDate,
@@ -3563,6 +3576,109 @@ function deriveCoachHeartRateModel(memory: unknown, currentDate: string, runs: R
     })
   }
   return coachModelFromAnchor(null, { estimatedMaxHr: null, observedMaxHr: null, restingHeartRate, source: 'insufficient' })
+}
+
+// VDOT 페이스 모델(보조). 웹 src/shared/lib/vdotPaces.ts와 동일 공식.
+// 우선순위: PB/Race 환산(measured) > VO2max 추정(estimate, 1:1 보수적) > 없음(insufficient).
+// 강도 권위는 항상 heartRateModel이며, 페이스는 그 하위 보조 신호로만 컨텍스트에 넣는다.
+type CoachPaceModel = {
+  vdot: number | null
+  source: 'pb_measured' | 'vo2max_estimate' | 'insufficient'
+  confidence: 'measured' | 'estimate' | 'none'
+  thresholdPaceSec: number | null
+  easyPaceRangeSec: [number, number] | null
+  marathonPaceSec: number | null
+  intervalPaceSec: number | null
+  basis: string | null
+}
+
+const COACH_VDOT_MIN_PB_KM = 3
+const COACH_PACE_INTENSITY = { easiest: 0.62, hardest: 0.74, marathon: 0.84, threshold: 0.88, interval: 0.975 }
+
+function coachVo2Cost(velocityMetersPerMin: number): number {
+  return -4.6 + 0.182258 * velocityMetersPerMin + 0.000104 * velocityMetersPerMin * velocityMetersPerMin
+}
+
+function coachVelocityForVo2(vo2: number): number {
+  const a = 0.000104
+  const b = 0.182258
+  const c = -4.6 - vo2
+  const disc = b * b - 4 * a * c
+  if (disc <= 0) return 0
+  return (-b + Math.sqrt(disc)) / (2 * a)
+}
+
+function coachFractionalVo2Max(durationMin: number): number {
+  return 0.8 + 0.1894393 * Math.exp(-0.012778 * durationMin) + 0.2989558 * Math.exp(-0.1932605 * durationMin)
+}
+
+function coachVdotFromPerformance(distanceKm: number, durationSec: number): number | null {
+  if (!Number.isFinite(distanceKm) || !Number.isFinite(durationSec) || distanceKm <= 0 || durationSec <= 0) return null
+  const minutes = durationSec / 60
+  const velocity = (distanceKm * 1000) / minutes
+  const pct = coachFractionalVo2Max(minutes)
+  if (pct <= 0) return null
+  const vdot = coachVo2Cost(velocity) / pct
+  if (!Number.isFinite(vdot) || vdot <= 0) return null
+  return Math.round(Math.min(90, Math.max(20, vdot)) * 10) / 10
+}
+
+function coachPaceAt(vdot: number, fraction: number): number | null {
+  const velocity = coachVelocityForVo2(vdot * fraction)
+  if (velocity <= 0) return null
+  return Math.round(60000 / velocity)
+}
+
+function deriveCoachPaceModel(memory: unknown): CoachPaceModel {
+  const insufficient: CoachPaceModel = {
+    vdot: null, source: 'insufficient', confidence: 'none',
+    thresholdPaceSec: null, easyPaceRangeSec: null, marathonPaceSec: null, intervalPaceSec: null, basis: null
+  }
+  const profile = memory && typeof memory === 'object'
+    ? (memory as Record<string, unknown>).athleteProfile as Record<string, unknown> | undefined
+    : undefined
+  if (!profile) return insufficient
+
+  // PB 환산(measured) 우선: 기준 거리 이상 PB 중 가장 높은 VDOT.
+  const personalBests = Array.isArray(profile.personalBests) ? profile.personalBests as Record<string, unknown>[] : []
+  let best: { vdot: number; basis: string } | null = null
+  for (const pb of personalBests) {
+    const distanceKm = typeof pb.distanceKm === 'number' ? pb.distanceKm : Number(pb.distanceKm)
+    const durationSec = typeof pb.durationSec === 'number' ? pb.durationSec : Number(pb.durationSec)
+    if (!Number.isFinite(distanceKm) || distanceKm < COACH_VDOT_MIN_PB_KM || !Number.isFinite(durationSec) || durationSec <= 0) continue
+    const vdot = coachVdotFromPerformance(distanceKm, durationSec)
+    if (vdot === null) continue
+    if (!best || vdot > best.vdot) best = { vdot, basis: `PB ${distanceKm.toFixed(2)}km 환산` }
+  }
+  if (best) return buildCoachPaceModel(best.vdot, 'pb_measured', 'measured', best.basis)
+
+  // VO2max 추정(estimate): 1:1 근사, 현실 범위만.
+  const vo2Max = typeof profile.vo2Max === 'number' ? profile.vo2Max : Number(profile.vo2Max)
+  if (Number.isFinite(vo2Max) && vo2Max >= 15 && vo2Max <= 95) {
+    const vdot = Math.round(Math.min(90, Math.max(20, vo2Max)) * 10) / 10
+    return buildCoachPaceModel(vdot, 'vo2max_estimate', 'estimate', `HealthKit VO2max ${vdot} 추정`)
+  }
+  return insufficient
+}
+
+function buildCoachPaceModel(
+  vdot: number,
+  source: CoachPaceModel['source'],
+  confidence: CoachPaceModel['confidence'],
+  basis: string
+): CoachPaceModel {
+  const easySlow = coachPaceAt(vdot, COACH_PACE_INTENSITY.easiest)
+  const easyFast = coachPaceAt(vdot, COACH_PACE_INTENSITY.hardest)
+  return {
+    vdot,
+    source,
+    confidence,
+    thresholdPaceSec: coachPaceAt(vdot, COACH_PACE_INTENSITY.threshold),
+    easyPaceRangeSec: easySlow !== null && easyFast !== null ? [easySlow, easyFast] : null,
+    marathonPaceSec: coachPaceAt(vdot, COACH_PACE_INTENSITY.marathon),
+    intervalPaceSec: coachPaceAt(vdot, COACH_PACE_INTENSITY.interval),
+    basis
+  }
 }
 
 function withinDaysFromAnchor(runs: RunLogRow[], days: number, anchorDate: string) {

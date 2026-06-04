@@ -2,13 +2,16 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/app/stores/authStore'
+import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useSettingsStore, type ManualThemeMode, type NotificationSettings } from '@/app/stores/settingsStore'
 import { getActiveGoal, getActiveInjuryItem, type PersonalBest, type TrainingMemory } from '@/entities/training-memory/model'
+import { isHealthKitBridgeAvailable } from '@/features/import-healthkit-run/healthKitBridge'
 import { syncNativeNotifications } from '@/features/sync-native-notifications/notificationBridge'
 import { formatDateWithWeekday } from '@/shared/lib/format'
 import { RUNNER_LEVEL_LABEL, resolveRunnerLevel } from '@/shared/lib/runnerLevel'
+import { resolvePaceModel, formatPaceSec } from '@/shared/lib/vdotPaces'
 import { deriveHeartRateModel, deriveObservedMaxHr, deriveRecommendedHeartRateModel } from '@/shared/lib/heartRateZones'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
@@ -22,6 +25,7 @@ defineProps<{ isAuthenticated: boolean }>()
 const emit = defineEmits<{ signOut: [] }>()
 
 const authStore = useAuthStore()
+const healthKitSyncStore = useHealthKitSyncStore()
 const memoryStore = useMemoryStore()
 const runStore = useRunStore()
 const settingsStore = useSettingsStore()
@@ -181,6 +185,73 @@ const lactateThresholdHrValue = computed({
     draft.athleteProfile.lactateThresholdHr = value === '' ? null : Number(value)
   }
 })
+
+// VO2max(심폐 체력). HealthKit '갱신' 또는 수동 입력으로 채운다. 수동 편집 시 source는 manual로 둔다.
+const vo2MaxValue = computed({
+  get: () => draft.athleteProfile.vo2Max === null ? '' : String(draft.athleteProfile.vo2Max),
+  set: (value: string | string[]) => {
+    if (Array.isArray(value)) return
+    if (value === '') {
+      draft.athleteProfile.vo2Max = null
+      draft.athleteProfile.vo2MaxSampleDate = null
+      draft.athleteProfile.vo2MaxSource = null
+      return
+    }
+    draft.athleteProfile.vo2Max = Number(value)
+    draft.athleteProfile.vo2MaxSource = 'manual'
+    draft.athleteProfile.vo2MaxSampleDate = null
+  }
+})
+const healthKitBridgeAvailable = isHealthKitBridgeAvailable()
+const vo2MaxSourceLabel = computed(() => {
+  switch (draft.athleteProfile.vo2MaxSource) {
+    case 'healthkit':
+      return 'HealthKit'
+    case 'manual':
+      return '직접 입력'
+    default:
+      return ''
+  }
+})
+const vo2MaxSampleDateLabel = computed(() => {
+  const raw = draft.athleteProfile.vo2MaxSampleDate
+  if (!raw) return ''
+  return raw.slice(0, 10)
+})
+// 페이스 모델(보조). PB 환산 > VO2max 추정 > 없음. 심박 상한이 게이트이고 페이스는 보조 표시.
+const paceModel = computed(() => resolvePaceModel(draft.athleteProfile))
+const paceModelSummary = computed(() => {
+  const m = paceModel.value
+  if (m.source === 'insufficient') return ''
+  const tempo = formatPaceSec(m.thresholdPaceSec)
+  const easyRange = m.easyPaceRangeSec
+    ? `${formatPaceSec(m.easyPaceRangeSec[0])} ~ ${formatPaceSec(m.easyPaceRangeSec[1])}`
+    : '-'
+  return `템포 ${tempo} · 이지 ${easyRange}`
+})
+const paceModelBasis = computed(() => {
+  const m = paceModel.value
+  if (m.source === 'insufficient') return ''
+  const confidence = m.confidence === 'measured' ? '정확' : '추정'
+  return `${m.basis ?? ''} · 신뢰도 ${confidence}`
+})
+function refreshVo2Max() {
+  if (!healthKitBridgeAvailable) return
+  healthKitSyncStore.requestVo2Max()
+}
+// HealthKit '갱신' 응답은 store state에 들어온다. 값이 있으면 draft에 채우고(저장 시 영속화),
+// 없으면(기록 없음) draft는 그대로 둔다.
+watch(
+  () => healthKitSyncStore.lastVo2MaxAt,
+  () => {
+    if (!drawerOpen.value) return
+    const sample = healthKitSyncStore.lastVo2MaxSample
+    if (!sample || sample.value === null) return
+    draft.athleteProfile.vo2Max = sample.value
+    draft.athleteProfile.vo2MaxSampleDate = sample.sampleDate
+    draft.athleteProfile.vo2MaxSource = 'healthkit'
+  }
+)
 
 watch(
   () => [memoryStore.selectedUserId, memoryStore.selectedUser.updatedAt],
@@ -477,6 +548,35 @@ function goGlossary() {
               심박존·상한은 역치심박(LTHR) &gt; 측정 최대심박 &gt; 나이 + 누적 기록 보정 순으로 개인화합니다.
               산출 방식과 근거는 <strong>심박 기준</strong> 옆 <strong>?</strong>를 눌러 확인하세요.
             </p>
+            <div class="full vo2-card">
+              <div class="vo2-card-head">
+                <h3>심폐 체력 (VO2max)</h3>
+                <button
+                  v-if="healthKitBridgeAvailable"
+                  type="button"
+                  class="vo2-refresh"
+                  :disabled="healthKitSyncStore.vo2MaxRequesting"
+                  @click="refreshVo2Max"
+                >{{ healthKitSyncStore.vo2MaxRequesting ? '불러오는 중' : 'HealthKit 갱신' }}</button>
+              </div>
+              <p v-if="draft.athleteProfile.vo2Max !== null" class="vo2-value">
+                {{ draft.athleteProfile.vo2Max }} <span class="vo2-unit">mL/kg·min</span>
+                <span v-if="vo2MaxSourceLabel" class="vo2-meta">{{ vo2MaxSourceLabel }}<template v-if="vo2MaxSampleDateLabel"> · {{ vo2MaxSampleDateLabel }}</template></span>
+              </p>
+              <label>
+                직접 입력 (HealthKit 값이 없을 때)
+                <ClearableField v-model="vo2MaxValue" type="number" number inputmode="decimal" placeholder="예: 48.5" />
+              </label>
+              <div v-if="paceModelSummary" class="vo2-pace">
+                <p class="vo2-pace-title">추정 페이스 <span class="vo2-pace-tag">보조</span></p>
+                <p class="vo2-pace-line">{{ paceModelSummary }}</p>
+                <p class="vo2-pace-basis">{{ paceModelBasis }}</p>
+              </div>
+              <p class="full hr-hint">
+                심폐 체력은 심박 상한을 만들지 않습니다. 페이스 추정의 보조 신호로만 쓰며, 실제 강도 기준은 심박 상한입니다.
+                <template v-if="!healthKitBridgeAvailable"> HealthKit 자동 갱신은 iOS 앱에서만 동작합니다.</template>
+              </p>
+            </div>
             <label class="full">
               거리별 PB
               <ClearableField
