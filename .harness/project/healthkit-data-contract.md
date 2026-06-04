@@ -184,6 +184,21 @@ type FastSegment = {
 - 네이티브는 `HealthKitRunCandidate[]`를 plain JSON으로 직렬화해 넘긴다.
 - 웹은 후보를 바로 저장하지 않고 확인/수정 폼에 채운다.
 
+## VO2max(심폐 체력) 프로필 레벨 브리지
+- VO2max(`HKQuantityTypeIdentifierVO2Max`, mL/kg·min)는 워크아웃에 묶이지 않는 **프로필 레벨 최신 샘플**이므로 러닝 후보(`HealthKitRunCandidate`) 흐름과 분리한다.
+- 웹 -> 네이티브 요청:
+  - `window.webkit.messageHandlers.runContextHealthKit.postMessage({ type: 'requestLatestVo2Max' })`
+- 네이티브 -> 웹 응답:
+  - 성공: `window.RunContextHealthKit.receiveVo2Max({ value, unit, sampleDate, sourceName })`
+    - `value`: mL/kg·min 수치. 기록이 없으면 `null`(오류가 아니라 "미사용" 신호).
+    - `unit`: 표시용 단위 문자열(예: `mL/kg·min`).
+    - `sampleDate`: 최신 샘플의 ISO 시각.
+    - `sourceName`: 샘플 출처 이름.
+  - 실패: `window.RunContextHealthKit.receiveVo2MaxError(message)`
+- 네이티브는 `.vo2Max` 읽기 권한을 `healthTypesToRead()`에 포함하고, 최신 `HKQuantitySample` 1건만 조회한다(별도 엔트리먼트/usage description 불필요, 기존 health share 권한이 커버).
+- 웹은 받은 값을 `AthleteProfile.vo2Max`/`vo2MaxSampleDate`/`vo2MaxSource`에 저장한다. 갱신 응답은 store state로 받아 프로필 편집 draft에 채우고, 사용자가 저장할 때 영속화한다(편집 중 memory 비파괴).
+- VO2max는 심박 상한을 만들지 않는다. VDOT 페이스 추정(`src/shared/lib/vdotPaces.ts`, coach-run `deriveCoachPaceModel`)의 보조 신호로만 쓰며, 없으면 미사용이다. 페이스 우선순위는 PB/Race 환산(measured) > VO2max 추정(estimate) > 없음이다.
+
 ## HealthKit/알림 브리지 플로우
 - PaceLAB의 iOS 알림은 APNs/FCM 원격 푸시가 아니라 `runContextNotifications` WebView bridge를 통해 네이티브가 예약/표시하는 로컬 알림이다.
 - 앱 시작 또는 인증 후 웹이 `syncNotificationSettings`를 보내면 네이티브는 `allEnabled`, `healthKitNewRun`을 `UserDefaults`에 저장하고, `pacelab-` prefix의 기존 예약 알림을 제거한 뒤 웹이 넘긴 새 예약 알림을 등록한다.
