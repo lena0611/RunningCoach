@@ -14,6 +14,7 @@ import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import ClearableField from '@/shared/ui/ClearableField.vue'
 import FormGrid from '@/shared/ui/FormGrid.vue'
+import GlossarySheet from '@/shared/ui/GlossarySheet.vue'
 import HeartRateHelpSheet from '@/shared/ui/HeartRateHelpSheet.vue'
 import HeartRateTestGuideSheet from '@/shared/ui/HeartRateTestGuideSheet.vue'
 
@@ -28,6 +29,7 @@ const router = useRouter()
 const drawerOpen = ref(false)
 const heartRateHelpOpen = ref(false)
 const heartRateTestGuideOpen = ref(false)
+const glossaryOpen = ref(false)
 const drawerPanel = ref<'account' | 'profile' | 'settings'>('account')
 const saving = ref(false)
 const error = ref('')
@@ -310,7 +312,7 @@ function goDashboard() {
 
 function goGlossary() {
   closeDrawer()
-  router.push('/glossary')
+  glossaryOpen.value = true
 }
 </script>
 
@@ -579,4 +581,6 @@ function goGlossary() {
   <HeartRateHelpSheet :open="heartRateHelpOpen" @close="heartRateHelpOpen = false" />
 
   <HeartRateTestGuideSheet :open="heartRateTestGuideOpen" @close="heartRateTestGuideOpen = false" />
+
+  <GlossarySheet :open="glossaryOpen" @close="glossaryOpen = false" />
 </template>
