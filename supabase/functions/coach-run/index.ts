@@ -481,7 +481,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       coachingDecisionBasis: [
         '1순위: activeGoal의 목표 거리, 목표 기록, 목표일, 성공 기준, 전략 메모',
         '2순위: 선택 세션의 실제 수행 데이터(distance, duration, pace, HR, cadence, laps, fast_segments, RPE, memo)',
-        '2.5순위: selectedRunExecutionGuide 대비 실제 수행 일치도. 처방된 심박/페이스/패턴 경계를 지켰는지, 경계를 넘었다면 어느 랩부터 왜 넘었는지',
+        '2.5순위: selectedRunExecutionGuide 대비 실제 수행 일치도. 처방된 심박/페이스/패턴 경계를 지켰는지, 경계를 넘었다면 어느 구간부터 왜 넘었는지',
         '3순위: 최근 7/14/30일 누적 거리, Easy 비율, 강훈련 빈도, Long Run/Tempo 수행 여부',
         '4순위: weeklyPattern 대비 실제 소화율과 누락/대체/추가런 패턴',
         '5순위: activeInjuryItem, pain_note, workout_feeling, 회복 신호',
@@ -532,7 +532,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       doNotUpdateWhen: [
         '단일 세션 하나만 좋거나 나쁘다.',
         '날씨, 동반주, 과거 기록 리뷰처럼 일시적 맥락으로 설명된다.',
-        '랩/심박/RPE 데이터가 부족하다.',
+        '구간/심박/RPE 데이터가 부족하다.',
         '목표 달성 보장을 암시해야만 설명 가능한 변경이다.'
       ]
     },
@@ -589,7 +589,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     selectedRunLapAnalysis,
     selectedRunExecutionGuide,
     lapAnalysisInstruction:
-      'selectedRunLapAnalysis와 selectedRunExecutionGuide가 있으면 반드시 코칭에 반영한다. 핵심 지표에는 페이스 흐름과 심박 흐름을 화살표로 짧게 보여주고, 해석 섹션에는 초반 오버페이스 여부, 심박이 터졌는지/잘 눌렸는지, 세션 유형별 심박/페이스 경계 초과 여부, 후반 페이스-심박 품질을 짚는다. 랩 데이터가 없을 때만 평균값 중심으로 말한다.',
+      'selectedRunLapAnalysis와 selectedRunExecutionGuide가 있으면 반드시 코칭에 반영한다. 핵심 지표에는 페이스 흐름과 심박 흐름을 화살표로 짧게 보여주고, 해석 섹션에는 초반 오버페이스 여부, 심박이 터졌는지/잘 눌렸는지, 세션 유형별 심박/페이스 경계 초과 여부, 후반 페이스-심박 품질을 짚는다. 구간 데이터가 없을 때만 평균값 중심으로 말한다.',
     contextFactorInstruction:
       '세션 품질을 페이스/심박 숫자만으로 단독 평가하지 않는다. 그 기록을 유발한 외부 요인과 내부 요인을 함께 보고 "이 결과가 왜 이렇게 나왔는지"를 설명한다. 외부 요인: selectedRun.weather(기온/습도/바람), courseType(고도/지형), companion(동반주), 시간대. 내부 요인: activeInjuryItem/pain_note(부상·통증), sleep_quality(수면), condition_score(컨디션), stress_level(스트레스), rpe, recent7/14/30 누적과 중장기 부하 추세(최근 부하/피로). 과거 세션 복기든 최근 7일 현재 흐름이든 동일하게 적용한다.',
     contextFactorHeatInstruction:
@@ -599,7 +599,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     recentPrescriptionComplianceSignals,
     prescriptionComplianceSummary,
     prescriptionMemoryInstruction:
-      'recentPrescriptionComplianceSignals는 최근 세션들이 각 유형별 처방 기준을 얼마나 지켰는지 보는 신호다. 단일 세션 결과를 장기기억으로 저장하지 말고, 최근 여러 세션에서 반복되는 준수/이탈 패턴만 memoryItems에 저장한다. 예: "최근 Tempo는 템포 상한을 대체로 지키지만 후반 1~2랩에서 흔들린다", "Recovery는 심박을 잘 누르는 편이다".',
+      'recentPrescriptionComplianceSignals는 최근 세션들이 각 유형별 처방 기준을 얼마나 지켰는지 보는 신호다. 단일 세션 결과를 장기기억으로 저장하지 말고, 최근 여러 세션에서 반복되는 준수/이탈 패턴만 memoryItems에 저장한다. 예: "최근 Tempo는 템포 상한을 대체로 지키지만 후반 1~2구간에서 흔들린다", "Recovery는 심박을 잘 누르는 편이다".',
     runsAfterSelectedRun: runsAfterSelected.slice(0, 10).map(summarizeRunForCoach),
     recent14: recent14.slice(0, 20).map(summarizeRunForCoach),
     summaryStats
@@ -764,7 +764,7 @@ function buildResponseTemplatePolicy() {
       '고정 6섹션을 매번 채우지 않는다. 필수 최소만 항상 쓰고, 나머지 섹션은 세션 유형·runnerLevel·dataAvailability에 따라 필요할 때만 넣는다.',
     requiredSections: ['첫 문장 반응(분석/숫자로 시작 금지)', '오늘 또는 그 세션의 핵심 판단 1개(가장 중요한 의미)'],
     optionalSections: [
-      '## 핵심 지표: 선택 세션과 랩/심박 데이터가 있을 때만. dataAvailability.hasLapData=false이거나 현재 흐름 코칭이면 평균값 한두 줄로 줄이거나 생략한다.',
+      '## 핵심 지표: 선택 세션과 구간/심박 데이터가 있을 때만. dataAvailability.hasLapData=false이거나 현재 흐름 코칭이면 평균값 한두 줄로 줄이거나 생략한다.',
       '## 오늘 해석 또는 ## 세션 해석: 해석할 거리가 있으면 넣는다. 짧은 후속 질문 답변이면 생략 가능.',
       '## 조심할 점: 부상/통증/경계 초과/회복 우려 신호가 있을 때만 넣는다. 신호가 없으면 없는 위험을 만들지 않는다.',
       '## 다음 훈련: nextTrainingAdviceRelevant=true일 때만.',
@@ -773,9 +773,9 @@ function buildResponseTemplatePolicy() {
     ],
     sessionTypeDensity: {
       recovery_easy: '회복/이지런은 짧게. 심박 중심으로 보고 섹션을 적게 쓴다.',
-      tempo_interval: '템포/인터벌/품질훈련은 핵심 지표(랩 흐름)와 심박 상한 준수 비중을 높인다.',
+      tempo_interval: '템포/인터벌/품질훈련은 핵심 지표(구간 흐름)와 심박 상한 준수 비중을 높인다.',
       long_run: '롱런/LSD/Steady Long은 후반 드리프트·지속성·다음날 회복 비중을 높인다.',
-      sparse_or_current_flow: '랩 데이터가 없거나 현재 흐름 코칭이면 추측하지 말고 핵심 판단과 다음 체크포인트 중심으로 짧게 답한다.'
+      sparse_or_current_flow: '구간 데이터가 없거나 현재 흐름 코칭이면 추측하지 말고 핵심 판단과 다음 체크포인트 중심으로 짧게 답한다.'
     },
     instruction:
       '이 정책은 기존 과거 세션 게이트(nextTrainingAdviceRelevant)와 함께 적용한다. 섹션을 줄여도 첫 문장 반응과 핵심 판단은 반드시 유지한다.'
@@ -808,17 +808,18 @@ function buildCoachInstructions(context: unknown) {
     'coachingDecisionBoard.prescriptionCompliance는 세션별 처방 준수 판정이다. "잘했다/아쉽다"가 아니라 어떤 경계를 지켰거나 넘겼는지 말한다.',
     'coachingDecisionBoard.goalProjectionCheck는 목표 예상과 루틴 상향 가능성을 보는 보조 근거다. 예측값 하나만 믿지 말고 역치훈련, Easy 기반, Long Run 지속성, 회복/부상 게이트와 함께 본다.',
     'coachingDecisionBoard.routineUpdateCheck는 루틴 유지/상향/하향/보류 결론의 초안이다. "## 루틴 업데이트"에서는 이 결론과 근거를 1~3개만 짧게 말한다.',
-    'selectedRunLapAnalysis가 있으면 "## 핵심 지표"에 랩 진행에 따른 페이스 흐름과 심박 흐름을 반드시 넣는다. 예: "- 페이스: 10분44초 → 10분05초 → 10분29초 → 9분57초 → 9분28초", "- 심박: 108 → 116 → 114 → 118 → 121", "- 케이던스: 159~164".',
+    'selectedRunLapAnalysis가 있으면 "## 핵심 지표"에 구간 진행에 따른 페이스 흐름과 심박 흐름을 반드시 넣는다. 예: "- 페이스: 10분44초 → 10분05초 → 10분29초 → 9분57초 → 9분28초", "- 심박: 108 → 116 → 114 → 118 → 121", "- 케이던스: 159~164".',
+    'selectedRunLapAnalysis의 구간은 시간 흐름을 일정 간격으로 나눈 분석 구간이다(세션 상세의 거리 스플릿/1km 랩과 다른 개념이며 개수도 다를 수 있다). 코칭 본문에서는 항상 "구간"(예: "후반 7번째 구간부터")으로 표현하고 "랩"이라고 쓰지 않는다. 거리 스플릿 개수와 다르다고 사용자가 혼동하지 않게 한다.',
     'selectedRunLapAnalysis가 있으면 평균 페이스/평균 심박만 말하고 끝내지 않는다. 러닝 중간 과정, 즉 초반을 서둘렀는지, 심박이 먼저 터졌는지, 잘 눌러 시작했는지, 후반에 페이스를 올려도 심박 품질이 유지됐는지 분석한다.',
     'selectedRunExecutionGuide가 있으면 세션 유형별 처방 경계를 사용한다. 심박 상한은 heartRateModel/boundaries의 개인 파생값을 그대로 쓰고, 임의의 고정 숫자를 만들지 않는다. 상한이 null이면 심박 상한을 말하지 말고 페이스/RPE/드리프트로 본다. Long Run은 후반 심박 드리프트, Easy + Strides는 10분 워밍업 + 8회 가속/회복 + 15분 쿨다운 구조를 본다.',
     '선택 세션은 단순 사후 기록이 아니라 이전 코칭/주간 루틴/처방 가이드의 실행 결과로 본다. 반드시 "처방 가이드에 맞게 임했는지"를 확인하고, 그 결과에 따라 사후 처방을 유지/상향/하향/보류 중 하나로 정리한다.',
     '처방 가이드에 맞게 잘 수행했으면 칭찬으로 끝내지 말고 다음 처방 기준을 유지할지, 더 나은 품질로 소폭 올릴지 조건을 말한다. 단, Tempo 처방의 핵심은 페이스 처방이 아니라 최대 심박이 heartRateModel.tempoCeilingBpm 상한(개인 파생값, null이면 페이스/드리프트로 평가)을 넘기지 않는 것이다.',
-    '처방 가이드를 넘겼으면 비난하지 말고 어느 랩부터 심박/페이스 경계가 흔들렸는지 말하고, 다음 처방에서 무엇을 낮출지 또는 어떤 체크포인트를 둘지 제안한다.',
+    '처방 가이드를 넘겼으면 비난하지 말고 어느 구간부터 심박/페이스 경계가 흔들렸는지 말하고, 다음 처방에서 무엇을 낮출지 또는 어떤 체크포인트를 둘지 제안한다.',
     '현재 처방 숫자는 영구 고정값이 아니다. 사용자가 실행 가능한 Workoutdoors 세팅 기준으로 제시하되, 누적 데이터와 회복 반응이 충분하면 AI가 먼저 숫자/구성 변경을 제안한다.',
-    'Tempo 또는 품질훈련에서는 selectedRunExecutionGuide.boundaries.heartRateCeilingBpm(=heartRateModel.tempoCeilingBpm)을 상한으로 쓴다. lapHeartRatesOverTempoCeiling이 있거나 maxHeartRate가 그 상한을 넘으면 몇 번째 랩/구간부터 넘었는지 짧게 말하고, 없으면 "상한을 넘기지 않았다"처럼 훈련 품질 근거로 쓴다. 본문 숫자는 165 고정이 아니라 그 상한 값을 쓴다.',
-    'Easy 세션에서는 평균심박만 보지 말고 maxHeartRate와 랩 심박이 heartRateModel.easyCeilingBpm(이지 상한)을 넘겼는지 확인한다(상한이 null이면 페이스/RPE로 본다). 넘겼다면 "이지 처방은 이지 상한을 넘기지 않는 게 핵심인데, 오늘은 이 지점이 흔들렸다"처럼 다음 처방을 보수적으로 말한다.',
+    'Tempo 또는 품질훈련에서는 selectedRunExecutionGuide.boundaries.heartRateCeilingBpm(=heartRateModel.tempoCeilingBpm)을 상한으로 쓴다. lapHeartRatesOverTempoCeiling이 있거나 maxHeartRate가 그 상한을 넘으면 몇 번째 구간/구간부터 넘었는지 짧게 말하고, 없으면 "상한을 넘기지 않았다"처럼 훈련 품질 근거로 쓴다. 본문 숫자는 165 고정이 아니라 그 상한 값을 쓴다.',
+    'Easy 세션에서는 평균심박만 보지 말고 maxHeartRate와 구간 심박이 heartRateModel.easyCeilingBpm(이지 상한)을 넘겼는지 확인한다(상한이 null이면 페이스/RPE로 본다). 넘겼다면 "이지 처방은 이지 상한을 넘기지 않는 게 핵심인데, 오늘은 이 지점이 흔들렸다"처럼 다음 처방을 보수적으로 말한다.',
     '다음 훈련을 제안할 때는 세션명만 말하지 말고 사용자가 Workoutdoors에 바로 세팅할 수 있는 세부 지침을 준다. 심박 숫자는 heartRateModel의 개인 상한 값만 쓰고(예: Easy는 easyCeilingBpm 넘기지 말기, Tempo는 max tempoCeilingBpm 넘기지 말기), 상한이 null이면 심박 숫자 대신 페이스/RPE로 안내한다. Easy + Strides는 "워밍업 10분 + 20초 가속/1분40초 회복 x8 + 쿨다운 15분".',
-    '세션 유형별 랩당 페이스/심박 경계 가이드가 현재 사용자에게 맞지 않아 보이면 "## 루틴 업데이트"에서 유지/조정 여부를 말한다. 조정이 필요할 때는 trainingMemoryPatch.activeGoalStrategyNotes 또는 aiNotes에 새 기준을 저장한다.',
+    '세션 유형별 구간당 페이스/심박 경계 가이드가 현재 사용자에게 맞지 않아 보이면 "## 루틴 업데이트"에서 유지/조정 여부를 말한다. 조정이 필요할 때는 trainingMemoryPatch.activeGoalStrategyNotes 또는 aiNotes에 새 기준을 저장한다.',
     'recentPrescriptionComplianceSignals를 보고 최근 여러 세션에서 처방 준수율 패턴이 있는지 활용한다. 반복적으로 잘 지키는 기준은 다음 처방 상향 근거가 되고, 반복적으로 넘는 기준은 처방 하향/보류 근거가 된다.',
     'context.trainingMethodology는 외부 러닝/지구력 훈련 문헌을 앱 기준선으로 압축한 것이다. 이 기준선을 무시하지 말고, Easy 기반, 제한된 강훈련, 점진적 과부하, 목표 특이성, 회복 게이트를 기본 알고리즘으로 삼는다.',
     'context.trainingKnowledge는 Supabase 지식 보관소에서 activeGoal과 selectedRun에 맞춰 검색한 승인된 훈련법/처방 규칙이다. 일반 모델 지식보다 이 승인된 규칙을 우선한다.',
@@ -835,7 +836,7 @@ function buildCoachInstructions(context: unknown) {
     '날씨, 동반주, 과거 기록 리뷰, 데이터 부족처럼 일시적 이유로 설명되는 결과는 adaptiveTrainingProfile을 바꾸지 않는다.',
     '반복 패턴이 충분하면 trainingMemoryPatch.adaptiveTrainingProfile을 반환한다. compliancePatterns에는 장기적으로 기억할 반복 패턴을, sessionGuides에는 세션 유형별 현재 처방 경계와 조정 방향을 저장한다.',
     'adaptiveTrainingProfile.sessionGuides 조정 방향은 maintain/raise/lower/watch 중 하나다. raise는 회복 안정과 품질 준수가 반복될 때만, lower는 반복 경계 초과/통증/회복 악화가 있을 때만 쓴다.',
-    'memoryItems에는 단일 세션의 준수 여부를 넣지 말고 반복 패턴만 넣는다. 예: "최근 Recovery는 심박을 회복 상한 이하로 잘 누르는 편이다", "최근 Tempo는 후반 랩에서 템포 상한 근처까지 올라가므로 초반 진입을 보수적으로 잡아야 한다".',
+    'memoryItems에는 단일 세션의 준수 여부를 넣지 말고 반복 패턴만 넣는다. 예: "최근 Recovery는 심박을 회복 상한 이하로 잘 누르는 편이다", "최근 Tempo는 후반 구간에서 템포 상한 근처까지 올라가므로 초반 진입을 보수적으로 잡아야 한다".',
     'Easy/Recovery에서는 페이스보다 심박 흐름을 우선한다. 후반 페이스가 빨라졌더라도 심박이 낮게 유지되면 잘 눌렀다고 본다.',
     'Long Run/LSD/Steady Long에서는 후반 페이스 급락, 심박 드리프트, 전후반 심박 차이를 보고 지속성과 품질을 말한다.',
     '답변 우선순위는 오늘 세션의 정체, 사용자가 의도한 훈련과 맞는지, 중요한 지표 2~3개, 최근 맥락, 조심할 점, 다음 훈련 순서다.',
@@ -868,10 +869,10 @@ function buildCoachInstructions(context: unknown) {
     '강수확률이 높거나 향후 12시간 강수량이 있으면 미끄러운 노면, 신발 젖음, 세션 강도 조절을 체크포인트로만 말한다.',
     'recent14/recent30은 anchorDateForWindowStats 기준 창이다. selectedRun이 있으면 선택 기록 날짜 기준의 이전 흐름으로 해석한다.',
     'runsAfterSelectedRun은 선택 기록 이후 실제로 저장된 러닝이다. 과거 기록 리뷰에서는 이 목록이 있으면 이후 흐름을 짧게 참고할 수 있지만, 선택 기록 자체 평가와 혼동하지 않는다.',
-    '사용자가 말한 세션명을 그대로 믿지 말고 요일, 최근 흐름, 랩, 심박, 페이스, RPE, 메모, TrainingMemory로 재해석한다.',
+    '사용자가 말한 세션명을 그대로 믿지 말고 요일, 최근 흐름, 구간, 심박, 페이스, RPE, 메모, TrainingMemory로 재해석한다.',
     '저장된 RunLog.type을 그대로 반복하지 말고 TrainingMemory와 사용자 루틴을 함께 본다.',
     '예: 토요일 12~15km 기록이고 격주 패턴상 Steady Long 주차라면 DB에 LSD라고 저장되어 있어도 "LSD라기보다 Steady Long 성격"이라고 부드럽게 재해석한다.',
-    'Easy 판단은 페이스보다 심박을 우선한다. 평균 페이스가 빨라도 평균/랩 심박이 낮고 대화 가능한 흐름이면 Tempo로 단정하지 말고 Easy 가능성을 먼저 본다.',
+    'Easy 판단은 페이스보다 심박을 우선한다. 평균 페이스가 빨라도 평균/구간 심박이 낮고 대화 가능한 흐름이면 Tempo로 단정하지 말고 Easy 가능성을 먼저 본다.',
     'fast_segments는 route/speed 기반 짧은 고속 구간 요약이다. Easy + Strides 판단에서는 세션 타입명보다 요일 루틴, lap 심박/페이스, fast_segments를 우선한다.',
     '현재 Easy + Strides 기본 루틴은 10분 워밍업 + 8개의 스트라이드 가속 인터벌(20초 가속 + 1분40초 회복) + 15분 쿨다운이다. 다만 HealthKit/GPS 데이터는 타이트하게 들어오지 않으므로 20초/100초를 기계적으로 요구하지 않는다. route/speed에서 6~45초 정도의 짧은 가속이 4개 이상 반복되고 시작 간격이 대략 1~3.5분이면 Easy + Strides 성격으로 관용적으로 본다.',
     '앱 로그가 적어도 TrainingMemory나 coachMemoryItems의 장기 맥락을 부정하지 않는다. 로그가 덜 들어온 상태로 보고 조심스럽게 해석한다.',
@@ -1482,7 +1483,7 @@ function buildTrainingMethodologyAlgorithm() {
     ],
     adaptationLoop: [
       '문헌 기반 기준선으로 세션별 처방 경계를 만든다.',
-      '선택 RunLog의 랩/심박/RPE/메모로 처방 준수 여부를 판정한다.',
+      '선택 RunLog의 구간/심박/RPE/메모로 처방 준수 여부를 판정한다.',
       '최근 여러 세션의 반복 준수/이탈 패턴을 요약한다.',
       '반복 근거 또는 사용자 피드백이 있을 때만 adaptiveTrainingProfile을 갱신한다.',
       '다음 코칭에서는 갱신된 개인화 경계를 기준선 위에 얹어 판단한다.'
@@ -2006,7 +2007,7 @@ function buildCoachingDecisionBoard(args: {
         'trainingKnowledge의 승인 규칙과 adaptiveTrainingProfile의 개인화 경계를 함께 보되, 단일 세션만으로 큰 변경을 하지 않는다.'
     },
     responseChecklist: [
-      '핵심 지표에 랩/샘플 흐름을 넣는다.',
+      '핵심 지표에 구간/샘플 흐름을 넣는다.',
       '처방 기준을 지켰는지 먼저 말한다.',
       '목표 예상은 보조 근거로만 쓰고 확정처럼 말하지 않는다.',
       '루틴 업데이트 섹션에 유지/상향/하향/보류 결론과 근거 1~3개를 넣는다.',
@@ -2265,7 +2266,7 @@ function buildSelectedRunEvidence(run: RunLogRow | null) {
     tags: run.tags,
     memo: truncateText(run.memo, 180),
     instruction:
-      'storedType은 출발점일 뿐이다. 메모, 요일, 랩/샘플 흐름, 심박 경계, fast_segments로 실제 세션 성격을 재해석한다.'
+      'storedType은 출발점일 뿐이다. 메모, 요일, 구간/샘플 흐름, 심박 경계, fast_segments로 실제 세션 성격을 재해석한다.'
   }
 }
 
@@ -2273,8 +2274,8 @@ function buildLapProcessEvidence(analysis: ReturnType<typeof buildLapProgression
   if (!hasAvailableLapAnalysis(analysis)) {
     return {
       available: false,
-      reason: analysis?.reason ?? '랩/샘플 데이터가 부족하다.',
-      instruction: '랩 데이터가 없을 때만 평균값 중심으로 말한다.'
+      reason: analysis?.reason ?? '구간/샘플 데이터가 부족하다.',
+      instruction: '구간 데이터가 없을 때만 평균값 중심으로 말한다.'
     }
   }
 
@@ -2363,7 +2364,7 @@ function buildComplianceEvidenceBullets(
       bullets.push(`Tempo 처방 핵심은 max HR ${hr.tempoCeilingBpm} 이하. 세션 max HR ${run.max_heart_rate ?? '-'}.`)
       if (hasAvailableLapAnalysis(analysis)) {
         const over = (analysis.lapHeartRatesOverTempoCeiling ?? []).map((lap) => `${lap.index}번 ${lap.avgHeartRate}`)
-        bullets.push(over.length ? `${hr.tempoCeilingBpm} 초과 랩: ${over.join(', ')}` : `랩 평균 기준으로 ${hr.tempoCeilingBpm} 초과 구간은 없다.`)
+        bullets.push(over.length ? `${hr.tempoCeilingBpm} 초과 구간: ${over.join(', ')}` : `구간 평균 기준으로 ${hr.tempoCeilingBpm} 초과 구간은 없다.`)
       }
     }
   } else if (run.type === 'Easy' || run.type === 'Recovery') {
@@ -2379,7 +2380,7 @@ function buildComplianceEvidenceBullets(
       bullets.push(`전후반 심박 드리프트 ${analysis.heartRateDriftBpmSecondHalfMinusFirstHalf ?? '-'}bpm.`)
       bullets.push(`페이스 흐름은 ${analysis.paceTrend}, 심박 품질은 ${analysis.heartRateQuality}.`)
     } else {
-      bullets.push('랩 드리프트 근거가 부족해 장거리 품질 판정은 보수적으로 한다.')
+      bullets.push('구간 드리프트 근거가 부족해 장거리 품질 판정은 보수적으로 한다.')
     }
   } else if (run.type === 'Easy + Strides') {
     const count = Array.isArray(run.fast_segments) ? run.fast_segments.length : 0
@@ -3760,7 +3761,7 @@ function buildLapProgressionAnalysis(run: RunLogRow | null, tempoHeartRateCeilin
   if (!laps.length) {
     return {
       available: false,
-      reason: '랩 데이터가 없어 평균 페이스/평균 심박 중심으로만 볼 수 있다.'
+      reason: '구간 데이터가 없어 평균 페이스/평균 심박 중심으로만 볼 수 있다.'
     }
   }
 
@@ -3816,9 +3817,9 @@ function buildLapProgressionAnalysis(run: RunLogRow | null, tempoHeartRateCeilin
     startControlHint: describeStartControl(laps, run.avg_pace_sec),
     interpretationHints: [
       'paceFlowDisplay와 heartRateFlowDisplay를 함께 보고 페이스 상승이 심박 폭발로 이어졌는지 확인한다.',
-      '초반 랩이 평균보다 과하게 빠르고 심박도 빠르게 오르면 서둘러 시작한 것으로 본다.',
+      '초반 구간이 평균보다 과하게 빠르고 심박도 빠르게 오르면 서둘러 시작한 것으로 본다.',
       '후반 페이스가 빨라져도 심박 상승이 작으면 잘 눌러 시작해 품질이 좋은 흐름으로 본다.',
-      '템포/품질훈련은 tempoHeartRateCeilingBpm 초과 랩이 있는지 확인한다.'
+      '템포/품질훈련은 tempoHeartRateCeilingBpm 초과 구간이 있는지 확인한다.'
     ]
   }
 }
@@ -3845,7 +3846,7 @@ function buildSessionExecutionGuide(run: RunLogRow | null, activeGoal: unknown, 
     : `개인 심박 기준(${hr.source}) 기반 환산값.`
   const common = {
     runType: type,
-    purpose: '선택 세션을 평가할 때 랩별 페이스/심박 경계를 보는 기준이다. 사용자의 목표와 누적 반응에 따라 코칭에서 유지/조정될 수 있다.',
+    purpose: '선택 세션을 평가할 때 구간별 페이스/심박 경계를 보는 기준이다. 사용자의 목표와 누적 반응에 따라 코칭에서 유지/조정될 수 있다.',
     heartRateModelSource: hr.source,
     updateRule:
       '같은 유형의 세션이 2~3주 이상 안정적으로 소화되고 회복/부상 신호가 좋으면 경계를 소폭 상향할 수 있다. 반대로 심박/RPE/통증이 반복적으로 높으면 경계를 낮춘다.'
@@ -3864,7 +3865,7 @@ function buildSessionExecutionGuide(run: RunLogRow | null, activeGoal: unknown, 
         targetPaceDisplay: targetPaceSec ? formatPaceForCoach(targetPaceSec) : null,
         allowedLapInterpretation: tempo === null
           ? '심박 상한 없이, 초반 오버페이스 여부와 후반 페이스/심박 드리프트로 품질을 본다. 사용자에게 나이 또는 심박 입력을 권한다.'
-          : `템포 랩은 ${tempo}bpm 상한을 넘겼는지 먼저 본다. 후반 페이스가 빨라져도 심박이 ${tempo}를 넘지 않으면 품질이 좋고, 넘겼다면 다음 템포는 초반 진입을 낮춘다.`
+          : `템포 구간은 ${tempo}bpm 상한을 넘겼는지 먼저 본다. 후반 페이스가 빨라져도 심박이 ${tempo}를 넘지 않으면 품질이 좋고, 넘겼다면 다음 템포는 초반 진입을 낮춘다.`
       }
     }
   }
@@ -3898,7 +3899,7 @@ function buildSessionExecutionGuide(run: RunLogRow | null, activeGoal: unknown, 
         recoveryWindowToleranceSec: '60~210',
         recoveryHeartRateRule: '가속 뒤 회복 구간에서 심박과 호흡이 내려오는지 본다.',
         allowedLapInterpretation:
-          '랩 단위가 1km라면 스트라이드가 뭉개져 보일 수 있으므로 fast_segments와 심박 회복을 함께 본다.'
+          '구간 단위가 1km라면 스트라이드가 뭉개져 보일 수 있으므로 fast_segments와 심박 회복을 함께 본다.'
       }
     }
   }
@@ -3921,7 +3922,7 @@ function buildSessionExecutionGuide(run: RunLogRow | null, activeGoal: unknown, 
     ...common,
     primaryMetric: 'context_dependent',
     boundaries: {
-      rule: '저장된 타입이 Unknown이면 랩 페이스, 심박, 요일 루틴, 메모로 실제 세션 성격을 먼저 재해석한다.'
+      rule: '저장된 타입이 Unknown이면 구간 페이스, 심박, 요일 루틴, 메모로 실제 세션 성격을 먼저 재해석한다.'
     }
   }
 }
