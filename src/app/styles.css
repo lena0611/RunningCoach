@@ -4514,14 +4514,29 @@ button.run-session-row {
   width: 100%;
 }
 
+.bottom-sheet-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .bottom-sheet-label {
   color: var(--color-muted);
   font-size: 14px;
   font-weight: 760;
 }
 
+.bottom-sheet-select-compact .bottom-sheet-label-row,
 .bottom-sheet-select-compact .bottom-sheet-label {
   display: none;
+}
+
+.help-icon-button.help-icon-button-sm {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  min-height: 20px;
+  font-size: 12px;
 }
 
 .bottom-sheet-trigger {

@@ -14,6 +14,7 @@ import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import ClearableField from '@/shared/ui/ClearableField.vue'
 import FormGrid from '@/shared/ui/FormGrid.vue'
+import HeartRateHelpSheet from '@/shared/ui/HeartRateHelpSheet.vue'
 
 defineProps<{ isAuthenticated: boolean }>()
 const emit = defineEmits<{ signOut: [] }>()
@@ -24,6 +25,7 @@ const runStore = useRunStore()
 const settingsStore = useSettingsStore()
 const router = useRouter()
 const drawerOpen = ref(false)
+const heartRateHelpOpen = ref(false)
 const drawerPanel = ref<'account' | 'profile' | 'settings'>('account')
 const saving = ref(false)
 const error = ref('')
@@ -418,7 +420,11 @@ function goDashboard() {
             <BottomSheetSelect v-model="draft.athleteProfile.runnerLevel" label="러너 레벨" :options="runnerLevelOptions" />
             <BottomSheetSelect v-model="weeklyRunDaysTargetValue" label="목표 주간 러닝 횟수" :options="weeklyRunDaysTargetOptions" />
             <BottomSheetSelect v-model="draft.athleteProfile.preferredLongRunDay" label="선호 롱런 요일" :options="weekdayOptions" />
-            <BottomSheetSelect v-model="heartRateModeValue" label="심박 기준" :options="heartRateModeOptions" />
+            <BottomSheetSelect v-model="heartRateModeValue" label="심박 기준" :options="heartRateModeOptions">
+              <template #label-suffix>
+                <button class="help-icon-button help-icon-button-sm" type="button" aria-label="심박 기준 산출 방식 보기" @click="heartRateHelpOpen = true">?</button>
+              </template>
+            </BottomSheetSelect>
             <div class="full hr-summary">
               <p><strong>현재 적용</strong> · {{ activeHeartRateDisplay }}</p>
               <p class="hr-recommended">앱 추천 · {{ recommendedHeartRateDisplay }}</p>
@@ -438,15 +444,8 @@ function goDashboard() {
               </label>
             </template>
             <p class="full hr-hint">
-              심박존·심박 상한은 <strong>역치심박(LTHR) &gt; 측정 최대심박 &gt; 나이(Tanaka) + 누적 기록 보정</strong> 순으로 개인화합니다. 추천(자동)은 나이와 그동안 실제로 찍힌 최고 심박으로 보정하고, 직접 입력하면 그 값을 우선합니다.
-              <br />
-              <strong>산출 방식:</strong> 최대심박 ≈ 208 − 0.7 × 나이(Tanaka), 역치심박 ≈ 최대심박의 90%, 템포 상한 = 역치심박. LTHR은 30분 단독 전력주의 마지막 20분 평균심박으로 측정합니다.
-              <br />
-              <strong>근거:</strong>
-              <a href="https://pubmed.ncbi.nlm.nih.gov/11153730/" target="_blank" rel="noopener">Tanaka 2001 (최대심박 식)</a>,
-              <a href="https://joefrieltraining.com/determining-your-lthr/" target="_blank" rel="noopener">Joe Friel — LTHR</a>,
-              <a href="https://www.asics.com/ie/en-ie/running-advice/threshold-and-tempo-runs-all-you-need-to-know/" target="_blank" rel="noopener">ASICS — Threshold/Tempo</a>.
-              개인차가 있으니 정확히 하려면 LTHR 또는 측정 최대심박을 직접 입력하세요. 이 값은 의료 기준이 아니라 훈련 강도 참고용입니다.
+              심박존·상한은 역치심박(LTHR) &gt; 측정 최대심박 &gt; 나이 + 누적 기록 보정 순으로 개인화합니다.
+              산출 방식과 근거는 <strong>심박 기준</strong> 옆 <strong>?</strong>를 눌러 확인하세요.
             </p>
             <label class="full">
               거리별 PB
@@ -555,4 +554,6 @@ function goDashboard() {
       </aside>
     </div>
   </Teleport>
+
+  <HeartRateHelpSheet :open="heartRateHelpOpen" @close="heartRateHelpOpen = false" />
 </template>
