@@ -5,8 +5,8 @@
 > 하네스 본체의 개발 기록이 아닙니다. 설치된 프로젝트의 현재 작업 맥락만 기록합니다.
 
 ## 현재 상태
-- updatedAt: 2026-05-31
-- baseHarness: 0.2.51
+- updatedAt: 2026-06-05
+- baseHarness: 0.2.53
 - activeStack: `.harness/policy/profile.json` 참고
 - harnessMode: `.harness/policy/profile.json` 참고
 
