@@ -2,7 +2,7 @@
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import type { WeatherHourlyPoint, WeatherSnapshot } from '@/features/import-weatherkit/weatherKitBridge'
-import { formatRainAmount, formatWeatherNumber, getUpcomingHours, weatherSymbolToEmoji } from '@/shared/lib/weather'
+import { formatRainAmount, formatWeatherNumber, weatherSymbolToEmoji } from '@/shared/lib/weather'
 import { getOutfitRecommendation, getRunningSafety, type DerivedHour } from '@/shared/lib/runningWeather'
 import { getSunTimes } from '@/shared/lib/sunTimes'
 import EmptyState from '@/shared/ui/EmptyState.vue'
@@ -46,10 +46,25 @@ watch(
 
 const isSelectedToday = computed(() => selectedDate.value === todayText.value)
 
-const dayHours = computed<WeatherHourlyPoint[]>(() => {
-  const source = props.snapshot?.hourly ?? []
-  if (isSelectedToday.value) return getUpcomingHours(source, 12)
-  return source.filter((hour) => hour.time.slice(0, 10) === selectedDate.value).slice(0, 12)
+// 선택한 날 전체 시간을 보인다(최대 24h). 오늘은 발표시각부터 종일.
+const dayHours = computed<WeatherHourlyPoint[]>(() =>
+  (props.snapshot?.hourly ?? []).filter((hour) => hour.time.slice(0, 10) === selectedDate.value).slice(0, 24)
+)
+
+// 요청(현재) 시각. 이 이전 시간은 타임라인에서 흐리게 표시한다.
+const requestTime = computed(() => {
+  const parsed = props.snapshot?.observedAt ? Date.parse(props.snapshot.observedAt) : Date.now()
+  return Number.isFinite(parsed) ? parsed : Date.now()
+})
+function isPastHour(hour: WeatherHourlyPoint) {
+  return Date.parse(hour.time) < requestTime.value
+}
+// 과거가 끝나는 경계(첫 미래 시간)의 라벨 — 차트 과거 음영 기준.
+const dimBeforeLabel = computed(() => {
+  const firstFuture = dayHours.value.find((hour) => !isPastHour(hour))
+  if (!firstFuture) return undefined
+  if (dayHours.value[0] === firstFuture) return undefined
+  return new Date(firstFuture.time).getHours().toString().padStart(2, '0')
 })
 
 // 선택 시점의 대표 현재값: 오늘이면 실황, 미래면 그 날 오전 시간대 예보.
@@ -82,10 +97,13 @@ const repCurrent = computed<RepCurrent | null>(() => {
   }
 })
 
+// 안전등급·강수 요약은 앞으로의 시간만 본다(과거는 표시용으로만 dim 처리).
+const forwardHours = computed(() => dayHours.value.filter((hour) => !isPastHour(hour)))
+
 const safety = computed(() =>
   getRunningSafety(
     repCurrent.value,
-    dayHours.value.map((hour) => ({
+    forwardHours.value.map((hour) => ({
       temperatureC: hour.temperatureC,
       apparentTemperatureC: hour.apparentTemperatureC,
       humidity: hour.humidity ?? null,
@@ -96,8 +114,8 @@ const safety = computed(() =>
   )
 )
 
-const rainAmount = computed(() => dayHours.value.reduce((sum, hour) => sum + (hour.precipitationAmountMm ?? 0), 0))
-const maxRainChance = computed(() => Math.max(0, ...dayHours.value.map((hour) => hour.precipitationChance ?? 0)))
+const rainAmount = computed(() => forwardHours.value.reduce((sum, hour) => sum + (hour.precipitationAmountMm ?? 0), 0))
+const maxRainChance = computed(() => Math.max(0, ...forwardHours.value.map((hour) => hour.precipitationChance ?? 0)))
 
 const outfit = computed(() => {
   const felt = repCurrent.value?.apparentTemperatureC ?? repCurrent.value?.temperatureC ?? null
@@ -213,9 +231,9 @@ function formatClock(date: Date | null) {
         <button type="button" :class="{ active: tempMode === 'feel' }" @click="tempMode = 'feel'">체감 온도</button>
       </div>
       <div class="weather-hour-icons">
-        <span v-for="hour in dayHours" :key="hour.time">{{ weatherSymbolToEmoji(hour.symbolName) }}</span>
+        <span v-for="hour in dayHours" :key="hour.time" :class="{ 'is-past': isPastHour(hour) }">{{ weatherSymbolToEmoji(hour.symbolName) }}</span>
       </div>
-      <TrendChart :points="tempPoints" unit="°" />
+      <TrendChart :points="tempPoints" unit="°" :dim-before-label="dimBeforeLabel" />
       <p v-if="sun" class="helper weather-sun">🌅 일출 {{ formatClock(sun.sunrise) }} · 🌇 일몰 {{ formatClock(sun.sunset) }}</p>
     </div>
 
@@ -306,5 +324,8 @@ function formatClock(date: Date | null) {
 }
 .weather-sun {
   margin-top: 6px;
+}
+.weather-hour-icons span.is-past {
+  opacity: 0.32;
 }
 </style>
