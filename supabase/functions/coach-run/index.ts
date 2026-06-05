@@ -332,6 +332,35 @@ function normalizeCurrentWeather(value: unknown): CurrentWeatherContext | null {
   }
 }
 
+// 응답 형식 모드. report=세션만 열림, conversational=일반 사담,
+// explain=자세한 설명/분석 요청, evidence=근거/출처 요청.
+type CoachResponseMode = 'report' | 'conversational' | 'explain' | 'evidence'
+// userNote가 있을 때 사용자 의도 분류. chat=잡담, explain=설명/분석, evidence=근거/출처.
+type CoachAnswerIntent = 'chat' | 'explain' | 'evidence'
+
+// userNote 문구로 사용자 의도를 분류한다(서버 권위 분류).
+// 프론트가 보조 힌트를 보내더라도 서버는 항상 여기서 다시 분류한다.
+function detectCoachAnswerIntent(note: string): CoachAnswerIntent {
+  const text = note.trim().toLowerCase()
+  if (!text) return 'chat'
+  // 근거/출처를 먼저 본다("왜 그렇게 판단했어?"도 근거 요청으로 본다).
+  if (/근거|출처|왜|논문|자료|reference|source|evidence|실제로 있|진짜 있|검증|입증/.test(text)) {
+    return 'evidence'
+  }
+  if (/자세히|자세하게|상세|분석|평가|설명|비교|정리|풀어서|구체적/.test(text)) {
+    return 'explain'
+  }
+  return 'chat'
+}
+
+// 빈 입력이면 report, 그 외에는 의도에 따라 evidence/explain/conversational.
+function resolveCoachResponseMode(userNote: string, answerIntent: CoachAnswerIntent): CoachResponseMode {
+  if (userNote.trim().length === 0) return 'report'
+  if (answerIntent === 'evidence') return 'evidence'
+  if (answerIntent === 'explain') return 'explain'
+  return 'conversational'
+}
+
 async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner') {
   const memorySelect = 'id, content, created_at, importance, last_referenced_at, reference_count'
   const [
@@ -470,17 +499,23 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     isSparse: recent30.length < 4
   }
 
+  // userNote 의도를 분류해 응답 모드를 나눈다. 빈 입력=report, 잡담=conversational,
+  // 설명/분석 요청=explain, 근거/출처 요청=evidence.
+  const answerIntent = detectCoachAnswerIntent(userNote)
+  const coachResponseMode = resolveCoachResponseMode(userNote, answerIntent)
   return {
     userNote,
     hasUserNote: userNote.trim().length > 0,
-    // 사용자가 무언가 입력했으면(=대화 턴) 무조건 대화형(사담)으로 답한다. 입력이 없으면(세션만 열림) 리포트.
-    coachResponseMode: userNote.trim().length > 0 ? 'conversational' : 'report',
+    answerIntent,
+    coachResponseMode,
     coachResponseModePolicy:
       'coachResponseMode가 응답 형식을 결정한다. ' +
-      '[conversational] 사용자가 userNote로 말/질문/메모를 보낸 경우다. 이때는 리포트가 아니라 친구 같은 코치와의 "사담"으로 답한다. ' +
+      '[conversational] 사용자가 userNote로 가벼운 말/메모/잡담을 보낸 경우다. 리포트가 아니라 친구 같은 코치와의 "사담"으로 답한다. ' +
       '절대 금지: "## 핵심 지표", "## 오늘 해석", "## 조심할 점", "## 다음 훈련", "## 루틴 업데이트", "## 한 줄 요약" 같은 마크다운 섹션 헤더와 지표 나열 목록. ' +
       '대신 사용자가 한 말에 반응해서 2~6문장 정도로 자연스럽게 대화한다. 숫자가 필요하면 문장 속에 한두 개만 가볍게 녹이고, 세션 전체를 다시 분석하지 않는다. ' +
-      '사용자 표현(예: "오랜만에 5km 30분 도전")을 그대로 받아 맥락에 맞게 사람처럼 답한다. 사용자가 직접 더 자세한 분석/리포트를 요청할 때만 섹션을 쓴다. ' +
+      '사용자 표현(예: "오랜만에 5km 30분 도전")을 그대로 받아 맥락에 맞게 사람처럼 답한다. ' +
+      '[explain] 사용자가 "자세히/분석/설명/비교/정리"처럼 더 깊은 설명을 요청한 경우다. 고정 섹션을 기계적으로 채우지 말고 질문에 맞춰 결론→설명→사용자 적용→추천 순으로 유연하게 답한다. ' +
+      '[evidence] 사용자가 "근거/출처/왜 그렇게 판단했는지/이 훈련법이 실제로 있는지"를 물은 경우다. 짧은 사담으로 끝내지 말고 결론→판단 근거→사용자 데이터 적용→참고한 훈련 원칙/출처 순으로 trainingKnowledge와 러닝 데이터를 근거로 답한다. 출처가 trainingKnowledge에 없으면 지어내지 말고 확인된 출처가 부족하다고 말한다. ' +
       '[report] userNote가 없으면(세션만 열림) 기존 selectedRun 리뷰 리포트 형식(responseTemplatePolicy)으로 답한다.',
     responseStyle,
     runnerLevel,
@@ -857,12 +892,59 @@ function buildConversationalInstructions(runnerLevel: RunnerLevel, levelGuide: R
   ].join('\n')
 }
 
+function buildEvidenceInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnType<typeof buildRunnerLevelGuide>) {
+  return [
+    '너는 사용자를 오래 봐온 한국어 러닝 코치다.',
+    `이 사용자의 runnerLevel은 ${runnerLevel}이다. ${levelGuide.termDepth} ${levelGuide.tone}`,
+    '지금은 근거/출처 설명 모드다. 짧은 사담으로 끝내지 말고 판단 근거와 출처 설명을 우선한다.',
+    '사용자의 질문(context.userNote)에 직접 답한다. 질문이 가리키는 판단이 무엇인지 먼저 잡고, 그 판단의 근거를 댄다.',
+    'context.trainingKnowledge가 있으면 일반 모델 지식보다 이 승인된 지식을 우선 사용한다.',
+    'trainingKnowledge.sources(title/author/summary), trainingKnowledge.methods(name/summary/sourceTitle), trainingKnowledge.prescriptionRules(prescription/evidenceSummary/sourceTitle)를 근거로 설명한다.',
+    '출처가 context.trainingKnowledge에 없으면 출처를 지어내지 말고 "앱 지식 보관소에 확인된 출처가 부족하다"고 솔직히 말한 뒤, 일반 코칭 원칙 수준으로만 조심스럽게 설명한다.',
+    'trainingKnowledge는 원문 전문이 아니라 저작권을 피한 구조화 요약이다. 출처명/저자는 짧게 언급하되 원문 문구를 길게 재현하지 않는다.',
+    '사용자의 최근 러닝 데이터, context.activeGoal, context.activeInjuryItem, context.heartRateModel, context.paceModel을 함께 반영한다. 심박 상한의 유일 출처는 heartRateModel이며, 규칙 텍스트에 적힌 절대 심박 숫자는 상한으로 쓰지 않는다.',
+    '의학적 진단처럼 말하지 않는다. 부상/통증 신호가 있으면 강도 상승보다 회복과 안전을 우선한다.',
+    '출력 구성(마크다운 소제목 사용 가능):',
+    '1. 결론',
+    '2. 판단 근거',
+    '3. 사용자 데이터에 적용',
+    '4. 참고한 훈련 원칙/출처',
+    'memoryItems는 이 대화에서 새로 생긴 안정적인 장기 기억이 있을 때만 0~2개 넣는다. 이미 core/coachMemoryItems에 있으면 다시 넣지 않는다.',
+    'trainingMemoryPatch와 injuryUpdateProposal은 명확한 필요가 없으면 null로 둔다.',
+    '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal. report에 위 설명 본문을 넣는다.'
+  ].join('\n')
+}
+
+function buildExplainInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnType<typeof buildRunnerLevelGuide>) {
+  return [
+    '너는 사용자를 오래 봐온 한국어 러닝 코치다.',
+    `이 사용자의 runnerLevel은 ${runnerLevel}이다. ${levelGuide.termDepth} ${levelGuide.tone}`,
+    '지금은 설명/분석 모드다. 리포트처럼 고정 6섹션을 기계적으로 채우지 말고, 사용자의 질문(context.userNote)에 맞춰 설명한다.',
+    '필요하면 마크다운 소제목을 사용할 수 있다. 다만 selectedRun 리뷰 리포트 템플릿(핵심 지표/오늘 해석/루틴 업데이트 등 고정 헤더 전체)을 그대로 찍어내지 않는다.',
+    '사용자의 최근 러닝 데이터, context.activeGoal, context.activeInjuryItem, context.heartRateModel, context.paceModel, context.trainingKnowledge를 질문과 관련된 만큼 반영한다.',
+    '용어/개념 질문이면 먼저 용어를 구분해 설명한 뒤, 사용자 상황에 맞는 추천을 준다.',
+    '강도 기준은 심박 상한(heartRateModel)이 우선이고 페이스(paceModel)는 보조다. 상한이 null이면 페이스/RPE로 설명한다.',
+    '부상/통증 신호가 있으면 강도 상승보다 회복과 안전을 우선한다. 의학적 진단처럼 말하지 않는다.',
+    'context.coreMemoryItems/coachMemoryItems가 질문과 이어지면 자연스럽게 녹여 "너를 기억한다"는 맥락을 유지한다.',
+    '출력 구성은 질문에 맞게 유연하게 하되 결론 → 설명 → 사용자 적용 → 추천 순서를 기본으로 한다.',
+    'memoryItems는 안정적인 장기 기억이 생긴 경우만 0~2개 넣는다. 이미 core/coachMemoryItems에 있으면 다시 넣지 않는다.',
+    'trainingMemoryPatch와 injuryUpdateProposal은 명확한 필요가 없으면 null로 둔다.',
+    '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal. report에 설명 본문을 넣는다.'
+  ].join('\n')
+}
+
 function buildCoachInstructions(context: unknown) {
   const ctx = context as Record<string, unknown> | null
   const runnerLevel = normalizeRunnerLevel(ctx?.runnerLevel)
   const levelGuide = buildRunnerLevelGuide(runnerLevel)
-  // 대화 턴(사용자가 입력함)이면 리포트 지침 세트를 아예 보내지 않고 채팅 전용 지침만 보낸다.
+  // 대화 턴(사용자가 입력함)이면 리포트 지침 세트를 아예 보내지 않고 의도별 전용 지침만 보낸다.
   // (리포트 few-shot 예시/섹션 정책이 함께 가면 모델이 계속 템플릿으로 빠진다.)
+  if (ctx?.coachResponseMode === 'evidence') {
+    return buildEvidenceInstructions(runnerLevel, levelGuide)
+  }
+  if (ctx?.coachResponseMode === 'explain') {
+    return buildExplainInstructions(runnerLevel, levelGuide)
+  }
   if (ctx?.coachResponseMode === 'conversational') {
     return buildConversationalInstructions(runnerLevel, levelGuide)
   }
