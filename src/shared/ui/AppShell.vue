@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch } from 'vue'
+import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppHeader from '@/shared/ui/AppHeader.vue'
 import BottomNav, { type BottomNavItem } from '@/shared/ui/BottomNav.vue'
@@ -17,6 +17,9 @@ function getRouteIndex(path: string | undefined) {
   return props.navItems.findIndex((item) => item.to === path)
 }
 
+// 하단 네비 탭 라우트에서만 고정 100dvh + 내부 스크롤 레이아웃을 적용한다.
+const isTabRoute = computed(() => getRouteIndex(route.path) !== -1)
+
 watch(
   () => route.path,
   (path, previousPath) => {
@@ -31,7 +34,7 @@ watch(
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'is-tab-home': isTabRoute }">
     <AppHeader :is-authenticated="isAuthenticated" @sign-out="emit('signOut')" />
     <main class="app-main">
       <slot />

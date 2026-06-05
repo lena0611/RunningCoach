@@ -524,8 +524,6 @@ body,
 #app {
   min-height: 100%;
   touch-action: manipulation;
-  /* iOS 상단 오버스크롤(러버밴드) 차단 — 하단 네비 탭에서 웹뷰 뒤 노출 방지 */
-  overscroll-behavior: none;
 }
 
 body {
@@ -678,6 +676,28 @@ label {
   .app-shell {
     min-height: 100dvh;
   }
+}
+
+/* 탭 홈: 상세 스택(.memory-stack-page)과 동일한 고정 100dvh + 내부 스크롤 모델.
+   바디가 스크롤하지 않아 상단 오버스크롤로 웹뷰 뒤가 노출되지 않고, 스크롤·바운스는
+   패널 내부에서만 일어난다(향후 pull-to-refresh 대비). */
+.app-shell.is-tab-home {
+  height: 100vh;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+@supports (height: 100dvh) {
+  .app-shell.is-tab-home {
+    height: 100dvh;
+  }
+}
+
+.app-shell.is-tab-home .app-main {
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 0;
 }
 
 .app-header {
@@ -1181,7 +1201,8 @@ body.tab-swiping {
 
 .tab-swipe-viewport {
   position: relative;
-  min-height: calc(100vh - 170px);
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
   overscroll-behavior-x: contain;
   touch-action: pan-y;
@@ -1197,8 +1218,9 @@ body.tab-swiping {
   top: 0;
   left: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   width: 100%;
+  height: 100%;
   backface-visibility: hidden;
   transform-style: preserve-3d;
   will-change: transform;
@@ -1213,7 +1235,11 @@ body.tab-swiping {
   flex: 0 0 100%;
   width: 100%;
   min-width: 0;
-  padding: 0;
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 0 0 var(--bottom-nav-reserve);
 }
 
 .tab-swipe-panel[aria-hidden='true'] {
@@ -1221,13 +1247,7 @@ body.tab-swiping {
 }
 
 .tab-panel-skeleton {
-  min-height: calc(100vh - 170px);
-}
-
-@supports (height: 100dvh) {
-  .tab-panel-skeleton {
-    min-height: calc(100dvh - 170px);
-  }
+  min-height: 100%;
 }
 
 .app-toast {
