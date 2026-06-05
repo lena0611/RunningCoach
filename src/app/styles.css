@@ -1239,6 +1239,8 @@ body.tab-swiping {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  /* 세로는 네이티브 스크롤, 수평은 JS pager가 소유(브라우저 수평 팬 비활성). */
+  touch-action: pan-y;
   padding: 0 0 var(--bottom-nav-reserve);
 }
 
