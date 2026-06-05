@@ -58,6 +58,16 @@ const coachError = ref('')
 const coachCommandOpen = ref(false)
 const streamingCoachText = ref('')
 const streamingCoachMeta = ref('')
+// 스트리밍 reveal 스무딩: 수신 버퍼를 rAF 루프로 grapheme 경계 단위 표시한다.
+let coachRevealPending = ''
+let coachRevealRafId = 0
+let coachRevealLastTs = 0
+let coachRevealStopped = false
+let coachRevealDrainResolve: (() => void) | null = null
+const coachGraphemeSegmenter =
+  typeof Intl !== 'undefined' && typeof (Intl as { Segmenter?: unknown }).Segmenter === 'function'
+    ? new Intl.Segmenter('ko', { granularity: 'grapheme' })
+    : null
 const coachThinkingSeconds = ref(1)
 const coachThinkingTimer = ref<number | null>(null)
 const coachAbortController = ref<AbortController | null>(null)
@@ -335,6 +345,7 @@ onBeforeUnmount(() => {
   cleanupRunMonthStickyState()
   stopCoachThinkingTimer()
   coachAbortController.value?.abort()
+  resetCoachReveal()
 })
 
 function setupObserver() {
@@ -834,20 +845,16 @@ async function sendCoachRequest(note: string) {
   streamingCoachMeta.value = 'AI 코치가 답변 중'
   const controller = new AbortController()
   coachAbortController.value = controller
-  let revealCancelled = false
-  let revealChain = Promise.resolve()
-  const enqueueCoachDelta = (delta: string) => {
-    revealChain = revealChain.then(() => revealCoachDelta(delta, () => revealCancelled || controller.signal.aborted))
-    void revealChain
-  }
+  resetCoachReveal()
+  coachRevealStopped = false
   startCoachThinkingTimer()
   try {
     const report = await requestCoachRunStream(coachRun.value.id, note, weatherStore.snapshot, {
       signal: controller.signal,
-      onDelta: enqueueCoachDelta,
+      onDelta: enqueueCoachReveal,
       runnerLevel: resolveRunnerLevel(memoryStore.memory.athleteProfile, runStore.sortedRuns).level
     })
-    await revealChain
+    await waitForCoachRevealDrain()
     reports.value = [report, ...reports.value.filter((item) => item.id !== report.id)]
     coachNote.value = ''
     coachCommandOpen.value = false
@@ -855,7 +862,7 @@ async function sendCoachRequest(note: string) {
     streamingCoachMeta.value = ''
     reportsLoaded.value = true
   } catch (err) {
-    revealCancelled = true
+    resetCoachReveal()
     if (err instanceof Error && err.name === 'AbortError') {
       streamingCoachMeta.value = '생성 중단됨 · 저장되지 않음'
     } else {
@@ -864,55 +871,118 @@ async function sendCoachRequest(note: string) {
       streamingCoachMeta.value = ''
     }
   } finally {
-    revealCancelled = true
     stopCoachThinkingTimer()
     coachLoading.value = false
     if (coachAbortController.value === controller) coachAbortController.value = null
   }
 }
 
-async function revealCoachDelta(delta: string, shouldStop: () => boolean) {
-  for (const chunk of splitCoachDelta(delta)) {
-    if (shouldStop()) return
-    if (!streamingCoachText.value) stopCoachThinkingTimer()
-    streamingCoachText.value += chunk
-    await waitForCoachReveal(getCoachRevealDelay(chunk))
+// 수신한 delta를 버퍼에 쌓고, rAF drain 루프가 grapheme 경계 단위로 매끄럽게 표시한다.
+function enqueueCoachReveal(delta: string) {
+  if (!delta) return
+  coachRevealPending += delta
+  ensureCoachRevealLoop()
+}
+
+function ensureCoachRevealLoop() {
+  if (coachRevealRafId || coachRevealStopped) return
+  coachRevealLastTs = 0
+  coachRevealRafId = window.requestAnimationFrame(pumpCoachReveal)
+}
+
+function pumpCoachReveal(timestamp: number) {
+  coachRevealRafId = 0
+  if (coachRevealStopped) {
+    settleCoachRevealDrain()
+    return
+  }
+  if (!coachRevealLastTs) coachRevealLastTs = timestamp
+  // 탭 전환 등으로 프레임 간격이 크면 한꺼번에 쏟아내지 않도록 제한한다.
+  const elapsed = Math.min(Math.max(timestamp - coachRevealLastTs, 0), 80)
+  coachRevealLastTs = timestamp
+
+  const backlog = coachRevealPending.length
+  if (backlog > 0) {
+    // 따라잡았을 때 ~52자/초(내추럴), 밀리면 백로그에 비례해 부드럽게 빨라져 따라잡는다.
+    const charsPerSecond = Math.min(900, 52 + backlog * 7)
+    const want = Math.max(1, Math.round((charsPerSecond * elapsed) / 1000))
+    const take = clampCoachRevealBoundary(coachRevealPending, want)
+    if (take > 0) {
+      if (!streamingCoachText.value) stopCoachThinkingTimer()
+      streamingCoachText.value += coachRevealPending.slice(0, take)
+      coachRevealPending = coachRevealPending.slice(take)
+    }
+  }
+
+  if (coachRevealPending.length > 0 && !coachRevealStopped) {
+    coachRevealRafId = window.requestAnimationFrame(pumpCoachReveal)
+  } else {
+    coachRevealLastTs = 0
+    settleCoachRevealDrain()
   }
 }
 
-function splitCoachDelta(delta: string) {
-  const chunks: string[] = []
-  let index = 0
-  while (index < delta.length) {
-    const remaining = delta.slice(index)
-    if (remaining.startsWith('\n')) {
-      chunks.push('\n')
-      index += 1
-      continue
+// want 글자 지점에서 grapheme 경계로 스냅하고, 코드펜스(백틱 런)는 쪼개지 않는다.
+function clampCoachRevealBoundary(text: string, want: number) {
+  if (want >= text.length) return text.length
+  let boundary = graphemeBoundaryAtMost(text, want)
+  if (boundary > 0 && boundary < text.length && text[boundary - 1] === '`' && text[boundary] === '`') {
+    let runStart = boundary
+    while (runStart > 0 && text[runStart - 1] === '`') runStart -= 1
+    if (runStart > 0) {
+      boundary = runStart
+    } else {
+      let runEnd = boundary
+      while (runEnd < text.length && text[runEnd] === '`') runEnd += 1
+      boundary = runEnd
     }
-    if (remaining.startsWith('```')) {
-      chunks.push('```')
-      index += 3
-      continue
-    }
-    const maxLength = remaining.startsWith('|') ? 18 : 7
-    const windowText = remaining.slice(0, maxLength + 4)
-    const sentenceEnd = windowText.search(/[.!?。]\s/)
-    const take = sentenceEnd >= 2 ? sentenceEnd + 2 : Math.min(maxLength, remaining.length)
-    chunks.push(delta.slice(index, index + take))
-    index += take
   }
-  return chunks
+  return Math.max(1, boundary)
 }
 
-function getCoachRevealDelay(chunk: string) {
-  if (chunk === '\n') return 18
-  if (chunk === '```') return 28
-  return chunk.length >= 14 ? 12 : 9
+function graphemeBoundaryAtMost(text: string, limit: number) {
+  if (coachGraphemeSegmenter) {
+    let boundary = 0
+    let firstGraphemeEnd = 0
+    for (const segment of coachGraphemeSegmenter.segment(text)) {
+      const end = segment.index + segment.segment.length
+      if (!firstGraphemeEnd) firstGraphemeEnd = end
+      if (end > limit) break
+      boundary = end
+    }
+    // limit이 첫 grapheme보다 작아도 최소 한 글자는 진행시킨다.
+    return boundary > 0 ? boundary : firstGraphemeEnd || Math.min(limit, text.length)
+  }
+  let end = Math.min(limit, text.length)
+  const code = text.charCodeAt(end)
+  if (code >= 0xdc00 && code <= 0xdfff) end -= 1 // 서로게이트 페어를 가르지 않는다.
+  return Math.max(1, end)
 }
 
-function waitForCoachReveal(ms: number) {
-  return new Promise<void>((resolve) => window.setTimeout(resolve, ms))
+// 버퍼가 완전히 표시될 때까지(또는 루프가 멈출 때까지) 기다린다.
+function waitForCoachRevealDrain() {
+  if (!coachRevealRafId && coachRevealPending.length === 0) return Promise.resolve()
+  return new Promise<void>((resolve) => {
+    coachRevealDrainResolve = resolve
+  })
+}
+
+function settleCoachRevealDrain() {
+  const resolve = coachRevealDrainResolve
+  coachRevealDrainResolve = null
+  if (resolve) resolve()
+}
+
+// 중단/완료/언마운트 시 버퍼와 rAF 루프를 즉시 정리한다.
+function resetCoachReveal() {
+  coachRevealStopped = true
+  coachRevealPending = ''
+  if (coachRevealRafId) {
+    window.cancelAnimationFrame(coachRevealRafId)
+    coachRevealRafId = 0
+  }
+  coachRevealLastTs = 0
+  settleCoachRevealDrain()
 }
 
 async function confirmGoalProposal() {
@@ -1097,6 +1167,7 @@ function stopCoachStream() {
   coachAbortController.value?.abort()
   coachAbortController.value = null
   coachLoading.value = false
+  resetCoachReveal()
   stopCoachThinkingTimer()
   if (streamingCoachText.value) {
     streamingCoachMeta.value = '생성 중단됨 · 저장되지 않음'
