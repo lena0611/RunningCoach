@@ -270,7 +270,9 @@ onMounted(() => {
   }
   setupObserver()
   setupRunMonthStickyOffset()
-  window.addEventListener('scroll', scheduleRunMonthStickyStateSync, { passive: true })
+  // capture 단계로 구독해야 실제 스크롤러인 자식 .tab-swipe-panel의 scroll(및 탭 복귀 시
+  // scrollTop=0 리셋이 발화하는 scroll)까지 수신해 sticky 상태를 갱신/해제한다.
+  window.addEventListener('scroll', scheduleRunMonthStickyStateSync, { passive: true, capture: true })
   openRouteRunIfNeeded()
 })
 
@@ -397,7 +399,7 @@ function setRunMonthGroupRef(key: string, element: Element | ComponentPublicInst
 }
 
 function cleanupRunMonthStickyState() {
-  window.removeEventListener('scroll', scheduleRunMonthStickyStateSync)
+  window.removeEventListener('scroll', scheduleRunMonthStickyStateSync, { capture: true })
   if (runMonthStickyStateFrame) window.cancelAnimationFrame(runMonthStickyStateFrame)
   runMonthStickyStateFrame = 0
   runMonthGroupRefs.clear()
