@@ -41,6 +41,7 @@
 - Node 버전 불일치로 npm 스크립트가 실패하면 중단하지 않고 프로젝트 루트에서 `. "$HOME/.nvm/nvm.sh" && nvm use`로 `.nvmrc` 버전을 활성화한 뒤 재시도한다.
 - Codex hook의 `nvm use`는 hook 자식 프로세스에만 적용된다. 실제 npm/tsc/build/test/harness 명령을 실행하는 shell에서는 다시 `. "$HOME/.nvm/nvm.sh" && nvm use`를 적용한다.
 - Issue worktree는 `node_modules`를 자동으로 가져오지 않는다. 이 프로젝트는 `package-lock.json` 기준 npm 프로젝트이므로 새 worktree에서 `node_modules`가 없으면 `npm ci`로 의존성을 준비한 뒤 TypeScript/build/test를 실행한다.
+- Issue worktree에서 commit/pre-push hook의 `npm run harness:check`는 lint/test/build를 **silent skip**한다(`결과: 통과`로 보이지만 실제 검증 안 함). 원인은 `guard.mjs`가 적용 여부를 gitignore된 `.harness/.stack-applied.json` 마커 존재로만 판정하는데, worktree(및 fresh clone/CI)는 추적 파일만 체크아웃해 그 마커가 없기 때문(`node_modules` 누락과 동일 이치). 단일 작업트리 브랜치 분기 모델에선 마커가 유지돼 문제가 없다. 대응: worktree 작업은 hook과 별개로 작업트리에서 `npm run build`+`npm run test:run`을 직접 돌려 보강한다(필요 시 worktree에서 `npm run stack:apply` 1회로 마커 생성 가능하나 profile.json/stack-preset-rules.md/harness-lock.json을 건드릴 수 있어 commit 전 `git status` 확인). 근본 수정은 상류 harness-seed 몫이며 2026-06-05 결정로그에 상류 제안을 남겼다.
 - 부상관리 도메인은 0~5 통증 체크인, 사용자 승인 기반 완치 처리, 목표 예상/훈련 강도에 반영되는 부상/회복 게이트, 근거 출처와 의료 한계를 포함한 참고용 보강운동 기준을 따른다.
 
 ## 기록 원칙

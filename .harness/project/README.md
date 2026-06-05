@@ -46,13 +46,11 @@
 10. [도메인 규칙](./domain-rules.md)
 11. [아키텍처 규칙](./architecture-rules.md)
 12. [작업 흐름 규칙](./workflow-rules.md)
-13. [GitHub 작업 추적 규칙](./github-tracking-rules.md)
-14. [GitHub 이슈 운영 가이드](./github-issue-management-guide.md)
-15. [커밋/푸시 안전장치 규칙](./commit-push-rules.md)
-16. [중요 경로 선언](./critical-paths.md)
-17. [설정 계약](./config-contract.md)
-18. [이식 가이드](./portability-guide.md)
-19. [스택 프리셋 목록](../stacks/README.md)
+13. [커밋/푸시 안전장치 규칙](./commit-push-rules.md)
+14. [중요 경로 선언](./critical-paths.md)
+15. [설정 계약](./config-contract.md)
+16. [이식 가이드](./portability-guide.md)
+17. [스택 프리셋 목록](../stacks/README.md)
 
 ## 운영 원칙
 - 아직 비어 있는 항목은 빈 채로 두지 말고 `TBD`와 필요한 입력을 함께 적습니다.
