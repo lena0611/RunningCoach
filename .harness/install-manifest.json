@@ -1,14 +1,14 @@
 {
   "tool": "harness-seed",
-  "version": "0.2.52",
-  "installedAt": "2026-05-29T06:40:45.981Z",
+  "version": "0.2.53",
+  "installedAt": "2026-06-05T02:07:01.344Z",
   "source": {
     "type": "git",
     "repo": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git",
-    "ref": "v0.2.52",
+    "ref": "v0.2.53",
     "commit": null,
-    "packageVersion": "0.2.52",
-    "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.52"
+    "packageVersion": "0.2.53",
+    "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.53"
   },
   "manifestVersion": 2,
   "managedFiles": {
@@ -31,7 +31,7 @@
       "sha256": "875f25b4ed215580c77f038546880f7a620c5380917347efd6bb975d3447ac9a"
     },
     ".harness/bin/guard.mjs": {
-      "sha256": "c5cc5b1f00232d348f102e0b1009d7ce2abc9301d075862c99a510c03b5154cb"
+      "sha256": "3dbdccfa17a2de8fbfd0744d84d7197c6f8a1d66609ab9a858aea8175034bac5"
     },
     ".harness/bin/handoff.mjs": {
       "sha256": "e809d6b1861d7cfda9a3595579d33a7e582346fdb6cf026fbeb5e1e8ecef92cd"
@@ -115,7 +115,7 @@
       "sha256": "14d526d86161d4fe9c569eb539596d0adb740cf539b5d6390646e9d54caf7e35"
     },
     ".harness/policy/automation-coverage.md": {
-      "sha256": "473a4b0f7b49852e9a3f1960c2f037d72e76e9011c348c9f19f5daed94c0f606"
+      "sha256": "2a2368031420d900017235a4218f254862290f291cf5b52e528a7e0382970142"
     },
     ".harness/policy/context-protocol.md": {
       "sha256": "6ff2697a27feede96cffd31da46934edbde162d6070462ea424cd9f668dbdf94"
@@ -142,7 +142,7 @@
       "sha256": "724a9845eceb08c64b7266f3d707934e9452fb0d434ec11124a93d2a4c41ab3f"
     },
     ".harness/project/bootstrap.md": {
-      "sha256": "310dd0f5ec771c67088355ae9a4b8d347c59559db756246970969e4b80975b0a"
+      "sha256": "b702fcc7d9e3a4264fcc7beb516996651c7e6032ee66cc27feaa0e2aaa54da16"
     },
     ".harness/project/personal-methodology.example.md": {
       "sha256": "46a3565c19674fdeff1061bc846452c50c9adee8af135a1a9352909c46ffa913"

@@ -554,3 +554,19 @@
 - 데이터 구조 확인: 처방·루틴은 `training_memory.memory` 단일 JSON에 **upsert(덮어쓰기) → 이력 없음, 항상 최신본**. coach_reports만 append 이력. 따라서 stale 165는 "과거 기록"이 아니라 현재 최신 처방의 잔재라 **이력 훼손 없이 load 시 정규화 가능**.
 - 결정: (1) `stripStaleHeartRateCeilings`로 정규화(load) 시 처방/루틴 텍스트의 130/145/165/168을 일반 표현("회복/이지/템포 상한")으로 치환(웹 normalizeTrainingMemory + coach-run sanitizeMemoryHeartRateCeilings). (2) coach-run 지침에서 심박 상한 숫자는 저장 텍스트가 아니라 항상 heartRateModel을 유일 출처로 사용하도록 명시. coach_reports 과거 이력은 불변(새 턴부터 정합).
 - 적용 범위: `src/entities/training-memory/model.ts`(sanitizer + 정규화 적용), `supabase/functions/coach-run/index.ts`(sanitizeMemoryHeartRateCeilings + 지침), 테스트 추가.
+
+## 2026-06-05 - worktree에서 harness:check가 lint/test/build를 silent skip (하네스 본체 결함 + 운영 대응)
+- 증상: Issue worktree에서 commit/pre-push hook의 `npm run harness:check`가 매번 `검증: 스택 미적용으로 lint/test/build 스킵`을 찍고도 `결과: 통과`로 끝남. 검증을 안 했는데 통과처럼 보이는 silent degradation.
+- 원인(소스): `guard.mjs:22`가 적용 여부를 `fs.existsSync('.harness/.stack-applied.json')` 마커 존재만으로 판정 → 마커 없으면 `guard.mjs:549`에서 lint/test/build 블록을 통째 스킵. 그런데 이 마커는 `.gitignore:19`로 **추적 제외**(내용에 npx 캐시 등 머신 로컬 경로 포함이 이유로 추정).
+- 근본: git worktree는 **추적 파일만 새로 체크아웃**하고 ignored 파일은 안 만들어 냄(node_modules와 동일 이치). 단일 작업트리 + 브랜치 분기 모델에선 마커가 그 자리에 남아 "한 번 stack:apply=영구"가 성립해 문제가 안 났으나, worktree(및 fresh `git clone`/CI 러너 등 "추적 파일만의 깨끗한 체크아웃")에선 마커가 빠져 검증이 누락됨. 하네스가 "적용 상태"를 머신 로컬·체크아웃 종속 마커로 들고 있는 게 원인. 참고: 프리셋 스냅샷 `.harness/stacks/.applied/<id>/`는 추적되어 worktree에도 존재함(확인).
+- 결정/대응:
+  - (즉시 운영) 상류 수정 전까지 worktree 작업은 hook 검증과 별개로 작업트리에서 `npm run build`+`npm run test:run`을 직접 돌려 보강한다(이번 #186/#188이 그렇게 처리됨). 필요 시 worktree에서 `npm run stack:apply` 1회로 마커를 만들면 hook이 풀 검증으로 돌지만, profile.json/stack-preset-rules.md/harness-lock.json(추적 파일)을 건드릴 수 있어 commit 전 `git status` 확인 필요.
+  - (상류 제안) harness-seed의 `guard.mjs` 판정을 **추적되는 상태에서 derive**: `profile.json`의 `activeStack` + 커밋된 `.harness/stacks/.applied/<id>/` 스냅샷 존재로 "적용됨"을 판정(마커는 보조). 더해 **linked worktree + 마커 없음**이면 조용한 info가 아니라 **경고**로 스킵을 알린다. 이러면 worktree/clone/CI 어떤 fresh checkout이든 검증이 자연히 켜짐.
+- 메타: 이 repo는 하네스(harness-seed/스택 하네스)의 도그푸드 소비자라, 본 발견은 상류 개선 피드백으로 격상. `.harness/bin/*`는 sync로 내려오는 본체이므로 로컬 직접 수정은 다음 sync에 덮임 → 수정은 상류에서.
+
+## 2026-06-05 - 하네스 base v0.2.53 적용 (위 silent-skip 상류 수정 반영, Issue #194)
+- 적용: `npm run harness:update -- --base-only`로 base 0.2.52 → 0.2.53. stack vue3-vite-pinia-router 0.1.32는 최신(무변경).
+- 상류 수정 확인: v0.2.53 `guard.mjs`는 우리가 제안한 1번대로, 로컬 마커(`.harness/.stack-applied.json`) 없이도 `profile.json` activeStack + 커밋된 `.harness/stacks/.applied/<stack>/manifest.json` 스냅샷에서 적용 상태를 derive. **마커 없는 worktree에서 `Stack applied state derived from tracked snapshot ...` 출력 후 `검증: test, build 통과` 실제 실행**을 확인(캐시 비우고 재현). silent skip 종료.
+- 표준 계층 충돌 처리: 이 업데이트가 base-managed인 `CLAUDE.md`/`AGENTS.md`의 인라인 PaceLAB 전용 문구(MVP 자동완료 흐름·요청창 풀스택 소유·main 직접 commit 차단/예외)를 generic base 문구로 되돌림. 확인 결과 해당 권위 규칙은 프로젝트 소유 문서 `.harness/project/workflow-rules.md`(8·33·44·45행)와 `commit-push-rules.md`(21행)에 그대로 보존되어 **동작 손실 없음**.
+  - 결정: 재인라인하지 않고 generic base 문구를 수용. 프로젝트 전용 규칙의 단일 출처는 `.harness/project/*`로 유지(엔트리 파일에 인라인하면 base 업데이트마다 덮여 drift 재발). CLAUDE.md는 "작업별로 골라 읽는 기준"으로 그 문서들을 가리키고, UserPromptSubmit hook이 PaceLAB 컨텍스트를 매 요청 주입하므로 surface도 유지됨.
+- 주의(기록): fresh worktree는 `node_modules`가 없으면 이제 검증이 실제 실행되며 `vitest: command not found`로 실패할 수 있음 → 하네스 문제 아님, `npm ci` 선행 필요. strict(`harness:check:strict`)는 사전 존재하던 doc-link 경고(`workflow-rules.md → GlossaryPage.vue`)에서 죽으므로 평소 게이트는 비-strict `harness:check` 기준.
