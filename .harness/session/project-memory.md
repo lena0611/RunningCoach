@@ -43,6 +43,7 @@
 - Issue worktree는 `node_modules`를 자동으로 가져오지 않는다. 이 프로젝트는 `package-lock.json` 기준 npm 프로젝트이므로 새 worktree에서 `node_modules`가 없으면 `npm ci`로 의존성을 준비한 뒤 TypeScript/build/test를 실행한다.
 - Issue worktree에서 commit/pre-push hook의 `npm run harness:check`는 lint/test/build를 **silent skip**한다(`결과: 통과`로 보이지만 실제 검증 안 함). 원인은 `guard.mjs`가 적용 여부를 gitignore된 `.harness/.stack-applied.json` 마커 존재로만 판정하는데, worktree(및 fresh clone/CI)는 추적 파일만 체크아웃해 그 마커가 없기 때문(`node_modules` 누락과 동일 이치). 단일 작업트리 브랜치 분기 모델에선 마커가 유지돼 문제가 없다. 대응: worktree 작업은 hook과 별개로 작업트리에서 `npm run build`+`npm run test:run`을 직접 돌려 보강한다(필요 시 worktree에서 `npm run stack:apply` 1회로 마커 생성 가능하나 profile.json/stack-preset-rules.md/harness-lock.json을 건드릴 수 있어 commit 전 `git status` 확인). 근본 수정은 상류 harness-seed 몫이며 2026-06-05 결정로그에 상류 제안을 남겼다.
 - 부상관리 도메인은 0~5 통증 체크인, 사용자 승인 기반 완치 처리, 목표 예상/훈련 강도에 반영되는 부상/회복 게이트, 근거 출처와 의료 한계를 포함한 참고용 보강운동 기준을 따른다.
+- 하단 네비 4탭(요약/기록/추세/기억)은 App.vue가 4페이지를 한 트랙에 동시 마운트하는 좌우 스와이프 pager다. 스크롤 모델은 상세 스택(`.memory-stack-page`)과 동일하게 `.app-shell.is-tab-home` 고정 100dvh + 각 `.tab-swipe-panel` 독립 내부 스크롤러다(바디 미스크롤). 탭 페이지는 `defineAsyncComponent` 지연 로드이며 App.vue에서 정적 import 금지(라우터 코드분할 무력화). iOS 제스처 계약은 2026-06-05 decision-log "스와이프 탭" 항목을 단일 출처로 따른다: Pointer preventDefault는 iOS 스크롤 못 막음(non-passive touchmove만), 첫 move 방향 확정, 제스처 중 overflow/touch-action 토글 금지(pointercancel 유발), pointercancel은 스냅백(네비는 pointerup만), 내부 스크롤러는 window scroll을 capture로 구독, 탭 도착 시 패널 scrollTop=0, 스크롤-구동 sticky는 `pacelab:tab-swipe-commit` 이벤트로 확정 즉시 해제.
 
 ## 기록 원칙
 - 한 번뿐인 구현 세부사항은 기록하지 않습니다.
