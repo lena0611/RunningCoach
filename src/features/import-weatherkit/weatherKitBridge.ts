@@ -8,6 +8,9 @@ export type WeatherHourlyPoint = {
   condition: string
   symbolName: string
   isDaylight: boolean
+  // 기상청(weather-run) 경유에서 채워진다. WeatherKit/Open-Meteo 경로에서는 선택값.
+  humidity?: number | null
+  precipitationType?: number | null
 }
 
 export type WeatherDailyPoint = {
@@ -35,6 +38,8 @@ export type WeatherSnapshot = {
   }
   hourly: WeatherHourlyPoint[]
   daily: WeatherDailyPoint[]
+  // 기상청 격자(nx/ny). weather-run 경유에서만 채워진다.
+  grid?: { nx: number; ny: number }
 }
 
 type WeatherKitBridgeHandlers = {

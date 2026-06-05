@@ -15,7 +15,7 @@
 - `RunContextUser`: 앱에 등록된 사용자 단위다. 각 사용자는 자기 `TrainingMemory`와 목표를 가진다.
 - `FIT import`: Workoutdoors에서 export한 `.fit` 파일을 브라우저에서 로컬 파싱해 `RunLog` 후보를 만드는 흐름이다.
 - `AI Coach`: 저장 데이터와 프로그램 통계를 기반으로 OpenAI가 자연어 코칭 리포트를 생성하는 코칭 엔진이다.
-- `WeatherSnapshot`: 무료 Open-Meteo에서 받은 현재/시간별/일별 날씨 요약이다. 러닝 준비 판단의 체감온도, 강수확률, 강수량, 강수시간 근거로 쓴다.
+- `WeatherSnapshot`: 기상청 단기예보(운영 기본, Edge `weather-run` 경유)에서 받은 현재/시간별/일별 국내 날씨 요약이다. 러닝 준비 판단의 체감온도, 강수확률, 강수량, 강수시간, 복장 근거로 쓴다. 체감온도는 계절분기 자체 산출이며, 위치(현위치/마지막 러닝 위치)와 시점(지금/3일 이내)을 사용자가 바꿀 수 있다.
 - `Goal`: 사용자는 여러 목표를 가질 수 있고, `activeGoalId`로 지정된 활성 목표가 코칭의 1차 판단 기준이다. 시작일, 목표일, 성공 기준, 목표 전략을 함께 가진다. 다른 목표는 보조 관점으로 참고한다.
 - `InjuryItem`: 사용자는 여러 부상/주의사항을 관리할 수 있고, `activeInjuryItemId`로 지정된 항목이 코칭의 1차 부상관리 기준이다. 악화 트리거, 훈련 제한, 복귀 기준을 함께 가지며, 의료 진단이 아니라 훈련 강도 조절과 관찰 포인트로만 사용한다.
 - `InjuryArea`: 부상 부위는 자유 텍스트가 아니라 정규화된 근육/힘줄/인대/근막/관절/뼈 단위 선택값이다. 러너에게 중요한 기본 축은 햄스트링, 대퇴사두근, IT 밴드, 무릎, 정강이, 종아리, 아킬레스건, 발목 인대, 족저근막, 고관절, 허리다.
@@ -192,8 +192,8 @@
 - Workoutdoors export의 기본 지원 포맷은 FIT로 제한한다.
 - Strava 연동은 장기 확장이다. Strava OAuth token exchange, refresh token 보관, webhook callback은 정적 프론트가 아니라 서버리스 백엔드가 담당해야 한다.
 - Strava 연동은 당장 구현하지 않고 확장 메모로 둔다. 모바일 FIT 업로드 불편이 커지면 MVP 이후 구현한다.
-- 날씨 연동의 기본값은 무료 Open-Meteo API다. iOS 하이브리드 앱은 네이티브 CoreLocation으로 위치를 잡고 Open-Meteo를 호출해 웹에 `WeatherSnapshot`을 전달한다. 일반 브라우저/localhost는 웹 geolocation으로 현재 위치를 낮은 정밀도로 반올림해 Open-Meteo forecast API를 호출한다.
-- WeatherKit은 현재 보류한다. GitHub Pages 일반 브라우저에서는 직접 WeatherKit을 호출하지 않으며, Personal Team 빌드에서는 WeatherKit capability를 켜지 않는다.
+- 날씨 연동의 운영 기본값은 국내 정확도를 위한 기상청 단기예보이며 Supabase Edge Function `weather-run` 프록시 경유로 받는다(serviceKey는 서버 secret). 좌표→격자(nx/ny)는 행정동↔격자 룩업표(`grid.json`) 최근접 매칭을 쓰고, nx/ny 역매핑으로 동네명 라벨을 만든다. 예보 범위는 오늘부터 약 3일이며 초과 시점은 안내만 한다.
+- Open-Meteo는 Supabase 미설정/비로그인 개발 환경 fallback으로만 유지한다. WeatherKit은 보류한다(Personal Team 빌드에서 capability를 켜지 않음). 운영 기본 출처는 기상청이다.
 
 ## 금지되는 도메인 처리
 - 브라우저 코드에 OpenAI API Key, Strava client secret, refresh token 같은 secret을 넣지 않는다.

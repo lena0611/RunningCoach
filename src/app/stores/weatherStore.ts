@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia'
 import { useAuthStore } from '@/app/stores/authStore'
+import { useRunStore } from '@/app/stores/runStore'
 import { useToastStore } from '@/app/stores/toastStore'
+import { isSupabaseConfigured } from '@/shared/api/supabase'
+import { getCurrentCoords, requestKmaForecast, type Coords } from '@/features/import-kma/kmaWeather'
 import { requestOpenMeteoForecast } from '@/features/import-open-meteo/openMeteoWeather'
 import {
   hasWeatherKitBridge,
@@ -12,6 +15,9 @@ import {
 
 const minRefreshIntervalMs = 15 * 60 * 1000
 let listenersAttached = false
+
+export type WeatherLocationSource = 'current' | 'last-run'
+
 type ForecastRequestOptions = {
   silent?: boolean
 }
@@ -22,6 +28,8 @@ export const useWeatherStore = defineStore('weatherStore', {
     loading: false,
     error: '',
     snapshot: null as WeatherSnapshot | null,
+    locationSource: 'current' as WeatherLocationSource,
+    coords: null as Coords | null,
     lastRequestedAt: 0,
     lastReceivedAt: 0
   }),
@@ -29,7 +37,10 @@ export const useWeatherStore = defineStore('weatherStore', {
     hasBridge: () => hasWeatherKitBridge(),
     current: (state) => state.snapshot?.current ?? null,
     hourly: (state) => state.snapshot?.hourly ?? [],
-    daily: (state) => state.snapshot?.daily ?? []
+    daily: (state) => state.snapshot?.daily ?? [],
+    locationName: (state) => state.snapshot?.locationName ?? null,
+    // 마지막 러닝 위치를 쓸 수 있는지(GPS 러닝이 하나라도 있는지)
+    hasLastRunLocation: () => Boolean(getLastRunCoords())
   },
   actions: {
     init() {
@@ -61,6 +72,20 @@ export const useWeatherStore = defineStore('weatherStore', {
       if (this.loading || (this.snapshot && now - this.lastReceivedAt < minRefreshIntervalMs)) return
       await this.requestForecast({ silent: true })
     },
+    async setLocationSource(source: WeatherLocationSource) {
+      if (this.locationSource === source) return
+      this.locationSource = source
+      await this.requestForecast()
+    },
+    async resolveCoords(): Promise<Coords> {
+      if (this.locationSource === 'last-run') {
+        const lastRun = getLastRunCoords()
+        if (lastRun) return lastRun
+        // GPS 러닝이 없으면 현위치로 자연 강등한다.
+        this.locationSource = 'current'
+      }
+      return getCurrentCoords()
+    },
     async requestForecast(options: ForecastRequestOptions = {}) {
       this.init()
       this.loading = true
@@ -72,17 +97,30 @@ export const useWeatherStore = defineStore('weatherStore', {
           return
         }
 
+        const coords = await this.resolveCoords()
+        this.coords = coords
+
+        const authStore = useAuthStore()
+        if (isSupabaseConfigured && authStore.isAuthenticated) {
+          const result = await requestKmaForecast(coords, null)
+          if (result.kind === 'out-of-range') {
+            // 현재 시점 조회는 보통 범위 안이다. 방어적으로 안내만 남긴다.
+            this.loading = false
+            this.error = '선택한 시점은 기상청 예보 범위(약 3일)를 벗어났습니다.'
+            return
+          }
+          this.handleForecast(result.snapshot)
+          return
+        }
+
+        // Supabase 미설정/비로그인 개발 환경 fallback. 운영 기본은 기상청(Edge) 경유다.
         const snapshot = await requestOpenMeteoForecast()
         this.handleForecast(snapshot)
       } catch (err) {
         this.loading = false
         this.error = formatWeatherError(err)
         if (!options.silent) {
-          useToastStore().error(this.error, {
-            placement: 'top',
-            delayMs: 280,
-            durationMs: 3600
-          })
+          useToastStore().error(this.error, { placement: 'top', delayMs: 280, durationMs: 3600 })
         }
       }
     },
@@ -95,14 +133,26 @@ export const useWeatherStore = defineStore('weatherStore', {
     handleError(message: string) {
       this.loading = false
       this.error = message || '날씨 가져오기 실패'
-      useToastStore().error(this.error, {
-        placement: 'top',
-        delayMs: 280,
-        durationMs: 3600
-      })
+      useToastStore().error(this.error, { placement: 'top', delayMs: 280, durationMs: 3600 })
     }
   }
 })
+
+// 가장 최근 GPS 러닝의 시작점(routePoints[0])을 마지막 러닝 위치로 본다.
+function getLastRunCoords(): Coords | null {
+  try {
+    const runStore = useRunStore()
+    for (const run of runStore.sortedRuns) {
+      const start = run.routePoints?.[0]
+      if (start && Number.isFinite(start.latitude) && Number.isFinite(start.longitude)) {
+        return { lat: start.latitude, lon: start.longitude }
+      }
+    }
+  } catch {
+    // 러닝 스토어 미초기화 등은 현위치 fallback으로 넘긴다.
+  }
+  return null
+}
 
 function formatWeatherError(err: unknown) {
   if (isGeolocationError(err)) {

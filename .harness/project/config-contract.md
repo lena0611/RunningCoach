@@ -21,7 +21,8 @@
 
 ## PaceLAB 앱 실행 보안 설정
 - 프론트 빌드에 노출 가능한 값은 `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`뿐이다.
-- `APP_SESSION_HMAC_SECRET`, `APPLE_TEAM_ID`, `APPLE_DEVICECHECK_KEY_ID`, `APPLE_DEVICECHECK_PRIVATE_KEY`, `APPLE_DEVICECHECK_ENVIRONMENT`, `PACELAB_ALLOWED_EMAILS`, `COACH_RUN_RATE_LIMIT_PER_HOUR`, `APP_SECURITY_MODE`, `APP_SECURITY_DEVELOPMENT_TOKEN`은 Supabase Edge Function secret 전용이다.
+- `APP_SESSION_HMAC_SECRET`, `APPLE_TEAM_ID`, `APPLE_DEVICECHECK_KEY_ID`, `APPLE_DEVICECHECK_PRIVATE_KEY`, `APPLE_DEVICECHECK_ENVIRONMENT`, `PACELAB_ALLOWED_EMAILS`, `COACH_RUN_RATE_LIMIT_PER_HOUR`, `APP_SECURITY_MODE`, `APP_SECURITY_DEVELOPMENT_TOKEN`, `KMA_SERVICE_KEY_DEC`, `KMA_SERVICE_KEY_ENC`, `WEATHER_RUN_RATE_LIMIT_PER_HOUR`은 Supabase Edge Function secret 전용이다.
+- 기상청 단기예보 serviceKey는 `KMA_SERVICE_KEY_DEC`(디코딩)와 `KMA_SERVICE_KEY_ENC`(URL 인코딩) Edge secret으로만 둔다. `weather-run`은 `DEC`를 우선 사용(URLSearchParams가 1회 인코딩)하고, 없으면 이미 인코딩된 `ENC`를 그대로 붙인다. 프론트 `.env`의 `VITE_WEATHER_*`로 두지 않는다(`VITE_` prefix는 브라우저 번들에 노출됨).
 - 위 서버 secret은 `VITE_` prefix를 붙이지 않고, GitHub Pages Actions variables 또는 프론트 `.env`에 넣지 않는다.
 - PaceLAB MVP 임시 운영 모드는 `APP_SECURITY_MODE=allowlist`다. 이 모드는 Apple DeviceCheck 키 없이 로그인 사용자 allowlist, 서버 발급 앱 세션, rate limit으로 비용성 기능을 통제하지만, "iOS 앱에서 실행된 기기"를 암호학적으로 증명하지는 않는다.
 - `APP_SECURITY_MODE=devicecheck`는 유료 Apple Developer 계정에서 DeviceCheck key id와 `.p8` private key를 준비한 뒤에만 사용한다.
