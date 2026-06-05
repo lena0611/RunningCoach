@@ -11,15 +11,12 @@
 ## 현재 오픈 항목
 | id | status | 질문 | 왜 필요한가 | 개발자 선택 |
 | --- | --- | --- | --- | --- |
-| charter-status | answered | 이 프로젝트는 신규 구축, 유지보수, 마이그레이션, 운영 개선 중 어디에 가까운가? | 프로젝트 헌장 질문을 상황에 맞게 줄이기 위해 필요 | 신규 구축. 개인 앱 완성을 통해 하네스 검증도 함께 수행한다. |
-| charter-scope | answered | 이 저장소가 현재 책임지는 범위와 책임지지 않는 범위는 무엇인가? | 프로젝트 하네스가 과도한 규칙을 만들지 않기 위해 필요 | 정적 PWA, FIT import, 로컬 저장, 규칙 기반 코칭을 책임진다. AI 대화, 의료 진단, 원본 파일 저장, 기본 경로의 서버 운영은 책임지지 않는다. |
-| charter-success | answered | 현재 가장 중요한 성공 기준은 무엇인가? | 완료 판단과 범위 통제를 위해 필요 | iPhone 홈 화면 앱처럼 열고 FIT 파일을 넣으면 기록 저장과 다음 훈련 추천까지 된다. |
-| charter-risk | answered | 변경하면 특히 위험한 영역이나 반복 회귀 지점은 무엇인가? | 유지보수와 에이전트 작업의 검증 기준을 정하기 위해 필요 | FIT 파싱 정확도, 저장 스키마 호환성, 목표 가능성/피로도/추천 계산, 모바일 반복 사용 흐름. |
-| storage-policy | answered | 데이터 저장은 어디까지 허용하는가? | 정적 앱/동기화/백업 설계 경계를 정하기 위해 필요 | 기본은 브라우저 로컬 저장소다. 백업용 JSON export/import는 허용한다. 개인 서버/클라우드 동기화는 현재 기본 범위가 아니다. |
-| strava-timing | answered | Strava 연동은 언제까지 목표인가? | 서버리스 확장 우선순위를 정하기 위해 필요 | 지금은 확장 메모로 둔다. 당장은 FIT 업로드가 기본이고, 모바일 업로드 불편이 커지면 MVP 이후 서버리스 Strava 연동을 구현한다. |
-| training-goal | answered | 훈련 목표는 확정인가? | 목표 가능성/추천 계산의 기준을 정하기 위해 필요 | 2026-11-21까지 10km 59:59 달성. |
-| coaching-scope | answered | 코칭 엔진이 해도 되는 말의 범위는 어디까지인가? | 규칙 기반 코칭의 출력 경계를 정하기 위해 필요 | 다음 훈련 추천, 목표 가능성, 피로도, 위험 경고까지 제공한다. 주간 훈련 계획 자동 조정은 향후 확장이다. |
+
+현재 `open` 또는 `deferred` 항목이 없습니다.
+
+> 초기 charter 질문 8건(charter-status/scope/success/risk, storage-policy, strava-timing, training-goal, coaching-scope)은 모두 답변되어 `project-charter.md`와 `project-memory.md`에 반영되었으므로, 하네스 v0.2.55 기억 표면 정리 기준에 따라 큐에서 제거했습니다.
 
 ## 운영 원칙
 - 답변을 받으면 관련 문서(`project-charter.md`, `active-context.md`, `decision-log.md`)를 함께 갱신합니다.
 - 유보된 질문은 삭제하지 않고 `deferred`로 남깁니다.
+- `answered`/`obsolete` 항목은 관련 문서 반영을 확인한 뒤 큐에서 제거하거나 아카이브하고, 현재 파일에는 `open`/`deferred`만 상주시킵니다.

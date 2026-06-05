@@ -1,14 +1,14 @@
 {
   "tool": "harness-seed",
-  "version": "0.2.54",
-  "installedAt": "2026-06-05T14:47:58.116Z",
+  "version": "0.2.55",
+  "installedAt": "2026-06-05T15:36:52.159Z",
   "source": {
     "type": "git",
     "repo": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git",
-    "ref": "v0.2.54",
+    "ref": "v0.2.55",
     "commit": null,
-    "packageVersion": "0.2.54",
-    "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.54"
+    "packageVersion": "0.2.55",
+    "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.55"
   },
   "manifestVersion": 2,
   "managedFiles": {
@@ -160,19 +160,19 @@
       "sha256": "52470e4cc6d5d8b494e835ab08ff1c969fc238a0747134253d8fc65799db26ba"
     },
     ".harness/session/README.md": {
-      "sha256": "ee0de3798dc2786548dd38f50e27675bf08fa553a5e38dc428e3f7070538cc86"
+      "sha256": "57d1d49c26b04b6a9e5de9e593a27856b1b6f66869c8db2107942b394b6550e6"
     },
     ".harness/session/session-boot.md": {
-      "sha256": "e62b5239751e6d8cd75ec10c4b7aca38e08c1e276e2687455d6ef14364dd999a"
+      "sha256": "d5e7ec03ea6a4c6116091d93878d5ff4283f2b4419b9b4738d900631f16fbf09"
     },
     ".harness/session/session-start-alert.md": {
-      "sha256": "3b2fe97b5274e55d0ae6bd34a2d910f417cd3453a7feb5cba9737d113c3ce869"
+      "sha256": "06e219b72c5368e54f024dc2a04bb67d597c0930d02b637e1cefeb2b0a1ebdea"
     },
     ".harness/skills/README.md": {
-      "sha256": "593af186b5b43f3bb0e0659ad780908b59456bdee82e24bfda7ef95a0b97943c"
+      "sha256": "672991810adfa80774687a7ceb707bfe8881655bc53300368df831d23b684a35"
     },
     ".harness/skills/registry.json": {
-      "sha256": "f0fc6dd21a2a423d4009d51fb92efc5d21a0d436c7447edc7aca11db95bbdfbd"
+      "sha256": "d2ae255ce7462beb8106b7bd58b075c155ae67c5b02d1184086905d32cae4261"
     },
     ".harness/stacks/README.md": {
       "sha256": "d72bd1c48cfdc572ef036b3fb86aa6e318a0530894b0fcb784c8b83c3539df6d"
@@ -211,13 +211,13 @@
       "sha256": "d6a6dad9e09954a7ac362f976e9e2cfda9e9b22b606ab7db1f35544510844038"
     },
     ".claude/commands/decision.md": {
-      "sha256": "39304076e345baa9b301a4e34e9798a2816d759852051c013977ec819a1968aa"
+      "sha256": "1b79181f3791f0f0ddcf9435ae11ff3654c6635775962f49a49d533df50a355f"
     },
     ".claude/commands/harness-scan.md": {
       "sha256": "73dc559e0d947ed8b62ced946715c10b4ed34a381554379a052c7bc786a1693b"
     },
     ".claude/commands/memory.md": {
-      "sha256": "6c56aec21e9fd5511551c887e3d4a5455c14874e8bbbcb941038bf5363d36726"
+      "sha256": "b75323b5b2127885bc5ff79965f90d01c16b68ce9061b3a17c3aed2c237c8b5d"
     },
     ".claude/commands/reminder.md": {
       "sha256": "a15479a6f5ad373f4840b29c40a140595b72eaa3c5f609129161df0e9fab538f"
@@ -238,7 +238,7 @@
       "sha256": "0b0fd07d750fb0061455af2f1b9839c3149013607e559dc5984877bad309e46c"
     },
     ".claude/hooks/session-start-reminder.sh": {
-      "sha256": "31290b5d7f61eec578886de6fe51fe01b67f6223aee74e42614bcdee257f6fef"
+      "sha256": "ccb86eb31fe86d9eaf74da9bb2123408fe0fd29d2555343e3dd5ebbfd65233a2"
     },
     ".claude/hooks/statusline.sh": {
       "sha256": "ce695a216edd2467abc693b4be94a338484d87beb2488d8a66388ebdf73c94b9"
