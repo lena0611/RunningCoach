@@ -56,6 +56,8 @@ const SWIPE_INTENT_MIN_DISTANCE = 12
 const SWIPE_VERTICAL_MIN_DISTANCE = 8
 const SWIPE_VERTICAL_DOMINANCE = 0.75
 const SWIPE_HORIZONTAL_DOMINANCE = 1.2
+// 첫 move 방향 확정용 최소 이동(px). 이 이상 움직인 첫 touchmove에서 즉시 수평/수직을 정한다.
+const SWIPE_FIRST_MOVE_MIN = 6
 const SWIPE_DISTANCE_RATIO = 0.32
 const SWIPE_DISTANCE_MAX = 132
 const SWIPE_VELOCITY_THRESHOLD = 0.65
@@ -96,9 +98,30 @@ function clearSuppressClickTimer() {
   suppressClickTimer = null
 }
 
-// Pointer Events의 preventDefault는 iOS 네이티브 스크롤을 막지 못한다.
-// 수평 락 동안 non-passive touchmove를 preventDefault해 실제 세로 스크롤 개입을 차단한다.
+function lockHorizontalSwipe() {
+  swipeLocked.value = 'horizontal'
+  swipeLockedPanel = tabPanelRefs.value[currentTabIndex.value] ?? null
+  swipeLockedScrollTop = swipeLockedPanel?.scrollTop ?? 0
+}
+
+// Pointer Events의 preventDefault는 iOS 네이티브 스크롤을 막지 못한다(오직 non-passive
+// touchmove만 가능). 또한 스크롤이 시작된 뒤의 touchmove는 취소 불가이므로, 첫 유의미한
+// touchmove에서 방향을 확정하고 수평이면 그 즉시 preventDefault해 스크롤 시작 자체를 막는다.
 function preventNativeScrollDuringSwipe(event: TouchEvent) {
+  if (!swipeLocked.value) return
+  if (swipeLocked.value === 'pending') {
+    const touch = event.touches[0]
+    if (!touch) return
+    const absX = Math.abs(touch.clientX - swipeStartX.value)
+    const absY = Math.abs(touch.clientY - swipeStartY.value)
+    if (Math.max(absX, absY) < SWIPE_FIRST_MOVE_MIN) return
+    if (absX > absY) {
+      lockHorizontalSwipe()
+    } else {
+      swipeLocked.value = 'vertical'
+      return
+    }
+  }
   if (swipeLocked.value === 'horizontal' && event.cancelable) event.preventDefault()
 }
 
@@ -133,6 +156,9 @@ watch(currentTabIndex, () => {
   loadTab(currentTabIndex.value)
   if (!isTabAnimating.value) resetSwipeState()
   void nextTick(() => {
+    // 패널은 독립 스크롤러이므로 탭 도착 시 상단으로 정상화(어중간한 스크롤 상태 방지).
+    const activePanel = tabPanelRefs.value[currentTabIndex.value]
+    if (activePanel) activePanel.scrollTop = 0
     observeActivePanel()
     scheduleActivePanelHeightUpdate()
   })
@@ -559,9 +585,7 @@ function onTabPointerMove(event: PointerEvent) {
       return
     }
     if (absX > absY * SWIPE_HORIZONTAL_DOMINANCE) {
-      swipeLocked.value = 'horizontal'
-      swipeLockedPanel = tabPanelRefs.value[currentTabIndex.value] ?? null
-      swipeLockedScrollTop = swipeLockedPanel?.scrollTop ?? 0
+      lockHorizontalSwipe()
     } else {
       return
     }
@@ -604,6 +628,9 @@ function onTabPointerEnd(event: PointerEvent) {
   }
 
   if (shouldNavigate && mainTabRoutes[nextIndex]) {
+    // 들어오는 패널이 옛 스크롤 위치로 슬라이드인되지 않도록 미리 상단으로 맞춘다.
+    const targetPanel = tabPanelRefs.value[nextIndex]
+    if (targetPanel) targetPanel.scrollTop = 0
     const targetOffset = nextIndex > currentTabIndex.value ? -viewportWidth : viewportWidth
     animateTabRelease(targetOffset, mainTabRoutes[nextIndex])
     return
