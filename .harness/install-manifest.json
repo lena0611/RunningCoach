@@ -1,14 +1,14 @@
 {
   "tool": "harness-seed",
-  "version": "0.2.53",
-  "installedAt": "2026-06-05T02:07:01.344Z",
+  "version": "0.2.54",
+  "installedAt": "2026-06-05T14:47:58.116Z",
   "source": {
     "type": "git",
     "repo": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git",
-    "ref": "v0.2.53",
+    "ref": "v0.2.54",
     "commit": null,
-    "packageVersion": "0.2.53",
-    "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.53"
+    "packageVersion": "0.2.54",
+    "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.54"
   },
   "manifestVersion": 2,
   "managedFiles": {
@@ -82,7 +82,7 @@
       "sha256": "00a6f717542d61c7596f1fa721359d7d8a7f5951ae580d88bc79bd0afa2ecdd1"
     },
     ".harness/documentation/decision-flow.md": {
-      "sha256": "f0c37987e960d1831650bb95dc3bca435d7cf86080d22c194db241eeb900666e"
+      "sha256": "8c0cae84bb382aca5c8202bfed549022bcb4cedbbc1a26cc1c5849607e4dfdf2"
     },
     ".harness/documentation/document-registry.json": {
       "sha256": "17ba7a905fc12891c95ba7aa2cd749aa29923c4c0f49f12bd99107fe53d025ef"
@@ -160,7 +160,7 @@
       "sha256": "52470e4cc6d5d8b494e835ab08ff1c969fc238a0747134253d8fc65799db26ba"
     },
     ".harness/session/README.md": {
-      "sha256": "da4b9edd3fa0412a8204d91472031367ea71d480d82a7b1d1a09ea4e235a23a6"
+      "sha256": "ee0de3798dc2786548dd38f50e27675bf08fa553a5e38dc428e3f7070538cc86"
     },
     ".harness/session/session-boot.md": {
       "sha256": "e62b5239751e6d8cd75ec10c4b7aca38e08c1e276e2687455d6ef14364dd999a"
@@ -172,7 +172,7 @@
       "sha256": "593af186b5b43f3bb0e0659ad780908b59456bdee82e24bfda7ef95a0b97943c"
     },
     ".harness/skills/registry.json": {
-      "sha256": "c1ba087e7ad22dcbd72caaad58def4bddc8e4c6c78cbfbc6b3d3988e20c62baf"
+      "sha256": "f0fc6dd21a2a423d4009d51fb92efc5d21a0d436c7447edc7aca11db95bbdfbd"
     },
     ".harness/stacks/README.md": {
       "sha256": "d72bd1c48cfdc572ef036b3fb86aa6e318a0530894b0fcb784c8b83c3539df6d"
@@ -220,7 +220,7 @@
       "sha256": "6c56aec21e9fd5511551c887e3d4a5455c14874e8bbbcb941038bf5363d36726"
     },
     ".claude/commands/reminder.md": {
-      "sha256": "e2e1e443282e9480adc37309289dc77584af2a06071178bcf049a18a8c4bd3cc"
+      "sha256": "a15479a6f5ad373f4840b29c40a140595b72eaa3c5f609129161df0e9fab538f"
     },
     ".claude/commands/업무요약.md": {
       "sha256": "f83fecd27d8ce1548a7384e41119244ca375460d62ca0c01fca4712a6a75934d"
