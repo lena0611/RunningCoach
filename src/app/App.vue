@@ -55,7 +55,7 @@ function loadAdjacentTabs(index: number) {
 const SWIPE_INTENT_MIN_DISTANCE = 12
 const SWIPE_VERTICAL_MIN_DISTANCE = 8
 const SWIPE_VERTICAL_DOMINANCE = 0.75
-const SWIPE_HORIZONTAL_DOMINANCE = 1.45
+const SWIPE_HORIZONTAL_DOMINANCE = 1.2
 const SWIPE_DISTANCE_RATIO = 0.32
 const SWIPE_DISTANCE_MAX = 132
 const SWIPE_VELOCITY_THRESHOLD = 0.65
@@ -85,9 +85,22 @@ let keyboardInsetCleanup: (() => void) | null = null
 let injuryCheckInCleanup: (() => void) | null = null
 let touchZoomCleanup: (() => void) | null = null
 let swipeReleaseTimer: number | null = null
+let suppressClickTimer: number | null = null
 // 수평 스와이프 락 동안 활성 패널의 세로 스크롤을 고정값으로 핀(reflow 없이 세로 스크롤 억제).
 let swipeLockedPanel: HTMLElement | null = null
 let swipeLockedScrollTop = 0
+
+function clearSuppressClickTimer() {
+  if (suppressClickTimer === null) return
+  window.clearTimeout(suppressClickTimer)
+  suppressClickTimer = null
+}
+
+// Pointer Events의 preventDefault는 iOS 네이티브 스크롤을 막지 못한다.
+// 수평 락 동안 non-passive touchmove를 preventDefault해 실제 세로 스크롤 개입을 차단한다.
+function preventNativeScrollDuringSwipe(event: TouchEvent) {
+  if (swipeLocked.value === 'horizontal' && event.cancelable) event.preventDefault()
+}
 
 function getNavIndex(path: string) {
   return navItems.findIndex((item) => item.to === path)
@@ -160,6 +173,7 @@ onMounted(() => {
   void healthKitSyncStore.syncAfterActivation()
   void weatherStore.refreshAfterActivation()
   requestInjuryCheckInPrompt()
+  document.addEventListener('touchmove', preventNativeScrollDuringSwipe, { passive: false })
 })
 
 onBeforeUnmount(() => {
@@ -179,6 +193,8 @@ onBeforeUnmount(() => {
   activePanelViewportCleanup?.()
   activePanelViewportCleanup = null
   clearSwipeReleaseTimer()
+  clearSuppressClickTimer()
+  document.removeEventListener('touchmove', preventNativeScrollDuringSwipe)
   document.body.classList.remove('tab-swiping')
 })
 
@@ -579,9 +595,12 @@ function onTabPointerEnd(event: PointerEvent) {
 
   if (swipeLocked.value === 'horizontal') {
     suppressNextTabClick.value = true
-    window.setTimeout(() => {
+    // iOS 합성 click(touchend 후 ~300ms)을 안정적으로 막기 위한 suppress 윈도우.
+    clearSuppressClickTimer()
+    suppressClickTimer = window.setTimeout(() => {
       suppressNextTabClick.value = false
-    }, 0)
+      suppressClickTimer = null
+    }, 350)
   }
 
   if (shouldNavigate && mainTabRoutes[nextIndex]) {
