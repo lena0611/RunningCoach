@@ -21,6 +21,8 @@ const props = defineProps<{
   unit?: string
   // 이 라벨 이전(왼쪽) 구간을 과거로 보고 음영 처리한다(예: 날씨 타임라인의 현재 시각 이전).
   dimBeforeLabel?: string
+  // 'bars'(기본): 막대+라인 겹침. 'line': 라인 전용(막대 생략).
+  variant?: 'bars' | 'line'
 }>()
 
 const chartRef = ref<HTMLElement | null>(null)
@@ -90,25 +92,27 @@ function renderChart() {
       axisLabel: { color: muted, fontWeight: 700 }
     },
     series: [
-      {
-        type: 'bar',
-        data: values.value,
-        barMaxWidth: 22,
-        itemStyle: {
-          borderRadius: [10, 10, 4, 4],
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: primary },
-              { offset: 1, color: accent }
-            ]
-          }
-        }
-      },
+      ...(props.variant === 'line'
+        ? []
+        : [{
+            type: 'bar' as const,
+            data: values.value,
+            barMaxWidth: 22,
+            itemStyle: {
+              borderRadius: [10, 10, 4, 4] as [number, number, number, number],
+              color: {
+                type: 'linear' as const,
+                x: 0,
+                y: 0,
+                x2: 0,
+                y2: 1,
+                colorStops: [
+                  { offset: 0, color: primary },
+                  { offset: 1, color: accent }
+                ]
+              }
+            }
+          }]),
       {
         type: 'line',
         data: values.value,

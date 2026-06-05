@@ -46,10 +46,23 @@ watch(
 
 const isSelectedToday = computed(() => selectedDate.value === todayText.value)
 
-// 선택한 날 전체 시간을 보인다(최대 24h). 오늘은 발표시각부터 종일.
+// 선택한 날 전체 시간(최대 24h). 안전등급·강수 계산용 풀 해상도.
 const dayHours = computed<WeatherHourlyPoint[]>(() =>
   (props.snapshot?.hourly ?? []).filter((hour) => hour.time.slice(0, 10) === selectedDate.value).slice(0, 24)
 )
+
+// 타임라인 표시는 3시간 간격으로 듬성하게(시간별은 빡빡함).
+const displayHours = computed<WeatherHourlyPoint[]>(() =>
+  dayHours.value.filter((hour) => new Date(hour.time).getHours() % 3 === 0)
+)
+
+// "오전 6시" 식 라벨.
+function formatHourLabel(time: string) {
+  const h = new Date(time).getHours()
+  const period = h < 12 ? '오전' : '오후'
+  const display = h % 12 === 0 ? 12 : h % 12
+  return `${period} ${display}시`
+}
 
 // 요청(현재) 시각. 이 이전 시간은 타임라인에서 흐리게 표시한다.
 const requestTime = computed(() => {
@@ -59,12 +72,11 @@ const requestTime = computed(() => {
 function isPastHour(hour: WeatherHourlyPoint) {
   return Date.parse(hour.time) < requestTime.value
 }
-// 과거가 끝나는 경계(첫 미래 시간)의 라벨 — 차트 과거 음영 기준.
+// 과거가 끝나는 경계(첫 미래 표시시간)의 라벨 — 차트 과거 음영 기준.
 const dimBeforeLabel = computed(() => {
-  const firstFuture = dayHours.value.find((hour) => !isPastHour(hour))
-  if (!firstFuture) return undefined
-  if (dayHours.value[0] === firstFuture) return undefined
-  return new Date(firstFuture.time).getHours().toString().padStart(2, '0')
+  const firstFuture = displayHours.value.find((hour) => !isPastHour(hour))
+  if (!firstFuture || displayHours.value[0] === firstFuture) return undefined
+  return formatHourLabel(firstFuture.time)
 })
 
 // 선택 시점의 대표 현재값: 오늘이면 실황, 미래면 그 날 오전 시간대 예보.
@@ -123,8 +135,8 @@ const outfit = computed(() => {
 })
 
 const tempPoints = computed<TrendChartPoint[]>(() =>
-  dayHours.value.map((hour) => ({
-    label: new Date(hour.time).getHours().toString().padStart(2, '0'),
+  displayHours.value.map((hour) => ({
+    label: formatHourLabel(hour.time),
     value: Math.round((tempMode.value === 'feel' ? hour.apparentTemperatureC ?? hour.temperatureC : hour.temperatureC) ?? 0),
     detail: hour.condition
   }))
@@ -231,9 +243,9 @@ function formatClock(date: Date | null) {
         <button type="button" :class="{ active: tempMode === 'feel' }" @click="tempMode = 'feel'">체감 온도</button>
       </div>
       <div class="weather-hour-icons">
-        <span v-for="hour in dayHours" :key="hour.time" :class="{ 'is-past': isPastHour(hour) }">{{ weatherSymbolToEmoji(hour.symbolName) }}</span>
+        <span v-for="hour in displayHours" :key="hour.time" :class="{ 'is-past': isPastHour(hour) }">{{ weatherSymbolToEmoji(hour.symbolName) }}</span>
       </div>
-      <TrendChart :points="tempPoints" unit="°" :dim-before-label="dimBeforeLabel" />
+      <TrendChart :points="tempPoints" unit="°" variant="line" :dim-before-label="dimBeforeLabel" />
       <p v-if="sun" class="helper weather-sun">🌅 일출 {{ formatClock(sun.sunrise) }} · 🌇 일몰 {{ formatClock(sun.sunset) }}</p>
     </div>
 
