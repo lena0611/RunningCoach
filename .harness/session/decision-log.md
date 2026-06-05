@@ -570,3 +570,19 @@
 - 표준 계층 충돌 처리: 이 업데이트가 base-managed인 `CLAUDE.md`/`AGENTS.md`의 인라인 PaceLAB 전용 문구(MVP 자동완료 흐름·요청창 풀스택 소유·main 직접 commit 차단/예외)를 generic base 문구로 되돌림. 확인 결과 해당 권위 규칙은 프로젝트 소유 문서 `.harness/project/workflow-rules.md`(8·33·44·45행)와 `commit-push-rules.md`(21행)에 그대로 보존되어 **동작 손실 없음**.
   - 결정: 재인라인하지 않고 generic base 문구를 수용. 프로젝트 전용 규칙의 단일 출처는 `.harness/project/*`로 유지(엔트리 파일에 인라인하면 base 업데이트마다 덮여 drift 재발). CLAUDE.md는 "작업별로 골라 읽는 기준"으로 그 문서들을 가리키고, UserPromptSubmit hook이 PaceLAB 컨텍스트를 매 요청 주입하므로 surface도 유지됨.
 - 주의(기록): fresh worktree는 `node_modules`가 없으면 이제 검증이 실제 실행되며 `vitest: command not found`로 실패할 수 있음 → 하네스 문제 아님, `npm ci` 선행 필요. strict(`harness:check:strict`)는 사전 존재하던 doc-link 경고(`workflow-rules.md → GlossaryPage.vue`)에서 죽으므로 평소 게이트는 비-strict `harness:check` 기준.
+
+## 2026-06-05 - 하단 네비 스와이프 탭: 스크롤 모델 + iOS 제스처 계약 (#196·#198·#200·#204·#206·#208·#210·#212 완료처리)
+- 배경: 하단 4탭(요약/기록/추세/기억)은 App.vue가 4페이지를 한 트랙에 동시 마운트해 좌우 스와이프로 전환. 번들 다이어트 + iOS 스와이프 불안정(세로 끌림·mid-drag 네비·sticky 잔상) 해결에 8개 이슈·연쇄 회귀가 있었어 핵심 계약을 고정한다.
+- 아키텍처(#196·#198):
+  - 4탭 페이지는 `defineAsyncComponent` 지연 로드(독립 청크). 활성 탭만 초기, `onTabPointerDown` 시 좌우 이웃 로드, 유지. **App.vue에서 페이지 정적 import 금지**(라우터 `() => import()` 무력화 → 전부 entry로 합쳐짐).
+  - 탭 홈 스크롤 모델 = 상세 스택(`.memory-stack-page`)과 동일: `.app-shell.is-tab-home` `height:100dvh` 고정 grid + `.app-main` 내부 스크롤 행 + **각 `.tab-swipe-panel`이 독립 내부 스크롤러**(`overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain`). 바디 미스크롤 → 상단 오버스크롤로 웹뷰 뒤 미노출, 내부는 바운스(pull-to-refresh 대비).
+- iOS 제스처/스크롤 계약(회귀 교훈, 위반 금지):
+  1. **Pointer Events `preventDefault()`는 iOS 네이티브 스크롤을 못 막음 — non-passive `touchmove`만 가능.** 수평 락 중 document `{passive:false}` touchmove로 preventDefault.
+  2. **스크롤 시작된 touchmove는 취소 불가** → 첫 유의미 move(≥6px)에서 방향 확정(absX>absY=수평), 수평이면 즉시 preventDefault(dead-zone 대기 금지).
+  3. **제스처 도중 스크롤러 `overflow`/`touch-action` 토글 금지** → reflow가 `pointercancel` 유발, `@pointercancel`이 종료처리에 묶이면 mid-drag 네비(#200→#204). 세로 억제는 토글 아닌 scrollTop 핀 + touchmove preventDefault.
+  4. **`pointercancel`은 네비 커밋 금지(스냅백). 네비는 `pointerup`에서만.**
+  5. **내부 스크롤러에선 `window` scroll 리스너를 capture(`{capture:true}`)로** — 버블 리스너는 자식 스크롤러 scroll을 못 받음(#210 sticky 잔상 원인).
+  6. **스크롤 위치는 패널별 독립** → 탭 도착 시 active 패널 `scrollTop=0` 리셋(#208). AppShell `window/app-main.scrollTo`는 탭 라우트에선 무효(잔존 무해).
+  7. **스크롤-구동 sticky는 스와이프 확정 즉시 정리** → 확정 시 `CustomEvent('pacelab:tab-swipe-commit')` 발화, 페이지가 수신해 해제(#212). 도착-후 처리는 슬라이드 종료 후 늦게 떨어짐.
+- 한계: iOS 첫 move 이전 미세 세로 끌림 잔존 가능. 검증 실기기 필수(헤드리스 불가). 미채택: 비활성 탭 완전 지연 마운트, 부상 이미지 최적화(부상 전면개선 시 별도).
+- 적용: `src/app/App.vue`(arbiter·지연로드·commit 이벤트), `src/app/styles.css`(is-tab-home·panel), `src/shared/ui/AppShell.vue`(is-tab-home), `src/pages/run-log/RunLogPage.vue`(capture scroll·sticky 이벤트). 다른 탭엔 동일 sticky 패턴 없음(점검 완료).
