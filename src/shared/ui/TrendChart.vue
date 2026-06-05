@@ -19,6 +19,8 @@ export type TrendChartPoint = {
 const props = defineProps<{
   points: TrendChartPoint[]
   unit?: string
+  // 이 라벨 이전(왼쪽) 구간을 과거로 보고 음영 처리한다(예: 날씨 타임라인의 현재 시각 이전).
+  dimBeforeLabel?: string
 }>()
 
 const chartRef = ref<HTMLElement | null>(null)
@@ -114,7 +116,14 @@ function renderChart() {
         symbolSize: 7,
         lineStyle: { width: 3, color: primary },
         itemStyle: { color: primary },
-        areaStyle: { opacity: 0.08, color: primary }
+        areaStyle: { opacity: 0.08, color: primary },
+        markArea: props.dimBeforeLabel && labels.value.includes(props.dimBeforeLabel)
+          ? {
+              silent: true,
+              itemStyle: { color: muted, opacity: 0.16 },
+              data: [[{ xAxis: labels.value[0] }, { xAxis: props.dimBeforeLabel }]]
+            }
+          : undefined
       }
     ]
   }
