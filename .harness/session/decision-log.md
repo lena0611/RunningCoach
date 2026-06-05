@@ -601,3 +601,11 @@
 - harness:check blocking 오탐 처리: `config-contract.md` 변경이 `[common.runtime.minimum-node]` 정책과 매칭됐으나, 이번 변경은 **KMA Edge secret 추가**일 뿐 Node 최소버전 enforcement(`check-node-version.mjs`)와 무관 → 반대편 구현 변경 불필요. (정책의 "can ignore when: 구현 변경이 필요 없고 그 이유가 decision-log에 남아 있을 때" 충족.) `package.json` 변경은 `supabase:functions:check`에 weather-run 추가뿐으로 vue3-vite-runtime 계약 무영향.
 - 미완 수동 단계(배포 전 필수): Supabase Edge secret `supabase secrets set KMA_SERVICE_KEY_DEC=... KMA_SERVICE_KEY_ENC=...` 설정 후 `weather-run` 배포. 배포 후 실제 위치 1회 스모크(인증/프록시 토큰 경로 포함)로 완료 확인 — `.claude` memory `edge-auth-deploy-smoke` 기준.
 - 재발 방지 기록: `.harness/project/architecture-rules.md`(날씨 계약), `domain-rules.md`(WeatherSnapshot·외부 시스템 계약), `config-contract.md`(KMA secret), `weatherkit-data-contract.md`, `.harness/session/decision-log.md`(본 항목), `.claude` memory `weather-runner-domain.md` 반영.
+
+## 2026-06-05 - 세션 파일 슬림 구조 채택 + 운영 규칙 단일 출처 고정
+- 문제: `next-session-reminder.md`와 `active-context.md`가 `.harness/project/workflow-rules.md`의 "요청 단위 풀스택 창 운영" 규칙 본문을 거의 1:1로 복붙해 비대해졌다. 두 파일은 매 세션 SessionStart hook(`session-start-reminder.sh`, `sed 1,120p`)과 always-on 기준으로 로드되므로 중복이 매 세션 토큰을 두 번 먹고, 규칙 단일 출처가 무너진다.
+- 결정: 두 파일은 **부트스트랩/핸드오프 계층**으로 한정한다. `next-session-reminder.md`=부팅 체크리스트, `active-context.md`=프로젝트 고정 사실+최신 상태+핸드오프. 운영 규칙 본문은 `.harness/project/workflow-rules.md`와 `CLAUDE.md`를 **단일 출처**로 가리키고 session 파일에 중복 기재하지 않는다. (next-session-reminder.md 35→23줄, active-context.md 39→30줄.)
+- 계층 근거: `standards-layers.md` — 세션 운영 기준은 회사 공통(본체) 영역이나 "기본 운영 기준" 층이라 프로젝트가 구체화 가능. 두 파일은 `install-manifest.json`의 `projectOwnedFiles`라 본체 업데이트가 내용을 보존 → 슬림 내용은 프로젝트 소유로 유지된다.
+- 본체 분담: 슬림 유지 "원칙"은 본체로 승격 요청(상류 PR 대상: `.claude/commands/reminder.md`, `.harness/skills/registry.json`, `.harness/session/README.md`, `.harness/documentation/decision-flow.md` — 모두 managedFiles라 업데이트로 전파). 진행 상태는 `.harness/session/manual-actions.md` open 항목 참고.
+- 반영 후 절차: 본체 반영 확인 시 이 프로젝트는 `npm run harness:update -- --base-only`(기본 update는 stack이므로 `--base-only` 필수)로 managed 지침을 받고, owned인 두 세션 파일은 그대로 둔다.
+- 재발 방지 기록: `.harness/session/active-context.md`, `.harness/session/next-session-reminder.md`(슬림화), `.harness/session/manual-actions.md`(본체 요청 추적), `.harness/session/decision-log.md`(본 항목). project 규칙 문서는 변경 없음(단일 출처가 이미 `workflow-rules.md`).
