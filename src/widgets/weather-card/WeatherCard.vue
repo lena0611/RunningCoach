@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent } from 'vue'
-import type { WeatherSnapshot } from '@/features/import-weatherkit/weatherKitBridge'
-import { formatRainAmount, formatWeatherNumber, getRainWindowText, getRunningWeatherAdvice, getUpcomingHours, weatherSymbolToEmoji } from '@/shared/lib/weather'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
+import { useWeatherStore } from '@/app/stores/weatherStore'
+import type { WeatherHourlyPoint, WeatherSnapshot } from '@/features/import-weatherkit/weatherKitBridge'
+import { formatRainAmount, formatWeatherNumber, getUpcomingHours, weatherSymbolToEmoji } from '@/shared/lib/weather'
+import { getOutfitRecommendation, getRunningSafety, type DerivedHour } from '@/shared/lib/runningWeather'
+import { getSunTimes } from '@/shared/lib/sunTimes'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
 import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
@@ -19,38 +22,121 @@ const props = defineProps<{
 
 const emit = defineEmits<{ refresh: [] }>()
 
-const advice = computed(() => getRunningWeatherAdvice(props.snapshot))
+const weatherStore = useWeatherStore()
+
+const tempMode = ref<'actual' | 'feel'>('feel')
+const selectedDate = ref<string>('')
+
 const todayText = computed(() => formatLocalDate(new Date()))
-const targetDate = computed(() => props.targetDate || todayText.value)
-const targetDaily = computed(() => props.snapshot?.daily.find((day) => day.date === targetDate.value) ?? null)
-const isTargetToday = computed(() => targetDate.value === todayText.value)
-const hourly = computed(() => {
+const availableDates = computed(() => props.snapshot?.daily.map((day) => day.date) ?? [])
+const targetOutOfRange = computed(
+  () => Boolean(props.targetDate) && props.targetDate !== todayText.value && availableDates.value.length > 0 && !availableDates.value.includes(props.targetDate as string)
+)
+
+// 스냅샷/타겟이 바뀌면 선택 날짜를 범위 안으로 맞춘다.
+watch(
+  () => [props.snapshot, props.targetDate] as const,
+  () => {
+    const dates = availableDates.value
+    if (props.targetDate && dates.includes(props.targetDate)) selectedDate.value = props.targetDate
+    else selectedDate.value = dates[0] ?? todayText.value
+  },
+  { immediate: true }
+)
+
+const isSelectedToday = computed(() => selectedDate.value === todayText.value)
+
+const dayHours = computed<WeatherHourlyPoint[]>(() => {
   const source = props.snapshot?.hourly ?? []
-  if (isTargetToday.value) return getUpcomingHours(source, 12)
-  return source.filter((hour) => hour.time.slice(0, 10) === targetDate.value).slice(0, 12)
+  if (isSelectedToday.value) return getUpcomingHours(source, 12)
+  return source.filter((hour) => hour.time.slice(0, 10) === selectedDate.value).slice(0, 12)
 })
+
+// 선택 시점의 대표 현재값: 오늘이면 실황, 미래면 그 날 오전 시간대 예보.
+type RepCurrent = DerivedHour & { symbolName: string }
+const repCurrent = computed<RepCurrent | null>(() => {
+  if (!props.snapshot) return null
+  if (isSelectedToday.value) {
+    const c = props.snapshot.current
+    return {
+      temperatureC: c.temperatureC,
+      apparentTemperatureC: c.apparentTemperatureC,
+      humidity: c.humidity,
+      windMps: c.windMps,
+      precipitationChance: null,
+      precipitationAmountMm: null,
+      symbolName: c.symbolName
+    }
+  }
+  const hours = props.snapshot.hourly.filter((hour) => hour.time.slice(0, 10) === selectedDate.value)
+  const morning = hours.find((hour) => new Date(hour.time).getHours() >= 7) ?? hours[0]
+  if (!morning) return null
+  return {
+    temperatureC: morning.temperatureC,
+    apparentTemperatureC: morning.apparentTemperatureC,
+    humidity: morning.humidity ?? null,
+    windMps: null,
+    precipitationChance: morning.precipitationChance,
+    precipitationAmountMm: morning.precipitationAmountMm,
+    symbolName: morning.symbolName
+  }
+})
+
+const safety = computed(() =>
+  getRunningSafety(
+    repCurrent.value,
+    dayHours.value.map((hour) => ({
+      temperatureC: hour.temperatureC,
+      apparentTemperatureC: hour.apparentTemperatureC,
+      humidity: hour.humidity ?? null,
+      windMps: null,
+      precipitationChance: hour.precipitationChance,
+      precipitationAmountMm: hour.precipitationAmountMm
+    }))
+  )
+)
+
+const rainAmount = computed(() => dayHours.value.reduce((sum, hour) => sum + (hour.precipitationAmountMm ?? 0), 0))
+const maxRainChance = computed(() => Math.max(0, ...dayHours.value.map((hour) => hour.precipitationChance ?? 0)))
+
+const outfit = computed(() => {
+  const felt = repCurrent.value?.apparentTemperatureC ?? repCurrent.value?.temperatureC ?? null
+  return getOutfitRecommendation(felt, { rain: maxRainChance.value >= 0.5, windy: (repCurrent.value?.windMps ?? 0) >= 7 })
+})
+
 const tempPoints = computed<TrendChartPoint[]>(() =>
-  hourly.value.map((hour) => ({
+  dayHours.value.map((hour) => ({
     label: new Date(hour.time).getHours().toString().padStart(2, '0'),
-    value: Math.round(hour.apparentTemperatureC ?? hour.temperatureC ?? 0),
+    value: Math.round((tempMode.value === 'feel' ? hour.apparentTemperatureC ?? hour.temperatureC : hour.temperatureC) ?? 0),
     detail: hour.condition
   }))
 )
-const rainAmount = computed(() => hourly.value.reduce((sum, hour) => sum + (hour.precipitationAmountMm ?? 0), 0))
-const maxRainChance = computed(() => Math.max(0, ...hourly.value.map((hour) => hour.precipitationChance ?? 0)))
+
+const sun = computed(() => {
+  const coords = weatherStore.coords
+  if (!coords || !selectedDate.value) return null
+  const anchor = new Date(`${selectedDate.value}T12:00:00`)
+  if (!Number.isFinite(anchor.getTime())) return null
+  return getSunTimes(anchor, coords.lat, coords.lon)
+})
 
 function formatLocalDate(value: Date) {
-  return [
-    value.getFullYear(),
-    String(value.getMonth() + 1).padStart(2, '0'),
-    String(value.getDate()).padStart(2, '0')
-  ].join('-')
+  return [value.getFullYear(), String(value.getMonth() + 1).padStart(2, '0'), String(value.getDate()).padStart(2, '0')].join('-')
+}
+function formatDayChip(date: string) {
+  if (date === todayText.value) return '오늘'
+  const d = new Date(`${date}T00:00:00`)
+  return ['일', '월', '화', '수', '목', '금', '토'][d.getDay()]
+}
+function formatClock(date: Date | null) {
+  if (!date) return '-'
+  return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
 }
 </script>
 
 <template>
-  <div class="weather-card" :class="`weather-card-${advice.level}`">
-    <SectionHeader title="다음 세션 날씨">
+  <div class="weather-card" :class="`weather-card-${safety.level}`">
+    <SectionHeader title="러닝 날씨">
       <button class="ghost weather-refresh-button" type="button" :disabled="loading" :aria-label="loading ? '날씨 확인 중' : '날씨 새로고침'" @click="emit('refresh')">
         <svg viewBox="0 0 24 24" aria-hidden="true" :class="{ spinning: loading }">
           <path d="M20 11a8 8 0 0 0-14.8-4.2L3 9" />
@@ -60,18 +146,38 @@ function formatLocalDate(value: Date) {
         </svg>
       </button>
     </SectionHeader>
-    <p class="weather-target">{{ targetDate }} · {{ sessionTitle || '다음 추천 세션' }}</p>
 
-    <div v-if="snapshot && (!targetDaily || isTargetToday)" class="weather-current">
+    <!-- 위치 소스 전환 -->
+    <div class="weather-controls">
+      <div class="weather-segment" role="group" aria-label="위치 선택">
+        <button type="button" :class="{ active: weatherStore.locationSource === 'current' }" @click="weatherStore.setLocationSource('current')">현위치</button>
+        <button type="button" :class="{ active: weatherStore.locationSource === 'last-run' }" :disabled="!weatherStore.hasLastRunLocation" @click="weatherStore.setLocationSource('last-run')">마지막 러닝</button>
+      </div>
+      <span v-if="weatherStore.locationName" class="weather-location">📍 {{ weatherStore.locationName }}</span>
+    </div>
+
+    <!-- 시점(날짜) 전환: 이미 받은 3일 예보 안에서 -->
+    <div v-if="snapshot && availableDates.length" class="weather-days">
+      <button v-for="date in availableDates" :key="date" type="button" :class="{ active: date === selectedDate }" @click="selectedDate = date">
+        {{ formatDayChip(date) }}
+      </button>
+    </div>
+    <p class="weather-target">{{ selectedDate }} · {{ sessionTitle || '러닝 준비' }}</p>
+
+    <p v-if="targetOutOfRange" class="helper weather-range-note">
+      추천 세션일({{ targetDate }})은 기상청 단기예보 범위(약 3일)를 벗어나 표시할 수 없습니다. 3일 이내 예보만 제공합니다.
+    </p>
+
+    <div v-if="repCurrent" class="weather-current">
       <div>
         <strong class="weather-value-inline">
-          <span class="weather-symbol">{{ weatherSymbolToEmoji(snapshot.current.symbolName) }}</span>
-          <UnitValue :value="formatWeatherNumber(snapshot.current.temperatureC, '°')" />
+          <span class="weather-symbol">{{ weatherSymbolToEmoji(repCurrent.symbolName) }}</span>
+          <UnitValue :value="formatWeatherNumber(repCurrent.temperatureC, '°')" />
         </strong>
         <small>실제 온도</small>
       </div>
       <div>
-        <strong><UnitValue :value="formatWeatherNumber(snapshot.current.apparentTemperatureC, '°')" /></strong>
+        <strong><UnitValue :value="formatWeatherNumber(repCurrent.apparentTemperatureC, '°')" /></strong>
         <small>체감 온도</small>
       </div>
       <div>
@@ -80,53 +186,125 @@ function formatLocalDate(value: Date) {
       </div>
       <div>
         <strong><UnitValue :value="formatRainAmount(rainAmount)" /></strong>
-        <small>향후 12시간</small>
-      </div>
-    </div>
-
-    <div v-if="snapshot && targetDaily && !isTargetToday" class="weather-current">
-      <div>
-        <strong class="weather-value-inline">
-          <span class="weather-symbol">{{ weatherSymbolToEmoji(targetDaily.symbolName) }}</span>
-          <UnitValue :value="formatWeatherNumber(targetDaily.maxTemperatureC, '°')" />
-        </strong>
-        <small>최고 온도</small>
-      </div>
-      <div>
-        <strong><UnitValue :value="formatWeatherNumber(targetDaily.minTemperatureC, '°')" /></strong>
-        <small>최저 온도</small>
-      </div>
-      <div>
-        <strong><UnitValue :amount="Math.round((targetDaily.precipitationChance ?? 0) * 100)" unit="%" /></strong>
-        <small>강수확률</small>
-      </div>
-      <div>
-        <strong><UnitValue :value="formatRainAmount(targetDaily.precipitationAmountMm)" /></strong>
-        <small>예상 강수량</small>
+        <small>{{ isSelectedToday ? '향후 12시간' : '하루' }}</small>
       </div>
     </div>
 
     <div v-if="snapshot" class="weather-advice">
-      <span>{{ advice.title }}</span>
-      <p>{{ advice.summary }}</p>
+      <span>{{ safety.title }}</span>
+      <p>{{ safety.summary }}</p>
       <ul>
-        <li v-for="item in advice.bullets" :key="item">{{ item }}</li>
+        <li v-for="item in safety.bullets" :key="item">{{ item }}</li>
       </ul>
     </div>
 
+    <!-- 복장 추천 -->
+    <div v-if="outfit" class="weather-outfit">
+      <strong>👕 복장 추천 · {{ outfit.label }}</strong>
+      <p>{{ outfit.top }} / {{ outfit.bottom }}</p>
+      <p v-if="outfit.accessories.length" class="helper">{{ outfit.accessories.join(' · ') }}</p>
+      <p class="helper">{{ outfit.note }}</p>
+    </div>
+
+    <!-- 시간대별 + 실제/체감 토글 -->
     <div v-if="snapshot && tempPoints.length" class="weather-chart-card">
+      <div class="weather-segment weather-temp-toggle" role="group" aria-label="온도 표시">
+        <button type="button" :class="{ active: tempMode === 'actual' }" @click="tempMode = 'actual'">실제 온도</button>
+        <button type="button" :class="{ active: tempMode === 'feel' }" @click="tempMode = 'feel'">체감 온도</button>
+      </div>
       <div class="weather-hour-icons">
-        <span v-for="hour in hourly" :key="hour.time">{{ weatherSymbolToEmoji(hour.symbolName) }}</span>
+        <span v-for="hour in dayHours" :key="hour.time">{{ weatherSymbolToEmoji(hour.symbolName) }}</span>
       </div>
       <TrendChart :points="tempPoints" unit="°" />
-      <p class="helper">{{ isTargetToday ? getRainWindowText(snapshot.hourly) : `${targetDate} 시간대별 예보` }}</p>
+      <p v-if="sun" class="helper weather-sun">🌅 일출 {{ formatClock(sun.sunrise) }} · 🌇 일몰 {{ formatClock(sun.sunset) }}</p>
     </div>
 
     <p v-if="error" class="error">{{ error }}</p>
     <EmptyState
       v-if="!snapshot && !loading"
       title="날씨 연결 전입니다."
-      description="위치 권한을 허용하면 무료 Open-Meteo 예보로 체감온도와 강수 시간을 홈에서 같이 봅니다."
+      description="위치를 허용하면 기상청 단기예보로 체감온도·복장·강수 시간을 홈에서 같이 봅니다."
     />
   </div>
 </template>
+
+<style scoped>
+.weather-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 4px 0 8px;
+}
+.weather-segment {
+  display: inline-flex;
+  border: 1px solid var(--border, rgba(120, 120, 130, 0.3));
+  border-radius: 999px;
+  overflow: hidden;
+}
+.weather-segment button {
+  border: none;
+  background: transparent;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--text-muted, #888);
+  cursor: pointer;
+}
+.weather-segment button.active {
+  background: var(--accent-soft, rgba(80, 130, 255, 0.16));
+  color: var(--accent, #4a7dff);
+  font-weight: 600;
+}
+.weather-segment button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.weather-location {
+  font-size: 12px;
+  color: var(--text-muted, #888);
+}
+.weather-days {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.weather-days button {
+  border: 1px solid var(--border, rgba(120, 120, 130, 0.3));
+  background: transparent;
+  border-radius: 10px;
+  min-width: 38px;
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--text-muted, #888);
+  cursor: pointer;
+}
+.weather-days button.active {
+  background: var(--accent-soft, rgba(80, 130, 255, 0.16));
+  color: var(--accent, #4a7dff);
+  border-color: var(--accent, #4a7dff);
+  font-weight: 600;
+}
+.weather-range-note {
+  color: var(--warning, #c97a00);
+}
+.weather-outfit {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface-soft, rgba(120, 120, 130, 0.08));
+}
+.weather-outfit strong {
+  font-size: 13px;
+}
+.weather-outfit p {
+  margin: 2px 0 0;
+  font-size: 13px;
+}
+.weather-temp-toggle {
+  margin-bottom: 8px;
+}
+.weather-sun {
+  margin-top: 6px;
+}
+</style>

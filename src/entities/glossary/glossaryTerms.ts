@@ -512,13 +512,24 @@ export const GLOSSARY_FALLBACK_TERMS: GlossaryTerm[] = [
   {
     id: 'weather',
     slug: 'weather',
-    term: '날씨 (Open-Meteo)',
-    aka: ['weather', 'open-meteo', '날씨'],
+    term: '날씨 (기상청 단기예보)',
+    aka: ['weather', '기상청', '단기예보', '날씨'],
     category: 'data',
-    shortDef: '무료 Open-Meteo API로 받는 날씨 요약.',
-    detail: '체감온도·강수확률·강수량 등을 러닝 준비 판단에 씁니다. 30도 이상이면 페이스보다 심박·체감강도를 우선합니다.',
-    relatedSlugs: ['rpe'],
+    shortDef: '기상청 단기예보로 받는 국내 날씨 요약.',
+    detail: '현위치나 마지막 러닝 위치 기준으로 체감온도·강수확률·강수량·복장을 러닝 준비에 씁니다. 오늘부터 약 3일까지 제공하며, 더위·강추위·비·강풍은 페이스보다 안전·강도 조절 근거로 씁니다.',
+    relatedSlugs: ['rpe', 'outfit'],
     orderIndex: 40
+  },
+  {
+    id: 'outfit',
+    slug: 'outfit',
+    term: '복장 추천',
+    aka: ['outfit', '복장', '옷차림'],
+    category: 'data',
+    shortDef: '러닝 체감온도 기준 옷차림 가이드.',
+    detail: '러닝 중엔 정지 상태보다 덥게 느껴져 체감온도 기준으로 한 단계 가볍게 입도록 5℃ 단위로 상·하의와 액세서리를 제안합니다. 비·강풍이면 방수·바람막이를 더합니다.',
+    relatedSlugs: ['weather', 'rpe'],
+    orderIndex: 45
   },
   {
     id: 'pb',

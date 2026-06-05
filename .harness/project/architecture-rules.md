@@ -76,9 +76,12 @@
 - 웹 앱의 HealthKit 브리지 등록과 자동 동기화 트리거는 앱 루트 전역 스토어에서 담당한다. 개별 페이지가 브리지를 직접 등록/해제하지 않는다.
 
 ## 날씨 계약
-- 날씨 데이터 구조와 웹 전달 구조는 `.harness/project/weatherkit-data-contract.md`를 기준으로 하되, 현재 구현 기본값은 WeatherKit이 아니라 Open-Meteo다.
-- Open-Meteo는 API key 없이 호출하며, 현재 위치 좌표는 낮은 정밀도로 반올림해 요청한다. 홈의 새로고침 아이콘은 전체 화면 리로드가 아니라 날씨 데이터만 다시 패치한다.
-- 웹 앱의 날씨 자동 갱신 트리거는 앱 루트 전역 스토어에서 담당한다.
+- 날씨 데이터 구조와 웹 전달 구조는 `.harness/project/weatherkit-data-contract.md`를 기준으로 한다. **운영 기본 출처는 국내 정확도를 위해 기상청 단기예보(VilageFcstInfoService_2.0)**이며 Supabase Edge Function `weather-run` 프록시 경유로 받는다. serviceKey는 서버 secret 전용이다.
+- `weather-run`은 위경도 -> 격자(nx/ny) 룩업(`grid.json` 행정동↔격자 최근접), 초단기실황 + 단기예보 호출, 카테고리 디코딩, 발표시각 캐시, `WeatherSnapshot` 정규화를 담당한다. 비용/외부 호출 경계이므로 `x-pacelab-app-session` 검증과 rate limit(`WEATHER_RUN_RATE_LIMIT_PER_HOUR`)을 통과한다.
+- 입력 2축은 위치(현위치 GPS / 마지막 러닝 위치 = 최근 GPS 러닝 시작점, GPS 실패 시 fallback)와 시점(지금 / 3일 이내 날짜, 초과는 "예보 범위 밖" 안내)이다. 시점 전환은 이미 받은 3일 스냅샷을 클라이언트에서 필터해 추가 호출을 만들지 않는다.
+- 체감온도는 기상청이 미제공하므로 계절분기로 자체 산출한다(여름 열지수 / 겨울 풍속냉각 / 중간 기온). 공식은 Edge `weather-run`과 웹 `src/shared/lib/runningWeather.ts`를 미러로 유지한다. 일출/일몰은 외부 API 없이 위경도 천문계산(`src/shared/lib/sunTimes.ts`)으로 구한다.
+- Open-Meteo(`import-open-meteo`)는 Supabase 미설정/비로그인 개발 환경 fallback으로만 남긴다. WeatherKit 네이티브 브리지 경로는 보존하되 운영 기본이 아니다.
+- 웹 앱의 날씨 자동 갱신 트리거는 앱 루트 전역 스토어에서 담당한다. 홈의 새로고침 아이콘은 전체 화면 리로드가 아니라 날씨 데이터만 다시 패치한다.
 - 날씨 조회가 실패해도 RunLog 저장, HealthKit 동기화, AI 코칭은 계속 동작해야 한다.
 
 ## 새 모듈 추가 규칙

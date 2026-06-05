@@ -1,6 +1,8 @@
 # 날씨 데이터 계약
 
-이 문서는 PaceLAB이 홈/AI 코칭에 사용하는 날씨 데이터 구조를 정의한다.
+이 문서는 PaceLAB이 홈/AI 코칭에 사용하는 날씨 데이터(`WeatherSnapshot`) 구조를 정의한다.
+
+> 출처 업데이트(#219): 운영 기본 날씨 출처는 기상청 단기예보이며 Supabase Edge Function `weather-run` 프록시 경유로 받는다. `WeatherSnapshot` 구조 자체는 유지하되 `hourly`에 `humidity`/`precipitationType`, snapshot에 `grid`(nx/ny)가 선택값으로 추가됐다. 체감온도는 계절분기 자체 산출(웹 `runningWeather.ts` ↔ Edge 미러), 일출/일몰은 `sunTimes.ts` 천문계산. Open-Meteo는 개발 fallback. 자세한 경계는 `architecture-rules.md`의 "날씨 계약" 참고.
 
 ## 목적
 - 러닝 준비 판단에 중요한 체감온도, 강수확률, 강수량, 강수 시간대를 홈의 다음 세션 준비 카드에 제공한다.

@@ -586,3 +586,18 @@
   7. **스크롤-구동 sticky는 스와이프 확정 즉시 정리** → 확정 시 `CustomEvent('pacelab:tab-swipe-commit')` 발화, 페이지가 수신해 해제(#212). 도착-후 처리는 슬라이드 종료 후 늦게 떨어짐.
 - 한계: iOS 첫 move 이전 미세 세로 끌림 잔존 가능. 검증 실기기 필수(헤드리스 불가). 미채택: 비활성 탭 완전 지연 마운트, 부상 이미지 최적화(부상 전면개선 시 별도).
 - 적용: `src/app/App.vue`(arbiter·지연로드·commit 이벤트), `src/app/styles.css`(is-tab-home·panel), `src/shared/ui/AppShell.vue`(is-tab-home), `src/pages/run-log/RunLogPage.vue`(capture scroll·sticky 이벤트). 다른 탭엔 동일 sticky 패턴 없음(점검 완료).
+
+## 2026-06-05 - 날씨 도메인 러너 중심 재설계: 기상청 교체·Edge 프록시 (Issue #219)
+- 배경: Open-Meteo(글로벌)는 국내 정확도가 약하고 로드 실패가 잦음. 국내 정확도 높은 기상청 단기예보(VilageFcstInfoService_2.0)로 교체.
+- 결정:
+  - **출처 교체 + 프록시**: 운영 기본을 기상청으로 교체. serviceKey가 `VITE_WEATHER_*`(프론트 노출, config-contract 위반)였던 문제를 Edge Function `weather-run`에서 `KMA_SERVICE_KEY_DEC/ENC` 서버 secret으로 옮겨 해결. Edge가 격자 룩업·디코딩·발표시각 캐시·rate limit·app-session 검증을 담당(coach-run 패턴). 로드 안정성도 캐시/서버 흡수로 개선.
+  - **좌표→격자**: Lambert 변환식 대신 행정동↔격자 룩업표(`grid.json`, 3834행) 최근접 매칭(사용자 선택). 역매핑으로 동네명 라벨 동시 제공.
+  - **체감온도 계절분기 자체 산출**: 기상청 미제공 → 여름 열지수(Stull 습구)/겨울 풍속냉각/중간 기온. 웹 `runningWeather.ts` ↔ Edge `weather-run` **미러 유지**(pace/HR 모델과 동일 패턴).
+  - **일출/일몰**: 외부 API 없이 위경도 천문계산(`sunTimes.ts`, NOAA solar-noon). day-wrap은 Date 산술에 위임.
+  - **시점 전환**: 3일 스냅샷을 한 번 받고 클라이언트에서 날짜 필터(추가 호출 없음). 3일 초과는 "예보 범위 밖" 안내(중기예보 미사용).
+  - **복장 추천**: 러닝 체감온도 5℃ 단위 10버킷(≤−10~≥30) + 강수·강풍 가점. 규칙기반(오프라인).
+  - **공유 인증 모듈**: `_shared/appSession.ts` 신설(weather-run에서 사용). coach-run(4715줄, critical)은 인라인 구현 유지해 risk 격리 — 추후 수렴 가능.
+  - **Open-Meteo 보존**: 삭제하지 않고 Supabase 미설정/비로그인 개발 fallback으로만 유지.
+- harness:check blocking 오탐 처리: `config-contract.md` 변경이 `[common.runtime.minimum-node]` 정책과 매칭됐으나, 이번 변경은 **KMA Edge secret 추가**일 뿐 Node 최소버전 enforcement(`check-node-version.mjs`)와 무관 → 반대편 구현 변경 불필요. (정책의 "can ignore when: 구현 변경이 필요 없고 그 이유가 decision-log에 남아 있을 때" 충족.) `package.json` 변경은 `supabase:functions:check`에 weather-run 추가뿐으로 vue3-vite-runtime 계약 무영향.
+- 미완 수동 단계(배포 전 필수): Supabase Edge secret `supabase secrets set KMA_SERVICE_KEY_DEC=... KMA_SERVICE_KEY_ENC=...` 설정 후 `weather-run` 배포. 배포 후 실제 위치 1회 스모크(인증/프록시 토큰 경로 포함)로 완료 확인 — `.claude` memory `edge-auth-deploy-smoke` 기준.
+- 재발 방지 기록: `.harness/project/architecture-rules.md`(날씨 계약), `domain-rules.md`(WeatherSnapshot·외부 시스템 계약), `config-contract.md`(KMA secret), `weatherkit-data-contract.md`, `.harness/session/decision-log.md`(본 항목), `.claude` memory `weather-runner-domain.md` 반영.
