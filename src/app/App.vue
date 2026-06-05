@@ -655,7 +655,6 @@ function animateTabRelease(targetOffset: number, targetRoute: string | null) {
       v-if="isMainTabRoute"
       class="tab-swipe-viewport"
       :class="{ 'is-dragging': isTabDragging }"
-      :style="{ height: `${tabViewportHeight}px` }"
       @pointerdown="onTabPointerDown"
       @pointermove="onTabPointerMove"
       @pointerup="onTabPointerEnd"
