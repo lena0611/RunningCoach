@@ -524,6 +524,8 @@ body,
 #app {
   min-height: 100%;
   touch-action: manipulation;
+  /* iOS 상단 오버스크롤(러버밴드) 차단 — 하단 네비 탭에서 웹뷰 뒤 노출 방지 */
+  overscroll-behavior: none;
 }
 
 body {
@@ -1216,6 +1218,16 @@ body.tab-swiping {
 
 .tab-swipe-panel[aria-hidden='true'] {
   pointer-events: none;
+}
+
+.tab-panel-skeleton {
+  min-height: calc(100vh - 170px);
+}
+
+@supports (height: 100dvh) {
+  .tab-panel-skeleton {
+    min-height: calc(100dvh - 170px);
+  }
 }
 
 .app-toast {

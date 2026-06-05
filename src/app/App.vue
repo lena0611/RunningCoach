@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/app/stores/authStore'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
@@ -12,10 +12,6 @@ import {
   createInjuryScreeningGuideSeenKey,
   createInjuryScreeningPromptedKey
 } from '@/features/injury-check-in/injuryCheckInPrompt'
-import DashboardPage from '@/pages/dashboard/DashboardPage.vue'
-import RunLogPage from '@/pages/run-log/RunLogPage.vue'
-import TrendsPage from '@/pages/trends/TrendsPage.vue'
-import MemoryPage from '@/pages/memory/MemoryPage.vue'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import AppShell from '@/shared/ui/AppShell.vue'
 import InjuryCheckInSheet from '@/shared/ui/InjuryCheckInSheet.vue'
@@ -38,6 +34,24 @@ const navItems: BottomNavItem[] = [
 const route = useRoute()
 const transitionName = ref('page-slide-forward')
 const mainTabRoutes = ['/', '/runs', '/trends', '/memory']
+// 탭 페이지는 지연 로드: 활성 탭만 우선 받고, 스와이프 시작/탭 선택 시 이웃·대상 탭을 비동기로 채운다.
+const TabSkeleton = () => h('div', { class: 'tab-panel-skeleton', 'aria-hidden': 'true' })
+const DashboardPage = defineAsyncComponent({ loader: () => import('@/pages/dashboard/DashboardPage.vue'), loadingComponent: TabSkeleton, delay: 0 })
+const RunLogPage = defineAsyncComponent({ loader: () => import('@/pages/run-log/RunLogPage.vue'), loadingComponent: TabSkeleton, delay: 0 })
+const TrendsPage = defineAsyncComponent({ loader: () => import('@/pages/trends/TrendsPage.vue'), loadingComponent: TabSkeleton, delay: 0 })
+const MemoryPage = defineAsyncComponent({ loader: () => import('@/pages/memory/MemoryPage.vue'), loadingComponent: TabSkeleton, delay: 0 })
+const loadedTabs = ref(new Set<number>())
+function loadTab(index: number) {
+  if (index < 0 || index >= mainTabRoutes.length || loadedTabs.value.has(index)) return
+  const next = new Set(loadedTabs.value)
+  next.add(index)
+  loadedTabs.value = next
+}
+function loadAdjacentTabs(index: number) {
+  loadTab(index)
+  loadTab(index - 1)
+  loadTab(index + 1)
+}
 const SWIPE_INTENT_MIN_DISTANCE = 12
 const SWIPE_VERTICAL_MIN_DISTANCE = 8
 const SWIPE_VERTICAL_DOMINANCE = 0.75
@@ -100,6 +114,7 @@ watch(
 )
 
 watch(currentTabIndex, () => {
+  loadTab(currentTabIndex.value)
   if (!isTabAnimating.value) resetSwipeState()
   void nextTick(() => {
     observeActivePanel()
@@ -136,6 +151,7 @@ onMounted(() => {
   weatherStore.init()
   weatherStore.attachActivationListeners()
   attachInjuryCheckInActivationListeners()
+  loadTab(currentTabIndex.value)
   void nextTick(observeActivePanel)
   void resetNativeStartupRoute()
   void healthKitSyncStore.syncAfterActivation()
@@ -499,6 +515,7 @@ function isSwipeBlockedTarget(target: EventTarget | null) {
 function onTabPointerDown(event: PointerEvent) {
   if (!isMainTabRoute.value || isTabAnimating.value || !event.isPrimary || isSwipeBlockedTarget(event.target)) return
 
+  loadAdjacentTabs(currentTabIndex.value)
   swipeStartX.value = event.clientX
   swipeStartY.value = event.clientY
   swipeStartAt.value = Date.now()
@@ -647,16 +664,20 @@ function animateTabRelease(targetOffset: number, targetRoute: string | null) {
     >
       <div class="tab-swipe-track" :class="{ 'is-dragging': isTabDragging }" :style="tabTrackStyle">
         <section :ref="(element) => setTabPanelRef(element, 0)" class="tab-swipe-panel" :aria-hidden="currentTabIndex !== 0" :inert="currentTabIndex !== 0">
-          <DashboardPage />
+          <DashboardPage v-if="loadedTabs.has(0)" />
+          <TabSkeleton v-else />
         </section>
         <section :ref="(element) => setTabPanelRef(element, 1)" class="tab-swipe-panel" :aria-hidden="currentTabIndex !== 1" :inert="currentTabIndex !== 1">
-          <RunLogPage />
+          <RunLogPage v-if="loadedTabs.has(1)" />
+          <TabSkeleton v-else />
         </section>
         <section :ref="(element) => setTabPanelRef(element, 2)" class="tab-swipe-panel" :aria-hidden="currentTabIndex !== 2" :inert="currentTabIndex !== 2">
-          <TrendsPage />
+          <TrendsPage v-if="loadedTabs.has(2)" />
+          <TabSkeleton v-else />
         </section>
         <section :ref="(element) => setTabPanelRef(element, 3)" class="tab-swipe-panel" :aria-hidden="currentTabIndex !== 3" :inert="currentTabIndex !== 3">
-          <MemoryPage />
+          <MemoryPage v-if="loadedTabs.has(3)" />
+          <TabSkeleton v-else />
         </section>
       </div>
     </div>
