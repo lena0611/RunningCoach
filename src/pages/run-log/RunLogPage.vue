@@ -62,12 +62,15 @@ const streamingCoachMeta = ref('')
 let coachRevealPending = ''
 let coachRevealRafId = 0
 let coachRevealLastTs = 0
+let coachRevealCarry = 0
 let coachRevealStopped = false
 let coachRevealDrainResolve: (() => void) | null = null
 const coachGraphemeSegmenter =
   typeof Intl !== 'undefined' && typeof (Intl as { Segmenter?: unknown }).Segmenter === 'function'
     ? new Intl.Segmenter('ko', { granularity: 'grapheme' })
     : null
+// 한 프레임에 표시할 grapheme 상한 — 버스트 수신에도 점프 없이 부드럽게 따라잡도록 제한.
+const MAX_COACH_REVEAL_PER_FRAME = 5
 const coachThinkingSeconds = ref(1)
 const coachThinkingTimer = ref<number | null>(null)
 const coachAbortController = ref<AbortController | null>(null)
@@ -903,11 +906,14 @@ function pumpCoachReveal(timestamp: number) {
 
   const backlog = coachRevealPending.length
   if (backlog > 0) {
-    // 따라잡았을 때 ~52자/초(내추럴), 밀리면 백로그에 비례해 부드럽게 빨라져 따라잡는다.
-    const charsPerSecond = Math.min(900, 52 + backlog * 7)
-    const want = Math.max(1, Math.round((charsPerSecond * elapsed) / 1000))
-    const take = clampCoachRevealBoundary(coachRevealPending, want)
-    if (take > 0) {
+    // 따라잡았을 때 ~30자/초로 잔잔하게, 밀리면 완만하게 빨라져 따라잡는다.
+    const charsPerSecond = Math.min(240, 30 + backlog * 3)
+    // 소수 글자를 누적해 60fps보다 느린 속도도 정확히 내고, 프레임당 글자 수를 막아 점프를 없앤다.
+    coachRevealCarry += (charsPerSecond * elapsed) / 1000
+    const want = Math.min(Math.floor(coachRevealCarry), MAX_COACH_REVEAL_PER_FRAME)
+    if (want > 0) {
+      const take = clampCoachRevealBoundary(coachRevealPending, want)
+      coachRevealCarry -= take
       if (!streamingCoachText.value) stopCoachThinkingTimer()
       streamingCoachText.value += coachRevealPending.slice(0, take)
       coachRevealPending = coachRevealPending.slice(take)
@@ -918,6 +924,7 @@ function pumpCoachReveal(timestamp: number) {
     coachRevealRafId = window.requestAnimationFrame(pumpCoachReveal)
   } else {
     coachRevealLastTs = 0
+    coachRevealCarry = 0
     settleCoachRevealDrain()
   }
 }
@@ -982,6 +989,7 @@ function resetCoachReveal() {
     coachRevealRafId = 0
   }
   coachRevealLastTs = 0
+  coachRevealCarry = 0
   settleCoachRevealDrain()
 }
 
