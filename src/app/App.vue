@@ -628,6 +628,8 @@ function onTabPointerEnd(event: PointerEvent) {
   }
 
   if (shouldNavigate && mainTabRoutes[nextIndex]) {
+    // 슬라이드 시작 전에 떠나는 페이지의 스크롤-구동 sticky(예: 기록 년월)를 즉시 정리하도록 알린다.
+    window.dispatchEvent(new CustomEvent('pacelab:tab-swipe-commit'))
     // 들어오는 패널이 옛 스크롤 위치로 슬라이드인되지 않도록 미리 상단으로 맞춘다.
     const targetPanel = tabPanelRefs.value[nextIndex]
     if (targetPanel) targetPanel.scrollTop = 0
