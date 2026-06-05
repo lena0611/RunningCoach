@@ -14,6 +14,7 @@ import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { resolveRunnerLevel } from '@/shared/lib/runnerLevel'
 import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, formatInteger, formatNumberWithCommas, formatPace } from '@/shared/lib/format'
 import { getRunFilterTags, hasRunFilterTag, isScheduledSession, type RunFilterTag } from '@/shared/lib/runMetaChips'
+import { buildVisibleRunGroups, groupRunsByMonth, type RunMonthGroup, type RunMonthSummary } from '@/pages/run-log/runLogSummary'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import CoachMessage from '@/shared/ui/CoachMessage.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
@@ -102,17 +103,6 @@ type CalendarCell = {
   hasScheduledRun: boolean
 }
 
-type RunMonthSummary = {
-  runCount: number
-  totalDurationSec: number | null
-  avgDurationSec: number | null
-  totalCalories: number | null
-  avgCalories: number | null
-  totalDistanceKm: number
-  avgDistanceKm: number
-  avgPaceSec: number | null
-}
-
 type RunMonthSummaryRow = {
   id: string
   label: string
@@ -123,12 +113,6 @@ type RunMonthSummaryRow = {
   tone?: 'time' | 'calorie' | 'distance' | 'pace'
 }
 
-type RunMonthGroup = {
-  key: string
-  title: string
-  runs: RunLog[]
-  summary: RunMonthSummary
-}
 const coachCommandItems = [
   {
     id: 'session',
@@ -225,7 +209,10 @@ const filteredRuns = computed(() => {
 })
 
 const visibleRuns = computed(() => filteredRuns.value.slice(0, visibleCount.value))
-const visibleRunGroups = computed(() => groupRunsByMonth(visibleRuns.value))
+// 월별 요약은 전체 데이터(filteredRuns)로 계산하고, 무한스크롤 slice는 표시할 세션 행에만 적용한다.
+// (요약을 visibleRuns로 계산하면 두 달 경계에서 아래쪽 달이 부분 집계돼 값이 틀린다.)
+const runMonthGroups = computed(() => groupRunsByMonth(filteredRuns.value))
+const visibleRunGroups = computed(() => buildVisibleRunGroups(runMonthGroups.value, visibleCount.value))
 const hasMoreRuns = computed(() => visibleCount.value < filteredRuns.value.length)
 const isEditDirty = computed(() => Boolean(editing.value) && JSON.stringify(editing.value) !== editSnapshot.value)
 const openStack = computed(() => Boolean(detailRun.value || addingRun.value || editing.value || coachRun.value))
@@ -441,65 +428,6 @@ function syncRunMonthStickyState() {
   }) ?? null
 
   activeStickyMonth.value = active
-}
-
-function groupRunsByMonth(runs: RunLog[]): RunMonthGroup[] {
-  const groups: RunMonthGroup[] = []
-  for (const run of runs) {
-    const key = run.date.slice(0, 7)
-    let group = groups.find((item) => item.key === key)
-    if (!group) {
-      group = { key, title: formatMonthHeading(key), runs: [], summary: createEmptyMonthSummary() }
-      groups.push(group)
-    }
-    group.runs.push(run)
-  }
-  return groups.map((group) => ({
-    ...group,
-    summary: summarizeMonthRuns(group.runs)
-  }))
-}
-
-function formatMonthHeading(monthKey: string) {
-  const [year, month] = monthKey.split('-')
-  return `${year}년 ${Number(month)}월`
-}
-
-function createEmptyMonthSummary(): RunMonthSummary {
-  return {
-    runCount: 0,
-    totalDurationSec: null,
-    avgDurationSec: null,
-    totalCalories: null,
-    avgCalories: null,
-    totalDistanceKm: 0,
-    avgDistanceKm: 0,
-    avgPaceSec: null
-  }
-}
-
-function summarizeMonthRuns(runs: RunLog[]): RunMonthSummary {
-  const runCount = runs.length
-  const durationValues = runs
-    .map((run) => run.durationSec)
-    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0)
-  const calorieValues = runs
-    .map((run) => run.activeEnergyKcal)
-    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
-  const totalDurationSec = durationValues.length ? durationValues.reduce((sum, value) => sum + value, 0) : null
-  const totalCalories = calorieValues.length ? calorieValues.reduce((sum, value) => sum + value, 0) : null
-  const totalDistanceKm = runs.reduce((sum, run) => sum + (Number.isFinite(run.distanceKm) ? run.distanceKm : 0), 0)
-
-  return {
-    runCount,
-    totalDurationSec,
-    avgDurationSec: totalDurationSec === null || !durationValues.length ? null : totalDurationSec / durationValues.length,
-    totalCalories,
-    avgCalories: totalCalories === null || !calorieValues.length ? null : totalCalories / calorieValues.length,
-    totalDistanceKm,
-    avgDistanceKm: runCount ? totalDistanceKm / runCount : 0,
-    avgPaceSec: totalDurationSec !== null && totalDistanceKm > 0 ? totalDurationSec / totalDistanceKm : null
-  }
 }
 
 function getMonthSummaryRows(summary: RunMonthSummary): RunMonthSummaryRow[] {
