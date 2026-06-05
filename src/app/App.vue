@@ -85,6 +85,9 @@ let keyboardInsetCleanup: (() => void) | null = null
 let injuryCheckInCleanup: (() => void) | null = null
 let touchZoomCleanup: (() => void) | null = null
 let swipeReleaseTimer: number | null = null
+// 수평 스와이프 락 동안 활성 패널의 세로 스크롤을 고정값으로 핀(reflow 없이 세로 스크롤 억제).
+let swipeLockedPanel: HTMLElement | null = null
+let swipeLockedScrollTop = 0
 
 function getNavIndex(path: string) {
   return navItems.findIndex((item) => item.to === path)
@@ -541,6 +544,8 @@ function onTabPointerMove(event: PointerEvent) {
     }
     if (absX > absY * SWIPE_HORIZONTAL_DOMINANCE) {
       swipeLocked.value = 'horizontal'
+      swipeLockedPanel = tabPanelRefs.value[currentTabIndex.value] ?? null
+      swipeLockedScrollTop = swipeLockedPanel?.scrollTop ?? 0
     } else {
       return
     }
@@ -550,6 +555,8 @@ function onTabPointerMove(event: PointerEvent) {
   event.preventDefault()
   isTabDragging.value = true
   document.body.classList.add('tab-swiping')
+  // 세로 스크롤 동반 방지: overflow 토글(=pointercancel 유발) 대신 scrollTop을 핀.
+  if (swipeLockedPanel) swipeLockedPanel.scrollTop = swipeLockedScrollTop
 
   const isFirst = currentTabIndex.value === 0
   const isLast = currentTabIndex.value === mainTabRoutes.length - 1
@@ -591,6 +598,17 @@ function onTabPointerEnd(event: PointerEvent) {
   resetSwipeState()
 }
 
+// pointercancel은 사용자가 손을 뗀 게 아니라 브라우저가 제스처를 가로챈 것이므로,
+// 절대 네비게이션을 커밋하지 않고 현재 탭으로 스냅백한다(mid-drag 네비 방지).
+function onTabPointerCancel(event: PointerEvent) {
+  if (swipePointerId.value !== event.pointerId) return
+  if (swipeLocked.value === 'horizontal') {
+    animateTabRelease(0, null)
+    return
+  }
+  resetSwipeState()
+}
+
 function onTabClickCapture(event: MouseEvent) {
   if (!suppressNextTabClick.value) return
   event.preventDefault()
@@ -607,6 +625,7 @@ function resetSwipeState() {
   swipeStartAt.value = 0
   isTabDragging.value = false
   isTabAnimating.value = false
+  swipeLockedPanel = null
   document.body.classList.remove('tab-swiping')
 }
 
@@ -658,7 +677,7 @@ function animateTabRelease(targetOffset: number, targetRoute: string | null) {
       @pointerdown="onTabPointerDown"
       @pointermove="onTabPointerMove"
       @pointerup="onTabPointerEnd"
-      @pointercancel="onTabPointerEnd"
+      @pointercancel="onTabPointerCancel"
       @click.capture="onTabClickCapture"
     >
       <div class="tab-swipe-track" :class="{ 'is-dragging': isTabDragging }" :style="tabTrackStyle">
