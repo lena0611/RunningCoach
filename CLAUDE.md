@@ -25,5 +25,10 @@
 - HealthKit/세션상세/스플릿/케이던스/route/자동동기화 관련 네이티브 변경은 웹 쪽 데이터 계약(run-ai의 `.harness/project/healthkit-data-contract.md`)과 양방향으로 맞춘다.
 - WebView 브리지 식별자(`window.RunContextHealthKit`, `window.RunContextAuth` 등)는 웹과 네이티브 양쪽을 함께 수정한다.
 
+## git hook (경량 안전장치)
+- `.githooks/`에 `xcodebuild` 없는 경량 hook이 있다. clone 후 1회 `sh .githooks/install.sh`로 설치(`core.hooksPath=.githooks`).
+- `pre-commit`: `main` 직접 커밋 차단. `pre-push`: `main` 직접 push 차단. 예외는 `HARNESS_ALLOW_MAIN_COMMIT=1` / `HARNESS_ALLOW_MAIN_PUSH=1`.
+- 무거운 빌드 검증은 hook에 넣지 않는다. iOS 검증은 Xcode 재빌드/기기 설치로 분리한다(위 "iOS 전용 완료 흐름").
+
 ## git 위생
 - `.gitignore`로 Xcode 산출물(`*.xcuserstate`, `DerivedData/`, `build/`, `xcuserdata/`)과 생성된 웹 번들(`RunningCoach/WebApp/`)을 제외한다. 추적된 산출물이 없도록 유지한다.
