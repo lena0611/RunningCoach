@@ -1,6 +1,6 @@
-# 결정 로그 아카이브 — 2026 H1 (5월)
+# 결정 로그 아카이브 — 2026 H1 (5~6월)
 
-이 파일은 `decision-log.md`에서 분리한 2026-05 결정 스냅샷입니다. 하네스 v0.2.55 기억 표면 정리 기준에 따라, 현재 파일이 무한 누적되지 않도록 오래된 결정을 날짜 스냅샷으로 아카이브했습니다.
+이 파일은 `decision-log.md`에서 분리한 2026-05~06 결정 스냅샷입니다. 하네스 v0.2.55 기억 표면 정리 기준에 따라, 현재 파일이 무한 누적되지 않도록 완료된 1회성 이벤트, 후속 결정으로 supersede된 항목, 상류에서 해소된 본체 결함, 단일 항목으로 통합된 반복 결정을 날짜 스냅샷으로 아카이브했습니다.
 
 > 여기 결정 중 다수는 이미 `.harness/project/*`(domain-rules, architecture-rules, ui-system-contract, workflow-rules 등)와 `project-memory.md`로 승격되어 있습니다. 현재 유효 기준은 그 권위 문서를 우선하고, 이 파일은 당시 판단 근거 추적용으로 보존합니다.
 
@@ -424,3 +424,70 @@
 - 결정: MVP 배포 자동 완료는 Issue 생성/재사용과 Issue worktree/branch 분리 이후에만 시작되는 후속 단계로 재정의한다. `.githooks/pre-commit`과 `.githooks/pre-push`에서 기준 작업트리 `main` 직접 commit/push를 차단하고, 사용자 명시 승인 예외만 `HARNESS_ALLOW_MAIN_COMMIT=1` 또는 `HARNESS_ALLOW_MAIN_PUSH=1`로 1회 우회한다.
 - 선택 이유: 문서 안내만으로는 긴 대화나 예외 규칙 충돌에서 누락될 수 있다. 실행 단계 hook이 main 직접 기록을 막아야 Issue/worktree 선행 게이트가 실제 운영 기준이 된다.
 - 적용 범위: `CLAUDE.md`, `AGENTS.md`, `.codex/hooks/inject-context.sh`, `.githooks/pre-commit`, `.githooks/pre-push`, `.harness/bin/guard-main-worktree.mjs`, `.harness/session/session-start-alert.md`, `.harness/session/active-context.md`, `.harness/session/next-session-reminder.md`, `.harness/session/project-memory.md`, `.harness/project/workflow-rules.md`, `.harness/project/commit-push-rules.md`.
+
+---
+
+# 2026-06 아카이브 (2026-06-06 기억 표면 정리)
+
+아래는 `decision-log.md`에서 슬림화하며 이관한 2026-06 결정 전문입니다. 완료된 1회성 이벤트, 후속 통합 결정으로 supersede된 항목, 상류 해소 본체 결함이 대상입니다. 현재 유효 기준은 활성 `decision-log.md`와 `.harness/project/*`를 우선합니다.
+
+## 2026-06-01 - HealthKit 과거 이관 임시 UI (완료된 1회성, #25)
+- 문제: Issue #25의 날짜 범위 HealthKit 이관 경로는 웹 store와 네이티브 브리지에는 연결됐지만, 사용자가 실제 iPhone 앱에서 2025-11~2026-04 범위를 실행할 화면 진입점이 없었다.
+- 결정: 정식 데이터 관리 화면을 새로 설계하지 않고, 기록 페이지의 `전체 기록` 섹션 바로 위에 삭제 예정인 임시 마이그레이션 UI를 둔다. 버튼은 `2025-11-01`부터 `2026-04-30`까지 고정 범위로 `requestHistoricalMigration()`을 호출한다.
+- 선택 이유: 이번 목적은 1회성 MVP 데이터 이관 실행이다. 영구 기능처럼 설정/범위 입력/관리 화면을 만들면 삭제 비용과 사용자 혼란이 커진다.
+- 제거 조건: 사용자가 실제 데이터 이관 결과를 확인하고 #25 완료를 승인한 뒤 해당 임시 UI를 제거한다.
+
+## 2026-06-01 - HealthKit 과거 이관 성공 후 임시 UI 제거 (위 항목 완료)
+- 문제: 2025-11~2026-04 HealthKit 과거 이관이 성공해 기록 페이지의 1회성 실행 UI가 더 이상 사용자에게 노출될 필요가 없어졌다.
+- 결정: 사용자-facing 임시 UI만 제거하고, 웹 `requestHistoricalMigration()`/`requestHealthKitRunsInRange()`와 네이티브 `requestRunningWorkoutsInRange` 처리 로직은 유지한다.
+- 선택 이유: 향후 다른 날짜 범위 이관이나 운영성 복구가 필요할 수 있고, 비노출 브리지/저장 로직은 자동 동기화와 분리되어 일반 사용자 흐름을 방해하지 않는다.
+- 포기한 대안: 마이그레이션 로직 전체 제거는 나중에 같은 문제가 생겼을 때 네이티브와 웹 계약을 다시 복원해야 하므로 채택하지 않는다.
+
+## 2026-06-02 - Root tab swipe release animation은 route 전환보다 먼저 수행 (스와이프 계약으로 통합)
+- 문제: Issue #92에서 스와이프 판정 직후 `router.push`가 먼저 실행되고, track은 아직 dragging 상태라 CSS transition이 꺼져 있었다. 그 결과 손을 뗀 offset 지점에서 다음 패널까지 이어지는 애니메이션 없이 route index가 즉시 바뀌어 화면이 확 넘어갔다.
+- 결정: root tab swipe는 release 단계에서 `swipeTrackIndex`로 현재 시각 기준 index를 고정하고, `swipeOffset`을 패널 폭 끝까지 transition시킨 뒤 route를 변경한다. route 변경 후 reset은 시각 위치가 같은 상태에서 수행한다.
+- 선택 이유: 사용자가 손을 뗀 순간의 offset은 다음 장면 전환의 시작점이어야 한다. route 변경을 먼저 하면 Vue route index 변경과 dragging transition off 상태가 결합해 전환 애니메이션을 볼 수 없다.
+- 운영 보정: 사용자 최종 완료 승인 전 Issue close가 금지되어 있으므로 PR 본문에 `Closes #...`를 넣지 않는다. #92는 이전 PR 본문의 `Closes #92` 때문에 조기 close되어 다시 열었다.
+- 적용 범위: `src/app/App.vue`, GitHub Issue/PR 운영 문구.
+
+## 2026-06-02 - Root tab swipe 차단은 내부 horizontal gesture만 opt-out (스와이프 계약으로 통합)
+- 문제: Issue #92 후속 확인에서 root swipe 차단 selector가 `button`, `[role="button"]`, 일반 차트까지 포함해 요약의 최근 세션 같은 일반 버튼형 카드에서 홈 간 스와이프가 시작되지 않았다.
+- 결정: 일반 button/card/list row/summary row/non-interactive chart는 root tab swipe를 막지 않는다. 실제 내부 좌우 드래그나 horizontal scroll을 가진 컴포넌트만 `data-no-swipe`, `[data-horizontal-scroll]`, `role="slider"`, overflow-x scroll 감지로 opt-out한다.
+- 선택 이유: root pager의 click suppression은 horizontal swipe 후 accidental click을 막을 수 있다. 터치 시작점이 pressable이라는 이유만으로 root swipe를 차단하면 모바일 앱의 기본 탭 이동 제스처가 깨진다.
+- 추가 결정: iOS/WebView에서 double-tap zoom은 웹 viewport/touch guard와 네이티브 WKWebView zoom gesture 비활성화를 함께 적용한다. iOS 앱 orientation은 Info.plist 생성 설정과 AppDelegate supported orientation을 portrait로 고정한다.
+- 적용 범위: `src/app/App.vue`, `src/shared/ui/BottomSheetSelect.vue`, `src/shared/ui/TrendLensChart.vue`, `index.html`, `src/app/styles.css`, `/Users/smart-tn-083/practice/RunningCoach`.
+
+## 2026-06-04 - 템포 심박 상한·심박존을 개인 심박 기준으로 공식 파생 (#123 조사 → #127 구현, v2로 통합)
+- 배경: #123 조사 결과 템포 상한 165와 Z0~Z5 존이 개발자 개인값으로 4곳(`heartRateZones` Z4, `coach-run` tempoHeartRateCeilingBpm/boundary, `performanceProjection`, `trendInsights`)에 하드코딩돼 있었고, `AthleteProfile`에 개인 심박 입력 필드·환산식·개인화 경로가 전혀 없었다(문서 약속만 존재). 랩 "8랩"은 1km 분할이 아니라 소스(FIT/HealthKit) lap 레코드를 1:1 저장한 순번임도 확인.
+- 결정: 심박존·템포/이지/회복 상한을 단일 공식으로 파생한다. 우선순위는 **LTHR > 측정 HRmax > Tanaka(208−0.7×나이) 추정 > 상수 fallback**. anchor=LTHR, 측정/추정 HRmax에서는 LT≈0.9×HRmax(역치 88~92% HRmax 중앙값). 존 경계는 anchor를 기준 상수 비율로 만들어 anchor=165면 기존 상수와 정확히 일치(미입력 회귀 0).
+- 웹 근거: 템포 ~75~85% HRmax, 역치 ~85~92% HRmax / ~80~88% HRR; Tanaka 식이 220−나이보다 정확(특히 40세+); Friel LTHR(30분 단독 TT 마지막 20분 평균) 기반 존; Karvonen %HRR. (ASICS, Marathon Handbook, Tanaka PMC5862813, Joe Friel, RunReps)
+- 포기한 대안: Karvonen(%HRR) 중심 — 사용자가 LTHR 우선을 선택. 안정심박은 입력은 받아 코칭 맥락으로 보존하되 anchor 산출엔 직접 쓰지 않음(추후 HRR 확장 여지). 랩 거리 정규화는 별도 decision 후보로 보류(route 기반 fastSegments 우선 정책 유지).
+- 안전: Tanaka 추정은 단정 근거가 아니라 보수 신호로만 쓰고 측정/역치 입력을 권유. 레벨·나이로 안전 상한을 낮추지 않는다. 의료 단정 금지.
+- 적용 범위: `src/entities/training-memory/model.ts`(AthleteProfile 3필드+normalize), `src/shared/lib/heartRateZones.ts`(deriveHeartRateModel), `src/shared/lib/performanceProjection.ts`, `src/shared/lib/trendInsights.ts`, `src/pages/dashboard/DashboardPage.vue`, `src/shared/ui/AppHeader.vue`, `src/pages/memory/MemoryPage.vue`, `supabase/functions/coach-run/index.ts`(deriveCoachHeartRateModel), `.harness/project/domain-rules.md`.
+
+## 2026-06-04 - 심박 상한 165 상수 완전 제거 + 데이터 보정 + auto/manual + 근거 표시 (#127 v2)
+- 배경: 사용자가 #127 1차(merge/배포) 후 확인. (1) 나이만 입력해도 156으로 자동 적용되는 것을 보고 "나이 베이스 + 누적 데이터 보정"을 원했고, (2) 165는 2달 전 ChatGPT에서 받은 개발자 개인값을 상수로 박은 것이라 "코드 어디에도 165 상수를 두면 안 된다"고 못박았으며, (3) 앱 화면에 산출식·외부 근거를 보여 신뢰를 줄 것, (4) 추천값 vs 사용자 지정값 분리·선택을 요구.
+- 결정:
+  - 165/145/130 상수를 **코드 전역에서 제거**(heartRateZones·coach-run·performanceProjection·trendInsights·inferRunType). 존 경계는 anchor(LTHR)의 %LTHR 비율로만 정의(Z1 0.79·Z2 0.88·Z3 0.94·Z4 1.0). 36세는 공식상 anchor≈165가 자연 산출.
+  - 추천(auto) anchor = max(Tanaka 나이추정, 누적 RunLog 관측 최대심박)×0.9. 관측은 표본 3개↑(4개↑면 최고 1개 제외)로 강건 추정, 올리는 방향으로만 보정. 직접입력(manual)은 LTHR > 측정 HRmax.
+  - 근거 데이터 전무 시 상한 null(미설정). 165 fallback 없음 → 페이스/RPE/드리프트로 평가 + 입력 권유.
+  - `AthleteProfile.heartRateMode: 'auto'|'manual'` 추가(러너레벨 패턴과 동일). 직접값 보존·토글. UI에 현재값/추천값/source + 산출식 + 외부 근거 링크(Tanaka PMID 11153730, Joe Friel LTHR, ASICS).
+  - inferRunType은 store에서 모델을 주입받아 상수 없이 판정. 테스트는 anchor=165 모델(manual+LTHR 165)을 주입해 기존 판정 회귀를 막음.
+- 포기/주의: 나이 추정을 그대로 게이트로 쓰면 fit한 50세가 156에 갇히는 문제 → 관측 보정으로 해소. 나이/추정은 보수 신호로만, 레벨·나이로 안전 상한 안 낮춤, 의료 단정 금지.
+- 적용 범위: 위 5개 코드 파일 + `src/entities/training-memory/model.ts`(heartRateMode) + 3개 UI(AppHeader/MemoryPage/Dashboard) + import 경로(healthKitSyncStore/UploadRunPage/localFileExtractor/healthKitBridge) + `.harness/project/domain-rules.md`.
+
+## 2026-06-04 - 저장 처방의 stale 심박 상한(165) 잔재 정리 (#127 후속)
+- 증상: 심박 추천(예 156)으로 설정해도 코칭/주간 루틴 템포 처방에 옛 165가 그대로 나옴.
+- 원인: 프로필 "심박 상한"은 deriveHeartRateModel로 live 계산이지만, weeklyPattern/adaptiveTrainingProfile.prescriptionTemplates/progressionCriteria/sessionGuides는 과거 AI/기본값이 박은 "165bpm" 텍스트를 그대로 보존(normalize가 저장 배열 유지). coach-run은 그 템플릿을 우선 사용하라고 지시해 새 코칭도 165를 에코.
+- 데이터 구조 확인: 처방·루틴은 `training_memory.memory` 단일 JSON에 **upsert(덮어쓰기) → 이력 없음, 항상 최신본**. coach_reports만 append 이력. 따라서 stale 165는 "과거 기록"이 아니라 현재 최신 처방의 잔재라 **이력 훼손 없이 load 시 정규화 가능**.
+- 결정: (1) `stripStaleHeartRateCeilings`로 정규화(load) 시 처방/루틴 텍스트의 130/145/165/168을 일반 표현("회복/이지/템포 상한")으로 치환(웹 normalizeTrainingMemory + coach-run sanitizeMemoryHeartRateCeilings). (2) coach-run 지침에서 심박 상한 숫자는 저장 텍스트가 아니라 항상 heartRateModel을 유일 출처로 사용하도록 명시. coach_reports 과거 이력은 불변(새 턴부터 정합).
+- 적용 범위: `src/entities/training-memory/model.ts`(sanitizer + 정규화 적용), `supabase/functions/coach-run/index.ts`(sanitizeMemoryHeartRateCeilings + 지침), 테스트 추가.
+
+## 2026-06-05 - worktree에서 harness:check가 lint/test/build를 silent skip (본체 결함, v0.2.53에서 해소)
+- 증상: Issue worktree에서 commit/pre-push hook의 `npm run harness:check`가 매번 `검증: 스택 미적용으로 lint/test/build 스킵`을 찍고도 `결과: 통과`로 끝남. 검증을 안 했는데 통과처럼 보이는 silent degradation.
+- 원인(소스): `guard.mjs:22`가 적용 여부를 `fs.existsSync('.harness/.stack-applied.json')` 마커 존재만으로 판정 → 마커 없으면 `guard.mjs:549`에서 lint/test/build 블록을 통째 스킵. 그런데 이 마커는 `.gitignore:19`로 **추적 제외**(내용에 npx 캐시 등 머신 로컬 경로 포함이 이유로 추정).
+- 근본: git worktree는 **추적 파일만 새로 체크아웃**하고 ignored 파일은 안 만들어 냄(node_modules와 동일 이치). 단일 작업트리 + 브랜치 분기 모델에선 마커가 그 자리에 남아 "한 번 stack:apply=영구"가 성립해 문제가 안 났으나, worktree(및 fresh `git clone`/CI 러너 등 "추적 파일만의 깨끗한 체크아웃")에선 마커가 빠져 검증이 누락됨. 하네스가 "적용 상태"를 머신 로컬·체크아웃 종속 마커로 들고 있는 게 원인. 참고: 프리셋 스냅샷 `.harness/stacks/.applied/<id>/`는 추적되어 worktree에도 존재함(확인).
+- 결정/대응:
+  - (즉시 운영) 상류 수정 전까지 worktree 작업은 hook 검증과 별개로 작업트리에서 `npm run build`+`npm run test:run`을 직접 돌려 보강한다(이번 #186/#188이 그렇게 처리됨). 필요 시 worktree에서 `npm run stack:apply` 1회로 마커를 만들면 hook이 풀 검증으로 돌지만, profile.json/stack-preset-rules.md/harness-lock.json(추적 파일)을 건드릴 수 있어 commit 전 `git status` 확인 필요.
+  - (상류 제안) harness-seed의 `guard.mjs` 판정을 **추적되는 상태에서 derive**: `profile.json`의 `activeStack` + 커밋된 `.harness/stacks/.applied/<id>/` 스냅샷 존재로 "적용됨"을 판정(마커는 보조). 더해 **linked worktree + 마커 없음**이면 조용한 info가 아니라 **경고**로 스킵을 알린다. 이러면 worktree/clone/CI 어떤 fresh checkout이든 검증이 자연히 켜짐.
+- 메타: 이 repo는 하네스(harness-seed/스택 하네스)의 도그푸드 소비자라, 본 발견은 상류 개선 피드백으로 격상. `.harness/bin/*`는 sync로 내려오는 본체이므로 로컬 직접 수정은 다음 sync에 덮임 → 수정은 상류에서. (해소: v0.2.53 `guard.mjs`가 추적 스냅샷 derive 채택, 활성 로그 `2026-06-05 하네스 base v0.2.53 적용` 참조.)

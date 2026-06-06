@@ -17,7 +17,6 @@
 - 한 사용자 목표 안에서 프론트 표시, 네이티브 브리지, DB/동기화, Edge Function, OpenAI 코칭, 배포/캐시 영향이 연결되면 현재 요청 창이 전체 계약과 검증 후보를 소유한다.
 - 특정 사용자의 Supabase 데이터 확인은 RLS를 전제로 처음부터 앱 로그인 세션, repository/store 함수, 또는 사용자가 제공한 현재 앱 컨텍스트의 사용자 ID로 재현한다. 익명 조회나 service role/admin 우회를 먼저 시도한 뒤 앱 컨텍스트로 fallback하지 않는다.
 - OpenAI API Key는 브라우저나 iOS 앱에 두지 않고 Supabase Edge Function secret에만 둔다.
-- iOS 네이티브 로컬 프로젝트는 `/Users/smart-tn-083/practice/RunningCoach`에 있다.
 - Workoutdoors export 파일은 FIT 입력을 보조 경로로 유지한다. 기본 반복 사용 흐름은 HealthKit 자동 동기화와 세션별 HealthKit 재갱신이다.
 - Strava 연동은 GitHub Pages 단독 정적 앱만으로 처리하지 않는다. OAuth `client_secret`, refresh token, webhook callback 보호를 위해 Cloudflare Worker, Vercel Function 등 최소 서버리스 백엔드를 둔다.
 - AI 코칭은 세션 상세에서 열며, 별도 Coach 하단 탭은 제거된 상태다.
@@ -41,9 +40,9 @@
 - Node 버전 불일치로 npm 스크립트가 실패하면 중단하지 않고 프로젝트 루트에서 `. "$HOME/.nvm/nvm.sh" && nvm use`로 `.nvmrc` 버전을 활성화한 뒤 재시도한다.
 - Codex hook의 `nvm use`는 hook 자식 프로세스에만 적용된다. 실제 npm/tsc/build/test/harness 명령을 실행하는 shell에서는 다시 `. "$HOME/.nvm/nvm.sh" && nvm use`를 적용한다.
 - Issue worktree는 `node_modules`를 자동으로 가져오지 않는다. 이 프로젝트는 `package-lock.json` 기준 npm 프로젝트이므로 새 worktree에서 `node_modules`가 없으면 `npm ci`로 의존성을 준비한 뒤 TypeScript/build/test를 실행한다.
-- Issue worktree에서 commit/pre-push hook의 `npm run harness:check`는 base v0.2.53(2026-06-05, Issue #194/PR #195)부터 추적 상태(`profile.json` activeStack + 커밋된 `.harness/stacks/.applied/<stack>/manifest.json` 스냅샷)로 적용 여부를 derive해 lint/test/build를 **실제 실행**한다(`Stack applied state derived from tracked snapshot` 출력). 따라서 worktree에서 commit 전 **`npm ci` 필수**(미설치 시 `vitest: command not found`로 실패), build/test를 손으로 별도 보강할 필요 없음. `activeStack`은 있는데 `.harness/stacks/.applied/<stack>/` 스냅샷이 없으면 통과가 아니라 실패 → `npm run stack:apply` 후 스냅샷 커밋. (v0.2.52 이하 과거 결함: gitignore된 `.harness/.stack-applied.json` 마커 부재로 silent skip하고도 `결과: 통과`로 끝났음 — 이 repo 도그푸드로 상류 제안해 v0.2.53에 반영.)
+- Issue worktree는 `node_modules`를 자동으로 가져오지 않는다(`package-lock.json` npm 프로젝트). worktree에서 commit 전 **`npm ci` 필수**(미설치 시 hook `harness:check`가 `vitest: command not found`로 실패). hook은 추적 상태(`profile.json` activeStack + 커밋된 `.harness/stacks/.applied/<stack>/manifest.json` 스냅샷)로 적용 여부를 derive해 lint/test/build를 실제 실행하므로 build/test 수동 보강은 불필요. 스냅샷이 없으면 통과가 아니라 실패 → `npm run stack:apply` 후 스냅샷 커밋. (과거 silent-skip 본체 결함 경위·상류 수정 전문 → `decision-log-2026H1.md`)
 - 부상관리 도메인은 0~5 통증 체크인, 사용자 승인 기반 완치 처리, 목표 예상/훈련 강도에 반영되는 부상/회복 게이트, 근거 출처와 의료 한계를 포함한 참고용 보강운동 기준을 따른다.
-- 하단 네비 4탭(요약/기록/추세/기억)은 App.vue가 4페이지를 한 트랙에 동시 마운트하는 좌우 스와이프 pager다. 스크롤 모델은 상세 스택(`.memory-stack-page`)과 동일하게 `.app-shell.is-tab-home` 고정 100dvh + 각 `.tab-swipe-panel` 독립 내부 스크롤러다(바디 미스크롤). 탭 페이지는 `defineAsyncComponent` 지연 로드이며 App.vue에서 정적 import 금지(라우터 코드분할 무력화). iOS 제스처 계약은 2026-06-05 decision-log "스와이프 탭" 항목을 단일 출처로 따른다: Pointer preventDefault는 iOS 스크롤 못 막음(non-passive touchmove만), 첫 move 방향 확정, 제스처 중 overflow/touch-action 토글 금지(pointercancel 유발), pointercancel은 스냅백(네비는 pointerup만), 내부 스크롤러는 window scroll을 capture로 구독, 탭 도착 시 패널 scrollTop=0, 스크롤-구동 sticky는 `pacelab:tab-swipe-commit` 이벤트로 확정 즉시 해제.
+- 하단 네비 4탭(요약/기록/추세/기억)은 App.vue가 4페이지를 한 트랙에 동시 마운트하는 좌우 스와이프 pager다(`.app-shell.is-tab-home` 고정 100dvh + 각 `.tab-swipe-panel` 독립 내부 스크롤러, 바디 미스크롤). 탭 페이지는 `defineAsyncComponent` 지연 로드이며 App.vue 정적 import 금지(코드분할 무력화). 스크롤 모델·iOS 제스처 7계약의 단일 출처는 2026-06-05 decision-log "하단 네비 스와이프 탭" 항목과 `.claude` memory `tab-swipe-pager-contract`다.
 
 ## 기록 원칙
 - 한 번뿐인 구현 세부사항은 기록하지 않습니다.
