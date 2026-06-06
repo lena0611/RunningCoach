@@ -2,6 +2,7 @@ import type { ExtractedRunData, FastSegment, Lap, RunMetricSample, RunRoutePoint
 import { createSessionTitle } from '@/features/create-session-title/createSessionTitle'
 import { inferCourseType } from '@/features/infer-course-type/inferCourseType'
 import { inferRunType } from '@/features/infer-run-type/inferRunType'
+import { sanitizeCadence } from '@/shared/lib/cadence'
 import type { HeartRateModel } from '@/shared/lib/heartRateZones'
 
 export type HealthKitRunCandidate = {
@@ -237,7 +238,7 @@ export function toExtractedRunData(
     avgPaceSec: candidate.avgPaceSec ?? (distanceKm > 0 && durationSec ? Math.round(durationSec / distanceKm) : null),
     avgHeartRate: candidate.avgHeartRate,
     maxHeartRate: candidate.maxHeartRate,
-    cadence: candidate.cadence,
+    cadence: sanitizeCadence(candidate.cadence),
     activeEnergyKcal: candidate.activeEnergyKcal,
     temperature: candidate.temperature,
     humidity: candidate.humidity,
@@ -279,7 +280,7 @@ function normalizeCandidate(candidate: HealthKitRunCandidate): HealthKitRunCandi
     elevationGainM: normalizeNumber(candidate.elevationGainM),
     elevationLossM: normalizeNumber(candidate.elevationLossM),
     rpe: normalizeNumber(candidate.rpe),
-    laps: candidate.laps ?? [],
+    laps: (candidate.laps ?? []).map((lap) => ({ ...lap, cadence: sanitizeCadence(lap.cadence) })),
     fastSegments: candidate.fastSegments ?? [],
     metricSamples: normalizeMetricSamples(candidate.metricSamples ?? []),
     routePoints: normalizeRoutePoints(candidate.routePoints ?? []),
@@ -299,7 +300,7 @@ function normalizeMetricSamples(samples: RunMetricSample[]) {
       offsetSec: normalizeNumber(sample.offsetSec) ?? 0,
       heartRate: normalizeNumber(sample.heartRate),
       paceSec: normalizeNumber(sample.paceSec),
-      cadence: normalizeNumber(sample.cadence)
+      cadence: sanitizeCadence(sample.cadence)
     }))
     .filter((sample) => Number.isFinite(sample.offsetSec) && (sample.heartRate !== null || sample.paceSec !== null || sample.cadence !== null))
 }
