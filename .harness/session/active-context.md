@@ -13,7 +13,7 @@
 ## 제품 구조 (고정 사실)
 - 제품명은 `PaceLAB`. 사용자-facing UI에서 `RunContext` 표현은 제거하는 방향.
 - GitHub Pages 정적 프론트 + Supabase Auth/Postgres/Edge Function + OpenAI API + iOS WKWebView/HealthKit 하이브리드.
-- iOS 네이티브 로컬 프로젝트: `/Users/smart-tn-083/practice/RunningCoach`.
+- iOS 네이티브 repo: `/Users/smart-tn-083/practice/RunningCoach/RunningCoach`(2중첩, 바깥은 컨테이너), remote `github.com/lena0611/RunningCoach-Native-Swift`(웹 repo와 별개). 상세 [[native-repo-git-management]].
 - HealthKit 자동 동기화, 세션별 HealthKit 재갱신, FIT 보조 import 유지.
 - AI 코칭은 세션 상세에서 열며, 별도 Coach 하단 탭은 제거됨.
 
@@ -26,5 +26,6 @@
 - PaceLAB MVP 단계 구현/버그/운영 요청의 자동 진행(배포 확인까지) + 사용자 최종 완료 승인 대기 흐름도 위 문서를 따른다.
 
 ## 확인할 일
+- (대기) 케이던스 수정 기기 검증: 사용자 2026-06-08 앱 재빌드 예정. 네이티브 `RunningCoach-Native-Swift` PR #4 → Xcode 재빌드·기기 설치·해당 런 재동기화 후 Apple과 케이던스(평균 167/범위 158~172/전구간) 일치 확인 → 일치 시 PR #4 머지. 웹은 Issue #225 + PR #226(배포 완료)로 sanitize 방어막 적용됨.
 - 새 대화의 작업 유형을 먼저 선언하고 `.harness/project/workflow-rules.md`의 작업 유형별 시작 문서 표만 좁혀 읽는다.
 - Supabase Edge Function(`coach-run` 등) 변경 시 배포가 별도로 필요하다.

@@ -1,19 +1,19 @@
 {
   "version": 1,
-  "updatedAt": "2026-06-06T02:30:45.940Z",
+  "updatedAt": "2026-06-06T14:33:52.747Z",
   "baseHarness": {
     "id": "harness-seed",
-    "version": "0.2.55",
+    "version": "0.2.56",
     "repo": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git",
-    "ref": "v0.2.55",
+    "ref": "v0.2.56",
     "commit": null,
     "source": {
       "type": "git",
       "repo": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git",
-      "ref": "v0.2.55",
+      "ref": "v0.2.56",
       "commit": null,
-      "packageVersion": "0.2.55",
-      "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.55"
+      "packageVersion": "0.2.56",
+      "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.56"
     }
   },
   "stackHarness": {

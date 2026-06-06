@@ -1,19 +1,19 @@
 {
   "tool": "harness-seed",
-  "version": "0.2.55",
-  "installedAt": "2026-06-06T02:30:45.939Z",
+  "version": "0.2.56",
+  "installedAt": "2026-06-06T14:33:52.747Z",
   "source": {
     "type": "git",
     "repo": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git",
-    "ref": "v0.2.55",
+    "ref": "v0.2.56",
     "commit": null,
-    "packageVersion": "0.2.55",
-    "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.55"
+    "packageVersion": "0.2.56",
+    "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.56"
   },
   "manifestVersion": 2,
   "managedFiles": {
     ".harness/README.md": {
-      "sha256": "f7a80b52bfe7d36a8491e06bf08a44f9c3e7aaf799da23e8af2671d072894f49"
+      "sha256": "2e9419da76ce234c4311be57b58911ae2f93fe54fc98bc850718a598c7dcf110"
     },
     ".harness/bin/apply-stack.mjs": {
       "sha256": "459771859b5d72a80191d100d0dc1503bc3463d07e12dff8dda6627465a3b3d9"
@@ -112,13 +112,13 @@
       "sha256": "aab4c7253f222eb454b618bb4f82090f6baf6928f0f78c07a3a742ef686ecf11"
     },
     ".harness/policy/ai-standard-guiding-policy.md": {
-      "sha256": "14d526d86161d4fe9c569eb539596d0adb740cf539b5d6390646e9d54caf7e35"
+      "sha256": "0bbeabf001e84a2e38f71e25881e0a39b6c8bef7fd77b9338da45cc1fa122230"
     },
     ".harness/policy/automation-coverage.md": {
-      "sha256": "2a2368031420d900017235a4218f254862290f291cf5b52e528a7e0382970142"
+      "sha256": "1297c6170705937b1f74920396c99af7f6ea785374bd4a2062459febf477d472"
     },
     ".harness/policy/context-protocol.md": {
-      "sha256": "6ff2697a27feede96cffd31da46934edbde162d6070462ea424cd9f668dbdf94"
+      "sha256": "72940cd7daaea08b93a66ef7f47b95fc015e4bbe9c523d1a00332c6158037055"
     },
     ".harness/policy/enforcement-ladder.md": {
       "sha256": "5a51f0e7ab706272894f454dc04d8edca3db193058873be407f93849636a300c"
@@ -127,13 +127,13 @@
       "sha256": "21f0ccf5058366f89dc4e62fb71a8f2a763b625211245db3f5c76c5dcd129941"
     },
     ".harness/policy/policy-registry.json": {
-      "sha256": "227d86323c0ba3747a06bcd0fd2b4b49bf43d5d9401b1818e7b378e6f691cd89"
+      "sha256": "e5a194932baae24b09728ef7ff7bb7d6a1eebeeac16359856ab326bc5c534140"
     },
     ".harness/policy/policy-steward.md": {
       "sha256": "76cfefbae09233294b7848f2d0667e970355cf6838d9c63cb685aaa259e9cd71"
     },
     ".harness/policy/sync-protocol.md": {
-      "sha256": "a7bb86d84bd34dcf9c8079ddf7c0778e5d79d8a225c30edd90630bc04b6f6e72"
+      "sha256": "b48eb09abdb3bc3c177b0162206f8bf37be1aef81eb13a9ff9602e3de7a21df1"
     },
     ".harness/policy/waiver-guidelines.md": {
       "sha256": "89ac7d09a19316d0b54f621af6d4a90e45026c56616d8067ebc969c96b58dc2f"
@@ -148,7 +148,7 @@
       "sha256": "46a3565c19674fdeff1061bc846452c50c9adee8af135a1a9352909c46ffa913"
     },
     ".harness/project/portability-guide.md": {
-      "sha256": "15ff8b86df2c1db1a9b04e3ba7885cd6c6e820760437fcf4f931dd46fdee79eb"
+      "sha256": "a5f7234654965537866bd8cb31a2cd7d3d2c67dd76fc7bd218f8121c1e86a9db"
     },
     ".harness/project/project-harness-guide.md": {
       "sha256": "46a76da875dbb922f6f3360f1d772a25b4c32d1246e0f104b59ec0e5e56a8a90"
@@ -160,13 +160,13 @@
       "sha256": "52470e4cc6d5d8b494e835ab08ff1c969fc238a0747134253d8fc65799db26ba"
     },
     ".harness/session/README.md": {
-      "sha256": "57d1d49c26b04b6a9e5de9e593a27856b1b6f66869c8db2107942b394b6550e6"
+      "sha256": "1de5336fb614e142e8d4bf0ca04e343f393602145e6163fe8a41ff8f35040bdd"
     },
     ".harness/session/session-boot.md": {
-      "sha256": "d5e7ec03ea6a4c6116091d93878d5ff4283f2b4419b9b4738d900631f16fbf09"
+      "sha256": "3dd5857328ca6613383c4c72dd976a9e82970598b4eb0689ffa35af263415ec4"
     },
     ".harness/session/session-start-alert.md": {
-      "sha256": "06e219b72c5368e54f024dc2a04bb67d597c0930d02b637e1cefeb2b0a1ebdea"
+      "sha256": "a4fabebbe638b5b396175b6fc39be6fd7f51fdf431c19c533538cbe7275e7038"
     },
     ".harness/skills/README.md": {
       "sha256": "672991810adfa80774687a7ceb707bfe8881655bc53300368df831d23b684a35"
@@ -196,7 +196,7 @@
       "sha256": "a75c84d1661d7ad24c6ba7c3e9225a1061d043d9c6a2386163b9832d55e8a13a"
     },
     ".claude/README.md": {
-      "sha256": "d0e1e4936e6b416950846ba7784a42c8a7ad5f5ac8c00b61b91371568af2a1fc"
+      "sha256": "9b09617104090366fd906077b0801bad59e9c79ec314c2b4ce7efbab2f92a92b"
     },
     ".claude/agents/code-reviewer.md": {
       "sha256": "64958a1c62a02772cc1f1720fc68fdfd702bf42a8f4c4b0ff86be896cb910e1f"
@@ -231,11 +231,23 @@
     ".claude/commands/하네스업데이트.md": {
       "sha256": "1c30f3e08f82da0245226f23765280a9fd5a8efd09b8d83ede50908132a8b2d9"
     },
+    ".claude/hooks/block-dangerous.sh": {
+      "sha256": "0bef7c9c5b9fd5c6dec72301ac00a73abf9c93fd120cf844dd229840dc7e0e73"
+    },
     ".claude/hooks/enforce-check.sh": {
       "sha256": "1f6e626ee6562107b6759041302a8053312296b7b508735343755b66f93d7acf"
     },
     ".claude/hooks/inject-context.sh": {
-      "sha256": "0b0fd07d750fb0061455af2f1b9839c3149013607e559dc5984877bad309e46c"
+      "sha256": "64d2288f8ff644cb197ddea618bf76ba9b0b62e2b3ebe712287001a6a7d77499"
+    },
+    ".claude/hooks/protect-paths.sh": {
+      "sha256": "3922902fee0c00539c9cf21ea88168546ff8d602ab50fee153aaecfd111387ed"
+    },
+    ".claude/hooks/record-tool-failure.sh": {
+      "sha256": "c3931a95d7517df575b4998caf01e8075e5467b503195fec6a7e9afb7bfdf6c3"
+    },
+    ".claude/hooks/scan-secrets.sh": {
+      "sha256": "d57a9c311c0a4433a85535da686a134e2465f7f22c78e9ccbe773e8c8b31241f"
     },
     ".claude/hooks/session-start-reminder.sh": {
       "sha256": "ccb86eb31fe86d9eaf74da9bb2123408fe0fd29d2555343e3dd5ebbfd65233a2"
@@ -244,13 +256,13 @@
       "sha256": "ce695a216edd2467abc693b4be94a338484d87beb2488d8a66388ebdf73c94b9"
     },
     ".claude/settings.json": {
-      "sha256": "90f1e32abd5948a46bbd8d4b6177a928960856c681c4847f1900bdd7550db2ae"
+      "sha256": "57b3b2d756ab7bb95b30860c8cc5497c81ddd3ffbef2c588950233d90ddddca6"
     },
     ".github/commit-template.txt": {
       "sha256": "6395a3cd4c799f6b19d3e33d03c89a40f167c72b2c17f4352a26e7a1c77e26f4"
     },
     ".github/copilot-instructions.md": {
-      "sha256": "e9909f5ef44e9f0c651cbc7efbd7c89b35d76cbe047baf95c35e30e7331c11cd"
+      "sha256": "7fce009a7b823690d7cf1513add7c43b27bb08ffeaa868ae3ea7bb1d764e0312"
     },
     ".github/copilot-instructions/coding-conventions.md": {
       "sha256": "622a6e99e90e542ea56a07b68a5535ac19a573e52ca5bce9f6cd5948c2d987e7"
@@ -268,10 +280,10 @@
       "sha256": "0c80fedf5ca93fc95a27160ff4f55156da2032c63bcd410dde1cdc85fffc3edb"
     },
     "AGENTS.md": {
-      "sha256": "7dd6f003263832330140e4dcc6b355b8f2261c09379ffa3901d007d2279d12f1"
+      "sha256": "5aa2c07bb1937c797e3e1ebca4598b77d26235f3f58205e8b37ad38a0b099ec0"
     },
     "CLAUDE.md": {
-      "sha256": "9535c1a37aa4b52332439eb92e602367f6ad03896754da927cf3a8c5add46554"
+      "sha256": "3f9795205d66b722ffb6f798fd4661025a006aee6fa2dc28280364965d7e3212"
     }
   },
   "projectOwnedFiles": [
