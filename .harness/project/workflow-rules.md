@@ -82,7 +82,7 @@ Issue final comment에는 항상 아래 항목을 포함합니다.
 
 완료 책임 창은 정식 Issue를 `Done`으로 닫기 전에, 이번 작업이 **앱 사용자에게 보이는 용어/개념**을 추가·변경·삭제했는지 반드시 점검하고 필요하면 용어 안내 화면을 함께 갱신합니다. 이 게이트는 선택이 아니라 완료 전 필수 점검입니다.
 
-용어 사전의 정본은 Supabase 마이그레이션 시드 `supabase/migrations/*_glossary_terms.sql`(또는 후속 시드 마이그레이션)이며, 웹 번들 fallback `src/entities/glossary/glossaryTerms.ts`와 화면(`src/pages/glossary/GlossaryPage.vue`)이 같은 내용을 미러링합니다.
+용어 사전의 정본은 Supabase 마이그레이션 시드 `supabase/migrations/*_glossary_terms.sql`(또는 후속 시드 마이그레이션)이며, 웹 번들 fallback `src/entities/glossary/glossaryTerms.ts`와 화면(`src/shared/ui/GlossarySheet.vue`)이 같은 내용을 미러링합니다.
 
 - 점검 질문: 이번 변경으로 새 용어/약어/지표/세션 유형/심박·부하·부상·코칭 개념이 생겼거나, 기존 정의·기준 숫자·표현이 바뀌었는가?
 - 하나라도 해당하면:

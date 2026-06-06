@@ -138,7 +138,7 @@
 - 상류 수정 확인: v0.2.53 `guard.mjs`는 우리가 제안한 1번대로, 로컬 마커(`.harness/.stack-applied.json`) 없이도 `profile.json` activeStack + 커밋된 `.harness/stacks/.applied/<stack>/manifest.json` 스냅샷에서 적용 상태를 derive. **마커 없는 worktree에서 `Stack applied state derived from tracked snapshot ...` 출력 후 `검증: test, build 통과` 실제 실행**을 확인(캐시 비우고 재현). silent skip 종료.
 - 표준 계층 충돌 처리: 이 업데이트가 base-managed인 `CLAUDE.md`/`AGENTS.md`의 인라인 PaceLAB 전용 문구(MVP 자동완료 흐름·요청창 풀스택 소유·main 직접 commit 차단/예외)를 generic base 문구로 되돌림. 확인 결과 해당 권위 규칙은 프로젝트 소유 문서 `.harness/project/workflow-rules.md`(8·33·44·45행)와 `commit-push-rules.md`(21행)에 그대로 보존되어 **동작 손실 없음**.
   - 결정: 재인라인하지 않고 generic base 문구를 수용. 프로젝트 전용 규칙의 단일 출처는 `.harness/project/*`로 유지(엔트리 파일에 인라인하면 base 업데이트마다 덮여 drift 재발). CLAUDE.md는 "작업별로 골라 읽는 기준"으로 그 문서들을 가리키고, UserPromptSubmit hook이 PaceLAB 컨텍스트를 매 요청 주입하므로 surface도 유지됨.
-- 주의(기록): fresh worktree는 `node_modules`가 없으면 이제 검증이 실제 실행되며 `vitest: command not found`로 실패할 수 있음 → 하네스 문제 아님, `npm ci` 선행 필요. strict(`harness:check:strict`)는 사전 존재하던 doc-link 경고(`workflow-rules.md → GlossaryPage.vue`)에서 죽으므로 평소 게이트는 비-strict `harness:check` 기준.
+- 주의(기록): fresh worktree는 `node_modules`가 없으면 이제 검증이 실제 실행되며 `vitest: command not found`로 실패할 수 있음 → 하네스 문제 아님, `npm ci` 선행 필요. (해소됨 2026-06-06: 당시 strict 게이트를 죽이던 doc-link 경고 `workflow-rules.md → GlossaryPage.vue`는 #146에서 시트 전환으로 삭제된 옛 경로 잔재였고, `src/shared/ui/GlossarySheet.vue`로 정정함.)
 
 ## 2026-06-05 - 하단 네비 스와이프 탭: 스크롤 모델 + iOS 제스처 계약 (#196·#198·#200·#204·#206·#208·#210·#212 완료처리)
 - 배경: 하단 4탭(요약/기록/추세/기억)은 App.vue가 4페이지를 한 트랙에 동시 마운트해 좌우 스와이프로 전환. 번들 다이어트 + iOS 스와이프 불안정(세로 끌림·mid-drag 네비·sticky 잔상) 해결에 8개 이슈·연쇄 회귀가 있었어 핵심 계약을 고정한다.
