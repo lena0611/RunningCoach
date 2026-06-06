@@ -2,6 +2,7 @@ import type { ExtractedRunData, RunMetricSample, RunRoutePoint } from '@/entitie
 import { createSessionTitle } from '@/features/create-session-title/createSessionTitle'
 import { inferCourseType } from '@/features/infer-course-type/inferCourseType'
 import { inferRunType } from '@/features/infer-run-type/inferRunType'
+import { sanitizeCadence } from '@/shared/lib/cadence'
 import type { HeartRateModel } from '@/shared/lib/heartRateZones'
 
 export async function extractRunDataFromFile(file: File, heartRateModel: HeartRateModel | null = null): Promise<ExtractedRunData> {
@@ -58,7 +59,7 @@ async function extractFromFit(buffer: ArrayBuffer, heartRateModel: HeartRateMode
       paceSec: distanceKm && lapDurationSec ? Math.round(lapDurationSec / (distanceKm / 1000)) : null,
       avgHeartRate: numberOrNull(String(lap.avg_heart_rate ?? '')),
       maxHeartRate: numberOrNull(String(lap.max_heart_rate ?? '')),
-      cadence: lapCadence === null ? null : normalizeCadence(lapCadence)
+      cadence: sanitizeCadence(lapCadence)
     }
   })
   const metricSamples = buildMetricSamples(records, session?.start_time ?? session?.timestamp ?? records[0]?.timestamp)
@@ -91,7 +92,7 @@ async function extractFromFit(buffer: ArrayBuffer, heartRateModel: HeartRateMode
     avgPaceSec: totalDistanceKm > 0 && durationSec ? Math.round(durationSec / totalDistanceKm) : null,
     avgHeartRate: numberOrNull(String(session?.avg_heart_rate ?? '')),
     maxHeartRate: numberOrNull(String(session?.max_heart_rate ?? '')),
-    cadence: rawCadence === null ? null : normalizeCadence(rawCadence),
+    cadence: sanitizeCadence(rawCadence),
     activeEnergyKcal,
     temperature,
     humidity,
@@ -160,7 +161,7 @@ function buildMetricSamples(records: any[], startValue: unknown): RunMetricSampl
         offsetSec,
         heartRate: numberOrNull(String(record.heart_rate ?? '')),
         paceSec: speed && speed > 0 ? Math.round(1000 / speed) : null,
-        cadence: rawCadence === null ? null : normalizeCadence(rawCadence)
+        cadence: sanitizeCadence(rawCadence)
       }
       return sample.heartRate !== null || sample.paceSec !== null || sample.cadence !== null ? sample : null
     })
@@ -241,10 +242,6 @@ function numberOrNull(value: string): number | null {
 function normalizeRpe(value: number | null) {
   if (value === null || value <= 0) return null
   return Math.max(1, Math.min(10, Math.round(value)))
-}
-
-function normalizeCadence(value: number): number {
-  return Math.round(value < 120 ? value * 2 : value)
 }
 
 function round(value: number): number {
