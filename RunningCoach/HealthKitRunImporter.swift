@@ -77,6 +77,14 @@ struct HealthKitRunRefreshRequest {
     let durationSec: Double?
 }
 
+// VO2max(심폐 체력)는 워크아웃에 묶이지 않는 프로필 레벨 최신 샘플이라 러닝 후보와 분리해 전달한다.
+struct HealthKitVo2MaxSample: Codable {
+    let value: Double?
+    let unit: String?
+    let sampleDate: String?
+    let sourceName: String?
+}
+
 final class HealthKitRunImporter {
     private let healthStore = HKHealthStore()
     private var runningWorkoutObserverQuery: HKObserverQuery?
@@ -161,6 +169,53 @@ final class HealthKitRunImporter {
         }
     }
 
+    func fetchLatestVo2Max(completion: @escaping (Result<HealthKitVo2MaxSample, Error>) -> Void) {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            print("[RunContext HealthKit] Health data unavailable")
+            completion(.failure(HealthKitImportError.healthDataUnavailable))
+            return
+        }
+
+        requestAuthorization { [weak self] result in
+            switch result {
+            case .success:
+                print("[RunContext HealthKit] authorization success (vo2max)")
+                self?.queryLatestVo2Max(completion: completion)
+            case .failure(let error):
+                print("[RunContext HealthKit] authorization failed (vo2max):", error.localizedDescription)
+                completion(.failure(error))
+            }
+        }
+    }
+
+    private func queryLatestVo2Max(completion: @escaping (Result<HealthKitVo2MaxSample, Error>) -> Void) {
+        guard let vo2Type = HKObjectType.quantityType(forIdentifier: .vo2Max) else {
+            completion(.failure(HealthKitImportError.healthDataUnavailable))
+            return
+        }
+        // 최신 샘플 1건만. 워크아웃과 무관하므로 predicate 없이 endDate 내림차순으로 정렬한다.
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        let query = HKSampleQuery(sampleType: vo2Type, predicate: nil, limit: 1, sortDescriptors: [sort]) { _, samples, error in
+            if let error {
+                print("[RunContext HealthKit] vo2max query failed:", error.localizedDescription)
+                completion(.failure(error))
+                return
+            }
+            guard let sample = samples?.first as? HKQuantitySample else {
+                // 기록 없음은 오류가 아니다. value=nil로 정상 응답해 웹이 "미사용"으로 처리한다.
+                completion(.success(HealthKitVo2MaxSample(value: nil, unit: nil, sampleDate: nil, sourceName: nil)))
+                return
+            }
+            let unit = HKUnit(from: "mL/kg*min")
+            let raw = sample.quantity.doubleValue(for: unit)
+            let value = (raw * 10).rounded() / 10
+            let sampleDate = Self.isoFormatter.string(from: sample.endDate)
+            let sourceName = sample.sourceRevision.source.name
+            completion(.success(HealthKitVo2MaxSample(value: value, unit: "mL/kg·min", sampleDate: sampleDate, sourceName: sourceName)))
+        }
+        healthStore.execute(query)
+    }
+
     func startRunningWorkoutBackgroundDelivery(onChange: @escaping () -> Void) {
         guard HKHealthStore.isHealthDataAvailable() else {
             print("[RunContext HealthKit] Background delivery unavailable: health data unavailable")
@@ -205,7 +260,8 @@ final class HealthKitRunImporter {
             HKQuantityTypeIdentifier.runningSpeed,
             HKQuantityTypeIdentifier.runningPower,
             HKQuantityTypeIdentifier.runningStrideLength,
-            HKQuantityTypeIdentifier.runningVerticalOscillation
+            HKQuantityTypeIdentifier.runningVerticalOscillation,
+            HKQuantityTypeIdentifier.vo2Max
         ].compactMap { HKObjectType.quantityType(forIdentifier: $0) }
             .forEach { types.append($0) }
 
