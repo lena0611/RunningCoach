@@ -111,3 +111,15 @@
 - 결정: 두 파일은 **부트스트랩/핸드오프 계층**으로 한정한다. `next-session-reminder.md`=부팅 체크리스트, `active-context.md`=프로젝트 고정 사실+최신 상태+핸드오프. 운영 규칙 본문은 `.harness/project/workflow-rules.md`와 `CLAUDE.md`를 **단일 출처**로 가리키고 session 파일에 중복 기재하지 않는다.
 - 계층 근거: `standards-layers.md` — 세션 운영 기준은 "기본 운영 기준" 층이라 프로젝트가 구체화 가능. 두 파일은 `install-manifest.json`의 `projectOwnedFiles`라 본체 업데이트가 내용을 보존.
 - 후속: 슬림 유지 "원칙"은 본체로 승격 요청해 하네스 v0.2.54/0.2.55에 반영됨(축적형 기억 파일까지 확장). 본 2026-06-06 정리가 그 기준의 첫 전면 적용.
+
+## 2026-06-07 - 가상레이싱(나와의 대결) 도메인 분류 + 구현 스펙 확정 (Issue #67 후속, #228~#233)
+- 배경: #67 기획 위에 구현 계약을 얹으며 (a) 레이싱 타겟 모델, (b) 가상레이싱의 세션 데이터 분류를 확정해야 했다. 분류는 부상·추세·추천·코칭 4대 경로로 흐르므로 결정 단위로 고정한다.
+- 타겟 모델 결정: 타겟은 "과거 RunLog 1건"이 아니라 **거리별 PB**(출발선부터 5km 단위 누적거리에 가장 빨리 도달한 기록). PB 산출·업적 등록 엔진은 **#181 업적 도메인이 소유**(#228), `나와의 대결`은 소비만. PB 런의 곡선이 고스트 입력.
+- PB 사다리 분리 결정: 업적 PB는 **훈련간 PB / 레이싱간 PB를 상호 배타로 분리**한다. 분리 키 = `RunLog.tags`의 'self-race' 포함 여부(#233 태깅의 이중 목적 — 식별 + PB 분리). 레이싱 PB가 훈련 PB 사다리를 오염시키지 않게 partition 후 각각 min. 타겟 선택(#232)은 두 사다리 모두 노출. `DistancePb`에 `context:'training'|'race'` 추가.
+- 분류 결정(핵심): **가상레이싱 = 훈련 분류와 직교하는 경쟁 도메인의 "수행 모드 + 결과 주석". 별도 RunType도 별도 활동도 아니다.**
+  - 근거: `type:'Race'`는 Riegel 예측(`performanceProjection.ts:303,312`)·회복 비용·테이퍼·하드세션 부하(`ruleBasedCoach.ts:208,388`, `runStats.ts:164`, `trendInsights.ts:118`)에 직접 투입되는 무거운 신호. 가상레이싱(쉬운 날 PB 추격 포함)을 'Race'로 강제하면 이 경로가 오염된다. 또 별도 "레이싱 활동"을 만들면 HealthKit→RunLog 정본과 거리·부하가 **이중계산**된다.
+  - 처리: 정본 활동 = HealthKit→RunLog(`type`은 `inferRunType` 판정, 불변) + `tags += 'self-race'` 경량 태그. 레이싱 결과 = 경량 `competition_result{mode:'self-pb',targetPb,racedDistanceM,resultGapSec,outcome,linkedRunId,racedAt}` (종료 후 import된 RunLog와 시간·거리 근접 매칭). competition_result는 볼륨·부하·추세 집계 **미포함**(업적·동기부여·코칭 인용 전용).
+- 선행 갭(불변): PaceLAB는 라이브 인-런 데이터를 안 받음 → iOS 라이브 트래킹(#229)이 1순위 선행. 브리지 2종 신설(`runContextLiveRun`, `runContextSpeech`)은 기존 healthKit 브리지 패턴 확장.
+- 착수 게이트: PoC②(metricSamples 밀도로 고스트 생성 가능성, #228 — 코드 없이 가장 싸게 검증)를 **최우선**. PoC①(iOS 백그라운드 위치+오디오 60분+ 안정성, #229) 막히면 Watch 우선순위 상승.
+- child 분해: #228(PB·업적, Ready/P2/최우선) #229(iOS 라이브, 선행) #230(고스트 엔진, 틱 모킹 선개발) #231(음성) #232(UI — 와이어프레임·glossary 게이트) #233(결과 분류·링크).
+- → 권위: `.harness/project/competition-domain.md` §9·§10에 구현 스펙·분류 반영. UI 착수는 와이어프레임 합의 후(design-before-implementation), 사용자 노출 용어는 /glossary 동반 갱신.
