@@ -68,6 +68,7 @@ export async function requestCoachRunStream(
     signal?: AbortSignal
     onDelta: (delta: string) => void
     runnerLevel?: RunnerLevel
+    commandId?: string | null
   }
 ): Promise<CoachReport> {
   const client = requireSupabase()
@@ -89,6 +90,7 @@ export async function requestCoachRunStream(
       userNote,
       currentWeather: summarizeWeatherForCoach(currentWeather),
       stream: true,
+      commandId: options.commandId ?? null,
       runnerLevel: options.runnerLevel ?? 'beginner',
       responseStyle: {
         tone: 'conversational_coach',

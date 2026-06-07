@@ -171,6 +171,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}))
     const selectedRunId = typeof body.selectedRunId === 'string' && body.selectedRunId ? body.selectedRunId : null
     const userNote = typeof body.userNote === 'string' ? body.userNote.slice(0, 2000) : ''
+    const commandId = typeof body.commandId === 'string' && body.commandId ? body.commandId : null
     const currentWeather = normalizeCurrentWeather(body.currentWeather)
     const runnerLevel = normalizeRunnerLevel(body.runnerLevel)
     const responseStyle = normalizeResponseStyle(body.responseStyle, runnerLevel)
@@ -182,7 +183,7 @@ Deno.serve(async (req) => {
     const rateLimit = await consumeRateLimit(admin, userId, 'coach-run')
     if (!rateLimit.ok) return json({ error: rateLimit.error, retryAfterSec: rateLimit.retryAfterSec }, 429)
 
-    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel)
+    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId)
     const ownedSelectedRunId = context.selectedRun?.id ?? null
     if (shouldStream) {
       return streamCoachRun(admin, userId, ownedSelectedRunId, userNote, openaiKey, model, context)
@@ -361,7 +362,36 @@ function resolveCoachResponseMode(userNote: string, answerIntent: CoachAnswerInt
   return 'conversational'
 }
 
-async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner') {
+// 프리셋 코칭 커맨드(/세션분석 등)별 맞춤 리포트 구조(#237).
+// 프론트가 보낸 commandId가 여기 있으면 키워드 분류를 무시하고 report 형식 + 이 섹션 구성을 강제한다.
+const COACH_COMMAND_FORMATS: Record<string, { label: string; sections: string[] }> = {
+  session: {
+    label: '세션 분석',
+    sections: ['## 핵심 지표 (페이스·심박 흐름)', '## 의도 부합 (계획한 세션 유형과 맞았는지)', '## 한 줄 평가']
+  },
+  routine: {
+    label: '루틴 점검',
+    sections: ['## 현재 루틴', '## 판단 (유지 / 상향 / 하향)', '## 근거', '## 적용 (다음 주 조정)']
+  },
+  quality: {
+    label: '훈련 품질',
+    sections: ['## 품질 게이트 결과', '## 충족·미달 항목', '## 다음 단계 가능 여부']
+  },
+  goal: {
+    label: '목표 예상',
+    sections: ['## 현재 예상 기록', '## 변화 방향', '## 달성 흐름']
+  },
+  recovery: {
+    label: '회복/부상 체크',
+    sections: ['## 회복 신호', '## 다음 훈련 강도 제한', '## 주의']
+  },
+  next: {
+    label: '다음 훈련',
+    sections: ['## 추천 세션', '## 강도·거리 (Workoutdoors 세팅 기준)', '## 이유']
+  }
+}
+
+async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null) {
   const memorySelect = 'id, content, created_at, importance, last_referenced_at, reference_count'
   const [
     { data: memoryRow },
@@ -502,14 +532,22 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
   // userNote 의도를 분류해 응답 모드를 나눈다. 빈 입력=report, 잡담=conversational,
   // 설명/분석 요청=explain, 근거/출처 요청=evidence.
   const answerIntent = detectCoachAnswerIntent(userNote)
-  const coachResponseMode = resolveCoachResponseMode(userNote, answerIntent)
+  // 프리셋 커맨드는 키워드 분류 대신 커맨드 전용 리포트 형식을 강제한다(#237 우선순위 정상화).
+  const coachCommandFormat = commandId ? COACH_COMMAND_FORMATS[commandId] ?? null : null
+  const coachResponseMode: CoachResponseMode = coachCommandFormat ? 'report' : resolveCoachResponseMode(userNote, answerIntent)
   return {
     userNote,
     hasUserNote: userNote.trim().length > 0,
     answerIntent,
     coachResponseMode,
+    coachCommandId: commandId,
+    coachCommandFormat,
+    coachCommandPolicy: coachCommandFormat
+      ? `사용자가 프리셋 커맨드 "${coachCommandFormat.label}"로 요청했다. coachResponseMode는 report이며, 아래 섹션 구성을 그 순서대로 마크다운 소제목으로 사용한다(데이터가 없는 섹션은 한 줄로 줄이되 구조는 유지): ${coachCommandFormat.sections.join(' / ')}. 줄글 한 덩어리로 쓰지 말고 각 섹션을 짧게 채운다. 키워드 기반 conversational/explain 분기는 무시한다.`
+      : null,
     coachResponseModePolicy:
       'coachResponseMode가 응답 형식을 결정한다. ' +
+      '[command] context.coachCommandFormat이 있으면(프리셋 커맨드) coachCommandPolicy의 섹션 구성을 따른 리포트로 답한다. 이것이 키워드 분류보다 우선한다. ' + +
       '[conversational] 사용자가 userNote로 가벼운 말/메모/잡담을 보낸 경우다. 리포트가 아니라 친구 같은 코치와의 "사담"으로 답한다. ' +
       '절대 금지: "## 핵심 지표", "## 오늘 해석", "## 조심할 점", "## 다음 훈련", "## 루틴 업데이트", "## 한 줄 요약" 같은 마크다운 섹션 헤더와 지표 나열 목록. ' +
       '대신 사용자가 한 말에 반응해서 2~6문장 정도로 자연스럽게 대화한다. 숫자가 필요하면 문장 속에 한두 개만 가볍게 녹이고, 세션 전체를 다시 분석하지 않는다. ' +
@@ -953,6 +991,7 @@ function buildCoachInstructions(context: unknown) {
     `이 사용자의 runnerLevel은 ${runnerLevel}이다. ${levelGuide.termDepth} ${levelGuide.focus} ${levelGuide.tone} ${levelGuide.common}`,
     'context.responseTemplatePolicy를 따른다. 고정 6섹션을 기계적으로 채우지 말고, 첫 문장 반응과 핵심 판단만 항상 쓰고 나머지 섹션은 세션 유형·runnerLevel·dataAvailability에 따라 필요할 때만 넣는다.',
     'context.coachResponseMode를 가장 먼저 따른다. 이것이 다른 모든 형식 지침(responseTemplatePolicy 포함)보다 우선한다.',
+    'context.coachCommandFormat이 있으면(프리셋 커맨드 요청) context.coachCommandPolicy의 섹션 구성을 그 순서대로 마크다운 소제목으로 사용한 리포트로 답한다. 줄글 한 덩어리 금지. 이 커맨드 형식은 키워드 기반 conversational/explain 분기보다 우선한다.',
     'coachResponseMode=conversational이면(=사용자가 무언가 입력한 대화 턴) 절대 리포트로 답하지 마라. "## 핵심 지표/오늘 해석/조심할 점/다음 훈련/루틴 업데이트/한 줄 요약" 같은 마크다운 섹션 헤더와 지표 나열을 쓰지 말고, 사용자가 한 말에 반응하는 2~6문장의 자연스러운 사담으로만 답한다. 세션 전체를 다시 분석하지 않는다. 사용자가 명시적으로 분석/리포트를 요청할 때만 예외다.',
     'coachResponseMode=report이면(=세션만 열리고 입력 없음) 아래 responseTemplatePolicy에 따른 selectedRun 리뷰 리포트로 답한다.',
     'context.dataAvailability를 확인한다. hasLapData=false이거나 현재 흐름 코칭이면 핵심 지표 섹션을 줄이고, isSparse=true면 데이터가 적다는 전제로 추측 없이 보수적으로 말한다.',

@@ -50,6 +50,10 @@ const editing = ref<RunLog | null>(null)
 const editSnapshot = ref('')
 const coachRun = ref<RunLog | null>(null)
 const coachNote = ref('')
+// 전송 즉시 입력창을 비우고 질문을 사용자 말풍선으로 낙관적 표시하기 위한 상태(#238).
+const pendingUserNote = ref('')
+// 프리셋 커맨드(/세션분석 등)로 보낸 경우의 커맨드 id. 서버가 키워드 분류 대신 이 신호로 리포트 형식을 정한다(#237).
+const selectedCommandId = ref('')
 const coachNoteInput = ref<HTMLTextAreaElement | null>(null)
 const coachScrollContainer = ref<HTMLElement | null>(null)
 const coachAutoScroll = ref(true)
@@ -319,7 +323,12 @@ watch(
   () => openRouteRunIfNeeded()
 )
 
-watch(coachNote, () => {
+watch(coachNote, (value) => {
+  // 프리셋 커맨드 텍스트를 사용자가 직접 수정하면 커맨드 신호를 해제한다(자유 입력으로 간주).
+  if (selectedCommandId.value) {
+    const matched = coachCommandItems.find((item) => item.id === selectedCommandId.value)
+    if (!matched || value !== matched.prompt) selectedCommandId.value = ''
+  }
   void nextTick(resizeCoachNoteInput)
 })
 
@@ -687,8 +696,9 @@ function clearCoachNote() {
   void nextTick(resizeCoachNoteInput)
 }
 
-function selectCoachCommand(prompt: string) {
-  coachNote.value = prompt
+function selectCoachCommand(item: { id: string; prompt: string }) {
+  coachNote.value = item.prompt
+  selectedCommandId.value = item.id
   coachCommandOpen.value = false
   void nextTick(() => {
     resizeCoachNoteInput()
@@ -778,9 +788,13 @@ async function requestCoach() {
 
 async function sendCoachRequest(note: string) {
   if (!coachRun.value) return
+  const commandId = selectedCommandId.value || null
   coachLoading.value = true
   coachError.value = ''
   coachCommandOpen.value = false
+  // 전송 즉시 입력창을 비우고 질문을 사용자 말풍선으로 올린다(#238).
+  coachNote.value = ''
+  pendingUserNote.value = note
   streamingCoachText.value = ''
   streamingCoachMeta.value = 'AI 코치가 답변 중'
   const controller = new AbortController()
@@ -792,17 +806,22 @@ async function sendCoachRequest(note: string) {
     const report = await requestCoachRunStream(coachRun.value.id, note, weatherStore.snapshot, {
       signal: controller.signal,
       onDelta: enqueueCoachReveal,
-      runnerLevel: resolveRunnerLevel(memoryStore.memory.athleteProfile, runStore.sortedRuns).level
+      runnerLevel: resolveRunnerLevel(memoryStore.memory.athleteProfile, runStore.sortedRuns).level,
+      commandId
     })
     await waitForCoachRevealDrain()
     reports.value = [report, ...reports.value.filter((item) => item.id !== report.id)]
-    coachNote.value = ''
+    pendingUserNote.value = ''
+    selectedCommandId.value = ''
     coachCommandOpen.value = false
     streamingCoachText.value = ''
     streamingCoachMeta.value = ''
     reportsLoaded.value = true
   } catch (err) {
     resetCoachReveal()
+    // 실패/중단 시 질문을 입력창으로 복원해 재시도할 수 있게 하고 낙관적 말풍선은 내린다.
+    pendingUserNote.value = ''
+    if (!coachNote.value) coachNote.value = note
     if (err instanceof Error && err.name === 'AbortError') {
       streamingCoachMeta.value = '생성 중단됨 · 저장되지 않음'
     } else {
@@ -1440,6 +1459,7 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
                   </article>
                 </div>
               </template>
+              <CoachMessage v-if="pendingUserNote" role="user" :text="pendingUserNote" />
               <CoachMessage v-if="visibleStreamingCoachText" role="coach" :text="visibleStreamingCoachText" :meta="streamingCoachMeta" :streaming="coachLoading" :thinking="coachLoading && !streamingCoachText" />
               <EmptyState v-else-if="!selectedReports.length" title="아직 이 세션의 코칭이 없습니다." description="짧은 메모를 넣고 AI 코칭을 요청하세요." />
             </template>
@@ -1456,7 +1476,7 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
                 class="coach-command-item"
                 type="button"
                 @pointerdown.prevent
-                @click="selectCoachCommand(item.prompt)"
+                @click="selectCoachCommand(item)"
               >
                 <span class="coach-command-icon">{{ item.icon }}</span>
                 <span>
