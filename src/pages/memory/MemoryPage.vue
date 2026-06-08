@@ -29,6 +29,7 @@ import InfoPairGrid from '@/shared/ui/InfoPairGrid.vue'
 import InjuryBodySelector from '@/shared/ui/InjuryBodySelector.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
+import AchievementsSection from '@/pages/memory/AchievementsSection.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
 import SchedulingHelpSheet from '@/shared/ui/SchedulingHelpSheet.vue'
 
@@ -770,6 +771,8 @@ async function save() {
       </div>
       <p class="helper">프로필과 PB 수정은 우상단 계정 메뉴에서 관리합니다.</p>
     </SectionGroup>
+
+    <AchievementsSection :runs="runStore.sortedRuns" />
 
     <SectionGroup title="훈련 기준" :surface="false">
       <template #actions>
