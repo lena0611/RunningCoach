@@ -536,11 +536,11 @@ export const GLOSSARY_FALLBACK_TERMS: GlossaryTerm[] = [
     slug: 'pb',
     term: 'PB (개인 최고기록)',
     aka: ['pb', 'personal best', '개인 기록'],
-    category: 'data',
+    category: 'achievement',
     shortDef: '거리별 개인 최고기록.',
     detail: '목표 가능성과 러너 레벨 판정, 당일 평가 문구에 반영됩니다.',
-    relatedSlugs: ['riegel', 'race-tt'],
-    orderIndex: 50
+    relatedSlugs: ['distance-pb', 'riegel', 'race-tt'],
+    orderIndex: 10
   },
   {
     id: 'course-type',
@@ -585,5 +585,28 @@ export const GLOSSARY_FALLBACK_TERMS: GlossaryTerm[] = [
     detail: 'PB/레이스가 있으면 그 기록에서, 없으면 VO2max에서 추정합니다(추정은 신뢰도가 낮음). 템포·이지 페이스와 레이스 예상에 쓰되, 실제 강도 기준은 심박 상한이고 페이스는 보조입니다.',
     relatedSlugs: ['vo2max', 'pb', 'riegel'],
     orderIndex: 90
+  },
+  // 업적·기록
+  {
+    id: 'distance-pb',
+    slug: 'distance-pb',
+    term: '거리별 PB',
+    aka: ['distance pb', '거리별 개인최고', '5K PB', '10K PB'],
+    category: 'achievement',
+    shortDef: '출발선부터 5km 단위 거리에 가장 빨리 도달한 기록.',
+    detail: '전체 기록에서 자동 산출하며, 훈련과 레이싱(자기와의 대결)을 분리해 각각 관리합니다. 세션 기록의 페이스 흐름을 적분해 5K·10K처럼 거리별 도달 시간을 추정합니다.',
+    relatedSlugs: ['pb', 'run-streak'],
+    orderIndex: 20
+  },
+  {
+    id: 'run-streak',
+    slug: 'run-streak',
+    term: '연속 러닝 (스트릭)',
+    aka: ['streak', '스트릭', '최장 연속'],
+    category: 'achievement',
+    shortDef: '끊김 없이 이어진 러닝 일수.',
+    detail: '하루라도 빠지면 끊기며, 전체 기록에서 가장 길었던 연속 일수를 업적으로 보여줍니다. 주·월 최다 누적 거리와 함께 꾸준함 지표로 쓰입니다.',
+    relatedSlugs: ['distance-pb'],
+    orderIndex: 30
   }
 ]

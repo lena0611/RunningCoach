@@ -10,6 +10,7 @@ export type GlossaryCategory =
   | 'trend'
   | 'injury'
   | 'goal'
+  | 'achievement'
   | 'data'
 
 export type GlossaryTerm = {
@@ -32,6 +33,7 @@ export const GLOSSARY_CATEGORY_ORDER: GlossaryCategory[] = [
   'trend',
   'injury',
   'goal',
+  'achievement',
   'data'
 ]
 
@@ -43,6 +45,7 @@ export const GLOSSARY_CATEGORY_LABEL: Record<GlossaryCategory, string> = {
   trend: '추세 Lens',
   injury: '부상·몸 상태',
   goal: '목표',
+  achievement: '업적·기록',
   data: '데이터·연동'
 }
 
@@ -54,6 +57,7 @@ export const GLOSSARY_CATEGORY_DESCRIPTION: Record<GlossaryCategory, string> = {
   trend: '누적 데이터를 질문별로 다시 해석하는 분석 관점',
   injury: '통증·부상 상태를 훈련 강도에 반영하는 기준',
   goal: '코칭의 판단 기준이 되는 목표 구조',
+  achievement: '전체 기록에서 자동 산출되는 개인 최고·꾸준함 기록',
   data: 'HealthKit·FIT·날씨 등 기록이 들어오는 경로와 예측'
 }
 
