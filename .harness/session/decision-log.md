@@ -4,6 +4,21 @@
 
 > 하네스 본체의 변경 이력이나 릴리스 노트가 아닙니다. 하네스 본체 변경 기록은 하네스 저장소의 `CHANGELOG.md` 또는 릴리스 태그를 확인합니다.
 
+## 2026-06-08 - PoC② metricSamples 밀도 측정 → 거리별 PB(#228) 착수 게이트 GO
+- 게이트: 2026-06-07 결정의 "착수 게이트 PoC②"(metricSamples로 현실적 PB 곡선 생성 가능 비율 측정, #228 완료조건 1번)를 닫는다. **production 코드 없이** Supabase SQL Editor에서 집계 SQL만 실행해 측정(원시 PII 미반출). 측정 SQL은 repo root `poc228-metric-samples-density.sql`(재현용, 추적).
+- 측정 결과(전체 188런, 5km↑ 140런이 5km PB 사다리 모집단):
+  - 샘플 보유율 **97%(136/140)** — 순수 균등 fallback이 강제되는 무샘플 런은 **3%(4건)뿐**.
+  - paceSec 커버리지 평균 0.98, 시간(offsetSec) 커버리지 평균 ~1.0 → 적분 입력(offsetSec/paceSec)이 거의 항상 존재.
+  - 밀도 중앙값 15.2 샘플/km, 샘플 간격 중앙값 30.2초(≈80~100m/점) → 5km 경계 위치 오차 ±~18초로 PB 산출에 충분.
+  - 밀도 히스토그램(5km↑): 무샘플 4 / <5km 1 / 5–10km 31 / 10–20km 104 / ≥20km 0.
+  - source는 **전부 HealthKit**(188/188, 평균 73샘플/런). file_import·manual·image_extracted 경로의 샘플 부재는 이 데이터셋으로는 검증 불가(향후).
+  - `self-race` 태그 런 **0건** → 레이싱 PB 사다리 현재 비어있음(이슈 부트스트랩 전제와 일치).
+- 판정: **GO**. 근거 — 곡선 생성 가능 실질 비율 97%, 순수 fallback 3%로 균등 fallback 비중 우려 없음 → 고스트(#67) 입력 품질 재검토 불요.
+- 구현에 고정할 결정 2가지:
+  1. `computeDistancePbs` 분기는 **"샘플+paceSec 있으면 적분, 없으면 durationSec/distanceKm 균등"의 2단**으로 충분. 초기 측정에 쓴 `10샘플/km` 같은 밀도 컷오프는 **사용성 게이트로 쓰지 않는다**(성긴 5–10/km 22%도 실측 pace가 등속 가정보다 우월 → 적분 사용). 밀도 컷오프 도입 시 22%가 불필요하게 fallback으로 떨어짐.
+  2. **race 분리 케이스는 실데이터가 없어 합성 fixture Vitest로만 검증** 가능(self-race 0건). #228 완료조건 "훈련·레이싱 분리 케이스" 테스트는 이 전제를 명시.
+- → 권위: 이슈 #228 완료조건, `.harness/project/competition-domain.md` §9. 후속 구현(`src/shared/lib/achievement/distancePb.ts`)은 본 게이트 통과 후 진행.
+
 ## 2026-06-08 - 웹+네이티브 모노레포 이행 (#250, ultracode 9-에이전트 계획)
 - 배경: 웹·네이티브가 `runContext*` 브리지 스키마로 결합돼 있는데 별 repo라 브리지 변경이 두 repo로 쪼개져 원자성이 깨짐. 라이브 트래킹(#229)·워치(#235)·레이싱 등 크로스커팅 작업이 곧 본격화 → 모노레포로 결정.
 - 핵심 결정: (1) 웹 repo를 기준 모노레포로 유지(새 repo 안 팜 — 하네스·Pages·Actions·Supabase Vars·하드코딩 URL이 웹에 바인딩). (2) **웹은 root 그대로**(서브디렉터리化 금지 — `vite base '/RunningCoach/'`·`pages.yml`·`repoRoot`·상대경로 스크립트가 web-at-root 가정, 옮기면 전부 깨짐. 웹/하네스 변경 표면 0). (3) 네이티브만 `native/` 프리픽스로 `git subtree add` 흡수(history 보존, 2중첩 평탄화). (4) 네이티브 remote는 archive(삭제 금지), #248 parked는 보존 브랜치로 push.
