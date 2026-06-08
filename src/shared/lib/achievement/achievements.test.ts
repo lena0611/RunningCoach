@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RunLog } from '@/entities/run/model'
-import { computeAchievements, summarizeAchievementsForCoach } from './achievements'
+import { computeAchievements, computeCumulativeAchievements, summarizeAchievementsForCoach } from './achievements'
 
 function makeRun(overrides: Partial<RunLog> & { id: string; distanceKm: number }): RunLog {
   return {
@@ -22,7 +22,10 @@ function rec<T extends { context: string }>(arr: T[], context: 'training' | 'rac
 describe('computeAchievements', () => {
   it('returns empty record sets for empty input', () => {
     const set = computeAchievements([])
-    expect(set).toEqual({ distancePbs: [], fastestPace: [], longestDistance: [], longestDuration: [], firstMilestones: [] })
+    expect(set).toEqual({
+      distancePbs: [], fastestPace: [], longestDistance: [], longestDuration: [], firstMilestones: [],
+      cumulative: { longestStreak: null, bestWeeklyVolume: null, bestMonthlyVolume: null }
+    })
   })
 
   it('finds longest distance, longest duration, and fastest average pace per context', () => {
@@ -111,5 +114,67 @@ describe('summarizeAchievementsForCoach', () => {
     expect(summary.race).not.toBeNull()
     expect(summary.race!.fastestAvgPaceSec).toBe(270)
     expect(summary.race!.longestDistanceKm).toBe(10)
+  })
+
+  it('summarizes cumulative achievements (streak + best volumes)', () => {
+    const runs = [
+      makeRun({ id: 'd1', distanceKm: 5, date: '2026-03-02' }), // 월
+      makeRun({ id: 'd2', distanceKm: 7, date: '2026-03-03' }), // 화
+      makeRun({ id: 'd3', distanceKm: 8, date: '2026-03-04' }) // 수
+    ]
+    const summary = summarizeAchievementsForCoach(runs)
+    expect(summary.cumulative.longestStreakDays).toBe(3)
+    expect(summary.cumulative.bestWeeklyVolumeKm).toBe(20) // 같은 주 합
+    expect(summary.cumulative.bestMonthlyVolumeKm).toBe(20)
+  })
+})
+
+describe('computeCumulativeAchievements', () => {
+  it('returns nulls for no runs', () => {
+    expect(computeCumulativeAchievements([])).toEqual({ longestStreak: null, bestWeeklyVolume: null, bestMonthlyVolume: null })
+  })
+
+  it('finds the longest consecutive-day streak across gaps and dedupes same-day runs', () => {
+    const runs = [
+      makeRun({ id: 'a', distanceKm: 5, date: '2026-01-01' }),
+      makeRun({ id: 'b', distanceKm: 5, date: '2026-01-02' }),
+      makeRun({ id: 'b2', distanceKm: 3, date: '2026-01-02' }), // 같은 날 두 번 — 하루로
+      makeRun({ id: 'c', distanceKm: 5, date: '2026-01-03' }),
+      makeRun({ id: 'gap', distanceKm: 5, date: '2026-01-05' }), // 04 빠짐 → 끊김
+      makeRun({ id: 'e', distanceKm: 5, date: '2026-01-06' })
+    ]
+    const { longestStreak } = computeCumulativeAchievements(runs)
+    expect(longestStreak).toEqual({ days: 3, start: '2026-01-01', end: '2026-01-03' })
+  })
+
+  it('counts a single run as a 1-day streak', () => {
+    expect(computeCumulativeAchievements([makeRun({ id: 's', distanceKm: 5, date: '2026-02-10' })]).longestStreak).toEqual({
+      days: 1, start: '2026-02-10', end: '2026-02-10'
+    })
+  })
+
+  it('picks the best weekly (Mon-start) and monthly volume; ties prefer earlier period', () => {
+    const runs = [
+      // 2026-01-05(월)~01-11(일) 주: 10+12 = 22
+      makeRun({ id: 'w1a', distanceKm: 10, date: '2026-01-05' }),
+      makeRun({ id: 'w1b', distanceKm: 12, date: '2026-01-08' }),
+      // 2026-01-12 주: 9
+      makeRun({ id: 'w2', distanceKm: 9, date: '2026-01-13' }),
+      // 2월: 한 주에 8
+      makeRun({ id: 'feb', distanceKm: 8, date: '2026-02-02' })
+    ]
+    const { bestWeeklyVolume, bestMonthlyVolume } = computeCumulativeAchievements(runs)
+    expect(bestWeeklyVolume).toMatchObject({ periodStart: '2026-01-05', distanceKm: 22, runCount: 2 })
+    expect(bestMonthlyVolume).toMatchObject({ periodStart: '2026-01-01', distanceKm: 31, runCount: 3 })
+  })
+
+  it('integrates across contexts (training + race counted together)', () => {
+    const runs = [
+      makeRun({ id: 't', distanceKm: 10, date: '2026-04-06' }),
+      makeRun({ id: 'r', distanceKm: 10, date: '2026-04-07', tags: ['self-race'] })
+    ]
+    const { longestStreak, bestWeeklyVolume } = computeCumulativeAchievements(runs)
+    expect(longestStreak!.days).toBe(2) // 레이싱·훈련 통합 연속
+    expect(bestWeeklyVolume!.distanceKm).toBe(20)
   })
 })
