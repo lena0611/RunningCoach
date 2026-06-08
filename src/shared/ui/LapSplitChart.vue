@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { Lap, RunMetricSample, RunRoutePoint } from '@/entities/run/model'
 import { formatDuration } from '@/shared/lib/format'
+import { sanitizeAltitudeSeries } from '@/shared/lib/altitude'
 import LapMetricChart from '@/shared/ui/LapMetricChart.vue'
 
 const props = defineProps<{
@@ -55,6 +56,8 @@ const useSampleAxis = computed(() => samplePoints.value.length >= Math.max(6, la
 const chartPoints = computed(() => useSampleAxis.value ? samplePoints.value : lapPoints.value)
 const labels = computed(() => chartPoints.value.map((point) => point.label))
 const axisName = computed(() => useSampleAxis.value ? '시간' : '랩')
+// GPS 고도 스파이크 방어(#244). 이미 저장된 런도 표시 단계에서 클린한다.
+const cleanRoutePoints = computed(() => sanitizeAltitudeSeries(props.routePoints))
 const elevationValues = computed(() => chartPoints.value.map((point) => getElevationAtOffset(point.offsetSec)))
 const selectedIndex = computed(() => {
   const points = chartPoints.value
@@ -77,7 +80,7 @@ function getNearestIndex(points: SplitChartPoint[], offsetSec: number | null | u
 }
 
 function getElevationAtOffset(offsetSec: number) {
-  const points = props.routePoints.filter((point) => point.altitude !== null)
+  const points = cleanRoutePoints.value.filter((point) => point.altitude !== null)
   if (!points.length) return null
   const nearest = points.reduce((current, point) => {
     return Math.abs(point.offsetSec - offsetSec) < Math.abs(current.offsetSec - offsetSec) ? point : current

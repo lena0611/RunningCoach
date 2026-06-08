@@ -3,6 +3,7 @@ import { createSessionTitle } from '@/features/create-session-title/createSessio
 import { inferCourseType } from '@/features/infer-course-type/inferCourseType'
 import { inferRunType } from '@/features/infer-run-type/inferRunType'
 import { sanitizeCadence } from '@/shared/lib/cadence'
+import { sanitizeAltitudeSeries } from '@/shared/lib/altitude'
 import type { HeartRateModel } from '@/shared/lib/heartRateZones'
 
 export type HealthKitRunCandidate = {
@@ -306,7 +307,7 @@ function normalizeMetricSamples(samples: RunMetricSample[]) {
 }
 
 function normalizeRoutePoints(points: RunRoutePoint[]) {
-  return points
+  const normalized = points
     .map((point) => ({
       offsetSec: normalizeNumber(point.offsetSec) ?? 0,
       latitude: normalizeNumber(point.latitude) ?? Number.NaN,
@@ -314,6 +315,8 @@ function normalizeRoutePoints(points: RunRoutePoint[]) {
       altitude: normalizeNumber(point.altitude)
     }))
     .filter((point) => Number.isFinite(point.offsetSec) && Number.isFinite(point.latitude) && Number.isFinite(point.longitude))
+  // GPS 고도 스파이크 방어: 차트 범위·course type(altitudeRange) 왜곡 방지(#244).
+  return sanitizeAltitudeSeries(normalized)
 }
 
 function normalizeNumber(value: number | null): number | null {
