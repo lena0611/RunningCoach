@@ -1,0 +1,9 @@
+.DS_Store
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+
+# The native app loads the deployed GitHub Pages web app.
+# Do not track stale generated web bundles inside the Swift project.
+RunningCoach/WebApp/
