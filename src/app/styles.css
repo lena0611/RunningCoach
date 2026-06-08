@@ -5781,6 +5781,33 @@ button.run-session-row {
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
 }
 
+.injury-checkin-session {
+  margin: 0;
+  padding: 11px 13px;
+  border-radius: 16px;
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.injury-checkin-shortcuts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+
+.injury-checkin-shortcuts button {
+  padding: 11px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .injury-screening-layer {
   z-index: var(--z-confirm-sheet);
 }
