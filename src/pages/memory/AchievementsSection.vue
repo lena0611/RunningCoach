@@ -3,7 +3,6 @@ import { computed, ref } from 'vue'
 import type { RunLog } from '@/entities/run/model'
 import { computeAchievements, DISTANCE_MILESTONES_M, type AchievementContext } from '@/shared/lib/achievement/achievements'
 import { formatDuration, formatPace } from '@/shared/lib/format'
-import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import InfoPairGrid from '@/shared/ui/InfoPairGrid.vue'
 
 const props = defineProps<{ runs: RunLog[] }>()
@@ -49,12 +48,11 @@ const cumulativeItems = computed(() => {
   return items
 })
 
-const hasContextRecords = computed(() => pbItems.value.length > 0 || recordItems.value.length > 0)
-const hasAnyAchievement = computed(() => hasContextRecords.value || cumulativeItems.value.length > 0 || ctxView.value.milestones.size > 0)
+const hasContextRecords = computed(() => pbItems.value.length > 0 || recordItems.value.length > 0 || ctxView.value.milestones.size > 0)
 </script>
 
 <template>
-  <SectionGroup title="업적" :surface="false">
+  <div class="achievements-detail">
     <div class="achievement-context-toggle" role="tablist">
       <button type="button" role="tab" :aria-selected="activeContext === 'training'" :class="{ active: activeContext === 'training' }" @click="activeContext = 'training'">훈련</button>
       <button type="button" role="tab" :aria-selected="activeContext === 'race'" :class="{ active: activeContext === 'race' }" @click="activeContext = 'race'">레이싱</button>
@@ -63,53 +61,55 @@ const hasAnyAchievement = computed(() => hasContextRecords.value || cumulativeIt
     <template v-if="activeContext === 'race' && !hasRace">
       <p class="helper">아직 레이싱(자기와의 대결) 기록이 없어요. 첫 레이싱을 하면 레이싱 PB가 여기 쌓입니다.</p>
     </template>
-    <template v-else-if="hasContextRecords || ctxView.milestones.size">
-      <div v-if="pbItems.length" class="achievement-block">
+    <template v-else-if="hasContextRecords">
+      <section v-if="pbItems.length" class="achievement-block">
         <strong>거리별 PB</strong>
         <InfoPairGrid :items="pbItems" />
-      </div>
-      <div v-if="recordItems.length" class="achievement-block">
+      </section>
+      <section v-if="recordItems.length" class="achievement-block">
         <strong>기록</strong>
         <InfoPairGrid :items="recordItems" />
-      </div>
-      <div class="achievement-block">
+      </section>
+      <section class="achievement-block">
         <strong>마일스톤</strong>
         <div class="achievement-milestones">
           <span v-for="m in DISTANCE_MILESTONES_M" :key="m" :class="{ done: ctxView.milestones.has(m) }">
             {{ ctxView.milestones.has(m) ? '✓' : '·' }} {{ distanceLabel(m) }}
           </span>
         </div>
-      </div>
+      </section>
     </template>
     <p v-else class="helper">아직 {{ activeContext === 'race' ? '레이싱' : '훈련' }} 기록 업적이 없어요.</p>
 
-    <div v-if="cumulativeItems.length" class="achievement-block">
+    <section v-if="cumulativeItems.length" class="achievement-block">
       <strong>꾸준함 <span class="achievement-block-note">(훈련·레이싱 전체)</span></strong>
       <InfoPairGrid :items="cumulativeItems" />
-    </div>
+    </section>
 
-    <p v-if="!hasAnyAchievement && !(activeContext === 'race' && !hasRace)" class="helper">기록을 더 쌓으면 업적이 여기 표시됩니다.</p>
     <p class="helper">전체 기록에서 자동 산출됩니다. 새 기록을 추가하면 갱신됩니다.</p>
-  </SectionGroup>
+  </div>
 </template>
 
 <style scoped>
 .achievement-context-toggle {
-  display: inline-flex;
+  display: flex;
+  width: 100%;
   gap: 4px;
-  padding: 3px;
+  padding: 4px;
   border-radius: 999px;
   background: var(--surface-2, rgba(255, 255, 255, 0.06));
-  margin-bottom: 12px;
+  margin-bottom: 18px;
 }
 .achievement-context-toggle button {
+  flex: 1;
   border: none;
   background: transparent;
   color: var(--text-muted, #9aa0a6);
-  padding: 6px 16px;
+  padding: 10px 0;
   border-radius: 999px;
-  font-size: 0.85rem;
+  font-size: 0.92rem;
   cursor: pointer;
+  text-align: center;
 }
 .achievement-context-toggle button.active {
   background: var(--accent, #2f6df6);
@@ -117,12 +117,12 @@ const hasAnyAchievement = computed(() => hasContextRecords.value || cumulativeIt
   font-weight: 600;
 }
 .achievement-block {
-  margin-top: 12px;
+  margin-bottom: 20px;
 }
 .achievement-block > strong {
   display: block;
-  margin-bottom: 6px;
-  font-size: 0.9rem;
+  margin-bottom: 8px;
+  font-size: 0.95rem;
 }
 .achievement-block-note {
   font-weight: 400;
@@ -132,11 +132,11 @@ const hasAnyAchievement = computed(() => hasContextRecords.value || cumulativeIt
 .achievement-milestones {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 14px;
+  gap: 10px 16px;
 }
 .achievement-milestones span {
   color: var(--text-muted, #9aa0a6);
-  font-size: 0.88rem;
+  font-size: 0.92rem;
 }
 .achievement-milestones span.done {
   color: var(--text, #e8eaed);

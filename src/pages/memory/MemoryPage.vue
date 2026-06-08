@@ -30,10 +30,11 @@ import InjuryBodySelector from '@/shared/ui/InjuryBodySelector.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import AchievementsSection from '@/pages/memory/AchievementsSection.vue'
+import { computeAchievements } from '@/shared/lib/achievement/achievements'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
 import SchedulingHelpSheet from '@/shared/ui/SchedulingHelpSheet.vue'
 
-type MemoryPanel = 'overview' | 'goals' | 'goal-edit' | 'goal-new' | 'injuries' | 'injury-edit' | 'injury-new' | 'knowledge' | 'knowledge-request'
+type MemoryPanel = 'overview' | 'goals' | 'goal-edit' | 'goal-new' | 'injuries' | 'injury-edit' | 'injury-new' | 'achievements' | 'knowledge' | 'knowledge-request'
 
 const memoryStore = useMemoryStore()
 const runStore = useRunStore()
@@ -155,6 +156,8 @@ const stackTitle = computed(() => {
       return '훈련 지식'
     case 'knowledge-request':
       return '지식화 검토 요청'
+    case 'achievements':
+      return '업적'
     default:
       return '코칭 메모리'
   }
@@ -396,10 +399,32 @@ function openInjuries() {
   pushPanel('injuries')
 }
 
+function openAchievements() {
+  pushPanel('achievements')
+}
+
 function openKnowledge() {
   pushPanel('knowledge')
   void loadKnowledge()
 }
+
+const achievementPreview = computed(() => {
+  const set = computeAchievements(runStore.sortedRuns)
+  const pb5k = set.distancePbs.find((p) => p.context === 'training' && p.distanceM === 5000)
+  const longest = set.longestDistance.find((r) => r.context === 'training')
+  const streak = set.cumulative.longestStreak
+  const weekly = set.cumulative.bestWeeklyVolume
+  const headline: string[] = []
+  if (pb5k) headline.push(`5K ${formatDuration(pb5k.elapsedSec)}`)
+  if (longest) headline.push(`최장 ${longest.distanceKm.toFixed(1)}km`)
+  const sub: string[] = []
+  if (streak) sub.push(`최장 연속 ${streak.days}일`)
+  if (weekly) sub.push(`주 최고 ${weekly.distanceKm}km`)
+  return {
+    headline: headline.join(' · ') || '아직 업적이 없어요',
+    sub: sub.join(' · ') || '기록을 쌓으면 PB·꾸준함 업적이 표시됩니다'
+  }
+})
 
 function openKnowledgeRequest() {
   knowledgeRequestSaved.value = false
@@ -772,7 +797,15 @@ async function save() {
       <p class="helper">프로필과 PB 수정은 우상단 계정 메뉴에서 관리합니다.</p>
     </SectionGroup>
 
-    <AchievementsSection :runs="runStore.sortedRuns" />
+    <SectionGroup title="업적" :surface="false">
+      <button class="memory-nav-card memory-nav-card-standalone" type="button" @click="openAchievements">
+        <span>
+          <strong>{{ achievementPreview.headline }}</strong>
+          <small>{{ achievementPreview.sub }}</small>
+        </span>
+        <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
+      </button>
+    </SectionGroup>
 
     <SectionGroup title="훈련 기준" :surface="false">
       <template #actions>
@@ -1091,6 +1124,10 @@ async function save() {
                 <button class="danger" type="button" @click="askRemoveInjury(editingInjury)">삭제</button>
               </ActionGroup>
                 </FormGrid>
+
+                <div v-else-if="panel === 'achievements'" class="memory-stack">
+                  <AchievementsSection :runs="runStore.sortedRuns" />
+                </div>
 
                 <div v-else-if="panel === 'knowledge'" class="memory-stack">
                   <SectionHeader title="지식 보관소" compact>
