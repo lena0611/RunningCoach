@@ -39,11 +39,19 @@ let lastEmittedIndex = -1
 
 const numbers = computed(() => props.values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value)))
 const domain = computed(() => getChartDomain(props.values, props.domainKind))
-const summary = computed(() => {
+const averageText = computed(() => {
   if (!numbers.value.length) return '-'
   const average = numbers.value.reduce((sum, value) => sum + value, 0) / numbers.value.length
   return formatMetric(average)
 })
+// 선택 지점이 있으면 헤더를 그 지점값으로(지도 밑 "선택 구간"과 동일 오프셋), 없으면 평균.
+const selectedValue = computed(() => {
+  if (typeof props.selectedIndex !== 'number') return null
+  const value = props.values[props.selectedIndex]
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+})
+const hasSelection = computed(() => selectedValue.value !== null)
+const headline = computed(() => (hasSelection.value ? formatMetric(selectedValue.value as number) : averageText.value))
 const range = computed(() => {
   const currentDomain = domain.value
   if (!currentDomain) return '-'
@@ -260,7 +268,8 @@ function renderChart() {
     <header class="lap-metric-header">
       <div>
         <span>{{ title }}</span>
-        <strong>{{ summary }}</strong>
+        <strong>{{ headline }}</strong>
+        <small v-if="hasSelection" class="lap-metric-average">평균 {{ averageText }}</small>
       </div>
       <small>{{ range }}</small>
     </header>
