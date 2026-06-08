@@ -10,6 +10,7 @@ import type { TrainingGoal, TrainingInjuryCheckIn, TrainingMemory } from '@/enti
 import { detectGoalIntent, type GoalIntentProposal } from '@/features/detect-goal-intent/detectGoalIntent'
 import UploadRunPage from '@/pages/upload-run/UploadRunPage.vue'
 import { fetchCoachReports, requestCoachRunStream, type CoachInjuryUpdateProposal, type CoachReport } from '@/shared/api/coachRepository'
+import { summarizeAchievementsForCoach } from '@/shared/lib/achievement/achievements'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { resolveRunnerLevel } from '@/shared/lib/runnerLevel'
 import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, formatInteger, formatNumberWithCommas, formatPace } from '@/shared/lib/format'
@@ -807,7 +808,8 @@ async function sendCoachRequest(note: string) {
       signal: controller.signal,
       onDelta: enqueueCoachReveal,
       runnerLevel: resolveRunnerLevel(memoryStore.memory.athleteProfile, runStore.sortedRuns).level,
-      commandId
+      commandId,
+      achievements: summarizeAchievementsForCoach(runStore.sortedRuns)
     })
     await waitForCoachRevealDrain()
     reports.value = [report, ...reports.value.filter((item) => item.id !== report.id)]
