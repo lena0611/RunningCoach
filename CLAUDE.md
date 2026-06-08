@@ -38,6 +38,13 @@
 - `.harness/documentation/README.md`
 - `.harness/stacks/README.md`
 
+## 모노레포 구조 (#250)
+- 이 repo는 **웹 + 네이티브(iOS) 모노레포**입니다. 웹은 repo root(`src/`, `vite.config.ts`, `.harness/` 등 그대로), 네이티브는 `native/`(`native/RunningCoach.xcodeproj`, Swift 소스, 브리지)에 있습니다.
+- **단일 `.git`/단일 origin.** 웹과 네이티브 변경을 **하나의 commit/PR로 원자적**으로 한다 — 특히 `runContext*` 브리지 계약은 웹 `src/features/*/*Bridge.ts`와 네이티브 `native/RunningCoach/RunContextWebView.swift`를 **동시 변경**한다.
+- 네이티브 빌드 검증은 harness:check 대상이 아니라 **수동(Xcode/`xcodebuild`)** 입니다. native 변경은 critical-path 수동 검증 경로로 다룹니다.
+- worktree는 단일 `.git` 기준으로 만들고, iOS 작업도 같은 worktree의 `native/` 하위에서 합니다.
+- 과거 별도 네이티브 repo(`RunningCoach-Native-Swift`)는 archive됨. DeviceCheck 보안 강화는 보류(#248).
+
 ## 기준
 - 하네스 본체는 `.harness/`에 있습니다.
 - 플랫폼별 파일은 하네스 본체 밖의 어댑터입니다.

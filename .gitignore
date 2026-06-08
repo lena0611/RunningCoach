@@ -24,3 +24,11 @@ dist/
 CLAUDE.local.md
 .harness/project/personal-methodology.local.md
 .claude/settings.local.json
+
+# native (iOS) — 모노레포 흡수(#250). native/ 프리픽스 한정(무프리픽스는 웹과 충돌)
+native/**/DerivedData/
+native/**/build/
+native/**/*.xcuserstate
+native/**/xcuserdata/
+native/**/WebApp/
+native/.githooks/

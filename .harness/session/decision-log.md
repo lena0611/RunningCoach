@@ -4,6 +4,14 @@
 
 > 하네스 본체의 변경 이력이나 릴리스 노트가 아닙니다. 하네스 본체 변경 기록은 하네스 저장소의 `CHANGELOG.md` 또는 릴리스 태그를 확인합니다.
 
+## 2026-06-08 - 웹+네이티브 모노레포 이행 (#250, ultracode 9-에이전트 계획)
+- 배경: 웹·네이티브가 `runContext*` 브리지 스키마로 결합돼 있는데 별 repo라 브리지 변경이 두 repo로 쪼개져 원자성이 깨짐. 라이브 트래킹(#229)·워치(#235)·레이싱 등 크로스커팅 작업이 곧 본격화 → 모노레포로 결정.
+- 핵심 결정: (1) 웹 repo를 기준 모노레포로 유지(새 repo 안 팜 — 하네스·Pages·Actions·Supabase Vars·하드코딩 URL이 웹에 바인딩). (2) **웹은 root 그대로**(서브디렉터리化 금지 — `vite base '/RunningCoach/'`·`pages.yml`·`repoRoot`·상대경로 스크립트가 web-at-root 가정, 옮기면 전부 깨짐. 웹/하네스 변경 표면 0). (3) 네이티브만 `native/` 프리픽스로 `git subtree add` 흡수(history 보존, 2중첩 평탄화). (4) 네이티브 remote는 archive(삭제 금지), #248 parked는 보존 브랜치로 push.
+- 검증으로 밝혀진 단순화: native/ 추가가 harness:check(web lint/test/build)·harness:impact에 영향 없음 → 계획이 우려한 stack scoping(scope-gate.mjs)은 **불필요**. WebApp gitignore분도 subtree에 안 딸려옴.
+- 비가역 지점은 **E4(통합 브랜치→main 머지) 하나뿐**. 그 전까지는 통합 브랜치 삭제로 완전 복구. 백업 태그 `premonorepo-web-backup`/`premonorepo-native-backup` + 네이티브 미러(`~/backup/native-mirror.git`) 확보.
+- 후속(별도): 브리지 계약 단일화(`shared/contracts/runContext.bridge.ts`), WebApp 빌드 자동복사, 메모리 모노레포판 갱신(`native-repo-git-management`·`worktree-edit-path`), #248 DeviceCheck.
+- → 권위: root `CLAUDE.md` 모노레포 섹션, 이슈 #250.
+
 ## 기록 원칙
 - 프로젝트 기준, 스택 기준, 템플릿 계약, 개인 기준이 충돌할 때 선택 이유를 남깁니다.
 - 테스트 전략, 예외 허용, 아키텍처 경계, 운영 절차처럼 이후 작업에 영향을 주는 판단을 남깁니다.
