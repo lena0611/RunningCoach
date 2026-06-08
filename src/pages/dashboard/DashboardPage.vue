@@ -13,6 +13,7 @@ import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
 import { getAgeLoadWeight, getEasyRatio, getFatigueWarning, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, sumDistance } from '@/shared/lib/runStats'
 import { formatDateWithWeekday, formatDuration } from '@/shared/lib/format'
 import { getRaceProjection } from '@/shared/lib/performanceProjection'
+import { resolveRunnerProgress } from '@/shared/lib/level/levelModel'
 import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
 import { formatWeatherNumber, weatherSymbolToEmoji } from '@/shared/lib/weather'
 import EmptyState from '@/shared/ui/EmptyState.vue'
@@ -22,6 +23,8 @@ import RunDetailContent from '@/shared/ui/RunDetailContent.vue'
 import RunSessionList from '@/shared/ui/RunSessionList.vue'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import StatCard from '@/shared/ui/StatCard.vue'
+import LevelCard from './LevelCard.vue'
+import QuestPanel from './QuestPanel.vue'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
 
@@ -66,6 +69,7 @@ const raceProjection = computed(() =>
     tempoCeilingBpm: heartRateModel.value.tempoCeilingBpm
   })
 )
+const runnerProgress = computed(() => resolveRunnerProgress(memoryStore.memory.athleteProfile, runs.value, today.value))
 
 watch(
   () => route.path,
@@ -270,6 +274,9 @@ function formatDateOnly(value: Date) {
       </div>
       <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
     </button>
+
+    <LevelCard :progress="runnerProgress" />
+    <QuestPanel :progress="runnerProgress" :next-session="nextSession" />
 
     <SectionGroup v-if="runStore.loading || runStore.error" title="데이터 상태">
       <template #actions>
