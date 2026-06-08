@@ -2,6 +2,7 @@ import { getSupabaseAnonKey, getSupabaseFunctionUrl, requireSupabase } from '@/s
 import { getAppSessionToken } from '@/shared/api/appSecurity'
 import type { WeatherSnapshot } from '@/features/import-weatherkit/weatherKitBridge'
 import type { RunnerLevel } from '@/entities/training-memory/model'
+import type { CoachAchievementSummary } from '@/shared/lib/achievement/achievements'
 
 export type CoachReport = {
   id: string
@@ -33,7 +34,7 @@ type CoachReportRow = {
   updated_at?: string
 }
 
-export async function requestCoachRun(selectedRunId: string | null, userNote: string, currentWeather: WeatherSnapshot | null = null, runnerLevel: RunnerLevel = 'beginner'): Promise<CoachReport> {
+export async function requestCoachRun(selectedRunId: string | null, userNote: string, currentWeather: WeatherSnapshot | null = null, runnerLevel: RunnerLevel = 'beginner', achievements: CoachAchievementSummary | null = null): Promise<CoachReport> {
   const appSessionToken = await getAppSessionToken()
   const { data, error } = await requireSupabase().functions.invoke('coach-run', {
     headers: {
@@ -43,6 +44,7 @@ export async function requestCoachRun(selectedRunId: string | null, userNote: st
       selectedRunId,
       userNote,
       currentWeather: summarizeWeatherForCoach(currentWeather),
+      achievements,
       runnerLevel,
       responseStyle: {
         tone: 'conversational_coach',
@@ -69,6 +71,7 @@ export async function requestCoachRunStream(
     onDelta: (delta: string) => void
     runnerLevel?: RunnerLevel
     commandId?: string | null
+    achievements?: CoachAchievementSummary | null
   }
 ): Promise<CoachReport> {
   const client = requireSupabase()
@@ -89,6 +92,7 @@ export async function requestCoachRunStream(
       selectedRunId,
       userNote,
       currentWeather: summarizeWeatherForCoach(currentWeather),
+      achievements: options.achievements ?? null,
       stream: true,
       commandId: options.commandId ?? null,
       runnerLevel: options.runnerLevel ?? 'beginner',

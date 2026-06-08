@@ -4,6 +4,14 @@
 
 > 하네스 본체의 변경 이력이나 릴리스 노트가 아닙니다. 하네스 본체 변경 기록은 하네스 저장소의 `CHANGELOG.md` 또는 릴리스 태그를 확인합니다.
 
+## 2026-06-08 - 개인 업적 도메인(#181): 파생 계산 + 코칭 인용은 client-summary 주입
+- 설계 게이트: #181은 Inbox·초안("설계 확정 후 착수")이라 구현 전 4개 결정을 사용자 확인. 결과(모두 추천 채택): (1) 범위=PB·기록류 우선(최장 거리/시간·최속 평균 페이스·거리 마일스톤 첫 달성, 누적류 스트릭/볼륨은 후속), (2) coach-run 인용 포함, (3) 표시 UI는 후속(와이어프레임 게이트), (4) 저장=파생 계산(테이블 없음).
+- 저장 결정: 업적은 전부 `run_logs` 파생·stateless 재산출(`src/shared/lib/achievement/achievements.ts`). 별도 테이블/트리거 없음 → 새 기록 import 시 재호출만으로 자동 갱신. distancePb(#228)와 동일 패턴, 이중 출처·동기화 복잡도 회피.
+- 컨텍스트 분리: PB·기록류는 'self-race'로 훈련/레이싱 상호 배타. 누적류는 통합(후속). race 사다리는 self-race 0건이면 비어있음(부트스트랩).
+- **코칭 인용 = client-summary 주입(미러 대신)**: coach-run은 `run_logs`를 최근 120건만 조회 → 서버 재계산 시 올타임 기록(예: 130런 전 최장거리)을 놓침. 그래서 vdotPaces류 "양측 미러" 대신, **웹이 전체 런으로 산출한 컴팩트 요약을 payload로 전달**하는 `currentWeather` 패턴을 채택. coach-run은 `normalizeAchievements`로 검증·주입만. 이유: (a) 올타임 정확, (b) distancePb 적분(150줄) Deno 미러 회피, (c) 프롬프트 크기 절약(PB 2버킷·마일스톤 목록만). 단점=클라이언트 신뢰지만 사용자 본인 데이터·비권위 인용이라 수용. 인용 지침: 과장/날조 금지, 맥락 맞을 때 1~2개, 값 재계산 금지.
+- 검증/배포: Edge(coach-run) 변경 → 배포 후 로그인 상태 실제 코칭 1회 스모크가 완료 조건([[edge-auth-deploy-smoke]]). 인증/토큰 경계 미변경(선택적 context 필드 추가).
+- → 권위: 이슈 #181, `.harness/project/competition-domain.md` §9.2(PB 분리). UI·누적류는 후속 이슈.
+
 ## 2026-06-08 - PoC② metricSamples 밀도 측정 → 거리별 PB(#228) 착수 게이트 GO
 - 게이트: 2026-06-07 결정의 "착수 게이트 PoC②"(metricSamples로 현실적 PB 곡선 생성 가능 비율 측정, #228 완료조건 1번)를 닫는다. **production 코드 없이** Supabase SQL Editor에서 집계 SQL만 실행해 측정(원시 PII 미반출). 측정 SQL은 repo root `poc228-metric-samples-density.sql`(재현용, 추적).
 - 측정 결과(전체 188런, 5km↑ 140런이 5km PB 사다리 모집단):

@@ -173,6 +173,7 @@ Deno.serve(async (req) => {
     const userNote = typeof body.userNote === 'string' ? body.userNote.slice(0, 2000) : ''
     const commandId = typeof body.commandId === 'string' && body.commandId ? body.commandId : null
     const currentWeather = normalizeCurrentWeather(body.currentWeather)
+    const achievements = normalizeAchievements(body.achievements)
     const runnerLevel = normalizeRunnerLevel(body.runnerLevel)
     const responseStyle = normalizeResponseStyle(body.responseStyle, runnerLevel)
     const shouldStream = body.stream === true
@@ -183,7 +184,7 @@ Deno.serve(async (req) => {
     const rateLimit = await consumeRateLimit(admin, userId, 'coach-run')
     if (!rateLimit.ok) return json({ error: rateLimit.error, retryAfterSec: rateLimit.retryAfterSec }, 429)
 
-    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId)
+    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements)
     const ownedSelectedRunId = context.selectedRun?.id ?? null
     if (shouldStream) {
       return streamCoachRun(admin, userId, ownedSelectedRunId, userNote, openaiKey, model, context)
@@ -333,6 +334,57 @@ function normalizeCurrentWeather(value: unknown): CurrentWeatherContext | null {
   }
 }
 
+// 웹이 전체 RunLog 에서 산출해 보내는 개인 업적 요약(#181). 서버는 최근 120건만 보므로
+// 올타임 기록을 놓치지 않게 currentWeather 와 동일한 client-summary 패턴으로 받는다.
+type CoachAchievementHighlights = {
+  longestDistanceKm: number | null
+  longestDurationSec: number | null
+  fastestAvgPaceSec: number | null
+  distancePbs: { distanceM: number; elapsedSec: number }[]
+  milestonesM: number[]
+}
+type CoachAchievementContext = {
+  training: CoachAchievementHighlights
+  race: CoachAchievementHighlights | null
+}
+
+function normalizeAchievementHighlights(value: unknown): CoachAchievementHighlights | null {
+  if (!value || typeof value !== 'object') return null
+  const item = value as Record<string, unknown>
+  const distancePbs = Array.isArray(item.distancePbs)
+    ? item.distancePbs
+        .filter((p): p is Record<string, unknown> => Boolean(p) && typeof p === 'object')
+        .map((p) => ({ distanceM: nullableNumber(p.distanceM), elapsedSec: nullableNumber(p.elapsedSec) }))
+        .filter((p): p is { distanceM: number; elapsedSec: number } => p.distanceM != null && p.elapsedSec != null)
+        .slice(0, 4)
+    : []
+  const milestonesM = Array.isArray(item.milestonesM)
+    ? item.milestonesM.filter((m): m is number => typeof m === 'number' && Number.isFinite(m)).slice(0, 8)
+    : []
+  const highlights: CoachAchievementHighlights = {
+    longestDistanceKm: nullableNumber(item.longestDistanceKm),
+    longestDurationSec: nullableNumber(item.longestDurationSec),
+    fastestAvgPaceSec: nullableNumber(item.fastestAvgPaceSec),
+    distancePbs,
+    milestonesM
+  }
+  const empty = highlights.longestDistanceKm == null && highlights.longestDurationSec == null
+    && highlights.fastestAvgPaceSec == null && !distancePbs.length && !milestonesM.length
+  return empty ? null : highlights
+}
+
+function normalizeAchievements(value: unknown): CoachAchievementContext | null {
+  if (!value || typeof value !== 'object') return null
+  const item = value as Record<string, unknown>
+  const training = normalizeAchievementHighlights(item.training)
+  const race = normalizeAchievementHighlights(item.race)
+  if (!training && !race) return null
+  return {
+    training: training ?? { longestDistanceKm: null, longestDurationSec: null, fastestAvgPaceSec: null, distancePbs: [], milestonesM: [] },
+    race
+  }
+}
+
 // 응답 형식 모드. report=세션만 열림, conversational=일반 사담,
 // explain=자세한 설명/분석 요청, evidence=근거/출처 요청.
 type CoachResponseMode = 'report' | 'conversational' | 'explain' | 'evidence'
@@ -391,7 +443,7 @@ const COACH_COMMAND_FORMATS: Record<string, { label: string; sections: string[] 
   }
 }
 
-async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null) {
+async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null) {
   const memorySelect = 'id, content, created_at, importance, last_referenced_at, reference_count'
   const [
     { data: memoryRow },
@@ -606,6 +658,9 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     currentWeather,
     instructionForWeatherHandling:
       'currentWeather는 iOS WeatherKit에서 받은 현재/향후 12시간 날씨이며 다음 세션 준비용이다. selectedRun이 과거 기록이면 currentWeather를 그 과거 훈련 당시 날씨로 착각하지 마라. selectedRun.date가 오늘이거나 사용자가 다음 훈련/오늘 뛸지 묻는 경우에만 체감온도, 강수확률, 강수량, 비 가능 시간대를 짧게 반영한다.',
+    achievements,
+    instructionForAchievements:
+      'achievements는 웹이 전체 기록에서 산출한 개인 업적이다(거리별 PB·최장 거리/시간·최속 평균 페이스·거리 마일스톤 첫 달성, 훈련/레이싱 컨텍스트 분리). 동기부여·신뢰 강화를 위해 맥락에 맞을 때만 1~2개를 사실 그대로 짧게 인용한다. 매 답변에 기계적으로 나열하지 말고, 수치를 과장하거나 없는 기록을 지어내지 마라. PB/기록 값은 재계산하지 말고 주어진 값을 그대로 쓴다. race가 null이면 아직 레이싱(자기와의 대결) 기록이 없다는 뜻이니 레이싱 업적을 언급하지 않는다.',
     routineUpdatePolicy: {
       purpose:
         '주간 루틴은 activeGoal 달성을 위한 처방이다. 세션별 코칭 때마다 유지/조정 여부를 확인하되, 단일 기록 하나만으로 자주 바꾸지 않는다.',
