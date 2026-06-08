@@ -86,7 +86,7 @@
   --text-caption-size: 13px;
   --text-caption-line: 1.45;
   --text-metric-size: clamp(28px, 7.8vw, 38px);
-  --z-toast: 90;
+  --z-toast: 1200;
   --z-bottom-sheet: 1000;
   --z-stack: 860;
   --z-confirm-sheet: 1100;
