@@ -132,6 +132,15 @@ function getNavIndex(path: string) {
 const currentTabIndex = computed(() => mainTabRoutes.indexOf(route.path))
 const isMainTabRoute = computed(() => currentTabIndex.value !== -1)
 const injuryCheckInItem = computed(() => memoryStore.memory.injuryItems.find((item) => item.id === injuryCheckInItemId.value) ?? null)
+// 이 체크인을 띄운 "방금 들어온" 세션(최근 2일 이내일 때만 브리지 문장/숏컷 노출).
+const injuryCheckInContextRun = computed(() => {
+  if (!injuryCheckInItem.value) return null
+  const latest = runStore.sortedRuns[0]
+  if (!latest?.date) return null
+  const ageMs = Date.now() - Date.parse(latest.date)
+  if (!Number.isFinite(ageMs) || ageMs > 2 * 24 * 60 * 60 * 1000) return null
+  return latest
+})
 const tabTrackStyle = computed(() => {
   const index = swipeTrackIndex.value ?? currentTabIndex.value
   return {
@@ -371,6 +380,19 @@ function dismissCurrentInjuryCheckIn() {
   const item = injuryCheckInItem.value
   if (item) localStorage.setItem(injuryCheckInDismissKey(item), '1')
   injuryCheckInItemId.value = ''
+}
+
+// 숏컷 이동: 체크인을 저장/dismiss하지 않고 닫기만 한다(나중에 다시 뜸).
+function openInjuryCheckInSession() {
+  const run = injuryCheckInContextRun.value
+  injuryCheckInItemId.value = ''
+  if (run) void router.push({ path: '/runs', query: { runId: run.id } })
+}
+
+function askInjuryCheckInCoach() {
+  const run = injuryCheckInContextRun.value
+  injuryCheckInItemId.value = ''
+  if (run) void router.push({ path: '/runs', query: { runId: run.id, coach: '1' } })
 }
 
 async function submitInjuryCheckIn(payload: {
@@ -708,7 +730,10 @@ function animateTabRelease(targetOffset: number, targetRoute: string | null) {
       :open="Boolean(injuryCheckInItem)"
       :item="injuryCheckInItem"
       :saving="injuryCheckInSaving"
+      :context-run="injuryCheckInContextRun"
       @close="dismissCurrentInjuryCheckIn"
+      @open-session="openInjuryCheckInSession"
+      @ask-coach="askInjuryCheckInCoach"
       @submit="submitInjuryCheckIn"
     />
     <InjuryScreeningSheet

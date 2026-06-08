@@ -68,7 +68,7 @@ function finishGuide() {
             <span class="context-chip">러닝 후 컨디션</span>
             <h2>오늘도 잘 달렸어요 👏</h2>
           </div>
-          <button class="sheet-close" type="button" aria-label="닫기" @click="closeSheet">
+          <button class="stack-icon-button sheet-close" type="button" aria-label="닫기" @click="closeSheet">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
           </button>
         </div>
@@ -94,7 +94,7 @@ function finishGuide() {
             <span class="context-chip">알아두면 좋아요</span>
             <h2>좋아요, 계속 그렇게! 🙌</h2>
           </div>
-          <button class="sheet-close" type="button" aria-label="닫기" @click="finishGuide">
+          <button class="stack-icon-button sheet-close" type="button" aria-label="닫기" @click="finishGuide">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
           </button>
         </div>

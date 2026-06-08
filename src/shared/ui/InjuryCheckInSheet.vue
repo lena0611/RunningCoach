@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue'
 import type { TrainingInjuryItem } from '@/entities/training-memory/model'
+import type { RunLog } from '@/entities/run/model'
 import { getInjuryAreaLabel, type InjuryAreaSelection } from '@/entities/training-memory/injuryAreas'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 import ScaleSlider from './ScaleSlider.vue'
@@ -9,10 +10,14 @@ const props = defineProps<{
   item: TrainingInjuryItem | null
   open: boolean
   saving?: boolean
+  // 이 체크인을 띄운 "방금 들어온" 세션(있을 때만 세션-부상 브리지 문장/숏컷 노출).
+  contextRun?: RunLog | null
 }>()
 
 const emit = defineEmits<{
   close: []
+  openSession: []
+  askCoach: []
   submit: [
     value: {
       painLevel: number | null
@@ -37,6 +42,17 @@ const draft = reactive({
 
 const drag = useBottomSheetDrag(() => emit('close'))
 const areaLabels = computed(() => props.item?.normalizedAreas.map((area) => getInjuryAreaLabel(area.areaId)).filter(Boolean).join(', ') ?? '')
+// 세션-부상 브리지 문장: "방금 이 러닝이 들어왔고, 그 뒤 이 부위를 확인한다"는 맥락을 전달한다.
+const sessionFeedback = computed(() => {
+  const run = props.contextRun
+  if (!run) return ''
+  const areaText = areaLabels.value || props.item?.title || '부상 부위'
+  const distance = Number.isFinite(run.distanceKm) && run.distanceKm > 0 ? `${run.distanceKm.toFixed(1)}km` : ''
+  const minutes = run.durationSec ? Math.round(run.durationSec / 60) : null
+  const record = [distance, minutes ? `${minutes}분` : ''].filter(Boolean).join(' · ')
+  const lead = record ? `방금 ${record} 기록이 들어왔어요.` : '방금 러닝 기록이 들어왔어요.'
+  return `${lead} 이 러닝 뒤 ${areaText} 상태를 확인할게요.`
+})
 const hasMultipleAreas = computed(() => draft.areaPainLevels.length > 1)
 const latestPlanDetails = computed(() => props.item?.strengthPlanDetails?.slice(0, 3) ?? [])
 const currentQuiet = computed(() => isQuietCheckInResponse({ ...draft, areaPainLevels: getSubmitAreaPainLevels() }))
@@ -130,12 +146,13 @@ function deriveMaxPainLevel(areas: InjuryAreaSelection[]) {
           <span class="context-chip">부상 체크인</span>
           <h2>{{ item.title }}</h2>
         </div>
-        <button class="sheet-close" type="button" aria-label="닫기" @click="emit('close')">
+        <button class="stack-icon-button sheet-close" type="button" aria-label="닫기" @click="emit('close')">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
         </button>
       </div>
 
       <div class="injury-checkin-content">
+        <p v-if="sessionFeedback" class="injury-checkin-session">{{ sessionFeedback }}</p>
         <p class="helper">러닝 강도 조절을 위한 짧은 확인입니다. 의료 진단이나 치료 판단으로 보지 않습니다.</p>
         <p v-if="areaLabels" class="injury-checkin-area">{{ areaLabels }}</p>
 
@@ -204,6 +221,11 @@ function deriveMaxPainLevel(areas: InjuryAreaSelection[]) {
           <strong>한 번 더 조용하면 해소 후보</strong>
           <small>첫 조용한 응답만으로는 해소 저장을 열지 않습니다. 다음 체크인에서도 통증과 일상/훈련 반응이 조용하면 후보로 제안합니다.</small>
         </div>
+      </div>
+
+      <div v-if="contextRun" class="injury-checkin-shortcuts">
+        <button type="button" @click="emit('openSession')">세션 상세 보기</button>
+        <button type="button" @click="emit('askCoach')">AI 코치 질문</button>
       </div>
 
       <div class="injury-checkin-actions">
