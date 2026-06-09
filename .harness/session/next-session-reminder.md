@@ -4,6 +4,15 @@
 운영 규칙 본문은 여기서 중복하지 않습니다. 최신 기준은 `active-context.md`,
 `project-memory.md`, `.harness/project/workflow-rules.md`, `decision-log.md`를 우선합니다.
 
+## ⭐ 다음 1순위 — 가상레이싱 #229 본구현 (PoC① GO 완료, 2026-06-09)
+- **PoC① 통과(GO)**: iOS 백그라운드 위치+오디오+배터리(~7%/h) viability 확인. 상세 `decision-log.md` 2026-06-09 항목.
+- **PoC 코드는 브랜치 `issue-229/live-run-poc`(PR #265, 미머지)에 있음. main엔 없음.** 재개: `git checkout issue-229/live-run-poc`.
+  - ⚠️ 그 브랜치 `native/RunningCoach/RunningCoachApp.swift` 진입점이 `LiveRunPoCView()`로 임시 swap됨 → 본구현/실앱 전 `ContentView()`로 되돌릴 것.
+  - ⚠️ 네이티브 서명은 lena0611(`DEVELOPMENT_TEAM=3GCS2R55TJ`) 유지(폰 iCloud lenas0611과 혼동 주의). main pbxproj는 아직 lenas0611.
+- **남은 본구현(네이티브·실기기 빌드 핑퐁)**: #229 `LiveRunTracker`·`GhostRaceEngine`(웹 `ghost.ts` 포팅)·`runContextLiveRun` 브리지(웹 `liveRunBridge.ts`+네이티브, 원자적) → #231 `SpeechManager`(`speechQueue.ts` 포팅)·PoC③ 음질 → #232 레이싱 UI(와이어프레임 합의됨, 요약탭 진입).
+- **확정 결정**: force-quit 시 세션 종료(자동복원 미구현). 고스트/음성 순수로직(#230 `ghost.ts`·#231 `speechQueue.ts`)은 머지 완료 — 네이티브는 이걸 그대로 포팅.
+- 네이티브는 harness:check 대상 아님 — Xcode 빌드/실기기 수동 검증. 코드는 즉시 커밋(유실 방지), 검증 후 머지.
+
 ## 먼저 확인할 것
 1. `git --no-pager status --short` (변경분 있으면 `git diff`, 필요 시 `git diff --staged`)
 2. `. "$HOME/.nvm/nvm.sh" && nvm use` — 이후 npm/tsc/build/test/harness 명령은 새 shell마다 다시 실행
