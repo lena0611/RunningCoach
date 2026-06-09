@@ -228,7 +228,12 @@ const summaryResult = computed(() => {
         <template v-if="lastSettings">
           <SectionGroup title="레이싱 설정">
             <template #actions>
-              <button class="ghost" type="button" @click="openSettings">설정 변경</button>
+              <button class="race-gear" type="button" aria-label="레이싱 설정 변경" @click="openSettings">
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H1a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V1a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H23a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+              </button>
             </template>
             <div class="summary-grid">
               <div><span>거리</span><strong>{{ lastSettings.distanceLabel }}</strong></div>
@@ -412,6 +417,14 @@ const summaryResult = computed(() => {
 
 .race-cta { width: 100%; padding: 15px; border: none; border-radius: 14px; background: var(--color-primary); color: var(--color-on-primary); font-size: 1.02rem; font-weight: 700; cursor: pointer; box-shadow: none; }
 .race-cta.inline { margin-top: 14px; }
+/* 설정 변경: 아이콘-온리 톱니바퀴 (SectionGroup actions 슬롯) */
+.race-gear {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; padding: 0; border: none; border-radius: 10px;
+  background: transparent; color: var(--color-muted); cursor: pointer; box-shadow: none;
+}
+.race-gear:hover { color: var(--color-text); background: var(--color-subtle); }
+.race-gear svg { width: 20px; height: 20px; }
 /* 스택 상세 하단 고정 푸터(.memory-stack-page 3행 그리드의 footer 슬롯) */
 .stack-footer {
   padding: 12px 16px calc(env(safe-area-inset-bottom) + 12px);
