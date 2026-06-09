@@ -278,6 +278,7 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "러닝 기록 코칭을 위해 운동 기록, 거리, 심박 데이터를 읽습니다.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "달리는 동안 화면이 꺼져도 거리와 시간을 측정해 나와의 대결 음성 안내를 제공합니다.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "다음 러닝 준비를 위해 현재 위치의 기상정보를 확인합니다.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "GPS 신호가 약할 때 걸음 기반 거리로 나와의 대결 측정을 이어갑니다.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -330,6 +331,7 @@
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "러닝 기록 코칭을 위해 운동 기록, 거리, 심박 데이터를 읽습니다.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "달리는 동안 화면이 꺼져도 거리와 시간을 측정해 나와의 대결 음성 안내를 제공합니다.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "다음 러닝 준비를 위해 현재 위치의 기상정보를 확인합니다.";
+				INFOPLIST_KEY_NSMotionUsageDescription = "GPS 신호가 약할 때 걸음 기반 거리로 나와의 대결 측정을 이어갑니다.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
