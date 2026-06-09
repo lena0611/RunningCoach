@@ -1,15 +1,23 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useRunStore } from '@/app/stores/runStore'
 import { useLiveRun } from '@/features/live-run/useLiveRun'
 import { ghostCurveForTarget, listRaceTargets } from '@/features/live-run/raceTargets'
 import type { AnnounceConfig, PeriodicAnnounceKind } from '@/features/live-run/liveRunBridge'
 import type { LiveGapPayload, LiveTickPayload } from '@/features/live-run/liveRunBridge'
+import PageLayout from '@/shared/ui/PageLayout.vue'
+import SectionGroup from '@/shared/ui/SectionGroup.vue'
 
 type Step = 'setup' | 'live' | 'summary'
 
 const runStore = useRunStore()
 const live = useLiveRun()
+const route = useRoute()
+
+// dev 전용 미리보기: 브리지 없는 브라우저에서도 화면 스타일을 보기 위함(?preview=1).
+// import.meta.env.DEV가 false인 프로덕션 빌드에는 포함되지 않는다.
+const previewMode = computed(() => import.meta.env.DEV && route.query.preview === '1')
 
 const step = ref<Step>('setup')
 
@@ -59,12 +67,14 @@ function startRace() {
   const ghostCurve = selectedTargetId.value
     ? ghostCurveForTarget(runStore.selectedUserRuns, selectedTargetId.value) ?? undefined
     : undefined
-  live.start({
-    sessionId: `live-${Date.now()}`,
-    mode: 'solo',
-    ghostCurve,
-    announceConfig: buildAnnounceConfig()
-  })
+  if (live.available) {
+    live.start({
+      sessionId: `live-${Date.now()}`,
+      mode: 'solo',
+      ghostCurve,
+      announceConfig: buildAnnounceConfig()
+    })
+  }
   step.value = 'live'
 }
 
@@ -116,44 +126,43 @@ const summaryResult = computed(() => {
 </script>
 
 <template>
-  <main class="race-page">
+  <PageLayout>
     <header class="race-head">
       <h1>나와의 대결</h1>
       <p class="sub">혼자하기 · 화면 잠가도 음성으로 안내</p>
     </header>
 
     <!-- 브리지 없음(웹) 폴백 -->
-    <section v-if="!live.available" class="race-card race-unavailable">
-      <p>가상레이싱은 <strong>iOS 앱</strong>에서만 가능합니다.</p>
-      <p class="helper">앱에서 화면을 잠그고 달리면 음성으로 경쟁 상황을 안내합니다.</p>
-    </section>
+    <SectionGroup v-if="!live.available && !previewMode" title="안내">
+      <p class="race-text">가상레이싱은 <strong>iOS 앱</strong>에서만 가능합니다.</p>
+      <p class="race-muted">앱에서 화면을 잠그고 달리면 음성으로 경쟁 상황을 안내합니다.</p>
+    </SectionGroup>
 
     <!-- ① 타겟 선택 + 설정 -->
     <template v-else-if="step === 'setup'">
-      <section class="race-card">
-        <h2>타겟</h2>
-        <label class="race-radio" :class="{ active: selectedTargetId === null }">
-          <input type="radio" :value="null" :checked="selectedTargetId === null" @change="selectedTargetId = null" />
-          <span class="radio-main">없음 — 자유 레이싱</span>
-          <span class="radio-sub">고스트 없이 측정만. 이번 기록이 다음 타겟이 됩니다.</span>
-        </label>
+      <SectionGroup title="타겟">
+        <div class="race-options">
+          <label class="race-option" :class="{ active: selectedTargetId === null }">
+            <input type="radio" :checked="selectedTargetId === null" @change="selectedTargetId = null" />
+            <span class="option-main">없음 — 자유 레이싱</span>
+            <span class="option-sub">고스트 없이 측정만. 이번 기록이 다음 타겟이 됩니다.</span>
+          </label>
 
-        <label v-for="t in targets" :key="t.runId" class="race-radio" :class="{ active: selectedTargetId === t.runId }">
-          <input type="radio" :value="t.runId" :checked="selectedTargetId === t.runId" @change="selectedTargetId = t.runId" />
-          <span class="radio-main">
-            {{ t.distanceKm.toFixed(2) }}km · {{ fmtTime(t.durationSec) }}
-            <span v-if="t.isPb" class="pb-badge">최고</span>
-          </span>
-          <span class="radio-sub">{{ fmtPace(t.avgPaceSec) }} · {{ t.date }}</span>
-        </label>
-
-        <p v-if="targets.length === 0" class="helper">
+          <label v-for="t in targets" :key="t.runId" class="race-option" :class="{ active: selectedTargetId === t.runId }">
+            <input type="radio" :checked="selectedTargetId === t.runId" @change="selectedTargetId = t.runId" />
+            <span class="option-main">
+              {{ t.distanceKm.toFixed(2) }}km · {{ fmtTime(t.durationSec) }}
+              <span v-if="t.isPb" class="pb-badge">최고</span>
+            </span>
+            <span class="option-sub">{{ fmtPace(t.avgPaceSec) }} · {{ t.date }}</span>
+          </label>
+        </div>
+        <p v-if="targets.length === 0" class="race-muted">
           아직 레이싱 세션이 없어요. 먼저 '없음'으로 한 번 달리면 다음부터 그 기록과 대결할 수 있어요.
         </p>
-      </section>
+      </SectionGroup>
 
-      <section class="race-card">
-        <h2>경쟁 보고 주기</h2>
+      <SectionGroup title="경쟁 보고 주기">
         <div class="seg">
           <button type="button" :class="{ active: periodicKind === 'distance' }" @click="periodicKind = 'distance'">거리</button>
           <button type="button" :class="{ active: periodicKind === 'time' }" @click="periodicKind = 'time'">시간</button>
@@ -172,90 +181,115 @@ const summaryResult = computed(() => {
         </div>
 
         <label class="race-toggle">
-          <span>역전 알림 (추월/추월당함)</span>
+          <span class="toggle-label">역전 알림 (추월/추월당함)</span>
           <input type="checkbox" v-model="reversalAlert" />
         </label>
-      </section>
+      </SectionGroup>
 
       <button class="race-cta" type="button" @click="startRace">레이싱 시작</button>
     </template>
 
     <!-- ② 라이브 -->
     <template v-else-if="step === 'live'">
-      <section class="race-card race-live">
-        <div class="live-time">{{ elapsedText }}</div>
-        <div class="live-distance">{{ distanceText }} km</div>
-        <div v-if="hasGhost" class="live-gap" :class="live.gap.value?.leadState ?? 'even'">
-          {{ gapText(live.gap.value) }}
+      <SectionGroup title="라이브">
+        <div class="race-live">
+          <div class="live-time">{{ elapsedText }}</div>
+          <div class="live-distance">{{ distanceText }} km</div>
+          <div v-if="hasGhost" class="live-gap" :class="live.gap.value?.leadState ?? 'even'">
+            {{ gapText(live.gap.value) }}
+          </div>
+          <div class="live-meta">
+            페이스 {{ paceText }} · 신호 {{ live.tick.value?.signalState ?? '-' }} · {{ live.tick.value?.source ?? '-' }}
+          </div>
         </div>
-        <div class="live-meta">
-          페이스 {{ paceText }}
-          · 신호 {{ live.tick.value?.signalState ?? '-' }}
-          · {{ live.tick.value?.source ?? '-' }}
-        </div>
-        <p v-if="live.permission.value === 'whenInUse'" class="helper warn">
+        <p v-if="live.permission.value === 'whenInUse'" class="race-warn">
           위치를 "항상 허용"으로 바꿔야 화면을 잠가도 측정됩니다.
         </p>
-        <p v-if="live.error.value" class="helper warn">오류 {{ live.error.value.code }}: {{ live.error.value.message }}</p>
-      </section>
+        <p v-if="live.error.value" class="race-warn">오류 {{ live.error.value.code }}: {{ live.error.value.message }}</p>
+      </SectionGroup>
 
       <div class="race-actions">
-        <button v-if="live.state.value === 'paused'" class="race-cta ghost" type="button" @click="live.resume()">재개</button>
-        <button v-else class="race-cta ghost" type="button" @click="live.pause()">일시정지</button>
-        <button class="race-cta danger" type="button" @click="endRace">종료</button>
+        <button v-if="live.state.value === 'paused'" class="race-btn secondary" type="button" @click="live.resume()">재개</button>
+        <button v-else class="race-btn secondary" type="button" @click="live.pause()">일시정지</button>
+        <button class="race-btn danger" type="button" @click="endRace">종료</button>
       </div>
     </template>
 
     <!-- ③ 종료 요약 -->
     <template v-else>
-      <section class="race-card race-summary">
-        <h2 v-if="summaryResult">{{ summaryResult.emoji }} {{ summaryResult.label }}</h2>
-        <h2 v-else>레이싱 완료</h2>
+      <SectionGroup title="결과">
+        <div class="race-live">
+          <div class="summary-title">
+            <template v-if="summaryResult">{{ summaryResult.emoji }} {{ summaryResult.label }}</template>
+            <template v-else>레이싱 완료</template>
+          </div>
+        </div>
         <div class="summary-grid">
           <div><span>거리</span><strong>{{ fmtKm(finalTick?.cumulativeDistanceM) }} km</strong></div>
           <div><span>시간</span><strong>{{ fmtTime(finalTick?.elapsedSec) }}</strong></div>
           <div v-if="finalGap"><span>고스트 시간차</span><strong>{{ gapText(finalGap) }}</strong></div>
         </div>
-      </section>
+      </SectionGroup>
       <button class="race-cta" type="button" @click="resetRace">새 레이싱</button>
     </template>
-  </main>
+  </PageLayout>
 </template>
 
 <style scoped>
-.race-page { max-width: 520px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
-.race-head h1 { font-size: 1.4rem; margin: 0; }
-.race-head .sub { color: var(--text-secondary, #888); font-size: 0.85rem; margin: 2px 0 0; }
-.race-card { background: var(--surface, #fff); border-radius: 16px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); display: flex; flex-direction: column; gap: 10px; }
-.race-card h2 { font-size: 1rem; margin: 0 0 4px; }
-.race-radio { display: grid; grid-template-columns: 1fr; gap: 2px; padding: 12px; border: 1.5px solid var(--border, #e4e4e7); border-radius: 12px; cursor: pointer; }
-.race-radio.active { border-color: var(--accent, #6d28d9); background: color-mix(in srgb, var(--accent, #6d28d9) 8%, transparent); }
-.race-radio input { display: none; }
-.radio-main { font-weight: 600; }
-.radio-sub { font-size: 0.8rem; color: var(--text-secondary, #888); }
-.pb-badge { font-size: 0.7rem; background: var(--accent, #6d28d9); color: #fff; border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
-.helper { font-size: 0.82rem; color: var(--text-secondary, #888); margin: 0; }
-.helper.warn { color: #d97706; }
-.seg { display: flex; gap: 8px; }
-.seg button { flex: 1; padding: 9px 0; border: 1.5px solid var(--border, #e4e4e7); border-radius: 10px; background: transparent; font-size: 0.9rem; cursor: pointer; }
-.seg button.active { border-color: var(--accent, #6d28d9); background: var(--accent, #6d28d9); color: #fff; }
-.race-toggle { display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; padding-top: 4px; }
-.race-cta { padding: 14px; border: none; border-radius: 14px; background: var(--accent, #6d28d9); color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; }
-.race-cta.ghost { background: var(--surface-2, #f1f1f4); color: var(--text, #18181b); }
-.race-cta.danger { background: #dc2626; }
-.race-actions { display: flex; gap: 10px; }
-.race-actions .race-cta { flex: 1; }
-.race-live { align-items: center; text-align: center; gap: 6px; }
-.live-time { font-size: 2.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-.live-distance { font-size: 1.2rem; color: var(--text-secondary, #888); }
-.live-gap { font-size: 1.3rem; font-weight: 700; padding: 8px 0; }
-.live-gap.ahead { color: #16a34a; }
-.live-gap.behind { color: #dc2626; }
-.live-gap.even { color: var(--text-secondary, #888); }
-.live-meta { font-size: 0.85rem; color: var(--text-secondary, #888); }
-.race-summary { align-items: center; text-align: center; }
-.summary-grid { display: flex; flex-direction: column; gap: 8px; width: 100%; }
-.summary-grid div { display: flex; justify-content: space-between; border-top: 1px solid var(--border, #eee); padding-top: 8px; }
-.summary-grid span { color: var(--text-secondary, #888); }
-.race-unavailable { text-align: center; }
+.race-head { padding: 4px 2px 2px; }
+.race-head h1 { font-size: 1.5rem; margin: 0; color: var(--color-text); }
+.race-head .sub { color: var(--color-muted); font-size: 0.86rem; margin: 4px 0 0; }
+
+.race-text { color: var(--color-text); margin: 0 0 6px; }
+.race-muted { font-size: 0.84rem; color: var(--color-muted); margin: 8px 0 0; line-height: 1.5; }
+.race-warn { font-size: 0.84rem; color: var(--color-warning-text); margin: 10px 0 0; }
+
+.race-options { display: flex; flex-direction: column; gap: 10px; }
+.race-option {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 13px 14px; border: 1px solid var(--color-border); border-radius: 12px;
+  background: var(--color-field); cursor: pointer;
+}
+.race-option.active { border-color: var(--color-primary); background: var(--color-primary-soft); }
+.race-option input { display: none; }
+.option-main { font-weight: 600; color: var(--color-text); }
+.option-sub { font-size: 0.8rem; color: var(--color-muted); }
+.pb-badge { font-size: 0.7rem; background: var(--color-primary); color: var(--color-on-primary); border-radius: 6px; padding: 1px 7px; margin-left: 6px; }
+
+.seg { display: flex; gap: 6px; background: var(--color-surface-2); padding: 4px; border-radius: 12px; margin-bottom: 10px; }
+.seg button {
+  flex: 1; border: none; background: transparent; color: var(--color-muted);
+  padding: 10px 0; border-radius: 9px; font-size: 0.9rem; cursor: pointer;
+}
+.seg button.active { background: var(--color-primary); color: var(--color-on-primary); font-weight: 600; }
+
+.race-toggle { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-top: 4px; }
+.race-toggle .toggle-label { flex: 1; min-width: 0; color: var(--color-text); font-size: 0.92rem; }
+.race-toggle input { flex: none; width: 22px; height: 22px; accent-color: var(--color-primary); }
+
+.race-cta {
+  width: 100%; padding: 15px; border: none; border-radius: 14px; margin-top: 4px;
+  background: var(--color-primary); color: var(--color-on-primary);
+  font-size: 1.02rem; font-weight: 700; cursor: pointer; box-shadow: var(--shadow-button);
+}
+
+.race-actions { display: flex; gap: 10px; margin-top: 4px; }
+.race-btn { flex: 1; padding: 14px; border: none; border-radius: 14px; font-size: 1rem; font-weight: 600; cursor: pointer; }
+.race-btn.secondary { background: var(--color-surface-2); color: var(--color-text); }
+.race-btn.danger { background: var(--tds-red-500); color: #fff; }
+
+.race-live { text-align: center; padding: 6px 0; }
+.live-time { font-size: 2.8rem; font-weight: 700; color: var(--color-text); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.live-distance { font-size: 1.15rem; color: var(--color-muted); margin-top: 2px; }
+.live-gap { font-size: 1.35rem; font-weight: 700; margin: 10px 0; }
+.live-gap.ahead { color: var(--color-primary); }
+.live-gap.behind { color: var(--color-warning-text); }
+.live-gap.even { color: var(--color-muted); }
+.live-meta { font-size: 0.85rem; color: var(--color-muted); margin-top: 4px; }
+
+.summary-title { font-size: 1.5rem; font-weight: 700; color: var(--color-text); }
+.summary-grid { display: flex; flex-direction: column; gap: 0; margin-top: 6px; }
+.summary-grid div { display: flex; justify-content: space-between; border-top: 1px solid var(--color-border); padding: 11px 0; }
+.summary-grid span { color: var(--color-muted); }
+.summary-grid strong { color: var(--color-text); }
 </style>
