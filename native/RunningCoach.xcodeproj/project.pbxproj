@@ -10,9 +10,22 @@
 		1E3F1BAA2FBED6B8003D8EA4 /* RunningCoach.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RunningCoach.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		1EB6B4F52FD7BF8700355CC0 /* Exceptions for "RunningCoach" folder in "RunningCoach" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 1E3F1BA92FBED6B8003D8EA4 /* RunningCoach */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		1E3F1BAC2FBED6B8003D8EA4 /* RunningCoach */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				1EB6B4F52FD7BF8700355CC0 /* Exceptions for "RunningCoach" folder in "RunningCoach" target */,
+			);
 			path = RunningCoach;
 			sourceTree = "<group>";
 		};
@@ -260,6 +273,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RunningCoach/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = PACELAB;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "러닝 기록 코칭을 위해 운동 기록, 거리, 심박 데이터를 읽습니다.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "달리는 동안 화면이 꺼져도 거리와 시간을 측정해 나와의 대결 음성 안내를 제공합니다.";
@@ -268,10 +282,7 @@
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
-				INFOPLIST_KEY_UIBackgroundModes = (
-					audio,
-					location,
-				);
+				INFOPLIST_KEY_UIBackgroundModes = "audio location";
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
@@ -314,6 +325,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = RunningCoach/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = PACELAB;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "러닝 기록 코칭을 위해 운동 기록, 거리, 심박 데이터를 읽습니다.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "달리는 동안 화면이 꺼져도 거리와 시간을 측정해 나와의 대결 음성 안내를 제공합니다.";
@@ -322,10 +334,7 @@
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
-				INFOPLIST_KEY_UIBackgroundModes = (
-					audio,
-					location,
-				);
+				INFOPLIST_KEY_UIBackgroundModes = "audio location";
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
