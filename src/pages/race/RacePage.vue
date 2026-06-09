@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRunStore } from '@/app/stores/runStore'
 import { useLiveRun } from '@/features/live-run/useLiveRun'
@@ -37,6 +37,10 @@ const step = ref<Step>('setup')
 const raceMode = ref<RaceMode>('solo')
 const settingsOpen = ref(false)
 const lastSettings = ref<RaceSettings | null>(null)
+// 라이브 진입 후 명시적 시작 전까지 started=false(대기). 시작 시 3·2·1 카운트다운.
+const started = ref(false)
+const countdown = ref<number | null>(null)
+let countdownTimer: ReturnType<typeof setTimeout> | null = null
 
 const distances = computed(() => listDistanceOptions(runStore.selectedUserRuns))
 const selectedDistanceM = ref<number | null>(null)
@@ -138,19 +142,52 @@ function saveSettings() {
   settingsOpen.value = false
 }
 
-function startRace() {
+// '레이싱 입장' — 라이브 화면으로 이동하되 아직 트래킹은 시작하지 않는다(대기 상태).
+function enterRace() {
+  started.value = false
+  countdown.value = null
+  step.value = 'live'
+}
+
+// 명시적 '시작' → 3·2·1 카운트다운 후 실제 트래킹 시작.
+function beginCountdown() {
+  if (countdown.value !== null || started.value) return
+  countdown.value = 3
+  const tick = () => {
+    if (countdown.value === null) return
+    if (countdown.value > 1) {
+      countdown.value -= 1
+      countdownTimer = setTimeout(tick, 1000)
+    } else {
+      countdown.value = null
+      startTracking()
+    }
+  }
+  countdownTimer = setTimeout(tick, 1000)
+}
+
+function startTracking() {
+  started.value = true
   const ghostCurve = selectedOpponentRunId.value
     ? ghostCurveForRun(runStore.selectedUserRuns, selectedOpponentRunId.value) ?? undefined
     : undefined
   if (live.available) {
     live.start({ sessionId: `live-${Date.now()}`, mode: 'solo', ghostCurve, announceConfig: buildAnnounceConfig() })
   }
-  step.value = 'live'
+}
+
+function clearCountdown() {
+  if (countdownTimer) {
+    clearTimeout(countdownTimer)
+    countdownTimer = null
+  }
+  countdown.value = null
 }
 
 function endRace() {
   finalTick.value = live.tick.value
   finalGap.value = live.gap.value
+  clearCountdown()
   live.stop()
   step.value = 'summary'
 }
@@ -158,8 +195,12 @@ function endRace() {
 function resetRace() {
   finalTick.value = null
   finalGap.value = null
+  started.value = false
+  clearCountdown()
   step.value = 'setup'
 }
+
+onUnmounted(() => clearCountdown())
 
 function opponentLabel(o: OpponentOption): string {
   if (o.kind === 'none') return '없음 — 자유 레이싱'
@@ -255,13 +296,19 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
       <template v-else-if="step === 'live'">
         <SectionGroup title="라이브">
           <div class="race-live">
-            <div class="live-time">{{ elapsedText }}</div>
-            <div class="live-distance">{{ distanceText }} km</div>
-            <div v-if="hasGhost" class="live-gap" :class="live.gap.value?.leadState ?? 'even'">{{ gapText(live.gap.value) }}</div>
-            <div class="live-meta">페이스 {{ paceText }} · 신호 {{ live.tick.value?.signalState ?? '-' }} · {{ live.tick.value?.source ?? '-' }}</div>
+            <template v-if="started">
+              <div class="live-time">{{ elapsedText }}</div>
+              <div class="live-distance">{{ distanceText }} km</div>
+              <div v-if="hasGhost" class="live-gap" :class="live.gap.value?.leadState ?? 'even'">{{ gapText(live.gap.value) }}</div>
+              <div class="live-meta">페이스 {{ paceText }} · 신호 {{ live.tick.value?.signalState ?? '-' }} · {{ live.tick.value?.source ?? '-' }}</div>
+            </template>
+            <template v-else>
+              <p class="race-ready">출발 준비 완료</p>
+              <p class="race-ready-sub">아래 <strong>시작</strong>을 누르면 3·2·1 카운트다운 후 측정이 시작됩니다.</p>
+            </template>
           </div>
-          <p v-if="live.permission.value === 'whenInUse'" class="race-warn">위치를 "항상 허용"으로 바꿔야 화면을 잠가도 측정됩니다.</p>
-          <p v-if="live.error.value" class="race-warn">오류 {{ live.error.value.code }}: {{ live.error.value.message }}</p>
+          <p v-if="started && live.permission.value === 'whenInUse'" class="race-warn">위치를 "항상 허용"으로 바꿔야 화면을 잠가도 측정됩니다.</p>
+          <p v-if="started && live.error.value" class="race-warn">오류 {{ live.error.value.code }}: {{ live.error.value.message }}</p>
         </SectionGroup>
       </template>
 
@@ -285,9 +332,12 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
 
     <!-- 컨텍스트 푸터 (스택 3행 그리드의 footer 슬롯) -->
     <footer v-if="showStartCta" class="stack-footer">
-      <button class="race-cta" type="button" @click="startRace">레이싱 시작</button>
+      <button class="race-cta" type="button" @click="enterRace">레이싱 입장</button>
     </footer>
-    <footer v-else-if="step === 'live'" class="stack-footer race-live-footer">
+    <footer v-else-if="step === 'live' && !started && countdown === null" class="stack-footer">
+      <button class="race-cta" type="button" @click="beginCountdown">시작</button>
+    </footer>
+    <footer v-else-if="step === 'live' && started" class="stack-footer race-live-footer">
       <button v-if="live.state.value === 'paused'" class="race-btn secondary" type="button" @click="live.resume()">재개</button>
       <button v-else class="race-btn secondary" type="button" @click="live.pause()">일시정지</button>
       <button class="race-btn danger" type="button" @click="endRace">종료</button>
@@ -295,6 +345,15 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
     <footer v-else-if="step === 'summary'" class="stack-footer">
       <button class="race-cta" type="button" @click="resetRace">새 레이싱</button>
     </footer>
+
+    <!-- 시작 카운트다운 오버레이 (3·2·1, 서클 애니메이션) -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="countdown !== null" class="race-countdown">
+          <div :key="countdown" class="countdown-ring"><span class="countdown-num">{{ countdown }}</span></div>
+        </div>
+      </Transition>
+    </Teleport>
 
     <!-- 2차 스택: 레이싱 설정 -->
     <Teleport to="body">
@@ -432,6 +491,26 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
 .live-gap.behind { color: var(--color-warning-text); }
 .live-gap.even { color: var(--color-muted); }
 .live-meta { font-size: 0.85rem; color: var(--color-muted); margin-top: 4px; }
+
+.race-ready { font-size: 1.4rem; font-weight: 700; color: var(--color-text); margin: 8px 0 6px; }
+.race-ready-sub { font-size: 0.9rem; color: var(--color-muted); line-height: 1.55; }
+
+/* 시작 카운트다운 오버레이 */
+.race-countdown { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(6px); }
+.countdown-ring {
+  width: 168px; height: 168px; border-radius: 50%;
+  border: 4px solid var(--color-primary);
+  display: flex; align-items: center; justify-content: center;
+  animation: countdown-pulse 1s ease-out;
+}
+.countdown-num { font-size: 5.5rem; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; }
+@keyframes countdown-pulse {
+  0% { transform: scale(0.55); opacity: 0; }
+  25% { opacity: 1; }
+  100% { transform: scale(1.18); opacity: 0; }
+}
+.fade-enter-active, .fade-leave-active { transition: opacity 160ms ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 
 .summary-title { font-size: 1.5rem; font-weight: 700; color: var(--color-text); }
 .summary-grid { display: flex; flex-direction: column; gap: 0; }

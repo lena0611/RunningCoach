@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { runnerProgressLabel, type RunnerProgress } from '@/shared/lib/level/levelModel'
 
-const props = defineProps<{ progress: RunnerProgress }>()
+const props = defineProps<{ progress: RunnerProgress; hideEyebrow?: boolean }>()
 
 const label = computed(() => runnerProgressLabel(props.progress))
 
@@ -29,7 +29,7 @@ const gradeLine = computed(() => {
 <template>
   <article class="level-card">
     <header class="level-card-head">
-      <span class="level-eyebrow">내 레벨</span>
+      <span v-if="!hideEyebrow" class="level-eyebrow">내 레벨</span>
       <div class="level-identity">
         <strong class="level-label">{{ label }}</strong>
         <span v-if="progress.provisional" class="level-badge">잠정</span>
