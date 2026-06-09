@@ -95,5 +95,11 @@ defineProps<{
 .quest-body small {
   font-size: 12px;
   color: var(--color-muted);
+  /* 루틴 이유 등 긴 문구는 2줄로 클램프(퀘스트 카드 간결화). */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 </style>
