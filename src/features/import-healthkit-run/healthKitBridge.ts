@@ -102,6 +102,9 @@ declare global {
         runContextAuth?: {
           postMessage: (message: unknown) => void
         }
+        runContextLiveRun?: {
+          postMessage: (message: unknown) => void
+        }
       }
     }
   }

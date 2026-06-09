@@ -179,6 +179,7 @@ struct RunContextWebView: UIViewRepresentable {
         contentController.add(context.coordinator, name: "runContextHaptics")
         contentController.add(context.coordinator, name: "runContextNotifications")
         contentController.add(context.coordinator, name: "runContextAuth")
+        contentController.add(context.coordinator, name: "runContextLiveRun")
         contentController.add(context.coordinator, name: "runContextLog")
         contentController.addUserScript(WKUserScript(
             source: """
@@ -237,6 +238,7 @@ struct RunContextWebView: UIViewRepresentable {
         private let importer = HealthKitRunImporter()
         private let weatherImporter = OpenMeteoWeatherImporter()
         private let notificationManager = RunContextNotificationManager()
+        private let liveRunTracker = LiveRunTracker()
         private let onReady: () -> Void
         private let minimumSplashDuration: TimeInterval = 1.5
         private let startedAt = Date()
@@ -250,6 +252,27 @@ struct RunContextWebView: UIViewRepresentable {
                 DispatchQueue.main.async {
                     self?.handleBackgroundHealthKitChange()
                 }
+            }
+            wireLiveRunTracker()
+        }
+
+        // #229 라이브 트래커 콜백 → 포그라운드 웹 표시용 JS 전송. 백그라운드 핵심 루프(gap/발화)는
+        // 트래커가 직접 돌고, 여기선 화면 갱신용 틱/gap만 웹으로 올린다.
+        private func wireLiveRunTracker() {
+            liveRunTracker.onTick = { [weak self] seq, elapsedSec, distanceM, instantPaceSec, signal, source in
+                self?.sendLiveTick(seq: seq, elapsedSec: elapsedSec, distanceM: distanceM, instantPaceSec: instantPaceSec, signal: signal, source: source)
+            }
+            liveRunTracker.onGap = { [weak self] timeGapSec, leadState in
+                self?.sendLiveGap(timeGapSec: timeGapSec, leadState: leadState)
+            }
+            liveRunTracker.onStateChange = { [weak self] state in
+                self?.sendLiveStateChange(state)
+            }
+            liveRunTracker.onPermission = { [weak self] status in
+                self?.sendLivePermission(status)
+            }
+            liveRunTracker.onError = { [weak self] code, message in
+                self?.sendLiveError(code: code, message: message)
             }
         }
 
@@ -276,6 +299,11 @@ struct RunContextWebView: UIViewRepresentable {
 
             if message.name == "runContextAuth" {
                 handleAuthMessage(message)
+                return
+            }
+
+            if message.name == "runContextLiveRun" {
+                handleLiveRunMessage(message)
                 return
             }
 
@@ -507,6 +535,110 @@ struct RunContextWebView: UIViewRepresentable {
                 print("[RunContext Auth] sendStoredSession: Keychain miss, no stored session")
             }
             webView.evaluateJavaScript("window.RunContextAuth?.receiveStoredSession(\(payload));")
+        }
+
+        // ── #229 가상레이싱 라이브 트래킹 (runContextLiveRun) ──────────────────
+
+        private func handleLiveRunMessage(_ message: WKScriptMessage) {
+            guard let body = message.body as? [String: Any],
+                  let type = body["type"] as? String else {
+                sendLiveError(code: "bad_request", message: "지원하지 않는 라이브 트래킹 요청입니다.")
+                return
+            }
+
+            switch type {
+            case "startLiveRun":
+                let sessionId = body["sessionId"] as? String ?? ""
+                let mode = body["mode"] as? String ?? "solo"
+                let curve = parseGhostCurve(body["ghostCurve"])
+                let config = AnnounceConfig.parse(body["announceConfig"] as? [String: Any])
+                let tickIntervalMs = (body["tickIntervalMs"] as? NSNumber)?.intValue ?? 1000
+                print("[RunContext LiveRun] startLiveRun session=\(sessionId) mode=\(mode) ghost=\(curve != nil) periodic=\(config.periodicKind.rawValue)")
+                liveRunTracker.start(LiveRunStartParams(
+                    sessionId: sessionId,
+                    mode: mode,
+                    curve: curve,
+                    config: config,
+                    tickIntervalMs: tickIntervalMs
+                ))
+
+            case "pauseLiveRun":
+                print("[RunContext LiveRun] pauseLiveRun")
+                liveRunTracker.pause()
+
+            case "resumeLiveRun":
+                print("[RunContext LiveRun] resumeLiveRun")
+                liveRunTracker.resume()
+
+            case "stopLiveRun":
+                print("[RunContext LiveRun] stopLiveRun")
+                liveRunTracker.stop()
+
+            case "requestRecoverableLiveRun":
+                print("[RunContext LiveRun] requestRecoverableLiveRun")
+                sendLiveRecoverable(liveRunTracker.loadRecoverable())
+
+            default:
+                sendLiveError(code: "bad_request", message: "지원하지 않는 라이브 트래킹 요청입니다.")
+            }
+        }
+
+        private func parseGhostCurve(_ raw: Any?) -> GhostCurve? {
+            guard let points = raw as? [[String: Any]], !points.isEmpty else { return nil }
+            let parsed = points.compactMap { point -> GhostCurvePoint? in
+                guard let d = (point["distanceM"] as? NSNumber)?.doubleValue,
+                      let t = (point["elapsedSec"] as? NSNumber)?.doubleValue else { return nil }
+                return GhostCurvePoint(distanceM: d, elapsedSec: t)
+            }
+            return parsed.count >= 2 ? GhostCurve(points: parsed) : nil
+        }
+
+        private func sendLiveTick(seq: Int, elapsedSec: Double, distanceM: Double, instantPaceSec: Double?, signal: LiveSignalState, source: LiveDistanceSource) {
+            guard let webView else { return }
+            let pace = instantPaceSec.map { String($0) } ?? "null"
+            let json = "{\"seq\":\(seq),\"elapsedSec\":\(elapsedSec),\"cumulativeDistanceM\":\(distanceM),\"instantPaceSec\":\(pace),\"signalState\":\"\(signal.rawValue)\",\"source\":\"\(source.rawValue)\"}"
+            webView.evaluateJavaScript("window.RunContextLiveRun?.receiveTick(\(json));")
+        }
+
+        private func sendLiveGap(timeGapSec: Double, leadState: LeadState) {
+            guard let webView else { return }
+            let json = "{\"timeGapSec\":\(timeGapSec),\"leadState\":\"\(leadState.rawValue)\"}"
+            webView.evaluateJavaScript("window.RunContextLiveRun?.receiveGap(\(json));")
+        }
+
+        private func sendLiveStateChange(_ state: LiveRunState) {
+            guard let webView else { return }
+            webView.evaluateJavaScript("window.RunContextLiveRun?.receiveStateChange('\(state.rawValue)');")
+        }
+
+        private func sendLivePermission(_ status: LivePermissionStatus) {
+            guard let webView else { return }
+            webView.evaluateJavaScript("window.RunContextLiveRun?.receivePermission('\(status.rawValue)');")
+        }
+
+        private func sendLiveRecoverable(_ snapshot: LiveRunSnapshot?) {
+            guard let webView else { return }
+            let payload: String
+            if let s = snapshot {
+                payload = "{\"sessionId\":\"\(jsString(s.sessionId))\",\"elapsedSec\":\(s.elapsedSec),\"cumulativeDistanceM\":\(s.cumulativeDistanceM),\"seq\":\(s.seq),\"state\":\"\(s.state.rawValue)\"}"
+            } else {
+                payload = "null"
+            }
+            webView.evaluateJavaScript("window.RunContextLiveRun?.receiveRecoverable(\(payload));")
+        }
+
+        private func sendLiveError(code: String, message: String) {
+            guard let webView else { return }
+            let json = "{\"code\":\"\(jsString(code))\",\"message\":\"\(jsString(message))\"}"
+            webView.evaluateJavaScript("window.RunContextLiveRun?.receiveError(\(json));")
+        }
+
+        /// JS 문자열 리터럴용 최소 escape(쌍따옴표/역슬래시/개행).
+        private func jsString(_ value: String) -> String {
+            value
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+                .replacingOccurrences(of: "\n", with: "\\n")
         }
 
         private func handleBackgroundHealthKitChange() {

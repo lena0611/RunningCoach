@@ -20,8 +20,7 @@ struct RunningCoachApp: App {
 
     var body: some Scene {
         WindowGroup {
-            // #229 PoC① 측정 중 임시 진입점. 측정이 끝나면 ContentView() 로 되돌린다(이 브랜치 전용).
-            LiveRunPoCView()
+            ContentView()
         }
     }
 }
