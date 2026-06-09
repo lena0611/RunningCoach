@@ -1,37 +1,96 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useRunStore } from '@/app/stores/runStore'
 import { useLiveRun } from '@/features/live-run/useLiveRun'
-import { ghostCurveForTarget, listRaceTargets } from '@/features/live-run/raceTargets'
+import { ghostCurveForRun, listDistanceOptions, listOpponents, type OpponentOption } from '@/features/live-run/raceTargets'
 import type { AnnounceConfig, PeriodicAnnounceKind } from '@/features/live-run/liveRunBridge'
 import type { LiveGapPayload, LiveTickPayload } from '@/features/live-run/liveRunBridge'
+import PageLayout from '@/shared/ui/PageLayout.vue'
+import SectionGroup from '@/shared/ui/SectionGroup.vue'
 
 type Step = 'setup' | 'live' | 'summary'
+type RaceMode = 'solo' | 'crew'
+type RaceSettings = {
+  distanceM: number | null
+  opponentRunId: string | null
+  periodicKind: PeriodicAnnounceKind
+  stepM: 100 | 500 | 1000
+  stepSec: number
+  reversalAlert: boolean
+  // read-only 요약 스냅샷
+  distanceLabel: string
+  opponentLabel: string
+  voiceLabel: string
+}
+
+const LS_KEY = 'race_last_settings_v1'
 
 const runStore = useRunStore()
 const live = useLiveRun()
+const route = useRoute()
+
+const previewMode = computed(() => import.meta.env.DEV && route.query.preview !== '0')
 
 const step = ref<Step>('setup')
+const raceMode = ref<RaceMode>('solo')
+const settingsOpen = ref(false)
+const lastSettings = ref<RaceSettings | null>(null)
 
-// ── 타겟 선택 ('없음' = null) ──────────────────────────────────────────────
-const targets = computed(() => listRaceTargets(runStore.selectedUserRuns))
-const selectedTargetId = ref<string | null>(null) // null = 없음
+// ── 거리 / 상대 (설정 폼 편집 버퍼) ────────────────────────────────────────
+const distances = computed(() => listDistanceOptions(runStore.selectedUserRuns))
+const selectedDistanceM = ref<number | null>(null)
+const opponents = computed(() => listOpponents(runStore.selectedUserRuns, selectedDistanceM.value))
+const selectedOpponentRunId = ref<string | null>(null)
+const hasGhost = computed(() => selectedOpponentRunId.value != null)
 
-// ── 경쟁 보고 주기 설정 (#232 스펙) ────────────────────────────────────────
+// ── 음성 안내 설정 ─────────────────────────────────────────────────────────
 const periodicKind = ref<PeriodicAnnounceKind>('distance')
 const stepM = ref<100 | 500 | 1000>(1000)
 const stepSec = ref<number>(300)
 const reversalAlert = ref(true)
 
-// ── 라이브/요약 표시용 ────────────────────────────────────────────────────
+// ── 라이브/요약 ────────────────────────────────────────────────────────────
 const finalTick = ref<LiveTickPayload | null>(null)
 const finalGap = ref<LiveGapPayload | null>(null)
 
 onMounted(() => {
   if (!runStore.loaded) void runStore.load()
+  loadSavedSettings()
 })
 
-// 네이티브가 정지(완주)로 상태를 바꾸면 요약으로 전환
+function loadSavedSettings() {
+  try {
+    const raw = localStorage.getItem(LS_KEY)
+    if (!raw) return
+    const s = JSON.parse(raw) as RaceSettings
+    lastSettings.value = s
+    selectedDistanceM.value = s.distanceM
+    selectedOpponentRunId.value = s.opponentRunId
+    periodicKind.value = s.periodicKind
+    stepM.value = s.stepM
+    stepSec.value = s.stepSec
+    reversalAlert.value = s.reversalAlert
+  } catch {
+    // 저장값 손상 시 무시(기본값 사용)
+  }
+}
+
+// 거리 목록이 준비되면 첫 거리 자동 선택(저장값이 없을 때만)
+watch(
+  distances,
+  (list) => {
+    if (selectedDistanceM.value == null && list.length) selectedDistanceM.value = list[0].distanceM
+  },
+  { immediate: true }
+)
+
+function selectDistance(distanceM: number) {
+  selectedDistanceM.value = distanceM
+  selectedOpponentRunId.value = null // 거리 바뀌면 상대 후보가 달라짐 → 없음으로
+}
+
+// 네이티브 완주 → 요약
 watch(
   () => live.state.value,
   (s) => {
@@ -43,28 +102,50 @@ watch(
   }
 )
 
-const hasGhost = computed(() => selectedTargetId.value != null)
-
 function buildAnnounceConfig(): AnnounceConfig {
-  if (periodicKind.value === 'distance') {
-    return { periodic: { kind: 'distance', stepM: stepM.value }, reversalAlert: reversalAlert.value }
-  }
-  if (periodicKind.value === 'time') {
-    return { periodic: { kind: 'time', stepSec: stepSec.value }, reversalAlert: reversalAlert.value }
-  }
+  if (periodicKind.value === 'distance') return { periodic: { kind: 'distance', stepM: stepM.value }, reversalAlert: reversalAlert.value }
+  if (periodicKind.value === 'time') return { periodic: { kind: 'time', stepSec: stepSec.value }, reversalAlert: reversalAlert.value }
   return { periodic: { kind: 'silent' }, reversalAlert: reversalAlert.value }
 }
 
+function voiceLabel(): string {
+  if (periodicKind.value === 'silent') return '조용히'
+  if (periodicKind.value === 'distance') return `${stepM.value >= 1000 ? `${stepM.value / 1000}km` : `${stepM.value}m`}마다`
+  return `${Math.round(stepSec.value / 60)}분마다`
+}
+
+function openSettings() {
+  settingsOpen.value = true
+}
+
+function saveSettings() {
+  const opp = opponents.value.find((o) => o.runId === selectedOpponentRunId.value) ?? opponents.value[0]
+  lastSettings.value = {
+    distanceM: selectedDistanceM.value,
+    opponentRunId: selectedOpponentRunId.value,
+    periodicKind: periodicKind.value,
+    stepM: stepM.value,
+    stepSec: stepSec.value,
+    reversalAlert: reversalAlert.value,
+    distanceLabel: selectedDistanceM.value ? `${selectedDistanceM.value / 1000}km` : '자유',
+    opponentLabel: opponentLabel(opp),
+    voiceLabel: voiceLabel()
+  }
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(lastSettings.value))
+  } catch {
+    // 저장 실패는 치명적 아님(이번 세션은 메모리값으로 동작)
+  }
+  settingsOpen.value = false
+}
+
 function startRace() {
-  const ghostCurve = selectedTargetId.value
-    ? ghostCurveForTarget(runStore.selectedUserRuns, selectedTargetId.value) ?? undefined
+  const ghostCurve = selectedOpponentRunId.value
+    ? ghostCurveForRun(runStore.selectedUserRuns, selectedOpponentRunId.value) ?? undefined
     : undefined
-  live.start({
-    sessionId: `live-${Date.now()}`,
-    mode: 'solo',
-    ghostCurve,
-    announceConfig: buildAnnounceConfig()
-  })
+  if (live.available) {
+    live.start({ sessionId: `live-${Date.now()}`, mode: 'solo', ghostCurve, announceConfig: buildAnnounceConfig() })
+  }
   step.value = 'live'
 }
 
@@ -78,8 +159,13 @@ function endRace() {
 function resetRace() {
   finalTick.value = null
   finalGap.value = null
-  selectedTargetId.value = null
   step.value = 'setup'
+}
+
+function opponentLabel(o: OpponentOption): string {
+  if (o.kind === 'none') return '없음 — 자유 레이싱'
+  const km = o.distanceM ? o.distanceM / 1000 : 0
+  return `${km}km ${o.kind === 'race' ? '레이싱' : '훈련'} PB · ${fmtTime(o.elapsedSec)}`
 }
 
 // ── 포맷 ──────────────────────────────────────────────────────────────────
@@ -106,7 +192,6 @@ function gapText(gap: LiveGapPayload | null): string {
 const elapsedText = computed(() => fmtTime(live.tick.value?.elapsedSec))
 const distanceText = computed(() => fmtKm(live.tick.value?.cumulativeDistanceM))
 const paceText = computed(() => fmtPace(live.tick.value?.instantPaceSec))
-
 const summaryResult = computed(() => {
   if (!finalGap.value) return null
   if (finalGap.value.leadState === 'ahead') return { emoji: '🎉', label: '고스트 제침' }
@@ -116,146 +201,258 @@ const summaryResult = computed(() => {
 </script>
 
 <template>
-  <main class="race-page">
+  <PageLayout>
     <header class="race-head">
-      <h1>나와의 대결</h1>
-      <p class="sub">혼자하기 · 화면 잠가도 음성으로 안내</p>
+      <h1>레이싱</h1>
+      <p class="sub">달리며 음성으로 경쟁 상황을 안내</p>
     </header>
 
-    <!-- 브리지 없음(웹) 폴백 -->
-    <section v-if="!live.available" class="race-card race-unavailable">
-      <p>가상레이싱은 <strong>iOS 앱</strong>에서만 가능합니다.</p>
-      <p class="helper">앱에서 화면을 잠그고 달리면 음성으로 경쟁 상황을 안내합니다.</p>
-    </section>
+    <SectionGroup v-if="!live.available && !previewMode" title="안내">
+      <p class="race-text">가상레이싱은 <strong>iOS 앱</strong>에서만 가능합니다.</p>
+      <p class="race-muted">앱에서 화면을 잠그고 달리면 음성으로 경쟁 상황을 안내합니다.</p>
+    </SectionGroup>
 
-    <!-- ① 타겟 선택 + 설정 -->
+    <!-- ① 설정 -->
     <template v-else-if="step === 'setup'">
-      <section class="race-card">
-        <h2>타겟</h2>
-        <label class="race-radio" :class="{ active: selectedTargetId === null }">
-          <input type="radio" :value="null" :checked="selectedTargetId === null" @change="selectedTargetId = null" />
-          <span class="radio-main">없음 — 자유 레이싱</span>
-          <span class="radio-sub">고스트 없이 측정만. 이번 기록이 다음 타겟이 됩니다.</span>
-        </label>
+      <div class="race-modes" role="tablist">
+        <button type="button" role="tab" :aria-selected="raceMode === 'solo'" :class="{ active: raceMode === 'solo' }" @click="raceMode = 'solo'">나와의 대결</button>
+        <button type="button" role="tab" :aria-selected="raceMode === 'crew'" :class="{ active: raceMode === 'crew' }" @click="raceMode = 'crew'">크루와 대결</button>
+      </div>
 
-        <label v-for="t in targets" :key="t.runId" class="race-radio" :class="{ active: selectedTargetId === t.runId }">
-          <input type="radio" :value="t.runId" :checked="selectedTargetId === t.runId" @change="selectedTargetId = t.runId" />
-          <span class="radio-main">
-            {{ t.distanceKm.toFixed(2) }}km · {{ fmtTime(t.durationSec) }}
-            <span v-if="t.isPb" class="pb-badge">최고</span>
-          </span>
-          <span class="radio-sub">{{ fmtPace(t.avgPaceSec) }} · {{ t.date }}</span>
-        </label>
+      <SectionGroup v-if="raceMode === 'crew'" title="크루와 대결">
+        <p class="race-muted">추후 공개됩니다.</p>
+      </SectionGroup>
 
-        <p v-if="targets.length === 0" class="helper">
-          아직 레이싱 세션이 없어요. 먼저 '없음'으로 한 번 달리면 다음부터 그 기록과 대결할 수 있어요.
-        </p>
-      </section>
+      <template v-else>
+        <!-- 저장된 설정 있음: read-only 요약 -->
+        <template v-if="lastSettings">
+          <SectionGroup title="레이싱 설정">
+            <template #actions>
+              <button class="race-gear" type="button" aria-label="레이싱 설정 변경" @click="openSettings">
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H1a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V1a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H23a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+              </button>
+            </template>
+            <div class="summary-grid">
+              <div><span>거리</span><strong>{{ lastSettings.distanceLabel }}</strong></div>
+              <div><span>상대</span><strong>{{ lastSettings.opponentLabel }}</strong></div>
+              <div><span>음성 안내</span><strong>{{ lastSettings.voiceLabel }}</strong></div>
+              <div v-if="lastSettings.opponentRunId"><span>역전 알림</span><strong>{{ lastSettings.reversalAlert ? '켜짐' : '꺼짐' }}</strong></div>
+            </div>
+          </SectionGroup>
+          <div class="race-bottom-spacer" aria-hidden="true" />
+          <button class="race-cta fixed" type="button" @click="startRace">레이싱 시작</button>
+        </template>
 
-      <section class="race-card">
-        <h2>경쟁 보고 주기</h2>
-        <div class="seg">
-          <button type="button" :class="{ active: periodicKind === 'distance' }" @click="periodicKind = 'distance'">거리</button>
-          <button type="button" :class="{ active: periodicKind === 'time' }" @click="periodicKind = 'time'">시간</button>
-          <button type="button" :class="{ active: periodicKind === 'silent' }" @click="periodicKind = 'silent'">조용히</button>
-        </div>
-
-        <div v-if="periodicKind === 'distance'" class="seg">
-          <button type="button" :class="{ active: stepM === 100 }" @click="stepM = 100">100m</button>
-          <button type="button" :class="{ active: stepM === 500 }" @click="stepM = 500">500m</button>
-          <button type="button" :class="{ active: stepM === 1000 }" @click="stepM = 1000">1km</button>
-        </div>
-        <div v-else-if="periodicKind === 'time'" class="seg">
-          <button type="button" :class="{ active: stepSec === 60 }" @click="stepSec = 60">1분</button>
-          <button type="button" :class="{ active: stepSec === 180 }" @click="stepSec = 180">3분</button>
-          <button type="button" :class="{ active: stepSec === 300 }" @click="stepSec = 300">5분</button>
-        </div>
-
-        <label class="race-toggle">
-          <span>역전 알림 (추월/추월당함)</span>
-          <input type="checkbox" v-model="reversalAlert" />
-        </label>
-      </section>
-
-      <button class="race-cta" type="button" @click="startRace">레이싱 시작</button>
+        <!-- 저장된 설정 없음: 빈 상태 -->
+        <SectionGroup v-else title="나와의 대결">
+          <p class="race-muted">고스트(과거 기록)와 달리거나, 자유 레이싱으로 기록에 도전하세요. 거리·상대·음성 안내를 먼저 설정합니다.</p>
+          <button class="race-cta inline" type="button" @click="openSettings">설정하러 가기</button>
+        </SectionGroup>
+      </template>
     </template>
 
     <!-- ② 라이브 -->
     <template v-else-if="step === 'live'">
-      <section class="race-card race-live">
-        <div class="live-time">{{ elapsedText }}</div>
-        <div class="live-distance">{{ distanceText }} km</div>
-        <div v-if="hasGhost" class="live-gap" :class="live.gap.value?.leadState ?? 'even'">
-          {{ gapText(live.gap.value) }}
+      <SectionGroup title="라이브">
+        <div class="race-live">
+          <div class="live-time">{{ elapsedText }}</div>
+          <div class="live-distance">{{ distanceText }} km</div>
+          <div v-if="hasGhost" class="live-gap" :class="live.gap.value?.leadState ?? 'even'">{{ gapText(live.gap.value) }}</div>
+          <div class="live-meta">페이스 {{ paceText }} · 신호 {{ live.tick.value?.signalState ?? '-' }} · {{ live.tick.value?.source ?? '-' }}</div>
         </div>
-        <div class="live-meta">
-          페이스 {{ paceText }}
-          · 신호 {{ live.tick.value?.signalState ?? '-' }}
-          · {{ live.tick.value?.source ?? '-' }}
-        </div>
-        <p v-if="live.permission.value === 'whenInUse'" class="helper warn">
-          위치를 "항상 허용"으로 바꿔야 화면을 잠가도 측정됩니다.
-        </p>
-        <p v-if="live.error.value" class="helper warn">오류 {{ live.error.value.code }}: {{ live.error.value.message }}</p>
-      </section>
-
+        <p v-if="live.permission.value === 'whenInUse'" class="race-warn">위치를 "항상 허용"으로 바꿔야 화면을 잠가도 측정됩니다.</p>
+        <p v-if="live.error.value" class="race-warn">오류 {{ live.error.value.code }}: {{ live.error.value.message }}</p>
+      </SectionGroup>
       <div class="race-actions">
-        <button v-if="live.state.value === 'paused'" class="race-cta ghost" type="button" @click="live.resume()">재개</button>
-        <button v-else class="race-cta ghost" type="button" @click="live.pause()">일시정지</button>
-        <button class="race-cta danger" type="button" @click="endRace">종료</button>
+        <button v-if="live.state.value === 'paused'" class="race-btn secondary" type="button" @click="live.resume()">재개</button>
+        <button v-else class="race-btn secondary" type="button" @click="live.pause()">일시정지</button>
+        <button class="race-btn danger" type="button" @click="endRace">종료</button>
       </div>
     </template>
 
-    <!-- ③ 종료 요약 -->
+    <!-- ③ 요약 -->
     <template v-else>
-      <section class="race-card race-summary">
-        <h2 v-if="summaryResult">{{ summaryResult.emoji }} {{ summaryResult.label }}</h2>
-        <h2 v-else>레이싱 완료</h2>
+      <SectionGroup title="결과">
+        <div class="race-live">
+          <div class="summary-title">
+            <template v-if="summaryResult">{{ summaryResult.emoji }} {{ summaryResult.label }}</template>
+            <template v-else>레이싱 완료</template>
+          </div>
+        </div>
         <div class="summary-grid">
           <div><span>거리</span><strong>{{ fmtKm(finalTick?.cumulativeDistanceM) }} km</strong></div>
           <div><span>시간</span><strong>{{ fmtTime(finalTick?.elapsedSec) }}</strong></div>
           <div v-if="finalGap"><span>고스트 시간차</span><strong>{{ gapText(finalGap) }}</strong></div>
         </div>
-      </section>
-      <button class="race-cta" type="button" @click="resetRace">새 레이싱</button>
+      </SectionGroup>
+      <button class="race-cta inline" type="button" @click="resetRace">새 레이싱</button>
     </template>
-  </main>
+
+    <!-- 설정 스택 상세 -->
+    <Teleport to="body">
+      <Transition name="stack-page">
+        <div v-if="settingsOpen" class="memory-stack-layer" data-no-swipe>
+          <section class="memory-stack-page">
+            <header class="memory-stack-header">
+              <div><h2>레이싱 설정</h2></div>
+              <button class="stack-icon-button" type="button" aria-label="닫기" @click="settingsOpen = false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+              </button>
+            </header>
+            <main class="memory-stack-content">
+              <SectionGroup title="거리 설정">
+                <div v-if="distances.length" class="race-chips">
+                  <button v-for="d in distances" :key="d.distanceM" type="button" :class="{ active: selectedDistanceM === d.distanceM }" @click="selectDistance(d.distanceM)">{{ d.label }}</button>
+                </div>
+                <p v-else class="race-muted">5km 이상 기록이 쌓이면 거리가 표시됩니다. 그 전엔 '없음'으로 자유 레이싱할 수 있어요.</p>
+              </SectionGroup>
+
+              <SectionGroup title="상대 설정">
+                <div class="race-options">
+                  <label v-for="o in opponents" :key="o.runId ?? 'none'" class="race-option" :class="{ active: selectedOpponentRunId === o.runId }">
+                    <input type="radio" :checked="selectedOpponentRunId === o.runId" @change="selectedOpponentRunId = o.runId" />
+                    <span class="option-main">{{ opponentLabel(o) }}</span>
+                    <span v-if="o.kind === 'none'" class="option-sub">고스트 없이 측정만. 이번 기록이 다음 타겟이 됩니다.</span>
+                    <span v-else class="option-sub">{{ fmtPace(o.avgPaceSec) }} · {{ o.date }}</span>
+                  </label>
+                </div>
+              </SectionGroup>
+
+              <SectionGroup title="음성 안내 설정">
+                <div class="race-tabs" role="tablist">
+                  <button type="button" role="tab" :aria-selected="periodicKind === 'distance'" :class="{ active: periodicKind === 'distance' }" @click="periodicKind = 'distance'">거리</button>
+                  <button type="button" role="tab" :aria-selected="periodicKind === 'time'" :class="{ active: periodicKind === 'time' }" @click="periodicKind = 'time'">시간</button>
+                  <button type="button" role="tab" :aria-selected="periodicKind === 'silent'" :class="{ active: periodicKind === 'silent' }" @click="periodicKind = 'silent'">조용히</button>
+                </div>
+                <div v-if="periodicKind !== 'silent'" class="race-sub">
+                  <span class="race-sub-label">{{ periodicKind === 'distance' ? '구간마다 안내' : '시간마다 안내' }}</span>
+                  <div v-if="periodicKind === 'distance'" class="race-sub-options">
+                    <button type="button" :class="{ active: stepM === 100 }" @click="stepM = 100">100m</button>
+                    <button type="button" :class="{ active: stepM === 500 }" @click="stepM = 500">500m</button>
+                    <button type="button" :class="{ active: stepM === 1000 }" @click="stepM = 1000">1km</button>
+                  </div>
+                  <div v-else class="race-sub-options">
+                    <button type="button" :class="{ active: stepSec === 60 }" @click="stepSec = 60">1분</button>
+                    <button type="button" :class="{ active: stepSec === 180 }" @click="stepSec = 180">3분</button>
+                    <button type="button" :class="{ active: stepSec === 300 }" @click="stepSec = 300">5분</button>
+                  </div>
+                </div>
+                <p v-else class="race-sub-silent">음성 안내 없이 측정만 합니다.</p>
+                <label class="race-toggle" :class="{ 'is-disabled': !hasGhost }">
+                  <span class="toggle-label">
+                    역전 알림 (추월/추월당함)
+                    <small v-if="!hasGhost" class="toggle-hint">상대를 선택하면 켤 수 있어요</small>
+                  </span>
+                  <input type="checkbox" v-model="reversalAlert" :disabled="!hasGhost" />
+                </label>
+              </SectionGroup>
+
+            </main>
+            <footer class="stack-footer">
+              <button class="race-cta" type="button" @click="saveSettings">설정 저장</button>
+            </footer>
+          </section>
+        </div>
+      </Transition>
+    </Teleport>
+  </PageLayout>
 </template>
 
 <style scoped>
-.race-page { max-width: 520px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
-.race-head h1 { font-size: 1.4rem; margin: 0; }
-.race-head .sub { color: var(--text-secondary, #888); font-size: 0.85rem; margin: 2px 0 0; }
-.race-card { background: var(--surface, #fff); border-radius: 16px; padding: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); display: flex; flex-direction: column; gap: 10px; }
-.race-card h2 { font-size: 1rem; margin: 0 0 4px; }
-.race-radio { display: grid; grid-template-columns: 1fr; gap: 2px; padding: 12px; border: 1.5px solid var(--border, #e4e4e7); border-radius: 12px; cursor: pointer; }
-.race-radio.active { border-color: var(--accent, #6d28d9); background: color-mix(in srgb, var(--accent, #6d28d9) 8%, transparent); }
-.race-radio input { display: none; }
-.radio-main { font-weight: 600; }
-.radio-sub { font-size: 0.8rem; color: var(--text-secondary, #888); }
-.pb-badge { font-size: 0.7rem; background: var(--accent, #6d28d9); color: #fff; border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
-.helper { font-size: 0.82rem; color: var(--text-secondary, #888); margin: 0; }
-.helper.warn { color: #d97706; }
-.seg { display: flex; gap: 8px; }
-.seg button { flex: 1; padding: 9px 0; border: 1.5px solid var(--border, #e4e4e7); border-radius: 10px; background: transparent; font-size: 0.9rem; cursor: pointer; }
-.seg button.active { border-color: var(--accent, #6d28d9); background: var(--accent, #6d28d9); color: #fff; }
-.race-toggle { display: flex; justify-content: space-between; align-items: center; font-size: 0.9rem; padding-top: 4px; }
-.race-cta { padding: 14px; border: none; border-radius: 14px; background: var(--accent, #6d28d9); color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; }
-.race-cta.ghost { background: var(--surface-2, #f1f1f4); color: var(--text, #18181b); }
-.race-cta.danger { background: #dc2626; }
-.race-actions { display: flex; gap: 10px; }
-.race-actions .race-cta { flex: 1; }
-.race-live { align-items: center; text-align: center; gap: 6px; }
-.live-time { font-size: 2.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-.live-distance { font-size: 1.2rem; color: var(--text-secondary, #888); }
-.live-gap { font-size: 1.3rem; font-weight: 700; padding: 8px 0; }
-.live-gap.ahead { color: #16a34a; }
-.live-gap.behind { color: #dc2626; }
-.live-gap.even { color: var(--text-secondary, #888); }
-.live-meta { font-size: 0.85rem; color: var(--text-secondary, #888); }
-.race-summary { align-items: center; text-align: center; }
-.summary-grid { display: flex; flex-direction: column; gap: 8px; width: 100%; }
-.summary-grid div { display: flex; justify-content: space-between; border-top: 1px solid var(--border, #eee); padding-top: 8px; }
-.summary-grid span { color: var(--text-secondary, #888); }
-.race-unavailable { text-align: center; }
+.race-head { padding: 4px 2px 2px; }
+.race-head h1 { font-size: 1.5rem; margin: 0; color: var(--color-text); }
+.race-head .sub { color: var(--color-muted); font-size: 0.86rem; margin: 4px 0 0; }
+
+.race-text { color: var(--color-text); margin: 0 0 6px; }
+.race-muted { font-size: 0.84rem; color: var(--color-muted); margin: 6px 0 0; line-height: 1.5; }
+.race-warn { font-size: 0.84rem; color: var(--color-warning-text); margin: 10px 0 0; }
+
+/* 상위 모드 탭 — 페이지 레벨 밑줄형 탭 스킨 */
+.race-modes { display: flex; gap: 2px; border-bottom: 1px solid var(--color-border); margin-bottom: 16px; }
+.race-modes button {
+  flex: 1; padding: 14px 0 13px; border: none; background: transparent;
+  color: var(--color-muted); font-size: 1.08rem; font-weight: 700; cursor: pointer;
+  position: relative; box-shadow: none; letter-spacing: -0.01em;
+}
+.race-modes button.active { color: var(--color-text); }
+.race-modes button.active::after {
+  content: ''; position: absolute; left: 14%; right: 14%; bottom: -1px; height: 3px;
+  background: var(--color-primary); border-radius: 3px 3px 0 0;
+}
+
+.race-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.race-chips button {
+  padding: 9px 18px; border: 1px solid var(--color-border); border-radius: 999px;
+  background: transparent; color: var(--color-text); font-size: 0.92rem; cursor: pointer; box-shadow: none;
+}
+.race-chips button.active { background: var(--color-primary); color: var(--color-on-primary); border-color: var(--color-primary); font-weight: 700; }
+
+.race-options { display: flex; flex-direction: column; gap: 10px; }
+.race-option { display: flex; flex-direction: column; gap: 3px; padding: 13px 14px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-field); cursor: pointer; }
+.race-option.active { border-color: var(--color-primary); background: var(--color-primary-soft); }
+.race-option input { display: none; }
+.option-main { font-weight: 600; color: var(--color-text); }
+.option-sub { font-size: 0.8rem; color: var(--color-muted); }
+
+.race-tabs { display: flex; gap: 8px; }
+.race-tabs button { flex: 1; padding: 11px 0; border: 1px solid var(--color-border); border-radius: 10px; background: transparent; color: var(--color-muted); font-size: 0.92rem; cursor: pointer; box-shadow: none; }
+.race-tabs button.active { background: var(--color-primary); color: var(--color-on-primary); border-color: var(--color-primary); font-weight: 700; }
+
+.race-sub { margin: 12px 0 2px; padding: 12px 12px 12px 14px; border-left: 2px solid var(--color-primary); background: var(--color-subtle); border-radius: 0 12px 12px 0; }
+.race-sub-label { display: block; font-size: 0.78rem; color: var(--color-muted); margin-bottom: 9px; }
+.race-sub-options { display: flex; gap: 8px; }
+.race-sub-options button { flex: 1; padding: 9px 0; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-surface-2); color: var(--color-text); font-size: 0.88rem; cursor: pointer; box-shadow: none; }
+.race-sub-options button.active { background: var(--color-primary); color: var(--color-on-primary); border-color: var(--color-primary); font-weight: 700; }
+.race-sub-silent { margin: 12px 0 2px; font-size: 0.84rem; color: var(--color-muted); }
+
+.race-toggle { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-top: 12px; }
+.race-toggle .toggle-label { flex: 1; min-width: 0; color: var(--color-text); font-size: 0.92rem; }
+.race-toggle .toggle-hint { display: block; font-size: 0.75rem; color: var(--color-muted); margin-top: 3px; }
+.race-toggle input { flex: none; width: 22px; height: 22px; accent-color: var(--color-primary); }
+.race-toggle.is-disabled { opacity: 0.55; }
+.race-toggle.is-disabled .toggle-label { color: var(--color-muted); }
+
+.race-cta { width: 100%; padding: 15px; border: none; border-radius: 14px; background: var(--color-primary); color: var(--color-on-primary); font-size: 1.02rem; font-weight: 700; cursor: pointer; box-shadow: none; }
+.race-cta.inline { margin-top: 14px; }
+/* 설정 변경: 아이콘-온리 톱니바퀴 (SectionGroup actions 슬롯) */
+.race-gear {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; padding: 0; border: none; border-radius: 10px;
+  background: transparent; color: var(--color-muted); cursor: pointer; box-shadow: none;
+}
+.race-gear:hover { color: var(--color-text); background: var(--color-subtle); }
+.race-gear svg { width: 20px; height: 20px; }
+/* 스택 상세 하단 고정 푸터(.memory-stack-page 3행 그리드의 footer 슬롯) */
+.stack-footer {
+  padding: 12px 16px calc(env(safe-area-inset-bottom) + 12px);
+  background: var(--color-header-bg);
+  backdrop-filter: blur(18px);
+  border-top: 1px solid var(--color-border);
+}
+.race-cta.fixed { position: fixed; left: 50%; transform: translateX(-50%); bottom: var(--bottom-nav-reserve); width: min(100% - 32px, 560px); z-index: 40; }
+.race-bottom-spacer { height: 74px; }
+
+.race-actions { display: flex; gap: 10px; margin-top: 4px; }
+.race-btn { flex: 1; padding: 14px; border: none; border-radius: 14px; font-size: 1rem; font-weight: 600; cursor: pointer; box-shadow: none; }
+.race-btn.secondary { background: var(--color-surface-2); color: var(--color-text); }
+.race-btn.danger { background: var(--tds-red-500); color: #fff; }
+
+.race-live { text-align: center; padding: 6px 0; }
+.live-time { font-size: 2.8rem; font-weight: 700; color: var(--color-text); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.live-distance { font-size: 1.15rem; color: var(--color-muted); margin-top: 2px; }
+.live-gap { font-size: 1.35rem; font-weight: 700; margin: 10px 0; }
+.live-gap.ahead { color: var(--color-primary); }
+.live-gap.behind { color: var(--color-warning-text); }
+.live-gap.even { color: var(--color-muted); }
+.live-meta { font-size: 0.85rem; color: var(--color-muted); margin-top: 4px; }
+
+.summary-title { font-size: 1.5rem; font-weight: 700; color: var(--color-text); }
+.summary-grid { display: flex; flex-direction: column; gap: 0; }
+.summary-grid div { display: flex; justify-content: space-between; gap: 16px; border-top: 1px solid var(--color-border); padding: 12px 0; }
+.summary-grid div:first-child { border-top: none; }
+.summary-grid span { color: var(--color-muted); flex: none; }
+.summary-grid strong { color: var(--color-text); text-align: right; }
 </style>

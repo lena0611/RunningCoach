@@ -21,6 +21,7 @@
 - `harness:check`의 “Project rule candidate check”는 통과 메시지가 아니라 실제 검토 요청으로 취급한다. 같은 종류의 버그가 재발 가능하면 룰을 업데이트한다.
 - 정식 Issue를 `Done`으로 닫기 전에는 완료 책임 창이 재발 방지 기록 게이트를 통과해야 한다. 여러 번의 수정/배포, 반복 회귀, 독립 업무 분리나 인수인계 실패, 공유 계약 변경, 에이전트 운영 실패가 있었다면 `project-memory`, `decision-log`, 관련 `.harness/project/*` 중 적절한 장기 기억을 갱신한다.
 - HealthKit/세션 상세/스플릿/경로 차트/자동 동기화/세션별 새로고침을 수정할 때는 구현 전에 `.harness/project/healthkit-data-contract.md`를 먼저 확인한다. 네이티브 후보 구조, 웹 `RunLog` 매핑, 샘플/랩/라우트 배열 의미를 추측하지 않는다.
+- **UI 화면/컴포넌트/스타일/레이아웃을 만들거나 수정할 때는 구현 전에 `.harness/project/ui-guidelines.md`와 `.harness/project/ui-system-contract.md`를 먼저 확인한다(스타일 한 줄 쓰기 전).** 디자인 토큰(`--color-*`), 공유 컴포넌트(`SectionGroup`/`PageLayout`/`BottomSheetSelect`/`PrimaryButton`/`StatCard` 등), 스택 패턴(`memory-stack-layer` 3행 그리드·`stack-page` 트랜지션·`data-no-swipe`), FixedBottomCTA(`env(safe-area-inset-bottom)`·`--bottom-nav-reserve`), 탭/칩 스킨, 버튼 `box-shadow: none` 리셋, 아이콘-온리 액션을 추측하지 않는다. 색·그림자·네이티브 `<select>`·임의 폰트 크기를 즉흥으로 만들지 않는다. 인접 화면과의 일관성·빈/로딩/에러 상태까지 선제 점검한다. 어긋난 사례: [[proactive-design-system-adherence]](흰 카드·이상한 box-shadow·세로 깨진 토글, #232).
 
 ## 요청 단위 풀스택 창 운영
 - PaceLAB은 상시 workstream 대화창 분리 운영을 중단하고, 요청 단위 새 창 운영을 기본으로 한다.
