@@ -32,6 +32,7 @@ const gradeLine = computed(() => {
       <span class="level-eyebrow">내 레벨</span>
       <div class="level-identity">
         <strong class="level-label">{{ label }}</strong>
+        <span v-if="progress.provisional" class="level-badge">잠정</span>
         <span v-if="estimated" class="level-badge">추정</span>
       </div>
     </header>

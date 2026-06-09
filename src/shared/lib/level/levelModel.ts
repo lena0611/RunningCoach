@@ -232,6 +232,9 @@ function laterDate(a: string | null, b: string | null): string | null {
 
 const PREDICTION_DISTANCES_M: number[] = [5000, 10000, 21097.5, 42195]
 
+/** 온보딩 자기보고 잠정 배치(아직 GPS 주행으로 인증되기 전). */
+export type SelfReportedPlacement = { maxDistanceM?: number | null }
+
 export type RunnerProgress = {
   vdot: number | null
   confidence: PaceConfidence
@@ -241,6 +244,8 @@ export type RunnerProgress = {
   /** 다음 등급까지 필요한 VDOT(없으면 null, 최상위 등급이면 null). */
   vdotToNextGrade: number | null
   distanceClass: DistanceClass
+  /** 거리 클래스가 자기보고(잠정)로 올라간 상태인지(아직 실제 주행 미인증). */
+  provisional: boolean
   nextClass: DistanceClass | null
   maxCompletedDistanceM: number
   /** 다음 클래스 도전 자격(최상위 클래스면 null). */
@@ -256,7 +261,8 @@ export type RunnerProgress = {
 export function resolveRunnerProgress(
   profile: AthleteProfile,
   runs: RunLog[] = [],
-  today = new Date()
+  today = new Date(),
+  selfReported: SelfReportedPlacement | null = null
 ): RunnerProgress {
   const measured = resolveMeasuredVdot(profile)
   const vdot = measured?.vdot ?? null
@@ -267,8 +273,12 @@ export function resolveRunnerProgress(
   const vdotToNextGrade =
     vdot !== null && nextGrade ? Math.max(0, Math.round((nextGrade.minVdot - vdot) * 10) / 10) : null
 
-  const completedM = maxCompletedDistanceM(runs)
+  const verifiedM = maxCompletedDistanceM(runs)
+  const selfM = selfReported?.maxDistanceM ?? 0
+  const completedM = Math.max(verifiedM, selfM)
   const distanceClass = distanceClassFromMeters(completedM)
+  // 자기보고가 실제 주행보다 높은 클래스를 만들었으면 "잠정"(아직 GPS 완주 미인증).
+  const provisional = distanceClass.key !== distanceClassFromMeters(verifiedM).key
   const nextClass = nextDistanceClass(distanceClass)
   const gate1 = nextClass ? evaluateGate1(nextClass.key, gate1InputsFromRuns(runs, today)) : null
 
@@ -303,6 +313,7 @@ export function resolveRunnerProgress(
     nextGrade,
     vdotToNextGrade,
     distanceClass,
+    provisional,
     nextClass,
     maxCompletedDistanceM: completedM,
     gate1,

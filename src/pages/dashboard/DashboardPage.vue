@@ -5,6 +5,7 @@ import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
+import { useLevelStore } from '@/app/stores/levelStore'
 import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
 import type { RunLog } from '@/entities/run/model'
 import RunSummaryCard from '@/widgets/run-summary-card/RunSummaryCard.vue'
@@ -34,6 +35,7 @@ const runStore = useRunStore()
 const memoryStore = useMemoryStore()
 const healthKitSyncStore = useHealthKitSyncStore()
 const weatherStore = useWeatherStore()
+const levelStore = useLevelStore()
 const router = useRouter()
 const route = useRoute()
 const trendMetric = ref<'month' | 'last7' | 'easy' | 'hard' | null>(null)
@@ -69,7 +71,11 @@ const raceProjection = computed(() =>
     tempoCeilingBpm: heartRateModel.value.tempoCeilingBpm
   })
 )
-const runnerProgress = computed(() => resolveRunnerProgress(memoryStore.memory.athleteProfile, runs.value, today.value))
+const runnerProgress = computed(() =>
+  resolveRunnerProgress(memoryStore.memory.athleteProfile, runs.value, today.value, {
+    maxDistanceM: levelStore.selfReportedMaxDistanceM
+  })
+)
 
 watch(
   () => route.path,
