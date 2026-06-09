@@ -552,13 +552,15 @@ struct RunContextWebView: UIViewRepresentable {
                 let mode = body["mode"] as? String ?? "solo"
                 let curve = parseGhostCurve(body["ghostCurve"])
                 let config = AnnounceConfig.parse(body["announceConfig"] as? [String: Any])
+                let targetDistanceM = (body["targetDistanceM"] as? NSNumber)?.doubleValue ?? 0
                 let tickIntervalMs = (body["tickIntervalMs"] as? NSNumber)?.intValue ?? 1000
-                print("[RunContext LiveRun] startLiveRun session=\(sessionId) mode=\(mode) ghost=\(curve != nil) periodic=\(config.periodicKind.rawValue)")
+                print("[RunContext LiveRun] startLiveRun session=\(sessionId) mode=\(mode) ghost=\(curve != nil) periodic=\(config.periodicKind.rawValue) target=\(targetDistanceM)")
                 liveRunTracker.start(LiveRunStartParams(
                     sessionId: sessionId,
                     mode: mode,
                     curve: curve,
                     config: config,
+                    targetDistanceM: targetDistanceM,
                     tickIntervalMs: tickIntervalMs
                 ))
 

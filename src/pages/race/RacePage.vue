@@ -172,7 +172,13 @@ function startTracking() {
     ? ghostCurveForRun(runStore.selectedUserRuns, selectedOpponentRunId.value) ?? undefined
     : undefined
   if (live.available) {
-    live.start({ sessionId: `live-${Date.now()}`, mode: 'solo', ghostCurve, announceConfig: buildAnnounceConfig() })
+    live.start({
+      sessionId: `live-${Date.now()}`,
+      mode: 'solo',
+      ghostCurve,
+      announceConfig: buildAnnounceConfig(),
+      targetDistanceM: selectedDistanceM.value // 거리 도달 시 네이티브 자동 완주
+    })
   }
 }
 

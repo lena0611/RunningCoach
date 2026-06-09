@@ -33,6 +33,8 @@ export type StartLiveRunParams = {
   /** 정적 고스트 곡선(출발선부터 누적거리↔경과시간). 타겟 '없음'이면 생략. */
   ghostCurve?: GhostCurvePoint[]
   announceConfig: AnnounceConfig
+  /** 목표 거리(m). 누적거리가 이를 넘으면 네이티브가 백그라운드에서 자동 완주. 미지정/0이면 수동 종료. */
+  targetDistanceM?: number | null
   /** 틱 전송 간격(ms). 미지정 시 네이티브 기본(~1Hz). */
   tickIntervalMs?: number
 }
@@ -137,6 +139,7 @@ export function startLiveRun(params: StartLiveRunParams) {
     mode: params.mode,
     ghostCurve: params.ghostCurve ?? null,
     announceConfig: params.announceConfig,
+    targetDistanceM: params.targetDistanceM ?? null,
     tickIntervalMs: params.tickIntervalMs ?? null
   })
 }

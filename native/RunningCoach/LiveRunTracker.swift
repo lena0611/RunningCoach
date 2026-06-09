@@ -48,6 +48,8 @@ struct LiveRunStartParams {
     let mode: String
     let curve: GhostCurve?
     let config: AnnounceConfig
+    /// 목표 거리(m). 누적거리가 이를 넘으면 백그라운드에서 자동 완주. 0 이면 수동 종료.
+    let targetDistanceM: Double
     let tickIntervalMs: Int
 }
 
@@ -95,6 +97,9 @@ final class LiveRunTracker: NSObject {
     /// 속도 상한 필터(m/s). 약 43km/h 초과 점프 제거.
     private let maxSpeedMps: Double = 12
 
+    /// 목표 거리(m). >0 이고 누적거리가 이를 넘으면 자동 완주. 0 = 수동 종료.
+    private var targetDistanceM: Double = 0
+
     private let snapshotKey = "liveRun_snapshot_v1"
 
     override init() {
@@ -128,6 +133,7 @@ final class LiveRunTracker: NSObject {
     func start(_ params: LiveRunStartParams) {
         reset()
         sessionId = params.sessionId
+        targetDistanceM = params.targetDistanceM
         engine = GhostRaceEngine(curve: params.curve, config: params.config)
 
         speech.reset()
@@ -226,6 +232,7 @@ final class LiveRunTracker: NSObject {
     private func reset() {
         manager.stopUpdatingLocation()
         pedometer.stopUpdates()
+        targetDistanceM = 0
         startDate = nil
         pausedAccumulatedSec = 0
         pauseStartedAt = nil
@@ -288,6 +295,11 @@ final class LiveRunTracker: NSObject {
 
         onTick?(seq, elapsedSec, cumulativeDistanceM, instantPaceSec, signal, distanceSource)
         persistSnapshot()
+
+        // 목표 거리 도달 → 백그라운드 자동 완주(완주 멘트는 stop() 안 engine.finish가 처리).
+        if targetDistanceM > 0, cumulativeDistanceM >= targetDistanceM, state == .running {
+            stop()
+        }
     }
 
     private func persistSnapshot() {
