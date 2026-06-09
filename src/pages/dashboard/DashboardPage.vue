@@ -26,6 +26,7 @@ import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import StatCard from '@/shared/ui/StatCard.vue'
 import LevelCard from './LevelCard.vue'
 import QuestPanel from './QuestPanel.vue'
+import RacePage from '@/pages/race/RacePage.vue'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
 
@@ -42,6 +43,7 @@ const trendMetric = ref<'month' | 'last7' | 'easy' | 'hard' | null>(null)
 const detailRun = ref<RunLog | null>(null)
 const projectionDetailOpen = ref(false)
 const nextSessionDetailOpen = ref(false)
+const raceOpen = ref(false)
 const today = ref(new Date())
 const todayDate = computed(() => formatDateOnly(today.value))
 
@@ -284,13 +286,21 @@ function formatDateOnly(value: Date) {
     <LevelCard :progress="runnerProgress" />
     <QuestPanel :progress="runnerProgress" :next-session="nextSession" />
 
-    <button class="stat-card stat-card-interactive" type="button" @click="router.push('/race')">
+    <button class="stat-card stat-card-interactive" type="button" @click="raceOpen = true">
       <div class="stat-card-data">
         <strong class="stat-card-value stat-card-text-value">레이싱하기</strong>
         <small>고스트와 달리거나 자유 레이싱으로 기록에 도전</small>
       </div>
       <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
     </button>
+
+    <Teleport to="body">
+      <Transition name="stack-page-up">
+        <div v-if="raceOpen" class="memory-stack-layer" data-no-swipe>
+          <RacePage @close="raceOpen = false" />
+        </div>
+      </Transition>
+    </Teleport>
 
     <SectionGroup v-if="runStore.loading || runStore.error" title="데이터 상태">
       <template #actions>

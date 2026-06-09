@@ -6,8 +6,8 @@ import { useLiveRun } from '@/features/live-run/useLiveRun'
 import { ghostCurveForRun, listDistanceOptions, listOpponents, type OpponentOption } from '@/features/live-run/raceTargets'
 import type { AnnounceConfig, PeriodicAnnounceKind } from '@/features/live-run/liveRunBridge'
 import type { LiveGapPayload, LiveTickPayload } from '@/features/live-run/liveRunBridge'
-import PageLayout from '@/shared/ui/PageLayout.vue'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
+import ListRow from '@/shared/ui/ListRow.vue'
 
 type Step = 'setup' | 'live' | 'summary'
 type RaceMode = 'solo' | 'crew'
@@ -18,11 +18,12 @@ type RaceSettings = {
   stepM: 100 | 500 | 1000
   stepSec: number
   reversalAlert: boolean
-  // read-only 요약 스냅샷
   distanceLabel: string
   opponentLabel: string
   voiceLabel: string
 }
+
+const emit = defineEmits<{ close: [] }>()
 
 const LS_KEY = 'race_last_settings_v1'
 
@@ -37,20 +38,17 @@ const raceMode = ref<RaceMode>('solo')
 const settingsOpen = ref(false)
 const lastSettings = ref<RaceSettings | null>(null)
 
-// ── 거리 / 상대 (설정 폼 편집 버퍼) ────────────────────────────────────────
 const distances = computed(() => listDistanceOptions(runStore.selectedUserRuns))
 const selectedDistanceM = ref<number | null>(null)
 const opponents = computed(() => listOpponents(runStore.selectedUserRuns, selectedDistanceM.value))
 const selectedOpponentRunId = ref<string | null>(null)
 const hasGhost = computed(() => selectedOpponentRunId.value != null)
 
-// ── 음성 안내 설정 ─────────────────────────────────────────────────────────
 const periodicKind = ref<PeriodicAnnounceKind>('distance')
 const stepM = ref<100 | 500 | 1000>(1000)
 const stepSec = ref<number>(300)
 const reversalAlert = ref(true)
 
-// ── 라이브/요약 ────────────────────────────────────────────────────────────
 const finalTick = ref<LiveTickPayload | null>(null)
 const finalGap = ref<LiveGapPayload | null>(null)
 
@@ -72,11 +70,10 @@ function loadSavedSettings() {
     stepSec.value = s.stepSec
     reversalAlert.value = s.reversalAlert
   } catch {
-    // 저장값 손상 시 무시(기본값 사용)
+    // 저장값 손상 시 무시
   }
 }
 
-// 거리 목록이 준비되면 첫 거리 자동 선택(저장값이 없을 때만)
 watch(
   distances,
   (list) => {
@@ -87,10 +84,9 @@ watch(
 
 function selectDistance(distanceM: number) {
   selectedDistanceM.value = distanceM
-  selectedOpponentRunId.value = null // 거리 바뀌면 상대 후보가 달라짐 → 없음으로
+  selectedOpponentRunId.value = null
 }
 
-// 네이티브 완주 → 요약
 watch(
   () => live.state.value,
   (s) => {
@@ -109,9 +105,12 @@ function buildAnnounceConfig(): AnnounceConfig {
 }
 
 function voiceLabel(): string {
-  if (periodicKind.value === 'silent') return '조용히'
-  if (periodicKind.value === 'distance') return `${stepM.value >= 1000 ? `${stepM.value / 1000}km` : `${stepM.value}m`}마다`
-  return `${Math.round(stepSec.value / 60)}분마다`
+  const reversal = hasGhost.value && reversalAlert.value
+  if (periodicKind.value === 'silent') return reversal ? '역전만' : '조용히'
+  const base = periodicKind.value === 'distance'
+    ? (stepM.value >= 1000 ? `${stepM.value / 1000}km` : `${stepM.value}m`)
+    : `${Math.round(stepSec.value / 60)}분`
+  return reversal ? `${base}, 역전 마다` : `${base}마다`
 }
 
 function openSettings() {
@@ -134,7 +133,7 @@ function saveSettings() {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(lastSettings.value))
   } catch {
-    // 저장 실패는 치명적 아님(이번 세션은 메모리값으로 동작)
+    // 저장 실패는 치명적 아님
   }
   settingsOpen.value = false
 }
@@ -168,7 +167,6 @@ function opponentLabel(o: OpponentOption): string {
   return `${km}km ${o.kind === 'race' ? '레이싱' : '훈련'} PB · ${fmtTime(o.elapsedSec)}`
 }
 
-// ── 포맷 ──────────────────────────────────────────────────────────────────
 function fmtTime(sec: number | null | undefined): string {
   const s = Math.max(0, Math.round(sec ?? 0))
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
@@ -198,109 +196,116 @@ const summaryResult = computed(() => {
   if (finalGap.value.leadState === 'behind') return { emoji: '😤', label: '아쉽게 뒤짐' }
   return { emoji: '🤝', label: '거의 동시' }
 })
+
+const showStartCta = computed(() => step.value === 'setup' && raceMode.value === 'solo' && !!lastSettings.value)
 </script>
 
 <template>
-  <PageLayout>
-    <header class="race-head">
-      <h1>레이싱</h1>
-      <p class="sub">달리며 음성으로 경쟁 상황을 안내</p>
+  <section class="memory-stack-page">
+    <header class="memory-stack-header">
+      <div><h2>레이싱</h2></div>
+      <button class="stack-icon-button" type="button" aria-label="닫기" @click="emit('close')">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+      </button>
     </header>
 
-    <SectionGroup v-if="!live.available && !previewMode" title="안내">
-      <p class="race-text">가상레이싱은 <strong>iOS 앱</strong>에서만 가능합니다.</p>
-      <p class="race-muted">앱에서 화면을 잠그고 달리면 음성으로 경쟁 상황을 안내합니다.</p>
-    </SectionGroup>
-
-    <!-- ① 설정 -->
-    <template v-else-if="step === 'setup'">
-      <div class="race-modes" role="tablist">
-        <button type="button" role="tab" :aria-selected="raceMode === 'solo'" :class="{ active: raceMode === 'solo' }" @click="raceMode = 'solo'">나와의 대결</button>
-        <button type="button" role="tab" :aria-selected="raceMode === 'crew'" :class="{ active: raceMode === 'crew' }" @click="raceMode = 'crew'">크루와 대결</button>
-      </div>
-
-      <SectionGroup v-if="raceMode === 'crew'" title="크루와 대결">
-        <p class="race-muted">추후 공개됩니다.</p>
+    <main class="memory-stack-content">
+      <!-- 브리지 없음(웹) 폴백 -->
+      <SectionGroup v-if="!live.available && !previewMode" title="안내">
+        <p class="race-text">가상레이싱은 <strong>iOS 앱</strong>에서만 가능합니다.</p>
+        <p class="race-muted">앱에서 화면을 잠그고 달리면 음성으로 경쟁 상황을 안내합니다.</p>
       </SectionGroup>
 
-      <template v-else>
-        <!-- 저장된 설정 있음: read-only 요약 -->
-        <template v-if="lastSettings">
-          <SectionGroup title="레이싱 설정">
-            <template #actions>
-              <button class="race-gear" type="button" aria-label="레이싱 설정 변경" @click="openSettings">
-                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H1a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V1a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H23a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                </svg>
-              </button>
-            </template>
-            <div class="summary-grid">
-              <div><span>거리</span><strong>{{ lastSettings.distanceLabel }}</strong></div>
-              <div><span>상대</span><strong>{{ lastSettings.opponentLabel }}</strong></div>
-              <div><span>음성 안내</span><strong>{{ lastSettings.voiceLabel }}</strong></div>
-              <div v-if="lastSettings.opponentRunId"><span>역전 알림</span><strong>{{ lastSettings.reversalAlert ? '켜짐' : '꺼짐' }}</strong></div>
-            </div>
-          </SectionGroup>
-          <div class="race-bottom-spacer" aria-hidden="true" />
-          <button class="race-cta fixed" type="button" @click="startRace">레이싱 시작</button>
-        </template>
+      <!-- ① 설정 -->
+      <template v-else-if="step === 'setup'">
+        <div class="race-modes" role="tablist">
+          <button type="button" role="tab" :aria-selected="raceMode === 'solo'" :class="{ active: raceMode === 'solo' }" @click="raceMode = 'solo'">🏃 나와의 대결</button>
+          <button type="button" role="tab" :aria-selected="raceMode === 'crew'" :class="{ active: raceMode === 'crew' }" @click="raceMode = 'crew'">👥 크루와 대결</button>
+        </div>
 
-        <!-- 저장된 설정 없음: 빈 상태 -->
-        <SectionGroup v-else title="나와의 대결">
-          <p class="race-muted">고스트(과거 기록)와 달리거나, 자유 레이싱으로 기록에 도전하세요. 거리·상대·음성 안내를 먼저 설정합니다.</p>
-          <button class="race-cta inline" type="button" @click="openSettings">설정하러 가기</button>
+        <SectionGroup v-if="raceMode === 'crew'" title="크루와 대결">
+          <p class="race-muted">추후 공개됩니다.</p>
+        </SectionGroup>
+
+        <template v-else>
+          <template v-if="lastSettings">
+            <SectionGroup title="레이싱 설정">
+              <div class="race-setting-list">
+                <ListRow title="거리" clickable @click="openSettings">
+                  <template #addon><span class="row-value">{{ lastSettings.distanceLabel }}</span><svg class="row-chevron" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6" /></svg></template>
+                </ListRow>
+                <ListRow title="상대" clickable @click="openSettings">
+                  <template #addon><span class="row-value">{{ lastSettings.opponentLabel }}</span><svg class="row-chevron" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6" /></svg></template>
+                </ListRow>
+                <ListRow title="음성 안내" clickable @click="openSettings">
+                  <template #addon><span class="row-value">{{ lastSettings.voiceLabel }}</span><svg class="row-chevron" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6" /></svg></template>
+                </ListRow>
+              </div>
+            </SectionGroup>
+          </template>
+
+          <SectionGroup v-else title="나와의 대결">
+            <p class="race-muted">고스트(과거 기록)와 달리거나, 자유 레이싱으로 기록에 도전하세요. 거리·상대·음성 안내를 먼저 설정합니다.</p>
+            <button class="race-cta inline" type="button" @click="openSettings">설정하러 가기</button>
+          </SectionGroup>
+        </template>
+      </template>
+
+      <!-- ② 라이브 -->
+      <template v-else-if="step === 'live'">
+        <SectionGroup title="라이브">
+          <div class="race-live">
+            <div class="live-time">{{ elapsedText }}</div>
+            <div class="live-distance">{{ distanceText }} km</div>
+            <div v-if="hasGhost" class="live-gap" :class="live.gap.value?.leadState ?? 'even'">{{ gapText(live.gap.value) }}</div>
+            <div class="live-meta">페이스 {{ paceText }} · 신호 {{ live.tick.value?.signalState ?? '-' }} · {{ live.tick.value?.source ?? '-' }}</div>
+          </div>
+          <p v-if="live.permission.value === 'whenInUse'" class="race-warn">위치를 "항상 허용"으로 바꿔야 화면을 잠가도 측정됩니다.</p>
+          <p v-if="live.error.value" class="race-warn">오류 {{ live.error.value.code }}: {{ live.error.value.message }}</p>
         </SectionGroup>
       </template>
-    </template>
 
-    <!-- ② 라이브 -->
-    <template v-else-if="step === 'live'">
-      <SectionGroup title="라이브">
-        <div class="race-live">
-          <div class="live-time">{{ elapsedText }}</div>
-          <div class="live-distance">{{ distanceText }} km</div>
-          <div v-if="hasGhost" class="live-gap" :class="live.gap.value?.leadState ?? 'even'">{{ gapText(live.gap.value) }}</div>
-          <div class="live-meta">페이스 {{ paceText }} · 신호 {{ live.tick.value?.signalState ?? '-' }} · {{ live.tick.value?.source ?? '-' }}</div>
-        </div>
-        <p v-if="live.permission.value === 'whenInUse'" class="race-warn">위치를 "항상 허용"으로 바꿔야 화면을 잠가도 측정됩니다.</p>
-        <p v-if="live.error.value" class="race-warn">오류 {{ live.error.value.code }}: {{ live.error.value.message }}</p>
-      </SectionGroup>
-      <div class="race-actions">
-        <button v-if="live.state.value === 'paused'" class="race-btn secondary" type="button" @click="live.resume()">재개</button>
-        <button v-else class="race-btn secondary" type="button" @click="live.pause()">일시정지</button>
-        <button class="race-btn danger" type="button" @click="endRace">종료</button>
-      </div>
-    </template>
-
-    <!-- ③ 요약 -->
-    <template v-else>
-      <SectionGroup title="결과">
-        <div class="race-live">
-          <div class="summary-title">
-            <template v-if="summaryResult">{{ summaryResult.emoji }} {{ summaryResult.label }}</template>
-            <template v-else>레이싱 완료</template>
+      <!-- ③ 요약 -->
+      <template v-else>
+        <SectionGroup title="결과">
+          <div class="race-live">
+            <div class="summary-title">
+              <template v-if="summaryResult">{{ summaryResult.emoji }} {{ summaryResult.label }}</template>
+              <template v-else>레이싱 완료</template>
+            </div>
           </div>
-        </div>
-        <div class="summary-grid">
-          <div><span>거리</span><strong>{{ fmtKm(finalTick?.cumulativeDistanceM) }} km</strong></div>
-          <div><span>시간</span><strong>{{ fmtTime(finalTick?.elapsedSec) }}</strong></div>
-          <div v-if="finalGap"><span>고스트 시간차</span><strong>{{ gapText(finalGap) }}</strong></div>
-        </div>
-      </SectionGroup>
-      <button class="race-cta inline" type="button" @click="resetRace">새 레이싱</button>
-    </template>
+          <div class="summary-grid">
+            <div><span>거리</span><strong>{{ fmtKm(finalTick?.cumulativeDistanceM) }} km</strong></div>
+            <div><span>시간</span><strong>{{ fmtTime(finalTick?.elapsedSec) }}</strong></div>
+            <div v-if="finalGap"><span>고스트 시간차</span><strong>{{ gapText(finalGap) }}</strong></div>
+          </div>
+        </SectionGroup>
+      </template>
+    </main>
 
-    <!-- 설정 스택 상세 -->
+    <!-- 컨텍스트 푸터 (스택 3행 그리드의 footer 슬롯) -->
+    <footer v-if="showStartCta" class="stack-footer">
+      <button class="race-cta" type="button" @click="startRace">레이싱 시작</button>
+    </footer>
+    <footer v-else-if="step === 'live'" class="stack-footer race-live-footer">
+      <button v-if="live.state.value === 'paused'" class="race-btn secondary" type="button" @click="live.resume()">재개</button>
+      <button v-else class="race-btn secondary" type="button" @click="live.pause()">일시정지</button>
+      <button class="race-btn danger" type="button" @click="endRace">종료</button>
+    </footer>
+    <footer v-else-if="step === 'summary'" class="stack-footer">
+      <button class="race-cta" type="button" @click="resetRace">새 레이싱</button>
+    </footer>
+
+    <!-- 2차 스택: 레이싱 설정 -->
     <Teleport to="body">
       <Transition name="stack-page">
         <div v-if="settingsOpen" class="memory-stack-layer" data-no-swipe>
           <section class="memory-stack-page">
             <header class="memory-stack-header">
-              <div><h2>레이싱 설정</h2></div>
-              <button class="stack-icon-button" type="button" aria-label="닫기" @click="settingsOpen = false">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+              <button class="stack-icon-button" type="button" aria-label="뒤로" @click="settingsOpen = false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
               </button>
+              <div><h2>레이싱 설정</h2></div>
             </header>
             <main class="memory-stack-content">
               <SectionGroup title="거리 설정">
@@ -349,7 +354,6 @@ const summaryResult = computed(() => {
                   <input type="checkbox" v-model="reversalAlert" :disabled="!hasGhost" />
                 </label>
               </SectionGroup>
-
             </main>
             <footer class="stack-footer">
               <button class="race-cta" type="button" @click="saveSettings">설정 저장</button>
@@ -358,14 +362,10 @@ const summaryResult = computed(() => {
         </div>
       </Transition>
     </Teleport>
-  </PageLayout>
+  </section>
 </template>
 
 <style scoped>
-.race-head { padding: 4px 2px 2px; }
-.race-head h1 { font-size: 1.5rem; margin: 0; color: var(--color-text); }
-.race-head .sub { color: var(--color-muted); font-size: 0.86rem; margin: 4px 0 0; }
-
 .race-text { color: var(--color-text); margin: 0 0 6px; }
 .race-muted { font-size: 0.84rem; color: var(--color-muted); margin: 6px 0 0; line-height: 1.5; }
 .race-warn { font-size: 0.84rem; color: var(--color-warning-text); margin: 10px 0 0; }
@@ -374,20 +374,19 @@ const summaryResult = computed(() => {
 .race-modes { display: flex; gap: 2px; border-bottom: 1px solid var(--color-border); margin-bottom: 16px; }
 .race-modes button {
   flex: 1; padding: 14px 0 13px; border: none; background: transparent;
-  color: var(--color-muted); font-size: 1.08rem; font-weight: 700; cursor: pointer;
+  color: var(--color-muted); font-size: 1.04rem; font-weight: 700; cursor: pointer;
   position: relative; box-shadow: none; letter-spacing: -0.01em;
 }
 .race-modes button.active { color: var(--color-text); }
-.race-modes button.active::after {
-  content: ''; position: absolute; left: 14%; right: 14%; bottom: -1px; height: 3px;
-  background: var(--color-primary); border-radius: 3px 3px 0 0;
-}
+.race-modes button.active::after { content: ''; position: absolute; left: 14%; right: 14%; bottom: -1px; height: 3px; background: var(--color-primary); border-radius: 3px 3px 0 0; }
+
+/* 레이싱 설정 요약 행: 값 + 화살표, 클릭 시 설정 스택 */
+.race-setting-list { display: flex; flex-direction: column; }
+.race-setting-list .row-value { color: var(--color-muted); font-size: 0.92rem; max-width: 60vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.race-setting-list .row-chevron { width: 18px; height: 18px; color: var(--color-muted); flex: none; }
 
 .race-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.race-chips button {
-  padding: 9px 18px; border: 1px solid var(--color-border); border-radius: 999px;
-  background: transparent; color: var(--color-text); font-size: 0.92rem; cursor: pointer; box-shadow: none;
-}
+.race-chips button { padding: 9px 18px; border: 1px solid var(--color-border); border-radius: 999px; background: transparent; color: var(--color-text); font-size: 0.92rem; cursor: pointer; box-shadow: none; }
 .race-chips button.active { background: var(--color-primary); color: var(--color-on-primary); border-color: var(--color-primary); font-weight: 700; }
 
 .race-options { display: flex; flex-direction: column; gap: 10px; }
@@ -415,27 +414,12 @@ const summaryResult = computed(() => {
 .race-toggle.is-disabled { opacity: 0.55; }
 .race-toggle.is-disabled .toggle-label { color: var(--color-muted); }
 
-.race-cta { width: 100%; padding: 15px; border: none; border-radius: 14px; background: var(--color-primary); color: var(--color-on-primary); font-size: 1.02rem; font-weight: 700; cursor: pointer; box-shadow: none; }
+.race-cta { width: 100%; padding: 15px; border: none; border-radius: 14px; background: var(--color-primary-strong); color: var(--color-on-primary); font-size: 1.02rem; font-weight: 700; cursor: pointer; box-shadow: none; }
 .race-cta.inline { margin-top: 14px; }
-/* 설정 변경: 아이콘-온리 톱니바퀴 (SectionGroup actions 슬롯) */
-.race-gear {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 36px; height: 36px; padding: 0; border: none; border-radius: 10px;
-  background: transparent; color: var(--color-muted); cursor: pointer; box-shadow: none;
-}
-.race-gear:hover { color: var(--color-text); background: var(--color-subtle); }
-.race-gear svg { width: 20px; height: 20px; }
-/* 스택 상세 하단 고정 푸터(.memory-stack-page 3행 그리드의 footer 슬롯) */
-.stack-footer {
-  padding: 12px 16px calc(env(safe-area-inset-bottom) + 12px);
-  background: var(--color-header-bg);
-  backdrop-filter: blur(18px);
-  border-top: 1px solid var(--color-border);
-}
-.race-cta.fixed { position: fixed; left: 50%; transform: translateX(-50%); bottom: var(--bottom-nav-reserve); width: min(100% - 32px, 560px); z-index: 40; }
-.race-bottom-spacer { height: 74px; }
 
-.race-actions { display: flex; gap: 10px; margin-top: 4px; }
+/* 스택 하단 고정 푸터 (.memory-stack-page 3행 그리드 footer 슬롯) */
+.stack-footer { padding: 12px 16px calc(env(safe-area-inset-bottom) + 12px); background: var(--color-header-bg); backdrop-filter: blur(18px); border-top: 1px solid var(--color-border); }
+.race-live-footer { display: flex; gap: 10px; }
 .race-btn { flex: 1; padding: 14px; border: none; border-radius: 14px; font-size: 1rem; font-weight: 600; cursor: pointer; box-shadow: none; }
 .race-btn.secondary { background: var(--color-surface-2); color: var(--color-text); }
 .race-btn.danger { background: var(--tds-red-500); color: #fff; }
