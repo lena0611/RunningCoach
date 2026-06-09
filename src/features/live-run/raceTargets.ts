@@ -4,17 +4,19 @@ import { buildGhostCurve, type GhostCurvePoint } from '@/shared/lib/selfRace/gho
 
 /**
  * 가상레이싱 `나와의 대결` 거리·상대(고스트) 선택 (#232).
- * 거리 설정(거리별 PB 버킷) → 상대 설정(없음 / 해당 거리 레이싱 PB / 해당 거리 훈련 PB).
  *
- * NOTE(스펙 변경): 초기 §9.2는 "타겟=레이싱 세션만, 훈련 제외"였으나, 사용자 결정으로
- *   **훈련 PB도 상대 후보로 허용**한다(거리별). competition-domain §9.2 / decision-log 갱신 대상.
+ * 결정(2026-06-09, decision-log): 솔로는 **실력 측정 / 내 베스트 도전** 모드.
+ *   타겟 = '없음'(자유 타임트라이얼) 또는 **내 베스트**(거리별 PB) 뿐.
+ *   내 베스트 모수 = **훈련·레이싱 전체 통합** 최속 1개(컨텍스트 무관). 단 "출발선부터
+ *   누적거리 D 도달 최속"이라 5km 전용 TT가 아니라 "어느 런이든 첫 D km 최속"의 의미.
+ *   (업적 PB 사다리의 훈련/레이싱 분리와는 별개 — 여기선 타겟 모수로만 통합 사용.)
  */
 
 const STEP_M = 5000
 
 export type DistanceOption = { distanceM: number; label: string }
 
-export type OpponentKind = 'none' | 'race' | 'training'
+export type OpponentKind = 'none' | 'best'
 
 export type OpponentOption = {
   kind: OpponentKind
@@ -35,33 +37,32 @@ function paceOf(pb: DistancePb): number {
   return pb.elapsedSec / (pb.distanceM / 1000)
 }
 
-/** 훈련/레이싱 PB가 하나라도 있는 거리 버킷을 오름차순으로. */
+/** 베스트(훈련/레이싱 통합 최속)가 있는 거리 버킷을 오름차순으로. */
 export function listDistanceOptions(runs: RunLog[]): DistanceOption[] {
   const pbs = computeDistancePbs(runs, STEP_M)
   const distances = [...new Set(pbs.map((p) => p.distanceM))].sort((a, b) => a - b)
   return distances.map((d) => ({ distanceM: d, label: kmLabel(d) }))
 }
 
-/** 선택한 거리의 상대 후보: 없음 + 레이싱 PB + 훈련 PB(있는 것만). */
+/** 선택한 거리의 상대 후보: 없음 + 내 베스트(전체 통합 최속, 있으면). */
 export function listOpponents(runs: RunLog[], distanceM: number | null): OpponentOption[] {
   const none: OpponentOption = { kind: 'none', runId: null, distanceM, elapsedSec: null, avgPaceSec: null, date: null }
   if (distanceM == null) return [none]
   const pbs = computeDistancePbs(runs, STEP_M).filter((p) => p.distanceM === distanceM)
-  const opts: OpponentOption[] = [none]
-  for (const ctx of ['race', 'training'] as const) {
-    const pb = pbs.find((p) => p.context === ctx)
-    if (pb) {
-      opts.push({
-        kind: ctx,
-        runId: pb.runId,
-        distanceM: pb.distanceM,
-        elapsedSec: pb.elapsedSec,
-        avgPaceSec: paceOf(pb),
-        date: pb.achievedAt.slice(0, 10)
-      })
+  if (!pbs.length) return [none]
+  // 훈련/레이싱 구분 없이 그 거리 최속 1개 = 내 베스트.
+  const best = pbs.reduce((a, b) => (b.elapsedSec < a.elapsedSec ? b : a))
+  return [
+    none,
+    {
+      kind: 'best',
+      runId: best.runId,
+      distanceM: best.distanceM,
+      elapsedSec: best.elapsedSec,
+      avgPaceSec: paceOf(best),
+      date: best.achievedAt.slice(0, 10)
     }
-  }
-  return opts
+  ]
 }
 
 /** 선택한 상대(runId)의 고스트 곡선 포인트. 못 찾으면 null. */
