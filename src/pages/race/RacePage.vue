@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { useRunStore } from '@/app/stores/runStore'
 import { useLiveRun } from '@/features/live-run/useLiveRun'
 import { ghostCurveForRun, listDistanceOptions, listOpponents, type OpponentOption } from '@/features/live-run/raceTargets'
+import { distanceAtTime, type GhostCurvePoint } from '@/shared/lib/selfRace/ghost'
 import type { AnnounceConfig, PeriodicAnnounceKind } from '@/features/live-run/liveRunBridge'
 import type { LiveGapPayload, LiveTickPayload } from '@/features/live-run/liveRunBridge'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
@@ -55,6 +56,10 @@ const reversalAlert = ref(true)
 
 const finalTick = ref<LiveTickPayload | null>(null)
 const finalGap = ref<LiveGapPayload | null>(null)
+
+// 라이브 진행 막대용 — 시작 시점 목표거리·고스트 곡선 캡처
+const activeTargetM = ref(0)
+const activeGhostCurve = ref<GhostCurvePoint[] | null>(null)
 
 onMounted(() => {
   if (!runStore.loaded) void runStore.load()
@@ -171,6 +176,8 @@ function startTracking() {
   const ghostCurve = selectedOpponentRunId.value
     ? ghostCurveForRun(runStore.selectedUserRuns, selectedOpponentRunId.value) ?? undefined
     : undefined
+  activeTargetM.value = selectedDistanceM.value ?? 0
+  activeGhostCurve.value = ghostCurve ?? null
   if (live.available) {
     live.start({
       sessionId: `live-${Date.now()}`,
@@ -237,6 +244,20 @@ function gapText(gap: LiveGapPayload | null): string {
 const elapsedText = computed(() => fmtTime(live.tick.value?.elapsedSec))
 const distanceText = computed(() => fmtKm(live.tick.value?.cumulativeDistanceM))
 const paceText = computed(() => fmtPace(live.tick.value?.instantPaceSec))
+
+// 실시간 진행 막대(0~목표거리). 내 위치 + 고스트 위치.
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, v))
+}
+const myProgress = computed(() => (activeTargetM.value > 0 ? clamp01((live.tick.value?.cumulativeDistanceM ?? 0) / activeTargetM.value) : 0))
+const ghostProgress = computed(() => {
+  if (!activeGhostCurve.value || activeTargetM.value <= 0) return null
+  const gd = distanceAtTime({ source: 'even', points: activeGhostCurve.value }, live.tick.value?.elapsedSec ?? 0)
+  return clamp01(gd / activeTargetM.value)
+})
+const myPct = computed(() => `${(myProgress.value * 100).toFixed(1)}%`)
+const ghostPct = computed(() => (ghostProgress.value == null ? null : `${(ghostProgress.value * 100).toFixed(1)}%`))
+const targetKmLabel = computed(() => `${(activeTargetM.value / 1000).toFixed(activeTargetM.value % 1000 === 0 ? 0 : 1)}km`)
 const summaryResult = computed(() => {
   if (!finalGap.value) return null
   if (finalGap.value.leadState === 'ahead') return { emoji: '🎉', label: '고스트 제침' }
@@ -305,6 +326,14 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
             <template v-if="started">
               <div class="live-time">{{ elapsedText }}</div>
               <div class="live-distance">{{ distanceText }} km</div>
+              <div v-if="activeTargetM > 0" class="race-track">
+                <div class="track-rail">
+                  <div class="track-fill" :style="{ width: myPct }" />
+                  <div v-if="ghostPct" class="track-marker ghost" :style="{ left: ghostPct }" aria-label="고스트" />
+                  <div class="track-marker me" :style="{ left: myPct }" aria-label="나" />
+                </div>
+                <div class="track-labels"><span>출발</span><span>{{ targetKmLabel }}</span></div>
+              </div>
               <div v-if="hasGhost" class="live-gap" :class="live.gap.value?.leadState ?? 'even'">{{ gapText(live.gap.value) }}</div>
               <div class="live-meta">페이스 {{ paceText }} · 신호 {{ live.tick.value?.signalState ?? '-' }} · {{ live.tick.value?.source ?? '-' }}</div>
             </template>
@@ -497,6 +526,15 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
 .live-gap.behind { color: var(--color-warning-text); }
 .live-gap.even { color: var(--color-muted); }
 .live-meta { font-size: 0.85rem; color: var(--color-muted); margin-top: 4px; }
+
+/* 실시간 진행 막대 (목표 거리 대비 내 위치 + 고스트) */
+.race-track { margin: 16px 0 8px; }
+.track-rail { position: relative; height: 12px; border-radius: 999px; background: var(--color-surface-2); }
+.track-fill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 999px; background: var(--color-primary-strong); transition: width 0.4s ease; }
+.track-marker { position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%; transform: translate(-50%, -50%); transition: left 0.4s ease; border: 2px solid var(--color-bg); }
+.track-marker.me { background: var(--color-primary); z-index: 2; }
+.track-marker.ghost { background: var(--color-muted); z-index: 1; }
+.track-labels { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--color-muted); margin-top: 7px; }
 
 .race-ready { font-size: 1.4rem; font-weight: 700; color: var(--color-text); margin: 8px 0 6px; }
 .race-ready-sub { font-size: 0.9rem; color: var(--color-muted); line-height: 1.55; }
