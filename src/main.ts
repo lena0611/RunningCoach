@@ -6,6 +6,7 @@ import { useAuthStore } from '@/app/stores/authStore'
 import { useSettingsStore } from '@/app/stores/settingsStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { useLevelStore } from '@/app/stores/levelStore'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { canUseAppFeatures } from '@/shared/lib/runtime'
 import { syncNativeNotifications } from '@/features/sync-native-notifications/notificationBridge'
@@ -54,6 +55,7 @@ await router.isReady()
 app.mount('#app')
 
 if (!isSupabaseConfigured || authStore.isAuthenticated) {
+  void useLevelStore().load()
   Promise.all([useMemoryStore().load(), useRunStore().load()]).catch(() => {
     // 화면 mount를 막지 않는다. 각 store가 자체 error 상태를 표시한다.
   }).finally(() => {

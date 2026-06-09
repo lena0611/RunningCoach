@@ -206,4 +206,17 @@ describe('resolveRunnerProgress', () => {
     expect(p.runnerLevel).toBe('advanced')
     expect(p.runnerLevelSource).toBe('derived')
   })
+
+  it('uses self-reported placement for a provisional class when no run verifies it', () => {
+    const p = resolveRunnerProgress(profile(), [], today, { maxDistanceM: 42195 })
+    expect(p.distanceClass.key).toBe('full')
+    expect(p.provisional).toBe(true)
+    expect(p.nextClass).toBeNull()
+  })
+
+  it('is not provisional when an actual run already reaches the self-reported class', () => {
+    const p = resolveRunnerProgress(profile(), [run(daysAgo(5), 10)], today, { maxDistanceM: 10000 })
+    expect(p.distanceClass.key).toBe('10k')
+    expect(p.provisional).toBe(false)
+  })
 })
