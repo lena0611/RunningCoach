@@ -102,7 +102,8 @@ final class LiveRunPoCModel: NSObject, ObservableObject {
     private func configureAudioSession() {
         #if os(iOS)
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.duckOthers, .mixWithOthers])
+            // .voicePrompt = 내비 안내 음성 모드: 다른 오디오를 더 강하게 ducking하고 음성을 또렷하게.
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .voicePrompt, options: [.duckOthers])
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             status = "오디오 세션 실패: \(error.localizedDescription)"
@@ -113,6 +114,7 @@ final class LiveRunPoCModel: NSObject, ObservableObject {
     private func speak(_ text: String) {
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: "ko-KR")
+        utterance.volume = 1.0
         synth.speak(utterance)
         speechCount += 1
         lastSpeechAt = Self.hhmmss(Date())
