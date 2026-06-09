@@ -59,7 +59,7 @@ final class LiveRunDebugModel: ObservableObject {
     func startNoGhost() {
         gap = "고스트 없음 (측정만)"
         tracker.start(LiveRunStartParams(
-            sessionId: "debug-noghost", mode: "solo", curve: nil, config: config, tickIntervalMs: 1000
+            sessionId: "debug-noghost", mode: "solo", curve: nil, config: config, targetDistanceM: 0, tickIntervalMs: 1000
         ))
     }
 
@@ -74,7 +74,7 @@ final class LiveRunDebugModel: ObservableObject {
         ])
         gap = "고스트 5:00/km 대결"
         tracker.start(LiveRunStartParams(
-            sessionId: "debug-ghost", mode: "solo", curve: curve, config: config, tickIntervalMs: 1000
+            sessionId: "debug-ghost", mode: "solo", curve: curve, config: config, targetDistanceM: 5000, tickIntervalMs: 1000
         ))
     }
 
