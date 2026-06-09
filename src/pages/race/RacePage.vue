@@ -233,9 +233,16 @@ function fmtPace(secPerKm: number | null | undefined): string {
   const s = Math.round(secPerKm)
   return `${Math.floor(s / 60)}'${String(s % 60).padStart(2, '0')}"/km`
 }
+function formatGapMinSec(seconds: number): string {
+  const s = Math.round(Math.abs(seconds))
+  if (s < 60) return `${s}초`
+  const m = Math.floor(s / 60)
+  const rest = s % 60
+  return rest ? `${m}분 ${rest}초` : `${m}분`
+}
 function gapText(gap: LiveGapPayload | null): string {
   if (!gap) return '고스트 없음'
-  const amount = `${Math.abs(Math.round(gap.timeGapSec))}초`
+  const amount = formatGapMinSec(gap.timeGapSec)
   if (gap.leadState === 'ahead') return `고스트보다 ${amount} 앞`
   if (gap.leadState === 'behind') return `고스트보다 ${amount} 뒤`
   return '고스트와 나란히'
@@ -325,7 +332,6 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
           <div class="race-live">
             <template v-if="started">
               <div class="live-time">{{ elapsedText }}</div>
-              <div class="live-distance">{{ distanceText }} km</div>
               <div v-if="activeTargetM > 0" class="race-track">
                 <div class="track-rail">
                   <div class="track-fill" :style="{ width: myPct }" />
@@ -335,7 +341,11 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
                 <div class="track-labels"><span>출발</span><span>{{ targetKmLabel }}</span></div>
               </div>
               <div v-if="hasGhost" class="live-gap" :class="live.gap.value?.leadState ?? 'even'">{{ gapText(live.gap.value) }}</div>
-              <div class="live-meta">페이스 {{ paceText }} · 신호 {{ live.tick.value?.signalState ?? '-' }} · {{ live.tick.value?.source ?? '-' }}</div>
+              <div class="live-stats">
+                <div class="live-stat"><strong>{{ distanceText }}</strong><span>km</span></div>
+                <div class="live-stat"><strong>{{ paceText }}</strong><span>페이스</span></div>
+              </div>
+              <div class="live-meta">신호 {{ live.tick.value?.signalState ?? '-' }} · {{ live.tick.value?.source ?? '-' }}</div>
             </template>
             <template v-else>
               <p class="race-ready">출발 준비 완료</p>
@@ -519,9 +529,12 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
 .race-btn.danger { background: var(--tds-red-500); color: #fff; }
 
 .race-live { text-align: center; padding: 6px 0; }
-.live-time { font-size: 2.8rem; font-weight: 700; color: var(--color-text); font-variant-numeric: tabular-nums; line-height: 1.1; }
-.live-distance { font-size: 1.15rem; color: var(--color-muted); margin-top: 2px; }
-.live-gap { font-size: 1.35rem; font-weight: 700; margin: 10px 0; }
+.live-time { font-size: 3.4rem; font-weight: 800; color: var(--color-strong); font-variant-numeric: tabular-nums; line-height: 1.05; letter-spacing: -0.02em; }
+.live-stats { display: flex; justify-content: center; gap: 14px; margin-top: 12px; }
+.live-stat { flex: 1; max-width: 180px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 6px; border-radius: 12px; background: var(--color-surface-2); }
+.live-stat strong { font-size: 1.8rem; font-weight: 800; color: var(--color-strong); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.live-stat span { font-size: 0.75rem; color: var(--color-muted); }
+.live-gap { font-size: 1.45rem; font-weight: 700; margin: 12px 0; }
 .live-gap.ahead { color: var(--color-primary); }
 .live-gap.behind { color: var(--color-warning-text); }
 .live-gap.even { color: var(--color-muted); }
