@@ -271,6 +271,15 @@ function formatDateOnly(value: Date) {
       <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
     </button>
 
+    <button class="stat-card stat-card-interactive" type="button" @click="router.push('/race')">
+      <span class="stat-card-label">레이싱하기</span>
+      <div class="stat-card-data">
+        <strong class="stat-card-value stat-card-text-value">나와의 대결</strong>
+        <small>고스트와 달리거나 자유 레이싱으로 기록 도전</small>
+      </div>
+      <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+    </button>
+
     <SectionGroup v-if="runStore.loading || runStore.error" title="데이터 상태">
       <template #actions>
         <button class="ghost" type="button" :disabled="runStore.loading" @click="runStore.load">
