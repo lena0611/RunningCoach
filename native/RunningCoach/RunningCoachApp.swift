@@ -20,7 +20,8 @@ struct RunningCoachApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            // #229 본구현 검증 중 임시 진입점. 검증이 끝나면 ContentView() 로 복원한다(이 브랜치 전용).
+            LiveRunDebugView()
         }
     }
 }
