@@ -28,6 +28,8 @@
 - `.harness/project/standards-layers.md`
 - `.harness/project/domain-rules.md`
 - `.harness/project/architecture-rules.md`
+- `.harness/project/ui-guidelines.md` (UI/화면/컴포넌트/스타일/레이아웃 작업 시 **구현 전 필수 선행**)
+- `.harness/project/ui-system-contract.md` (UI 토큰·공유 컴포넌트 1차 강제 계약 — UI 작업 시 먼저 읽는다)
 - `.harness/project/workflow-rules.md`
 - `.harness/project/commit-push-rules.md`
 - `.harness/project/stack-preset-rules.md`
