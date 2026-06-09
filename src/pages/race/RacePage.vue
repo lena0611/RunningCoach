@@ -205,7 +205,7 @@ onUnmounted(() => clearCountdown())
 function opponentLabel(o: OpponentOption): string {
   if (o.kind === 'none') return '없음 — 자유 레이싱'
   const km = o.distanceM ? o.distanceM / 1000 : 0
-  return `${km}km ${o.kind === 'race' ? '레이싱' : '훈련'} PB · ${fmtTime(o.elapsedSec)}`
+  return `내 ${km}km 베스트 · ${fmtTime(o.elapsedSec)}`
 }
 
 function fmtTime(sec: number | null | undefined): string {
