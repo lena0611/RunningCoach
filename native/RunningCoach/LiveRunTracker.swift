@@ -317,6 +317,10 @@ extension LiveRunTracker: CLLocationManagerDelegate {
         let now = Date()
 
         for loc in locations {
+            // 앱 시작 직후 CLLocationManager가 흔히 던지는 캐시된 오래된 fix는 무시한다
+            // (거리 점프·잘못된 pedometer 전환의 원인).
+            if abs(loc.timestamp.timeIntervalSinceNow) > 10 { continue }
+
             // 신호 상태
             let signal: LiveSignalState
             if loc.horizontalAccuracy < 0 {
@@ -346,7 +350,7 @@ extension LiveRunTracker: CLLocationManagerDelegate {
             }
 
             if signal != .lost {
-                lastGoodFixAt = loc.timestamp
+                lastGoodFixAt = now   // 폴백 staleness는 벽시계 기준(캐시 timestamp 아님)
                 lastLocation = loc
             }
 
@@ -365,6 +369,10 @@ extension LiveRunTracker: CLLocationManagerDelegate {
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        onError?("location", error.localizedDescription)
+        // kCLErrorLocationUnknown(0)은 일시적(측위 시도 중, 실내 흔함) — 무시하고 계속 시도.
+        let clError = error as? CLError
+        if clError?.code == .locationUnknown { return }
+        let code = clError.map { "\($0.code.rawValue)" } ?? "?"
+        onError?("location(\(code))", error.localizedDescription)
     }
 }

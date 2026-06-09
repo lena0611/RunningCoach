@@ -34,6 +34,7 @@ final class LiveRunDebugModel: ObservableObject {
                 self?.instantPace = pace.map { String(format: "%.0f초/km", $0) } ?? "-"
                 self?.signal = signal.rawValue
                 self?.source = source.rawValue
+                self?.lastError = ""   // 틱이 들어오면(=파이프라인 동작) 직전 일시 오류 표시 제거
             }
         }
         tracker.onGap = { [weak self] timeGap, lead in
