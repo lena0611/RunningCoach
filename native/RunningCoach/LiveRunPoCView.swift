@@ -30,6 +30,7 @@ final class LiveRunPoCModel: NSObject, ObservableObject {
     @Published var lastSpeechAt = "-"
     @Published var authStatus = "미요청"
     @Published var recoveredNote = ""
+    @Published var bgModes = "확인 전"
 
     private let manager = CLLocationManager()
     private let synth = AVSpeechSynthesizer()
@@ -47,13 +48,24 @@ final class LiveRunPoCModel: NSObject, ObservableObject {
         if let saved = UserDefaults.standard.object(forKey: "poc_startDate") as? Date {
             recoveredNote = "이전 세션 시작 \(Self.hhmmss(saved)) — 강제종료 복원 가능"
         }
+        let modes = (Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String]) ?? []
+        bgModes = modes.isEmpty ? "없음 ⚠️ (백그라운드 불가)" : modes.joined(separator: ", ")
+    }
+
+    private func backgroundLocationAllowed() -> Bool {
+        let modes = (Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String]) ?? []
+        return modes.contains("location")
     }
 
     func start() {
         configureAudioSession()
         manager.requestAlwaysAuthorization()
         #if os(iOS)
-        manager.allowsBackgroundLocationUpdates = true
+        // ⚠️ allowsBackgroundLocationUpdates=true 는 UIBackgroundModes 에 "location" 이 없으면
+        // 하드 크래시한다. 모드가 없으면(=Info.plist 설정 미반영) 포그라운드 측정만 하고 크래시는 피한다.
+        if backgroundLocationAllowed() {
+            manager.allowsBackgroundLocationUpdates = true
+        }
         manager.pausesLocationUpdatesAutomatically = false
         #endif
         manager.startUpdatingLocation()
@@ -67,7 +79,9 @@ final class LiveRunPoCModel: NSObject, ObservableObject {
         speechCount = 0
         lastSpeechElapsed = 0
         recoveredNote = ""
-        status = "측정 중 — 화면 잠그고 백그라운드 테스트"
+        status = backgroundLocationAllowed()
+            ? "측정 중 — 화면 잠그고 백그라운드 테스트"
+            : "측정 중(포그라운드만) — UIBackgroundModes에 location 없음"
         speak("측정을 시작합니다.")
     }
 
@@ -172,6 +186,7 @@ struct LiveRunPoCView: View {
             }
 
             Divider()
+            row("백그라운드 모드", model.bgModes)
             row("위치 권한", model.authStatus)
             row("경과", "\(model.elapsedSec / 60):" + String(format: "%02d", model.elapsedSec % 60))
             row("누적 거리", String(format: "%.0f m", model.cumulativeDistanceM))
