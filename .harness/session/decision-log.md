@@ -4,6 +4,16 @@
 
 > 하네스 본체의 변경 이력이나 릴리스 노트가 아닙니다. 하네스 본체 변경 기록은 하네스 저장소의 `CHANGELOG.md` 또는 릴리스 태그를 확인합니다.
 
+## 2026-06-09 - #229 PoC① GO + iOS 서명/백그라운드 셋업 (가상레이싱 본구현 착수 가능)
+- PoC① 결과(실기기 iPhone17,3, iOS 26.4.2): 백그라운드(화면잠금) 위치추적(틱·거리·경과 계속 증가)·1분 주기 음성·음악 ducking 동작, 배터리 99→97%/~17분 ≈ **~7%/h** → **GO**. Watch(#235) 우선순위 재검토 불요.
+- force-quit(앱스위처 강제종료) 자동복원은 **iOS 설계상 일반 위치업데이트로 불가**(앱 재실행 안 됨). **결정(2026-06-09): force-quit 시 세션 종료** — 자동복원 미구현(SLC/region monitoring 복잡도·배터리 부담 회피). 사용자가 다시 시작하면 새 세션으로 시작한다. (Strava/나이키런도 force-quit 미복원과 동일 정책.)
+- **PoC 코드 위치(중요)**: 전부 브랜치 `issue-229/live-run-poc`(origin 푸시됨, PR #265, **미머지**). main엔 없음. 재개 = `git checkout issue-229/live-run-poc`.
+  - 포함: `native/RunningCoach/LiveRunPoCView.swift`(측정 하니스), `Info.plist`(UIBackgroundModes=location,audio — Xcode Background Modes capability로 생성), `DEVELOPMENT_TEAM=3GCS2R55TJ`(lena0611) 통일, `.voicePrompt`+volume 1.0 음성, allowsBackgroundLocationUpdates 크래시 가드.
+  - ⚠️ **진입점 swap 주의**: 그 브랜치 `RunningCoachApp.swift`가 `ContentView()`→`LiveRunPoCView()`로 임시 변경됨. **main 머지 전·실앱 사용 전 반드시 `ContentView()`로 되돌릴 것.**
+- **iOS 서명 교훈(재발 방지)**: 폰 iCloud=lenas0611 / 개발자계정=lena0611. 모노레포 `native/` pbxproj가 lenas0611 팀(NMQC64885X)으로 박혀 있어, 빌드 서명 신원이 폰의 lena0611 설치와 달라지면 "미신뢰·새 설치(데이터 초기화)"로 떨어진다. → `DEVELOPMENT_TEAM`은 lena0611(`3GCS2R55TJ`)로 유지. **main pbxproj는 아직 lenas0611이므로 본구현 브랜치에서 lena0611 확인 필수.** 또 `INFOPLIST_KEY_UIBackgroundModes`는 이 Xcode(26.5)에서 안 먹음 → **GUI Capability(Background Modes)로 물리 Info.plist 생성이 정답**. Xcode 열린 채 외부에서 pbxproj 수정하면 안 먹을 수 있음(Xcode 내부 편집 우선).
+- 다음(본구현, 네이티브·실기기 빌드 핑퐁 각오): #229 `LiveRunTracker.swift`·`GhostRaceEngine.swift`(#230 `ghost.ts` 포팅)·`runContextLiveRun` 브리지(웹 `liveRunBridge.ts` + 네이티브 핸들러, 원자적), #231 `SpeechManager.swift`(`speechQueue.ts` 포팅)·PoC③ 음질, #232 레이싱 UI(와이어프레임 합의됨, 요약탭 진입).
+- → 권위: 이슈 #229(PoC① 결과 코멘트), #230/#231 순수로직(머지됨), #232 와이어프레임 합의 코멘트.
+
 ## 2026-06-08 - 개인 업적 도메인(#181): 파생 계산 + 코칭 인용은 client-summary 주입
 - 설계 게이트: #181은 Inbox·초안("설계 확정 후 착수")이라 구현 전 4개 결정을 사용자 확인. 결과(모두 추천 채택): (1) 범위=PB·기록류 우선(최장 거리/시간·최속 평균 페이스·거리 마일스톤 첫 달성, 누적류 스트릭/볼륨은 후속), (2) coach-run 인용 포함, (3) 표시 UI는 후속(와이어프레임 게이트), (4) 저장=파생 계산(테이블 없음).
 - 저장 결정: 업적은 전부 `run_logs` 파생·stateless 재산출(`src/shared/lib/achievement/achievements.ts`). 별도 테이블/트리거 없음 → 새 기록 import 시 재호출만으로 자동 갱신. distancePb(#228)와 동일 패턴, 이중 출처·동기화 복잡도 회피.
