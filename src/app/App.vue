@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/app/stores/authStore'
+import { useLevelStore } from '@/app/stores/levelStore'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
@@ -17,6 +18,8 @@ import AppShell from '@/shared/ui/AppShell.vue'
 import InjuryCheckInSheet from '@/shared/ui/InjuryCheckInSheet.vue'
 import InjuryScreeningSheet from '@/shared/ui/InjuryScreeningSheet.vue'
 import ToastHost from '@/shared/ui/ToastHost.vue'
+import OnboardingFlow from '@/pages/onboarding/OnboardingFlow.vue'
+import { isSupabaseConfigured } from '@/shared/api/supabase'
 import type { BottomNavItem } from '@/shared/ui/BottomNav.vue'
 
 const authStore = useAuthStore()
@@ -24,6 +27,15 @@ const healthKitSyncStore = useHealthKitSyncStore()
 const memoryStore = useMemoryStore()
 const runStore = useRunStore()
 const weatherStore = useWeatherStore()
+const levelStore = useLevelStore()
+const showOnboarding = computed(() => authStore.isAuthenticated && isSupabaseConfigured && levelStore.needsOnboarding)
+watch(
+  () => authStore.isAuthenticated,
+  (auth) => {
+    if (auth && isSupabaseConfigured && !levelStore.loaded && !levelStore.loading) void levelStore.load()
+  },
+  { immediate: true }
+)
 const router = useRouter()
 const navItems: BottomNavItem[] = [
   { to: '/', label: '요약', shortLabel: '요약', icon: 'home' },
@@ -726,6 +738,7 @@ function animateTabRelease(targetOffset: number, targetRoute: string | null) {
 <template>
   <AppShell :nav-items="navItems" :is-authenticated="authStore.isAuthenticated" @sign-out="authStore.signOut()">
     <ToastHost />
+    <OnboardingFlow v-if="showOnboarding" />
     <InjuryCheckInSheet
       :open="Boolean(injuryCheckInItem)"
       :item="injuryCheckInItem"
