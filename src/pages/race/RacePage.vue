@@ -264,6 +264,27 @@ const ghostProgress = computed(() => {
 })
 const myPct = computed(() => `${(myProgress.value * 100).toFixed(1)}%`)
 const ghostPct = computed(() => (ghostProgress.value == null ? null : `${(ghostProgress.value * 100).toFixed(1)}%`))
+
+// 실시간 타겟과의 갭을 거리(m)로 표현: 내 누적거리 − 같은 시각 고스트 거리. 양수=내가 앞.
+const distanceGapM = computed(() => {
+  if (!activeGhostCurve.value) return null
+  const ghostDist = distanceAtTime({ source: 'even', points: activeGhostCurve.value }, live.tick.value?.elapsedSec ?? 0)
+  return (live.tick.value?.cumulativeDistanceM ?? 0) - ghostDist
+})
+const liveLead = computed<'ahead' | 'behind' | 'even'>(() => {
+  const g = distanceGapM.value
+  if (g == null || Math.abs(g) <= 5) return 'even'
+  return g > 0 ? 'ahead' : 'behind'
+})
+const liveGapText = computed(() => {
+  const g = distanceGapM.value
+  if (g == null) return '고스트 없음'
+  const a = Math.abs(g)
+  const amount = a >= 1000 ? `${(a / 1000).toFixed(2)}km` : `${Math.round(a)}m`
+  if (g > 5) return `고스트보다 ${amount} 앞`
+  if (g < -5) return `고스트보다 ${amount} 뒤`
+  return '고스트와 나란히'
+})
 const targetKmLabel = computed(() => `${(activeTargetM.value / 1000).toFixed(activeTargetM.value % 1000 === 0 ? 0 : 1)}km`)
 const summaryResult = computed(() => {
   if (!finalGap.value) return null
@@ -333,13 +354,23 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
             <template v-if="started">
               <div class="live-time">{{ elapsedText }}</div>
               <div v-if="activeTargetM > 0" class="race-track">
-                <div class="track-rail">
-                  <div class="track-fill" :style="{ width: myPct }" />
-                  <div v-if="ghostPct" class="track-marker ghost" :style="{ left: ghostPct }" aria-label="고스트" />
+                <div class="track-lane">
+                  <span class="lane-label">나</span>
+                  <div class="track-rail">
+                    <div class="track-fill me" :style="{ width: myPct }" />
+                    <div class="track-dot me" :style="{ left: myPct }" />
+                  </div>
+                </div>
+                <div v-if="ghostPct" class="track-lane">
+                  <span class="lane-label">고스트</span>
+                  <div class="track-rail">
+                    <div class="track-fill ghost" :style="{ width: ghostPct }" />
+                    <div class="track-dot ghost" :style="{ left: ghostPct }" />
+                  </div>
                 </div>
                 <div class="track-labels"><span>출발</span><span>{{ targetKmLabel }}</span></div>
               </div>
-              <div v-if="hasGhost" class="live-gap" :class="live.gap.value?.leadState ?? 'even'">{{ gapText(live.gap.value) }}</div>
+              <div v-if="hasGhost" class="live-gap" :class="liveLead">{{ liveGapText }}</div>
               <div class="live-stats">
                 <div class="live-stat"><strong>{{ distanceText }}</strong><span>km</span></div>
                 <div class="live-stat"><strong>{{ paceText }}</strong><span>페이스</span></div>
@@ -541,13 +572,18 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
 .live-meta { font-size: 0.85rem; color: var(--color-muted); margin-top: 4px; }
 
 /* 실시간 진행 막대 (목표 거리 대비 내 위치 + 고스트) */
-.race-track { margin: 16px 0 8px; }
-.track-rail { position: relative; height: 12px; border-radius: 999px; background: var(--color-surface-2); }
-.track-fill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 999px; background: var(--color-primary-strong); transition: width 0.4s ease; }
-.track-marker { position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%; transform: translate(-50%, -50%); transition: left 0.4s ease; border: 2px solid var(--color-bg); }
-.track-marker.me { background: var(--color-primary); z-index: 2; }
-.track-marker.ghost { background: var(--color-muted); z-index: 1; }
-.track-labels { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--color-muted); margin-top: 7px; }
+/* 참가자별 레인(나/타겟) + 각자 진행 점 — 멀티(크루) 확장 구조 */
+.race-track { margin: 16px 0 8px; display: flex; flex-direction: column; gap: 10px; }
+.track-lane { display: flex; align-items: center; gap: 8px; }
+.lane-label { width: 38px; flex: none; font-size: 0.78rem; color: var(--color-muted); text-align: right; }
+.track-rail { position: relative; flex: 1; height: 10px; border-radius: 999px; background: var(--color-surface-2); }
+.track-fill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 999px; transition: width 0.4s ease; }
+.track-fill.me { background: var(--color-primary-strong); }
+.track-fill.ghost { background: color-mix(in srgb, var(--color-muted) 50%, transparent); }
+.track-dot { position: absolute; top: 50%; width: 13px; height: 13px; border-radius: 50%; transform: translate(-50%, -50%); transition: left 0.4s ease; border: 2px solid var(--color-bg); }
+.track-dot.me { background: var(--color-primary); }
+.track-dot.ghost { background: var(--color-muted); }
+.track-labels { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--color-muted); margin-top: 2px; padding-left: 46px; }
 
 .race-ready { font-size: 1.4rem; font-weight: 700; color: var(--color-text); margin: 8px 0 6px; }
 .race-ready-sub { font-size: 0.9rem; color: var(--color-muted); line-height: 1.55; }
