@@ -246,6 +246,8 @@ final class GhostRaceEngine {
     private var prevGap: GapState?
     private var lastPeriodicStep = 0    // 0 = 아직 첫 step 미통과
     private var finished = false
+    /// 시작 직후 grace(초): 이 시간 전엔 역전 안내를 억제한다(시작 멘트와 겹침·즉시 "추월당함" 방지).
+    private let reversalGraceSec: Double = 8
 
     init(curve: GhostCurve?, config: AnnounceConfig) {
         self.curve = curve
@@ -262,8 +264,9 @@ final class GhostRaceEngine {
         var gap: GapState?
         if let curve {
             let g = GhostMath.computeGap(curve, tick)
-            // 역전 발화 (gap 비교가 있을 때만)
-            if config.reversalAlert, let rev = GhostMath.detectReversal(prev: prevGap, next: g) {
+            // 역전 발화 (gap 비교가 있을 때만). 시작 직후 grace 동안엔 억제(시작 멘트와 겹침 방지).
+            if config.reversalAlert, tick.elapsedSec >= reversalGraceSec,
+               let rev = GhostMath.detectReversal(prev: prevGap, next: g) {
                 out.append(GhostMath.formatAnnouncement(.reversal, gap: g, distanceM: tick.cumulativeDistanceM, reversal: rev))
             }
             prevGap = g

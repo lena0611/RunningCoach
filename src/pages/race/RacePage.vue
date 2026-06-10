@@ -148,15 +148,33 @@ function saveSettings() {
 }
 
 // '레이싱 입장' — 라이브 화면으로 이동하되 아직 트래킹은 시작하지 않는다(대기 상태).
+// '레이싱 입장' — GPS를 켜고(준비) 신호 확보를 기다린다. 클럭/측정은 시작(begin) 때.
 function enterRace() {
+  const ghostCurve = selectedOpponentRunId.value
+    ? ghostCurveForRun(runStore.selectedUserRuns, selectedOpponentRunId.value) ?? undefined
+    : undefined
+  activeTargetM.value = selectedDistanceM.value ?? 0
+  activeGhostCurve.value = ghostCurve ?? null
   started.value = false
   countdown.value = null
+  if (live.available) {
+    live.start({
+      sessionId: `live-${Date.now()}`,
+      mode: 'solo',
+      ghostCurve,
+      announceConfig: buildAnnounceConfig(),
+      targetDistanceM: selectedDistanceM.value // 거리 도달 시 네이티브 자동 완주
+    })
+  }
   step.value = 'live'
 }
 
-// 명시적 '시작' → 3·2·1 카운트다운 후 실제 트래킹 시작.
+// GPS 확보 후 사용 가능. ['ok','weak'] 신호 틱이 오면 준비 완료. 브리지 없으면(미리보기) 허용.
+const gpsReady = computed(() => !live.available || ['ok', 'weak'].includes(live.tick.value?.signalState ?? ''))
+
+// 명시적 '시작' → 3·2·1 카운트다운 후 실제 측정 시작(begin).
 function beginCountdown() {
-  if (countdown.value !== null || started.value) return
+  if (countdown.value !== null || started.value || !gpsReady.value) return
   countdown.value = 3
   const tick = () => {
     if (countdown.value === null) return
@@ -173,20 +191,7 @@ function beginCountdown() {
 
 function startTracking() {
   started.value = true
-  const ghostCurve = selectedOpponentRunId.value
-    ? ghostCurveForRun(runStore.selectedUserRuns, selectedOpponentRunId.value) ?? undefined
-    : undefined
-  activeTargetM.value = selectedDistanceM.value ?? 0
-  activeGhostCurve.value = ghostCurve ?? null
-  if (live.available) {
-    live.start({
-      sessionId: `live-${Date.now()}`,
-      mode: 'solo',
-      ghostCurve,
-      announceConfig: buildAnnounceConfig(),
-      targetDistanceM: selectedDistanceM.value // 거리 도달 시 네이티브 자동 완주
-    })
-  }
+  if (live.available) live.begin() // 준비된 GPS 세션에서 클럭·측정 시작
 }
 
 function clearCountdown() {
@@ -213,7 +218,10 @@ function resetRace() {
   step.value = 'setup'
 }
 
-onUnmounted(() => clearCountdown())
+onUnmounted(() => {
+  clearCountdown()
+  live.stop() // 스택 닫힘/언마운트 시 GPS 세션 정리(대기/진행 중이던 경우)
+})
 
 function opponentLabel(o: OpponentOption): string {
   if (o.kind === 'none') return '없음 — 자유 레이싱'
@@ -378,8 +386,12 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
               <div class="live-meta">신호 {{ live.tick.value?.signalState ?? '-' }} · {{ live.tick.value?.source ?? '-' }} · #{{ live.tick.value?.seq ?? 0 }}</div>
             </template>
             <template v-else>
-              <p class="race-ready">출발 준비 완료</p>
-              <p class="race-ready-sub">아래 <strong>시작</strong>을 누르면 3·2·1 카운트다운 후 측정이 시작됩니다.</p>
+              <p class="race-ready">{{ gpsReady ? '출발 준비 완료' : 'GPS 신호 확보 중…' }}</p>
+              <p class="race-ready-sub">
+                <template v-if="gpsReady">아래 <strong>시작</strong>을 누르면 3·2·1 카운트다운 후 측정이 시작됩니다.</template>
+                <template v-else>위치 신호가 잡히면 시작 버튼이 켜집니다. (신호 {{ live.tick.value?.signalState ?? '대기' }})</template>
+              </p>
+              <p v-if="live.diagnostic.value" class="race-diag">진단 {{ live.diagnostic.value }}</p>
             </template>
           </div>
           <p v-if="started && live.error.value" class="race-warn">오류 {{ live.error.value.code }}: {{ live.error.value.message }}</p>
@@ -410,7 +422,7 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
       <button class="race-cta" type="button" @click="enterRace">레이싱 입장</button>
     </footer>
     <footer v-else-if="step === 'live' && !started && countdown === null" class="stack-footer">
-      <button class="race-cta" type="button" @click="beginCountdown">시작</button>
+      <button class="race-cta" type="button" :disabled="!gpsReady" @click="beginCountdown">{{ gpsReady ? '시작' : 'GPS 확보 중…' }}</button>
     </footer>
     <footer v-else-if="step === 'live' && started" class="stack-footer race-live-footer">
       <button v-if="live.state.value === 'paused'" class="race-btn secondary" type="button" @click="live.resume()">재개</button>
@@ -551,6 +563,7 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
 
 .race-cta { width: 100%; padding: 15px; border: none; border-radius: 14px; background: var(--color-primary-strong); color: var(--color-on-primary); font-size: 1.02rem; font-weight: 700; cursor: pointer; box-shadow: none; }
 .race-cta.inline { margin-top: 14px; }
+.race-cta:disabled { opacity: 0.5; cursor: default; }
 
 /* 스택 하단 고정 푸터 (.memory-stack-page 3행 그리드 footer 슬롯) */
 .stack-footer { padding: 12px 16px calc(env(safe-area-inset-bottom) + 12px); background: var(--color-header-bg); backdrop-filter: blur(18px); border-top: 1px solid var(--color-border); }
@@ -589,7 +602,7 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
 .race-ready-sub { font-size: 0.9rem; color: var(--color-muted); line-height: 1.55; }
 
 /* 시작 카운트다운 오버레이 */
-.race-countdown { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(6px); }
+.race-countdown { position: fixed; inset: 0; z-index: 1150; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(6px); }
 .countdown-ring {
   width: 168px; height: 168px; border-radius: 50%;
   border: 4px solid var(--color-primary);
