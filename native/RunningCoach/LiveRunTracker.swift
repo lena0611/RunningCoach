@@ -130,6 +130,27 @@ final class LiveRunTracker: NSObject {
         return modes.contains("location")
     }
 
+    /// 백그라운드 위치 업데이트 활성화. 권한이 부여된 뒤(또는 이미 부여) 호출해야 iOS가 존중한다.
+    /// (start()에서 권한 미결정 상태로 set하면 무시될 수 있어 didChangeAuthorization에서도 set.)
+    private func enableBackgroundUpdatesIfPossible() {
+        #if os(iOS)
+        let st = manager.authorizationStatus
+        guard st == .authorizedAlways || st == .authorizedWhenInUse, backgroundLocationAllowed() else { return }
+        manager.allowsBackgroundLocationUpdates = true
+        manager.pausesLocationUpdatesAutomatically = false
+        #endif
+    }
+
+    /// 백그라운드 진단(화면 표시): bg 모드/권한/bgUpd. bg=[]이면 stale plist, bgUpd=false면 권한 타이밍 문제.
+    private func emitDiagnostic() {
+        let modes = (Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String]) ?? []
+        var bgUpd = false
+        #if os(iOS)
+        bgUpd = manager.allowsBackgroundLocationUpdates
+        #endif
+        onDiagnostic?("bg=[\(modes.joined(separator: ","))] 권한=\(permissionStatus().rawValue) bgUpd=\(bgUpd)")
+    }
+
     // ── 명령 ──────────────────────────────────────────────────────────────────
 
     func start(_ params: LiveRunStartParams) {
@@ -143,12 +164,10 @@ final class LiveRunTracker: NSObject {
 
         manager.requestAlwaysAuthorization()
         #if os(iOS)
-        // allowsBackgroundLocationUpdates=true 는 UIBackgroundModes에 "location"이 없으면 크래시.
-        if backgroundLocationAllowed() {
-            manager.allowsBackgroundLocationUpdates = true
-        }
         manager.pausesLocationUpdatesAutomatically = false
         #endif
+        // 이미 권한이 있으면 지금 set, 아직 미결정이면 didChangeAuthorization에서 권한 부여 직후 set.
+        enableBackgroundUpdatesIfPossible()
         manager.startUpdatingLocation()
         startPedometer()
 
@@ -157,14 +176,7 @@ final class LiveRunTracker: NSObject {
         lastGoodFixAt = now
         setState(.running)
         onPermission?(permissionStatus())
-
-        // 백그라운드 진단: 위치 모드 누락(stale plist)이면 bg=[] → 백그라운드 정지 원인.
-        let modes = (Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String]) ?? []
-        var bgUpd = false
-        #if os(iOS)
-        bgUpd = manager.allowsBackgroundLocationUpdates
-        #endif
-        onDiagnostic?("bg=[\(modes.joined(separator: ","))] 권한=\(permissionStatus().rawValue) bgUpd=\(bgUpd)")
+        emitDiagnostic()
 
         speech.speak(text: "레이싱을 시작합니다.", priority: 0)
         persistSnapshot()
@@ -333,6 +345,9 @@ final class LiveRunTracker: NSObject {
 extension LiveRunTracker: CLLocationManagerDelegate {
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         onPermission?(permissionStatus())
+        // 권한 부여 직후 백그라운드 업데이트를 set(start()의 미결정 타이밍 set은 무시될 수 있음).
+        enableBackgroundUpdatesIfPossible()
+        if state == .running { emitDiagnostic() }
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
