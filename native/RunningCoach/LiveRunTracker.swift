@@ -69,6 +69,8 @@ final class LiveRunTracker: NSObject {
     var onStateChange: ((LiveRunState) -> Void)?
     var onPermission: ((LivePermissionStatus) -> Void)?
     var onError: ((_ code: String, _ message: String) -> Void)?
+    /// 백그라운드 동작 진단(화면 표시용): 위치 백그라운드 모드/권한/bg업데이트 활성 여부.
+    var onDiagnostic: ((_ text: String) -> Void)?
 
     private let manager = CLLocationManager()
     private let pedometer = CMPedometer()
@@ -155,6 +157,15 @@ final class LiveRunTracker: NSObject {
         lastGoodFixAt = now
         setState(.running)
         onPermission?(permissionStatus())
+
+        // 백그라운드 진단: 위치 모드 누락(stale plist)이면 bg=[] → 백그라운드 정지 원인.
+        let modes = (Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String]) ?? []
+        var bgUpd = false
+        #if os(iOS)
+        bgUpd = manager.allowsBackgroundLocationUpdates
+        #endif
+        onDiagnostic?("bg=[\(modes.joined(separator: ","))] 권한=\(permissionStatus().rawValue) bgUpd=\(bgUpd)")
+
         speech.speak(text: "레이싱을 시작합니다.", priority: 0)
         persistSnapshot()
     }
