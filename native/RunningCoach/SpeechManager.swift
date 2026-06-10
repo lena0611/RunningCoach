@@ -24,14 +24,15 @@ final class SpeechManager: NSObject {
 
     private(set) var spokenCount = 0
 
+    /// 발화 시점 오디오 세션 상태 보고(필드 디버깅용). LiveRunTracker가 onDiagnostic으로 중계한다.
+    var onSpeakReport: ((_ text: String) -> Void)?
+
     override init() {
         super.init()
         synth.delegate = self
-        // 합성기가 자기 전용 오디오 세션을 관리하게 한다(앱/WKWebView 세션 충돌 우회).
-        // 하이브리드 앱에서 백그라운드 TTS가 안 나오던 문제의 표준 해법.
-        #if os(iOS)
-        synth.usesApplicationAudioSession = false
-        #endif
+        // ⚠️ usesApplicationAudioSession=false 금지: 합성기 전용 세션은 무음 스위치를 따라가서
+        //    벨소리 끔 상태에서 포그라운드 발화까지 무음이 된다(2026-06-09 필드 검증).
+        //    러닝 안내는 내비처럼 무음 스위치 무시가 요구사항 → .playback 공유 세션 유지.
     }
 
     /// 오디오 세션을 음성 안내 모드로 활성화한다. 시작 시 1회.
@@ -66,11 +67,29 @@ final class SpeechManager: NSObject {
         if priority >= interruptPriority, synth.isSpeaking {
             synth.stopSpeaking(at: .immediate)
         }
+        reactivateAndReport()
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = voice
         utterance.volume = 1.0
         synth.speak(utterance)
         spokenCount += 1
+    }
+
+    /// 발화 직전 오디오 세션 재활성화 + 상태 보고(#229 백그라운드 무음 원인 추적).
+    /// 백그라운드에서 세션이 박탈/비활성화됐다면 여기서 에러가 화면 진단 줄에 찍힌다.
+    private func reactivateAndReport() {
+        #if os(iOS)
+        let session = AVAudioSession.sharedInstance()
+        var act = "ok"
+        do {
+            try session.setCategory(.playback, mode: .voicePrompt, options: [.duckOthers])
+            try session.setActive(true)
+        } catch {
+            act = error.localizedDescription
+        }
+        let cat = session.category.rawValue.replacingOccurrences(of: "AVAudioSessionCategory", with: "")
+        onSpeakReport?("발화#\(spokenCount + 1) cat=\(cat) other=\(session.isOtherAudioPlaying) act=\(act)")
+        #endif
     }
 
     func cancel() {
