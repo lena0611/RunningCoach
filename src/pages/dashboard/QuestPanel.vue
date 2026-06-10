@@ -45,7 +45,7 @@ defineProps<{
         <span class="quest-tag quest-tag-maintenance">◇ 유지</span>
         <div class="quest-body">
           <strong>{{ progress.distanceClass.label }} 폼 점검</strong>
-          <small v-if="progress.maintenanceDue">측정이 오래됐어요 — 타임트라이얼로 등급을 갱신하세요</small>
+          <small v-if="progress.maintenanceDue">측정이 오래됐어요 — 타임트라이얼로 등급 갱신 · +20 🪙</small>
           <small v-else>폼 최신 · 재측정 불필요</small>
         </div>
       </article>
