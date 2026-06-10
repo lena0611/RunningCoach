@@ -6,6 +6,8 @@ import type { RunnerProgress } from '@/shared/lib/level/levelModel'
 defineProps<{
   progress: RunnerProgress
   nextSession: { title: string; reason: string; dayName: string; plannedDate: string }
+  weeklyDone?: number
+  weeklyTarget?: number
 }>()
 </script>
 
@@ -17,6 +19,9 @@ defineProps<{
         <div class="quest-body">
           <strong>{{ nextSession.title }}</strong>
           <small>{{ nextSession.dayName }} 예정 · {{ nextSession.reason }}</small>
+          <small v-if="weeklyTarget" class="quest-week">
+            이번 주 {{ weeklyDone ?? 0 }}/{{ weeklyTarget }}회<template v-if="(weeklyDone ?? 0) >= (weeklyTarget ?? 0)"> · 완주 +30 🪙</template>
+          </small>
         </div>
       </article>
 

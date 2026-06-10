@@ -12,7 +12,9 @@ import {
   nextGradeBand,
   resolveRunnerProgress,
   runnerLevelFromGrade,
-  runnerProgressLabel
+  runnerProgressLabel,
+  detectLevelUps,
+  COIN_REWARD
 } from './levelModel'
 
 const today = new Date('2026-06-08T00:00:00')
@@ -218,5 +220,47 @@ describe('resolveRunnerProgress', () => {
     const p = resolveRunnerProgress(profile(), [run(daysAgo(5), 10)], today, { maxDistanceM: 10000 })
     expect(p.distanceClass.key).toBe('10k')
     expect(p.provisional).toBe(false)
+  })
+})
+
+describe('detectLevelUps', () => {
+  it('baselines (no events) when acknowledged class is null', () => {
+    const r = detectLevelUps('10k', 'silver', null, null)
+    expect(r.baseline).toBe(true)
+    expect(r.events).toEqual([])
+  })
+
+  it('no events when class/grade unchanged', () => {
+    const r = detectLevelUps('10k', 'silver', '10k', 'silver')
+    expect(r.baseline).toBe(false)
+    expect(r.events).toEqual([])
+  })
+
+  it('class up yields a class event with class coins', () => {
+    const r = detectLevelUps('half', 'silver', '10k', 'silver')
+    expect(r.events).toHaveLength(1)
+    expect(r.events[0]).toMatchObject({ kind: 'class', toKey: 'half', coins: COIN_REWARD.classUp })
+  })
+
+  it('grade up yields a grade event with grade coins', () => {
+    const r = detectLevelUps('10k', 'gold', '10k', 'silver')
+    expect(r.events).toHaveLength(1)
+    expect(r.events[0]).toMatchObject({ kind: 'grade', toKey: 'gold', coins: COIN_REWARD.gradeUp })
+  })
+
+  it('both class and grade up yields two events', () => {
+    const r = detectLevelUps('half', 'gold', '10k', 'silver')
+    expect(r.events.map((e) => e.kind).sort()).toEqual(['class', 'grade'])
+  })
+
+  it('first grade (acknowledged grade null) counts as a grade up', () => {
+    const r = detectLevelUps('10k', 'bronze', '10k', null)
+    expect(r.events).toHaveLength(1)
+    expect(r.events[0].kind).toBe('grade')
+  })
+
+  it('no grade event when current grade is null', () => {
+    const r = detectLevelUps('5k', null, '5k', null)
+    expect(r.events).toEqual([])
   })
 })

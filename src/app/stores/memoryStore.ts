@@ -19,6 +19,7 @@ export const useMemoryStore = defineStore('memoryStore', {
     users: loadUsers(),
     selectedUserId: loadSelectedUserId(),
     loading: false,
+    loaded: false,
     error: ''
   }),
   getters: {
@@ -45,6 +46,7 @@ export const useMemoryStore = defineStore('memoryStore', {
         this.error = err instanceof Error ? err.message : 'TrainingMemory를 불러오지 못했습니다.'
       } finally {
         this.loading = false
+        this.loaded = true
       }
     },
     selectUser(userId: string) {
