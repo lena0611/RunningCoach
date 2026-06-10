@@ -135,6 +135,20 @@ describe('formatAnnouncement', () => {
     expect(a.text).toContain('앞서')
   })
 
+  it('dedupes periodic by step (not km) so time-based intervals within one km stay distinct', () => {
+    // 시간 주기(예: 1분마다): 같은 km 안에 여러 멘트가 생긴다. step 으로 dedupe 해야
+    // 2번째 발화부터 무음 드롭되지 않는다(#229 백그라운드 무음 회귀 방지).
+    const m1 = formatAnnouncement('periodic', { gap: gap('behind', 20), distanceM: 120, periodicStep: 1 })
+    const m2 = formatAnnouncement('periodic', { gap: gap('behind', 30), distanceM: 240, periodicStep: 2 })
+    expect(m1.dedupeKey).toBe('periodic:1')
+    expect(m2.dedupeKey).toBe('periodic:2')
+    expect(m1.dedupeKey).not.toBe(m2.dedupeKey)
+  })
+
+  it('falls back to km bucket when periodicStep is absent', () => {
+    expect(formatAnnouncement('periodic', { gap: gap('behind', 20), distanceM: 3000 }).dedupeKey).toBe('periodic:3')
+  })
+
   it('orders priority finish > reversal > lap > periodic', () => {
     const periodic = formatAnnouncement('periodic', { gap: gap('behind', 20), distanceM: 3000 })
     const lap = formatAnnouncement('lap', { gap: gap('behind', 20), distanceM: 3000 })

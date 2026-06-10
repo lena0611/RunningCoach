@@ -90,6 +90,12 @@ final class LiveRunTracker: NSObject {
     private var seq = 0
     private var lastLocation: CLLocation?
 
+    // 시계/발화 구동용. emitTick을 위치 콜백이 아니라 이 타이머가 벽시계 기준으로 돌린다
+    // (정지/실내/백그라운드에서 위치 fix가 드물어도 시간·주기 발화가 끊기지 않게).
+    private var clockTimer: Timer?
+    private var lastInstantPaceSec: Double?
+    private var lastSignal: LiveSignalState = .ok
+
     // GPS 품질/fallback
     private var lastGoodFixAt: Date?
     private var distanceSource: LiveDistanceSource = .gps
@@ -112,6 +118,8 @@ final class LiveRunTracker: NSObject {
         manager.activityType = .fitness
         // 연속 업데이트(~1Hz). 느리거나 정지해도 틱이 흘러 시간/백그라운드 음성이 끊기지 않게.
         manager.distanceFilter = kCLDistanceFilterNone
+        // 발화 시점 오디오 세션 상태를 화면 진단 줄로 중계(#229 백그라운드 무음 추적).
+        speech.onSpeakReport = { [weak self] text in self?.onDiagnostic?(text) }
     }
 
     // ── 권한 ──────────────────────────────────────────────────────────────────
@@ -189,11 +197,31 @@ final class LiveRunTracker: NSObject {
         lastLocation = nil
         setState(.running)
         speech.speak(text: "레이싱 시작.", priority: 0)
+        startClock()
         persistSnapshot()
+    }
+
+    /// 시계 타이머 시작. 위치 fix와 무관하게 1초마다 emitTick(시간·주기 발화)을 돌린다.
+    /// .common 모드로 등록해 스크롤/백그라운드 RunLoop에서도 발화하게 한다.
+    private func startClock() {
+        clockTimer?.invalidate()
+        let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
+            self?.onClockTick()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        clockTimer = timer
+    }
+
+    private func onClockTick() {
+        guard state == .running, startDate != nil else { return }
+        // 거리는 위치 콜백이 누적해 둔 최신값을 쓰고, 시간은 벽시계 기준으로 emitTick이 계산한다.
+        emitTick(signal: lastSignal, instantPaceSec: lastInstantPaceSec, at: Date())
     }
 
     func pause() {
         guard state == .running else { return }
+        clockTimer?.invalidate()
+        clockTimer = nil
         manager.stopUpdatingLocation()
         pauseStartedAt = Date()
         lastLocation = nil
@@ -213,9 +241,12 @@ final class LiveRunTracker: NSObject {
         manager.startUpdatingLocation()
         setState(.running)
         speech.speak(text: "다시 출발.", priority: 0)
+        startClock()
     }
 
     func stop() {
+        clockTimer?.invalidate()
+        clockTimer = nil
         // 측정 시작 전(idle/ready/stopped)에서도 GPS/오디오 세션은 반드시 정리(대기 중 닫기 누수 방지).
         guard state == .running || state == .paused else {
             manager.stopUpdatingLocation()
@@ -270,6 +301,10 @@ final class LiveRunTracker: NSObject {
     // ── 내부 ──────────────────────────────────────────────────────────────────
 
     private func reset() {
+        clockTimer?.invalidate()
+        clockTimer = nil
+        lastInstantPaceSec = nil
+        lastSignal = .ok
         manager.stopUpdatingLocation()
         pedometer.stopUpdates()
         targetDistanceM = 0
@@ -427,7 +462,10 @@ extension LiveRunTracker: CLLocationManagerDelegate {
                 }
             }
 
-            emitTick(signal: signal, instantPaceSec: instantPaceSec, at: loc.timestamp)
+            // 위치 콜백은 거리 누적·신호/페이스 갱신만 한다. 시간 진행과 주기 발화는
+            // clockTimer(onClockTick)가 벽시계 기준으로 돌린다(정지/백그라운드에서도 끊김 없게).
+            lastSignal = signal
+            if let pace = instantPaceSec { lastInstantPaceSec = pace }
         }
     }
 

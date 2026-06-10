@@ -43,6 +43,12 @@ export type AnnouncementContext = {
   gap: GapState
   /** lap/periodic 의 기준 거리(m). dedupe·문구에 사용. */
   distanceM?: number
+  /**
+   * periodic 의 주기 step 인덱스(1부터). 시간 주기(N분마다)에서는 같은 km 안에 여러 멘트가
+   * 생기므로 km 버킷이 아닌 step 으로 dedupe 해야 한다(없으면 같은 km 내 2번째 발화부터 무음 드롭).
+   * 거리 주기에서도 step 으로 dedupe 하면 1km 미만 간격이 안전하다. 없으면 km 버킷으로 폴백.
+   */
+  periodicStep?: number
   /** reversal 종류. */
   reversal?: 'overtake' | 'overtaken'
 }
@@ -219,7 +225,7 @@ export function formatAnnouncement(kind: AnnouncementKind, ctx: AnnouncementCont
         : ctx.gap.leadState === 'ahead'
           ? `고스트보다 ${formatGapSeconds(ctx.gap.timeGapSec)} 앞서고 있어요.`
           : `고스트보다 ${formatGapSeconds(ctx.gap.timeGapSec)} 뒤처졌어요.`
-      return { text, priority: PRIORITY.periodic, dedupeKey: `periodic:${kmBucket}` }
+      return { text, priority: PRIORITY.periodic, dedupeKey: `periodic:${ctx.periodicStep ?? kmBucket}` }
     }
     case 'lap': {
       return { text: `${kmLabel(distanceM)} 통과 — ${gapClause(ctx.gap)}.`, priority: PRIORITY.lap, dedupeKey: `lap:${Math.round(distanceM / 1000)}` }
