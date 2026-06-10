@@ -27,6 +27,11 @@ final class SpeechManager: NSObject {
     override init() {
         super.init()
         synth.delegate = self
+        // 합성기가 자기 전용 오디오 세션을 관리하게 한다(앱/WKWebView 세션 충돌 우회).
+        // 하이브리드 앱에서 백그라운드 TTS가 안 나오던 문제의 표준 해법.
+        #if os(iOS)
+        synth.usesApplicationAudioSession = false
+        #endif
     }
 
     /// 오디오 세션을 음성 안내 모드로 활성화한다. 시작 시 1회.
@@ -58,10 +63,6 @@ final class SpeechManager: NSObject {
 
     /// 임의 텍스트 발화(시작/종료 멘트 등 dedupe 불필요한 경우).
     func speak(text: String, priority: Int) {
-        // 백그라운드에서 idle로 비활성화됐을 수 있으니 발화 직전 세션을 재활성화(잠금 후 음성 미재생 수정).
-        #if os(iOS)
-        try? AVAudioSession.sharedInstance().setActive(true)
-        #endif
         if priority >= interruptPriority, synth.isSpeaking {
             synth.stopSpeaking(at: .immediate)
         }
