@@ -18,6 +18,7 @@ import CoreMotion
 
 enum LiveRunState: String {
     case idle
+    case ready    // GPS 확보 대기(측정 전). 신호만 흐름
     case running
     case paused
     case stopped
@@ -172,14 +173,22 @@ final class LiveRunTracker: NSObject {
         manager.startUpdatingLocation()
         startPedometer()
 
+        // 대기 상태: GPS만 켜고 신호 확보를 기다린다. 실제 측정/클럭은 begin()에서.
+        setState(.ready)
+        onPermission?(permissionStatus())
+        emitDiagnostic()
+        persistSnapshot()
+    }
+
+    /// GPS 확보 후 명시적 시작(카운트다운 종료 시). ready → running, 클럭·엔진·발화 시작.
+    func begin() {
+        guard state == .ready else { return }
         let now = Date()
         startDate = now
         lastGoodFixAt = now
+        lastLocation = nil
         setState(.running)
-        onPermission?(permissionStatus())
-        emitDiagnostic()
-
-        speech.speak(text: "레이싱을 시작합니다.", priority: 0)
+        speech.speak(text: "레이싱 시작.", priority: 0)
         persistSnapshot()
     }
 
@@ -207,7 +216,14 @@ final class LiveRunTracker: NSObject {
     }
 
     func stop() {
+        // 측정 시작 전(idle/ready/stopped)에서도 GPS/오디오 세션은 반드시 정리(대기 중 닫기 누수 방지).
         guard state == .running || state == .paused else {
+            manager.stopUpdatingLocation()
+            #if os(iOS)
+            manager.allowsBackgroundLocationUpdates = false
+            #endif
+            pedometer.stopUpdates()
+            speech.deactivateAudioSession()
             clearSnapshot()
             setState(.stopped)
             return
@@ -352,16 +368,10 @@ extension LiveRunTracker: CLLocationManagerDelegate {
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard state == .running else { return }
+        guard state == .running || state == .ready else { return }
         let now = Date()
 
         for loc in locations {
-            // 앱 시작 직후 CLLocationManager가 흔히 던지는 캐시된 오래된 fix는 무시한다
-            // (거리 점프·잘못된 pedometer 전환의 원인).
-            // 출발 이전 캐시된 fix만 버린다. 인-런 fix는 백그라운드 batch로 약간 늦게 와도
-            // 처리해야 틱이 끊기지 않는다(이전의 ">10초 무시"가 백그라운드 정지의 원인이었음).
-            if let s = startDate, loc.timestamp < s.addingTimeInterval(-1) { continue }
-
             // 신호 상태
             let signal: LiveSignalState
             if loc.horizontalAccuracy < 0 {
@@ -371,6 +381,18 @@ extension LiveRunTracker: CLLocationManagerDelegate {
             } else {
                 signal = .weak
             }
+
+            // 대기(ready): GPS 확보 표시용 신호만 emit — 누적/엔진/완주 없음. 시작 버튼 활성 판단용.
+            if state == .ready {
+                if signal != .lost { lastLocation = loc }
+                seq += 1
+                onTick?(seq, 0, 0, nil, signal, distanceSource)
+                continue
+            }
+
+            // (running) 출발 이전 캐시된 fix만 버린다. 인-런 fix는 백그라운드 batch로 약간 늦게
+            // 와도 처리해야 틱이 끊기지 않는다(이전의 ">10초 무시"가 백그라운드 정지의 원인이었음).
+            if let s = startDate, loc.timestamp < s.addingTimeInterval(-1) { continue }
 
             var instantPaceSec: Double?
 

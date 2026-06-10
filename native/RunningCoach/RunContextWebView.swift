@@ -567,6 +567,10 @@ struct RunContextWebView: UIViewRepresentable {
                     tickIntervalMs: tickIntervalMs
                 ))
 
+            case "beginLiveRun":
+                print("[RunContext LiveRun] beginLiveRun")
+                liveRunTracker.begin()
+
             case "pauseLiveRun":
                 print("[RunContext LiveRun] pauseLiveRun")
                 liveRunTracker.pause()

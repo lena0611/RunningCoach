@@ -1,5 +1,6 @@
 import { onUnmounted, ref, shallowRef } from 'vue'
 import {
+  beginLiveRun,
   isLiveRunBridgeAvailable,
   pauseLiveRun,
   registerLiveRunBridge,
@@ -78,6 +79,7 @@ export function useLiveRun() {
     recoverable,
     diagnostic,
     start,
+    begin: beginLiveRun,
     pause: pauseLiveRun,
     resume: resumeLiveRun,
     stop: stopLiveRun,

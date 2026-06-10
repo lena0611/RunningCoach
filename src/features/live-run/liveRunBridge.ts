@@ -41,7 +41,7 @@ export type StartLiveRunParams = {
 
 export type LiveSignalState = 'ok' | 'weak' | 'lost'
 export type LiveDistanceSource = 'gps' | 'pedometer'
-export type LiveRunState = 'idle' | 'running' | 'paused' | 'stopped'
+export type LiveRunState = 'idle' | 'ready' | 'running' | 'paused' | 'stopped'
 export type LivePermissionStatus = 'notDetermined' | 'whenInUse' | 'always' | 'denied' | 'restricted'
 
 /** 좌표 없는 ~1Hz 틱(포그라운드 표시용). 2차 실시간 레이스 broadcast 페이로드와 형태 일치. */
@@ -147,6 +147,11 @@ export function startLiveRun(params: StartLiveRunParams) {
     targetDistanceM: params.targetDistanceM ?? null,
     tickIntervalMs: params.tickIntervalMs ?? null
   })
+}
+
+/** GPS 확보 후 명시적 시작(카운트다운 종료 시). startLiveRun(준비)으로 ready된 뒤 호출. */
+export function beginLiveRun() {
+  window.webkit?.messageHandlers?.runContextLiveRun?.postMessage({ type: 'beginLiveRun' })
 }
 
 export function pauseLiveRun() {
