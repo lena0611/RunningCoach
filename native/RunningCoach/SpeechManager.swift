@@ -108,4 +108,15 @@ final class SpeechManager: NSObject {
 
 extension SpeechManager: AVSpeechSynthesizerDelegate {
     // 큐잉은 AVSpeechSynthesizer 가 내부적으로 순차 처리한다. 별도 큐 관리 불필요.
+
+    // 발화가 끝나면(또는 취소되면) 오디오 세션을 비활성화해 다른 앱(음악) 볼륨을 즉시 복구한다.
+    // 다음 발화 직전 reactivateAndReport()가 다시 duck 한다 → "발화 중에만 ducking" 내비 패턴.
+    // 연달아 큐잉된 발화가 남아 있으면(isSpeaking) 복구하지 않는다.
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        if !synthesizer.isSpeaking { deactivateAudioSession() }
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        if !synthesizer.isSpeaking { deactivateAudioSession() }
+    }
 }

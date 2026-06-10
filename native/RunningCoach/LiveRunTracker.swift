@@ -93,8 +93,13 @@ final class LiveRunTracker: NSObject {
     // 시계/발화 구동용. emitTick을 위치 콜백이 아니라 이 타이머가 벽시계 기준으로 돌린다
     // (정지/실내/백그라운드에서 위치 fix가 드물어도 시간·주기 발화가 끊기지 않게).
     private var clockTimer: Timer?
-    private var lastInstantPaceSec: Double?
     private var lastSignal: LiveSignalState = .ok
+
+    // 표시용 페이스 평활화. 연속 두 GPS fix의 거리÷시간은 GPS 노이즈(±5~10m)에 폭발하므로
+    // 최근 윈도우 구간의 (거리Δ/시간Δ)로 롤링 평균을 낸다. 거리 변화가 작으면(정지/노이즈) 미표시.
+    private var paceSamples: [(t: Double, d: Double)] = []
+    private let paceWindowSec: Double = 20
+    private let paceMinDistanceM: Double = 8
 
     // GPS 품질/fallback
     private var lastGoodFixAt: Date?
@@ -215,7 +220,22 @@ final class LiveRunTracker: NSObject {
     private func onClockTick() {
         guard state == .running, startDate != nil else { return }
         // 거리는 위치 콜백이 누적해 둔 최신값을 쓰고, 시간은 벽시계 기준으로 emitTick이 계산한다.
-        emitTick(signal: lastSignal, instantPaceSec: lastInstantPaceSec, at: Date())
+        let now = Date()
+        let elapsed = currentElapsed(at: now)
+        emitTick(signal: lastSignal, instantPaceSec: rollingPaceSec(elapsed: elapsed), at: now)
+    }
+
+    /// 최근 paceWindowSec 구간의 (거리Δ/시간Δ)로 평활화한 페이스(sec/km). 매 클럭 틱마다 호출.
+    /// 거리 변화가 paceMinDistanceM 미만(정지/노이즈)이면 nil → 화면은 '—'로 표시.
+    private func rollingPaceSec(elapsed: Double) -> Double? {
+        paceSamples.append((t: elapsed, d: cumulativeDistanceM))
+        let cutoff = elapsed - paceWindowSec
+        while let first = paceSamples.first, first.t < cutoff { paceSamples.removeFirst() }
+        guard let first = paceSamples.first, paceSamples.count >= 2 else { return nil }
+        let dDist = cumulativeDistanceM - first.d
+        let dTime = elapsed - first.t
+        guard dDist >= paceMinDistanceM, dTime > 0 else { return nil }
+        return dTime / dDist * 1000
     }
 
     func pause() {
@@ -303,7 +323,7 @@ final class LiveRunTracker: NSObject {
     private func reset() {
         clockTimer?.invalidate()
         clockTimer = nil
-        lastInstantPaceSec = nil
+        paceSamples.removeAll()
         lastSignal = .ok
         manager.stopUpdatingLocation()
         pedometer.stopUpdates()
@@ -429,8 +449,6 @@ extension LiveRunTracker: CLLocationManagerDelegate {
             // 와도 처리해야 틱이 끊기지 않는다(이전의 ">10초 무시"가 백그라운드 정지의 원인이었음).
             if let s = startDate, loc.timestamp < s.addingTimeInterval(-1) { continue }
 
-            var instantPaceSec: Double?
-
             if signal != .lost, let prev = lastLocation {
                 let d = loc.distance(from: prev)
                 let dt = loc.timestamp.timeIntervalSince(prev.timestamp)
@@ -441,9 +459,6 @@ extension LiveRunTracker: CLLocationManagerDelegate {
                         distanceSource = .gps
                     }
                     cumulativeDistanceM += d
-                    if d > 0 {
-                        instantPaceSec = (dt / d) * 1000  // sec per km
-                    }
                 }
             }
 
@@ -462,10 +477,9 @@ extension LiveRunTracker: CLLocationManagerDelegate {
                 }
             }
 
-            // 위치 콜백은 거리 누적·신호/페이스 갱신만 한다. 시간 진행과 주기 발화는
+            // 위치 콜백은 거리 누적·신호 갱신만 한다. 시간 진행·표시 페이스(롤링 평균)·주기 발화는
             // clockTimer(onClockTick)가 벽시계 기준으로 돌린다(정지/백그라운드에서도 끊김 없게).
             lastSignal = signal
-            if let pace = instantPaceSec { lastInstantPaceSec = pace }
         }
     }
 
