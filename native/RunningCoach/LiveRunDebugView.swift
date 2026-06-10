@@ -54,7 +54,7 @@ final class LiveRunDebugModel: ObservableObject {
         }
     }
 
-    private let config = AnnounceConfig(periodicKind: .distance, stepM: 1000, stepSec: 60, reversalAlert: true)
+    private let config = AnnounceConfig(periodicKind: .distance, stepM: 1000, stepSec: 60, reversalAlert: true, gapMode: .distance)
 
     func startNoGhost() {
         gap = "고스트 없음 (측정만)"

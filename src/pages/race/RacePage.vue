@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router'
 import { useRunStore } from '@/app/stores/runStore'
 import { useLiveRun } from '@/features/live-run/useLiveRun'
 import { ghostCurveForRun, listDistanceOptions, listOpponents, type OpponentOption } from '@/features/live-run/raceTargets'
-import { distanceAtTime, type GhostCurvePoint } from '@/shared/lib/selfRace/ghost'
+import { distanceAtTime, formatGapAmount, type GapDisplayMode, type GhostCurvePoint } from '@/shared/lib/selfRace/ghost'
 import type { AnnounceConfig, PeriodicAnnounceKind } from '@/features/live-run/liveRunBridge'
 import type { LiveGapPayload, LiveTickPayload } from '@/features/live-run/liveRunBridge'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
@@ -19,6 +19,7 @@ type RaceSettings = {
   stepM: 100 | 500 | 1000
   stepSec: number
   reversalAlert: boolean
+  gapMode: GapDisplayMode
   distanceLabel: string
   opponentLabel: string
   voiceLabel: string
@@ -53,6 +54,7 @@ const periodicKind = ref<PeriodicAnnounceKind>('distance')
 const stepM = ref<100 | 500 | 1000>(1000)
 const stepSec = ref<number>(300)
 const reversalAlert = ref(true)
+const gapMode = ref<GapDisplayMode>('distance')
 
 const finalTick = ref<LiveTickPayload | null>(null)
 const finalGap = ref<LiveGapPayload | null>(null)
@@ -78,6 +80,7 @@ function loadSavedSettings() {
     stepM.value = s.stepM
     stepSec.value = s.stepSec
     reversalAlert.value = s.reversalAlert
+    gapMode.value = s.gapMode ?? 'distance'
   } catch {
     // 저장값 손상 시 무시
   }
@@ -108,18 +111,21 @@ watch(
 )
 
 function buildAnnounceConfig(): AnnounceConfig {
-  if (periodicKind.value === 'distance') return { periodic: { kind: 'distance', stepM: stepM.value }, reversalAlert: reversalAlert.value }
-  if (periodicKind.value === 'time') return { periodic: { kind: 'time', stepSec: stepSec.value }, reversalAlert: reversalAlert.value }
-  return { periodic: { kind: 'silent' }, reversalAlert: reversalAlert.value }
+  const gap = gapMode.value
+  if (periodicKind.value === 'distance') return { periodic: { kind: 'distance', stepM: stepM.value }, reversalAlert: reversalAlert.value, gapMode: gap }
+  if (periodicKind.value === 'time') return { periodic: { kind: 'time', stepSec: stepSec.value }, reversalAlert: reversalAlert.value, gapMode: gap }
+  return { periodic: { kind: 'silent' }, reversalAlert: reversalAlert.value, gapMode: gap }
 }
 
 function voiceLabel(): string {
+  const gapLabel = gapMode.value === 'time' ? '시간차' : '거리차'
   const reversal = hasGhost.value && reversalAlert.value
-  if (periodicKind.value === 'silent') return reversal ? '역전만' : '조용히'
+  if (periodicKind.value === 'silent') return reversal ? `역전만 · ${gapLabel}` : `조용히 · ${gapLabel}`
   const base = periodicKind.value === 'distance'
     ? (stepM.value >= 1000 ? `${stepM.value / 1000}km` : `${stepM.value}m`)
     : `${Math.round(stepSec.value / 60)}분`
-  return reversal ? `${base}, 역전 마다` : `${base}마다`
+  const cadence = reversal ? `${base}, 역전 마다` : `${base}마다`
+  return `${cadence} · ${gapLabel}`
 }
 
 function openSettings() {
@@ -135,6 +141,7 @@ function saveSettings() {
     stepM: stepM.value,
     stepSec: stepSec.value,
     reversalAlert: reversalAlert.value,
+    gapMode: gapMode.value,
     distanceLabel: selectedDistanceM.value ? `${selectedDistanceM.value / 1000}km` : '자유',
     opponentLabel: opponentLabel(opp),
     voiceLabel: voiceLabel()
@@ -241,19 +248,12 @@ function fmtPace(secPerKm: number | null | undefined): string {
   const s = Math.round(secPerKm)
   return `${Math.floor(s / 60)}'${String(s % 60).padStart(2, '0')}"/km`
 }
-function formatGapMinSec(seconds: number): string {
-  const s = Math.round(Math.abs(seconds))
-  if (s < 60) return `${s}초`
-  const m = Math.floor(s / 60)
-  const rest = s % 60
-  return rest ? `${m}분 ${rest}초` : `${m}분`
-}
-function gapText(gap: LiveGapPayload | null): string {
-  if (!gap) return '고스트 없음'
-  const amount = formatGapMinSec(gap.timeGapSec)
-  if (gap.leadState === 'ahead') return `고스트보다 ${amount} 앞`
-  if (gap.leadState === 'behind') return `고스트보다 ${amount} 뒤`
-  return '고스트와 나란히'
+// 화면 격차 표기. 단위(거리/시간)는 gapMode를 따르고, 앞/뒤/나란히 판정은 네이티브 leadState로
+// 통일한다(음성과 동일 기준). 양(量)은 음성과 같은 formatGapAmount로 포맷해 표현을 일치시킨다.
+function gapLabel(distanceGapM: number | null, timeGapSec: number, leadState: LiveGapPayload['leadState'], mode: GapDisplayMode): string {
+  if (leadState === 'even') return '고스트와 나란히'
+  const amount = formatGapAmount({ distanceGapM: distanceGapM ?? 0, timeGapSec, leadState }, mode)
+  return leadState === 'ahead' ? `고스트보다 ${amount} 앞` : `고스트보다 ${amount} 뒤`
 }
 
 const elapsedText = computed(() => fmtTime(live.tick.value?.elapsedSec))
@@ -273,26 +273,29 @@ const ghostProgress = computed(() => {
 const myPct = computed(() => `${(myProgress.value * 100).toFixed(1)}%`)
 const ghostPct = computed(() => (ghostProgress.value == null ? null : `${(ghostProgress.value * 100).toFixed(1)}%`))
 
-// 실시간 타겟과의 갭을 거리(m)로 표현: 내 누적거리 − 같은 시각 고스트 거리. 양수=내가 앞.
+// 실시간 거리 격차: 내 누적거리 − 같은 시각 고스트 거리(m). 양수=내가 앞. (거리 모드 표시용)
 const distanceGapM = computed(() => {
   if (!activeGhostCurve.value) return null
   const ghostDist = distanceAtTime({ source: 'even', points: activeGhostCurve.value }, live.tick.value?.elapsedSec ?? 0)
   return (live.tick.value?.cumulativeDistanceM ?? 0) - ghostDist
 })
-const liveLead = computed<'ahead' | 'behind' | 'even'>(() => {
-  const g = distanceGapM.value
-  if (g == null || Math.abs(g) <= 5) return 'even'
-  return g > 0 ? 'ahead' : 'behind'
-})
+const liveLead = computed<'ahead' | 'behind' | 'even'>(() => live.gap.value?.leadState ?? 'even')
 const liveGapText = computed(() => {
-  const g = distanceGapM.value
-  if (g == null) return '고스트 없음'
-  const a = Math.abs(g)
-  const amount = a >= 1000 ? `${(a / 1000).toFixed(2)}km` : `${Math.round(a)}m`
-  if (g > 5) return `고스트보다 ${amount} 앞`
-  if (g < -5) return `고스트보다 ${amount} 뒤`
-  return '고스트와 나란히'
+  if (!hasGhost.value) return '고스트 없음'
+  const g = live.gap.value
+  if (!g) return '고스트와 나란히'
+  return gapLabel(distanceGapM.value, g.timeGapSec, g.leadState, gapMode.value)
 })
+// 종료 요약: 최종 거리 격차(거리 모드 표시용). 시간 격차는 finalGap에 들어 있다.
+const finalDistanceGapM = computed(() => {
+  if (!activeGhostCurve.value || !finalTick.value) return null
+  const ghostDist = distanceAtTime({ source: 'even', points: activeGhostCurve.value }, finalTick.value.elapsedSec ?? 0)
+  return (finalTick.value.cumulativeDistanceM ?? 0) - ghostDist
+})
+const summaryGapLabel = computed(() => (gapMode.value === 'time' ? '고스트 시간차' : '고스트 거리차'))
+const summaryGapText = computed(() =>
+  finalGap.value ? gapLabel(finalDistanceGapM.value, finalGap.value.timeGapSec, finalGap.value.leadState, gapMode.value) : ''
+)
 const targetKmLabel = computed(() => `${(activeTargetM.value / 1000).toFixed(activeTargetM.value % 1000 === 0 ? 0 : 1)}km`)
 const summaryResult = computed(() => {
   if (!finalGap.value) return null
@@ -411,7 +414,7 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
           <div class="summary-grid">
             <div><span>거리</span><strong>{{ fmtKm(finalTick?.cumulativeDistanceM) }} km</strong></div>
             <div><span>시간</span><strong>{{ fmtTime(finalTick?.elapsedSec) }}</strong></div>
-            <div v-if="finalGap"><span>고스트 시간차</span><strong>{{ gapText(finalGap) }}</strong></div>
+            <div v-if="finalGap"><span>{{ summaryGapLabel }}</span><strong>{{ summaryGapText }}</strong></div>
           </div>
         </SectionGroup>
       </template>
@@ -492,6 +495,16 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
                   </div>
                 </div>
                 <p v-else class="race-sub-silent">음성 안내 없이 측정만 합니다.</p>
+                <div class="race-sub" :class="{ 'is-disabled': !hasGhost }">
+                  <span class="race-sub-label">
+                    격차 표시 단위
+                    <small v-if="!hasGhost" class="toggle-hint">상대를 선택하면 설정할 수 있어요</small>
+                  </span>
+                  <div class="race-sub-options">
+                    <button type="button" :class="{ active: gapMode === 'distance' }" :disabled="!hasGhost" @click="gapMode = 'distance'">거리</button>
+                    <button type="button" :class="{ active: gapMode === 'time' }" :disabled="!hasGhost" @click="gapMode = 'time'">시간</button>
+                  </div>
+                </div>
                 <label class="race-toggle" :class="{ 'is-disabled': !hasGhost }">
                   <span class="toggle-label">
                     역전 알림 (추월/추월당함)

@@ -39,8 +39,13 @@ export type GapState = {
 
 export type AnnouncementKind = 'periodic' | 'lap' | 'reversal' | 'finish'
 
+/** 고스트 격차 표현 단위. 사용자가 음성 설정에서 고르며 화면 표시와 음성 안내가 함께 따른다. */
+export type GapDisplayMode = 'distance' | 'time'
+
 export type AnnouncementContext = {
   gap: GapState
+  /** 격차 표현 단위(거리/시간). 없으면 'distance'. */
+  gapMode?: GapDisplayMode
   /** lap/periodic 의 기준 거리(m). dedupe·문구에 사용. */
   distanceM?: number
   /**
@@ -205,9 +210,21 @@ function kmLabel(distanceM: number): string {
   return Number.isInteger(km) ? `${km}km` : `${km.toFixed(1)}km`
 }
 
-function gapClause(gap: GapState): string {
+/** 고스트와의 거리 격차를 한국어로. 1km 미만은 'Nm', 이상은 'X.Xkm'. */
+function formatGapDistance(distanceGapM: number): string {
+  const m = Math.round(Math.abs(distanceGapM))
+  if (m < 1000) return `${m}m`
+  return `${(m / 1000).toFixed(1)}km`
+}
+
+/** 격차 표현 단위(거리/시간)에 맞춰 양(量)을 한국어로. 화면·음성이 같은 단위를 쓰게 하는 단일 함수. */
+export function formatGapAmount(gap: GapState, mode: GapDisplayMode): string {
+  return mode === 'time' ? formatGapSeconds(gap.timeGapSec) : formatGapDistance(gap.distanceGapM)
+}
+
+function gapClause(gap: GapState, mode: GapDisplayMode): string {
   if (gap.leadState === 'even') return '고스트와 거의 나란히'
-  const amount = formatGapSeconds(gap.timeGapSec)
+  const amount = formatGapAmount(gap, mode)
   return gap.leadState === 'ahead' ? `고스트보다 ${amount} 앞서는 중` : `고스트보다 ${amount} 뒤지는 중`
 }
 
@@ -218,17 +235,18 @@ function gapClause(gap: GapState): string {
 export function formatAnnouncement(kind: AnnouncementKind, ctx: AnnouncementContext): Announcement {
   const distanceM = ctx.distanceM ?? 0
   const kmBucket = Math.floor(distanceM / 1000)
+  const mode: GapDisplayMode = ctx.gapMode ?? 'distance'
   switch (kind) {
     case 'periodic': {
       const text = ctx.gap.leadState === 'even'
         ? '고스트와 거의 나란히 달리고 있어요.'
         : ctx.gap.leadState === 'ahead'
-          ? `고스트보다 ${formatGapSeconds(ctx.gap.timeGapSec)} 앞서고 있어요.`
-          : `고스트보다 ${formatGapSeconds(ctx.gap.timeGapSec)} 뒤처졌어요.`
+          ? `고스트보다 ${formatGapAmount(ctx.gap, mode)} 앞서고 있어요.`
+          : `고스트보다 ${formatGapAmount(ctx.gap, mode)} 뒤처졌어요.`
       return { text, priority: PRIORITY.periodic, dedupeKey: `periodic:${ctx.periodicStep ?? kmBucket}` }
     }
     case 'lap': {
-      return { text: `${kmLabel(distanceM)} 통과 — ${gapClause(ctx.gap)}.`, priority: PRIORITY.lap, dedupeKey: `lap:${Math.round(distanceM / 1000)}` }
+      return { text: `${kmLabel(distanceM)} 통과 — ${gapClause(ctx.gap, mode)}.`, priority: PRIORITY.lap, dedupeKey: `lap:${Math.round(distanceM / 1000)}` }
     }
     case 'reversal': {
       const type = ctx.reversal ?? (ctx.gap.leadState === 'ahead' ? 'overtake' : 'overtaken')
@@ -236,11 +254,15 @@ export function formatAnnouncement(kind: AnnouncementKind, ctx: AnnouncementCont
       return { text, priority: PRIORITY.reversal, dedupeKey: `reversal:${type}:${kmBucket}` }
     }
     case 'finish': {
-      const text = ctx.gap.leadState === 'even'
-        ? '완주! 고스트와 거의 동시에 들어왔어요.'
-        : ctx.gap.leadState === 'ahead'
-          ? `완주! 고스트보다 ${formatGapSeconds(ctx.gap.timeGapSec)} 빨랐어요.`
-          : `완주! 고스트보다 ${formatGapSeconds(ctx.gap.timeGapSec)} 늦었어요.`
+      const amount = formatGapAmount(ctx.gap, mode)
+      let text: string
+      if (ctx.gap.leadState === 'even') {
+        text = '완주! 고스트와 거의 동시에 들어왔어요.'
+      } else if (mode === 'time') {
+        text = ctx.gap.leadState === 'ahead' ? `완주! 고스트보다 ${amount} 빨랐어요.` : `완주! 고스트보다 ${amount} 늦었어요.`
+      } else {
+        text = ctx.gap.leadState === 'ahead' ? `완주! 고스트보다 ${amount} 앞서 들어왔어요.` : `완주! 고스트보다 ${amount} 뒤처져 들어왔어요.`
+      }
       return { text, priority: PRIORITY.finish, dedupeKey: 'finish' }
     }
   }
