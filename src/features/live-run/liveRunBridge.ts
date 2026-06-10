@@ -33,13 +33,15 @@ export type StartLiveRunParams = {
   /** 정적 고스트 곡선(출발선부터 누적거리↔경과시간). 타겟 '없음'이면 생략. */
   ghostCurve?: GhostCurvePoint[]
   announceConfig: AnnounceConfig
+  /** 목표 거리(m). 누적거리가 이를 넘으면 네이티브가 백그라운드에서 자동 완주. 미지정/0이면 수동 종료. */
+  targetDistanceM?: number | null
   /** 틱 전송 간격(ms). 미지정 시 네이티브 기본(~1Hz). */
   tickIntervalMs?: number
 }
 
 export type LiveSignalState = 'ok' | 'weak' | 'lost'
 export type LiveDistanceSource = 'gps' | 'pedometer'
-export type LiveRunState = 'idle' | 'running' | 'paused' | 'stopped'
+export type LiveRunState = 'idle' | 'ready' | 'running' | 'paused' | 'stopped'
 export type LivePermissionStatus = 'notDetermined' | 'whenInUse' | 'always' | 'denied' | 'restricted'
 
 /** 좌표 없는 ~1Hz 틱(포그라운드 표시용). 2차 실시간 레이스 broadcast 페이로드와 형태 일치. */
@@ -77,6 +79,7 @@ type LiveRunBridgeHandlers = {
   onPermission: (status: LivePermissionStatus) => void
   onRecoverable: (snapshot: LiveRecoverablePayload | null) => void
   onError: (error: LiveErrorPayload) => void
+  onDiagnostic?: (text: string) => void
 }
 
 declare global {
@@ -88,6 +91,7 @@ declare global {
       receivePermission: (status: LivePermissionStatus) => void
       receiveRecoverable: (snapshot: LiveRecoverablePayload | null) => void
       receiveError: (error: LiveErrorPayload) => void
+      receiveDiagnostic: (text: string) => void
     }
   }
 }
@@ -116,6 +120,9 @@ export function registerLiveRunBridge(handlers: LiveRunBridgeHandlers) {
         code: error?.code ?? 'unknown',
         message: error?.message || '라이브 트래킹 오류'
       })
+    },
+    receiveDiagnostic(text) {
+      handlers.onDiagnostic?.(text)
     }
   }
 }
@@ -137,8 +144,14 @@ export function startLiveRun(params: StartLiveRunParams) {
     mode: params.mode,
     ghostCurve: params.ghostCurve ?? null,
     announceConfig: params.announceConfig,
+    targetDistanceM: params.targetDistanceM ?? null,
     tickIntervalMs: params.tickIntervalMs ?? null
   })
+}
+
+/** GPS 확보 후 명시적 시작(카운트다운 종료 시). startLiveRun(준비)으로 ready된 뒤 호출. */
+export function beginLiveRun() {
+  window.webkit?.messageHandlers?.runContextLiveRun?.postMessage({ type: 'beginLiveRun' })
 }
 
 export function pauseLiveRun() {

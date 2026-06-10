@@ -26,6 +26,7 @@ import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import StatCard from '@/shared/ui/StatCard.vue'
 import LevelCard from './LevelCard.vue'
 import QuestPanel from './QuestPanel.vue'
+import RacePage from '@/pages/race/RacePage.vue'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
 
@@ -42,6 +43,7 @@ const trendMetric = ref<'month' | 'last7' | 'easy' | 'hard' | null>(null)
 const detailRun = ref<RunLog | null>(null)
 const projectionDetailOpen = ref(false)
 const nextSessionDetailOpen = ref(false)
+const raceOpen = ref(false)
 const today = ref(new Date())
 const todayDate = computed(() => formatDateOnly(today.value))
 
@@ -53,6 +55,8 @@ onMounted(() => {
 })
 
 const runs = computed(() => runStore.sortedRuns)
+// 마지막 레이싱(self-race 태그) 기록 — 레이싱 카드 표시용. 없으면 null(독려 문구).
+const lastRace = computed(() => runs.value.find((run) => run.tags?.includes('self-race')) ?? null)
 const runDataLoading = computed(() => runStore.loading || (!runStore.loaded && !runStore.error))
 const memoryDataLoading = computed(() => memoryStore.loading)
 const weekDistance = computed(() => sumDistance(getThisWeekRuns(runs.value, today.value)))
@@ -283,7 +287,10 @@ function formatDateOnly(value: Date) {
       <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
     </button>
 
-    <LevelCard :progress="runnerProgress" :coins="levelStore.coins" />
+    <SectionGroup title="내 레벨" :surface="false">
+      <LevelCard :progress="runnerProgress" :coins="levelStore.coins" hide-eyebrow />
+    </SectionGroup>
+
     <QuestPanel
       :progress="runnerProgress"
       :next-session="nextSession"
@@ -291,14 +298,29 @@ function formatDateOnly(value: Date) {
       :weekly-target="weeklyRunTarget"
     />
 
-    <button class="stat-card stat-card-interactive" type="button" @click="router.push('/race')">
-      <span class="stat-card-label">레이싱하기</span>
-      <div class="stat-card-data">
-        <strong class="stat-card-value stat-card-text-value">나와의 대결</strong>
-        <small>고스트와 달리거나 자유 레이싱으로 기록 도전</small>
-      </div>
-      <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
-    </button>
+    <SectionGroup title="레이싱하기" :surface="false">
+      <button class="stat-card stat-card-interactive" type="button" @click="raceOpen = true">
+        <div class="stat-card-data">
+          <template v-if="lastRace">
+            <strong class="stat-card-value stat-card-text-value">{{ lastRace.distanceKm.toFixed(2) }}km · {{ formatDuration(lastRace.durationSec ?? 0) }}</strong>
+            <small>마지막 레이싱 · {{ formatDateWithWeekday(lastRace.date) }}</small>
+          </template>
+          <template v-else>
+            <strong class="stat-card-value stat-card-text-value">첫 레이싱을 시작해보세요</strong>
+            <small>아직 레이싱 기록이 없어요. 고스트와 달리거나 자유 레이싱으로 기록에 도전하세요.</small>
+          </template>
+        </div>
+        <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+      </button>
+    </SectionGroup>
+
+    <Teleport to="body">
+      <Transition name="stack-page-up">
+        <div v-if="raceOpen" class="memory-stack-layer" data-no-swipe>
+          <RacePage @close="raceOpen = false" />
+        </div>
+      </Transition>
+    </Teleport>
 
     <SectionGroup v-if="runStore.loading || runStore.error" title="데이터 상태">
       <template #actions>
@@ -310,19 +332,20 @@ function formatDateOnly(value: Date) {
       <p v-if="runStore.error" class="error">{{ runStore.error }}</p>
     </SectionGroup>
 
-    <button class="stat-card stat-card-interactive dashboard-goal-card" type="button" @click="openGoalCard">
-      <span class="stat-card-label">활성 목표</span>
-      <div v-if="memoryDataLoading || runDataLoading" class="stat-card-data stat-card-skeleton" aria-hidden="true">
-        <span class="skeleton-line skeleton-line-value" />
-        <span class="skeleton-line skeleton-line-hint" />
-      </div>
-      <div v-else class="stat-card-data">
-        <strong class="stat-card-value stat-card-text-value">{{ activeGoal.title }}</strong>
-        <small v-if="goalMetaText">{{ goalMetaText }}</small>
-        <small class="dashboard-goal-projection">{{ goalProjectionText }}</small>
-      </div>
-      <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
-    </button>
+    <SectionGroup title="활성 목표" :surface="false">
+      <button class="stat-card stat-card-interactive dashboard-goal-card" type="button" @click="openGoalCard">
+        <div v-if="memoryDataLoading || runDataLoading" class="stat-card-data stat-card-skeleton" aria-hidden="true">
+          <span class="skeleton-line skeleton-line-value" />
+          <span class="skeleton-line skeleton-line-hint" />
+        </div>
+        <div v-else class="stat-card-data">
+          <strong class="stat-card-value stat-card-text-value">{{ activeGoal.title }}</strong>
+          <small v-if="goalMetaText">{{ goalMetaText }}</small>
+          <small class="dashboard-goal-projection">{{ goalProjectionText }}</small>
+        </div>
+        <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+      </button>
+    </SectionGroup>
 
     <SectionGroup title="몸 상태 신호" :surface="false">
       <MetricGrid>

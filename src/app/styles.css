@@ -5938,6 +5938,26 @@ button.run-session-row {
   transform: translateX(0);
 }
 
+/* 1차 스택은 아래에서 위로 슬라이드인(2차부터는 stack-page 우→좌). */
+.stack-page-up-enter-active,
+.stack-page-up-leave-active {
+  transition:
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease;
+}
+
+.stack-page-up-enter-from,
+.stack-page-up-leave-to {
+  opacity: 0.98;
+  transform: translateY(100%);
+}
+
+.stack-page-up-enter-to,
+.stack-page-up-leave-from {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .stack-slide-forward-enter-active,
 .stack-slide-forward-leave-active,
 .stack-slide-back-enter-active,

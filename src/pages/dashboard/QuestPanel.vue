@@ -57,13 +57,26 @@ defineProps<{
 .quest-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
 }
 
 .quest {
   display: flex;
   gap: 10px;
   align-items: flex-start;
+  padding: 12px 0;
+}
+
+.quest + .quest {
+  border-top: 1px solid var(--color-hairline);
+}
+
+.quest:first-child {
+  padding-top: 0;
+}
+
+.quest:last-child {
+  padding-bottom: 0;
 }
 
 .quest-tag {

@@ -274,6 +274,9 @@ struct RunContextWebView: UIViewRepresentable {
             liveRunTracker.onError = { [weak self] code, message in
                 self?.sendLiveError(code: code, message: message)
             }
+            liveRunTracker.onDiagnostic = { [weak self] text in
+                self?.sendLiveDiagnostic(text)
+            }
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -552,15 +555,21 @@ struct RunContextWebView: UIViewRepresentable {
                 let mode = body["mode"] as? String ?? "solo"
                 let curve = parseGhostCurve(body["ghostCurve"])
                 let config = AnnounceConfig.parse(body["announceConfig"] as? [String: Any])
+                let targetDistanceM = (body["targetDistanceM"] as? NSNumber)?.doubleValue ?? 0
                 let tickIntervalMs = (body["tickIntervalMs"] as? NSNumber)?.intValue ?? 1000
-                print("[RunContext LiveRun] startLiveRun session=\(sessionId) mode=\(mode) ghost=\(curve != nil) periodic=\(config.periodicKind.rawValue)")
+                print("[RunContext LiveRun] startLiveRun session=\(sessionId) mode=\(mode) ghost=\(curve != nil) periodic=\(config.periodicKind.rawValue) target=\(targetDistanceM)")
                 liveRunTracker.start(LiveRunStartParams(
                     sessionId: sessionId,
                     mode: mode,
                     curve: curve,
                     config: config,
+                    targetDistanceM: targetDistanceM,
                     tickIntervalMs: tickIntervalMs
                 ))
+
+            case "beginLiveRun":
+                print("[RunContext LiveRun] beginLiveRun")
+                liveRunTracker.begin()
 
             case "pauseLiveRun":
                 print("[RunContext LiveRun] pauseLiveRun")
@@ -631,6 +640,11 @@ struct RunContextWebView: UIViewRepresentable {
             guard let webView else { return }
             let json = "{\"code\":\"\(jsString(code))\",\"message\":\"\(jsString(message))\"}"
             webView.evaluateJavaScript("window.RunContextLiveRun?.receiveError(\(json));")
+        }
+
+        private func sendLiveDiagnostic(_ text: String) {
+            guard let webView else { return }
+            webView.evaluateJavaScript("window.RunContextLiveRun?.receiveDiagnostic('\(jsString(text))');")
         }
 
         /// JS 문자열 리터럴용 최소 escape(쌍따옴표/역슬래시/개행).

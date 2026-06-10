@@ -50,6 +50,7 @@ describe('startLiveRun', () => {
       mode: 'solo',
       ghostCurve: [{ distanceM: 0, elapsedSec: 0 }, { distanceM: 1000, elapsedSec: 300 }],
       announceConfig: config,
+      targetDistanceM: null,
       tickIntervalMs: null
     })
   })

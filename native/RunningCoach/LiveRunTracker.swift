@@ -18,6 +18,7 @@ import CoreMotion
 
 enum LiveRunState: String {
     case idle
+    case ready    // GPS 확보 대기(측정 전). 신호만 흐름
     case running
     case paused
     case stopped
@@ -48,6 +49,8 @@ struct LiveRunStartParams {
     let mode: String
     let curve: GhostCurve?
     let config: AnnounceConfig
+    /// 목표 거리(m). 누적거리가 이를 넘으면 백그라운드에서 자동 완주. 0 이면 수동 종료.
+    let targetDistanceM: Double
     let tickIntervalMs: Int
 }
 
@@ -67,6 +70,8 @@ final class LiveRunTracker: NSObject {
     var onStateChange: ((LiveRunState) -> Void)?
     var onPermission: ((LivePermissionStatus) -> Void)?
     var onError: ((_ code: String, _ message: String) -> Void)?
+    /// 백그라운드 동작 진단(화면 표시용): 위치 백그라운드 모드/권한/bg업데이트 활성 여부.
+    var onDiagnostic: ((_ text: String) -> Void)?
 
     private let manager = CLLocationManager()
     private let pedometer = CMPedometer()
@@ -95,6 +100,9 @@ final class LiveRunTracker: NSObject {
     /// 속도 상한 필터(m/s). 약 43km/h 초과 점프 제거.
     private let maxSpeedMps: Double = 12
 
+    /// 목표 거리(m). >0 이고 누적거리가 이를 넘으면 자동 완주. 0 = 수동 종료.
+    private var targetDistanceM: Double = 0
+
     private let snapshotKey = "liveRun_snapshot_v1"
 
     override init() {
@@ -102,7 +110,8 @@ final class LiveRunTracker: NSObject {
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
         manager.activityType = .fitness
-        manager.distanceFilter = 5
+        // 연속 업데이트(~1Hz). 느리거나 정지해도 틱이 흘러 시간/백그라운드 음성이 끊기지 않게.
+        manager.distanceFilter = kCLDistanceFilterNone
     }
 
     // ── 권한 ──────────────────────────────────────────────────────────────────
@@ -123,11 +132,33 @@ final class LiveRunTracker: NSObject {
         return modes.contains("location")
     }
 
+    /// 백그라운드 위치 업데이트 활성화. 권한이 부여된 뒤(또는 이미 부여) 호출해야 iOS가 존중한다.
+    /// (start()에서 권한 미결정 상태로 set하면 무시될 수 있어 didChangeAuthorization에서도 set.)
+    private func enableBackgroundUpdatesIfPossible() {
+        #if os(iOS)
+        let st = manager.authorizationStatus
+        guard st == .authorizedAlways || st == .authorizedWhenInUse, backgroundLocationAllowed() else { return }
+        manager.allowsBackgroundLocationUpdates = true
+        manager.pausesLocationUpdatesAutomatically = false
+        #endif
+    }
+
+    /// 백그라운드 진단(화면 표시): bg 모드/권한/bgUpd. bg=[]이면 stale plist, bgUpd=false면 권한 타이밍 문제.
+    private func emitDiagnostic() {
+        let modes = (Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String]) ?? []
+        var bgUpd = false
+        #if os(iOS)
+        bgUpd = manager.allowsBackgroundLocationUpdates
+        #endif
+        onDiagnostic?("bg=[\(modes.joined(separator: ","))] 권한=\(permissionStatus().rawValue) bgUpd=\(bgUpd)")
+    }
+
     // ── 명령 ──────────────────────────────────────────────────────────────────
 
     func start(_ params: LiveRunStartParams) {
         reset()
         sessionId = params.sessionId
+        targetDistanceM = params.targetDistanceM
         engine = GhostRaceEngine(curve: params.curve, config: params.config)
 
         speech.reset()
@@ -135,21 +166,29 @@ final class LiveRunTracker: NSObject {
 
         manager.requestAlwaysAuthorization()
         #if os(iOS)
-        // allowsBackgroundLocationUpdates=true 는 UIBackgroundModes에 "location"이 없으면 크래시.
-        if backgroundLocationAllowed() {
-            manager.allowsBackgroundLocationUpdates = true
-        }
         manager.pausesLocationUpdatesAutomatically = false
         #endif
+        // 이미 권한이 있으면 지금 set, 아직 미결정이면 didChangeAuthorization에서 권한 부여 직후 set.
+        enableBackgroundUpdatesIfPossible()
         manager.startUpdatingLocation()
         startPedometer()
 
+        // 대기 상태: GPS만 켜고 신호 확보를 기다린다. 실제 측정/클럭은 begin()에서.
+        setState(.ready)
+        onPermission?(permissionStatus())
+        emitDiagnostic()
+        persistSnapshot()
+    }
+
+    /// GPS 확보 후 명시적 시작(카운트다운 종료 시). ready → running, 클럭·엔진·발화 시작.
+    func begin() {
+        guard state == .ready else { return }
         let now = Date()
         startDate = now
         lastGoodFixAt = now
+        lastLocation = nil
         setState(.running)
-        onPermission?(permissionStatus())
-        speech.speak(text: "레이싱을 시작합니다.", priority: 0)
+        speech.speak(text: "레이싱 시작.", priority: 0)
         persistSnapshot()
     }
 
@@ -177,7 +216,14 @@ final class LiveRunTracker: NSObject {
     }
 
     func stop() {
+        // 측정 시작 전(idle/ready/stopped)에서도 GPS/오디오 세션은 반드시 정리(대기 중 닫기 누수 방지).
         guard state == .running || state == .paused else {
+            manager.stopUpdatingLocation()
+            #if os(iOS)
+            manager.allowsBackgroundLocationUpdates = false
+            #endif
+            pedometer.stopUpdates()
+            speech.deactivateAudioSession()
             clearSnapshot()
             setState(.stopped)
             return
@@ -226,6 +272,7 @@ final class LiveRunTracker: NSObject {
     private func reset() {
         manager.stopUpdatingLocation()
         pedometer.stopUpdates()
+        targetDistanceM = 0
         startDate = nil
         pausedAccumulatedSec = 0
         pauseStartedAt = nil
@@ -288,6 +335,11 @@ final class LiveRunTracker: NSObject {
 
         onTick?(seq, elapsedSec, cumulativeDistanceM, instantPaceSec, signal, distanceSource)
         persistSnapshot()
+
+        // 목표 거리 도달 → 백그라운드 자동 완주(완주 멘트는 stop() 안 engine.finish가 처리).
+        if targetDistanceM > 0, cumulativeDistanceM >= targetDistanceM, state == .running {
+            stop()
+        }
     }
 
     private func persistSnapshot() {
@@ -310,17 +362,16 @@ final class LiveRunTracker: NSObject {
 extension LiveRunTracker: CLLocationManagerDelegate {
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         onPermission?(permissionStatus())
+        // 권한 부여 직후 백그라운드 업데이트를 set(start()의 미결정 타이밍 set은 무시될 수 있음).
+        enableBackgroundUpdatesIfPossible()
+        if state == .running { emitDiagnostic() }
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard state == .running else { return }
+        guard state == .running || state == .ready else { return }
         let now = Date()
 
         for loc in locations {
-            // 앱 시작 직후 CLLocationManager가 흔히 던지는 캐시된 오래된 fix는 무시한다
-            // (거리 점프·잘못된 pedometer 전환의 원인).
-            if abs(loc.timestamp.timeIntervalSinceNow) > 10 { continue }
-
             // 신호 상태
             let signal: LiveSignalState
             if loc.horizontalAccuracy < 0 {
@@ -330,6 +381,18 @@ extension LiveRunTracker: CLLocationManagerDelegate {
             } else {
                 signal = .weak
             }
+
+            // 대기(ready): GPS 확보 표시용 신호만 emit — 누적/엔진/완주 없음. 시작 버튼 활성 판단용.
+            if state == .ready {
+                if signal != .lost { lastLocation = loc }
+                seq += 1
+                onTick?(seq, 0, 0, nil, signal, distanceSource)
+                continue
+            }
+
+            // (running) 출발 이전 캐시된 fix만 버린다. 인-런 fix는 백그라운드 batch로 약간 늦게
+            // 와도 처리해야 틱이 끊기지 않는다(이전의 ">10초 무시"가 백그라운드 정지의 원인이었음).
+            if let s = startDate, loc.timestamp < s.addingTimeInterval(-1) { continue }
 
             var instantPaceSec: Double?
 

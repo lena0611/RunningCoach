@@ -1,5 +1,6 @@
 import { onUnmounted, ref, shallowRef } from 'vue'
 import {
+  beginLiveRun,
   isLiveRunBridgeAvailable,
   pauseLiveRun,
   registerLiveRunBridge,
@@ -30,6 +31,7 @@ export function useLiveRun() {
   const gap = shallowRef<LiveGapPayload | null>(null)
   const error = ref<LiveErrorPayload | null>(null)
   const recoverable = shallowRef<LiveRecoverablePayload | null>(null)
+  const diagnostic = ref<string | null>(null)
 
   registerLiveRunBridge({
     onTick(payload) {
@@ -50,6 +52,9 @@ export function useLiveRun() {
     },
     onError(payload) {
       error.value = payload
+    },
+    onDiagnostic(text) {
+      diagnostic.value = text
     }
   })
 
@@ -72,7 +77,9 @@ export function useLiveRun() {
     gap,
     error,
     recoverable,
+    diagnostic,
     start,
+    begin: beginLiveRun,
     pause: pauseLiveRun,
     resume: resumeLiveRun,
     stop: stopLiveRun,
