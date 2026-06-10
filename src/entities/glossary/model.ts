@@ -11,6 +11,7 @@ export type GlossaryCategory =
   | 'injury'
   | 'goal'
   | 'achievement'
+  | 'competition'
   | 'data'
 
 export type GlossaryTerm = {
@@ -34,6 +35,7 @@ export const GLOSSARY_CATEGORY_ORDER: GlossaryCategory[] = [
   'injury',
   'goal',
   'achievement',
+  'competition',
   'data'
 ]
 
@@ -46,6 +48,7 @@ export const GLOSSARY_CATEGORY_LABEL: Record<GlossaryCategory, string> = {
   injury: '부상·몸 상태',
   goal: '목표',
   achievement: '업적·기록',
+  competition: '레이싱',
   data: '데이터·연동'
 }
 
@@ -58,6 +61,7 @@ export const GLOSSARY_CATEGORY_DESCRIPTION: Record<GlossaryCategory, string> = {
   injury: '통증·부상 상태를 훈련 강도에 반영하는 기준',
   goal: '코칭의 판단 기준이 되는 목표 구조',
   achievement: '전체 기록에서 자동 산출되는 개인 최고·꾸준함 기록',
+  competition: '과거의 나(고스트)나 다른 러너와 같은 거리를 겨루는 레이싱 기능',
   data: 'HealthKit·FIT·날씨 등 기록이 들어오는 경로와 예측'
 }
 
