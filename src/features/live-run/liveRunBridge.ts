@@ -1,4 +1,4 @@
-import type { GhostCurvePoint, LeadState } from '@/shared/lib/selfRace/ghost'
+import type { GapDisplayMode, GhostCurvePoint, LeadState } from '@/shared/lib/selfRace/ghost'
 
 /**
  * 가상레이싱 `나와의 대결` 라이브 트래킹 브리지 — `runContextLiveRun` (#229, competition-domain §9.3).
@@ -25,6 +25,8 @@ export type AnnounceConfig = {
     stepSec?: number
   }
   reversalAlert: boolean
+  /** 고스트 격차 표현 단위. 화면 표시와 음성 안내가 함께 따른다. 기본 'distance'. */
+  gapMode?: GapDisplayMode
 }
 
 export type StartLiveRunParams = {

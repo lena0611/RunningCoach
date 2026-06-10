@@ -159,10 +159,25 @@ describe('formatAnnouncement', () => {
     expect(reversal.priority).toBeLessThan(finish.priority)
   })
 
-  it('formats reversal text and finish with minute:second gaps', () => {
+  it('formats reversal text and finish with minute:second gaps (time mode)', () => {
     expect(formatAnnouncement('reversal', { gap: gap('ahead', -5), reversal: 'overtake' }).text).toContain('제쳤')
     expect(formatAnnouncement('reversal', { gap: gap('behind', 5), reversal: 'overtaken' }).text).toContain('따라잡')
-    expect(formatAnnouncement('finish', { gap: gap('ahead', -75) }).text).toContain('1분 15초')
+    expect(formatAnnouncement('finish', { gap: gap('ahead', -75), gapMode: 'time' }).text).toContain('1분 15초')
     expect(formatAnnouncement('periodic', { gap: gap('even'), distanceM: 2000 }).text).toContain('나란히')
+  })
+
+  it('expresses gap amount per gapMode (distance vs time), default distance', () => {
+    // gap() 헬퍼: distanceGapM = -timeGapSec. behind 20s → 뒤 20m / 뒤 20초.
+    const g = gap('behind', 20)
+    const distancePeriodic = formatAnnouncement('periodic', { gap: g, distanceM: 500, gapMode: 'distance' }).text
+    const timePeriodic = formatAnnouncement('periodic', { gap: g, distanceM: 500, gapMode: 'time' }).text
+    expect(distancePeriodic).toContain('20m')
+    expect(distancePeriodic).toContain('뒤처졌')
+    expect(timePeriodic).toContain('20초')
+    // 기본값은 distance (gapMode 미지정)
+    expect(formatAnnouncement('periodic', { gap: g, distanceM: 500 }).text).toContain('20m')
+    // finish 도 모드를 따른다
+    expect(formatAnnouncement('finish', { gap: gap('ahead', -50), gapMode: 'distance' }).text).toContain('50m')
+    expect(formatAnnouncement('finish', { gap: gap('ahead', -50), gapMode: 'distance' }).text).toContain('앞서 들어왔')
   })
 })
