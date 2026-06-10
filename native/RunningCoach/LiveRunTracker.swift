@@ -98,8 +98,14 @@ final class LiveRunTracker: NSObject {
     // 표시용 페이스 평활화. 연속 두 GPS fix의 거리÷시간은 GPS 노이즈(±5~10m)에 폭발하므로
     // 최근 윈도우 구간의 (거리Δ/시간Δ)로 롤링 평균을 낸다. 거리 변화가 작으면(정지/노이즈) 미표시.
     private var paceSamples: [(t: Double, d: Double)] = []
-    private let paceWindowSec: Double = 20
+    /// 표시 페이스 롤링 윈도우(초). 길수록 매끄럽지만 반응이 느림. 10초 = 노이즈 억제와
+    /// 실시간 반응의 절충(딜레이 약 5초). 더 길면 속도 변화가 늦게 반영된다.
+    private let paceWindowSec: Double = 10
     private let paceMinDistanceM: Double = 8
+    /// 정지 감지 단기 윈도우(초)와 최소 이동(m). 최근 paceStopWindowSec 동안 이동이
+    /// paceStopMinDistanceM 미만이면 즉시 '—'(감속·정지 시 페이스가 확 치솟는 것 방지).
+    private let paceStopWindowSec: Double = 4
+    private let paceStopMinDistanceM: Double = 4
 
     // GPS 품질/fallback
     private var lastGoodFixAt: Date?
@@ -231,6 +237,15 @@ final class LiveRunTracker: NSObject {
         paceSamples.append((t: elapsed, d: cumulativeDistanceM))
         let cutoff = elapsed - paceWindowSec
         while let first = paceSamples.first, first.t < cutoff { paceSamples.removeFirst() }
+
+        // 정지 감지: 최근 단기 윈도우 이동이 거의 없으면 즉시 '—'. 슬라이딩 윈도우는 감속 시
+        // dDist는 멈추는데 dTime은 늘어 페이스가 치솟다 늦게 '—'로 떨어지므로, 그 폭증을 잘라낸다.
+        let stopCutoff = elapsed - paceStopWindowSec
+        if let recent = paceSamples.first(where: { $0.t >= stopCutoff }),
+           cumulativeDistanceM - recent.d < paceStopMinDistanceM {
+            return nil
+        }
+
         guard let first = paceSamples.first, paceSamples.count >= 2 else { return nil }
         let dDist = cumulativeDistanceM - first.d
         let dTime = elapsed - first.t
