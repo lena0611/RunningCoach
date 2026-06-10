@@ -19,7 +19,10 @@ import InjuryCheckInSheet from '@/shared/ui/InjuryCheckInSheet.vue'
 import InjuryScreeningSheet from '@/shared/ui/InjuryScreeningSheet.vue'
 import ToastHost from '@/shared/ui/ToastHost.vue'
 import OnboardingFlow from '@/pages/onboarding/OnboardingFlow.vue'
+import CelebrationModal from '@/pages/dashboard/CelebrationModal.vue'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
+import { resolveRunnerProgress } from '@/shared/lib/level/levelModel'
+import { getThisWeekRuns } from '@/shared/lib/runStats'
 import type { BottomNavItem } from '@/shared/ui/BottomNav.vue'
 
 const authStore = useAuthStore()
@@ -33,6 +36,32 @@ watch(
   () => authStore.isAuthenticated,
   (auth) => {
     if (auth && isSupabaseConfigured && !levelStore.loaded && !levelStore.loading) void levelStore.load()
+  },
+  { immediate: true }
+)
+const runnerProgress = computed(() =>
+  resolveRunnerProgress(memoryStore.memory.athleteProfile, runStore.sortedRuns, new Date(), {
+    maxDistanceM: levelStore.selfReportedMaxDistanceM
+  })
+)
+const weeklyDone = computed(() => getThisWeekRuns(runStore.sortedRuns, new Date()).length)
+const weeklyTarget = computed(() => memoryStore.memory.athleteProfile.weeklyRunDaysTarget ?? 0)
+// 보상 동기화는 run/memory 가 완전히 로드된 뒤에만 실행한다(로드 경합으로 인한 가짜 레벨업 축하 방지).
+watch(
+  () => [
+    levelStore.loaded,
+    levelStore.needsOnboarding,
+    runStore.loaded,
+    memoryStore.loaded,
+    runnerProgress.value.distanceClass.key,
+    runnerProgress.value.grade?.key ?? null,
+    weeklyDone.value
+  ],
+  () => {
+    if (!isSupabaseConfigured || !authStore.isAuthenticated) return
+    if (!levelStore.loaded || levelStore.needsOnboarding) return
+    if (!runStore.loaded || !memoryStore.loaded) return
+    void levelStore.syncRewards(runnerProgress.value, weeklyDone.value, weeklyTarget.value)
   },
   { immediate: true }
 )
@@ -739,6 +768,12 @@ function animateTabRelease(targetOffset: number, targetRoute: string | null) {
   <AppShell :nav-items="navItems" :is-authenticated="authStore.isAuthenticated" @sign-out="authStore.signOut()">
     <ToastHost />
     <OnboardingFlow v-if="showOnboarding" />
+    <CelebrationModal
+      v-if="levelStore.pendingCelebration"
+      :events="levelStore.pendingCelebration.events"
+      :coins="levelStore.pendingCelebration.coins"
+      @dismiss="levelStore.dismissCelebration()"
+    />
     <InjuryCheckInSheet
       :open="Boolean(injuryCheckInItem)"
       :item="injuryCheckInItem"

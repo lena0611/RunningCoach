@@ -80,6 +80,8 @@ const runnerProgress = computed(() =>
     maxDistanceM: levelStore.selfReportedMaxDistanceM
   })
 )
+const weeklyRunCount = computed(() => getThisWeekRuns(runs.value, today.value).length)
+const weeklyRunTarget = computed(() => memoryStore.memory.athleteProfile.weeklyRunDaysTarget ?? 0)
 
 watch(
   () => route.path,
@@ -286,10 +288,15 @@ function formatDateOnly(value: Date) {
     </button>
 
     <SectionGroup title="내 레벨" :surface="false">
-      <LevelCard :progress="runnerProgress" hide-eyebrow />
+      <LevelCard :progress="runnerProgress" :coins="levelStore.coins" hide-eyebrow />
     </SectionGroup>
 
-    <QuestPanel :progress="runnerProgress" :next-session="nextSession" />
+    <QuestPanel
+      :progress="runnerProgress"
+      :next-session="nextSession"
+      :weekly-done="weeklyRunCount"
+      :weekly-target="weeklyRunTarget"
+    />
 
     <SectionGroup title="레이싱하기" :surface="false">
       <button class="stat-card stat-card-interactive" type="button" @click="raceOpen = true">

@@ -329,3 +329,42 @@ export function runnerProgressLabel(progress: RunnerProgress): string {
   if (!progress.grade) return progress.distanceClass.label
   return `${progress.distanceClass.label} · ${progress.grade.label}`
 }
+
+// ── 레벨업 감지 + 코인 보상 (#277) ─────────────────────────────────────────────────
+// 무결성: 코인은 참여 보상이며 등급(실력)에 영향을 주지 않는다.
+
+export const COIN_REWARD = { classUp: 200, gradeUp: 50, weeklyRoutine: 30 } as const
+
+export type LevelUpEvent = { kind: 'class' | 'grade'; toKey: string; toLabel: string; coins: number }
+
+function classIndexOf(key: string): number {
+  return DISTANCE_CLASSES.findIndex((item) => item.key === key)
+}
+function gradeIndexOf(key: string): number {
+  return GRADE_BANDS.findIndex((item) => item.key === key)
+}
+
+/**
+ * 현재 클래스/등급을 acknowledged 와 비교해 레벨업 이벤트를 만든다.
+ * - acknowledged_class 가 null 이면 baseline(첫 감지) → 이벤트 없이 현재 값을 acknowledge 만 한다(소급 축하 방지).
+ * - 이후 클래스/등급이 acknowledged 보다 높아진 경우만 이벤트로 본다.
+ */
+export function detectLevelUps(
+  currentClassKey: string,
+  currentGradeKey: string | null,
+  acknowledgedClassKey: string | null,
+  acknowledgedGradeKey: string | null
+): { baseline: boolean; events: LevelUpEvent[] } {
+  if (acknowledgedClassKey === null) return { baseline: true, events: [] }
+
+  const events: LevelUpEvent[] = []
+  if (classIndexOf(currentClassKey) > classIndexOf(acknowledgedClassKey)) {
+    const cls = DISTANCE_CLASSES.find((item) => item.key === currentClassKey)
+    if (cls) events.push({ kind: 'class', toKey: cls.key, toLabel: cls.label, coins: COIN_REWARD.classUp })
+  }
+  if (currentGradeKey && (acknowledgedGradeKey === null || gradeIndexOf(currentGradeKey) > gradeIndexOf(acknowledgedGradeKey))) {
+    const grade = GRADE_BANDS.find((item) => item.key === currentGradeKey)
+    if (grade) events.push({ kind: 'grade', toKey: grade.key, toLabel: grade.label, coins: COIN_REWARD.gradeUp })
+  }
+  return { baseline: false, events }
+}
