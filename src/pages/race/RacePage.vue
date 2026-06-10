@@ -352,8 +352,8 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
               <p class="race-ready-sub">아래 <strong>시작</strong>을 누르면 3·2·1 카운트다운 후 측정이 시작됩니다.</p>
             </template>
           </div>
-          <p v-if="started && live.permission.value === 'whenInUse'" class="race-warn">위치를 "항상 허용"으로 바꿔야 화면을 잠가도 측정됩니다.</p>
           <p v-if="started && live.error.value" class="race-warn">오류 {{ live.error.value.code }}: {{ live.error.value.message }}</p>
+          <p v-if="started && live.diagnostic.value" class="race-diag">진단 {{ live.diagnostic.value }}</p>
         </SectionGroup>
       </template>
 
@@ -473,6 +473,7 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
 .race-text { color: var(--color-text); margin: 0 0 6px; }
 .race-muted { font-size: 0.84rem; color: var(--color-muted); margin: 6px 0 0; line-height: 1.5; }
 .race-warn { font-size: 0.84rem; color: var(--color-warning-text); margin: 10px 0 0; }
+.race-diag { font-size: 0.72rem; color: var(--color-muted); margin: 8px 0 0; font-family: ui-monospace, monospace; }
 
 /* 상위 모드 탭 — 페이지 레벨 밑줄형 탭 스킨 */
 .race-modes { display: flex; gap: 2px; border-bottom: 1px solid var(--color-border); margin-bottom: 16px; }

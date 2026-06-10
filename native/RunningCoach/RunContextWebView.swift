@@ -274,6 +274,9 @@ struct RunContextWebView: UIViewRepresentable {
             liveRunTracker.onError = { [weak self] code, message in
                 self?.sendLiveError(code: code, message: message)
             }
+            liveRunTracker.onDiagnostic = { [weak self] text in
+                self?.sendLiveDiagnostic(text)
+            }
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -633,6 +636,11 @@ struct RunContextWebView: UIViewRepresentable {
             guard let webView else { return }
             let json = "{\"code\":\"\(jsString(code))\",\"message\":\"\(jsString(message))\"}"
             webView.evaluateJavaScript("window.RunContextLiveRun?.receiveError(\(json));")
+        }
+
+        private func sendLiveDiagnostic(_ text: String) {
+            guard let webView else { return }
+            webView.evaluateJavaScript("window.RunContextLiveRun?.receiveDiagnostic('\(jsString(text))');")
         }
 
         /// JS 문자열 리터럴용 최소 escape(쌍따옴표/역슬래시/개행).

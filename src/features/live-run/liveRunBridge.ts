@@ -79,6 +79,7 @@ type LiveRunBridgeHandlers = {
   onPermission: (status: LivePermissionStatus) => void
   onRecoverable: (snapshot: LiveRecoverablePayload | null) => void
   onError: (error: LiveErrorPayload) => void
+  onDiagnostic?: (text: string) => void
 }
 
 declare global {
@@ -90,6 +91,7 @@ declare global {
       receivePermission: (status: LivePermissionStatus) => void
       receiveRecoverable: (snapshot: LiveRecoverablePayload | null) => void
       receiveError: (error: LiveErrorPayload) => void
+      receiveDiagnostic: (text: string) => void
     }
   }
 }
@@ -118,6 +120,9 @@ export function registerLiveRunBridge(handlers: LiveRunBridgeHandlers) {
         code: error?.code ?? 'unknown',
         message: error?.message || '라이브 트래킹 오류'
       })
+    },
+    receiveDiagnostic(text) {
+      handlers.onDiagnostic?.(text)
     }
   }
 }
