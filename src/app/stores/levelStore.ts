@@ -69,7 +69,7 @@ export const useLevelStore = defineStore('levelStore', {
      * 진척을 acknowledged 와 비교해 레벨업 보상/축하를 처리하고, 주간 루틴 완주 코인을 적립한다.
      * 전부 자동: 첫 감지는 baseline(소급 축하 방지), 이후 클래스/등급 상승만 코인+축하.
      */
-    async syncRewards(progress: RunnerProgress, weeklyDone: number, weeklyTarget: number, today = new Date()) {
+    async syncRewards(progress: RunnerProgress, weeklyDone: number, weeklyTarget: number, lastSelfRaceRunId: string | null = null, today = new Date()) {
       if (!isSupabaseConfigured || !this.row || this.syncing) return
       this.syncing = true
       try {
@@ -94,6 +94,12 @@ export const useLevelStore = defineStore('levelStore', {
             await insertQuestLog('routine', weekKey, COIN_REWARD.weeklyRoutine)
             await insertReward('coin', COIN_REWARD.weeklyRoutine, `routine_week:${weekKey}`)
           }
+        }
+
+        // 유지 점검: self-race(나만의 레이싱/타임트라이얼 재측정) 1건당 +20, run_id 키로 1회만.
+        if (lastSelfRaceRunId && !(await hasQuestLog('maintenance', lastSelfRaceRunId))) {
+          await insertQuestLog('maintenance', lastSelfRaceRunId, COIN_REWARD.maintenance)
+          await insertReward('coin', COIN_REWARD.maintenance, `maintenance:${lastSelfRaceRunId}`)
         }
 
         this.coins = await fetchCoinTotal()

@@ -333,7 +333,7 @@ export function runnerProgressLabel(progress: RunnerProgress): string {
 // ── 레벨업 감지 + 코인 보상 (#277) ─────────────────────────────────────────────────
 // 무결성: 코인은 참여 보상이며 등급(실력)에 영향을 주지 않는다.
 
-export const COIN_REWARD = { classUp: 200, gradeUp: 50, weeklyRoutine: 30 } as const
+export const COIN_REWARD = { classUp: 200, gradeUp: 50, weeklyRoutine: 30, maintenance: 20 } as const
 
 export type LevelUpEvent = { kind: 'class' | 'grade'; toKey: string; toLabel: string; coins: number }
 

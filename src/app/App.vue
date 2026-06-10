@@ -46,6 +46,7 @@ const runnerProgress = computed(() =>
 )
 const weeklyDone = computed(() => getThisWeekRuns(runStore.sortedRuns, new Date()).length)
 const weeklyTarget = computed(() => memoryStore.memory.athleteProfile.weeklyRunDaysTarget ?? 0)
+const lastSelfRaceRunId = computed(() => runStore.sortedRuns.find((run) => run.tags?.includes('self-race'))?.id ?? null)
 // 보상 동기화는 run/memory 가 완전히 로드된 뒤에만 실행한다(로드 경합으로 인한 가짜 레벨업 축하 방지).
 watch(
   () => [
@@ -55,13 +56,14 @@ watch(
     memoryStore.loaded,
     runnerProgress.value.distanceClass.key,
     runnerProgress.value.grade?.key ?? null,
-    weeklyDone.value
+    weeklyDone.value,
+    lastSelfRaceRunId.value
   ],
   () => {
     if (!isSupabaseConfigured || !authStore.isAuthenticated) return
     if (!levelStore.loaded || levelStore.needsOnboarding) return
     if (!runStore.loaded || !memoryStore.loaded) return
-    void levelStore.syncRewards(runnerProgress.value, weeklyDone.value, weeklyTarget.value)
+    void levelStore.syncRewards(runnerProgress.value, weeklyDone.value, weeklyTarget.value, lastSelfRaceRunId.value)
   },
   { immediate: true }
 )
