@@ -336,7 +336,6 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
                 <div class="track-rail">
                   <div class="track-fill" :style="{ width: myPct }" />
                   <div v-if="ghostPct" class="track-marker ghost" :style="{ left: ghostPct }" aria-label="고스트" />
-                  <div class="track-marker me" :style="{ left: myPct }" aria-label="나" />
                 </div>
                 <div class="track-labels"><span>출발</span><span>{{ targetKmLabel }}</span></div>
               </div>
@@ -345,7 +344,7 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
                 <div class="live-stat"><strong>{{ distanceText }}</strong><span>km</span></div>
                 <div class="live-stat"><strong>{{ paceText }}</strong><span>페이스</span></div>
               </div>
-              <div class="live-meta">신호 {{ live.tick.value?.signalState ?? '-' }} · {{ live.tick.value?.source ?? '-' }}</div>
+              <div class="live-meta">신호 {{ live.tick.value?.signalState ?? '-' }} · {{ live.tick.value?.source ?? '-' }} · #{{ live.tick.value?.seq ?? 0 }}</div>
             </template>
             <template v-else>
               <p class="race-ready">출발 준비 완료</p>

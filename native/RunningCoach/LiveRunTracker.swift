@@ -109,7 +109,8 @@ final class LiveRunTracker: NSObject {
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
         manager.activityType = .fitness
-        manager.distanceFilter = 5
+        // 연속 업데이트(~1Hz). 느리거나 정지해도 틱이 흘러 시간/백그라운드 음성이 끊기지 않게.
+        manager.distanceFilter = kCLDistanceFilterNone
     }
 
     // ── 권한 ──────────────────────────────────────────────────────────────────
@@ -357,7 +358,9 @@ extension LiveRunTracker: CLLocationManagerDelegate {
         for loc in locations {
             // 앱 시작 직후 CLLocationManager가 흔히 던지는 캐시된 오래된 fix는 무시한다
             // (거리 점프·잘못된 pedometer 전환의 원인).
-            if abs(loc.timestamp.timeIntervalSinceNow) > 10 { continue }
+            // 출발 이전 캐시된 fix만 버린다. 인-런 fix는 백그라운드 batch로 약간 늦게 와도
+            // 처리해야 틱이 끊기지 않는다(이전의 ">10초 무시"가 백그라운드 정지의 원인이었음).
+            if let s = startDate, loc.timestamp < s.addingTimeInterval(-1) { continue }
 
             // 신호 상태
             let signal: LiveSignalState
