@@ -118,4 +118,48 @@ describe('computeTempoCeilingAdaptation', () => {
     const a = computeTempoCeilingAdaptation(qualifyingSet(1, 200), BASE)
     expect(a.effectiveCeilingBpm).toBe(BASE)
   })
+
+  it('검증 3회는 proposedAdoptedCeilingBpm를 effective와 동일하게 제시(영속 대상)', () => {
+    const a = computeTempoCeilingAdaptation(qualifyingSet(3, 165), BASE)
+    expect(a.proposedAdoptedCeilingBpm).toBe(BASE + 2)
+    expect(a.effectiveCeilingBpm).toBe(BASE + 2)
+  })
+})
+
+describe('computeTempoCeilingAdaptation — 다단계 래칫(영속 채택값 재앵커링)', () => {
+  it('채택값은 sticky: 추가 근거 없어도 effective는 채택 상한 유지(고신뢰)', () => {
+    const a = computeTempoCeilingAdaptation([], BASE, { adoptedCeilingBpm: 160 })
+    expect(a.effectiveCeilingBpm).toBe(160)
+    expect(a.source).toBe('adapted')
+    expect(a.confidence).toBe('high')
+    expect(a.proposedAdoptedCeilingBpm).toBe(160) // 변경 없음
+  })
+
+  it('채택값 위에서 재검증되면 다음 단계로 상향(160→162)', () => {
+    // 채택 160 위로 maxHr 165가 3회 검증 → 162로 한 단계 더.
+    const a = computeTempoCeilingAdaptation(qualifyingSet(3, 165), BASE, { adoptedCeilingBpm: 160 })
+    expect(a.effectiveCeilingBpm).toBe(162)
+    expect(a.proposedAdoptedCeilingBpm).toBe(162)
+    expect(a.source).toBe('adapted')
+  })
+
+  it('채택값을 넘지 못한 Tempo는 추가 상향 근거가 아니다(채택 상한 유지)', () => {
+    // 채택 162인데 최근 Tempo maxHr 160(채택값 이하) → 추가 자격 0, effective 162 유지.
+    const a = computeTempoCeilingAdaptation(qualifyingSet(3, 160), BASE, { adoptedCeilingBpm: 162 })
+    expect(a.qualifyingCount).toBe(0)
+    expect(a.effectiveCeilingBpm).toBe(162)
+    expect(a.proposedAdoptedCeilingBpm).toBe(162)
+  })
+
+  it('부상 활성: 채택 상한은 유지하되 추가 상향은 차단', () => {
+    const a = computeTempoCeilingAdaptation(qualifyingSet(3, 165), BASE, { adoptedCeilingBpm: 160, injuryActive: true })
+    expect(a.effectiveCeilingBpm).toBe(160)
+    expect(a.candidateCeilingBpm).toBeNull()
+    expect(a.proposedAdoptedCeilingBpm).toBe(160)
+  })
+
+  it('채택값이 base보다 낮아도 effective는 base 미만으로 내려가지 않는다', () => {
+    const a = computeTempoCeilingAdaptation([], BASE, { adoptedCeilingBpm: BASE - 5 })
+    expect(a.effectiveCeilingBpm).toBe(BASE)
+  })
 })

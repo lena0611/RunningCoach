@@ -153,6 +153,20 @@ export type AdaptiveTrainingProfile = {
   prescriptionTemplates: PrescriptionTemplate[]
   compliancePatterns: string[]
   sessionGuides: AdaptiveSessionGuide[]
+  /** Tempo 심박 상한 적응 영속 상태(#301). 검증으로 채택한 상한을 저장해 재앵커링·다단계 상향한다. */
+  tempoCeiling: AdaptiveTempoCeiling
+}
+
+/**
+ * 검증된 Tempo 상한 적응값(상향만, base 미만 불가). 추정 base 위에 얹는 보정의 영속 상태.
+ * run_logs 파생 계산이 제안하고, 검증(고신뢰) 시 이 값이 채택·영속된다.
+ */
+export type AdaptiveTempoCeiling = {
+  /** 채택된 적응 상한(bpm). 미채택이면 null → 추정 base 사용. */
+  adoptedBpm: number | null
+  /** 채택 당시 추정 base(bpm). 감사·base 변동 감지용. */
+  baseBpm: number | null
+  adoptedAt: string | null
 }
 
 export type TrainingPhaseName = 'Base' | 'Build' | 'Threshold' | 'Race Specific' | 'Taper' | 'Recovery'
@@ -397,7 +411,8 @@ export const initialTrainingMemory: TrainingMemory = {
     progressionCriteria: defaultProgressionCriteria,
     prescriptionTemplates: defaultPrescriptionTemplates,
     compliancePatterns: [],
-    sessionGuides: []
+    sessionGuides: [],
+    tempoCeiling: { adoptedBpm: null, baseBpm: null, adoptedAt: null }
   },
   runnerIdentity: {
     strengths: [
@@ -731,7 +746,18 @@ function normalizeAdaptiveTrainingProfile(value: unknown): AdaptiveTrainingProfi
     compliancePatterns: Array.isArray(raw.compliancePatterns)
       ? raw.compliancePatterns.filter((item) => typeof item === 'string' && item.trim()).map((item) => stripStaleHeartRateCeilings(item.trim())).slice(0, 20)
       : [],
-    sessionGuides
+    sessionGuides,
+    tempoCeiling: normalizeAdaptiveTempoCeiling(raw.tempoCeiling)
+  }
+}
+
+function normalizeAdaptiveTempoCeiling(value: unknown): AdaptiveTempoCeiling {
+  const raw = value && typeof value === 'object' ? value as Partial<AdaptiveTempoCeiling> : {}
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : null)
+  return {
+    adoptedBpm: num(raw.adoptedBpm),
+    baseBpm: num(raw.baseBpm),
+    adoptedAt: typeof raw.adoptedAt === 'string' && raw.adoptedAt ? raw.adoptedAt : null
   }
 }
 

@@ -568,12 +568,14 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
   const selectedRunDateForTemporalContext = selectedRun?.date ?? null
   const injuryItems = filterInjuryItemsForRunDate(allInjuryItems, selectedRunDateForTemporalContext)
   const activeInjuryItem = getActiveInjuryItemForRunDate(trainingMemory, allInjuryItems, selectedRunDateForTemporalContext)
-  // Tempo 상한 적응(#301): 웹이 검증한 effective 상한이 오면 그것을 권위 기준으로 override한다
-  // (lap 분석·실행 가이드·처방 준수 신호가 모두 적응 상한을 쓰도록). base 미만으로는 내리지 않는다.
+  // Tempo 상한 적응(#301): 권위 있는 effective 상한은 클라이언트 주입이 아니라 영속된 채택값
+  // (adaptiveTrainingProfile.tempoCeiling.adoptedBpm)을 서버가 직접 읽어 max(base, 채택값)로 적용한다.
+  // base 미만으로는 내리지 않으며, lap 분석·실행 가이드·처방 준수 신호가 모두 이 상한을 쓴다.
   const baseCoachHeartRateModel = deriveCoachHeartRateModel(trainingMemory, currentDate, runRows)
+  const adoptedTempoCeilingBpm = coachAdoptedTempoCeilingBpm(trainingMemory)
   const coachHeartRateModel =
-    tempoCoaching && typeof tempoCoaching.effectiveCeilingBpm === 'number' && baseCoachHeartRateModel.tempoCeilingBpm !== null
-      ? { ...baseCoachHeartRateModel, tempoCeilingBpm: Math.max(baseCoachHeartRateModel.tempoCeilingBpm, tempoCoaching.effectiveCeilingBpm) }
+    adoptedTempoCeilingBpm !== null && baseCoachHeartRateModel.tempoCeilingBpm !== null
+      ? { ...baseCoachHeartRateModel, tempoCeilingBpm: Math.max(baseCoachHeartRateModel.tempoCeilingBpm, adoptedTempoCeilingBpm) }
       : baseCoachHeartRateModel
   const coachPaceModel = deriveCoachPaceModel(trainingMemory)
   const selectedRunLapAnalysis = buildLapProgressionAnalysis(selectedRun, coachHeartRateModel.tempoCeilingBpm)
@@ -1953,6 +1955,17 @@ function getAdaptiveTrainingProfile(memory: unknown) {
   return normalizeAdaptiveTrainingProfile((memory as Record<string, unknown>).adaptiveTrainingProfile)
 }
 
+// 영속된 Tempo 적응 상한(#301). 웹이 검증·채택해 adaptiveTrainingProfile.tempoCeiling 에 저장한 값.
+function coachAdoptedTempoCeilingBpm(memory: unknown): number | null {
+  if (!memory || typeof memory !== 'object') return null
+  const profile = (memory as Record<string, unknown>).adaptiveTrainingProfile
+  if (!profile || typeof profile !== 'object') return null
+  const tempoCeiling = (profile as Record<string, unknown>).tempoCeiling
+  if (!tempoCeiling || typeof tempoCeiling !== 'object') return null
+  const adopted = (tempoCeiling as Record<string, unknown>).adoptedBpm
+  return typeof adopted === 'number' && Number.isFinite(adopted) && adopted > 0 ? Math.round(adopted) : null
+}
+
 function normalizeAdaptiveTrainingProfile(value: unknown) {
   const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {}
   return {
@@ -1964,7 +1977,19 @@ function normalizeAdaptiveTrainingProfile(value: unknown) {
     progressionCriteria: normalizeProgressionCriteria(raw.progressionCriteria),
     prescriptionTemplates: normalizePrescriptionTemplates(raw.prescriptionTemplates),
     compliancePatterns: normalizeStringArray(raw.compliancePatterns, 20, 240),
-    sessionGuides: normalizeAdaptiveSessionGuides(raw.sessionGuides)
+    sessionGuides: normalizeAdaptiveSessionGuides(raw.sessionGuides),
+    // #301: Tempo 적응 상한 영속 상태. AI patch는 이 필드를 설정하지 않으므로 항상 보존만 한다.
+    tempoCeiling: normalizeCoachTempoCeiling(raw.tempoCeiling)
+  }
+}
+
+function normalizeCoachTempoCeiling(value: unknown) {
+  const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : null)
+  return {
+    adoptedBpm: num(raw.adoptedBpm),
+    baseBpm: num(raw.baseBpm),
+    adoptedAt: typeof raw.adoptedAt === 'string' && raw.adoptedAt ? raw.adoptedAt.slice(0, 40) : null
   }
 }
 
@@ -3237,7 +3262,9 @@ function mergeAdaptiveTrainingProfile(current: unknown, patch: AdaptiveTrainingP
     progressionCriteria: patch.progressionCriteria ? normalizeProgressionCriteria(patch.progressionCriteria) : base.progressionCriteria,
     prescriptionTemplates: patch.prescriptionTemplates ? normalizePrescriptionTemplates(patch.prescriptionTemplates) : base.prescriptionTemplates,
     compliancePatterns: mergeStringLists(patch.compliancePatterns ?? [], base.compliancePatterns, 20),
-    sessionGuides: [...patchGuides, ...[...guidesByType.values()].filter((guide) => !patchGuides.some((next) => next.type === guide.type))].slice(0, 12)
+    sessionGuides: [...patchGuides, ...[...guidesByType.values()].filter((guide) => !patchGuides.some((next) => next.type === guide.type))].slice(0, 12),
+    // #301: AI patch는 tempoCeiling을 다루지 않는다 — 웹이 영속한 채택값을 그대로 보존한다.
+    tempoCeiling: base.tempoCeiling
   }
 }
 

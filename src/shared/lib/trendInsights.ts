@@ -139,19 +139,21 @@ export function buildTrendLensResult(input: TrendInput): TrendLensResult {
   const window = getDateWindow(runs, input.period, input.baseline, input.memory, today)
   const observed = deriveObservedMaxHr(runs.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })), today)
   const hr = deriveHeartRateModel(input.memory.athleteProfile, today.getFullYear(), observed)
-  // Tempo 상한 적응(#301): 추정 base 위에 검증된 상향만 얹는다. effective를 Tempo 평가/목표 예상에 쓴다.
+  // tempoCeiling은 goal/quality 렌즈만 사용하므로 적응 계산도 그 두 경우에만 한다(efficiency/intensity/recovery는 base).
+  if (input.lens === 'efficiency') return buildEfficiencyLens(window, hr)
+  if (input.lens === 'intensity') return buildIntensityLens(window, today, hr)
+  if (input.lens === 'recovery') return buildRecoveryLens(window)
+  // Tempo 상한 적응(#301): 추정 base 위에 검증된 상향만 얹는다(채택값 sticky). effective를 Tempo 평가/목표 예상에 쓴다.
   const tempoAdaptation = computeTempoCeilingAdaptation(runs, hr.tempoCeilingBpm, {
-    injuryActive: Boolean(getActiveInjuryItem(input.memory))
+    injuryActive: Boolean(getActiveInjuryItem(input.memory)),
+    adoptedCeilingBpm: input.memory.adaptiveTrainingProfile.tempoCeiling?.adoptedBpm ?? null
   })
   const hrEffective =
     tempoAdaptation.effectiveCeilingBpm !== null && tempoAdaptation.effectiveCeilingBpm !== hr.tempoCeilingBpm
       ? { ...hr, tempoCeilingBpm: tempoAdaptation.effectiveCeilingBpm }
       : hr
   if (input.lens === 'goal') return buildGoalLens(runs, input.memory, today, hrEffective)
-  if (input.lens === 'efficiency') return buildEfficiencyLens(window, hr)
-  if (input.lens === 'intensity') return buildIntensityLens(window, today, hr)
-  if (input.lens === 'quality') return buildQualityLens(window, hrEffective, tempoAdaptation)
-  return buildRecoveryLens(window)
+  return buildQualityLens(window, hrEffective, tempoAdaptation)
 }
 
 export function buildTrendAnalysis(input: Omit<TrendInput, 'lens'>): TrendAnalysis {

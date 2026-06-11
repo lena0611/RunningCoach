@@ -18,7 +18,7 @@ import type { TrainingKnowledgeCatalog, TrainingKnowledgeRequest, TrainingMethod
 import { formatDateWithWeekday, formatDuration } from '@/shared/lib/format'
 import { RUNNER_LEVEL_LABEL, resolveRunnerLevel } from '@/shared/lib/runnerLevel'
 import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
-import { computeTempoCeilingAdaptation, tempoCeilingSourceLabel, HEART_RATE_CONFIDENCE_LABEL } from '@/shared/lib/coaching/tempoAdaptation'
+import { computeTempoCeilingAdaptation, describeTempoCeilingMeta } from '@/shared/lib/coaching/tempoAdaptation'
 import { getActiveInjuryItem } from '@/entities/training-memory/model'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 import { createTrainingKnowledgeRequest, fetchTrainingKnowledgeCatalog } from '@/shared/api/trainingKnowledgeRepository'
@@ -203,12 +203,11 @@ const heartRateModelFact = computed(() => {
   if (model.tempoCeilingBpm === null) return '미설정 (나이 또는 심박 입력 필요)'
   // Tempo 상한 적응(#301): effective + 출처·신뢰도. 상향 후보가 있으면 함께 표시.
   const adaptation = computeTempoCeilingAdaptation(runStore.sortedRuns, model.tempoCeilingBpm, {
-    injuryActive: Boolean(getActiveInjuryItem(draft))
+    injuryActive: Boolean(getActiveInjuryItem(draft)),
+    adoptedCeilingBpm: draft.adaptiveTrainingProfile.tempoCeiling?.adoptedBpm ?? null
   })
-  const tempo = adaptation.effectiveCeilingBpm ?? model.tempoCeilingBpm
-  const sourceLabel = tempoCeilingSourceLabel(adaptation, HEART_RATE_SOURCE_LABEL[model.source] ?? model.source)
-  const suffix = adaptation.candidateCeilingBpm !== null ? ` · ${adaptation.candidateCeilingBpm} 상향 후보` : ''
-  return `템포 ${tempo} · 이지 ${model.easyCeilingBpm}bpm (${sourceLabel} · 신뢰도 ${HEART_RATE_CONFIDENCE_LABEL[adaptation.confidence]})${suffix}`
+  const { effectiveBpm, suffix } = describeTempoCeilingMeta(adaptation, model.tempoCeilingBpm, HEART_RATE_SOURCE_LABEL[model.source] ?? model.source)
+  return `템포 ${effectiveBpm} · 이지 ${model.easyCeilingBpm}bpm ${suffix}`
 })
 const profileFacts = computed(() => [
   { label: '러너', value: memoryStore.selectedUser.name || '기본 사용자' },

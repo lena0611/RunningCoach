@@ -21,6 +21,8 @@ import { mergeHealthKitRefreshRun } from '@/features/import-healthkit-run/mergeH
 import { notifyHealthKitNewRuns } from '@/features/sync-native-notifications/notificationBridge'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import { deriveHeartRateModel, deriveObservedMaxHr, type HeartRateModel } from '@/shared/lib/heartRateZones'
+import { computeTempoCeilingAdaptation } from '@/shared/lib/coaching/tempoAdaptation'
+import { getActiveInjuryItem } from '@/entities/training-memory/model'
 
 const defaultLookbackDays = 90
 const maxLookbackDays = 365
@@ -217,6 +219,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         this.error = ''
         this.lastCompletedAt = Date.now()
         await linkSelfRaceResults() // 가상레이싱 보류 결과 ↔ 정본 RunLog 근접 매칭(#233)
+        await applyTempoCeilingAdaptation() // Tempo 상한 적응 채택값 영속화(#301)
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'HealthKit 동기화 저장 실패'
         if (this.syncFeedbackMode === 'toast') showSyncToast('error', this.error, 4200)
@@ -251,6 +254,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         this.error = ''
         this.lastCompletedAt = Date.now()
         await linkSelfRaceResults() // 가상레이싱 보류 결과 ↔ 정본 RunLog 근접 매칭(#233)
+        await applyTempoCeilingAdaptation() // Tempo 상한 적응 채택값 영속화(#301)
         showSyncToast('success', this.status, 4200)
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'HealthKit 과거 기록 마이그레이션 저장 실패'
@@ -335,6 +339,38 @@ async function linkSelfRaceResults() {
     await useCompetitionStore().linkPendingResults()
   } catch {
     // 매칭 단계 오류는 동기화 결과 보고와 분리한다.
+  }
+}
+
+// Tempo 상한 적응(#301): 새 기록 반영 후 검증(고신뢰)이 충족되면 채택 상한을 메모리에 영속화한다.
+// 상향만(채택값보다 클 때만), 부상 시 차단. 실패는 동기화 보고와 분리한다.
+async function applyTempoCeilingAdaptation() {
+  try {
+    const memoryStore = useMemoryStore()
+    const runStore = useRunStore()
+    const memory = memoryStore.memory
+    const observed = deriveObservedMaxHr(runStore.sortedRuns.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })))
+    const base = deriveHeartRateModel(memory.athleteProfile, new Date().getFullYear(), observed).tempoCeilingBpm
+    if (base === null) return
+    const current = memory.adaptiveTrainingProfile.tempoCeiling ?? { adoptedBpm: null, baseBpm: null, adoptedAt: null }
+    const adaptation = computeTempoCeilingAdaptation(runStore.sortedRuns, base, {
+      injuryActive: Boolean(getActiveInjuryItem(memory)),
+      adoptedCeilingBpm: current.adoptedBpm
+    })
+    const proposed = adaptation.proposedAdoptedCeilingBpm
+    if (proposed !== null && proposed > (current.adoptedBpm ?? base)) {
+      const now = new Date().toISOString()
+      await memoryStore.update({
+        ...memory,
+        adaptiveTrainingProfile: {
+          ...memory.adaptiveTrainingProfile,
+          tempoCeiling: { adoptedBpm: proposed, baseBpm: base, adoptedAt: now },
+          updatedAt: now
+        }
+      })
+    }
+  } catch {
+    // 적응 영속화 오류는 동기화 결과 보고와 분리한다.
   }
 }
 
