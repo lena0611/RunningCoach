@@ -2,8 +2,10 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRunStore } from '@/app/stores/runStore'
+import { useCompetitionStore } from '@/app/stores/competitionStore'
 import { useLiveRun } from '@/features/live-run/useLiveRun'
 import { ghostCurveForRun, listDistanceOptions, listOpponents, type OpponentOption } from '@/features/live-run/raceTargets'
+import type { CompetitionTargetPb } from '@/entities/competition/model'
 import { distanceAtTime, formatGapAmount, type GapDisplayMode, type GhostCurvePoint } from '@/shared/lib/selfRace/ghost'
 import type { AnnounceConfig, PeriodicAnnounceKind } from '@/features/live-run/liveRunBridge'
 import type { LiveGapPayload, LiveTickPayload } from '@/features/live-run/liveRunBridge'
@@ -30,6 +32,7 @@ const emit = defineEmits<{ close: [] }>()
 const LS_KEY = 'race_last_settings_v1'
 
 const runStore = useRunStore()
+const competitionStore = useCompetitionStore()
 const live = useLiveRun()
 const route = useRoute()
 
@@ -62,6 +65,10 @@ const finalGap = ref<LiveGapPayload | null>(null)
 // 라이브 진행 막대용 — 시작 시점 목표거리·고스트 곡선 캡처
 const activeTargetM = ref(0)
 const activeGhostCurve = ref<GhostCurvePoint[] | null>(null)
+// 결과 분류용(#233) — 시작 시점 타겟 PB(없음이면 null)·측정 시작 시각, 중복 기록 방지 플래그
+const activeTargetPb = ref<CompetitionTargetPb | null>(null)
+const racedAtStart = ref('')
+const resultRecorded = ref(false)
 
 onMounted(() => {
   if (!runStore.loaded) void runStore.load()
@@ -105,6 +112,7 @@ watch(
     if (s === 'stopped' && step.value === 'live') {
       finalTick.value = live.tick.value
       finalGap.value = live.gap.value
+      recordRaceResult()
       step.value = 'summary'
     }
   }
@@ -162,6 +170,9 @@ function enterRace() {
     : undefined
   activeTargetM.value = selectedDistanceM.value ?? 0
   activeGhostCurve.value = ghostCurve ?? null
+  activeTargetPb.value = captureTargetPb()
+  racedAtStart.value = ''
+  resultRecorded.value = false
   started.value = false
   countdown.value = null
   if (live.available) {
@@ -198,7 +209,32 @@ function beginCountdown() {
 
 function startTracking() {
   started.value = true
+  racedAtStart.value = new Date().toISOString() // 결과↔RunLog 근접 매칭의 1차 키(#233)
   if (live.available) live.begin() // 준비된 GPS 세션에서 클럭·측정 시작
+}
+
+// 시작 시점 선택된 상대를 타겟 PB 로 캡처. '없음'(자유 TT)이면 null → 태깅만, 결과 미생성.
+function captureTargetPb(): CompetitionTargetPb | null {
+  const opp = opponents.value.find((o) => o.runId === selectedOpponentRunId.value)
+  if (!opp || opp.kind !== 'best' || !opp.runId || opp.distanceM == null || opp.elapsedSec == null) return null
+  return { distanceM: opp.distanceM, elapsedSec: opp.elapsedSec, sourceRunId: opp.runId }
+}
+
+// 라이브 종료 결과를 경쟁 도메인에 보관(#233). 다음 HealthKit 동기화 때 RunLog 와 매칭·태깅된다.
+// 정본 RunLog 의 type·부하·추세는 건드리지 않는다(§10). 중복 기록은 resultRecorded 로 1회만.
+function recordRaceResult() {
+  if (resultRecorded.value) return
+  const tick = finalTick.value
+  if (!tick) return
+  const gap = finalGap.value
+  competitionStore.recordFinish({
+    racedAt: racedAtStart.value || new Date().toISOString(),
+    racedDistanceM: tick.cumulativeDistanceM ?? 0,
+    racedDurationSec: tick.elapsedSec ?? null,
+    targetPb: activeTargetPb.value,
+    finalGap: gap ? { timeGapSec: gap.timeGapSec, leadState: gap.leadState } : null
+  })
+  resultRecorded.value = true
 }
 
 function clearCountdown() {
@@ -212,6 +248,7 @@ function clearCountdown() {
 function endRace() {
   finalTick.value = live.tick.value
   finalGap.value = live.gap.value
+  recordRaceResult()
   clearCountdown()
   live.stop()
   step.value = 'summary'
@@ -220,6 +257,9 @@ function endRace() {
 function resetRace() {
   finalTick.value = null
   finalGap.value = null
+  activeTargetPb.value = null
+  racedAtStart.value = ''
+  resultRecorded.value = false
   started.value = false
   clearCountdown()
   step.value = 'setup'

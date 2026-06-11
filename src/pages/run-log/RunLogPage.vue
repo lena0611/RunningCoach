@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { useCompetitionStore } from '@/app/stores/competitionStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import { runTypes, type RunLog, type RunType } from '@/entities/run/model'
 import type { TrainingGoal, TrainingInjuryCheckIn, TrainingMemory } from '@/entities/training-memory/model'
@@ -30,6 +31,7 @@ import { hasNativeBridge } from '@/shared/lib/runtime'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 
 const runStore = useRunStore()
+const competitionStore = useCompetitionStore()
 const memoryStore = useMemoryStore()
 const healthKitSyncStore = useHealthKitSyncStore()
 const weatherStore = useWeatherStore()
@@ -273,6 +275,7 @@ onMounted(() => {
   if (!memoryStore.loading) {
     memoryStore.load()
   }
+  void competitionStore.ensureLoaded()
   setupObserver()
   setupRunMonthStickyOffset()
   // capture 단계로 구독해야 실제 스크롤러인 자식 .tab-swipe-panel의 scroll(및 탭 복귀 시
@@ -809,7 +812,7 @@ async function sendCoachRequest(note: string) {
       onDelta: enqueueCoachReveal,
       runnerLevel: resolveRunnerLevel(memoryStore.memory.athleteProfile, runStore.sortedRuns).level,
       commandId,
-      achievements: summarizeAchievementsForCoach(runStore.sortedRuns)
+      achievements: summarizeAchievementsForCoach(runStore.sortedRuns, competitionStore.results)
     })
     await waitForCoachRevealDrain()
     reports.value = [report, ...reports.value.filter((item) => item.id !== report.id)]

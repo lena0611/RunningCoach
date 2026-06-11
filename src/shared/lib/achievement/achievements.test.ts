@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import type { RunLog } from '@/entities/run/model'
+import type { CompetitionResult } from '@/entities/competition/model'
 import { computeAchievements, computeCumulativeAchievements, summarizeAchievementsForCoach } from './achievements'
+
+function makeResult(overrides: Partial<CompetitionResult> & { id: string }): CompetitionResult {
+  return {
+    userId: 'u', mode: 'self-pb', targetPb: { distanceM: 5000, elapsedSec: 1500, sourceRunId: 'pb' },
+    racedDistanceM: 5005, racedDurationSec: 1480, resultGapSec: -20, outcome: 'win', linkedRunId: 'r',
+    racedAt: '2026-06-11T07:00:00.000Z', createdAt: '2026-06-11T07:30:00.000Z', updatedAt: '2026-06-11T07:30:00.000Z',
+    ...overrides
+  }
+}
 
 function makeRun(overrides: Partial<RunLog> & { id: string; distanceKm: number }): RunLog {
   return {
@@ -126,6 +136,20 @@ describe('summarizeAchievementsForCoach', () => {
     expect(summary.cumulative.longestStreakDays).toBe(3)
     expect(summary.cumulative.bestWeeklyVolumeKm).toBe(20) // 같은 주 합
     expect(summary.cumulative.bestMonthlyVolumeKm).toBe(20)
+  })
+
+  it('defaults recentRacingResults to empty and summarizes provided competition results newest-first', () => {
+    const runs = [makeRun({ id: 'r', distanceKm: 5, durationSec: 1480, tags: ['self-race'] })]
+    expect(summarizeAchievementsForCoach(runs).recentRacingResults).toEqual([])
+
+    const results = [
+      makeResult({ id: 'older', outcome: 'lose', resultGapSec: 18, racedAt: '2026-05-01T07:00:00.000Z' }),
+      makeResult({ id: 'newer', outcome: 'win', resultGapSec: -20, racedAt: '2026-06-11T07:00:00.000Z' })
+    ]
+    const summary = summarizeAchievementsForCoach(runs, results)
+    expect(summary.recentRacingResults).toHaveLength(2)
+    expect(summary.recentRacingResults[0]).toMatchObject({ distanceM: 5000, outcome: 'win', isPb: true, racedAt: '2026-06-11', resultGapSec: -20 })
+    expect(summary.recentRacingResults[1]).toMatchObject({ outcome: 'lose', isPb: false, racedAt: '2026-05-01' })
   })
 })
 
