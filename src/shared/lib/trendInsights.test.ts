@@ -243,7 +243,8 @@ describe('buildTrendLensResult', () => {
       today: new Date('2026-06-01T00:00:00')
     })
 
-    expect(result.chart[0].detail).toContain('안정')
+    // #301: Tempo는 안정/실패 이진이 아니라 A/B/C/D 등급. 상한 이내·후반 안정 → A.
+    expect(result.chart[0].detail).toContain('A등급')
     expect(result.cards.find((item) => item.id === 'drift')?.value).toBe('0')
   })
 })
@@ -284,7 +285,8 @@ describe('buildTrendOverallSummary', () => {
       today: new Date('2026-06-01T00:00:00')
     })
 
-    expect(result.bestSignal.title).toContain('같은 심박에서')
+    // #301: Tempo(+5 초과·후반 안정)는 이제 B등급=안정 → 품질 렌즈가 좋은 신호로 잡힌다(이전엔 상한 초과로 실패).
+    expect(result.bestSignal.title).toContain('잘 수행했나')
     expect(result.cautionSignal.title).toContain('회복됐나')
     expect(result.prescriptionDirection.title).toBe('강도 상향 보류')
     expect(result.prescriptionDirection.tone).toBe('warning')

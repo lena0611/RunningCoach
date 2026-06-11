@@ -3,6 +3,7 @@ import { getAppSessionToken } from '@/shared/api/appSecurity'
 import type { WeatherSnapshot } from '@/features/import-weatherkit/weatherKitBridge'
 import type { RunnerLevel } from '@/entities/training-memory/model'
 import type { CoachAchievementSummary } from '@/shared/lib/achievement/achievements'
+import type { TempoCoachingSummary } from '@/shared/lib/coaching/tempoAdaptation'
 
 export type CoachReport = {
   id: string
@@ -34,7 +35,7 @@ type CoachReportRow = {
   updated_at?: string
 }
 
-export async function requestCoachRun(selectedRunId: string | null, userNote: string, currentWeather: WeatherSnapshot | null = null, runnerLevel: RunnerLevel = 'beginner', achievements: CoachAchievementSummary | null = null): Promise<CoachReport> {
+export async function requestCoachRun(selectedRunId: string | null, userNote: string, currentWeather: WeatherSnapshot | null = null, runnerLevel: RunnerLevel = 'beginner', achievements: CoachAchievementSummary | null = null, tempoCoaching: TempoCoachingSummary | null = null): Promise<CoachReport> {
   const appSessionToken = await getAppSessionToken()
   const { data, error } = await requireSupabase().functions.invoke('coach-run', {
     headers: {
@@ -45,6 +46,7 @@ export async function requestCoachRun(selectedRunId: string | null, userNote: st
       userNote,
       currentWeather: summarizeWeatherForCoach(currentWeather),
       achievements,
+      tempoCoaching,
       runnerLevel,
       responseStyle: {
         tone: 'conversational_coach',
@@ -72,6 +74,7 @@ export async function requestCoachRunStream(
     runnerLevel?: RunnerLevel
     commandId?: string | null
     achievements?: CoachAchievementSummary | null
+    tempoCoaching?: TempoCoachingSummary | null
   }
 ): Promise<CoachReport> {
   const client = requireSupabase()
@@ -93,6 +96,7 @@ export async function requestCoachRunStream(
       userNote,
       currentWeather: summarizeWeatherForCoach(currentWeather),
       achievements: options.achievements ?? null,
+      tempoCoaching: options.tempoCoaching ?? null,
       stream: true,
       commandId: options.commandId ?? null,
       runnerLevel: options.runnerLevel ?? 'beginner',

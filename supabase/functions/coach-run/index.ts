@@ -174,6 +174,7 @@ Deno.serve(async (req) => {
     const commandId = typeof body.commandId === 'string' && body.commandId ? body.commandId : null
     const currentWeather = normalizeCurrentWeather(body.currentWeather)
     const achievements = normalizeAchievements(body.achievements)
+    const tempoCoaching = normalizeTempoCoaching(body.tempoCoaching)
     const runnerLevel = normalizeRunnerLevel(body.runnerLevel)
     const responseStyle = normalizeResponseStyle(body.responseStyle, runnerLevel)
     const shouldStream = body.stream === true
@@ -184,7 +185,7 @@ Deno.serve(async (req) => {
     const rateLimit = await consumeRateLimit(admin, userId, 'coach-run')
     if (!rateLimit.ok) return json({ error: rateLimit.error, retryAfterSec: rateLimit.retryAfterSec }, 429)
 
-    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements)
+    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching)
     const ownedSelectedRunId = context.selectedRun?.id ?? null
     if (shouldStream) {
       return streamCoachRun(admin, userId, ownedSelectedRunId, userNote, openaiKey, model, context)
@@ -491,7 +492,33 @@ const COACH_COMMAND_FORMATS: Record<string, { label: string; sections: string[] 
   }
 }
 
-async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null) {
+type CoachTempoCoaching = {
+  baseCeilingBpm: number | null
+  effectiveCeilingBpm: number | null
+  candidateCeilingBpm: number | null
+  source: 'estimate' | 'adapted'
+  confidence: 'low' | 'medium' | 'high'
+  rationale: string
+  baseSource: string
+}
+
+// 웹이 산출한 Tempo 상한 적응 요약(#301, client-summary). 서버는 Tempo 분석을 재구현하지 않고
+// effective 상한을 그대로 권위 기준으로 쓴다.
+function normalizeTempoCoaching(value: unknown): CoachTempoCoaching | null {
+  if (!value || typeof value !== 'object') return null
+  const v = value as Record<string, unknown>
+  return {
+    baseCeilingBpm: nullableNumber(v.baseCeilingBpm),
+    effectiveCeilingBpm: nullableNumber(v.effectiveCeilingBpm),
+    candidateCeilingBpm: nullableNumber(v.candidateCeilingBpm),
+    source: v.source === 'adapted' ? 'adapted' : 'estimate',
+    confidence: v.confidence === 'high' ? 'high' : v.confidence === 'medium' ? 'medium' : 'low',
+    rationale: typeof v.rationale === 'string' ? v.rationale.slice(0, 400) : '',
+    baseSource: typeof v.baseSource === 'string' ? v.baseSource : 'insufficient'
+  }
+}
+
+async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null) {
   const memorySelect = 'id, content, created_at, importance, last_referenced_at, reference_count'
   const [
     { data: memoryRow },
@@ -541,7 +568,13 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
   const selectedRunDateForTemporalContext = selectedRun?.date ?? null
   const injuryItems = filterInjuryItemsForRunDate(allInjuryItems, selectedRunDateForTemporalContext)
   const activeInjuryItem = getActiveInjuryItemForRunDate(trainingMemory, allInjuryItems, selectedRunDateForTemporalContext)
-  const coachHeartRateModel = deriveCoachHeartRateModel(trainingMemory, currentDate, runRows)
+  // Tempo 상한 적응(#301): 웹이 검증한 effective 상한이 오면 그것을 권위 기준으로 override한다
+  // (lap 분석·실행 가이드·처방 준수 신호가 모두 적응 상한을 쓰도록). base 미만으로는 내리지 않는다.
+  const baseCoachHeartRateModel = deriveCoachHeartRateModel(trainingMemory, currentDate, runRows)
+  const coachHeartRateModel =
+    tempoCoaching && typeof tempoCoaching.effectiveCeilingBpm === 'number' && baseCoachHeartRateModel.tempoCeilingBpm !== null
+      ? { ...baseCoachHeartRateModel, tempoCeilingBpm: Math.max(baseCoachHeartRateModel.tempoCeilingBpm, tempoCoaching.effectiveCeilingBpm) }
+      : baseCoachHeartRateModel
   const coachPaceModel = deriveCoachPaceModel(trainingMemory)
   const selectedRunLapAnalysis = buildLapProgressionAnalysis(selectedRun, coachHeartRateModel.tempoCeilingBpm)
   const selectedRunExecutionGuide = buildSessionExecutionGuide(selectedRun, activeGoal, coachHeartRateModel)
@@ -709,6 +742,18 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     achievements,
     instructionForAchievements:
       'achievements는 웹이 전체 기록에서 산출한 개인 업적이다(거리별 PB·최장 거리/시간·최속 평균 페이스·거리 마일스톤 첫 달성, 훈련/레이싱 컨텍스트 분리). 동기부여·신뢰 강화를 위해 맥락에 맞을 때만 1~2개를 사실 그대로 짧게 인용한다. 매 답변에 기계적으로 나열하지 말고, 수치를 과장하거나 없는 기록을 지어내지 마라. PB/기록 값은 재계산하지 말고 주어진 값을 그대로 쓴다. race가 null이면 아직 레이싱(자기와의 대결) 기록이 없다는 뜻이니 레이싱 업적을 언급하지 않는다. achievements.distancePbs[].elapsedSec는 distanceM 거리(예: 5000=5K)에 실제 도달한 기록이며 performanceProjection(목표 기록·레이스 예측)과는 별개다. 특정 거리(예: 5K) 질문에는 그 거리의 distancePbs 기록으로 답하고, 다른 거리의 예측·목표 시간을 그 거리의 기록인 것처럼 라벨하지 마라(예: 10K 목표/예측 시간을 "5K"라고 말하지 않는다). achievements.cumulative(있으면)는 훈련/레이싱 구분 없는 통합 습관 지표다(longestStreakDays=최장 연속 러닝 일수, bestWeeklyVolumeKm·bestMonthlyVolumeKm=주/월 최다 누적 거리). 꾸준함·볼륨 관련 동기부여 맥락에서만 짧게 인용한다. achievements.recentRacingResults(있으면)는 최근 "나와의 대결"(가상레이싱) 결과다(distanceM=레이싱 거리, resultGapSec 음수=내 베스트보다 빠름·양수=느림, outcome win/lose/tie, isPb=true면 새 PB 달성). 레이싱 동기부여 맥락에서만 1건을 사실 그대로 짧게 인용한다(isPb면 새 기록 축하, 아니면 목표까지 남은 차이를 가볍게). 이는 경쟁 주석일 뿐 훈련 강도·부하 평가에는 쓰지 않는다(레이싱이라고 해당 RunLog 를 Race 강도로 재해석하지 마라).',
+    tempoCoaching: tempoCoaching
+      ? {
+          baseCeilingBpm: tempoCoaching.baseCeilingBpm,
+          effectiveCeilingBpm: tempoCoaching.effectiveCeilingBpm,
+          candidateCeilingBpm: tempoCoaching.candidateCeilingBpm,
+          source: tempoCoaching.source,
+          confidence: tempoCoaching.confidence,
+          rationale: tempoCoaching.rationale
+        }
+      : null,
+    instructionForTempoCoaching:
+      'tempoCoaching는 웹이 최근 Tempo 수행으로 검증·적응한 심박 상한 상태다(#301). Tempo 평가는 이진 성공/실패가 아니라 A/B/C/D 등급으로 본다: A 처방 완전 준수, B 템포 자극 확보+경계 일부 초과, C 경계 크게/반복 초과, D 세션 목적 실패. heartRateModel.tempoCeilingBpm은 이미 effectiveCeilingBpm(검증된 상향이 반영된 현재 상한)이다. effectiveCeilingBpm을 넘겼는지로 초과를 판정하고, base 추정값(예전 158)으로 실패라고 단정하지 마라. source=adapted(confidence=high)이면 "최근 템포 수행으로 검증된 상한"이라고 신뢰 있게 말한다. candidateCeilingBpm이 있으면(관찰 중) "자극은 충분히 확보했고 현재 상한 기준 일부 초과가 있었지만, 최근 패턴·회복이 안정적이라 N bpm 상향 후보로 관찰 중"이라는 식으로, 즉시 확정이 아니라 관찰 중임을 분명히 한다. 상한은 상향만 적응하며 base 미만으로 내리지 않는다. rationale을 그대로 복붙하지 말고 코칭 언어로 자연스럽게 1~2문장으로 녹인다. tempoCoaching이 null이거나 effectiveCeilingBpm이 null이면 이 적응 서사를 쓰지 말고 기존 심박/페이스/드리프트 기준으로 평가한다.',
     routineUpdatePolicy: {
       purpose:
         '주간 루틴은 activeGoal 달성을 위한 처방이다. 세션별 코칭 때마다 유지/조정 여부를 확인하되, 단일 기록 하나만으로 자주 바꾸지 않는다.',

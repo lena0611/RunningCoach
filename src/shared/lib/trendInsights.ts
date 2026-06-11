@@ -4,6 +4,8 @@ import { formatDuration, formatPace } from '@/shared/lib/format'
 import { getAgeLoadWeight, getEasyRatio, getRunsWithinDays, sumDistance } from '@/shared/lib/runStats'
 import { getRaceProjection } from '@/shared/lib/performanceProjection'
 import { deriveHeartRateModel, deriveObservedMaxHr, type HeartRateModel } from '@/shared/lib/heartRateZones'
+import { evaluateLapDrift } from '@/shared/lib/lapDrift'
+import { computeTempoCeilingAdaptation, gradeTempoRun, type TempoCeilingAdaptation, type TempoGrade } from '@/shared/lib/coaching/tempoAdaptation'
 
 export type TrendLensKey = 'goal' | 'efficiency' | 'intensity' | 'quality' | 'recovery'
 export type TrendPeriod = '90d' | '180d' | '365d' | 'all'
@@ -137,10 +139,18 @@ export function buildTrendLensResult(input: TrendInput): TrendLensResult {
   const window = getDateWindow(runs, input.period, input.baseline, input.memory, today)
   const observed = deriveObservedMaxHr(runs.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })), today)
   const hr = deriveHeartRateModel(input.memory.athleteProfile, today.getFullYear(), observed)
-  if (input.lens === 'goal') return buildGoalLens(runs, input.memory, today, hr)
+  // Tempo 상한 적응(#301): 추정 base 위에 검증된 상향만 얹는다. effective를 Tempo 평가/목표 예상에 쓴다.
+  const tempoAdaptation = computeTempoCeilingAdaptation(runs, hr.tempoCeilingBpm, {
+    injuryActive: Boolean(getActiveInjuryItem(input.memory))
+  })
+  const hrEffective =
+    tempoAdaptation.effectiveCeilingBpm !== null && tempoAdaptation.effectiveCeilingBpm !== hr.tempoCeilingBpm
+      ? { ...hr, tempoCeilingBpm: tempoAdaptation.effectiveCeilingBpm }
+      : hr
+  if (input.lens === 'goal') return buildGoalLens(runs, input.memory, today, hrEffective)
   if (input.lens === 'efficiency') return buildEfficiencyLens(window, hr)
   if (input.lens === 'intensity') return buildIntensityLens(window, today, hr)
-  if (input.lens === 'quality') return buildQualityLens(window, hr)
+  if (input.lens === 'quality') return buildQualityLens(window, hrEffective, tempoAdaptation)
   return buildRecoveryLens(window)
 }
 
@@ -373,13 +383,19 @@ function buildIntensityLens(window: DateWindow, today: Date, hr: HeartRateModel)
   }
 }
 
-function buildQualityLens(window: DateWindow, hr: HeartRateModel): TrendLensResult {
+function buildQualityLens(window: DateWindow, hr: HeartRateModel, tempoAdaptation: TempoCeilingAdaptation): TrendLensResult {
   const qualityRuns = window.current.filter((run) => qualityTypes.includes(run.type))
   if (!qualityRuns.length) return emptyResult('quality', '품질 세션 부족', 'Tempo, Long Run, Easy + Strides 같은 품질 세션이 쌓이면 안정성을 봅니다.')
   const evaluations = qualityRuns.map((run) => evaluateQualityRun(run, hr))
   const stableCount = evaluations.filter((item) => item.stable).length
   const ratio = Math.round((stableCount / evaluations.length) * 100)
   const tone: TrendInsightTone = ratio >= 70 ? 'good' : ratio < 45 ? 'warning' : 'watch'
+  const adaptationNote =
+    tempoAdaptation.source === 'adapted'
+      ? `Tempo 상한 적응: ${tempoAdaptation.rationale}`
+      : tempoAdaptation.candidateCeilingBpm !== null
+        ? `Tempo 상한 ${tempoAdaptation.candidateCeilingBpm}bpm 상향 후보 관찰 중(검증 ${tempoAdaptation.qualifyingCount}회).`
+        : null
 
   return {
     lens: 'quality',
@@ -404,20 +420,27 @@ function buildQualityLens(window: DateWindow, hr: HeartRateModel): TrendLensResu
       date: item.run.date,
       value: item.score,
       runId: item.run.id,
-      detail: `${item.run.type} · ${item.reason}`,
+      detail: `${item.run.type}${item.grade ? ` · ${item.grade}등급` : ''} · ${item.reason}`,
       status: item.stable ? 'good' : 'watch',
       confidence: item.run.laps.length >= 2 ? 'high' : 'medium'
     })),
     explanations: [
-      '품질 점수는 운동 처방을 확정하지 않고 다음 세션 상향/유지 판단의 보조 근거로 씁니다.',
-      'Easy는 낮은 심박 안정성, Tempo는 상한 준수, Long Run은 후반 유지력을 우선 봅니다.',
+      'Tempo는 이진 성공/실패가 아니라 A/B/C/D 등급으로 봅니다(자극 확보 × 처방 준수). A·B는 안정으로 셉니다.',
+      'Tempo 상한은 고정 추정값이 아니라 최근 수행으로 검증·적응하는 "현재까지 확인된 최적 추정치"입니다.',
+      ...(adaptationNote ? [adaptationNote] : []),
       '랩이나 심박 데이터가 부족한 세션은 낮은 confidence로 처리합니다.'
     ],
     evidenceRuns: evidenceFromRuns(qualityRuns.slice(-5), 'supporting', '품질 안정성 판단에 사용한 세션입니다.'),
     prescriptionImpact: prescription(
-      tone === 'good' ? 'raise-candidate' : tone === 'warning' ? 'maintain' : 'maintain',
-      tone === 'good' ? '동일 유형 처방 소폭 상향 후보' : '같은 처방 유지',
-      ['품질이 안정된 유형만 다음 단계로 올리고, 불안정한 유형은 반복 확인합니다.']
+      tempoAdaptation.candidateCeilingBpm !== null || tone === 'good' ? 'raise-candidate' : 'maintain',
+      tempoAdaptation.candidateCeilingBpm !== null
+        ? `Tempo 상한 ${tempoAdaptation.candidateCeilingBpm}bpm 상향 후보`
+        : tone === 'good' ? '동일 유형 처방 소폭 상향 후보' : '같은 처방 유지',
+      [
+        tempoAdaptation.candidateCeilingBpm !== null
+          ? '최근 Tempo가 상한을 넘겨도 RPE·후반·회복이 안정적이라 상한 상향을 관찰 중입니다.'
+          : '품질이 안정된 유형만 다음 단계로 올리고, 불안정한 유형은 반복 확인합니다.'
+      ]
     )
   }
 }
@@ -582,14 +605,20 @@ function typeDistributionPoints(runs: RunLog[], easyCeilingBpm: number | null): 
 
 function evaluateQualityRun(run: RunLog, hr: HeartRateModel) {
   const drift = estimateNumericDrift(run)
+  // Tempo(#301): 이진 상한 초과 대신 A/B/C/D 등급화. Quality Lens 호환을 위해 A/B=안정, C/D=불안정으로 매핑.
+  // hr.tempoCeilingBpm은 적응 effective 상한이 반영된 값이다.
+  if (run.type === 'Tempo') {
+    const g = gradeTempoRun(run, hr.tempoCeilingBpm, drift)
+    const stable = g.grade === 'A' || g.grade === 'B'
+    const score = g.grade === 'A' ? 92 : g.grade === 'B' ? 78 : g.grade === 'C' ? 52 : 30
+    return { run, stable, grade: g.grade as TempoGrade | undefined, score, reason: g.reasons.join(' · ') || `${g.grade}등급` }
+  }
   // 개인 심박 상한이 없으면 상한 초과 판정은 하지 않고 드리프트/거리만 본다.
-  const hrCeilingExceeded = hr.tempoCeilingBpm !== null && run.type === 'Tempo' && (run.maxHeartRate ?? 0) > hr.tempoCeilingBpm
   const easyExceeded = hr.easyCeilingBpm !== null && run.type === 'Easy' && (run.maxHeartRate ?? run.avgHeartRate ?? 0) > hr.easyCeilingBpm + 5
   const longEnough = run.type === 'LSD' || run.type === 'Steady Long' ? run.distanceKm >= 10 : true
-  const stable = !hrCeilingExceeded && !easyExceeded && longEnough && drift < 2
-  const score = Math.max(0, 100 - (hrCeilingExceeded ? 25 : 0) - (easyExceeded ? 20 : 0) - (!longEnough ? 20 : 0) - drift * 12)
+  const stable = !easyExceeded && longEnough && drift < 2
+  const score = Math.max(0, 100 - (easyExceeded ? 20 : 0) - (!longEnough ? 20 : 0) - drift * 12)
   const reasons = [
-    hrCeilingExceeded ? '상한 초과' : '',
     easyExceeded ? 'Easy 심박 상승' : '',
     !longEnough ? '롱런 거리 부족' : '',
     drift >= 2 ? '드리프트 주의' : ''
@@ -597,6 +626,7 @@ function evaluateQualityRun(run: RunLog, hr: HeartRateModel) {
   return {
     run,
     stable,
+    grade: undefined as TempoGrade | undefined,
     score: Math.round(score),
     reason: reasons.join(' · ') || '안정'
   }
@@ -637,32 +667,6 @@ function recoveryCost(run: RunLog, runs: RunLog[]) {
 
 function estimateNumericDrift(run: RunLog) {
   return evaluateLapDrift(run).level
-}
-
-function evaluateLapDrift(run: RunLog) {
-  const laps = run.laps.filter((lap) => lap.avgHeartRate && lap.paceSec)
-  if (laps.length < 2) return { level: 1, heartRateDriftBpm: null, paceDeltaSec: null }
-  const splitIndex = Math.ceil(laps.length / 2)
-  const firstHalf = laps.slice(0, splitIndex)
-  const secondHalf = laps.slice(splitIndex)
-  if (!secondHalf.length) return { level: 1, heartRateDriftBpm: null, paceDeltaSec: null }
-  const firstHalfHeartRate = averageNullable(firstHalf.map((lap) => lap.avgHeartRate))
-  const secondHalfHeartRate = averageNullable(secondHalf.map((lap) => lap.avgHeartRate))
-  const firstHalfPace = weightedLapPace(firstHalf)
-  const secondHalfPace = weightedLapPace(secondHalf)
-  const heartRateDriftBpm = firstHalfHeartRate !== null && secondHalfHeartRate !== null
-    ? Math.round(secondHalfHeartRate - firstHalfHeartRate)
-    : null
-  const paceDeltaSec = firstHalfPace !== null && secondHalfPace !== null
-    ? Math.round(secondHalfPace - firstHalfPace)
-    : null
-  const largeHeartRateDrift = heartRateDriftBpm !== null && heartRateDriftBpm > 10
-  const lateFade = paceDeltaSec !== null && paceDeltaSec >= 18
-  const moderateHeartRateDrift = heartRateDriftBpm !== null && heartRateDriftBpm > 4
-  if (largeHeartRateDrift && lateFade) return { level: 3, heartRateDriftBpm, paceDeltaSec }
-  if (largeHeartRateDrift || lateFade) return { level: 2, heartRateDriftBpm, paceDeltaSec }
-  if (moderateHeartRateDrift) return { level: 1, heartRateDriftBpm, paceDeltaSec }
-  return { level: 0, heartRateDriftBpm, paceDeltaSec }
 }
 
 function loadSignalForRun(run: RunLog, easyCeilingBpm: number | null): LoadSignal {
@@ -731,16 +735,6 @@ function dominantCourseType(runs: RunLog[]) {
   for (const run of runs) counts.set(run.courseType, (counts.get(run.courseType) ?? 0) + 1)
   const sorted = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])
   return sorted[0]?.[0] ?? null
-}
-
-function weightedLapPace(laps: RunLog['laps']) {
-  const paceLaps = laps.filter((lap) => lap.paceSec !== null)
-  if (!paceLaps.length) return null
-  const distance = paceLaps.reduce((sum, lap) => sum + (lap.distanceKm ?? 0), 0)
-  if (distance > 0) {
-    return paceLaps.reduce((sum, lap) => sum + (lap.paceSec ?? 0) * (lap.distanceKm ?? 0), 0) / distance
-  }
-  return averageNullable(paceLaps.map((lap) => lap.paceSec))
 }
 
 function heartRateBand(value: number, hr: HeartRateModel) {
