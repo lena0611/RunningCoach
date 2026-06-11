@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { useCompetitionStore } from '@/app/stores/competitionStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
 import { fetchCoachReports, requestCoachRun, type CoachReport } from '@/shared/api/coachRepository'
@@ -18,6 +19,7 @@ import PageLayout from '@/shared/ui/PageLayout.vue'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
 
 const runStore = useRunStore()
+const competitionStore = useCompetitionStore()
 const memoryStore = useMemoryStore()
 const weatherStore = useWeatherStore()
 const selectedRunId = ref('')
@@ -38,7 +40,10 @@ const runOptions = computed(() => [
   }))
 ])
 
-onMounted(loadReports)
+onMounted(() => {
+  void loadReports()
+  void competitionStore.ensureLoaded()
+})
 
 async function loadReports() {
   if (!isSupabaseConfigured) return
@@ -54,7 +59,7 @@ async function coach() {
   error.value = ''
   try {
     const runnerLevel = resolveRunnerLevel(memoryStore.memory.athleteProfile, runStore.sortedRuns).level
-    const report = await requestCoachRun(selectedRunId.value || null, userNote.value, weatherStore.snapshot, runnerLevel, summarizeAchievementsForCoach(runStore.sortedRuns))
+    const report = await requestCoachRun(selectedRunId.value || null, userNote.value, weatherStore.snapshot, runnerLevel, summarizeAchievementsForCoach(runStore.sortedRuns, competitionStore.results))
     reports.value = [
       report,
       ...reports.value.filter((item) => {

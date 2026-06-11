@@ -348,10 +348,18 @@ type CoachCumulativeHighlights = {
   bestWeeklyVolumeKm: number | null
   bestMonthlyVolumeKm: number | null
 }
+type CoachRacingResult = {
+  distanceM: number
+  resultGapSec: number
+  outcome: 'win' | 'lose' | 'tie'
+  racedAt: string
+  isPb: boolean
+}
 type CoachAchievementContext = {
   training: CoachAchievementHighlights
   race: CoachAchievementHighlights | null
   cumulative: CoachCumulativeHighlights | null
+  recentRacingResults: CoachRacingResult[]
 }
 
 function normalizeAchievementHighlights(value: unknown): CoachAchievementHighlights | null {
@@ -391,17 +399,37 @@ function normalizeCumulativeHighlights(value: unknown): CoachCumulativeHighlight
   return empty ? null : cumulative
 }
 
+function normalizeRacingResults(value: unknown): CoachRacingResult[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((r): r is Record<string, unknown> => Boolean(r) && typeof r === 'object')
+    .map((r) => {
+      const distanceM = nullableNumber(r.distanceM)
+      const resultGapSec = nullableNumber(r.resultGapSec)
+      const outcome = r.outcome
+      const racedAt = typeof r.racedAt === 'string' ? r.racedAt : null
+      if (distanceM == null || resultGapSec == null || (outcome !== 'win' && outcome !== 'lose' && outcome !== 'tie') || !racedAt) {
+        return null
+      }
+      return { distanceM, resultGapSec, outcome, racedAt, isPb: r.isPb === true }
+    })
+    .filter((r): r is CoachRacingResult => r != null)
+    .slice(0, 3)
+}
+
 function normalizeAchievements(value: unknown): CoachAchievementContext | null {
   if (!value || typeof value !== 'object') return null
   const item = value as Record<string, unknown>
   const training = normalizeAchievementHighlights(item.training)
   const race = normalizeAchievementHighlights(item.race)
   const cumulative = normalizeCumulativeHighlights(item.cumulative)
-  if (!training && !race && !cumulative) return null
+  const recentRacingResults = normalizeRacingResults(item.recentRacingResults)
+  if (!training && !race && !cumulative && !recentRacingResults.length) return null
   return {
     training: training ?? { longestDistanceKm: null, longestDurationSec: null, fastestAvgPaceSec: null, distancePbs: [], milestonesM: [] },
     race,
-    cumulative
+    cumulative,
+    recentRacingResults
   }
 }
 
@@ -680,7 +708,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       'currentWeather는 iOS WeatherKit에서 받은 현재/향후 12시간 날씨이며 다음 세션 준비용이다. selectedRun이 과거 기록이면 currentWeather를 그 과거 훈련 당시 날씨로 착각하지 마라. selectedRun.date가 오늘이거나 사용자가 다음 훈련/오늘 뛸지 묻는 경우에만 체감온도, 강수확률, 강수량, 비 가능 시간대를 짧게 반영한다.',
     achievements,
     instructionForAchievements:
-      'achievements는 웹이 전체 기록에서 산출한 개인 업적이다(거리별 PB·최장 거리/시간·최속 평균 페이스·거리 마일스톤 첫 달성, 훈련/레이싱 컨텍스트 분리). 동기부여·신뢰 강화를 위해 맥락에 맞을 때만 1~2개를 사실 그대로 짧게 인용한다. 매 답변에 기계적으로 나열하지 말고, 수치를 과장하거나 없는 기록을 지어내지 마라. PB/기록 값은 재계산하지 말고 주어진 값을 그대로 쓴다. race가 null이면 아직 레이싱(자기와의 대결) 기록이 없다는 뜻이니 레이싱 업적을 언급하지 않는다. achievements.distancePbs[].elapsedSec는 distanceM 거리(예: 5000=5K)에 실제 도달한 기록이며 performanceProjection(목표 기록·레이스 예측)과는 별개다. 특정 거리(예: 5K) 질문에는 그 거리의 distancePbs 기록으로 답하고, 다른 거리의 예측·목표 시간을 그 거리의 기록인 것처럼 라벨하지 마라(예: 10K 목표/예측 시간을 "5K"라고 말하지 않는다). achievements.cumulative(있으면)는 훈련/레이싱 구분 없는 통합 습관 지표다(longestStreakDays=최장 연속 러닝 일수, bestWeeklyVolumeKm·bestMonthlyVolumeKm=주/월 최다 누적 거리). 꾸준함·볼륨 관련 동기부여 맥락에서만 짧게 인용한다.',
+      'achievements는 웹이 전체 기록에서 산출한 개인 업적이다(거리별 PB·최장 거리/시간·최속 평균 페이스·거리 마일스톤 첫 달성, 훈련/레이싱 컨텍스트 분리). 동기부여·신뢰 강화를 위해 맥락에 맞을 때만 1~2개를 사실 그대로 짧게 인용한다. 매 답변에 기계적으로 나열하지 말고, 수치를 과장하거나 없는 기록을 지어내지 마라. PB/기록 값은 재계산하지 말고 주어진 값을 그대로 쓴다. race가 null이면 아직 레이싱(자기와의 대결) 기록이 없다는 뜻이니 레이싱 업적을 언급하지 않는다. achievements.distancePbs[].elapsedSec는 distanceM 거리(예: 5000=5K)에 실제 도달한 기록이며 performanceProjection(목표 기록·레이스 예측)과는 별개다. 특정 거리(예: 5K) 질문에는 그 거리의 distancePbs 기록으로 답하고, 다른 거리의 예측·목표 시간을 그 거리의 기록인 것처럼 라벨하지 마라(예: 10K 목표/예측 시간을 "5K"라고 말하지 않는다). achievements.cumulative(있으면)는 훈련/레이싱 구분 없는 통합 습관 지표다(longestStreakDays=최장 연속 러닝 일수, bestWeeklyVolumeKm·bestMonthlyVolumeKm=주/월 최다 누적 거리). 꾸준함·볼륨 관련 동기부여 맥락에서만 짧게 인용한다. achievements.recentRacingResults(있으면)는 최근 "나와의 대결"(가상레이싱) 결과다(distanceM=레이싱 거리, resultGapSec 음수=내 베스트보다 빠름·양수=느림, outcome win/lose/tie, isPb=true면 새 PB 달성). 레이싱 동기부여 맥락에서만 1건을 사실 그대로 짧게 인용한다(isPb면 새 기록 축하, 아니면 목표까지 남은 차이를 가볍게). 이는 경쟁 주석일 뿐 훈련 강도·부하 평가에는 쓰지 않는다(레이싱이라고 해당 RunLog 를 Race 강도로 재해석하지 마라).',
     routineUpdatePolicy: {
       purpose:
         '주간 루틴은 activeGoal 달성을 위한 처방이다. 세션별 코칭 때마다 유지/조정 여부를 확인하되, 단일 기록 하나만으로 자주 바꾸지 않는다.',

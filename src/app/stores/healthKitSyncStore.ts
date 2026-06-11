@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { useAuthStore } from '@/app/stores/authStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { useCompetitionStore } from '@/app/stores/competitionStore'
 import { useSettingsStore } from '@/app/stores/settingsStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import type { RunLog } from '@/entities/run/model'
@@ -215,6 +216,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         }
         this.error = ''
         this.lastCompletedAt = Date.now()
+        await linkSelfRaceResults() // 가상레이싱 보류 결과 ↔ 정본 RunLog 근접 매칭(#233)
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'HealthKit 동기화 저장 실패'
         if (this.syncFeedbackMode === 'toast') showSyncToast('error', this.error, 4200)
@@ -248,6 +250,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         this.status = `HealthKit 과거 기록 마이그레이션 완료 · ${formatRange(range)} · ${parts.join(' · ')}`
         this.error = ''
         this.lastCompletedAt = Date.now()
+        await linkSelfRaceResults() // 가상레이싱 보류 결과 ↔ 정본 RunLog 근접 매칭(#233)
         showSyncToast('success', this.status, 4200)
       } catch (err) {
         this.error = err instanceof Error ? err.message : 'HealthKit 과거 기록 마이그레이션 저장 실패'
@@ -324,6 +327,16 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
     }
   }
 })
+
+// 가상레이싱 종료 후 보류된 결과를 방금 동기화된 RunLog 와 매칭해 'self-race' 태깅 + 결과 생성한다.
+// 매칭 실패/없음은 정상(다음 동기화 재시도)이며 HealthKit 동기화 상태에는 영향을 주지 않는다.
+async function linkSelfRaceResults() {
+  try {
+    await useCompetitionStore().linkPendingResults()
+  } catch {
+    // 매칭 단계 오류는 동기화 결과 보고와 분리한다.
+  }
+}
 
 function canRequestHealthKitRefresh(run: RunLog) {
   if (run.externalId) return true

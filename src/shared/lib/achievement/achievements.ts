@@ -1,4 +1,5 @@
 import type { RunLog } from '@/entities/run/model'
+import type { CompetitionResult } from '@/entities/competition/model'
 import { computeDistancePbs, type DistancePb, type PbContext } from './distancePb'
 
 /**
@@ -220,16 +221,47 @@ export type CoachCumulativeHighlights = {
   bestMonthlyVolumeKm: number | null
 }
 
+/** 최근 가상레이싱(나와의 대결) 결과 1건. competition_result 파생(#233). */
+export type CoachRacingResult = {
+  distanceM: number
+  /** 부호(ghost.ts): 음수 = 타겟 PB 보다 빠름. */
+  resultGapSec: number
+  outcome: 'win' | 'lose' | 'tie'
+  /** 레이싱 날짜(YYYY-MM-DD). */
+  racedAt: string
+  /** 타겟(내 베스트)을 이겨 새 PB 인지(=outcome 'win'). */
+  isPb: boolean
+}
+
 export type CoachAchievementSummary = {
   training: CoachContextHighlights
   /** 레이싱 런이 없으면 null (부트스트랩: 첫 레이싱 전 레이싱 사다리 비어있음). */
   race: CoachContextHighlights | null
   /** 누적·습관류 (컨텍스트 분리 없이 전체 통합). */
   cumulative: CoachCumulativeHighlights
+  /** 최근 가상레이싱 결과(최신순, 최대 3건). 없으면 빈 배열. 업적 PB 와 별개의 경쟁 주석. */
+  recentRacingResults: CoachRacingResult[]
 }
 
-/** coach-run 인용용 컴팩트 요약. 프롬프트 크기 절약을 위해 PB 는 최대 2버킷으로 제한한다. */
-export function summarizeAchievementsForCoach(runs: RunLog[]): CoachAchievementSummary {
+/** competition_result 들을 코칭 인용용 최근 결과 요약으로 압축한다(최신순 최대 3건). */
+function summarizeRacingResults(results: CompetitionResult[]): CoachRacingResult[] {
+  return [...results]
+    .sort((a, b) => (b.racedAt ?? '').localeCompare(a.racedAt ?? ''))
+    .slice(0, 3)
+    .map((r) => ({
+      distanceM: r.targetPb.distanceM,
+      resultGapSec: Math.round(r.resultGapSec),
+      outcome: r.outcome,
+      racedAt: (r.racedAt ?? '').slice(0, 10),
+      isPb: r.outcome === 'win'
+    }))
+}
+
+/**
+ * coach-run 인용용 컴팩트 요약. 프롬프트 크기 절약을 위해 PB 는 최대 2버킷으로 제한한다.
+ * competitionResults 를 넘기면 최근 가상레이싱 결과를 함께 요약한다(#233).
+ */
+export function summarizeAchievementsForCoach(runs: RunLog[], competitionResults: CompetitionResult[] = []): CoachAchievementSummary {
   const set = computeAchievements(runs)
   const build = (context: AchievementContext): CoachContextHighlights | null => {
     const dist = set.longestDistance.find((r) => r.context === context) ?? null
@@ -258,6 +290,7 @@ export function summarizeAchievementsForCoach(runs: RunLog[]): CoachAchievementS
       longestStreakDays: c.longestStreak ? c.longestStreak.days : null,
       bestWeeklyVolumeKm: c.bestWeeklyVolume ? c.bestWeeklyVolume.distanceKm : null,
       bestMonthlyVolumeKm: c.bestMonthlyVolume ? c.bestMonthlyVolume.distanceKm : null
-    }
+    },
+    recentRacingResults: summarizeRacingResults(competitionResults)
   }
 }
