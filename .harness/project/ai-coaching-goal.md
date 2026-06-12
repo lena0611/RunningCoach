@@ -324,6 +324,7 @@ PaceLAB의 알고리즘 진화는 소스 코드 수정이 아니라 `TrainingMem
 - 반복 데이터와 사용자 피드백으로 검증된 개인화 경계만 저장한다.
 - `sessionGuides`에는 세션 유형별 현재 경계, 조정 방향, 근거, 다음 확인 기준을 남긴다.
 - `compliancePatterns`에는 처방 준수율의 반복 패턴만 남긴다.
+- `tempoCeiling`(#301)에는 검증으로 채택된 Tempo 심박 상한(상향만)을 저장한다. 추정 base(Tanaka+HRR) 위에 얹는 보정값으로, run_logs 파생 결정적 계산이 제안하고 고신뢰(최근 Tempo 3회+가 상한 초과에도 RPE 낮음·후반 안정·다음날 회복 양호) 시 채택·영속된다. 채택값은 sticky하며 그 위에서 재검증해 단계적으로 더 올린다(`src/shared/lib/coaching/tempoAdaptation.ts`). 즉 알고리즘 진화는 코드가 아니라 이 저장값으로 이뤄진다는 원칙 그대로다.
 
 예:
 

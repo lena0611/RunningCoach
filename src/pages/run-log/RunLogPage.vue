@@ -12,6 +12,7 @@ import { detectGoalIntent, type GoalIntentProposal } from '@/features/detect-goa
 import UploadRunPage from '@/pages/upload-run/UploadRunPage.vue'
 import { fetchCoachReports, requestCoachRunStream, type CoachInjuryUpdateProposal, type CoachReport } from '@/shared/api/coachRepository'
 import { summarizeAchievementsForCoach } from '@/shared/lib/achievement/achievements'
+import { summarizeTempoCoaching } from '@/shared/lib/coaching/tempoAdaptation'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { resolveRunnerLevel } from '@/shared/lib/runnerLevel'
 import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, formatInteger, formatNumberWithCommas, formatPace } from '@/shared/lib/format'
@@ -812,7 +813,8 @@ async function sendCoachRequest(note: string) {
       onDelta: enqueueCoachReveal,
       runnerLevel: resolveRunnerLevel(memoryStore.memory.athleteProfile, runStore.sortedRuns).level,
       commandId,
-      achievements: summarizeAchievementsForCoach(runStore.sortedRuns, competitionStore.results)
+      achievements: summarizeAchievementsForCoach(runStore.sortedRuns, competitionStore.results),
+      tempoCoaching: summarizeTempoCoaching(runStore.sortedRuns, memoryStore.memory)
     })
     await waitForCoachRevealDrain()
     reports.value = [report, ...reports.value.filter((item) => item.id !== report.id)]

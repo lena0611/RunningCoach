@@ -7,6 +7,7 @@ import { useWeatherStore } from '@/app/stores/weatherStore'
 import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
 import { fetchCoachReports, requestCoachRun, type CoachReport } from '@/shared/api/coachRepository'
 import { summarizeAchievementsForCoach } from '@/shared/lib/achievement/achievements'
+import { summarizeTempoCoaching } from '@/shared/lib/coaching/tempoAdaptation'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, formatPace } from '@/shared/lib/format'
 import { resolveRunnerLevel } from '@/shared/lib/runnerLevel'
@@ -59,7 +60,7 @@ async function coach() {
   error.value = ''
   try {
     const runnerLevel = resolveRunnerLevel(memoryStore.memory.athleteProfile, runStore.sortedRuns).level
-    const report = await requestCoachRun(selectedRunId.value || null, userNote.value, weatherStore.snapshot, runnerLevel, summarizeAchievementsForCoach(runStore.sortedRuns, competitionStore.results))
+    const report = await requestCoachRun(selectedRunId.value || null, userNote.value, weatherStore.snapshot, runnerLevel, summarizeAchievementsForCoach(runStore.sortedRuns, competitionStore.results), summarizeTempoCoaching(runStore.sortedRuns, memoryStore.memory))
     reports.value = [
       report,
       ...reports.value.filter((item) => {

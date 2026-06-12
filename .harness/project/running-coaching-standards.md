@@ -42,6 +42,7 @@ PaceLAB 코칭 알고리즘은 다섯 겹으로 동작한다.
 - 업데이트 대상은 `adaptiveTrainingProfile.trainingPhase`, `adaptiveTrainingProfile.progressionCriteria`, `adaptiveTrainingProfile.prescriptionTemplates`, `adaptiveTrainingProfile.compliancePatterns`, `adaptiveTrainingProfile.sessionGuides`다.
 - `trainingPhase`는 Base/Build/Threshold/Race Specific/Taper/Recovery 중 하나로 현재 훈련 블록을 나타낸다.
 - `progressionCriteria`는 Easy 심박 안정, Tempo 상한 준수, Long Run 지속성, 부상/회복 게이트처럼 승급/유지/하향 판단 기준을 구조화한다.
+- Tempo 평가는 단순 성공/실패가 아니라 A/B/C/D 등급(자극 확보 × 처방 준수)으로 본다(#301). Tempo 심박 상한은 고정 추정값이 아니라 실제 수행으로 검증해 상향만 적응하며(채택값은 `adaptiveTrainingProfile.tempoCeiling`에 영속), 추정 base 미만으로는 내리지 않는다. 상세는 `ai-coaching-goal.md §적응형 알고리즘 기억`.
 - `prescriptionTemplates`는 Easy, Recovery, Easy + Strides, Tempo, LSD, Steady Long, TT, interval 같은 실행 가능한 훈련 처방을 저장한다.
 - 같은 세션 유형에서 최근 2~3회 이상 같은 준수/이탈 패턴이 반복될 때만 갱신한다.
 - 사용자가 “너무 쉽다”, “다음날 피로가 크다”, “발바닥이 조용했다”, “템포가 버거웠다”처럼 명시 피드백을 주면 갱신 근거로 쓴다.

@@ -13,6 +13,7 @@ import { formatDateWithWeekday } from '@/shared/lib/format'
 import { RUNNER_LEVEL_LABEL, resolveRunnerLevel } from '@/shared/lib/runnerLevel'
 import { resolvePaceModel, formatPaceSec } from '@/shared/lib/vdotPaces'
 import { deriveHeartRateModel, deriveObservedMaxHr, deriveRecommendedHeartRateModel } from '@/shared/lib/heartRateZones'
+import { computeTempoCeilingAdaptation, describeTempoCeilingMeta } from '@/shared/lib/coaching/tempoAdaptation'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import ClearableField from '@/shared/ui/ClearableField.vue'
@@ -141,7 +142,19 @@ const heartRateModeValue = computed({
     draft.athleteProfile.heartRateMode = value === 'manual' ? 'manual' : 'auto'
   }
 })
-const activeHeartRateDisplay = computed(() => describeHeartRateModel(activeHeartRateModel.value))
+// Tempo 상한 적응(#301): 추정 base 위에 검증된 상향만 얹는다. active 표시는 effective + 출처·신뢰도.
+const activeHeartRateAdaptation = computed(() =>
+  computeTempoCeilingAdaptation(runStore.sortedRuns, activeHeartRateModel.value.tempoCeilingBpm, {
+    injuryActive: Boolean(getActiveInjuryItem(memoryStore.memory)),
+    adoptedCeilingBpm: memoryStore.memory.adaptiveTrainingProfile.tempoCeiling?.adoptedBpm ?? null
+  })
+)
+const activeHeartRateDisplay = computed(() => {
+  const model = activeHeartRateModel.value
+  if (model.tempoCeilingBpm === null) return '미설정 (나이 또는 심박 입력 필요)'
+  const { effectiveBpm, suffix } = describeTempoCeilingMeta(activeHeartRateAdaptation.value, model.tempoCeilingBpm, HEART_RATE_SOURCE_LABEL[model.source] ?? model.source)
+  return `템포 ${effectiveBpm} · 이지 ${model.easyCeilingBpm} · 회복 ${model.recoveryCeilingBpm}bpm ${suffix}`
+})
 const recommendedHeartRateDisplay = computed(() => describeHeartRateModel(recommendedHeartRateModel.value))
 const birthYearValue = computed({
   get: () => draft.athleteProfile.birthYear === null ? '' : String(draft.athleteProfile.birthYear),
