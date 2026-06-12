@@ -541,7 +541,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     admin.from('training_methods').select('id, source_id, name, slug, family, summary, target_distances, suitable_levels, weekly_days_min, weekly_days_max, caution_notes').eq('approved', true),
     admin.from('training_prescription_rules').select('id, method_id, source_id, goal_distance, phase, session_type, rule_type, metric, prescription, raise_condition, lower_condition, contraindications, evidence_summary, priority').eq('approved', true).order('priority')
   ])
-  const runRows = (runs ?? []) as RunLogRow[]
+  let runRows = (runs ?? []) as RunLogRow[]
   const reportRows = (reports ?? []) as CoachReportRow[]
   // 최근성 풀 + 활성(중요도순) 후보를 id 기준으로 합친다(중복 제거).
   const memoryRowPool = mergeMemoryRows((memoryItems ?? []) as CoachMemoryItemRow[], (activeMemoryItems ?? []) as CoachMemoryItemRow[])
@@ -549,7 +549,32 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
   const knowledgeSourceRows = (knowledgeSources ?? []) as TrainingKnowledgeSourceRow[]
   const trainingMethodRows = (trainingMethods ?? []) as TrainingMethodRow[]
   const prescriptionRuleRows = (prescriptionRules ?? []) as TrainingPrescriptionRuleRow[]
-  const selectedRun = selectedRunId ? runRows.find((run) => run.id === selectedRunId) ?? null : null
+  let selectedRun = selectedRunId ? runRows.find((run) => run.id === selectedRunId) ?? null : null
+  // 최근 120건 밖의 오래된 세션(#305): selectedRun을 못 찾으면 단건 조회(소유 검증 포함)로 확보하고,
+  // 그 시점 주변(±30일) 런을 합쳐 과거 당시 맥락(recent14/30·처방 준수 신호)으로 평가한다.
+  // 이게 없으면 리포트가 selected_run_id=NULL로 저장돼 세션 스레드에서 사라지고, 일반 흐름 리뷰로 강등된다.
+  if (selectedRunId && !selectedRun) {
+    const { data: selectedRow } = await admin
+      .from('run_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('id', selectedRunId)
+      .maybeSingle()
+    if (selectedRow) {
+      selectedRun = selectedRow as RunLogRow
+      const { data: nearbyRows } = await admin
+        .from('run_logs')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('date', shiftCoachDateKey(selectedRun.date, -30))
+        .lte('date', shiftCoachDateKey(selectedRun.date, 30))
+        .order('date', { ascending: false })
+        .limit(60)
+      const merged = new Map<string, RunLogRow>()
+      for (const row of [...runRows, selectedRun, ...((nearbyRows ?? []) as RunLogRow[])]) merged.set(row.id, row)
+      runRows = [...merged.values()].sort((a, b) => b.date.localeCompare(a.date))
+    }
+  }
   const currentDate = currentDateInSeoul()
   const anchorDate = selectedRun?.date ?? currentDate
   const selectedRunAgeDays = selectedRun ? diffDays(selectedRun.date, currentDate) : null
@@ -4754,6 +4779,12 @@ function parseDateOnly(value: string) {
 function diffDays(from: string, to: string) {
   const diffMs = parseDateOnly(to).getTime() - parseDateOnly(from).getTime()
   return Math.round(diffMs / 86400000)
+}
+
+// 날짜 키(YYYY-MM-DD)를 days만큼 이동. 오래된 selectedRun 주변 윈도우 조회용(#305).
+function shiftCoachDateKey(dateKey: string, days: number): string {
+  const t = Date.parse(`${dateKey.slice(0, 10)}T00:00:00Z`)
+  return new Date(t + days * 86400000).toISOString().slice(0, 10)
 }
 
 function describeTiming(ageDays: number | null) {
