@@ -751,6 +751,7 @@ function normalizeAdaptiveTrainingProfile(value: unknown): AdaptiveTrainingProfi
   }
 }
 
+// mirror: supabase/functions/coach-run/index.ts normalizeCoachTempoCeiling (검증 규칙을 함께 유지)
 function normalizeAdaptiveTempoCeiling(value: unknown): AdaptiveTempoCeiling {
   const raw = value && typeof value === 'object' ? value as Partial<AdaptiveTempoCeiling> : {}
   const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : null)

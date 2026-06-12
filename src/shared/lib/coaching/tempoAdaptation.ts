@@ -52,11 +52,15 @@ export type TempoCeilingAdaptation = {
 const MINOR_OVER_BPM = 10 // 이 이하 초과 + 후반 안정이면 B(자극 확보·경계 일부 초과)
 // 적응
 const RECENT_TEMPO_LIMIT = 5
+// 안전망: 적응 상한은 추정 base 대비 최대 이만큼만 올린다(클라이언트 산출 채택값의 폭주·변조 방지).
+export const MAX_TOTAL_RAISE_BPM = 12
 const RAISE_STEP_BPM = 2
 const CANDIDATE_COUNT = 2 // 검증 2회 → 상향 후보(관찰)
 const CONFIRM_COUNT = 3 // 검증 3회 이상 → 고신뢰 자동 채택
 const RPE_MAX_FOR_RAISE = 6
-const RECOVERY_WINDOW_DAYS = 3 // "다음날 회복"으로 인정하는 최대 간격(이후 런은 회복 근거로 약함)
+const RECOVERY_WINDOW_DAYS = 5 // 회복으로 인정하는 다음 런 최대 간격(강세션은 4일+ 휴식이 흔하므로 5일까지 인정)
+// 지속 자극 게이트: 평균심박이 현재 상한 −이 값 이상이어야 "유지된 템포"로 본다(이지런 1bpm blip·스파이크 배제).
+const SUSTAINED_AVG_MARGIN_BPM = 20
 
 /**
  * 한 Tempo 세션을 effective 상한 기준으로 A/B/C/D 등급화한다.
@@ -109,13 +113,6 @@ export function gradeTempoRun(run: RunLog, ceilingBpm: number | null, fadeLevel:
   return { grade, stimulus: true, overBpm, lateFade, reasons }
 }
 
-type TempoSessionSignal = {
-  date: string
-  maxHeartRate: number | null
-  rpe: number | null
-  fadeLevel: number
-  recoveryOk: boolean
-}
 
 const MS_PER_DAY = 86400000
 
@@ -157,8 +154,10 @@ export function computeTempoCeilingAdaptation(
     }
   }
 
-  // 채택값은 sticky하되 base 미만으로는 내려가지 않는다(상향만). 추가 상향은 이 floor 기준으로 검증.
-  const currentFloor = Math.max(baseCeilingBpm, adopted ?? baseCeilingBpm)
+  // 채택값은 sticky하되 base 미만으로 내려가지 않고(상향만), base+MAX_TOTAL_RAISE_BPM를 넘지도 않는다
+  // (스티키 채택값의 폭주·변조 안전망). 추가 상향은 이 floor 기준으로 검증한다.
+  const raiseCap = baseCeilingBpm + MAX_TOTAL_RAISE_BPM
+  const currentFloor = Math.min(Math.max(baseCeilingBpm, adopted ?? baseCeilingBpm), raiseCap)
   const onAdapted = currentFloor > baseCeilingBpm
 
   const sortedAsc = [...runs].sort((a, b) => a.date.localeCompare(b.date))
@@ -181,29 +180,31 @@ export function computeTempoCeilingAdaptation(
   if (opts.injuryActive) return settle({}, '부상 활성 — 상향 게이트 차단. 채택된 상한은 유지, 회복 후 재평가.')
   if (!sampleCount) return settle({}, '최근 Tempo 기록 없음 — 현재 상한 유지.')
 
-  const signals: TempoSessionSignal[] = recentTempo.map((run) => ({
-    date: run.date,
-    maxHeartRate: run.maxHeartRate,
-    rpe: run.rpe,
-    fadeLevel: evaluateLapDrift(run).level,
+  const signals = recentTempo.map((run) => ({
+    run,
+    grade: gradeTempoRun(run, currentFloor, evaluateLapDrift(run).level),
     recoveryOk: nextRunRecoveryOk(run, sortedAsc) === true
   }))
 
-  // 상향 검증 자격: 현재 상한 초과 + RPE<=6(기록 있음) + 후반 안정 + 다음날 회복 양호.
+  // 상향 검증 자격(완화 + 노이즈 방어): gradeTempoRun을 재사용해 "깨끗한 경계 초과"만 인정한다.
+  //   - 등급 B + overBpm 1~10(자극 확보·후반 안정·경계 일부 초과). C(크게/반복 초과)·D(자극 부족)·A(상한 이내)는 제외.
+  //   - 평균심박이 상한 근처(−20 이내)로 "유지된 템포"여야 한다(이지런 1bpm blip·HR 스파이크가 상한을 올리는 것 방지).
+  //   - 회복 양호 필수. RPE는 자동 import엔 없으므로 "있으면 너무 높지 않아야(>6 제외)"로만.
   const qualifying = signals.filter(
     (s) =>
-      s.maxHeartRate !== null &&
-      s.maxHeartRate > currentFloor &&
-      s.rpe !== null &&
-      s.rpe <= RPE_MAX_FOR_RAISE &&
-      s.fadeLevel < 2 &&
+      s.grade.grade === 'B' &&
+      s.grade.overBpm !== null &&
+      s.grade.overBpm > 0 &&
+      s.run.avgHeartRate !== null &&
+      s.run.avgHeartRate >= currentFloor - SUSTAINED_AVG_MARGIN_BPM &&
+      (s.run.rpe === null || s.run.rpe <= RPE_MAX_FOR_RAISE) &&
       s.recoveryOk
   )
   const qualifyingCount = qualifying.length
 
-  // 한 단계만 올리되, 입증된 최대심박을 넘지 않는다(보수적 단일 step).
-  const demonstratedMax = qualifying.reduce((max, s) => Math.max(max, s.maxHeartRate ?? 0), 0)
-  const raiseTarget = Math.min(currentFloor + RAISE_STEP_BPM, demonstratedMax || currentFloor + RAISE_STEP_BPM)
+  // 한 단계만 올리되, 입증된 최대심박과 base+cap 안전망을 넘지 않는다(보수적 단일 step).
+  const demonstratedMax = qualifying.reduce((max, s) => Math.max(max, s.run.maxHeartRate ?? 0), 0)
+  const raiseTarget = Math.min(currentFloor + RAISE_STEP_BPM, demonstratedMax || currentFloor + RAISE_STEP_BPM, raiseCap)
 
   if (qualifyingCount >= CONFIRM_COUNT) {
     return {

@@ -348,6 +348,8 @@ async function applyTempoCeilingAdaptation() {
   try {
     const memoryStore = useMemoryStore()
     const runStore = useRunStore()
+    // 메모리가 아직 로드되지 않았으면 쓰지 않는다(기본값으로 실제 영속 메모리를 덮어쓰는 사고 방지).
+    if (!memoryStore.loaded) return
     const memory = memoryStore.memory
     const observed = deriveObservedMaxHr(runStore.sortedRuns.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })))
     const base = deriveHeartRateModel(memory.athleteProfile, new Date().getFullYear(), observed).tempoCeilingBpm
