@@ -908,12 +908,18 @@ function normalizeGoalStatus(value: unknown): TrainingGoal['status'] {
 
 function normalizeInjuryItems(memory: Partial<TrainingMemory> | null | undefined): TrainingInjuryItem[] {
   const now = new Date().toISOString()
-  const rawItems = Array.isArray(memory?.injuryItems) ? memory.injuryItems : []
-  const items = rawItems
-    .map((item, index) => normalizeInjuryItem(item as Partial<TrainingInjuryItem>, index, now))
-    .filter((item): item is TrainingInjuryItem => Boolean(item))
 
-  if (items.length) return items
+  // injuryItems 키가 명시적으로 있으면(빈 배열 포함) 사용자 의도를 그대로 존중한다.
+  // 자동 복원(knownIssues 동기화)·기본 시드는 키가 부재한 최초/레거시 메모리에만 1회 적용한다.
+  // 그래야 사용자가 마지막 부상을 삭제했을 때 기본 시드/텍스트로 되살아나지 않는다(#303).
+  const explicitItems = Array.isArray(memory?.injuryItems)
+    ? (memory!.injuryItems as Partial<TrainingInjuryItem>[])
+    : null
+  if (explicitItems) {
+    return explicitItems
+      .map((item, index) => normalizeInjuryItem(item, index, now))
+      .filter((item): item is TrainingInjuryItem => Boolean(item))
+  }
 
   const legacyItems = (memory?.knownIssues ?? [])
     .filter((issue) => /햄스트링|통증|부상|이슈|무릎|발목|족저|아킬레스|정강|고관절/.test(issue))
