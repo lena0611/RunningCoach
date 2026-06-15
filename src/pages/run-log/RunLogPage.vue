@@ -5,6 +5,9 @@ import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useCompetitionStore } from '@/app/stores/competitionStore'
+import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
+import { computeIntentFulfillment } from '@/entities/session-intent/computeIntentFulfillment'
+import IntentFulfillmentCard from '@/shared/ui/IntentFulfillmentCard.vue'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import { runTypes, type RunLog, type RunType } from '@/entities/run/model'
 import type { TrainingGoal, TrainingInjuryCheckIn, TrainingMemory } from '@/entities/training-memory/model'
@@ -53,6 +56,14 @@ const addingRun = ref(false)
 const editing = ref<RunLog | null>(null)
 const editSnapshot = ref('')
 const coachRun = ref<RunLog | null>(null)
+const sessionIntentStore = useSessionIntentStore()
+// 의도 달성률(#310): 코칭 중인 run 에 연결된(완료된) 의도를 찾아 결정론적으로 평가.
+const coachIntent = computed(() =>
+  coachRun.value ? sessionIntentStore.intents.find((intent) => intent.runId === coachRun.value!.id) ?? null : null
+)
+const coachIntentFulfillment = computed(() =>
+  coachRun.value && coachIntent.value ? computeIntentFulfillment(coachIntent.value, coachRun.value) : null
+)
 const coachNote = ref('')
 // 전송 즉시 입력창을 비우고 질문을 사용자 말풍선으로 낙관적 표시하기 위한 상태(#238).
 const pendingUserNote = ref('')
@@ -636,6 +647,7 @@ async function openCoach(run: RunLog) {
   coachAutoScroll.value = true
   showCoachScrollButton.value = false
   void nextTick(resizeCoachNoteInput)
+  if (!sessionIntentStore.loaded) void sessionIntentStore.load()
   await ensureReportsLoaded()
   await nextTick()
   scrollCoachToBottom('auto')
@@ -1432,6 +1444,7 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
           </header>
           <main ref="coachScrollContainer" class="memory-stack-content coach-stack-content" @scroll="onCoachScroll">
             <CoachMessage role="user" :text="`${formatDateWithWeekday(coachRun.date)} ${coachRun.sessionTitle || coachRun.type}`" />
+            <IntentFulfillmentCard v-if="coachIntent && coachIntentFulfillment" :intent="coachIntent" :fulfillment="coachIntentFulfillment" />
             <div v-if="coachHistoryLoading" class="coach-history-skeleton" aria-label="기존 AI 코칭 대화 불러오는 중">
               <div class="coach-skeleton-user" aria-hidden="true">
                 <span class="skeleton-line skeleton-line-hint" />
