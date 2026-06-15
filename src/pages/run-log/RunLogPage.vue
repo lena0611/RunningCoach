@@ -16,6 +16,7 @@ import UploadRunPage from '@/pages/upload-run/UploadRunPage.vue'
 import { fetchCoachReports, requestCoachRunStream, type CoachInjuryUpdateProposal, type CoachReport } from '@/shared/api/coachRepository'
 import { summarizeAchievementsForCoach } from '@/shared/lib/achievement/achievements'
 import { summarizeTempoCoaching } from '@/shared/lib/coaching/tempoAdaptation'
+import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
 import { getAgeLoadWeight } from '@/shared/lib/runStats'
 import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
@@ -844,7 +845,8 @@ async function sendCoachRequest(note: string) {
       commandId,
       achievements: summarizeAchievementsForCoach(runStore.sortedRuns, competitionStore.results),
       tempoCoaching: summarizeTempoCoaching(runStore.sortedRuns, memoryStore.memory),
-      goalProjection: coachGoalProjection.value
+      goalProjection: coachGoalProjection.value,
+      adaptiveProgress: buildCoachAdaptiveProgress(runStore.sortedRuns, memoryStore.memory)
     })
     await waitForCoachRevealDrain()
     reports.value = [report, ...reports.value.filter((item) => item.id !== report.id)]

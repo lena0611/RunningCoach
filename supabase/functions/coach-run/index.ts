@@ -190,6 +190,7 @@ Deno.serve(async (req) => {
     const achievements = normalizeAchievements(body.achievements)
     const tempoCoaching = normalizeTempoCoaching(body.tempoCoaching)
     const goalProjection = normalizeGoalProjection(body.goalProjection)
+    const adaptiveProgress = normalizeAdaptiveProgress(body.adaptiveProgress)
     const runnerLevel = normalizeRunnerLevel(body.runnerLevel)
     const responseStyle = normalizeResponseStyle(body.responseStyle, runnerLevel)
     const shouldStream = body.stream === true
@@ -200,7 +201,7 @@ Deno.serve(async (req) => {
     const rateLimit = await consumeRateLimit(admin, userId, 'coach-run')
     if (!rateLimit.ok) return json({ error: rateLimit.error, retryAfterSec: rateLimit.retryAfterSec }, 429)
 
-    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection)
+    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress)
     const ownedSelectedRunId = context.selectedRun?.id ?? null
     if (shouldStream) {
       return streamCoachRun(admin, userId, ownedSelectedRunId, userNote, openaiKey, model, context)
@@ -602,6 +603,69 @@ function normalizeGoalProjection(value: unknown): CoachGoalProjection | null {
   }
 }
 
+type PhaseName = 'Base' | 'Build' | 'Threshold' | 'Race Specific' | 'Taper' | 'Recovery'
+type CriterionStatusValue = 'ready' | 'watch' | 'blocked'
+
+type CoachAdaptiveProgress = {
+  currentPhase: PhaseName
+  criteria: Array<{ id: string; label: string; status: CriterionStatusValue; evidence: string }>
+  readyCount: number
+  allReady: boolean
+  phaseProposal: { shouldTransition: boolean; toPhase: PhaseName | null; reason: string; blockers: string[] }
+  adapted: { easyCeilingBpm: number | null; longRunDriftTolerancePercent: number | null; recoveryRestDays: number | null }
+}
+
+function normalizePhaseName(value: unknown): PhaseName | null {
+  return value === 'Base' || value === 'Build' || value === 'Threshold' || value === 'Race Specific' || value === 'Taper' || value === 'Recovery'
+    ? value
+    : null
+}
+
+// 웹이 산출한 adaptiveProgress(#338) 요약을 방어적으로 정규화한다. 구조 불일치 시 null(정책 미적용).
+function normalizeAdaptiveProgress(value: unknown): CoachAdaptiveProgress | null {
+  if (!value || typeof value !== 'object') return null
+  const v = value as Record<string, unknown>
+  const currentPhase = normalizePhaseName(v.currentPhase)
+  if (!currentPhase) return null
+  const rawCriteria = Array.isArray(v.criteria) ? v.criteria : []
+  const criteria = rawCriteria
+    .map((item) => {
+      const c = item as Record<string, unknown>
+      const status = c.status === 'ready' || c.status === 'watch' || c.status === 'blocked' ? c.status : null
+      const id = typeof c.id === 'string' ? c.id : null
+      if (!status || !id) return null
+      return {
+        id,
+        label: typeof c.label === 'string' ? c.label : id,
+        status: status as CriterionStatusValue,
+        evidence: typeof c.evidence === 'string' ? c.evidence.slice(0, 240) : ''
+      }
+    })
+    .filter((item): item is CoachAdaptiveProgress['criteria'][number] => Boolean(item))
+    .slice(0, 8)
+  const proposal = (v.phaseProposal && typeof v.phaseProposal === 'object' ? v.phaseProposal : {}) as Record<string, unknown>
+  const adapted = (v.adapted && typeof v.adapted === 'object' ? v.adapted : {}) as Record<string, unknown>
+  return {
+    currentPhase,
+    criteria,
+    readyCount: nullableNumber(v.readyCount) ?? criteria.filter((c) => c.status === 'ready').length,
+    allReady: v.allReady === true,
+    phaseProposal: {
+      shouldTransition: proposal.shouldTransition === true,
+      toPhase: normalizePhaseName(proposal.toPhase),
+      reason: typeof proposal.reason === 'string' ? proposal.reason.slice(0, 240) : '',
+      blockers: Array.isArray(proposal.blockers)
+        ? proposal.blockers.filter((b): b is string => typeof b === 'string').slice(0, 6)
+        : []
+    },
+    adapted: {
+      easyCeilingBpm: nullableNumber(adapted.easyCeilingBpm),
+      longRunDriftTolerancePercent: nullableNumber(adapted.longRunDriftTolerancePercent),
+      recoveryRestDays: nullableNumber(adapted.recoveryRestDays)
+    }
+  }
+}
+
 // 주입된 웹 전망이 있으면 Riegel 결과를 대체해 동일 예상 기록/추세를 쓰게 한다(#98).
 // getPerformanceProjection 의 'available' 형태와 동일 구조를 유지한다.
 function unifyPerformanceProjection(
@@ -638,7 +702,7 @@ function unifyPerformanceProjection(
   }
 }
 
-async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null) {
+async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null) {
   const memorySelect = 'id, content, created_at, importance, last_referenced_at, reference_count'
   const [
     { data: memoryRow },
@@ -950,11 +1014,16 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       racePredictionPolicy:
         '레이스 예상시간은 PB, 최근 Tempo/Race/긴 지속주가 충분할 때만 보조 근거로 언급한다. 데이터가 부족하면 예상시간을 단정하지 않는다. 루틴 변경은 예상시간 하나가 아니라 최근 14/30일 수행, 회복, 부상, 목표일까지 남은 기간을 함께 보고 결정한다.',
       patchPolicy:
-        '변경 필요성이 명확할 때만 trainingMemoryPatch.weeklyPattern 전체와 activeGoalStrategyNotes를 반환한다. 유지가 맞으면 report의 루틴 업데이트 섹션에는 유지 근거와 다음 상향 조건을 짧게 쓰고 trainingMemoryPatch는 null로 둔다. 처방 경계 자체를 조정해야 하면 activeGoalStrategyNotes 또는 aiNotes에 새 기준을 명확히 남긴다.'
+        '변경 필요성이 명확할 때만 trainingMemoryPatch.weeklyPattern 전체와 activeGoalStrategyNotes를 반환한다. 유지가 맞으면 report의 루틴 업데이트 섹션에는 유지 근거와 다음 상향 조건을 짧게 쓰고 trainingMemoryPatch는 null로 둔다. 처방 경계 자체를 조정해야 하면 activeGoalStrategyNotes 또는 aiNotes에 새 기준을 명확히 남긴다.',
+      adaptiveProgressPolicy:
+        'context.adaptiveProgress는 웹이 결정적으로 산출한 진행 평가다(#336~#338): progressionCriteria 4기준 status(ready/watch/blocked), 현재 phase, phaseProposal(다음 단계 전환 제안과 blockers), 적응값(Easy 상한/Long Run 드리프트 허용/회복 휴식일). 이것이 있으면 루틴 진화·단계 판단의 1차 근거로 쓴다. ' +
+        '루틴 진화 트리거: 해당 기준이 ready로 안정됐을 때만 한 번에 한 요소를 소폭 올린다(예: Tempo 상한 준수 ready 2주 → Tempo 지속 +1세트, Long Run 지속성 ready → Long 거리 소폭↑). watch면 유지하며 관찰, blocked면 낮추거나 회복을 우선한다. ' +
+        'phaseProposal.shouldTransition=true이면 report의 루틴/다음훈련 섹션에서 "다음 단계(toPhase) 전환 준비가 됐다"고 근거(reason)와 함께 제안하되, 단정적 자동 변경이 아니라 사용자 확인이 필요한 제안으로 말한다. blockers가 있으면 무엇이 남았는지 1~2개만 짚는다. adaptiveProgress가 null이면 이 정책을 적용하지 않고 기존 기준으로 판단한다.'
     },
     trainingMemory,
     trainingMethodology: buildTrainingMethodologyAlgorithm(),
     trainingKnowledge,
+    adaptiveProgress,
     adaptiveTrainingProfile,
     adaptiveAlgorithmPolicy: {
       principle:
