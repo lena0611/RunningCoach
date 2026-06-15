@@ -91,6 +91,20 @@ type TrainingPrescriptionRuleRow = {
   contraindications: string[]
   evidence_summary: string
   priority: number
+  protocol: WorkoutProtocolRow | null
+  template_slug: string | null
+}
+
+type WorkoutProtocolRow = {
+  segments?: Array<{
+    kind?: string
+    detail?: string
+    durationMin?: number | null
+    reps?: number | null
+    onText?: string | null
+    offText?: string | null
+    intensity?: string | null
+  }>
 }
 
 type CurrentWeatherContext = {
@@ -645,7 +659,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     admin.from('coach_reports').select('selected_run_id, user_note, report, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(80),
     admin.from('training_knowledge_sources').select('id, title, author, source_type, url, reliability, summary').eq('approved', true),
     admin.from('training_methods').select('id, source_id, name, slug, family, summary, target_distances, suitable_levels, weekly_days_min, weekly_days_max, caution_notes').eq('approved', true),
-    admin.from('training_prescription_rules').select('id, method_id, source_id, goal_distance, phase, session_type, rule_type, metric, prescription, raise_condition, lower_condition, contraindications, evidence_summary, priority').eq('approved', true).order('priority')
+    admin.from('training_prescription_rules').select('id, method_id, source_id, goal_distance, phase, session_type, rule_type, metric, prescription, raise_condition, lower_condition, contraindications, evidence_summary, priority, protocol, template_slug').eq('approved', true).order('priority')
   ])
   let runRows = (runs ?? []) as RunLogRow[]
   const reportRows = (reports ?? []) as CoachReportRow[]
@@ -2006,6 +2020,22 @@ function buildTrainingMethodologyAlgorithm() {
   }
 }
 
+// 구조화 워크아웃 프로토콜(#327)을 프롬프트용 한 줄 구조 요약으로 압축한다. 비어 있으면 null.
+function summarizeWorkoutProtocol(protocol: WorkoutProtocolRow | null): string | null {
+  const segments = protocol?.segments
+  if (!Array.isArray(segments) || !segments.length) return null
+  const parts = segments
+    .map((segment) => {
+      const detail = typeof segment?.detail === 'string' ? segment.detail.trim() : ''
+      if (!detail) return null
+      const kind = typeof segment?.kind === 'string' ? segment.kind : 'note'
+      const reps = typeof segment?.reps === 'number' && segment.reps > 0 ? ` x${segment.reps}` : ''
+      return `[${kind}] ${detail}${reps}`
+    })
+    .filter((part): part is string => Boolean(part))
+  return parts.length ? parts.join(' → ') : null
+}
+
 function buildRelevantTrainingKnowledge(
   sources: TrainingKnowledgeSourceRow[],
   methods: TrainingMethodRow[],
@@ -2066,6 +2096,8 @@ function buildRelevantTrainingKnowledge(
       lowerCondition: rule.lower_condition,
       contraindications: rule.contraindications,
       evidenceSummary: rule.evidence_summary,
+      templateSlug: rule.template_slug ?? null,
+      workoutStructure: summarizeWorkoutProtocol(rule.protocol),
       sourceTitle: rule.source_id ? sourceById.get(rule.source_id)?.title ?? null : null
     })),
     sources: [...relevantSourceIds].map((id) => {
