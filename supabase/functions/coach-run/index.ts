@@ -228,7 +228,7 @@ async function persistCoachResult(
         user_id: userId,
         selected_run_id: selectedRunId,
         user_note: userNote,
-        report: ai.report,
+        report: applyTrustLayer(ai.report, context.trustLayerNote),
         updated_at: new Date().toISOString()
       })
       .select('id, selected_run_id, user_note, report, created_at, updated_at')
@@ -555,6 +555,22 @@ function buildTrustLayerNote(
     }
   }
   return `강도를 줄이는 건 목표 포기가 아니라 목표 보호다. ${projText}${outlook.returnWindow} 안에 통증이 가라앉으면 원래 계획으로 복귀할 수 있고, 그동안에도 목표 달성 가능성은 유지된다.`
+}
+
+// 신뢰 레이어 결정론 보장(#313): 모델이 trustLayerNote 를 빠뜨려도 저장본에 반드시 들어가게 한다.
+// 이미 "목표 보호"를 언급했으면 모델이 포함한 것으로 보고 건드리지 않는다.
+function applyTrustLayer(report: string, note: string | null | undefined): string {
+  if (!note || !report) return report
+  if (report.includes('목표 보호')) return report
+  const cautionHeader = '## 조심할 점'
+  if (report.includes(cautionHeader)) {
+    return report.replace(/(##\s*조심할 점[\s\S]*?)(?=\n##\s|$)/, (match) => `${match.trimEnd()}\n${note}`)
+  }
+  const section = `## 조심할 점\n${note}\n\n`
+  const anchor = report.indexOf('## 다음 훈련') >= 0 ? '## 다음 훈련'
+    : report.indexOf('## 한 줄 요약') >= 0 ? '## 한 줄 요약' : null
+  if (anchor) return report.replace(anchor, `${section}${anchor}`)
+  return `${report.trimEnd()}\n\n${section}`.trimEnd()
 }
 
 function normalizeGoalProjection(value: unknown): CoachGoalProjection | null {
