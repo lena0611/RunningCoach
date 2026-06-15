@@ -55,6 +55,16 @@ export const useSessionIntentStore = defineStore('sessionIntentStore', {
       this.intents.unshift(intent)
       return intent
     },
+    /** 해당 날짜에 미연결(planned) 의도가 있으면 그대로, 없으면 생성한다(하루 1건 idempotent). */
+    async ensureIntentFor(draft: SessionIntentDraft): Promise<SessionIntent | null> {
+      if (!isSupabaseConfigured) return null
+      if (!this.loaded) await this.load()
+      const existing = this.intents.find(
+        (item) => item.plannedDate === draft.plannedDate && item.status === 'planned'
+      )
+      if (existing) return existing
+      return this.plan(draft)
+    },
     /** 런 저장 직후 호출. 가장 가까운 미연결 의도를 매칭한다(best-effort). */
     async matchRun(run: { id: string; date: string }): Promise<SessionIntent | null> {
       if (!isSupabaseConfigured) return null
