@@ -1,4 +1,4 @@
-import { initialTrainingMemory, normalizeTrainingMemory, type TrainingMemory } from '@/entities/training-memory/model'
+import { createBlankTrainingMemory, normalizeTrainingMemory, type TrainingMemory } from '@/entities/training-memory/model'
 import { requireSupabase } from '@/shared/api/supabase'
 
 export async function fetchTrainingMemory(): Promise<TrainingMemory> {
@@ -10,8 +10,11 @@ export async function fetchTrainingMemory(): Promise<TrainingMemory> {
   if (error) throw error
   if (data?.memory) return normalizeTrainingMemory(data.memory as Partial<TrainingMemory>)
 
-  await saveTrainingMemory(initialTrainingMemory)
-  return normalizeTrainingMemory(initialTrainingMemory)
+  // #332: 신규 사용자에게 개발자 예시 루틴(initialTrainingMemory) 대신 중립 메모리를 시드한다.
+  // 온보딩이 weeklyPattern/처방/목표/부상을 사용자 값으로 채운다.
+  const blank = createBlankTrainingMemory()
+  await saveTrainingMemory(blank)
+  return blank
 }
 
 export async function saveTrainingMemory(memory: TrainingMemory) {

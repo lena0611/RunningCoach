@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { initialTrainingMemory, normalizeTrainingMemory, type TrainingMemory } from '@/entities/training-memory/model'
+import { createBlankTrainingMemory, normalizeTrainingMemory, type TrainingMemory } from '@/entities/training-memory/model'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { fetchTrainingMemory, saveTrainingMemory } from '@/shared/api/memoryRepository'
 
@@ -56,13 +56,13 @@ export const useMemoryStore = defineStore('memoryStore', {
     },
     addUser(name: string, goal: string) {
       const now = new Date().toISOString()
+      // #332: 새 사용자도 개발자 예시 루틴이 아니라 중립 메모리에서 시작한다.
+      const memory = createBlankTrainingMemory()
+      if (goal.trim()) memory.goal = goal.trim()
       const user: RunContextUser = {
         id: crypto.randomUUID(),
         name: name.trim() || '새 사용자',
-        memory: {
-          ...cloneMemory(initialTrainingMemory),
-          goal: goal.trim() || initialTrainingMemory.goal
-        },
+        memory,
         createdAt: now,
         updatedAt: now
       }
@@ -135,12 +135,9 @@ function persistSelectedUserId(userId: string) {
 function loadLegacyMemory(): TrainingMemory {
   try {
     const raw = localStorage.getItem(storageKey)
-    return raw ? normalizeTrainingMemory(JSON.parse(raw)) : cloneMemory(initialTrainingMemory)
+    // #332: 로컬 메모리가 없으면 개발자 예시 루틴이 아니라 중립 메모리로 시작한다.
+    return raw ? normalizeTrainingMemory(JSON.parse(raw)) : createBlankTrainingMemory()
   } catch {
-    return cloneMemory(initialTrainingMemory)
+    return createBlankTrainingMemory()
   }
-}
-
-function cloneMemory(memory: TrainingMemory): TrainingMemory {
-  return JSON.parse(JSON.stringify(memory))
 }
