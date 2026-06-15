@@ -1448,6 +1448,8 @@ function buildCoachInstructions(context: unknown) {
     'context.coachingDecisionBoard는 이번 답변의 판단 보드다. 답변 전에 selectedRunEvidence, lapProcess, prescriptionCompliance, goalProjectionCheck, routineUpdateCheck를 먼저 확인한다.',
     'coachingDecisionBoard.lapProcess가 있으면 평균값만 반복하지 말고, 페이스 흐름/심박 흐름/전후반 변화/초반 통제 여부를 핵심 지표와 해석 섹션에 넣는다.',
     'coachingDecisionBoard.prescriptionCompliance는 세션별 처방 준수 판정이다. "잘했다/아쉽다"가 아니라 어떤 경계를 지켰거나 넘겼는지 말한다.',
+    '⚠️ prescriptionCompliance/lapProcess/sessionEvidence의 내부 토큰(met_*, partial_*, missed_*, _drift, controlled/aggressive/overcooked 같은 식별자)을 사용자에게 그대로 출력하지 마라. 반드시 자연어로 번역한다. 예: "missed_large_long_run_drift"라고 쓰지 말고 "후반 심박이 다소 따라붙었다" 정도로 푼다.',
+    'Steady Long/LSD에서 후반에 페이스를 끌어올린 네거티브 스플릿은 기본적으로 긍정 신호다. 보정 드리프트가 낮으면 "심박이 따라붙어 과했다"고 단정하지 말고 "체력이 남아 후반 가속이 가능했다"는 쪽으로 먼저 해석한다.',
     'coachingDecisionBoard.goalProjectionCheck는 목표 예상과 루틴 상향 가능성을 보는 보조 근거다. 예측값 하나만 믿지 말고 역치훈련, Easy 기반, Long Run 지속성, 회복/부상 게이트와 함께 본다.',
     'coachingDecisionBoard.routineUpdateCheck는 루틴 유지/상향/하향/보류 결론의 초안이다. "## 루틴 업데이트"에서는 이 결론과 근거를 1~3개만 짧게 말한다.',
     'selectedRunLapAnalysis가 있으면 "## 핵심 지표"에 구간 진행에 따른 페이스 흐름과 심박 흐름을 반드시 넣는다. 예: "- 페이스: 10분44초 → 10분05초 → 10분29초 → 9분57초 → 9분28초", "- 심박: 108 → 116 → 114 → 118 → 121", "- 케이던스: 159~164".',
@@ -4886,10 +4888,15 @@ function classifyPrescriptionCompliance(
   }
 
   if (type === 'LSD' || type === 'Steady Long') {
-    const drift = analysis?.available ? analysis.heartRateDriftBpmSecondHalfMinusFirstHalf ?? null : null
-    if (drift === null) return 'unknown_no_lap_drift'
-    if (drift <= 8) return 'met_long_run_stability'
-    if (drift <= 12) return 'partial_long_run_drift'
+    const rawDrift = analysis?.available ? analysis.heartRateDriftBpmSecondHalfMinusFirstHalf ?? null : null
+    if (rawDrift === null) return 'unknown_no_lap_drift'
+    // 네거티브 스플릿(후반 빨라짐) 보정(#359): 후반 가속분만큼 오른 심박은 정상이므로 깐다.
+    // paceDelta>0=후반 느려짐, <0=후반 빨라짐. 웹 sessionQuality(#354 §6)와 동일 계수(0.4).
+    const paceDelta = analysis?.available ? analysis.paceDeltaSecSecondHalfMinusFirstHalf ?? null : null
+    const paceGain = paceDelta === null ? 0 : Math.max(0, -paceDelta)
+    const adjustedDrift = Math.round(rawDrift - paceGain * 0.4)
+    if (adjustedDrift <= 8) return 'met_long_run_stability'
+    if (adjustedDrift <= 12) return 'partial_long_run_drift'
     return 'missed_large_long_run_drift'
   }
 
