@@ -25,7 +25,12 @@ import RunSessionList from '@/shared/ui/RunSessionList.vue'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import StatCard from '@/shared/ui/StatCard.vue'
 import LevelCard from './LevelCard.vue'
+import PreRunIntentCard from './PreRunIntentCard.vue'
 import QuestPanel from './QuestPanel.vue'
+import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
+import { useToastStore } from '@/app/stores/toastStore'
+import { buildSessionIntentDraft, easierAlternative, type BuildSessionIntentArgs } from '@/features/build-session-intent/buildSessionIntentDraft'
+import { isSupabaseConfigured } from '@/shared/api/supabase'
 import RacePage from '@/pages/race/RacePage.vue'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
@@ -82,6 +87,61 @@ const runnerProgress = computed(() =>
 )
 const weeklyRunCount = computed(() => getThisWeekRuns(runs.value, today.value).length)
 const weeklyRunTarget = computed(() => memoryStore.memory.athleteProfile.weeklyRunDaysTarget ?? 0)
+
+// Pre-Run 의도(#309): 결정론 신호를 조합해 오늘 의도를 만들고 하루 1건 영속한다.
+const sessionIntentStore = useSessionIntentStore()
+const toastStore = useToastStore()
+const intentBusy = ref(false)
+const activePlannedIntent = computed(() => sessionIntentStore.activePlannedIntent)
+const weakestFactorLabel = computed(() => {
+  const factors = raceProjection.value?.factors ?? []
+  if (!factors.length) return null
+  return [...factors].sort((a, b) => a.score - b.score)[0]?.label ?? null
+})
+function intentArgs(overrideType?: BuildSessionIntentArgs['overrideType']): BuildSessionIntentArgs {
+  return {
+    recommendation: nextSession.value,
+    heartRateModel: {
+      easyCeilingBpm: heartRateModel.value.easyCeilingBpm,
+      tempoCeilingBpm: heartRateModel.value.tempoCeilingBpm,
+      recoveryCeilingBpm: heartRateModel.value.recoveryCeilingBpm
+    },
+    weakestFactorLabel: weakestFactorLabel.value,
+    activeGoalId: activeGoal.value?.id ?? null,
+    overrideType
+  }
+}
+async function ensureTodayIntent() {
+  if (!isSupabaseConfigured || !runStore.loaded || !memoryStore.loaded) return
+  try {
+    await sessionIntentStore.ensureIntentFor(buildSessionIntentDraft(intentArgs()))
+  } catch {
+    // best-effort: 의도 생성 실패가 대시보드를 막지 않는다.
+  }
+}
+function onAcknowledgeIntent() {
+  toastStore.success('좋아요, 오늘은 이 훈련에 집중해요.')
+}
+async function onRequestAlternative() {
+  const current = activePlannedIntent.value
+  if (!current || intentBusy.value) return
+  intentBusy.value = true
+  try {
+    await sessionIntentStore.setStatus(current.id, 'superseded')
+    await sessionIntentStore.plan(buildSessionIntentDraft(intentArgs(easierAlternative(current.sessionType))))
+  } catch {
+    toastStore.error('다른 훈련을 제안하지 못했어요.')
+  } finally {
+    intentBusy.value = false
+  }
+}
+watch(
+  () => [runStore.loaded, memoryStore.loaded] as const,
+  () => {
+    void ensureTodayIntent()
+  },
+  { immediate: true }
+)
 
 watch(
   () => route.path,
@@ -289,6 +349,15 @@ function formatDateOnly(value: Date) {
 
     <SectionGroup title="내 레벨" :surface="false">
       <LevelCard :progress="runnerProgress" :coins="levelStore.coins" hide-eyebrow />
+    </SectionGroup>
+
+    <SectionGroup v-if="activePlannedIntent" title="훈련 의도" :surface="false">
+      <PreRunIntentCard
+        :intent="activePlannedIntent"
+        :busy="intentBusy"
+        @acknowledge="onAcknowledgeIntent"
+        @request-alternative="onRequestAlternative"
+      />
     </SectionGroup>
 
     <QuestPanel
