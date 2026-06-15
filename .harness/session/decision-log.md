@@ -4,6 +4,14 @@
 
 > 하네스 본체의 변경 이력이나 릴리스 노트가 아닙니다. 하네스 본체 변경 기록은 하네스 저장소의 `CHANGELOG.md` 또는 릴리스 태그를 확인합니다.
 
+## 2026-06-15 - 공통 하네스 0.2.56→0.2.64 업데이트 (CLAUDE.md 프로젝트 내용 복원 주의)
+
+`npm run harness:update -- --base-only`로 base(harness-seed)를 0.2.64로 올림(스택 vue3-vite-pinia-router 0.1.32 최신 유지). 주요 변경: npm 없이 동작하는 `harness` 런처, git hook의 런처 호출, 스택 manifest `verify` 섹션, guard의 package.json-free 동작 등(상세 `npm run harness:changelog`).
+
+- ⚠️ **부작용**: 업데이트가 `CLAUDE.md`에서 프로젝트 소유 내용을 삭제함 — `## 모노레포 구조 (#250)` 섹션 전체 + reading-list의 `ui-guidelines.md`/`ui-system-contract.md` 2줄. 커밋 전 수동 복원(HEAD 대비 CLAUDE.md 순변경 0 확인).
+- **재발 방지**: 향후 `harness:update` 뒤 반드시 `git diff CLAUDE.md`로 프로젝트 고유 섹션(모노레포 구조, UI 선행 reading) 보존을 확인하고, 삭제됐으면 복원한다. CLAUDE.md는 일부 프로젝트 소유다.
+- harness:check 통과(주의: SYNC GAP review 제안 1건 — 비차단).
+
 ## 2026-06-09 - 가상레이싱 데이터 모델 확정 (competition 1급 엔티티 + 솔로=실력측정/내 베스트 도전)
 
 #232 UI 작업 중 데이터 귀속을 사용자와 함께 정리. 궁극 매력포인트 = **여러 명이 각자의 장소에서 실시간 레이싱**(#67, §3). 이 north star 기준으로 다음을 확정한다.

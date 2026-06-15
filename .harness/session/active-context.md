@@ -5,8 +5,21 @@
 
 > 하네스 본체의 개발 기록이 아닙니다. 설치된 프로젝트의 현재 작업 맥락만 기록합니다.
 
+## ⭐ 다음 작업 — #233 가상레이싱 결과 분류·RunLog 링크 (착수 직전, 2026-06-11)
+- **상태**: 설계 착수 직전. 코드 미시작. 선행 #228(거리별 PB `src/shared/lib/achievement/distancePb.ts`)·#229(라이브 트래킹) 모두 Done.
+- **목표**: 라이브 레이싱 결과를 경량 `competition_result`로 분류·저장하고 정본 RunLog에 링크. 훈련 분류와 직교(경쟁 주석).
+- **스펙(확정, `.harness/project/competition-domain.md` §9.2·§10)**:
+  - 정본 RunLog `type` **불변**(`inferRunType` 그대로, 'Race' 강제 금지 — Riegel/부하/추세 오염 방지). `RunLog.tags += 'self-race'` 경량 태그만(식별 + 업적 PB 훈련/레이싱 사다리 분리 키).
+  - `competition_result{mode:'self-pb', targetPb:{distanceM,elapsedSec,sourceRunId}, racedDistanceM, resultGapSec, outcome:'win'|'lose'|'tie', linkedRunId, racedAt}`.
+  - 링크: 라이브 종료 후 import된 RunLog와 **시간·거리 근접 매칭**(기존 `requestRunningWorkoutByExternalId` 패턴 재사용).
+  - **이중계산 방지**: competition_result는 볼륨·부하·추세 집계 **미포함**. 업적·동기부여·코칭 인용 전용.
+  - `competition_result`는 현재 코드에 **없음**(신규). 라이브 결과는 RacePage에 `finalTick`/`finalGap`/`finalDistanceGapM`로 종료 요약만 존재(미저장).
+- **다음 세션 1순위 조사(미확인)**: ① RunLog 영속화 위치(Supabase 테이블 vs 로컬) ② `requestRunningWorkoutByExternalId` 매칭 로직 위치·패턴 ③ coach-run 컨텍스트 주입 지점([[coach-context-client-summary]] 패턴) ④ 'self-race' 태그를 라이브 종료→import RunLog에 붙이는 시점.
+- **착수 전 결정 필요(사용자 인터뷰)**: **저장 여부** — MVP 미저장(종료요약만) vs 저장(업적/코칭 인용 위해 권장). 저장 시 Supabase 테이블 신설 여부.
+- **작업 규율**: 새 worktree `run-ai.worktrees/issue-233-*` 생성(현 issue-232 워크트리는 #232/#296용, 모두 머지·종료됨). 큰 작업이니 구현 전 설계 합의.
+
 ## 현재 상태
-- updatedAt: 2026-06-05
+- updatedAt: 2026-06-11 (#233 착수 직전)
 - baseHarness: 0.2.53
 - activeStack / harnessMode: `.harness/policy/profile.json` 참고
 

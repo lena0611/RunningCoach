@@ -4,7 +4,13 @@
 운영 규칙 본문은 여기서 중복하지 않습니다. 최신 기준은 `active-context.md`,
 `project-memory.md`, `.harness/project/workflow-rules.md`, `decision-log.md`를 우선합니다.
 
-## ⭐ 다음 1순위 — 가상레이싱 #229 본구현 (PoC① GO 완료, 2026-06-09)
+## ⭐ 미검증 스모크 — 에픽 #307 코치 목표관리형 진화 #311 묶음 (2026-06-15)
+- 에픽 #307 Phase 1~5+기반 배포 완료. **#308·#309·#310·#312·#313·#98 = Closed/Done**(코드+배포+검증 끝). `coach-run` v84+ 배포됨.
+- **남은 1건: #311(운동 직후 인터뷰) + #310(의도 달성률 카드) + #308(의도↔런 매칭)** — 트리거가 **HealthKit 새 러닝 임포트 직후**라 새 세션 데이터 없이는 검증 불가.
+- 검증 방법(새 임포트 후): ① 임포트 직후 PostRunInterviewSheet 노출→통증/부위/난이도/의견 제출→그 run의 rpe/painNote/workoutFeeling 반영 ② 그날 대시보드 Pre-run 의도가 그 런과 매칭(#308) ③ 그 런 코칭뷰에 "의도 달성률" 카드(#310) 표시.
+- 통과하면 **에픽 #307 최종 완료처리**(Done/Close). 상세는 메모리 `coach-goal-management-epic`, 교훈 `coach-always-on-block-deterministic`.
+
+## 다음 1순위 — 가상레이싱 #229 본구현 (PoC① GO 완료, 2026-06-09)
 - **PoC① 통과(GO)**: iOS 백그라운드 위치+오디오+배터리(~7%/h) viability 확인. 상세 `decision-log.md` 2026-06-09 항목.
 - **PoC 코드는 브랜치 `issue-229/live-run-poc`(PR #265, 미머지)에 있음. main엔 없음.** 재개: `git checkout issue-229/live-run-poc`.
   - ⚠️ 그 브랜치 `native/RunningCoach/RunningCoachApp.swift` 진입점이 `LiveRunPoCView()`로 임시 swap됨 → 본구현/실앱 전 `ContentView()`로 되돌릴 것.

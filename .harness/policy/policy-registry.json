@@ -287,11 +287,15 @@
       ],
       "ownedAreas": [
         ".harness/bin/check-node-version.mjs",
+        ".harness/bin/dual-node.sh",
+        ".harness/bin/node-env.mjs",
         "scripts/init.mjs",
         "scripts/test-init.mjs"
       ],
       "triggerPaths": [
         ".harness/bin/check-node-version.mjs",
+        ".harness/bin/dual-node.sh",
+        ".harness/bin/node-env.mjs",
         "scripts/init.mjs"
       ],
       "checks": [
@@ -353,9 +357,7 @@
         "path": ".harness/project/template-contract.md"
       },
       "documents": [
-        ".harness/project/template-contract.md",
-        ".harness/project/portability-guide.md",
-        ".harness/stacks/README.md"
+        ".harness/project/template-contract.md"
       ],
       "ownedAreas": [
         ".harness/bin/apply-stack.mjs",

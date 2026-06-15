@@ -1,14 +1,14 @@
 {
   "tool": "harness-seed",
-  "version": "0.2.56",
-  "installedAt": "2026-06-06T14:33:52.747Z",
+  "version": "0.2.64",
+  "installedAt": "2026-06-15T06:29:07.285Z",
   "source": {
     "type": "git",
     "repo": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git",
-    "ref": "v0.2.56",
+    "ref": "v0.2.64",
     "commit": null,
-    "packageVersion": "0.2.56",
-    "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.56"
+    "packageVersion": "0.2.64",
+    "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.64"
   },
   "manifestVersion": 2,
   "managedFiles": {
@@ -21,8 +21,14 @@
     ".harness/bin/build-context.mjs": {
       "sha256": "39a8b9664577b788baeb607eb3c86657a6e11f0d2aa326e1a2cf5e9a0a6573a4"
     },
+    ".harness/bin/changelog-delta.mjs": {
+      "sha256": "96bc5b3204f70d99a57a75a0ff845817ee2c506408917e77213c6576d733637e"
+    },
     ".harness/bin/check-node-version.mjs": {
-      "sha256": "940b0b6d4c1a0f207416945211a0dd7a75c15d4479852c9ba9f3e28a461fbc8e"
+      "sha256": "baca4122e8c09178fe6435d7ee9d432bbfcf881c041a804c6ec92e7114c6e1c0"
+    },
+    ".harness/bin/check-remote-sync.mjs": {
+      "sha256": "40f51ec993b067070058cac71a7545fb6377cbbd65c65ff2147ac509374aba6a"
     },
     ".harness/bin/check-seed-mode.mjs": {
       "sha256": "7c29bf666e1d53817b4b646fe3501fbb287f9c83eabfe52ff62ea96fdf7d4770"
@@ -30,23 +36,35 @@
     ".harness/bin/doc-link-check.mjs": {
       "sha256": "875f25b4ed215580c77f038546880f7a620c5380917347efd6bb975d3447ac9a"
     },
+    ".harness/bin/dual-node.sh": {
+      "sha256": "ce80aa8cd2a530213f5cc7538fd8e2ade79b4f4500b708c98956f9b280f11903"
+    },
     ".harness/bin/guard.mjs": {
-      "sha256": "3dbdccfa17a2de8fbfd0744d84d7197c6f8a1d66609ab9a858aea8175034bac5"
+      "sha256": "be31029e232cbe27ff5ea67f5d329cbb06adb66d899997fa033747f37c865ef5"
     },
     ".harness/bin/handoff.mjs": {
-      "sha256": "e809d6b1861d7cfda9a3595579d33a7e582346fdb6cf026fbeb5e1e8ecef92cd"
+      "sha256": "313e6dd9b5c7afc75e98fc55e558b680a995ef38f815adc5f9952fc9e74c85cf"
+    },
+    ".harness/bin/harness": {
+      "sha256": "8c255baf37a3262b041991dcf4ef469d6b2927f2a07c88bbccab49a02fb32323"
     },
     ".harness/bin/harness-guide.mjs": {
       "sha256": "6e0eed265b03cbb20339612f6b08b72e694120b9fa407b27659160d84d817990"
     },
+    ".harness/bin/harness.cmd": {
+      "sha256": "52cdeb337a8d9f5f14f1d0c22f77a24205b5425584f0d8ddaefc272e0ee95bbe"
+    },
     ".harness/bin/install-hooks.mjs": {
-      "sha256": "807a979d0821946ae754e3b986c580cd9bea9df26a81e2f29860e36e7d73f12e"
+      "sha256": "5ff2d3f3c6816d32689dce432da1f1bd957bf3a5c9975fd858bd3bcc3a1b58a1"
     },
     ".harness/bin/list-stack-standards.mjs": {
       "sha256": "8fb5e2d760951792aaf2a467578f77ca761f5ee325e487ccc1a82553cd62bd57"
     },
     ".harness/bin/list-templates.mjs": {
       "sha256": "6ac1724e78c8350537790b8aeecc94d5606ed3e5899dc040f53b09b23d7f6ae4"
+    },
+    ".harness/bin/node-env.mjs": {
+      "sha256": "0cf08d43c56237c06dd111c7f6d83feaa09ee275c734d3c51e4414aece92afff"
     },
     ".harness/bin/outdated-harness.mjs": {
       "sha256": "0e641ff8fe5fe49acfa20896360c009b54f224fb2db13871dd122e7526b8e56f"
@@ -55,7 +73,7 @@
       "sha256": "2f311748ad04b19f24705fde296faaef104f38fcbcb7d8ee9ee81977f8c88b34"
     },
     ".harness/bin/run-previous-hook.mjs": {
-      "sha256": "19b55e7895d33c57c19691b16325b14f3c62c97b5b822e00329eca9cf90fda10"
+      "sha256": "ae53b5194b77ab250b1e6c756d795da3b0b99a3d29b52787a3fc87cb5cacaebf"
     },
     ".harness/bin/scan-project.mjs": {
       "sha256": "096638e9e5785fb3b884c8ddbb8c22206c02ef4d48a8faab06860a6cafcaea9e"
@@ -79,13 +97,13 @@
       "sha256": "06977b047a4f833dbe5cca4907e56f251da25906a111e56f987b87a8dfa2cbb5"
     },
     ".harness/documentation/context-registry.json": {
-      "sha256": "00a6f717542d61c7596f1fa721359d7d8a7f5951ae580d88bc79bd0afa2ecdd1"
+      "sha256": "db7771c826da96d2440161434cc6708fae782e4974aea03002ea0571411d76d9"
     },
     ".harness/documentation/decision-flow.md": {
       "sha256": "8c0cae84bb382aca5c8202bfed549022bcb4cedbbc1a26cc1c5849607e4dfdf2"
     },
     ".harness/documentation/document-registry.json": {
-      "sha256": "17ba7a905fc12891c95ba7aa2cd749aa29923c4c0f49f12bd99107fe53d025ef"
+      "sha256": "ad248d0ca8061ebf0eecd21627023d22eaf318a7add4d285adfb01c3e5827bfc"
     },
     ".harness/documentation/guide/index.html": {
       "sha256": "e9b5f34c6b01712efcba2f3e7c48b1325c6ecdefbfa69981772361cd5abf23c7"
@@ -127,19 +145,22 @@
       "sha256": "21f0ccf5058366f89dc4e62fb71a8f2a763b625211245db3f5c76c5dcd129941"
     },
     ".harness/policy/policy-registry.json": {
-      "sha256": "e5a194932baae24b09728ef7ff7bb7d6a1eebeeac16359856ab326bc5c534140"
+      "sha256": "e1b88deb3ef5eb2dfd9dc0e6d167bd875dd2c490ae42c7a5e61ca002c95a43c4"
     },
     ".harness/policy/policy-steward.md": {
       "sha256": "76cfefbae09233294b7848f2d0667e970355cf6838d9c63cb685aaa259e9cd71"
     },
     ".harness/policy/sync-protocol.md": {
-      "sha256": "b48eb09abdb3bc3c177b0162206f8bf37be1aef81eb13a9ff9602e3de7a21df1"
+      "sha256": "4e1f1ff8c4c3031a5324b194d9efcceafb517691583412b0a6bafe90c292748f"
     },
     ".harness/policy/waiver-guidelines.md": {
       "sha256": "89ac7d09a19316d0b54f621af6d4a90e45026c56616d8067ebc969c96b58dc2f"
     },
     ".harness/project/README.md": {
       "sha256": "724a9845eceb08c64b7266f3d707934e9452fb0d434ec11124a93d2a4c41ab3f"
+    },
+    ".harness/project/body-release-checklist.md": {
+      "sha256": "486638f2123978991747adcbfda10a3d53de13e2173da2620dc859cbf0ccd443"
     },
     ".harness/project/bootstrap.md": {
       "sha256": "b702fcc7d9e3a4264fcc7beb516996651c7e6032ee66cc27feaa0e2aaa54da16"
@@ -148,7 +169,7 @@
       "sha256": "46a3565c19674fdeff1061bc846452c50c9adee8af135a1a9352909c46ffa913"
     },
     ".harness/project/portability-guide.md": {
-      "sha256": "a5f7234654965537866bd8cb31a2cd7d3d2c67dd76fc7bd218f8121c1e86a9db"
+      "sha256": "66f25fb3953c619c562d6496534ee875cc48f5020c84db088fea8135e5cea464"
     },
     ".harness/project/project-harness-guide.md": {
       "sha256": "46a76da875dbb922f6f3360f1d772a25b4c32d1246e0f104b59ec0e5e56a8a90"
@@ -172,10 +193,10 @@
       "sha256": "672991810adfa80774687a7ceb707bfe8881655bc53300368df831d23b684a35"
     },
     ".harness/skills/registry.json": {
-      "sha256": "d2ae255ce7462beb8106b7bd58b075c155ae67c5b02d1184086905d32cae4261"
+      "sha256": "6bf8e7d6e81634d79e3d7d52f5d1b11af69b476c49e1a1f49a64cba3b4b52a14"
     },
     ".harness/stacks/README.md": {
-      "sha256": "d72bd1c48cfdc572ef036b3fb86aa6e318a0530894b0fcb784c8b83c3539df6d"
+      "sha256": "298c10ee17a8e4cf450af79109d0cd1ac84abce414a1de487b2a7afa0cd8f947"
     },
     ".harness/stacks/authoring-guide.md": {
       "sha256": "2ed897e79f6a8c6970d15c42339a02454122516edea0de211c701e46a97bced6"
@@ -255,9 +276,6 @@
     ".claude/hooks/statusline.sh": {
       "sha256": "ce695a216edd2467abc693b4be94a338484d87beb2488d8a66388ebdf73c94b9"
     },
-    ".claude/settings.json": {
-      "sha256": "57b3b2d756ab7bb95b30860c8cc5497c81ddd3ffbef2c588950233d90ddddca6"
-    },
     ".github/commit-template.txt": {
       "sha256": "6395a3cd4c799f6b19d3e33d03c89a40f167c72b2c17f4352a26e7a1c77e26f4"
     },
@@ -274,10 +292,10 @@
       "sha256": "2b120ee1d424e9c531d78040d9b01192d74f1a5e1db5b07697149d1104ee026d"
     },
     ".githooks/pre-commit": {
-      "sha256": "9587eed140dfa255e3bb25284d95d1ddeacfe8d4f4b498777f9e0e6147c987f5"
+      "sha256": "1ff64446455bfd51dbcfc92773d52454ed1dfd01771532ab7a8542860c6eb5c2"
     },
     ".githooks/pre-push": {
-      "sha256": "0c80fedf5ca93fc95a27160ff4f55156da2032c63bcd410dde1cdc85fffc3edb"
+      "sha256": "9c3974bb0140502c3c671b8734039b1243086e80862b2675dfee078c71687f48"
     },
     "AGENTS.md": {
       "sha256": "5aa2c07bb1937c797e3e1ebca4598b77d26235f3f58205e8b37ad38a0b099ec0"
@@ -287,6 +305,7 @@
     }
   },
   "projectOwnedFiles": [
+    ".claude/settings.json",
     ".harness/maintenance/work-history/2026/.gitkeep",
     ".harness/policy/profile.json",
     ".harness/policy/waivers.json",

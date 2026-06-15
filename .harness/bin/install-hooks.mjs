@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { MIN_NODE, hasNvm, isSupportedNode, readNvmrc, resolveHarnessNodeBest, resolveInstalledForSpec } from './node-env.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -64,10 +65,11 @@ console.log('  - commit.template: .github/commit-template.txt')
 console.log('')
 console.log('활성화되는 hook:')
 console.log('  - .githooks/pre-commit')
-console.log('      사용자가 git commit을 실행한 뒤 기존 pre-commit hook, seed-mode 확인, npm run harness:check를 실행합니다.')
+console.log('      사용자가 git commit을 실행한 뒤 기존 pre-commit hook, seed-mode 확인, .harness/bin/harness check를 실행합니다.')
+console.log('      npm run harness:check와 같은 검사이며, package.json 없는 비-Node 프로젝트에서도 동작합니다.')
 console.log('      에이전트가 커밋 요청을 처리할 때는 이 hook 검증을 신뢰하고 선행 harness:check를 중복 실행하지 않습니다.')
 console.log('  - .githooks/pre-push')
-console.log('      사용자가 git push를 실행한 뒤 기존 pre-push hook과 npm run harness:check -- --fast를 실행합니다.')
+console.log('      사용자가 git push를 실행한 뒤 기존 pre-push hook과 .harness/bin/harness check --fast를 실행합니다.')
 console.log('      pre-push는 커밋 직전 전체 검증 반복을 줄이기 위해 정책/문서/버전/lint 중심으로 빠르게 확인합니다.')
 console.log('')
 console.log('커밋 메시지 템플릿:')
@@ -104,4 +106,42 @@ if (previousCommitTemplate && previousCommitTemplate !== '.github/commit-templat
   console.log('기존 commit template 안내:')
   console.log(`  - 이전 commit.template은 '${previousCommitTemplate}'였습니다.`)
   console.log('  - 이번 설치로 .github/commit-template.txt를 사용합니다.')
+}
+
+// dual-runtime(0.2.63): hook이 실제로 동작할 수 있는 Node 환경인지 설치 시점에 진단한다.
+// hook은 fresh 셸에서 실행되므로 "지금 이 셸의 node"가 아니라 nvm 설치본 기준으로 본다.
+const nvmrc = readNvmrc(repoRoot)
+const dualRuntime = Boolean(nvmrc?.parsed && !isSupportedNode(nvmrc.parsed))
+
+console.log('')
+console.log('node 환경 진단:')
+if (!hasNvm()) {
+  if (dualRuntime) {
+    console.warn(`  - nvm 없음: .nvmrc ${nvmrc.raw}(저버전) 프로젝트의 dual-runtime 전환에는 nvm이 필요합니다.`)
+    console.warn('    nvm 설치 전까지 hook이 Node 버전 게이트에서 실패할 수 있습니다: https://github.com/nvm-sh/nvm')
+  } else {
+    console.log(`  - nvm 없음: hook은 PATH의 node를 사용합니다 (>=${MIN_NODE.label} 필요).`)
+  }
+} else {
+  const best = resolveHarnessNodeBest()
+  if (best) {
+    console.log(`  - 하네스 Node(>=${MIN_NODE.label}): ${best.name} 설치됨`)
+  } else {
+    console.warn(`  - 하네스 Node(>=${MIN_NODE.label}): nvm에 없음 → nvm install ${MIN_NODE.major} 이상을 설치해야 hook이 동작합니다.`)
+  }
+  if (nvmrc) {
+    const installed = nvmrc.parsed ? resolveInstalledForSpec(nvmrc.parsed) : null
+    if (installed) {
+      console.log(`  - 프로젝트 Node(.nvmrc ${nvmrc.raw}): ${installed.name} 설치됨`)
+    } else if (nvmrc.parsed) {
+      console.warn(`  - 프로젝트 Node(.nvmrc ${nvmrc.raw}): nvm에 없음 → nvm install ${nvmrc.raw} 후 프로젝트 검증(lint/test/build)이 동작합니다.`)
+    } else {
+      console.warn(`  - 프로젝트 Node(.nvmrc ${nvmrc.raw}): 버전 표기를 해석하지 못했습니다. 숫자 버전 사용을 권장합니다.`)
+    }
+    if (dualRuntime) {
+      console.log('  - dual-runtime: hook은 하네스 Node로 검사를 실행하고, lint/test/build는 .nvmrc Node로 실행합니다.')
+    }
+  } else {
+    console.log('  - .nvmrc 없음: hook은 PATH 기본 Node가 낮으면 nvm 설치본(>=20.19)으로 자동 전환합니다.')
+  }
 }

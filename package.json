@@ -29,7 +29,8 @@
     "stack:reset": "node .harness/bin/check-node-version.mjs && node .harness/bin/apply-stack.mjs --reset",
     "template:status": "node .harness/bin/check-node-version.mjs && node .harness/bin/apply-stack.mjs --template-status",
     "template:apply": "node .harness/bin/check-node-version.mjs && node .harness/bin/apply-stack.mjs --template",
-    "template:reset": "node .harness/bin/check-node-version.mjs && node .harness/bin/apply-stack.mjs --template-reset"
+    "template:reset": "node .harness/bin/check-node-version.mjs && node .harness/bin/apply-stack.mjs --template-reset",
+    "harness:changelog": "node .harness/bin/check-node-version.mjs && node .harness/bin/changelog-delta.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.1",
