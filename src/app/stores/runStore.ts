@@ -13,7 +13,9 @@ export const useRunStore = defineStore('runStore', {
     runs: [] as RunLog[],
     loaded: false,
     loading: false,
-    error: ''
+    error: '',
+    // 운동 직후 코치 인터뷰(#311) 대상 run. HealthKit 임포트 직후 설정되고 App.vue 가 시트를 띄운다.
+    pendingInterviewRunId: null as string | null
   }),
   getters: {
     selectedUserRuns: (state) => {
@@ -72,6 +74,7 @@ export const useRunStore = defineStore('runStore', {
       if (isSupabaseConfigured) {
         const inserted = await insertRunLogs(items, source)
         this.runs.push(...inserted)
+        this.flagInterviewForImport(inserted, source)
         return inserted
       }
 
@@ -93,7 +96,22 @@ export const useRunStore = defineStore('runStore', {
       }))
       this.runs.push(...runs)
       this.persist()
+      this.flagInterviewForImport(runs, source)
       return runs
+    },
+    /** HealthKit 임포트 직후 가장 최근 run 을 인터뷰 대상으로 표시한다(#311). */
+    flagInterviewForImport(runs: RunLog[], source: RunLog['source']) {
+      if (source !== 'healthkit' || !runs.length) return
+      const newest = [...runs].sort(
+        (a, b) => b.date.localeCompare(a.date) || (b.startAt ?? '').localeCompare(a.startAt ?? '')
+      )[0]
+      this.pendingInterviewRunId = newest?.id ?? null
+    },
+    openInterview(runId: string) {
+      this.pendingInterviewRunId = runId
+    },
+    clearInterview() {
+      this.pendingInterviewRunId = null
     },
     async updateRun(run: RunLog) {
       if (isSupabaseConfigured) {
