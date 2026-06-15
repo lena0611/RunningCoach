@@ -165,7 +165,9 @@ const qualitySessionKeywords = ['Tempo', 'Interval', 'LSD', 'Steady Long', 'Race
 
 export function getNextSessionRecommendation(memory: TrainingMemory, runs: RunLog[], today = new Date()): NextSessionRecommendation {
   const sorted = [...runs].sort((a, b) => b.date.localeCompare(a.date))
-  const upcoming = getNextPlannedWorkout(memory, today)
+  // 오늘 이미 수행한 런이 있으면(#352) 오늘 슬롯을 건너뛰고 다음 예정일을 추천한다.
+  const ranToday = runs.some((run) => run.date === formatDateOnly(today))
+  const upcoming = getNextPlannedWorkout(memory, today, { excludeToday: ranToday })
   const lastRun = sorted[0] ?? null
   const lastRunSchedule = lastRun ? getPlannedWorkoutOnDate(memory, lastRun.date) : null
 
@@ -209,6 +211,64 @@ export function getNextSessionRecommendation(memory: TrainingMemory, runs: RunLo
   const ageWeight = getAgeLoadWeight(memory.athleteProfile.birthYear, today)
   const chronic = getChronicLoadTrend(runs, today, ageWeight)
   return applyChronicLoad(applyInjuryGate(base, injury), chronic, injury, ageWeight)
+}
+
+export type TrainingDayView = {
+  today: {
+    /** pending=오늘 예정 미수행 / rest=오늘 예정 없음(휴식) / done=오늘 이미 수행 */
+    state: 'pending' | 'rest' | 'done'
+    /** 오늘 예정 훈련명(pending). rest/done이면 null 가능. */
+    title: string | null
+    /** pending일 때 "어떻게 뛰라"는 코칭 한마디(처방 강도 가이드, 결정론). */
+    coachLine: string
+    /** done일 때 오늘 수행 요약(예: "Easy 6.2km · 32:10"). */
+    doneSummary: string | null
+  }
+  /** 다음 예정 세션(오늘 제외). 패턴이 없으면 null. */
+  next: { date: string; dayName: string; title: string } | null
+}
+
+function formatDurationMmSs(durationSec: number | null): string {
+  if (durationSec === null || !Number.isFinite(durationSec) || durationSec <= 0) return ''
+  const total = Math.round(durationSec)
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+function summarizeRunShort(run: RunLog): string {
+  const distance = Number.isFinite(run.distanceKm) ? `${Math.round(run.distanceKm * 10) / 10}km` : ''
+  const duration = formatDurationMmSs(run.durationSec)
+  return [run.type, distance, duration].filter(Boolean).join(' · ')
+}
+
+/**
+ * 대시보드 "오늘 / 다음 훈련" 카드용 뷰 (#352).
+ * 오늘 상태(미수행/휴식/완료)와 다음 예정 세션(날짜·요일·훈련명)을 결정론으로 산출한다. AI 호출 없음.
+ */
+export function getTrainingDayView(memory: TrainingMemory, runs: RunLog[], today: Date = new Date()): TrainingDayView {
+  const todayStr = formatDateOnly(today)
+  const planned = getPlannedWorkoutOnDate(memory, todayStr)
+  const todayRun = runs
+    .filter((run) => run.date === todayStr)
+    .sort((a, b) => (b.distanceKm ?? 0) - (a.distanceKm ?? 0))[0] ?? null
+  const upcoming = getNextPlannedWorkout(memory, today, { excludeToday: true })
+
+  let todayView: TrainingDayView['today']
+  if (todayRun) {
+    todayView = { state: 'done', title: planned?.workout || null, coachLine: '', doneSummary: summarizeRunShort(todayRun) }
+  } else if (planned) {
+    // 오늘 예정·미수행 → 오늘이 추천 대상이므로 recommendation의 강도 가이드를 코칭 한마디로 쓴다.
+    const rec = getNextSessionRecommendation(memory, runs, today)
+    todayView = { state: 'pending', title: planned.workout || rec.title, coachLine: rec.intensity, doneSummary: null }
+  } else {
+    todayView = { state: 'rest', title: null, coachLine: '', doneSummary: null }
+  }
+
+  return {
+    today: todayView,
+    next: upcoming ? { date: upcoming.date, dayName: upcoming.dayName, title: upcoming.workout || `${upcoming.dayName} 세션` } : null
+  }
 }
 
 function applyChronicLoad(
@@ -292,7 +352,11 @@ function round(value: number): number {
   return Math.round(value * 100) / 100
 }
 
-function getNextPlannedWorkout(memory: TrainingMemory, today: Date): { dayName: string; workout: string; pattern: string; date: string } {
+function getNextPlannedWorkout(
+  memory: TrainingMemory,
+  today: Date,
+  opts: { excludeToday?: boolean } = {}
+): { dayName: string; workout: string; pattern: string; date: string } {
   const days = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
   const todayIndex = today.getDay()
   const patterns = memory.weeklyPattern
@@ -310,10 +374,12 @@ function getNextPlannedWorkout(memory: TrainingMemory, today: Date): { dayName: 
     .filter((item) => item.dayIndex >= 0)
 
   const next = patterns
-    .map((item) => ({
-      ...item,
-      offset: (item.dayIndex - todayIndex + 7) % 7
-    }))
+    .map((item) => {
+      const rawOffset = (item.dayIndex - todayIndex + 7) % 7
+      // 오늘 이미 수행했으면 오늘 슬롯(offset 0)을 다음 주기로 밀어 다음 예정일을 고른다.
+      const offset = opts.excludeToday && rawOffset === 0 ? 7 : rawOffset
+      return { ...item, offset }
+    })
     .sort((a, b) => a.offset - b.offset)[0]
 
   if (next) return { ...next, date: formatDateOnly(addDays(today, next.offset)) }
