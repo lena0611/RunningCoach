@@ -575,6 +575,50 @@ export const initialTrainingMemory: TrainingMemory = {
   ]
 }
 
+/**
+ * 신규/온보딩 미완 사용자용 중립 메모리 (#332).
+ * initialTrainingMemory(개발자 예시 루틴/부상/목표)를 신규 사용자에게 주입하지 않기 위해
+ * 개인 서사(weeklyPattern/처방 외 부상·목표·루틴 텍스트)를 비운 상태로 만든다.
+ * 구조 기본값(adaptiveTrainingProfile·8종 처방 템플릿)은 유지한다. 온보딩이 실제 값으로 채운다.
+ * - injuryItems: [] 명시 → normalize가 존중(#303), 햄스트링 재시드 안 됨.
+ * - goals: 중립 활성 목표 1개(title 필수) → '10km 60분' 기본값 대체.
+ * initialTrainingMemory는 예시/테스트 fixture·normalize fallback으로 그대로 보존한다.
+ */
+export function createBlankTrainingMemory(): TrainingMemory {
+  return normalizeTrainingMemory({
+    goal: '',
+    activeGoalId: defaultGoalId,
+    activeInjuryItemId: null,
+    goals: [
+      {
+        id: defaultGoalId,
+        title: '목표 미설정',
+        category: 'health',
+        startDate: null,
+        targetDate: null,
+        distanceKm: null,
+        targetDurationSec: null,
+        priority: 1,
+        status: 'active',
+        successCriteria: '',
+        strategyNotes: '',
+        notes: '',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z'
+      }
+    ],
+    injuryItems: [],
+    weeklyPattern: [],
+    longRunStrategy: '',
+    currentVolumeNote: '',
+    knownIssues: [],
+    runningStyle: [],
+    heatStrategy: [],
+    aiNotes: [],
+    runnerIdentity: { strengths: [], weaknesses: [], riskFactors: [], coachingStyle: [] }
+  } as Partial<TrainingMemory>)
+}
+
 export function getActiveGoal(memory: TrainingMemory): TrainingGoal {
   return memory.goals.find((goal) => goal.id === memory.activeGoalId) ?? memory.goals[0]
 }
