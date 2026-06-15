@@ -44,8 +44,8 @@
 
 ## 반복 검증 완화
 - `harness:check`는 같은 git tree와 같은 검증 계획이 이미 통과했으면 `.harness/generated/check-cache.json`을 사용해 lint/test/build 반복을 줄일 수 있습니다.
-- `pre-commit`은 전체 `harness:check`를 실행합니다.
-- `pre-push`는 `npm run harness:check -- --fast`를 실행해 정책, 문서, 버전, lint 중심으로 빠르게 확인하고 test/build 반복을 줄입니다.
+- `pre-commit`은 `.harness/bin/harness check`로 전체 검사를 실행합니다(npm 프로젝트의 `npm run harness:check`와 동일 검사, 비-Node 프로젝트에서도 동작).
+- `pre-push`는 `.harness/bin/harness check --fast`를 실행해 정책, 문서, 버전, lint 중심으로 빠르게 확인하고 test/build 반복을 줄입니다.
 
 ## 세션 트리거
 - 새 세션 시작 시 `session-boot.md`를 읽은 직후 이 프로토콜을 확인합니다.
@@ -70,13 +70,18 @@
 - 새 어댑터 문서를 추가하면 `document-registry.json`과 `.harness/bin/doc-link-check.mjs`의 탐색 범위를 함께 확인합니다.
 - `init`은 하네스 소유 파일을 갱신하고 프로젝트 소유 파일을 보존해야 합니다.
 - `init`은 `.harness/install-manifest.json`으로 공통 하네스 설치기가 관리하는 파일을 식별해야 합니다.
+- `init`은 package.json이 없으면 새로 만들지 않습니다(비-Node 프로젝트인 PHP/Java/Swift/Kotlin 보호 — 프로젝트 매니페스트 오염 방지). package.json이 이미 있을 때만 harness npm 별칭을 멱등 머지하고, 없으면 하네스 명령을 `.harness/bin/harness` 런처 또는 `node .harness/bin/<script>.mjs`로 실행하도록 설치 안내에 표시합니다. 드문 greenfield Node 케이스만 `--with-package-json`으로 새로 생성합니다. 이 거동이 바뀌면 `scripts/test-init.mjs`의 Node/비-Node 설치 테스트도 함께 갱신합니다.
+- `init`은 프로젝트 Node가 하네스 최소 버전(20.19) 미만이어도 dual-runtime 모드로 설치합니다(0.2.63). 저버전 `.nvmrc`는 설치 중단 대신 nvm·하네스 Node·프로젝트 Node 설치 여부를 진단하고, nvm 자체가 없으면 전환 수단이 없으므로 중단합니다(머신 환경을 바꾸는 nvm 자동 설치는 하지 않음). `.nvmrc` 없는 Node 프로젝트(package.json 보유)에서 저버전 신호(engines/.node-version/Dockerfile/CI)를 감지하면 추측 확정 대신 `--project-node <ver>` 인터뷰를 요구하고, 사용자 확인 버전만 `.nvmrc`로 기록합니다(기존 `.nvmrc`는 덮어쓰지 않음 — 프로젝트 소유 보존). 비-Node 프로젝트(package.json 부재)는 인터뷰를 생략합니다. 런타임 전환은 `.harness/bin/dual-node.sh`(hook/런처가 source)와 `.harness/bin/node-env.mjs`(guard/install-hooks가 import)가 담당하며, hook은 하네스 스크립트만 전환하고 lint/test/build는 `.nvmrc` Node로 실행합니다. 이 설치/진단/인터뷰 거동이 바뀌면 `scripts/test-init.mjs`의 dual-runtime 테스트와 `.harness/project/portability-guide.md`의 Node 런타임 계약을 함께 갱신합니다.
+- npm 없이 쓰는 진입면으로 `.harness/bin/harness` 런처(무확장자 POSIX sh)를 함께 설치하고 `init`이 실행 권한을 부여합니다. `harness <command>`는 `npm run harness:*`와 같은 `.harness/bin/*.mjs`를 호출하므로 동작이 일치해야 합니다. 런처 명령표나 소비자 npm script(`CONSUMER_SCRIPT_NAMES`)가 바뀌면 둘을 함께 갱신하고 `scripts/test-init.mjs`의 런처 드리프트 테스트로 확인합니다. 전역 설치/`ai` 명령/devDependency CLI가 아니라 커밋되는 shell shim이며(2026-05-18 결정과 정합), npm 보유 프로젝트의 표준은 계속 `npm run harness:*`입니다. Windows cmd/PowerShell 사용자용으로 `.harness/bin/harness.cmd` shim을 함께 설치하며, 같은 명령표를 유지해야 합니다(sh 런처와 .cmd shim의 명령 드리프트는 `scripts/test-init.mjs`가 검사). git hook은 Windows에서도 Git Bash(sh)로 실행되므로 hook 경로는 sh 런처를 그대로 사용합니다.
 - manifest가 없는 기존 `.harness/`, `.claude/`, `.codex/`, `CLAUDE.md`는 전용 하네스일 수 있으므로 기본 보존하고 `--force`일 때만 덮어씁니다.
+- `.claude/settings.json`은 project-owned로 보존하되, 회사 공통 필수 차단 기준인 에이전트 안전 훅이 소비자에서 무력화되지 않도록 `init`이 하네스의 안전 표면(hooks, permissions.deny/allow, env, statusLine)을 기존 설정에 멱등·비파괴로 병합합니다(기존 값은 덮지 않고, statusLine은 없을 때만 설정). 소비자가 의도적으로 제거한 항목을 되살릴 수 있으므로, 원치 않으면 설치 후 제거하고 사유를 남깁니다.
 - `harness:outdated`는 공통 하네스와 스택 하네스를 함께 검사하고, 둘 중 하나라도 업데이트 후보가 있으면 전체 상태를 `outdated`로 표시합니다. 공통만 보려면 `--base-only`, 스택만 보려면 `--stack-only`를 사용합니다.
 - `harness:update` 기본 동작은 스택 하네스 업데이트입니다. 공통 하네스만 업데이트할 때는 `--base-only`를 명시합니다.
 - lock에 repo/ref/version 정보가 부족하면 lock source metadata와 install manifest source metadata에서 복구해 조회합니다.
 - `harness:update -- --base-only`는 공통 하네스 init에 `--source-repo`, `--source-ref`를 전달해 `.harness/harness-lock.json`과 `.harness/install-manifest.json`의 base source metadata가 `bundled`로 되돌아가지 않게 해야 합니다.
 - source ref가 `semver:*`인 경우 init은 lock/manifest에 그대로 기록하지 않고 실제 설치된 package version tag(`vX.Y.Z`)로 정규화합니다.
 - 과거 업데이트로 base source가 `bundled`로 남은 프로젝트는 stack의 `requiredBaseHarness.repo`와 현재 base version으로 `harness:outdated`가 repo/ref를 복구할 수 있어야 합니다.
+- `init`은 공통 하네스 버전이 오를 때 이전 버전 → 새 버전 사이의 `CHANGELOG.md` 구간을 계산해 설치 직후 출력하고 `.harness/harness-lock.json`의 `lastUpdate`에 보존합니다. 소비자 프로젝트에는 본체 `CHANGELOG.md`를 복사하지 않으므로, 변경 요약은 `npm run harness:changelog`로 lastUpdate에서 다시 확인합니다. 최초 설치처럼 이전 버전이 없으면 `lastUpdate`를 기록하지 않습니다.
 - `harness:update -- --force`는 프로젝트 소유 파일을 덮어쓸 수 있으므로 `--confirm-overwrite-project-files` 없이는 중단해야 합니다.
 - 업데이트 스크립트가 target 선택, source metadata 복구, force 확인 흐름을 바꾸면 `scripts/test-init.mjs`의 설치/업데이트/force 테스트와 README의 업데이트 명령 설명을 함께 갱신합니다.
 - 프로젝트 소유 파일 예시는 `.harness/project/project-charter.md`, `.harness/project/local-methodology.md`, `.harness/project/stack-preset-rules.md`, `.harness/project/domain-rules.md`, `.harness/project/architecture-rules.md`, `.harness/project/workflow-rules.md`, `.harness/project/critical-paths.md`, `.harness/session/active-context.md`, `.harness/session/manual-actions.md`, `.harness/policy/profile.json`, `.harness/policy/waivers.json`, `.claude/settings.local.json`입니다.

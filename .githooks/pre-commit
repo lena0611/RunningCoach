@@ -7,11 +7,24 @@ fi
 
 if [ -s "$NVM_DIR/nvm.sh" ]; then
   # git hook은 로그인 셸의 nvm 상태를 물려받지 않을 수 있으므로 프로젝트 Node를 직접 적용한다.
+  # nvm.sh와 nvm use는 set -u와 호환되지 않는다. dash(sh=dash인 Linux)에서는 미설정 변수
+  # 참조가 expansion error라 `|| true`로도 잡히지 않고 hook 전체가 exit 2로 죽으므로 잠시 끈다.
+  set +u
   . "$NVM_DIR/nvm.sh"
   nvm use >/dev/null 2>&1 || true
+  set -u
 fi
 
-# 기존 프로젝트 pre-commit hook이 있으면 먼저 실행
+# dual-runtime(0.2.63): 프로젝트 Node(.nvmrc)가 하네스 최소 버전(20.19) 미만이거나 node가 없으면
+# 하네스 스크립트만 nvm 설치본 중 최신(>=20.19)으로 전환한다. 프로젝트 검증(lint/test/build)은
+# guard.mjs가 HARNESS_PROJECT_NODE_BIN으로 프로젝트 Node로 되돌려 실행한다.
+. .harness/bin/dual-node.sh
+harness_dual_node_activate
+
+# 낮은 Node에서 ESM 크래시 대신 업그레이드 안내가 나오도록 첫 node 호출 전에 버전을 검사한다.
+node .harness/bin/check-node-version.mjs
+
+# 기존 프로젝트 pre-commit hook이 있으면 먼저 실행 (dual-runtime 전환 전의 PATH로 실행됨)
 node .harness/bin/run-previous-hook.mjs pre-commit "$@"
 
 # 시드 하네스 가드: .harness-seed-mode가 있으면 stack:apply 산출물의 staging을 차단
@@ -19,4 +32,6 @@ node .harness/bin/run-previous-hook.mjs pre-commit "$@"
 node .harness/bin/check-seed-mode.mjs
 
 # 통합 검사: 스택 미적용 시 lint/test/build를 자동 스킵, 적용 시 전체 검사
-npm run harness:check
+# P3(2026-06-09): npm/package.json 없는 비-Node 프로젝트에서도 동작하도록 npm 대신 harness 런처를 호출한다.
+# npm 프로젝트에서도 같은 .harness/bin/guard.mjs를 실행하므로 검증 결과는 동일하다.
+.harness/bin/harness check
