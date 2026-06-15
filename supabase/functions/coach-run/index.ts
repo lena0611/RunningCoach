@@ -528,6 +528,17 @@ type CoachGoalProjection = {
   deltaSec: number | null
 }
 
+// 신뢰 레이어(#313): 부상 상태 기반 복귀 전망 휴리스틱. 의료 판단이 아니라 안심·복귀 프레이밍용.
+function buildRecoveryOutlook(item: unknown): { status: string; returnWindow: string } | null {
+  if (!item || typeof item !== 'object') return null
+  const v = item as Record<string, unknown>
+  const status = typeof v.status === 'string' ? v.status : ''
+  if (status === 'resolved' || status === 'archived' || !status) return null
+  const severity = typeof v.severity === 'number' ? v.severity : 2
+  const returnWindow = status === 'monitoring' ? '수일~1주' : severity >= 4 ? '2~4주' : severity === 3 ? '1~2주' : '약 1주'
+  return { status, returnWindow }
+}
+
 function normalizeGoalProjection(value: unknown): CoachGoalProjection | null {
   if (!value || typeof value !== 'object') return null
   const v = value as Record<string, unknown>
@@ -750,6 +761,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     heartRateModel: coachHeartRateModel
   })
   const injuryCheckInPolicy = buildInjuryCheckInPolicy(activeInjuryItem, selectedRunInjuryContext(selectedRun))
+  const recoveryOutlook = buildRecoveryOutlook(activeInjuryItem)
   const dataAvailability = {
     hasSelectedRun: Boolean(selectedRun),
     selectedRunType: selectedRun?.type ?? null,
@@ -934,6 +946,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     injuryItems,
     activeInjuryItem,
     injuryCheckInPolicy,
+    recoveryOutlook,
     injuryTemporalPolicy: selectedRun
       ? 'injuryItems와 activeInjuryItem은 selectedRun.date 이전 또는 당일에 이미 발생/등록된 항목만 포함한다. 여기에 없는 현재 active 부상은 선택 세션 당시에는 아직 발생하지 않은 것으로 보고 언급하지 마라.'
       : '현재 흐름 코칭이므로 현재 active/monitoring 부상 항목을 사용할 수 있다.',
@@ -1380,6 +1393,7 @@ function buildCoachInstructions(context: unknown) {
     '루틴 업데이트 섹션에서는 이대로 activeGoal을 향해 가도 되는지, 주간 루틴을 유지할지, 변경이 필요한 시점인지 한두 문장으로 말한다.',
     '유지가 맞으면 "루틴은 유지"라고 짧게 말하고 trainingMemoryPatch는 null로 둔다. 조정이 필요하면 weeklyPattern 전체를 업데이트한다.',
     '매 코칭 요청마다 부상/주의 상태도 확인한다. pain_note, activeInjuryItem, 최근 강훈련/롱런 이후 회복 반응을 보고 다음 세션 강도에 반영하되 의료 진단처럼 말하지 않는다.',
+    '신뢰 레이어(#313): activeInjuryItem이 active/monitoring이거나 부상/통증 때문에 강도를 낮추는 답변일 때는, 사용자가 "이렇게 보수적으로 가도 목표를 달성할 수 있나?"라는 의문을 갖는다고 가정하고 반드시 다음을 짧게 함께 답한다. (1) 강도를 줄이는 것은 목표 포기가 아니라 목표 보호라는 프레이밍, (2) 현재 목표 달성 전망 — performanceProjection이 available이면 그 예상 기록/추세를, policy에 대시보드 준비도 note가 있으면 그 가능성을 사실 그대로 인용(없으면 일반적 안심 한 문장), (3) 복귀 조건/예상 — context.recoveryOutlook.returnWindow와 activeInjuryItem.returnToRunCriteria를 근거로 "그 기간 안에 통증이 가라앉으면 원래 계획으로 복귀" 식으로. 과장하거나 달성을 확정 단언하지 말고, 의료 진단은 하지 않는다.',
     'chronicLoadTrend.ageWeight가 1 이상이면 나이대를 고려해 회복을 더 보수적으로 본다(40대 1, 50대 2, 60대+ 3). 나이가 많을수록 같은 부하 증가에도 회복 여유를 더 주고 강도 상향을 천천히 권한다. 단 나이를 이유로 단정적으로 제한하지 말고 회복 보수성 근거로만 쓴다.',
     '루틴 변경이 필요 없으면 trainingMemoryPatch는 null로 둔다.',
     '루틴 변경이 필요하면 trainingMemoryPatch.weeklyPattern에 새 주간 루틴을 전체 배열로 넣는다. 일부만 넣지 말고 전체 주간 패턴을 반환한다.',
