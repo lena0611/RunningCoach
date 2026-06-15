@@ -5,6 +5,7 @@ import type { RunnerLevel } from '@/entities/training-memory/model'
 import type { CoachAchievementSummary } from '@/shared/lib/achievement/achievements'
 import type { TempoCoachingSummary } from '@/shared/lib/coaching/tempoAdaptation'
 import type { CoachGoalProjectionSummary } from '@/shared/lib/performanceProjection'
+import type { CoachAdaptiveProgressSummary } from '@/shared/lib/coaching/coachAdaptiveProgress'
 
 export type CoachReport = {
   id: string
@@ -77,6 +78,7 @@ export async function requestCoachRunStream(
     achievements?: CoachAchievementSummary | null
     tempoCoaching?: TempoCoachingSummary | null
     goalProjection?: CoachGoalProjectionSummary | null
+    adaptiveProgress?: CoachAdaptiveProgressSummary | null
   }
 ): Promise<CoachReport> {
   const client = requireSupabase()
@@ -100,6 +102,7 @@ export async function requestCoachRunStream(
       achievements: options.achievements ?? null,
       tempoCoaching: options.tempoCoaching ?? null,
       goalProjection: options.goalProjection ?? null,
+      adaptiveProgress: options.adaptiveProgress ?? null,
       stream: true,
       commandId: options.commandId ?? null,
       runnerLevel: options.runnerLevel ?? 'beginner',
