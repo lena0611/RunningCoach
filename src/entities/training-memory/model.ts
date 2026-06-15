@@ -874,7 +874,7 @@ function normalizeTrainingPhase(value: unknown): TrainingPhasePlan {
   }
 }
 
-function normalizeTrainingPhaseName(value: unknown, fallback: TrainingPhaseName | null): TrainingPhaseName | null {
+export function normalizeTrainingPhaseName(value: unknown, fallback: TrainingPhaseName | null): TrainingPhaseName | null {
   return value === 'Base' || value === 'Build' || value === 'Threshold' || value === 'Race Specific' || value === 'Taper' || value === 'Recovery'
     ? value
     : fallback
