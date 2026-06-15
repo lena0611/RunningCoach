@@ -169,12 +169,20 @@ function refreshDashboardContextWhenVisible() {
 const raceProjectionHint = computed(() => {
   const projection = raceProjection.value
   if (!projection) return ''
-  if (projection.readinessLevel) return `준비도 ${projection.readinessScore}점 · ${projection.readinessLevel}`
-  if (projection.deltaSec === null) return `${formatDateWithWeekday(projection.current.date)} 기준`
-  if (projection.deltaSec < 0) return `이전 대비 ${formatDuration(Math.abs(projection.deltaSec))} 단축`
-  if (projection.deltaSec > 0) return `이전 대비 ${formatDuration(projection.deltaSec)} 느림`
-  return '이전과 동일'
+  const parts: string[] = []
+  // #312: readinessScore(0~100)를 "달성 가능성 %(준비도 기반)"로 노출(진짜 확률 아님 명시).
+  if (projection.readinessLevel) parts.push(`달성 가능성 ${projection.readinessScore}% (준비도 기반) · ${projection.readinessLevel}`)
+  // 최근 변화 %: 이전 환산기록 대비. 음수 deltaSec=개선.
+  if (projection.deltaSec !== null && projection.previous && projection.previous.projectedSec > 0) {
+    const pct = Math.round((projection.deltaSec / projection.previous.projectedSec) * 100)
+    if (pct !== 0) parts.push(`최근 ${pct < 0 ? '개선' : '저하'} ${Math.abs(pct)}%`)
+  }
+  return parts.length ? parts.join(' · ') : `${formatDateWithWeekday(projection.current.date)} 기준`
 })
+// #312: 부상으로 세션이 하향됐을 때 "목표 포기가 아니라 목표 보호"임을 알린다.
+const goalProtectionText = computed(() =>
+  nextSession.value.injuryAdjusted && nextSession.value.injuryNote ? `목표 보호: ${nextSession.value.injuryNote}` : ''
+)
 const hardSessions = computed(() =>
   getRunsWithinDays(runs.value, 7, today.value).filter((run) => ['Tempo', 'LSD', 'Steady Long', 'Race'].includes(run.type)).length
 )
@@ -411,6 +419,7 @@ function formatDateOnly(value: Date) {
           <strong class="stat-card-value stat-card-text-value">{{ activeGoal.title }}</strong>
           <small v-if="goalMetaText">{{ goalMetaText }}</small>
           <small class="dashboard-goal-projection">{{ goalProjectionText }}</small>
+          <small v-if="goalProtectionText" class="dashboard-goal-projection">{{ goalProtectionText }}</small>
         </div>
         <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
       </button>

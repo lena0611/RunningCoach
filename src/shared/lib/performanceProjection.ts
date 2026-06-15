@@ -32,6 +32,24 @@ export type RaceProjection = {
   factors: ProjectionReadinessFactor[]
 }
 
+// #312/#98: 대시보드와 코칭이 같은 6요소 전망을 쓰도록 coach-run 에 주입하는 compact 요약.
+export type CoachGoalProjectionSummary = {
+  projectedSec: number | null
+  readinessScore: number | null
+  readinessLevel: RaceProjection['readinessLevel'] | null
+  deltaSec: number | null
+}
+
+export function summarizeGoalProjectionForCoach(projection: RaceProjection | null): CoachGoalProjectionSummary | null {
+  if (!projection) return null
+  return {
+    projectedSec: projection.current?.projectedSec ?? null,
+    readinessScore: projection.readinessScore,
+    readinessLevel: projection.readinessLevel,
+    deltaSec: projection.deltaSec
+  }
+}
+
 const dayMs = 24 * 60 * 60 * 1000
 
 // 개인 심박 기준에서 파생한 상한. 개인 기준이 없으면(데이터 부족) null이고, 그 경우 HR 기반 게이트는 건너뛴다.
