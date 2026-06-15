@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { nanoid } from 'nanoid'
 import type { ExtractedRunData, RunLog } from '@/entities/run/model'
 import { useMemoryStore } from '@/app/stores/memoryStore'
+import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { deleteRunLog, fetchRunLogs, insertRunLog, insertRunLogs, updateRunLog } from '@/shared/api/runRepository'
 
@@ -41,6 +42,8 @@ export const useRunStore = defineStore('runStore', {
       if (isSupabaseConfigured) {
         const run = await insertRunLog(data, source)
         this.runs.push(run)
+        // 세션 의도 매칭은 best-effort — 실패해도 런 저장은 유지한다(#308).
+        await this.matchSessionIntent(run)
         return run
       }
 
@@ -114,6 +117,13 @@ export const useRunStore = defineStore('runStore', {
       }
       this.runs = this.runs.filter((run) => run.id !== id)
       if (!isSupabaseConfigured) this.persist()
+    },
+    async matchSessionIntent(run: RunLog) {
+      try {
+        await useSessionIntentStore().matchRun({ id: run.id, date: run.date })
+      } catch {
+        // best-effort: 의도 매칭 실패가 런 저장을 막지 않는다.
+      }
     },
     persist() {
       localStorage.setItem(storageKey, JSON.stringify(this.runs))
