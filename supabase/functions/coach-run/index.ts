@@ -1154,7 +1154,7 @@ function buildResponseTemplatePolicy() {
     optionalSections: [
       '## 핵심 지표: 선택 세션과 구간/심박 데이터가 있을 때만. dataAvailability.hasLapData=false이거나 현재 흐름 코칭이면 평균값 한두 줄로 줄이거나 생략한다.',
       '## 오늘 해석 또는 ## 세션 해석: 해석할 거리가 있으면 넣는다. 짧은 후속 질문 답변이면 생략 가능.',
-      '## 조심할 점: 부상/통증/경계 초과/회복 우려 신호가 있을 때만 넣는다. 신호가 없으면 없는 위험을 만들지 않는다.',
+      '## 조심할 점: 부상/통증/경계 초과/회복 우려 신호가 있을 때만 넣는다. 신호가 없으면 없는 위험을 만들지 않는다. 단 activeInjuryItem이 active/monitoring이거나 부상/통증 때문에 다음 훈련을 하향하면, 이 섹션에 신뢰 레이어(#313)를 반드시 포함한다 — (1) 강도를 줄이는 건 목표 포기가 아니라 목표 보호라는 점, (2) 현재 목표 달성 전망(performanceProjection이 available이면 예상 기록/추세를, policy의 대시보드 준비도 가능성을 사실 그대로), (3) 복귀 조건/예상(context.recoveryOutlook.returnWindow와 activeInjuryItem.returnToRunCriteria 기반, 예: "그 기간 안에 통증이 가라앉으면 원래 계획으로 복귀")을 한두 문장으로 함께 말한다. 과장하거나 달성을 확정 단언하지 말고, 의료 진단은 하지 않는다.',
       '## 다음 훈련: nextTrainingAdviceRelevant=true일 때만.',
       '## 루틴 업데이트: nextTrainingAdviceRelevant=true이고 routineUpdateCheck에 유지가 아닌 변화(상향/하향/보류 전환)나 명확한 상향 조건이 있을 때만 상세히. 변화 근거가 없으면 한 줄("루틴은 유지, 다음 상향 조건은 ~")로 줄이거나 생략한다.',
       '## 한 줄 요약: 기본적으로 넣되, 아주 짧은 후속 답변에서는 생략 가능.'
