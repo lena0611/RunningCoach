@@ -175,6 +175,7 @@ Deno.serve(async (req) => {
     const currentWeather = normalizeCurrentWeather(body.currentWeather)
     const achievements = normalizeAchievements(body.achievements)
     const tempoCoaching = normalizeTempoCoaching(body.tempoCoaching)
+    const goalProjection = normalizeGoalProjection(body.goalProjection)
     const runnerLevel = normalizeRunnerLevel(body.runnerLevel)
     const responseStyle = normalizeResponseStyle(body.responseStyle, runnerLevel)
     const shouldStream = body.stream === true
@@ -185,7 +186,7 @@ Deno.serve(async (req) => {
     const rateLimit = await consumeRateLimit(admin, userId, 'coach-run')
     if (!rateLimit.ok) return json({ error: rateLimit.error, retryAfterSec: rateLimit.retryAfterSec }, 429)
 
-    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching)
+    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection)
     const ownedSelectedRunId = context.selectedRun?.id ?? null
     if (shouldStream) {
       return streamCoachRun(admin, userId, ownedSelectedRunId, userNote, openaiKey, model, context)
@@ -518,7 +519,67 @@ function normalizeTempoCoaching(value: unknown): CoachTempoCoaching | null {
   }
 }
 
-async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null) {
+// 웹이 산출한 6요소 목표 전망 요약(#312/#98, client-summary). 서버는 단순 Riegel 대신 이 값을
+// 권위 기준으로 써서 대시보드와 코칭의 목표 가능성/예상 기록을 일치시킨다.
+type CoachGoalProjection = {
+  projectedSec: number | null
+  readinessScore: number | null
+  readinessLevel: string | null
+  deltaSec: number | null
+}
+
+function normalizeGoalProjection(value: unknown): CoachGoalProjection | null {
+  if (!value || typeof value !== 'object') return null
+  const v = value as Record<string, unknown>
+  const projectedSec = nullableNumber(v.projectedSec)
+  const readinessScore = nullableNumber(v.readinessScore)
+  if (projectedSec === null && readinessScore === null) return null
+  const level = v.readinessLevel
+  return {
+    projectedSec,
+    readinessScore,
+    readinessLevel: level === '충분' || level === '보통' || level === '부족' ? level : null,
+    deltaSec: nullableNumber(v.deltaSec)
+  }
+}
+
+// 주입된 웹 전망이 있으면 Riegel 결과를 대체해 동일 예상 기록/추세를 쓰게 한다(#98).
+// getPerformanceProjection 의 'available' 형태와 동일 구조를 유지한다.
+function unifyPerformanceProjection(
+  base: ReturnType<typeof getPerformanceProjection>,
+  injected: CoachGoalProjection | null,
+  activeGoal: unknown
+): ReturnType<typeof getPerformanceProjection> {
+  if (!injected || injected.projectedSec === null) return base
+  const targetDistanceKm = getNullableNumber(activeGoal, 'distanceKm')
+  if (!targetDistanceKm || targetDistanceKm <= 0) return base
+  const targetDurationSec = getNullableNumber(activeGoal, 'targetDurationSec')
+  const deltaSec = injected.deltaSec
+  const readinessNote = injected.readinessLevel ? ` 대시보드 준비도 ${injected.readinessScore ?? '-'}점(${injected.readinessLevel}).` : ''
+  return {
+    targetDistanceKm,
+    targetDurationSec,
+    targetText: targetDurationSec ? formatDurationText(targetDurationSec) : null,
+    status: 'available',
+    current: {
+      runId: '',
+      date: '',
+      dateDisplay: '',
+      type: 'web_unified',
+      distanceKm: targetDistanceKm,
+      durationSec: injected.projectedSec,
+      projectedSec: injected.projectedSec,
+      projectedText: formatDurationText(injected.projectedSec),
+      confidence: 'medium'
+    },
+    previous: null,
+    deltaSec,
+    trend: deltaSec === null ? 'baseline' : deltaSec < 0 ? 'improving' : deltaSec > 0 ? 'slower' : 'flat',
+    policy: `대시보드와 동일한 6요소 전망(client-summary 통일, #98).${readinessNote} 예측 하나로 루틴을 바꾸지 않는다.`
+  }
+}
+
+async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null) {
   const memorySelect = 'id, content, created_at, importance, last_referenced_at, reference_count'
   const [
     { data: memoryRow },
@@ -588,7 +649,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
   const trainingMemory = sanitizeMemoryHeartRateCeilings(memoryRow?.memory ?? null)
   const goals = getGoals(trainingMemory)
   const activeGoal = getActiveGoal(trainingMemory, goals)
-  const performanceProjection = getPerformanceProjection(runRows, activeGoal)
+  const performanceProjection = unifyPerformanceProjection(getPerformanceProjection(runRows, activeGoal), goalProjection, activeGoal)
   const allInjuryItems = getInjuryItems(trainingMemory)
   const selectedRunDateForTemporalContext = selectedRun?.date ?? null
   const injuryItems = filterInjuryItemsForRunDate(allInjuryItems, selectedRunDateForTemporalContext)

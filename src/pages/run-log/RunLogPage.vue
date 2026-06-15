@@ -16,6 +16,10 @@ import UploadRunPage from '@/pages/upload-run/UploadRunPage.vue'
 import { fetchCoachReports, requestCoachRunStream, type CoachInjuryUpdateProposal, type CoachReport } from '@/shared/api/coachRepository'
 import { summarizeAchievementsForCoach } from '@/shared/lib/achievement/achievements'
 import { summarizeTempoCoaching } from '@/shared/lib/coaching/tempoAdaptation'
+import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
+import { getAgeLoadWeight } from '@/shared/lib/runStats'
+import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
+import { getRaceProjection, summarizeGoalProjectionForCoach } from '@/shared/lib/performanceProjection'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { resolveRunnerLevel } from '@/shared/lib/runnerLevel'
 import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, formatInteger, formatNumberWithCommas, formatPace } from '@/shared/lib/format'
@@ -64,6 +68,19 @@ const coachIntent = computed(() =>
 const coachIntentFulfillment = computed(() =>
   coachRun.value && coachIntent.value ? computeIntentFulfillment(coachIntent.value, coachRun.value) : null
 )
+// #312/#98: 대시보드와 동일한 6요소 전망을 coach-run 에 주입해 목표 가능성 불일치를 없앤다.
+const coachGoalProjection = computed(() => {
+  const runs = runStore.sortedRuns
+  const memory = memoryStore.memory
+  const now = new Date()
+  const observedMaxHr = deriveObservedMaxHr(runs.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })), now)
+  const hr = deriveHeartRateModel(memory.athleteProfile, now.getFullYear(), observedMaxHr)
+  const projection = getRaceProjection(runs, getActiveGoal(memory), now, getActiveInjuryItem(memory), getAgeLoadWeight(memory.athleteProfile.birthYear, now), {
+    easyCeilingBpm: hr.easyCeilingBpm,
+    tempoCeilingBpm: hr.tempoCeilingBpm
+  })
+  return summarizeGoalProjectionForCoach(projection)
+})
 const coachNote = ref('')
 // 전송 즉시 입력창을 비우고 질문을 사용자 말풍선으로 낙관적 표시하기 위한 상태(#238).
 const pendingUserNote = ref('')
@@ -826,7 +843,8 @@ async function sendCoachRequest(note: string) {
       runnerLevel: resolveRunnerLevel(memoryStore.memory.athleteProfile, runStore.sortedRuns).level,
       commandId,
       achievements: summarizeAchievementsForCoach(runStore.sortedRuns, competitionStore.results),
-      tempoCoaching: summarizeTempoCoaching(runStore.sortedRuns, memoryStore.memory)
+      tempoCoaching: summarizeTempoCoaching(runStore.sortedRuns, memoryStore.memory),
+      goalProjection: coachGoalProjection.value
     })
     await waitForCoachRevealDrain()
     reports.value = [report, ...reports.value.filter((item) => item.id !== report.id)]

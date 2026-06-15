@@ -4,6 +4,7 @@ import type { WeatherSnapshot } from '@/features/import-weatherkit/weatherKitBri
 import type { RunnerLevel } from '@/entities/training-memory/model'
 import type { CoachAchievementSummary } from '@/shared/lib/achievement/achievements'
 import type { TempoCoachingSummary } from '@/shared/lib/coaching/tempoAdaptation'
+import type { CoachGoalProjectionSummary } from '@/shared/lib/performanceProjection'
 
 export type CoachReport = {
   id: string
@@ -75,6 +76,7 @@ export async function requestCoachRunStream(
     commandId?: string | null
     achievements?: CoachAchievementSummary | null
     tempoCoaching?: TempoCoachingSummary | null
+    goalProjection?: CoachGoalProjectionSummary | null
   }
 ): Promise<CoachReport> {
   const client = requireSupabase()
@@ -97,6 +99,7 @@ export async function requestCoachRunStream(
       currentWeather: summarizeWeatherForCoach(currentWeather),
       achievements: options.achievements ?? null,
       tempoCoaching: options.tempoCoaching ?? null,
+      goalProjection: options.goalProjection ?? null,
       stream: true,
       commandId: options.commandId ?? null,
       runnerLevel: options.runnerLevel ?? 'beginner',
