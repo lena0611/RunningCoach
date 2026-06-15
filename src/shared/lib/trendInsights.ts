@@ -6,7 +6,7 @@ import { getRaceProjection } from '@/shared/lib/performanceProjection'
 import { deriveHeartRateModel, deriveObservedMaxHr, type HeartRateModel } from '@/shared/lib/heartRateZones'
 import { evaluateLapDrift } from '@/shared/lib/lapDrift'
 import { computeTempoCeilingAdaptation, gradeTempoRun, type TempoCeilingAdaptation, type TempoGrade } from '@/shared/lib/coaching/tempoAdaptation'
-import { evaluateSteadyLong } from '@/shared/lib/coaching/sessionQuality'
+import { evaluateLsd, evaluateSteadyLong, LSD_KIND_LABEL } from '@/shared/lib/coaching/sessionQuality'
 
 export type TrendLensKey = 'goal' | 'efficiency' | 'intensity' | 'quality' | 'recovery'
 export type TrendPeriod = '90d' | '180d' | '365d' | 'all'
@@ -625,14 +625,22 @@ function evaluateQualityRun(run: RunLog, hr: HeartRateModel) {
       return { run, stable, grade: undefined as TempoGrade | undefined, score, reason: sl.reasons.join(' · ') }
     }
   }
-  // 개인 심박 상한이 없으면 상한 초과 판정은 하지 않고 드리프트/거리만 본다.
+  // LSD(#354 §5): "오래 편하게" 관점으로 복합 평가 + Recovery/Standard/Progressive 세분화.
+  if (run.type === 'LSD') {
+    const lsd = evaluateLsd(run, { easyCeilingBpm: hr.easyCeilingBpm, recoveryCeilingBpm: hr.recoveryCeilingBpm })
+    const longEnough = run.distanceKm >= 10
+    const stable = lsd.stable && longEnough
+    const score = Math.max(0, (lsd.stable ? 88 : 56) - (longEnough ? 0 : 18))
+    const reason = [LSD_KIND_LABEL[lsd.kind], ...lsd.reasons.slice(1), longEnough ? '' : '롱런 거리 부족'].filter(Boolean).join(' · ')
+    return { run, stable, grade: undefined as TempoGrade | undefined, score: Math.round(score), reason }
+  }
+  // 여기 도달하는 타입은 Easy/Recovery/Easy + Strides/Race/Unknown (Tempo·Steady Long·LSD는 위에서 처리).
+  // 개인 심박 상한이 없으면 상한 초과 판정은 하지 않고 드리프트만 본다.
   const easyExceeded = hr.easyCeilingBpm !== null && run.type === 'Easy' && (run.maxHeartRate ?? run.avgHeartRate ?? 0) > hr.easyCeilingBpm + 5
-  const longEnough = run.type === 'LSD' || run.type === 'Steady Long' ? run.distanceKm >= 10 : true
-  const stable = !easyExceeded && longEnough && drift < 2
-  const score = Math.max(0, 100 - (easyExceeded ? 20 : 0) - (!longEnough ? 20 : 0) - drift * 12)
+  const stable = !easyExceeded && drift < 2
+  const score = Math.max(0, 100 - (easyExceeded ? 20 : 0) - drift * 12)
   const reasons = [
     easyExceeded ? 'Easy 심박 상승' : '',
-    !longEnough ? '롱런 거리 부족' : '',
     drift >= 2 ? '드리프트 주의' : ''
   ].filter(Boolean)
   return {

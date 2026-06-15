@@ -133,3 +133,69 @@ export const STEADY_LONG_GRADE_LABEL: Record<SteadyLongGrade, string> = {
   failed: 'Failed Long Run',
   insufficient: '판정 보류'
 }
+
+export type LsdKind = 'recovery' | 'standard' | 'progressive'
+
+export type LsdEvaluation = {
+  /** Recovery LSD(아주 편한 회복 롱런) / Standard LSD / Progressive LSD(후반 페이스업). */
+  kind: LsdKind
+  durationMin: number | null
+  rpe: number | null
+  /** 전→후반 심박 드리프트(bpm). */
+  hrDriftBpm: number | null
+  /** 후반 페이스 변화(초/km, 음수=빨라짐). */
+  paceDeltaSec: number | null
+  /** 후반까지 "오래 편하게"가 유지됐는가(부담 신호 없음). */
+  stable: boolean
+  reasons: string[]
+}
+
+const LSD_PROGRESSIVE_PACE_GAIN = 8 // 후반 8s/km 이상 빨라지면 progressive
+const LSD_RECOVERY_RPE = 3
+const LSD_STRAIN_DRIFT = 12
+
+/**
+ * LSD 세션을 "오래 편하게" 관점으로 복합 평가하고 세분화한다(#354 §5).
+ * 평균 심박 단독이 아니라 지속시간·RPE·심박 드리프트·페이스 안정성을 함께 본다.
+ */
+export function evaluateLsd(
+  run: RunLog,
+  opts: { easyCeilingBpm?: number | null; recoveryCeilingBpm?: number | null } = {}
+): LsdEvaluation {
+  const { firstHr, secondHr, firstPaceSec, secondPaceSec } = splitHalves(run)
+  const hrDriftBpm = firstHr !== null && secondHr !== null ? Math.round(secondHr - firstHr) : null
+  const paceDeltaSec = firstPaceSec !== null && secondPaceSec !== null ? Math.round(secondPaceSec - firstPaceSec) : null
+  const paceGainSec = paceDeltaSec === null ? null : -paceDeltaSec
+  const durationMin = run.durationSec !== null && run.durationSec > 0 ? Math.round(run.durationSec / 60) : null
+  const rpe = run.rpe
+  const avgHr = run.avgHeartRate
+
+  const lowEffort =
+    (rpe !== null && rpe <= LSD_RECOVERY_RPE) ||
+    (typeof opts.recoveryCeilingBpm === 'number' && avgHr !== null && avgHr <= opts.recoveryCeilingBpm) ||
+    (typeof opts.easyCeilingBpm === 'number' && avgHr !== null && avgHr <= opts.easyCeilingBpm - 8)
+
+  let kind: LsdKind
+  if (paceGainSec !== null && paceGainSec >= LSD_PROGRESSIVE_PACE_GAIN) kind = 'progressive'
+  else if (lowEffort) kind = 'recovery'
+  else kind = 'standard'
+
+  // "오래 편하게": 심박 드리프트가 과하지 않으면 안정. progressive는 의도된 페이스업이라 드리프트 허용폭을 조금 넓게.
+  const driftCap = kind === 'progressive' ? LSD_STRAIN_DRIFT + 3 : LSD_STRAIN_DRIFT
+  const stable = hrDriftBpm === null ? true : hrDriftBpm < driftCap
+
+  const reasons: string[] = []
+  if (kind === 'recovery') reasons.push('낮은 강도(RPE/심박) — 회복형 LSD')
+  else if (kind === 'progressive') reasons.push(`후반 ${paceGainSec}s/km 페이스업 — 프로그레시브 LSD`)
+  else reasons.push('편안한 지속주 — 스탠다드 LSD')
+  if (durationMin !== null) reasons.push(`지속 ${durationMin}분`)
+  if (!stable && hrDriftBpm !== null) reasons.push(`후반 심박 드리프트 ${hrDriftBpm}bpm — 다음엔 초반을 더 눌러도 좋음`)
+
+  return { kind, durationMin, rpe, hrDriftBpm, paceDeltaSec, stable, reasons }
+}
+
+export const LSD_KIND_LABEL: Record<LsdKind, string> = {
+  recovery: 'Recovery LSD',
+  standard: 'Standard LSD',
+  progressive: 'Progressive LSD'
+}
