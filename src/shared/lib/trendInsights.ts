@@ -6,6 +6,7 @@ import { getRaceProjection } from '@/shared/lib/performanceProjection'
 import { deriveHeartRateModel, deriveObservedMaxHr, type HeartRateModel } from '@/shared/lib/heartRateZones'
 import { evaluateLapDrift } from '@/shared/lib/lapDrift'
 import { computeTempoCeilingAdaptation, gradeTempoRun, type TempoCeilingAdaptation, type TempoGrade } from '@/shared/lib/coaching/tempoAdaptation'
+import { evaluateSteadyLong } from '@/shared/lib/coaching/sessionQuality'
 
 export type TrendLensKey = 'goal' | 'efficiency' | 'intensity' | 'quality' | 'recovery'
 export type TrendPeriod = '90d' | '180d' | '365d' | 'all'
@@ -614,6 +615,15 @@ function evaluateQualityRun(run: RunLog, hr: HeartRateModel) {
     const stable = g.grade === 'A' || g.grade === 'B'
     const score = g.grade === 'A' ? 92 : g.grade === 'B' ? 78 : g.grade === 'C' ? 52 : 30
     return { run, stable, grade: g.grade as TempoGrade | undefined, score, reason: g.reasons.join(' · ') || `${g.grade}등급` }
+  }
+  // Steady Long(#354 §6): 전후반 심박차를 그대로 드리프트로 보지 않고 후반 가속(네거티브 스플릿)을 보정해 등급화.
+  if (run.type === 'Steady Long') {
+    const sl = evaluateSteadyLong(run)
+    if (sl.grade !== 'insufficient') {
+      const stable = sl.grade === 'quality' || sl.grade === 'aggressive'
+      const score = sl.grade === 'quality' ? 90 : sl.grade === 'aggressive' ? 76 : sl.grade === 'strained' ? 50 : 28
+      return { run, stable, grade: undefined as TempoGrade | undefined, score, reason: sl.reasons.join(' · ') }
+    }
   }
   // 개인 심박 상한이 없으면 상한 초과 판정은 하지 않고 드리프트/거리만 본다.
   const easyExceeded = hr.easyCeilingBpm !== null && run.type === 'Easy' && (run.maxHeartRate ?? run.avgHeartRate ?? 0) > hr.easyCeilingBpm + 5
