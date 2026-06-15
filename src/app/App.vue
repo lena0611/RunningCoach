@@ -17,7 +17,10 @@ import { hasNativeBridge } from '@/shared/lib/runtime'
 import AppShell from '@/shared/ui/AppShell.vue'
 import InjuryCheckInSheet from '@/shared/ui/InjuryCheckInSheet.vue'
 import InjuryScreeningSheet from '@/shared/ui/InjuryScreeningSheet.vue'
+import PostRunInterviewSheet from '@/shared/ui/PostRunInterviewSheet.vue'
 import ToastHost from '@/shared/ui/ToastHost.vue'
+import { useToastStore } from '@/app/stores/toastStore'
+import { buildInterviewRunPatch, type PostRunInterviewResult } from '@/features/post-run-interview/buildInterviewRunPatch'
 import OnboardingFlow from '@/pages/onboarding/OnboardingFlow.vue'
 import CelebrationModal from '@/pages/dashboard/CelebrationModal.vue'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
@@ -31,6 +34,25 @@ const memoryStore = useMemoryStore()
 const runStore = useRunStore()
 const weatherStore = useWeatherStore()
 const levelStore = useLevelStore()
+const toastStore = useToastStore()
+
+// 운동 직후 코치 인터뷰(#311): HealthKit 임포트 직후 표시, 결과는 run 주관 필드로 저장.
+const pendingInterviewRun = computed(() => runStore.runs.find((run) => run.id === runStore.pendingInterviewRunId) ?? null)
+const interviewSaving = ref(false)
+async function submitPostRunInterview(result: PostRunInterviewResult) {
+  const run = pendingInterviewRun.value
+  if (!run) return
+  interviewSaving.value = true
+  try {
+    await runStore.updateRun(buildInterviewRunPatch(run, result))
+    toastStore.success('코치에게 전달했어요.')
+  } catch {
+    toastStore.error('인터뷰 저장에 실패했어요.')
+  } finally {
+    interviewSaving.value = false
+    runStore.clearInterview()
+  }
+}
 const showOnboarding = computed(() => authStore.isAuthenticated && isSupabaseConfigured && levelStore.needsOnboarding)
 watch(
   () => authStore.isAuthenticated,
@@ -785,6 +807,13 @@ function animateTabRelease(targetOffset: number, targetRoute: string | null) {
       @open-session="openInjuryCheckInSession"
       @ask-coach="askInjuryCheckInCoach"
       @submit="submitInjuryCheckIn"
+    />
+    <PostRunInterviewSheet
+      :open="Boolean(pendingInterviewRun)"
+      :run="pendingInterviewRun"
+      :saving="interviewSaving"
+      @close="runStore.clearInterview()"
+      @submit="submitPostRunInterview"
     />
     <InjuryScreeningSheet
       :open="injuryScreeningOpen"
