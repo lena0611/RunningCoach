@@ -25,6 +25,11 @@ import RunSessionList from '@/shared/ui/RunSessionList.vue'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import StatCard from '@/shared/ui/StatCard.vue'
 import LevelCard from './LevelCard.vue'
+import TrainingPhaseCard from './TrainingPhaseCard.vue'
+import PhaseTransitionModal from './PhaseTransitionModal.vue'
+import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
+import { appendPhaseTransition } from '@/shared/api/adaptiveTrainingRepository'
+import type { TrainingPhaseName } from '@/entities/training-memory/model'
 import PreRunIntentCard from './PreRunIntentCard.vue'
 import QuestPanel from './QuestPanel.vue'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
@@ -339,6 +344,46 @@ function formatDateOnly(value: Date) {
     String(value.getDate()).padStart(2, '0')
   ].join('-')
 }
+
+// #339/#337: 훈련 단계 진행 평가 + 전환 제안
+const adaptiveProgress = computed(() => buildCoachAdaptiveProgress(runs.value, memoryStore.memory))
+const phaseModalOpen = ref(false)
+const phaseSaving = ref(false)
+
+// Base→Build→Threshold→Race Specific→Taper 다음 단계(전환 후 nextPhase 표시용).
+const PHASE_NEXT: Record<TrainingPhaseName, TrainingPhaseName | null> = {
+  Base: 'Build',
+  Build: 'Threshold',
+  Threshold: 'Race Specific',
+  'Race Specific': 'Taper',
+  Taper: 'Recovery',
+  Recovery: 'Base'
+}
+
+async function applyPhaseTransition() {
+  const proposal = adaptiveProgress.value.phaseProposal
+  if (!proposal.shouldTransition || !proposal.toPhase || phaseSaving.value) return
+  phaseSaving.value = true
+  try {
+    const toPhase = proposal.toPhase
+    const statusMap: Record<string, string> = {}
+    for (const criterion of adaptiveProgress.value.criteria) statusMap[criterion.id] = criterion.status
+
+    const memory = JSON.parse(JSON.stringify(memoryStore.memory))
+    memory.adaptiveTrainingProfile.trainingPhase.currentPhase = toPhase
+    memory.adaptiveTrainingProfile.trainingPhase.startedAt = new Date().toISOString()
+    memory.adaptiveTrainingProfile.trainingPhase.nextPhase = PHASE_NEXT[toPhase] ?? null
+    await memoryStore.update(memory)
+    try {
+      await appendPhaseTransition(toPhase, proposal.reason, statusMap)
+    } catch {
+      /* 이력 저장 실패는 치명적이지 않음 */
+    }
+    phaseModalOpen.value = false
+  } finally {
+    phaseSaving.value = false
+  }
+}
 </script>
 
 <template>
@@ -358,6 +403,18 @@ function formatDateOnly(value: Date) {
     <SectionGroup title="내 레벨" :surface="false">
       <LevelCard :progress="runnerProgress" :coins="levelStore.coins" hide-eyebrow />
     </SectionGroup>
+
+    <SectionGroup title="훈련 단계" :surface="false">
+      <TrainingPhaseCard :summary="adaptiveProgress" @open="phaseModalOpen = true" />
+    </SectionGroup>
+
+    <PhaseTransitionModal
+      v-if="phaseModalOpen"
+      :summary="adaptiveProgress"
+      :saving="phaseSaving"
+      @confirm="applyPhaseTransition"
+      @close="phaseModalOpen = false"
+    />
 
     <SectionGroup v-if="activePlannedIntent" title="훈련 의도" :surface="false">
       <PreRunIntentCard
