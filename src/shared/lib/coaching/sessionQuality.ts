@@ -255,3 +255,63 @@ export function evaluateEasyRecovery(
   )
   return { intentHeld: false, overByBpm, rpeOverride: false, reasons }
 }
+
+/** coach-run 주입용 선택 세션 증거(#354). 규칙은 다단계 등급/보정 지표만 주고 AI가 최종 해석한다. */
+export type CoachSessionEvidence = {
+  runType: string
+  steadyLong?: {
+    grade: SteadyLongGrade
+    rawHrDrift: number | null
+    adjustedHrDrift: number | null
+    paceDeltaSec: number | null
+    efficiencyScore: number | null
+  }
+  lsd?: { kind: LsdKind; hrDriftBpm: number | null; paceDeltaSec: number | null; durationMin: number | null; stable: boolean }
+  easyRecovery?: { intentHeld: boolean; overByBpm: number | null; rpeOverride: boolean }
+  reasons: string[]
+}
+
+/**
+ * 선택 세션의 타입별 품질 증거를 coach-run 주입용 컴팩트 객체로 만든다(#354).
+ * Tempo는 기존 tempoCoaching 경로가 담당하므로 여기선 다루지 않는다.
+ */
+export function buildCoachSessionEvidence(
+  run: RunLog,
+  opts: { easyCeilingBpm?: number | null; recoveryCeilingBpm?: number | null } = {}
+): CoachSessionEvidence {
+  if (run.type === 'Steady Long') {
+    const sl = evaluateSteadyLong(run)
+    return {
+      runType: run.type,
+      steadyLong: {
+        grade: sl.grade,
+        rawHrDrift: sl.rawHrDrift,
+        adjustedHrDrift: sl.adjustedHrDrift,
+        paceDeltaSec: sl.paceDeltaSec,
+        efficiencyScore: sl.efficiencyScore
+      },
+      reasons: sl.reasons
+    }
+  }
+  if (run.type === 'LSD') {
+    const lsd = evaluateLsd(run, opts)
+    return {
+      runType: run.type,
+      lsd: { kind: lsd.kind, hrDriftBpm: lsd.hrDriftBpm, paceDeltaSec: lsd.paceDeltaSec, durationMin: lsd.durationMin, stable: lsd.stable },
+      reasons: lsd.reasons
+    }
+  }
+  if (run.type === 'Easy' || run.type === 'Recovery') {
+    const isRecovery = run.type === 'Recovery'
+    const er = evaluateEasyRecovery(run, {
+      ceilingBpm: isRecovery ? opts.recoveryCeilingBpm ?? null : opts.easyCeilingBpm ?? null,
+      isRecovery
+    })
+    return {
+      runType: run.type,
+      easyRecovery: { intentHeld: er.intentHeld, overByBpm: er.overByBpm, rpeOverride: er.rpeOverride },
+      reasons: er.reasons
+    }
+  }
+  return { runType: run.type, reasons: [] }
+}

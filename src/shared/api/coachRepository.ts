@@ -6,6 +6,7 @@ import type { CoachAchievementSummary } from '@/shared/lib/achievement/achieveme
 import type { TempoCoachingSummary } from '@/shared/lib/coaching/tempoAdaptation'
 import type { CoachGoalProjectionSummary } from '@/shared/lib/performanceProjection'
 import type { CoachAdaptiveProgressSummary } from '@/shared/lib/coaching/coachAdaptiveProgress'
+import type { CoachSessionEvidence } from '@/shared/lib/coaching/sessionQuality'
 
 export type CoachReport = {
   id: string
@@ -79,6 +80,7 @@ export async function requestCoachRunStream(
     tempoCoaching?: TempoCoachingSummary | null
     goalProjection?: CoachGoalProjectionSummary | null
     adaptiveProgress?: CoachAdaptiveProgressSummary | null
+    sessionEvidence?: CoachSessionEvidence | null
   }
 ): Promise<CoachReport> {
   const client = requireSupabase()
@@ -103,6 +105,7 @@ export async function requestCoachRunStream(
       tempoCoaching: options.tempoCoaching ?? null,
       goalProjection: options.goalProjection ?? null,
       adaptiveProgress: options.adaptiveProgress ?? null,
+      sessionEvidence: options.sessionEvidence ?? null,
       stream: true,
       commandId: options.commandId ?? null,
       runnerLevel: options.runnerLevel ?? 'beginner',

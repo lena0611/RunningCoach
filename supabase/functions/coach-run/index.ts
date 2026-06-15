@@ -191,6 +191,7 @@ Deno.serve(async (req) => {
     const tempoCoaching = normalizeTempoCoaching(body.tempoCoaching)
     const goalProjection = normalizeGoalProjection(body.goalProjection)
     const adaptiveProgress = normalizeAdaptiveProgress(body.adaptiveProgress)
+    const sessionEvidence = normalizeSessionEvidence(body.sessionEvidence)
     const runnerLevel = normalizeRunnerLevel(body.runnerLevel)
     const responseStyle = normalizeResponseStyle(body.responseStyle, runnerLevel)
     const shouldStream = body.stream === true
@@ -201,7 +202,7 @@ Deno.serve(async (req) => {
     const rateLimit = await consumeRateLimit(admin, userId, 'coach-run')
     if (!rateLimit.ok) return json({ error: rateLimit.error, retryAfterSec: rateLimit.retryAfterSec }, 429)
 
-    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress)
+    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress, sessionEvidence)
     const ownedSelectedRunId = context.selectedRun?.id ?? null
     if (shouldStream) {
       return streamCoachRun(admin, userId, ownedSelectedRunId, userNote, openaiKey, model, context)
@@ -666,6 +667,59 @@ function normalizeAdaptiveProgress(value: unknown): CoachAdaptiveProgress | null
   }
 }
 
+type CoachSessionEvidence = {
+  runType: string
+  steadyLong?: {
+    grade: string
+    rawHrDrift: number | null
+    adjustedHrDrift: number | null
+    paceDeltaSec: number | null
+    efficiencyScore: number | null
+  }
+  lsd?: { kind: string; hrDriftBpm: number | null; paceDeltaSec: number | null; durationMin: number | null; stable: boolean }
+  easyRecovery?: { intentHeld: boolean; overByBpm: number | null; rpeOverride: boolean }
+  reasons: string[]
+}
+
+// 웹이 산출한 선택 세션 품질 증거(#354)를 방어적으로 정규화한다. 구조 불일치 시 null.
+function normalizeSessionEvidence(value: unknown): CoachSessionEvidence | null {
+  if (!value || typeof value !== 'object') return null
+  const v = value as Record<string, unknown>
+  const runType = typeof v.runType === 'string' ? v.runType : null
+  if (!runType) return null
+  const reasons = Array.isArray(v.reasons) ? v.reasons.filter((r): r is string => typeof r === 'string').slice(0, 6) : []
+  const result: CoachSessionEvidence = { runType, reasons }
+  const sl = v.steadyLong as Record<string, unknown> | undefined
+  if (sl && typeof sl === 'object' && typeof sl.grade === 'string') {
+    result.steadyLong = {
+      grade: sl.grade,
+      rawHrDrift: nullableNumber(sl.rawHrDrift),
+      adjustedHrDrift: nullableNumber(sl.adjustedHrDrift),
+      paceDeltaSec: nullableNumber(sl.paceDeltaSec),
+      efficiencyScore: nullableNumber(sl.efficiencyScore)
+    }
+  }
+  const lsd = v.lsd as Record<string, unknown> | undefined
+  if (lsd && typeof lsd === 'object' && typeof lsd.kind === 'string') {
+    result.lsd = {
+      kind: lsd.kind,
+      hrDriftBpm: nullableNumber(lsd.hrDriftBpm),
+      paceDeltaSec: nullableNumber(lsd.paceDeltaSec),
+      durationMin: nullableNumber(lsd.durationMin),
+      stable: lsd.stable === true
+    }
+  }
+  const er = v.easyRecovery as Record<string, unknown> | undefined
+  if (er && typeof er === 'object') {
+    result.easyRecovery = {
+      intentHeld: er.intentHeld === true,
+      overByBpm: nullableNumber(er.overByBpm),
+      rpeOverride: er.rpeOverride === true
+    }
+  }
+  return result
+}
+
 // 주입된 웹 전망이 있으면 Riegel 결과를 대체해 동일 예상 기록/추세를 쓰게 한다(#98).
 // getPerformanceProjection 의 'available' 형태와 동일 구조를 유지한다.
 function unifyPerformanceProjection(
@@ -702,7 +756,7 @@ function unifyPerformanceProjection(
   }
 }
 
-async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null) {
+async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null, sessionEvidence: CoachSessionEvidence | null = null) {
   const memorySelect = 'id, content, created_at, importance, last_referenced_at, reference_count'
   const [
     { data: memoryRow },
@@ -1024,6 +1078,13 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     trainingMethodology: buildTrainingMethodologyAlgorithm(),
     trainingKnowledge,
     adaptiveProgress,
+    sessionEvidence,
+    sessionEvidencePolicy:
+      'context.sessionEvidence는 웹이 선택 세션 타입별로 산출한 다단계 품질 증거다(#354). 규칙이 pass/fail 최종 판정을 내린 게 아니라 "증거"이며, 최종 해석은 네가 목표·부상·날씨·성향을 얹어서 한다. ' +
+      'Steady Long: rawHrDrift가 아니라 adjustedHrDrift(후반 가속 보정)를 우선 본다. grade는 quality/aggressive/strained/failed. 네거티브 스플릿(paceDeltaSec 음수=후반 빨라짐)을 "심박이 따라붙어 실패"로 단정하지 마라 — 보정 드리프트가 낮으면 잘 통제된 것이다. ' +
+      'LSD: kind(recovery/standard/progressive)와 stable을 본다. progressive(후반 페이스업)는 의도된 강화일 수 있다. ' +
+      'Easy/Recovery: intentHeld가 true면 심박이 상한을 약간 넘었어도(rpeOverride) RPE 기준 의도 강도를 유지한 것으로 본다 — "상한 초과=실패"로 말하지 마라. ' +
+      '서술은 reasons를 복붙하지 말고 장점→리스크 순으로 1~2문장에 자연스럽게 녹인다. sessionEvidence가 null이면 이 정책을 적용하지 않는다.',
     adaptiveTrainingProfile,
     adaptiveAlgorithmPolicy: {
       principle:
