@@ -199,3 +199,59 @@ export const LSD_KIND_LABEL: Record<LsdKind, string> = {
   standard: 'Standard LSD',
   progressive: 'Progressive LSD'
 }
+
+export type EasyRecoveryEvaluation = {
+  /** 의도한 Easy/Recovery 강도를 유지했는가(우선순위: RPE > (호흡, 미수집) > 심박 > 페이스). */
+  intentHeld: boolean
+  /** 심박 상한 초과 bpm(양수=초과). 상한/심박 없으면 null. */
+  overByBpm: number | null
+  /** RPE가 낮아 심박 소폭 초과를 회복/이지 유지로 인정했는가. */
+  rpeOverride: boolean
+  reasons: string[]
+}
+
+// Easy는 상한 +5까지 허용(기존 기준), Recovery는 상한 자체 기준. RPE 낮음 기준은 Recovery가 더 보수적.
+const EASY_OVER_MARGIN = 5
+const RECOVERY_RPE_LOW = 3
+const EASY_RPE_LOW = 4
+// RPE가 낮아도 이만큼 넘으면 데이터 불일치로 보고 override하지 않는다.
+const RPE_OVERRIDE_CAP_BPM = 15
+
+/**
+ * Easy/Recovery 강도 유지 판정 (#354 §2).
+ * 심박 상한 초과를 곧바로 실패로 보지 않고 RPE를 우선한다(RPE > 호흡 > 심박 > 페이스).
+ * 호흡 데이터는 현재 미수집이라 RPE → 심박 → 페이스 순으로 적용한다.
+ */
+export function evaluateEasyRecovery(
+  run: RunLog,
+  opts: { ceilingBpm: number | null; isRecovery: boolean }
+): EasyRecoveryEvaluation {
+  const reasons: string[] = []
+  // Recovery는 평균심박, Easy는 max(있으면)/avg로 본다.
+  const effectiveHr = opts.isRecovery ? run.avgHeartRate : run.maxHeartRate ?? run.avgHeartRate
+  const margin = opts.isRecovery ? 0 : EASY_OVER_MARGIN
+  const overByBpm = opts.ceilingBpm !== null && effectiveHr !== null ? effectiveHr - opts.ceilingBpm : null
+  const over = overByBpm !== null && overByBpm > margin
+
+  const rpeLowThreshold = opts.isRecovery ? RECOVERY_RPE_LOW : EASY_RPE_LOW
+  const rpeLow = run.rpe !== null && run.rpe <= rpeLowThreshold
+
+  if (!over) {
+    reasons.push(opts.isRecovery ? '심박 회복 범위 유지' : 'Easy 심박 범위 유지')
+    return { intentHeld: true, overByBpm, rpeOverride: false, reasons }
+  }
+
+  // 초과했지만 RPE가 낮고, 초과 폭이 과하지 않으면 RPE를 우선해 유지로 본다.
+  const withinOverrideCap = overByBpm !== null && overByBpm <= RPE_OVERRIDE_CAP_BPM
+  if (rpeLow && withinOverrideCap) {
+    reasons.push(`심박이 ${overByBpm}bpm 올랐지만 RPE ${run.rpe} — 체감상 ${opts.isRecovery ? '회복' : 'Easy'} 강도 유지로 본다`)
+    return { intentHeld: true, overByBpm, rpeOverride: true, reasons }
+  }
+
+  reasons.push(
+    run.rpe === null
+      ? `심박이 상한을 ${overByBpm}bpm 초과(RPE 미입력) — 다음엔 조금 더 눌러도 좋다`
+      : `심박 ${overByBpm}bpm 초과 + RPE ${run.rpe} — 의도보다 강도가 올라갔다`
+  )
+  return { intentHeld: false, overByBpm, rpeOverride: false, reasons }
+}

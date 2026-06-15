@@ -6,7 +6,7 @@ import { getRaceProjection } from '@/shared/lib/performanceProjection'
 import { deriveHeartRateModel, deriveObservedMaxHr, type HeartRateModel } from '@/shared/lib/heartRateZones'
 import { evaluateLapDrift } from '@/shared/lib/lapDrift'
 import { computeTempoCeilingAdaptation, gradeTempoRun, type TempoCeilingAdaptation, type TempoGrade } from '@/shared/lib/coaching/tempoAdaptation'
-import { evaluateLsd, evaluateSteadyLong, LSD_KIND_LABEL } from '@/shared/lib/coaching/sessionQuality'
+import { evaluateEasyRecovery, evaluateLsd, evaluateSteadyLong, LSD_KIND_LABEL } from '@/shared/lib/coaching/sessionQuality'
 
 export type TrendLensKey = 'goal' | 'efficiency' | 'intensity' | 'quality' | 'recovery'
 export type TrendPeriod = '90d' | '180d' | '365d' | 'all'
@@ -634,21 +634,25 @@ function evaluateQualityRun(run: RunLog, hr: HeartRateModel) {
     const reason = [LSD_KIND_LABEL[lsd.kind], ...lsd.reasons.slice(1), longEnough ? '' : '롱런 거리 부족'].filter(Boolean).join(' · ')
     return { run, stable, grade: undefined as TempoGrade | undefined, score: Math.round(score), reason }
   }
-  // 여기 도달하는 타입은 Easy/Recovery/Easy + Strides/Race/Unknown (Tempo·Steady Long·LSD는 위에서 처리).
-  // 개인 심박 상한이 없으면 상한 초과 판정은 하지 않고 드리프트만 본다.
-  const easyExceeded = hr.easyCeilingBpm !== null && run.type === 'Easy' && (run.maxHeartRate ?? run.avgHeartRate ?? 0) > hr.easyCeilingBpm + 5
-  const stable = !easyExceeded && drift < 2
-  const score = Math.max(0, 100 - (easyExceeded ? 20 : 0) - drift * 12)
-  const reasons = [
-    easyExceeded ? 'Easy 심박 상승' : '',
-    drift >= 2 ? '드리프트 주의' : ''
-  ].filter(Boolean)
+  // Easy / Recovery(#354 §2): 심박 상한 초과를 바로 실패로 보지 않고 RPE를 우선(RPE>심박>페이스).
+  if (run.type === 'Easy' || run.type === 'Recovery') {
+    const isRecovery = run.type === 'Recovery'
+    const ceiling = isRecovery ? hr.recoveryCeilingBpm : hr.easyCeilingBpm
+    const er = evaluateEasyRecovery(run, { ceilingBpm: ceiling, isRecovery })
+    const stable = er.intentHeld && drift < 2
+    const score = Math.max(0, 100 - (er.intentHeld ? 0 : 20) - drift * 12)
+    const reasons = [er.reasons[0], drift >= 2 ? '드리프트 주의' : ''].filter(Boolean)
+    return { run, stable, grade: undefined as TempoGrade | undefined, score: Math.round(score), reason: reasons.join(' · ') || '안정' }
+  }
+  // 여기 도달하는 타입은 Easy + Strides / Race / Unknown (Tempo·Steady Long·LSD·Easy·Recovery는 위에서 처리).
+  const stable = drift < 2
+  const score = Math.max(0, 100 - drift * 12)
   return {
     run,
     stable,
     grade: undefined as TempoGrade | undefined,
     score: Math.round(score),
-    reason: reasons.join(' · ') || '안정'
+    reason: drift >= 2 ? '드리프트 주의' : '안정'
   }
 }
 
