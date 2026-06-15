@@ -17,6 +17,7 @@ import { fetchCoachReports, requestCoachRunStream, type CoachInjuryUpdateProposa
 import { summarizeAchievementsForCoach } from '@/shared/lib/achievement/achievements'
 import { summarizeTempoCoaching } from '@/shared/lib/coaching/tempoAdaptation'
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
+import { buildCoachSessionEvidence } from '@/shared/lib/coaching/sessionQuality'
 import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
 import { getAgeLoadWeight } from '@/shared/lib/runStats'
 import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
@@ -846,7 +847,13 @@ async function sendCoachRequest(note: string) {
       achievements: summarizeAchievementsForCoach(runStore.sortedRuns, competitionStore.results),
       tempoCoaching: summarizeTempoCoaching(runStore.sortedRuns, memoryStore.memory),
       goalProjection: coachGoalProjection.value,
-      adaptiveProgress: buildCoachAdaptiveProgress(runStore.sortedRuns, memoryStore.memory)
+      adaptiveProgress: buildCoachAdaptiveProgress(runStore.sortedRuns, memoryStore.memory),
+      sessionEvidence: (() => {
+        const now = new Date()
+        const observed = deriveObservedMaxHr(runStore.sortedRuns.map((r) => ({ maxHeartRate: r.maxHeartRate, date: r.date })), now)
+        const hr = deriveHeartRateModel(memoryStore.memory.athleteProfile, now.getFullYear(), observed)
+        return buildCoachSessionEvidence(coachRun.value, { easyCeilingBpm: hr.easyCeilingBpm, recoveryCeilingBpm: hr.recoveryCeilingBpm })
+      })()
     })
     await waitForCoachRevealDrain()
     reports.value = [report, ...reports.value.filter((item) => item.id !== report.id)]
