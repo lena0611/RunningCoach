@@ -11,7 +11,7 @@ import type { RunLog } from '@/entities/run/model'
 import RunSummaryCard from '@/widgets/run-summary-card/RunSummaryCard.vue'
 import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
 import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
-import { getAgeLoadWeight, getEasyRatio, getFatigueWarning, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, sumDistance } from '@/shared/lib/runStats'
+import { getAgeLoadWeight, getEasyRatio, getFatigueWarning, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, getTrainingDayView, sumDistance } from '@/shared/lib/runStats'
 import { formatDateWithWeekday, formatDuration } from '@/shared/lib/format'
 import { getRaceProjection } from '@/shared/lib/performanceProjection'
 import { resolveRunnerProgress } from '@/shared/lib/level/levelModel'
@@ -69,7 +69,6 @@ const runs = computed(() => runStore.sortedRuns)
 const lastRace = computed(() => runs.value.find((run) => run.tags?.includes('self-race')) ?? null)
 const runDataLoading = computed(() => runStore.loading || (!runStore.loaded && !runStore.error))
 const memoryDataLoading = computed(() => memoryStore.loading)
-const weekDistance = computed(() => sumDistance(getThisWeekRuns(runs.value, today.value)))
 const monthDistance = computed(() => sumDistance(getThisMonthRuns(runs.value, today.value)))
 const last7 = computed(() => sumDistance(getRunsWithinDays(runs.value, 7, today.value)))
 const easyRatio = computed(() => getEasyRatio(getRunsWithinDays(runs.value, 30, today.value)))
@@ -191,14 +190,8 @@ const goalProtectionText = computed(() =>
 const hardSessions = computed(() =>
   getRunsWithinDays(runs.value, 7, today.value).filter((run) => ['Tempo', 'LSD', 'Steady Long', 'Race'].includes(run.type)).length
 )
-const isNextSessionToday = computed(() => nextSession.value.plannedDate === todayDate.value)
-const heroEyebrow = computed(() => (isNextSessionToday.value ? '오늘 예정 훈련' : '다음 예정 훈련'))
-const heroTitle = computed(() =>
-  isNextSessionToday.value
-    ? `오늘은 ${nextSession.value.title} 예정일입니다.`
-    : `${formatDateWithWeekday(nextSession.value.plannedDate)} ${nextSession.value.title} 준비입니다.`
-)
-const heroHelper = computed(() => `주간 루틴 기준 · 오늘 ${formatDateWithWeekday(todayDate.value)} · 이번 주 ${weekDistance.value}km 누적`)
+// #352: 오늘/다음 2섹션 카드 뷰(결정론, AI 호출 없음)
+const dayView = computed(() => getTrainingDayView(memoryStore.memory, runs.value, today.value))
 const heroWeatherLine = computed(() => {
   const snapshot = weatherStore.snapshot
   if (!snapshot) return ''
@@ -389,12 +382,30 @@ async function applyPhaseTransition() {
 <template>
   <PageLayout variant="dashboard">
     <button class="hero-card hero-card-interactive" type="button" @click="openNextSessionDetail">
-      <div>
-        <p class="eyebrow">{{ heroEyebrow }}</p>
-        <h2>{{ heroTitle }}</h2>
-        <p class="helper">{{ heroHelper }}</p>
+      <div class="hero-body">
+        <section class="day-block">
+          <p class="eyebrow">오늘 · {{ formatDateWithWeekday(todayDate) }}</p>
+          <template v-if="dayView.today.state === 'pending'">
+            <h2>{{ dayView.today.title }}</h2>
+            <p v-if="dayView.today.coachLine" class="helper coach-line">{{ dayView.today.coachLine }}</p>
+          </template>
+          <template v-else-if="dayView.today.state === 'done'">
+            <h2>✅ 오늘 완료</h2>
+            <p v-if="dayView.today.doneSummary" class="helper">{{ dayView.today.doneSummary }}</p>
+          </template>
+          <template v-else>
+            <h2>🌙 오늘은 휴식</h2>
+            <p class="helper">예정 세션이 없어요. 가볍게 풀거나 쉬어가요.</p>
+          </template>
+        </section>
+
+        <section v-if="dayView.next" class="day-block day-block-next">
+          <p class="eyebrow">다음 훈련</p>
+          <p class="next-line">{{ formatDateWithWeekday(dayView.next.date) }} · {{ dayView.next.title }}</p>
+        </section>
+
         <p v-if="heroWeatherLine" class="helper hero-weather-line">
-          {{ heroWeatherLine }} · {{ formatDateWithWeekday(nextSession.plannedDate) }} 기준
+          {{ heroWeatherLine }} · {{ formatDateWithWeekday(todayDate) }} 기준
         </p>
       </div>
       <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
@@ -706,3 +717,34 @@ async function applyPhaseTransition() {
     </Teleport>
   </PageLayout>
 </template>
+
+<style scoped>
+/* #352: 오늘/다음 훈련 2섹션 카드 */
+.hero-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.day-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.day-block-next {
+  padding-top: 12px;
+  border-top: 1px solid rgba(120, 120, 120, 0.2);
+}
+
+.coach-line {
+  color: var(--color-text);
+}
+
+.next-line {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+</style>
