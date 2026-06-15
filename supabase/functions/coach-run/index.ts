@@ -564,7 +564,7 @@ function applyTrustLayer(report: string, note: string | null | undefined): strin
   if (report.includes('목표 보호')) return report
   const cautionHeader = '## 조심할 점'
   if (report.includes(cautionHeader)) {
-    return report.replace(/(##\s*조심할 점[\s\S]*?)(?=\n##\s|$)/, (match) => `${match.trimEnd()}\n${note}`)
+    return report.replace(/(##\s*조심할 점[\s\S]*?)(?=\n##\s|$)/, (match) => `${match.trimEnd()}\n\n${note}\n`)
   }
   const section = `## 조심할 점\n${note}\n\n`
   const anchor = report.indexOf('## 다음 훈련') >= 0 ? '## 다음 훈련'
