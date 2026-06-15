@@ -539,6 +539,24 @@ function buildRecoveryOutlook(item: unknown): { status: string; returnWindow: st
   return { status, returnWindow }
 }
 
+// 신뢰 레이어(#313): 부상 active/monitoring일 때 모델이 그대로 풀어 쓸 완성된 안심 문장을 결정론으로 만든다.
+// (소프트 지침만으로는 report 템플릿에 밀려 누락되어, ready-made note로 준수율을 높인다.)
+function buildTrustLayerNote(
+  outlook: { status: string; returnWindow: string } | null,
+  projection: unknown
+): string | null {
+  if (!outlook) return null
+  let projText = ''
+  if (projection && typeof projection === 'object') {
+    const p = projection as Record<string, unknown>
+    const current = p.current as Record<string, unknown> | undefined
+    if (p.status === 'available' && current && typeof current.projectedText === 'string' && p.targetDistanceKm) {
+      projText = `현재 ${p.targetDistanceKm}K 예상 기록은 약 ${current.projectedText} 수준이고, `
+    }
+  }
+  return `강도를 줄이는 건 목표 포기가 아니라 목표 보호다. ${projText}${outlook.returnWindow} 안에 통증이 가라앉으면 원래 계획으로 복귀할 수 있고, 그동안에도 목표 달성 가능성은 유지된다.`
+}
+
 function normalizeGoalProjection(value: unknown): CoachGoalProjection | null {
   if (!value || typeof value !== 'object') return null
   const v = value as Record<string, unknown>
@@ -762,6 +780,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
   })
   const injuryCheckInPolicy = buildInjuryCheckInPolicy(activeInjuryItem, selectedRunInjuryContext(selectedRun))
   const recoveryOutlook = buildRecoveryOutlook(activeInjuryItem)
+  const trustLayerNote = buildTrustLayerNote(recoveryOutlook, performanceProjection)
   const dataAvailability = {
     hasSelectedRun: Boolean(selectedRun),
     selectedRunType: selectedRun?.type ?? null,
@@ -947,6 +966,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     activeInjuryItem,
     injuryCheckInPolicy,
     recoveryOutlook,
+    trustLayerNote,
     injuryTemporalPolicy: selectedRun
       ? 'injuryItems와 activeInjuryItem은 selectedRun.date 이전 또는 당일에 이미 발생/등록된 항목만 포함한다. 여기에 없는 현재 active 부상은 선택 세션 당시에는 아직 발생하지 않은 것으로 보고 언급하지 마라.'
       : '현재 흐름 코칭이므로 현재 active/monitoring 부상 항목을 사용할 수 있다.',
@@ -1154,7 +1174,7 @@ function buildResponseTemplatePolicy() {
     optionalSections: [
       '## 핵심 지표: 선택 세션과 구간/심박 데이터가 있을 때만. dataAvailability.hasLapData=false이거나 현재 흐름 코칭이면 평균값 한두 줄로 줄이거나 생략한다.',
       '## 오늘 해석 또는 ## 세션 해석: 해석할 거리가 있으면 넣는다. 짧은 후속 질문 답변이면 생략 가능.',
-      '## 조심할 점: 부상/통증/경계 초과/회복 우려 신호가 있을 때만 넣는다. 신호가 없으면 없는 위험을 만들지 않는다. 단 activeInjuryItem이 active/monitoring이거나 부상/통증 때문에 다음 훈련을 하향하면, 이 섹션에 신뢰 레이어(#313)를 반드시 포함한다 — (1) 강도를 줄이는 건 목표 포기가 아니라 목표 보호라는 점, (2) 현재 목표 달성 전망(performanceProjection이 available이면 예상 기록/추세를, policy의 대시보드 준비도 가능성을 사실 그대로), (3) 복귀 조건/예상(context.recoveryOutlook.returnWindow와 activeInjuryItem.returnToRunCriteria 기반, 예: "그 기간 안에 통증이 가라앉으면 원래 계획으로 복귀")을 한두 문장으로 함께 말한다. 과장하거나 달성을 확정 단언하지 말고, 의료 진단은 하지 않는다.',
+      '## 조심할 점: 부상/통증/경계 초과/회복 우려 신호가 있을 때만 넣는다. 신호가 없으면 없는 위험을 만들지 않는다. **context.trustLayerNote가 비어있지 않으면(부상 active/monitoring) 이 섹션을 반드시 넣고, trustLayerNote의 내용(목표 보호 + 현재 전망 + 복귀 기간)을 코치 말투로 자연스럽게 풀어 반드시 포함한다. 생략 금지.** 의료 진단은 하지 않는다.',
       '## 다음 훈련: nextTrainingAdviceRelevant=true일 때만.',
       '## 루틴 업데이트: nextTrainingAdviceRelevant=true이고 routineUpdateCheck에 유지가 아닌 변화(상향/하향/보류 전환)나 명확한 상향 조건이 있을 때만 상세히. 변화 근거가 없으면 한 줄("루틴은 유지, 다음 상향 조건은 ~")로 줄이거나 생략한다.',
       '## 한 줄 요약: 기본적으로 넣되, 아주 짧은 후속 답변에서는 생략 가능.'
@@ -1393,7 +1413,7 @@ function buildCoachInstructions(context: unknown) {
     '루틴 업데이트 섹션에서는 이대로 activeGoal을 향해 가도 되는지, 주간 루틴을 유지할지, 변경이 필요한 시점인지 한두 문장으로 말한다.',
     '유지가 맞으면 "루틴은 유지"라고 짧게 말하고 trainingMemoryPatch는 null로 둔다. 조정이 필요하면 weeklyPattern 전체를 업데이트한다.',
     '매 코칭 요청마다 부상/주의 상태도 확인한다. pain_note, activeInjuryItem, 최근 강훈련/롱런 이후 회복 반응을 보고 다음 세션 강도에 반영하되 의료 진단처럼 말하지 않는다.',
-    '신뢰 레이어(#313): activeInjuryItem이 active/monitoring이거나 부상/통증 때문에 강도를 낮추는 답변일 때는, 사용자가 "이렇게 보수적으로 가도 목표를 달성할 수 있나?"라는 의문을 갖는다고 가정하고 반드시 다음을 짧게 함께 답한다. (1) 강도를 줄이는 것은 목표 포기가 아니라 목표 보호라는 프레이밍, (2) 현재 목표 달성 전망 — performanceProjection이 available이면 그 예상 기록/추세를, policy에 대시보드 준비도 note가 있으면 그 가능성을 사실 그대로 인용(없으면 일반적 안심 한 문장), (3) 복귀 조건/예상 — context.recoveryOutlook.returnWindow와 activeInjuryItem.returnToRunCriteria를 근거로 "그 기간 안에 통증이 가라앉으면 원래 계획으로 복귀" 식으로. 과장하거나 달성을 확정 단언하지 말고, 의료 진단은 하지 않는다.',
+    '신뢰 레이어(#313): context.trustLayerNote가 비어있지 않으면(=부상 active/monitoring), 어떤 응답 모드든 그 내용을 반드시 자연스럽게 포함한다. 사용자가 "이렇게 보수적으로 가도 목표를 달성할 수 있나?"라는 의문을 갖는다고 가정하고, 강도를 줄이는 것은 목표 포기가 아니라 목표 보호이며 현재 전망과 복귀 기간을 함께 말한다. 과장하거나 달성을 확정 단언하지 말고, 의료 진단은 하지 않는다.',
     'chronicLoadTrend.ageWeight가 1 이상이면 나이대를 고려해 회복을 더 보수적으로 본다(40대 1, 50대 2, 60대+ 3). 나이가 많을수록 같은 부하 증가에도 회복 여유를 더 주고 강도 상향을 천천히 권한다. 단 나이를 이유로 단정적으로 제한하지 말고 회복 보수성 근거로만 쓴다.',
     '루틴 변경이 필요 없으면 trainingMemoryPatch는 null로 둔다.',
     '루틴 변경이 필요하면 trainingMemoryPatch.weeklyPattern에 새 주간 루틴을 전체 배열로 넣는다. 일부만 넣지 말고 전체 주간 패턴을 반환한다.',
