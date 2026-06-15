@@ -926,6 +926,14 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     runnerLevel,
     heartRateModel: coachHeartRateModel
   })
+  // #354 리치: 항목별 점수 + 과거 같은 심박대 효율 비교(결정론, AI 환각 방지용 근거).
+  const sessionScorecard = buildSessionScorecard({
+    selectedRun,
+    compliance: selectedRun ? classifyPrescriptionCompliance(selectedRun, selectedRunLapAnalysis, coachHeartRateModel) : 'no_selected_run',
+    lapAnalysis: selectedRunLapAnalysis,
+    engine: runningAnalysisEngine
+  })
+  const efficiencyVsPast = buildEfficiencyVsPast(selectedRun, runRows)
   const injuryCheckInPolicy = buildInjuryCheckInPolicy(activeInjuryItem, selectedRunInjuryContext(selectedRun))
   const recoveryOutlook = buildRecoveryOutlook(activeInjuryItem)
   const trustLayerNote = buildTrustLayerNote(recoveryOutlook, performanceProjection)
@@ -1085,6 +1093,12 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       'LSD: kind(recovery/standard/progressive)와 stable을 본다. progressive(후반 페이스업)는 의도된 강화일 수 있다. ' +
       'Easy/Recovery: intentHeld가 true면 심박이 상한을 약간 넘었어도(rpeOverride) RPE 기준 의도 강도를 유지한 것으로 본다 — "상한 초과=실패"로 말하지 마라. ' +
       '서술은 reasons를 복붙하지 말고 장점→리스크 순으로 1~2문장에 자연스럽게 녹인다. sessionEvidence가 null이면 이 정책을 적용하지 않는다.',
+    sessionScorecard,
+    efficiencyVsPast,
+    richAnalysisPolicy:
+      'coachResponseMode=report 또는 explain이고 선택 세션에 구간/심박 데이터가 충분하면(특히 롱런/품질 세션) 아래 리치 분석을 만든다(conversational/a주 짧은 후속에는 적용 안 함). 항상 "장점 먼저, 리스크는 체크포인트처럼" 순서로. ' +
+      '① 한 줄 결론(긍정/핵심 먼저) ② 핵심 지표(거리·시간·평균페이스·평균심박·케이던스·RPE) ③ 스플릿 분석(lapProcess의 구간 페이스·심박 흐름을 초반/중반/후반으로 — 평균만 반복 금지) ④ 심박 분석(흐름 + context.efficiencyVsPast가 hasComparison이면 "같은 심박대 대비 페이스 변화"를 반드시 언급) ⑤ 케이던스(구간 cadence 흐름이 있으면) ⑥ 부상 체크(activeInjuryItem이 있으면 부위별 다음날 구체 신호 1~2개) ⑦ 점수: context.sessionScorecard가 있으면 페이스 운영/심박 관리/지구력/부상 리스크 관리를 각 N/10로 제시하되 점수는 sessionScorecard 값을 그대로 쓰고 임의로 만들지 않는다. ' +
+      'context.efficiencyVsPast.verdict=faster_same_hr면 "같은 심박으로 더 빠르게 달리고 있다"는 효율 향상 신호로 긍정 해석한다. sessionScorecard/efficiencyVsPast가 null이거나 hasComparison=false면 그 항목은 생략한다(없는 비교를 지어내지 마라).',
     adaptiveTrainingProfile,
     adaptiveAlgorithmPolicy: {
       principle:
@@ -4882,6 +4896,12 @@ function classifyPrescriptionCompliance(
     const maxHeartRate = run.max_heart_rate
     if (avgHeartRate === null && maxHeartRate === null) return 'unknown_no_heart_rate'
     if ((maxHeartRate ?? avgHeartRate ?? 999) <= ceiling) return 'met_easy_heart_rate'
+    // RPE 우선(#354 §2): 심박이 상한을 소폭(≤8bpm) 넘었어도 RPE가 낮으면 체감상 의도 강도 유지로 본다.
+    // 호흡 데이터는 미수집 → RPE→심박 순. 과한 초과(>8bpm)는 RPE와 무관하게 유지로 보지 않는다.
+    const rpe = typeof run.rpe === 'number' ? run.rpe : null
+    const rpeLowThreshold = type === 'Recovery' ? 3 : 4
+    const overByAvg = (avgHeartRate ?? 999) - ceiling
+    if (rpe !== null && rpe <= rpeLowThreshold && overByAvg <= 8) return 'met_easy_rpe_override'
     if ((avgHeartRate ?? 999) <= ceiling && (maxHeartRate ?? 999) <= ceiling + 8) return 'partial_easy_heart_rate_late_spike'
     if ((avgHeartRate ?? 999) <= ceiling + 5 && (maxHeartRate ?? 999) <= ceiling + 12) return 'partial_easy_heart_rate'
     return 'missed_too_hard_for_easy'
@@ -4907,6 +4927,95 @@ function classifyPrescriptionCompliance(
   }
 
   return 'unknown'
+}
+
+// 과거 같은 유형 세션과 "같은 심박대 효율" 비교(#354 리치). 같은 type, 평균심박 ±6bpm, 거리 ±35% 이내의
+// 가장 최근 과거 세션을 찾아 페이스를 비교한다. 데이터 없으면 hasComparison=false.
+function buildEfficiencyVsPast(selectedRun: RunLogRow | null, runRows: RunLogRow[]) {
+  if (!selectedRun || selectedRun.avg_heart_rate === null || selectedRun.avg_pace_sec === null) {
+    return { hasComparison: false as const, note: '비교용 심박/페이스 데이터 부족' }
+  }
+  const curHr = selectedRun.avg_heart_rate
+  const curPace = selectedRun.avg_pace_sec
+  const curDist = selectedRun.distance_km
+  const candidate = runRows
+    .filter(
+      (r) =>
+        r.id !== selectedRun.id &&
+        r.type === selectedRun.type &&
+        r.date < selectedRun.date &&
+        r.avg_heart_rate !== null &&
+        r.avg_pace_sec !== null &&
+        Math.abs((r.avg_heart_rate as number) - curHr) <= 6 &&
+        curDist > 0 &&
+        Math.abs(r.distance_km - curDist) / curDist <= 0.35
+    )
+    .sort((a, b) => b.date.localeCompare(a.date))[0]
+  if (!candidate) return { hasComparison: false as const, note: '비슷한 심박대의 과거 동일 유형 세션 없음' }
+  const pastPace = candidate.avg_pace_sec as number
+  const paceDeltaSec = Math.round(curPace - pastPace) // 음수 = 이번이 더 빠름
+  const verdict = paceDeltaSec <= -8 ? 'faster_same_hr' : paceDeltaSec >= 8 ? 'slower_same_hr' : 'similar'
+  return {
+    hasComparison: true as const,
+    pastRun: { date: candidate.date, distanceKm: candidate.distance_km, avgHr: candidate.avg_heart_rate, avgPaceSec: pastPace },
+    current: { avgHr: curHr, avgPaceSec: curPace },
+    paceDeltaSec,
+    verdict,
+    note:
+      verdict === 'faster_same_hr'
+        ? '같은 심박대에서 더 빠르게 달렸다 — 효율 향상 신호'
+        : verdict === 'slower_same_hr'
+          ? '같은 심박대인데 더 느렸다 — 더위/피로 등 맥락 확인'
+          : '과거 동일 심박대 세션과 비슷한 효율'
+  }
+}
+
+export type SessionScoreItem = { score: number; note: string }
+
+// 항목별 점수(0~10, 결정론) — 규칙 신호에서 산출해 AI가 환각 없이 점수를 말하게 한다(#354 리치).
+function buildSessionScorecard(args: {
+  selectedRun: RunLogRow | null
+  compliance: string
+  lapAnalysis: ReturnType<typeof buildLapProgressionAnalysis>
+  engine: ReturnType<typeof buildRunningAnalysisEngine>
+}): { pacing: SessionScoreItem; heartRate: SessionScoreItem; endurance: SessionScoreItem; injuryRiskControl: SessionScoreItem } | null {
+  if (!args.selectedRun) return null
+  const compliance = args.compliance
+  const analysis = args.lapAnalysis
+
+  // 심박 관리: compliance 토큰 기반.
+  const hrScore = compliance.startsWith('met_')
+    ? 9
+    : compliance.startsWith('partial_')
+      ? 6
+      : compliance.startsWith('missed_')
+        ? 3
+        : 5
+  // 페이스 운영: 후반 페이스 변화(네거티브 스플릿=좋음, 급락=나쁨).
+  const paceDelta = analysis?.available ? analysis.paceDeltaSecSecondHalfMinusFirstHalf ?? null : null
+  const pacingScore =
+    paceDelta === null ? 6 : paceDelta <= -8 ? 9 : paceDelta <= 6 ? 8 : paceDelta <= 15 ? 6 : 4
+  // 지구력 신호: 롱런류는 보정 안정 + 거리, 그 외는 심박 관리에 준한다.
+  const isLong = args.selectedRun.type === 'LSD' || args.selectedRun.type === 'Steady Long' || args.selectedRun.distance_km >= 10
+  const enduranceScore = isLong
+    ? compliance === 'met_long_run_stability'
+      ? 9
+      : compliance === 'partial_long_run_drift'
+        ? 6
+        : compliance === 'missed_large_long_run_drift'
+          ? 4
+          : 6
+    : Math.min(9, hrScore)
+  // 부상 리스크 "관리" 점수(높을수록 안전).
+  const injuryRisk = args.engine.injuryRisk
+  const injuryScore = injuryRisk === 'high' ? 3 : injuryRisk === 'watch' ? 6 : 9
+
+  return {
+    pacing: { score: pacingScore, note: '후반 페이스 운영(네거티브 스플릿/급락 기준)' },
+    heartRate: { score: hrScore, note: '처방 심박 경계 준수' },
+    endurance: { score: enduranceScore, note: '후반 지속성/지구력 신호' },
+    injuryRiskControl: { score: injuryScore, note: '부상 리스크 관리(높을수록 안전)' }
+  }
 }
 
 function normalizeLapMetrics(value: unknown): LapMetric[] {
