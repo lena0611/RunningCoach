@@ -189,7 +189,8 @@ const activeBriefing = computed<SessionBriefing | null>(() => {
     injury: activeInjury.value,
     chronic: chronicLoad.value,
     vdot: resolvePaceModel(memoryStore.memory.athleteProfile).vdot,
-    adaptiveProfile: memoryStore.memory.adaptiveTrainingProfile
+    adaptiveProfile: memoryStore.memory.adaptiveTrainingProfile,
+    progression: adaptiveProgress.value.criteria
   })
 })
 const briefingCeilingText = computed(() =>

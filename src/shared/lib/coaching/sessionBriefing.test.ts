@@ -86,6 +86,35 @@ describe('buildSessionBriefing', () => {
     expect(reps('blocked')).toBeLessThan(reps('watch'))
   })
 
+  it('라이브 수행 게이트(#336)를 우선 반영하고 그 근거를 노출(누적 수행 이력)', () => {
+    const b = buildSessionBriefing(session({ sessionType: 'Easy + Strides', phase: 'Base' }), {
+      goal,
+      injury: null,
+      chronic: noChronic,
+      progression: [{ id: 'easy-hr-stability', status: 'ready', evidence: '최근 Easy 3회 모두 상한 이하 — 안정.' }]
+    })
+    // ready → 스트라이드 상향
+    const reps = Number(b.execution.find((l) => l.includes('스트라이드'))?.match(/× (\d+)회/)?.[1] ?? 0)
+    expect(reps).toBeGreaterThan(0)
+    // 근거(누적 수행 이력) 노출
+    expect(b.execution.some((l) => l.includes('최근 수행') && l.includes('Easy 3회'))).toBe(true)
+  })
+
+  it('라이브 progression 이 저장 프로필보다 우선', () => {
+    const profile = {
+      progressionCriteria: [{ id: 'easy-hr-stability', label: '', status: 'blocked', evidence: '', action: '' }],
+      tempoCeiling: { adoptedBpm: null, baseBpm: null, adoptedAt: null }
+    } as unknown as import('@/entities/training-memory/model').AdaptiveTrainingProfile
+    const reps = (live: 'ready' | 'blocked') =>
+      Number(
+        buildSessionBriefing(session({ sessionType: 'Easy + Strides', phase: 'Base' }), {
+          goal, injury: null, chronic: noChronic, adaptiveProfile: profile,
+          progression: [{ id: 'easy-hr-stability', status: live, evidence: 'x' }]
+        }).execution.find((l) => l.includes('스트라이드'))?.match(/× (\d+)회/)?.[1] ?? 0
+      )
+    expect(reps('ready')).toBeGreaterThan(reps('blocked')) // 저장은 blocked지만 라이브 ready가 우선
+  })
+
   it('단계가 레이스에 가까울수록 스트라이드 반복수가 많다(산출)', () => {
     const reps = (phase: 'Base' | 'Race Specific') =>
       Number(

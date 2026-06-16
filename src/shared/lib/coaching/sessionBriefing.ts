@@ -16,17 +16,30 @@ import type { ChronicLoadTrend } from '@/shared/lib/runStats'
 
 type ProgressionStatus = 'ready' | 'watch' | 'blocked'
 
-/** 세션 타입 → 관련 progressionCriterion id (적응 프로필에서 수행 게이트 상태를 읽는다). */
+/** 라이브 평가된 수행 게이트 1건(evaluateProgressionCriteria #336 결과). 누적 수행 이력의 압축. */
+export type ProgressionSignal = { id: string; status: ProgressionStatus; evidence: string }
+
+/** 세션 타입 → 관련 progressionCriterion id. */
 function criterionIdFor(type: RunType): string {
   if (type === 'Tempo' || type === 'Race') return 'tempo-ceiling-quality'
   if (type === 'LSD' || type === 'Steady Long') return 'long-run-durability'
   return 'easy-hr-stability'
 }
 
-function progressionStatusFor(type: RunType, profile: AdaptiveTrainingProfile | null | undefined): ProgressionStatus {
-  if (!profile) return 'watch'
+/**
+ * 세션 타입의 수행 게이트 상태+근거를 해석한다. 라이브 평가(ctx.progression, #336)가 있으면 우선,
+ * 없으면 저장 프로필(기본 'watch')로 폴백. 라이브를 줘야 "누적 수행 이력"이 실제로 반영된다.
+ */
+function resolveProgression(
+  type: RunType,
+  progression: ProgressionSignal[] | null | undefined,
+  profile: AdaptiveTrainingProfile | null | undefined
+): { status: ProgressionStatus; evidence: string } {
   const id = criterionIdFor(type)
-  return profile.progressionCriteria.find((c) => c.id === id)?.status ?? 'watch'
+  const live = progression?.find((c) => c.id === id)
+  if (live) return { status: live.status, evidence: live.evidence }
+  const stored = profile?.progressionCriteria.find((c) => c.id === id)
+  return { status: stored?.status ?? 'watch', evidence: stored?.evidence ?? '' }
 }
 
 /** 코칭 근거(방법론·연구) 한 줄. 바텀시트에서만 노출. */
@@ -165,6 +178,7 @@ function executionFor(
   vdot: number | null,
   injury: TrainingInjuryItem | null,
   progression: ProgressionStatus,
+  progressionEvidence: string,
   tempoCeilingBpm: number | null
 ): string[] {
   const { sessionType, prescription, phase } = session
@@ -214,6 +228,10 @@ function executionFor(
     default:
       lines.push(`편한 대화 가능 페이스${pace ? ` ${pace}` : ''}${amount ? `, ${amount}` : ''}`)
   }
+  // 누적 수행 이력(#336 라이브 평가)이 상향/보수 신호일 때 그 근거를 투명하게 노출.
+  if ((progression === 'ready' || progression === 'blocked') && progressionEvidence) {
+    lines.push(`최근 수행: ${progressionEvidence}`)
+  }
   return lines
 }
 
@@ -255,8 +273,10 @@ export type SessionBriefingContext = {
   chronic: ChronicLoadTrend | null
   /** 러너 VDOT(resolvePaceModel.vdot). 스트라이드 반복수 등 산출에 쓰임. 없으면 null. */
   vdot?: number | null
-  /** 적응 프로필(#326) — progressionCriteria 수행 게이트·tempoCeiling 적응값을 산출에 반영. */
+  /** 적응 프로필(#326) — tempoCeiling 적응값·저장 게이트(폴백)에 사용. */
   adaptiveProfile?: AdaptiveTrainingProfile | null
+  /** 라이브 평가된 수행 게이트(#336, evaluateProgressionCriteria/coachAdaptiveProgress). 누적 수행 이력 반영. */
+  progression?: ProgressionSignal[] | null
 }
 
 /** ScheduledSession + 장기맥락 → 4요소 작전 브리핑(결정론). */
@@ -265,10 +285,10 @@ export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBrie
   const phaseLabel = phaseLabelKo(session.phase)
   const goalLine = `${goalLabel}${phaseLabel} — ${sessionTypeLabel(session.sessionType)}`
 
-  const progression = progressionStatusFor(session.sessionType, ctx.adaptiveProfile)
+  const prog = resolveProgression(session.sessionType, ctx.progression, ctx.adaptiveProfile)
   const tempoCeilingBpm = ctx.adaptiveProfile?.tempoCeiling?.adoptedBpm ?? null
   const effect = effectFor(session.sessionType)
-  const execution = executionFor(session, ctx.vdot ?? null, ctx.injury, progression, tempoCeilingBpm)
+  const execution = executionFor(session, ctx.vdot ?? null, ctx.injury, prog.status, prog.evidence, tempoCeilingBpm)
   const caution = cautionsFor(session, ctx.injury, ctx.chronic)
 
   const easyFamily = session.sessionType === 'Easy' || session.sessionType === 'Recovery' || session.sessionType === 'Easy + Strides'
