@@ -14,6 +14,33 @@ PaceLAB의 AI 코칭은 사용자의 개인 데이터만 보고 즉흥적으로 
 - 사용자 확인 현재 처방은 Workoutdoors에 바로 세팅할 실행방침으로 다룬다. Easy는 max/lap 심박 145bpm 이하, Tempo는 max 165bpm 이하, Easy + Strides는 워밍업 10분 + 20초 가속/1분40초 회복 x8 + 쿨다운 15분이다.
 - 이 처방은 평생 고정값이 아니다. 사용자가 루틴을 잘 소화하고 회복/부상 신호가 안정적이면 AI 코치가 먼저 더 나은 품질의 다음 처방을 제안한다.
 
+## 코칭 신뢰 원칙 — 근거·출처 명시 (필수)
+
+PaceLAB 코칭의 정당성은 "우리가 똑똑해서"가 아니라 **외부의 검증되고 저명한 코칭 방법론·연구에 뿌리를 둔다**는 데서 나온다. 사용자가 코칭을 신뢰하려면 이 뿌리가 코드 주석에만 있는 게 아니라 **사용자에게도 보여야** 한다.
+
+- 모든 처방·스케줄·예측 로직은 **이름 있는 방법론/연구에 귀속**시킨다(예: Daniels VDOT, Pfitzinger, Hansons, Seiler 80/20·polarized, periodization 교과서, Riegel 등). 출처 없는 즉흥 규칙을 코칭 기준선으로 쓰지 않는다.
+- 근거/출처는 **기본 화면에 인라인으로 노출하지 않는다**(화면을 어지럽히지 않음). 대신 처방·예측·단계 안내 옆에 **눈에 띄지 않는 "근거" 단서 버튼**(예: ⓘ/"왜?"/"근거")을 두고, **탭할 때만 바텀시트**로 해당 항목이 근거하는 방법론·연구·링크를 펼쳐 보여준다(on-demand). 평소엔 깔끔, 궁금할 때만 깊이.
+- 바텀시트 내용은 항목별로 귀속 방법론명 + 한 줄 요약 + (가능하면) 출처 링크를 담는다(예: "Easy 기반 비중 — polarized 80/20, Seiler", "예상 기록 — Riegel 외삽 보조치, 단일 기록이라 신뢰구간 동반"). 권위를 빌리되 과신을 경계하는 톤.
+- 근거를 인용할 때는 **출처를 추적 가능하게**(방법론명/연구 + 링크) 본 문서나 `decision-log.md`에 남긴다. 검증되지 않은 출처·자유 웹텍스트를 코칭 근거로 직접 주입하지 않는다(`training-knowledge-ops.md` 가드레일 연계).
+
+## 훈련 스케줄 모델 (주기화) — 하이브리드
+
+목표(레이스 날짜 + 목표 기록)를 받으면 **D-day까지의 풀 주기화 골격을 미리 생성하되, 적응적으로 재정렬하는 살아있는 플랜**으로 운용한다. 단일 요일반복 패턴의 무한 반복이 아니다. (결정: `decision-log.md` 2026-06-16, deep-research 근거)
+
+- **풀 골격은 미리 짠다(date-first/work-backward).** 전문 코치 표준은 레이스 날짜를 고정하고 거꾸로 계산해 macrocycle→mesocycle(3~6주)→microcycle(1주), base→build→peak/competition→taper/recovery로 진행하는 주기화 플랜이다. 근거: TrainingPeaks 주기화 https://www.trainingpeaks.com/blog/macrocycles-mesocycles-and-microcycles-understanding-the-3-cycles-of-periodization/ , Pfitzinger 12/18주·Daniels 사이클.
+- **골격은 경직되지 않는다.** "구조는 주되 정기 검토 후 조정"이 표준이며, 경직 플랜은 가능 이득의 10~15%를 놓치고 과훈련/부상 위험을 키운다. 근거: Fleet Feet 코치 조정 가이드 https://www.fleetfeet.com/blog/ask-a-coach-how-to-adjust-your-training-plan , 80/20 https://www.8020endurance.com/easy-ways-to-customize-your-readymade-endurance-training-plan/ .
+- **변경은 국소 처리, 누적 시 forward 재계산.** 하루치 세션 변경(거부/더 쉽게·어렵게)은 전체 일정에 파급하지 않고 그날만 처리한다. 누적 이탈이 임계치를 넘을 때만 **목표일은 고정한 채 '오늘부터' 플랜을 재구축**한다. 임계치·forward 재계산 사례 근거: Runna 재정렬 https://support.runna.com/en/articles/10026375-how-to-use-the-plan-realignment-feature (워크아웃 3개 초과/1주치 결손 트리거 — 단일 벤더 설계 사례이지 보편 원칙은 아님).
+- 세션 재배치 시 **키 세션 우선·하드/이지 교대·회복일 보호**를 지킨다(기존 "회복은 훈련의 일부", "점진적 부하" 기준선과 일관).
+
+## 목표 달성 예측 — 단일 기록 외삽 금지, 훈련량 결합 + 신뢰구간
+
+레이스 준비도/예상 기록은 **단일 기록 외삽 하나로 단정하지 않는다.** 보조 근거로만 쓰고 신뢰구간을 동반한다.
+
+- **단일 Riegel 외삽의 한계**: 하프까지는 잘 맞으나 마라톤은 약 절반의 생활 러너에서 10분 이상 과대예측(기록을 너무 빠르게). 근거: Vickers & Vertosick 2016 (n=2,303) https://pmc.ncbi.nlm.nih.gov/articles/PMC5000509/ , https://bmcsportsscimedrehabil.biomedcentral.com/articles/10.1186/s13102-016-0052-y .
+- **훈련량 결합이 우월**: 주간 마일리지 + 다중 사전 기록을 결합하면 단일 외삽보다 정확(MSE 380.7→208.3, 10분+ 과대예측 ~50%→~25%). 정립된 단일 표준식은 없다(체계적 리뷰 36연구/114식, R² 0.10~0.99). 근거: Keogh & Smyth 2019 (PMID 31575820) https://www.researchgate.net/publication/336163271_Prediction_Equations_for_Marathon_Performance_A_Systematic_Review .
+- **외삽 모델 선택 주의**: Critical-speed/hyperbolic은 적합 거리범위에 따라 파라미터가 불안정하고 초장거리를 과대예측한다. 외삽 범위 밖에서는 power-law가 더 안전. 근거: Vandewalle 2018 https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6192093/ , Drake et al. 2024 https://pubmed.ncbi.nlm.nih.gov/37563307/ .
+- 현재 `performanceProjection.ts`의 단일기록 Riegel(지수 1.06) 예측은 이 기준에 따라 훈련량 결합 + 신뢰구간 노출로 발전시킨다(후속 에픽).
+
 ## 알고리즘 레이어
 
 PaceLAB 코칭 알고리즘은 다섯 겹으로 동작한다.
