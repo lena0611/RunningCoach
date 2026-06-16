@@ -35,7 +35,7 @@ import QuestPanel from './QuestPanel.vue'
 import WeekTrainingCarousel, { type CarouselDay } from './WeekTrainingCarousel.vue'
 import SessionBriefingCard from './SessionBriefingCard.vue'
 import SessionDebriefCard from './SessionDebriefCard.vue'
-import { buildRestGuidance } from '@/shared/lib/coaching/restGuidance'
+import { buildRestGuidance, evaluateExtraRun } from '@/shared/lib/coaching/restGuidance'
 import { computeIntentFulfillment } from '@/entities/session-intent/computeIntentFulfillment'
 import { evaluateSteadyLong, STEADY_LONG_GRADE_LABEL, evaluateLsd, LSD_KIND_LABEL } from '@/shared/lib/coaching/sessionQuality'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
@@ -228,6 +228,14 @@ const activeFulfillment = computed(() => {
   const run = activeDoneRun.value
   const intent = activeDoneIntent.value
   return run && intent ? computeIntentFulfillment(intent, run) : null
+})
+// 진짜 엑스트라 런(스케줄 세션·의도에 귀속 안 됨 = 따라잡기 아님) → 회복일 건너뛴 비용 평가
+const activeExtraEval = computed(() => {
+  const run = activeDoneRun.value
+  if (!run) return null
+  const attributed = scheduleStore.sessions.some((s) => s.runId === run.id) || Boolean(activeDoneIntent.value)
+  if (attributed) return null
+  return evaluateExtraRun(run, activeInjury.value, chronicLoad.value)
 })
 const activeGradeLine = computed<string | null>(() => {
   const run = activeDoneRun.value
@@ -587,6 +595,7 @@ async function applyPhaseTransition() {
           :grade-line="activeGradeLine"
           :intent="activeDoneIntent"
           :fulfillment="activeFulfillment"
+          :extra-eval="activeExtraEval"
           :next-line="debriefNextLine"
         />
         <!-- 나가기 전: 작전 브리핑 -->
