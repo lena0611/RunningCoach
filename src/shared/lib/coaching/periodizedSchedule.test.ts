@@ -138,6 +138,21 @@ describe('buildPeriodizedSchedule', () => {
     expect(hardKm / totalKm).toBeLessThanOrEqual(0.3)
   })
 
+  it('회복 기준: 키/하드 세션이 인접일에 연속되지 않는다(하드 사이 회복 보장)', () => {
+    const sched = buildPeriodizedSchedule({
+      goal: goal({ targetDate: '2026-04-25', distanceKm: 21.1 }),
+      profile: profile({ weeklyRunDaysTarget: 5 }),
+      today
+    })
+    const keyDates = sched.filter((s) => s.keySession).map((s) => s.date).sort()
+    for (let i = 1; i < keyDates.length; i++) {
+      const gap = Math.round(
+        (new Date(`${keyDates[i]}T00:00:00`).getTime() - new Date(`${keyDates[i - 1]}T00:00:00`).getTime()) / 86400000
+      )
+      expect(gap).toBeGreaterThanOrEqual(2) // 하드 사이 최소 1일 회복
+    }
+  })
+
   it('하프 준비(21.1km, 16주): 테이퍼 2주 + 키세션 존재', () => {
     const sched = buildPeriodizedSchedule({
       goal: goal({ targetDate: '2026-04-25', distanceKm: 21.1 }),

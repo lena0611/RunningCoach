@@ -42,7 +42,7 @@ import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { buildSessionIntentDraft, easierAlternative, type BuildSessionIntentArgs } from '@/features/build-session-intent/buildSessionIntentDraft'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
-import { buildPeriodizedSchedule } from '@/shared/lib/coaching/periodizedSchedule'
+import { buildPeriodizedSchedule, buildWeekSummary } from '@/shared/lib/coaching/periodizedSchedule'
 import { buildRealignedSchedule } from '@/shared/lib/coaching/scheduleRealign'
 import { proposeAlternativeSession } from '@/shared/lib/coaching/alternativeSession'
 import { buildSessionBriefing, sessionTypeLabel, type SessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
@@ -177,6 +177,8 @@ const scheduleDays = computed<CarouselDay[]>(() => {
   return out
 })
 const hasSchedule = computed(() => scheduleDays.value.some((d) => d.state !== 'rest' && d.state !== 'past'))
+// 위크 요약(이번 주 단계·포커스·핵심·볼륨·D-day) — "이번 주가 통째로 뭘 위한 주인지"
+const weekSummary = computed(() => buildWeekSummary(scheduleStore.sessions, today.value, activeGoal.value?.targetDate ?? null))
 const activeDayIndex = ref(CAROUSEL_DAYS_BEFORE) // 기본 = 오늘(offset 0)
 const activeDay = computed(() => scheduleDays.value[activeDayIndex.value] ?? null)
 const activeSession = computed<ScheduledSession | null>(() =>
@@ -566,6 +568,13 @@ async function applyPhaseTransition() {
 
 <template>
   <PageLayout variant="dashboard">
+    <!-- 위크 요약(#362): 이번 주가 뭘 위한 주인지 — 단계·포커스·핵심·볼륨·D-day -->
+    <div v-if="hasSchedule && weekSummary" class="week-summary-bar">
+      <span class="week-summary-phase">{{ weekSummary.phaseLabel }}</span>
+      <span class="week-summary-focus">{{ weekSummary.focusLine }}</span>
+      <span class="week-summary-meta">핵심 {{ weekSummary.keyCount }} · 약 {{ weekSummary.weekKm }}km<template v-if="weekSummary.dDayText"> · {{ weekSummary.dDayText }}</template></span>
+    </div>
+
     <!-- 목표 기반 주간 캐러셀 (에픽 #362). 스케줄이 있으면 히어로 대신 표시. -->
     <WeekTrainingCarousel v-if="hasSchedule" v-model:active-index="activeDayIndex" :days="scheduleDays">
       <template #default="{ day }">
@@ -962,6 +971,28 @@ async function applyPhaseTransition() {
   margin: 0;
   font-size: var(--text-info-size, 14px);
   color: var(--color-text);
+}
+.week-summary-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  margin-bottom: var(--space-2, 8px);
+  background: var(--color-primary-soft, var(--color-surface-card));
+  border-radius: var(--radius-button, 12px);
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.week-summary-phase {
+  font-weight: 700;
+  color: var(--color-primary);
+}
+.week-summary-focus {
+  color: var(--color-text);
+}
+.week-summary-meta {
+  margin-left: auto;
 }
 .rest-list {
   margin: var(--space-1, 4px) 0 0;
