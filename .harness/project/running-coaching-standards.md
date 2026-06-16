@@ -41,6 +41,21 @@ PaceLAB 코칭의 정당성은 "우리가 똑똑해서"가 아니라 **외부의
 - **외삽 모델 선택 주의**: Critical-speed/hyperbolic은 적합 거리범위에 따라 파라미터가 불안정하고 초장거리를 과대예측한다. 외삽 범위 밖에서는 power-law가 더 안전. 근거: Vandewalle 2018 https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6192093/ , Drake et al. 2024 https://pubmed.ncbi.nlm.nih.gov/37563307/ .
 - 현재 `performanceProjection.ts`의 단일기록 Riegel(지수 1.06) 예측은 이 기준에 따라 훈련량 결합 + 신뢰구간 노출로 발전시킨다(후속 에픽).
 
+## 타입별 코칭 단일 출처(SSOT) + 도메인 로직 신설 게이트 (필수)
+
+세션 타입별 코칭(Easy/Recovery/Tempo/LSD/Steady Long/Race)의 판정·분류·뉘앙스는 **단일 출처를 정본으로** 한다. 프리런(처방)과 포스트런(분석)이 같은 타입별 프레임·용어를 공유해야 하며, 경로마다 따로 발명하지 않는다.
+
+- **정본**: 타입별 등급·세분화·우선순위는 `src/shared/lib/coaching/sessionQuality.ts`(#354 — Steady Long 효율/네거티브스플릿 보정, LSD Recovery/Standard/Progressive 세분화, Easy/Recovery RPE>호흡>심박>페이스 우선)를 기준으로 한다.
+- **프리런 처방(sessionBriefing 등)** 은 이 정본의 프레임·용어에 **정렬**한다. 같은 개념을 다른 단어/숫자로 재정의하지 않는다.
+
+**도메인 로직 신설 게이트(코칭·세션 분석·처방·추천·예측):** 새로 만들거나 수정하기 전에 반드시:
+1. `grep -rln`으로 기존 관련 모듈을 찾는다(키워드: 세션 타입명, RPE, drift, efficiency, progression 등).
+2. `gh issue list --search`로 관련 과거 이슈/결정을 확인한다.
+3. `npm run harness:context -- "<작업>"`로 읽을 기준을 좁힌다.
+4. 기존 구현이 있으면 **재사용·확장·정렬**한다. 백지 재작성은 기존이 명백히 부적합할 때만, 그 이유를 decision-log에 남기고.
+
+(근거: 2026-06-16 #375 프리런 브리핑이 #354 타입별 분석을 안 보고 effect/execution을 새로 발명해 코칭이 갈라진 사고. UI의 "토큰/공유컴포넌트 선감사" 규율을 도메인 로직에도 동일 적용.)
+
 ## 알고리즘 레이어
 
 PaceLAB 코칭 알고리즘은 다섯 겹으로 동작한다.
