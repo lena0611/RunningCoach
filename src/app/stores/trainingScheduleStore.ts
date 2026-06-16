@@ -79,6 +79,14 @@ export const useTrainingScheduleStore = defineStore('trainingScheduleStore', {
       })
       await this.insertMany(drafts)
     },
+    /** 런 임포트 직후: 그 날짜의 활성 세션을 done 으로 매칭한다(없으면 no-op). 미수행 오판·재정렬 방지. */
+    async matchRun(run: { id: string; date: string }): Promise<void> {
+      if (!isSupabaseConfigured) return
+      if (!this.loaded) await this.load()
+      const target = this.sessions.find((s) => s.date === run.date && isActiveSession(s))
+      if (!target) return
+      await this.setStatus(target.id, 'done', run.id)
+    },
     async setStatus(id: string, status: ScheduledSessionStatus, runId: string | null = null): Promise<void> {
       if (!isSupabaseConfigured) return
       const updated = await updateScheduledSessionStatus(id, status, runId)

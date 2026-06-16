@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid'
 import type { ExtractedRunData, RunLog } from '@/entities/run/model'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
+import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { deleteRunLog, fetchRunLogs, insertRunLog, insertRunLogs, updateRunLog } from '@/shared/api/runRepository'
 
@@ -141,6 +142,12 @@ export const useRunStore = defineStore('runStore', {
         await useSessionIntentStore().matchRun({ id: run.id, date: run.date })
       } catch {
         // best-effort: 의도 매칭 실패가 런 저장을 막지 않는다.
+      }
+      try {
+        // 스케줄 세션도 done 매칭 — 안 하면 수행한 세션이 'planned'로 남아 재정렬에서 미수행 오판(#378).
+        await useTrainingScheduleStore().matchRun({ id: run.id, date: run.date })
+      } catch {
+        // best-effort
       }
     },
     persist() {

@@ -34,6 +34,10 @@ import PreRunIntentCard from './PreRunIntentCard.vue'
 import QuestPanel from './QuestPanel.vue'
 import WeekTrainingCarousel, { type CarouselDay } from './WeekTrainingCarousel.vue'
 import SessionBriefingCard from './SessionBriefingCard.vue'
+import SessionDebriefCard from './SessionDebriefCard.vue'
+import { buildRestGuidance } from '@/shared/lib/coaching/restGuidance'
+import { computeIntentFulfillment } from '@/entities/session-intent/computeIntentFulfillment'
+import { evaluateSteadyLong, STEADY_LONG_GRADE_LABEL, evaluateLsd, LSD_KIND_LABEL } from '@/shared/lib/coaching/sessionQuality'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { buildSessionIntentDraft, easierAlternative, type BuildSessionIntentArgs } from '@/features/build-session-intent/buildSessionIntentDraft'
@@ -206,6 +210,43 @@ const activeBriefing = computed<SessionBriefing | null>(() => {
 const briefingCeilingText = computed(() =>
   heartRateModel.value.easyCeilingBpm ? `심박 상한 ${heartRateModel.value.easyCeilingBpm}` : null
 )
+
+// 디브리핑(완료 슬라이드, #378): 요약 + 의도 달성률(#310) + 세션 등급(#354) + 다음
+const activeDoneSummary = computed(() => {
+  const run = activeDoneRun.value
+  if (!run) return ''
+  const distance = Number.isFinite(run.distanceKm) ? `${Math.round(run.distanceKm * 10) / 10}km` : ''
+  const dur = run.durationSec ? formatDuration(run.durationSec) : ''
+  return [run.type, distance, dur].filter(Boolean).join(' · ')
+})
+const activeDoneIntent = computed(() =>
+  activeDoneRun.value ? sessionIntentStore.intents.find((i) => i.runId === activeDoneRun.value!.id) ?? null : null
+)
+const activeFulfillment = computed(() => {
+  const run = activeDoneRun.value
+  const intent = activeDoneIntent.value
+  return run && intent ? computeIntentFulfillment(intent, run) : null
+})
+const activeGradeLine = computed<string | null>(() => {
+  const run = activeDoneRun.value
+  if (!run) return null
+  if (run.type === 'Steady Long') {
+    const e = evaluateSteadyLong(run)
+    return `${STEADY_LONG_GRADE_LABEL[e.grade]}${e.reasons[0] ? ` · ${e.reasons[0]}` : ''}`
+  }
+  if (run.type === 'LSD') {
+    const e = evaluateLsd(run, { easyCeilingBpm: heartRateModel.value.easyCeilingBpm, recoveryCeilingBpm: heartRateModel.value.recoveryCeilingBpm })
+    return `${LSD_KIND_LABEL[e.kind]}${e.reasons[0] ? ` · ${e.reasons[0]}` : ''}`
+  }
+  return null
+})
+const debriefNextLine = computed(() => {
+  const next = dayView.value.next
+  return next ? `${formatDateWithWeekday(next.date)} · ${next.title}` : null
+})
+
+// 전략적 휴식(#378): 휴식날도 회복·부상관리·근력 보강 안내
+const restGuidance = computed(() => buildRestGuidance(activeInjury.value, chronicLoad.value))
 
 function onBriefingAck() {
   toastStore.success('좋아요, 오늘은 이 훈련에 집중해요.')
@@ -529,12 +570,16 @@ async function applyPhaseTransition() {
     <WeekTrainingCarousel v-if="hasSchedule" v-model:active-index="activeDayIndex" :days="scheduleDays">
       <template #default="{ day }">
         <p class="eyebrow carousel-date">{{ formatDateWithWeekday(day.date) }}</p>
-        <!-- 갔다와서: 디브리핑 (#372) -->
-        <article v-if="day.state === 'done' && activeDoneRun" class="carousel-card">
-          <strong class="carousel-card-title">✅ 디브리핑</strong>
-          <p class="carousel-card-line">{{ activeDoneRun.type }} · {{ activeDoneRun.distanceKm?.toFixed(1) }}km<span v-if="activeDoneRun.durationSec"> · {{ formatDuration(activeDoneRun.durationSec) }}</span></p>
-          <p class="helper">오늘 세션을 마쳤어요. 회복 신호를 살피며 다음 세션을 준비해요.</p>
-        </article>
+        <!-- 갔다와서: 디브리핑 (#372/#378) — 의도 달성률·세션 등급·다음 -->
+        <SessionDebriefCard
+          v-if="day.state === 'done' && activeDoneRun"
+          :run="activeDoneRun"
+          :summary="activeDoneSummary"
+          :grade-line="activeGradeLine"
+          :intent="activeDoneIntent"
+          :fulfillment="activeFulfillment"
+          :next-line="debriefNextLine"
+        />
         <!-- 나가기 전: 작전 브리핑 -->
         <SessionBriefingCard
           v-else-if="activeBriefing && (day.state === 'today' || day.state === 'future')"
@@ -545,10 +590,13 @@ async function applyPhaseTransition() {
           @acknowledge="onBriefingAck"
           @request-alternative="onBriefingAlternative"
         />
-        <!-- 휴식/예정 없음 -->
+        <!-- 휴식: 전략적 휴식(#378) — 회복·부상관리·근력 -->
         <article v-else class="carousel-card">
-          <strong class="carousel-card-title">🌙 휴식</strong>
-          <p class="helper">예정 세션이 없어요. 가볍게 풀거나 쉬어가요.</p>
+          <strong class="carousel-card-title">🌙 전략적 휴식</strong>
+          <p class="carousel-card-line">{{ restGuidance.purpose }}</p>
+          <ul class="rest-list">
+            <li v-for="(item, i) in restGuidance.items" :key="i">{{ item }}</li>
+          </ul>
         </article>
       </template>
     </WeekTrainingCarousel>
@@ -913,6 +961,16 @@ async function applyPhaseTransition() {
 .carousel-card-line {
   margin: 0;
   font-size: var(--text-info-size, 14px);
+  color: var(--color-text);
+}
+.rest-list {
+  margin: var(--space-1, 4px) 0 0;
+  padding-left: 1.1em;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--text-info-size, 14px);
+  line-height: var(--text-info-line, 1.5);
   color: var(--color-text);
 }
 
