@@ -42,6 +42,7 @@ import { buildPeriodizedSchedule } from '@/shared/lib/coaching/periodizedSchedul
 import { buildRealignedSchedule } from '@/shared/lib/coaching/scheduleRealign'
 import { proposeAlternativeSession } from '@/shared/lib/coaching/alternativeSession'
 import { buildSessionBriefing, sessionTypeLabel, type SessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
+import { resolvePaceModel } from '@/shared/lib/vdotPaces'
 import { getChronicLoadTrend } from '@/shared/lib/runStats'
 import { isActiveSession, type ScheduledSession } from '@/entities/training-schedule/model'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
@@ -186,7 +187,8 @@ const activeBriefing = computed<SessionBriefing | null>(() => {
   return buildSessionBriefing(session, {
     goal: activeGoal.value,
     injury: activeInjury.value,
-    chronic: chronicLoad.value
+    chronic: chronicLoad.value,
+    vdot: resolvePaceModel(memoryStore.memory.athleteProfile).vdot
   })
 })
 const briefingCeilingText = computed(() =>

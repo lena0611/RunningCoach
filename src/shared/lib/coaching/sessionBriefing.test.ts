@@ -53,11 +53,31 @@ describe('buildSessionBriefing', () => {
     expect(easy.execution).not.toEqual(tempo.execution)
   })
 
-  it('부상 severity 가 스트라이드 지침을 미세조절(조심할 점)', () => {
-    const b = buildSessionBriefing(session({ sessionType: 'Easy + Strides' }), { goal, injury: injury({ severity: 3, area: '무릎' }), chronic: noChronic })
-    expect(b.cautions.length).toBeGreaterThan(0)
-    expect(b.cautions[0]).toContain('무릎')
-    expect(b.cautions[0]).toContain('스트라이드')
+  it('부상 severity 가 스트라이드 반복수를 산출 단계에서 감축(무릎 등 비전족)', () => {
+    const reps = (inj: ReturnType<typeof injury> | null) =>
+      Number(
+        buildSessionBriefing(session({ sessionType: 'Easy + Strides', phase: 'Base' }), { goal, injury: inj, chronic: noChronic })
+          .execution.find((l) => l.includes('스트라이드'))?.match(/× (\d+)회/)?.[1] ?? 0
+      )
+    const healthy = reps(null)
+    const hurt = reps(injury({ severity: 3, area: '무릎' }))
+    expect(hurt).toBeGreaterThan(0)
+    expect(hurt).toBeLessThan(healthy) // 부상으로 반복수 감축
+  })
+
+  it('전족 부상(족저)이면 스트라이드를 보류로 산출', () => {
+    const b = buildSessionBriefing(session({ sessionType: 'Easy + Strides', phase: 'Base' }), { goal, injury: injury({ severity: 2, area: '족저근막' }), chronic: noChronic })
+    expect(b.execution.some((l) => l.includes('보류'))).toBe(true)
+    expect(b.execution.some((l) => /× \d+회/.test(l))).toBe(false) // 반복수 처방 없음(보류)
+  })
+
+  it('단계가 레이스에 가까울수록 스트라이드 반복수가 많다(산출)', () => {
+    const reps = (phase: 'Base' | 'Race Specific') =>
+      Number(
+        buildSessionBriefing(session({ sessionType: 'Easy + Strides', phase }), { goal, injury: null, chronic: noChronic })
+          .execution.find((l) => l.includes('스트라이드'))?.match(/× (\d+)회/)?.[1] ?? 0
+      )
+    expect(reps('Race Specific')).toBeGreaterThan(reps('Base'))
   })
 
   it('부하 급증이 조심할 점에 반영', () => {
