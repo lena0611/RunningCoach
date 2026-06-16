@@ -11,8 +11,36 @@
 
 import type { RunType } from '@/entities/run/model'
 import type { ScheduledSession } from '@/entities/training-schedule/model'
-import type { TrainingGoal, TrainingInjuryItem } from '@/entities/training-memory/model'
+import type { AdaptiveTrainingProfile, TrainingGoal, TrainingInjuryItem } from '@/entities/training-memory/model'
 import type { ChronicLoadTrend } from '@/shared/lib/runStats'
+
+type ProgressionStatus = 'ready' | 'watch' | 'blocked'
+
+/** 라이브 평가된 수행 게이트 1건(evaluateProgressionCriteria #336 결과). 누적 수행 이력의 압축. */
+export type ProgressionSignal = { id: string; status: ProgressionStatus; evidence: string }
+
+/** 세션 타입 → 관련 progressionCriterion id. */
+function criterionIdFor(type: RunType): string {
+  if (type === 'Tempo' || type === 'Race') return 'tempo-ceiling-quality'
+  if (type === 'LSD' || type === 'Steady Long') return 'long-run-durability'
+  return 'easy-hr-stability'
+}
+
+/**
+ * 세션 타입의 수행 게이트 상태+근거를 해석한다. 라이브 평가(ctx.progression, #336)가 있으면 우선,
+ * 없으면 저장 프로필(기본 'watch')로 폴백. 라이브를 줘야 "누적 수행 이력"이 실제로 반영된다.
+ */
+function resolveProgression(
+  type: RunType,
+  progression: ProgressionSignal[] | null | undefined,
+  profile: AdaptiveTrainingProfile | null | undefined
+): { status: ProgressionStatus; evidence: string } {
+  const id = criterionIdFor(type)
+  const live = progression?.find((c) => c.id === id)
+  if (live) return { status: live.status, evidence: live.evidence }
+  const stored = profile?.progressionCriteria.find((c) => c.id === id)
+  return { status: stored?.status ?? 'watch', evidence: stored?.evidence ?? '' }
+}
 
 /** 코칭 근거(방법론·연구) 한 줄. 바텀시트에서만 노출. */
 export type EvidenceRef = {
@@ -56,6 +84,10 @@ const EVIDENCE = {
   progressiveLoad: {
     method: '점진적 부하',
     summary: '볼륨·강도·빈도를 동시에 크게 올리지 않는다. 최근 부하 추세와 통증 신호를 함께 본다.'
+  },
+  rpePriority: {
+    method: '강도 판정 RPE 우선 (#354)',
+    summary: 'Easy/Recovery는 심박·페이스보다 RPE·호흡을 우선해 강도를 판정한다. 상한 소폭 초과도 RPE 낮으면 인정.'
   }
 } as const
 
@@ -81,9 +113,75 @@ function effectFor(type: RunType): { text: string; evidence: EvidenceRef } {
   }
 }
 
-/** ② 세부 이행지침. 처방(페이스대/노트) + 타입별 구조. */
-function executionFor(session: ScheduledSession): string[] {
-  const { sessionType, prescription } = session
+/** 전족(스트라이드/빠른 달리기)에 직접 부하가 가는 부위 — 이 부위 통증이면 스트라이드를 보류한다. */
+const FOREFOOT_LOAD_AREA = /족저|발|아킬레스|종아리|발목/
+
+/** #354 정렬: Easy/Recovery 강도 판정은 RPE>호흡>심박>페이스 순. 프리런 지침도 같은 프레임으로 안내. */
+const RPE_PRIORITY_LINE =
+  '강도 판정은 RPE·호흡 우선(심박·페이스는 보조) — 상한을 살짝 넘어도 편하면 유지, RPE가 높으면 페이스를 낮춰요'
+
+/**
+ * 스트라이드 반복수를 단계·체력·부상에서 **산출**한다(고정값 아님).
+ * 단계가 레이스에 가까울수록 신경근 자극을 늘리고, 입문(저VDOT)은 보수적으로, 전족 부상이면 보류.
+ */
+function computeStrides(
+  phase: ScheduledSession['phase'],
+  vdot: number | null,
+  injury: TrainingInjuryItem | null,
+  progression: ProgressionStatus
+): { reps: number; hold: boolean; holdReason: string } {
+  const byPhase: Record<ScheduledSession['phase'], number> = {
+    Base: 5,
+    Build: 6,
+    Threshold: 6,
+    'Race Specific': 8,
+    Taper: 4,
+    Recovery: 0
+  }
+  let reps = byPhase[phase] ?? 4
+  if (vdot != null && vdot < 35) reps = Math.min(reps, 4) // 입문자 보수적
+
+  if (injury && (injury.status === 'active' || injury.status === 'monitoring')) {
+    const sev = injury.severity ?? 0
+    const area = injury.area || '관리 부위'
+    if (sev >= 2 && FOREFOOT_LOAD_AREA.test(area)) {
+      return { reps: 0, hold: true, holdReason: `${area} ${sev}/5 — 스트라이드는 빠른 전족 부하라 직접 자극이에요. 오늘은 보류하고 본런만 이지로.` }
+    }
+    if (sev >= 2) reps = Math.max(2, reps - 2)
+  }
+  // 적응 프로필 수행 게이트: Easy 심박 안정이 검증되면 품질 상향(+1), 막혀 있으면 보수(-1).
+  if (progression === 'ready') reps += 1
+  else if (progression === 'blocked') reps = Math.max(2, reps - 1)
+  return { reps, hold: false, holdReason: '' }
+}
+
+/** 단계별 Tempo 지속(분)을 산출. 레이스에 가까울수록 길게, 수행 게이트가 막혀 있으면 보수적으로. */
+function tempoMinutesFor(phase: ScheduledSession['phase'], progression: ProgressionStatus): string {
+  if (progression === 'blocked') return '10~12분 짧게 — 상한 준수 우선'
+  switch (phase) {
+    case 'Build':
+      return '15~18분 지속'
+    case 'Threshold':
+      return '10분 × 2 (사이 2~3분 조깅)'
+    case 'Race Specific':
+      return '20~25분 지속'
+    case 'Taper':
+      return '10~12분 짧게'
+    default:
+      return '12~15분 지속'
+  }
+}
+
+/** ② 세부 이행지침을 러너 상태에서 **산출**한다(단계·VDOT·부상·볼륨·적응 프로필). 정적 처방 아님. */
+function executionFor(
+  session: ScheduledSession,
+  vdot: number | null,
+  injury: TrainingInjuryItem | null,
+  progression: ProgressionStatus,
+  progressionEvidence: string,
+  tempoCeilingBpm: number | null
+): string[] {
+  const { sessionType, prescription, phase } = session
   const lines: string[] = []
   const dist = prescription.distanceKm ? `${prescription.distanceKm}km` : ''
   const dur = prescription.durationMin ? `${prescription.durationMin}분` : ''
@@ -91,21 +189,38 @@ function executionFor(session: ScheduledSession): string[] {
   const pace = prescription.paceRange
 
   switch (sessionType) {
-    case 'Easy + Strides':
+    case 'Easy + Strides': {
       lines.push(`본런: 편한 대화 페이스${pace ? ` ${pace}` : ''}${amount ? `, ${amount}` : ''}`)
-      lines.push('마무리: 100m 스트라이드 4~6회, 힘 빼고 빠르게 · 사이 완전 회복')
+      lines.push(RPE_PRIORITY_LINE) // #354 정렬: 강도 판정 RPE>호흡>심박>페이스
+      const s = computeStrides(phase, vdot, injury, progression)
+      if (s.hold) lines.push(s.holdReason)
+      else lines.push(`마무리 스트라이드: 15~20초 빠르고 편하게 × ${s.reps}회, 사이 60~90초 완전 회복`)
       break
-    case 'Tempo':
-      lines.push(`${amount ? `${amount} ` : ''}편하게 힘든 강도 지속${pace ? ` ${pace}` : ''}, 심박 상한 준수`)
+    }
+    case 'Tempo': {
+      const ceiling = tempoCeilingBpm ? ` (심박 상한 ${tempoCeilingBpm} 준수)` : ', 심박 상한 준수'
+      lines.push(`${tempoMinutesFor(phase, progression)}${pace ? ` ${pace}` : ''}${ceiling}`)
       lines.push('무너지면 중단 — 자극 확보가 목적이지 기록 경신이 아니에요')
       break
+    }
     case 'LSD':
+      // #354 정렬: LSD 는 Recovery/Standard/Progressive 로 판정됨. 프리런은 Standard 의도 + 유연 옵션.
+      lines.push(`${amount ? `${amount} ` : ''}대화 가능 강도${pace ? ` ${pace}` : ''}, 심박 안정 우선 (Standard LSD)`)
+      lines.push('컨디션 좋으면 후반 자연 페이스업(Progressive)도 OK, 무리면 더 느린 Recovery LSD로 낮춰도 돼요')
+      lines.push('판정 기준: 평균심박 하나가 아니라 지속시간·RPE·심박 드리프트·페이스 안정성을 함께')
+      break
     case 'Steady Long':
-      lines.push(`${amount ? `${amount} ` : ''}대화 가능 강도${pace ? ` ${pace}` : ''}, 심박 안정 우선`)
-      lines.push(sessionType === 'Steady Long' ? '후반 자연 가속만 허용, 급락 금지' : '후반 급락 없이 일정하게')
+      // #354 정렬: 전후반 심박차만으로 판단 안 함 — 후반 가속 보정한 효율을 본다.
+      lines.push(`${amount ? `${amount} ` : ''}일정한 강도${pace ? ` ${pace}` : ''}, 후반 효율 위주`)
+      lines.push('잘 통제된 네거티브 스플릿(후반 살짝 가속) 환영 — 후반 가속분은 드리프트에서 보정해 평가해요')
       break
     case 'Recovery':
       lines.push(`아주 느리게${pace ? ` ${pace}` : ''}${amount ? `, ${amount}` : ''} — 회복이 목적`)
+      lines.push(RPE_PRIORITY_LINE)
+      break
+    case 'Easy':
+      lines.push(`편한 대화 가능 페이스${pace ? ` ${pace}` : ''}${amount ? `, ${amount}` : ''}`)
+      lines.push(RPE_PRIORITY_LINE)
       break
     case 'Race':
       lines.push(`목표 레이스 페이스${pace ? ` ${pace}` : ''} 점검${amount ? `, ${amount}` : ''}`)
@@ -113,9 +228,9 @@ function executionFor(session: ScheduledSession): string[] {
     default:
       lines.push(`편한 대화 가능 페이스${pace ? ` ${pace}` : ''}${amount ? `, ${amount}` : ''}`)
   }
-  // 처방 노트(스트라이드 프로토콜 등)가 위 지침과 중복되지 않으면 보조 한 줄로 노출.
-  if (prescription.note && !lines.some((l) => l.includes(prescription.note))) {
-    lines.push(prescription.note)
+  // 누적 수행 이력(#336 라이브 평가)이 상향/보수 신호일 때 그 근거를 투명하게 노출.
+  if ((progression === 'ready' || progression === 'blocked') && progressionEvidence) {
+    lines.push(`최근 수행: ${progressionEvidence}`)
   }
   return lines
 }
@@ -133,9 +248,8 @@ function cautionsFor(
     const severity = injury.severity ?? 0
     const area = injury.area || '관리 부위'
     if (severity >= 1) {
-      if (session.sessionType === 'Easy + Strides' && severity >= 2) {
-        lines.push(`${area} 통증 ${severity}/5 — 스트라이드 횟수를 줄이고(4회 이하), 통증이 커지면 중단하세요.`)
-      } else if (session.keySession && severity >= 3) {
+      // 스트라이드 횟수/보류는 executionFor 가 산출해 본문에 반영하므로, 여기선 일반 주의만.
+      if (session.keySession && severity >= 3) {
         lines.push(`${area} 통증 ${severity}/5 — 오늘 같은 강한 세션은 무리예요. 강도를 낮추거나 미루는 걸 권합니다.`)
       } else {
         lines.push(`${area} 통증 ${severity}/5 — 통증 변화를 보며 보수적으로, 악화되면 강도를 낮추세요.`)
@@ -157,6 +271,12 @@ export type SessionBriefingContext = {
   goal: TrainingGoal | null
   injury: TrainingInjuryItem | null
   chronic: ChronicLoadTrend | null
+  /** 러너 VDOT(resolvePaceModel.vdot). 스트라이드 반복수 등 산출에 쓰임. 없으면 null. */
+  vdot?: number | null
+  /** 적응 프로필(#326) — tempoCeiling 적응값·저장 게이트(폴백)에 사용. */
+  adaptiveProfile?: AdaptiveTrainingProfile | null
+  /** 라이브 평가된 수행 게이트(#336, evaluateProgressionCriteria/coachAdaptiveProgress). 누적 수행 이력 반영. */
+  progression?: ProgressionSignal[] | null
 }
 
 /** ScheduledSession + 장기맥락 → 4요소 작전 브리핑(결정론). */
@@ -165,13 +285,17 @@ export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBrie
   const phaseLabel = phaseLabelKo(session.phase)
   const goalLine = `${goalLabel}${phaseLabel} — ${sessionTypeLabel(session.sessionType)}`
 
+  const prog = resolveProgression(session.sessionType, ctx.progression, ctx.adaptiveProfile)
+  const tempoCeilingBpm = ctx.adaptiveProfile?.tempoCeiling?.adoptedBpm ?? null
   const effect = effectFor(session.sessionType)
-  const execution = executionFor(session)
+  const execution = executionFor(session, ctx.vdot ?? null, ctx.injury, prog.status, prog.evidence, tempoCeilingBpm)
   const caution = cautionsFor(session, ctx.injury, ctx.chronic)
 
+  const easyFamily = session.sessionType === 'Easy' || session.sessionType === 'Recovery' || session.sessionType === 'Easy + Strides'
   const evidence: EvidenceRef[] = dedupeEvidence([
     effect.evidence,
     session.sessionType === 'Tempo' || session.sessionType === 'Race' ? EVIDENCE.daniels : null,
+    easyFamily ? EVIDENCE.rpePriority : null,
     caution.evidence
   ])
 
