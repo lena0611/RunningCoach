@@ -59,6 +59,33 @@ describe('performanceProjection', () => {
     expect(projection?.factors.find((factor) => factor.key === 'aerobicBase')?.status).toBe('weak')
     expect(projection?.factors.find((factor) => factor.key === 'longRun')?.status).toBe('weak')
   })
+
+  it('신뢰구간(projectedRangeSec)을 산출하고 center 가 구간 안에 든다 (#367)', () => {
+    const runs = [
+      run({ id: 'tempo-2', date: '2026-05-24', type: 'Tempo', distanceKm: 6.2, durationSec: 2480, avgHeartRate: 156, maxHeartRate: 164, rpe: 7 }),
+      run({ id: 'long-1', date: '2026-05-23', type: 'Steady Long', distanceKm: 12.8, durationSec: 5580, avgHeartRate: 144, maxHeartRate: 154 }),
+      run({ id: 'tempo-1', date: '2026-05-17', type: 'Tempo', distanceKm: 5.5, durationSec: 2250, avgHeartRate: 158, maxHeartRate: 165, rpe: 7 })
+    ]
+    const projection = getRaceProjection(runs, goal, new Date('2026-05-27T00:00:00'), null, 0, { easyCeilingBpm: 145, tempoCeilingBpm: 165 })
+    const range = projection?.projectedRangeSec
+    expect(range).toBeTruthy()
+    expect(range![0]).toBeLessThan(range![1])
+    // 빠름 < 느림, 양수
+    expect(range![0]).toBeGreaterThan(0)
+  })
+
+  it('먼 거리 외삽(10km 신호 → 하프 목표)일수록 신뢰구간이 더 넓다 (#367)', () => {
+    const tenKRun = [run({ id: 'tt10k', date: '2026-05-24', type: 'Race', distanceKm: 10, durationSec: 2700, avgHeartRate: 170, maxHeartRate: 180 })]
+    const tenKGoal: TrainingGoal = { ...goal, distanceKm: 10 }
+    const halfGoal: TrainingGoal = { ...goal, distanceKm: 21.1 }
+    const today = new Date('2026-05-27T00:00:00')
+    const widthFor = (g: TrainingGoal): number => {
+      const p = getRaceProjection(tenKRun, g, today, null, 0, { easyCeilingBpm: 145, tempoCeilingBpm: 165 })
+      const r = p!.projectedRangeSec!
+      return (r[1] - r[0]) / ((r[0] + r[1]) / 2)
+    }
+    expect(widthFor(halfGoal)).toBeGreaterThan(widthFor(tenKGoal))
+  })
 })
 
 function run(overrides: Partial<RunLog>): RunLog {

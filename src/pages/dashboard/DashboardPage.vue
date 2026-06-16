@@ -32,9 +32,18 @@ import { appendPhaseTransition } from '@/shared/api/adaptiveTrainingRepository'
 import type { TrainingPhaseName } from '@/entities/training-memory/model'
 import PreRunIntentCard from './PreRunIntentCard.vue'
 import QuestPanel from './QuestPanel.vue'
+import WeekTrainingCarousel, { type CarouselDay } from './WeekTrainingCarousel.vue'
+import SessionBriefingCard from './SessionBriefingCard.vue'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { buildSessionIntentDraft, easierAlternative, type BuildSessionIntentArgs } from '@/features/build-session-intent/buildSessionIntentDraft'
+import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
+import { buildPeriodizedSchedule } from '@/shared/lib/coaching/periodizedSchedule'
+import { buildRealignedSchedule } from '@/shared/lib/coaching/scheduleRealign'
+import { proposeAlternativeSession } from '@/shared/lib/coaching/alternativeSession'
+import { buildSessionBriefing, sessionTypeLabel, type SessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
+import { getChronicLoadTrend } from '@/shared/lib/runStats'
+import { isActiveSession, type ScheduledSession } from '@/entities/training-schedule/model'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import RacePage from '@/pages/race/RacePage.vue'
 import { hasNativeBridge } from '@/shared/lib/runtime'
@@ -92,6 +101,126 @@ const runnerProgress = computed(() =>
 const weeklyRunCount = computed(() => getThisWeekRuns(runs.value, today.value).length)
 const weeklyRunTarget = computed(() => memoryStore.memory.athleteProfile.weeklyRunDaysTarget ?? 0)
 
+// === 목표 기반 주기화 스케줄 + 주간 캐러셀 (에픽 #362) ===
+const scheduleStore = useTrainingScheduleStore()
+const chronicLoad = computed(() => getChronicLoadTrend(runs.value, today.value, ageLoadWeight.value))
+
+function dateOnly(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토']
+
+/** 목표에 targetDate+거리가 있으면 골격 생성, 없으면 재정렬 점검(best-effort, no-op 안전). */
+let ensureInFlight: Promise<void> | null = null
+function ensureSchedule(): Promise<void> {
+  // in-flight 가드(B1): watch 가 여러 번 fire 해도 골격을 이중 생성하지 않는다.
+  if (ensureInFlight) return ensureInFlight
+  ensureInFlight = doEnsureSchedule().finally(() => {
+    ensureInFlight = null
+  })
+  return ensureInFlight
+}
+async function doEnsureSchedule() {
+  if (!isSupabaseConfigured) return
+  const goal = activeGoal.value
+  if (!goal?.targetDate || !goal.distanceKm) return
+  try {
+    if (!scheduleStore.loaded) await scheduleStore.load(goal.id)
+    const mine = scheduleStore.sessions.filter((s) => s.goalId === goal.id)
+    const hasActive = mine.some(isActiveSession)
+    if (!hasActive) {
+      const drafts = buildPeriodizedSchedule({ goal, profile: memoryStore.memory.athleteProfile, today: today.value })
+      if (drafts.length) await scheduleStore.insertMany(drafts)
+      return
+    }
+    const plan = buildRealignedSchedule(mine, goal, memoryStore.memory.athleteProfile, today.value)
+    if (plan.drafts.length) {
+      await scheduleStore.realign(goal.id, plan.fromDate, plan.drafts)
+      if (plan.deviation.reason) toastStore.success(plan.deviation.reason)
+    }
+  } catch {
+    // best-effort: 스케줄 생성 실패가 대시보드를 막지 않는다.
+  }
+}
+
+const CAROUSEL_DAYS_BEFORE = 2 // 오늘 이전 표시 일수 → 오늘의 인덱스
+const CAROUSEL_DAYS_AFTER = 4
+const scheduleDays = computed<CarouselDay[]>(() => {
+  const out: CarouselDay[] = []
+  for (let offset = -CAROUSEL_DAYS_BEFORE; offset <= CAROUSEL_DAYS_AFTER; offset++) {
+    const d = new Date(today.value)
+    d.setDate(d.getDate() + offset)
+    const date = dateOnly(d)
+    const session = scheduleStore.sessionOnDate(date)
+    const run = runs.value.find((r) => r.date === date) ?? null
+    const isToday = offset === 0
+    const state: CarouselDay['state'] = run
+      ? 'done'
+      : offset < 0
+        ? 'past'
+        : session
+          ? isToday
+            ? 'today'
+            : 'future'
+          : 'rest'
+    const chip = run ? sessionTypeLabel(run.type) : session ? sessionTypeLabel(session.sessionType) : '휴식'
+    out.push({ date, label: `${WEEKDAY_KO[d.getDay()]} ${d.getDate()}`, state, chip })
+  }
+  return out
+})
+const hasSchedule = computed(() => scheduleDays.value.some((d) => d.state !== 'rest' && d.state !== 'past'))
+const activeDayIndex = ref(CAROUSEL_DAYS_BEFORE) // 기본 = 오늘(offset 0)
+const activeDay = computed(() => scheduleDays.value[activeDayIndex.value] ?? null)
+const activeSession = computed<ScheduledSession | null>(() =>
+  activeDay.value ? scheduleStore.sessionOnDate(activeDay.value.date) : null
+)
+const activeDoneRun = computed(() =>
+  activeDay.value ? runs.value.find((r) => r.date === activeDay.value!.date) ?? null : null
+)
+const activeBriefing = computed<SessionBriefing | null>(() => {
+  const session = activeSession.value
+  if (!session || activeDoneRun.value) return null
+  return buildSessionBriefing(session, {
+    goal: activeGoal.value,
+    injury: activeInjury.value,
+    chronic: chronicLoad.value
+  })
+})
+const briefingCeilingText = computed(() =>
+  heartRateModel.value.easyCeilingBpm ? `심박 상한 ${heartRateModel.value.easyCeilingBpm}` : null
+)
+
+function onBriefingAck() {
+  toastStore.success('좋아요, 오늘은 이 훈련에 집중해요.')
+}
+async function onBriefingAlternative(direction: 'easier' | 'harder') {
+  const session = activeSession.value
+  if (!session || intentBusy.value) return
+  intentBusy.value = true
+  try {
+    const { draft, warning, atBoundary } = proposeAlternativeSession(
+      session,
+      activeGoal.value,
+      memoryStore.memory.athleteProfile,
+      direction
+    )
+    if (atBoundary) {
+      toastStore.success(direction === 'easier' ? '이미 가장 가벼운 세션이에요.' : '이미 가장 강한 세션이에요.')
+      return
+    }
+    await scheduleStore.setStatus(session.id, 'superseded')
+    await scheduleStore.insertMany([draft])
+    if (warning) toastStore.success(warning)
+  } catch {
+    toastStore.error('작전을 바꾸지 못했어요.')
+  } finally {
+    intentBusy.value = false
+  }
+}
+
 // Pre-Run 의도(#309): 결정론 신호를 조합해 오늘 의도를 만들고 하루 1건 영속한다.
 const sessionIntentStore = useSessionIntentStore()
 const toastStore = useToastStore()
@@ -143,6 +272,7 @@ watch(
   () => [runStore.loaded, memoryStore.loaded] as const,
   () => {
     void ensureTodayIntent()
+    void ensureSchedule()
   },
   { immediate: true }
 )
@@ -381,7 +511,35 @@ async function applyPhaseTransition() {
 
 <template>
   <PageLayout variant="dashboard">
-    <button class="hero-card hero-card-interactive" type="button" @click="openNextSessionDetail">
+    <!-- 목표 기반 주간 캐러셀 (에픽 #362). 스케줄이 있으면 히어로 대신 표시. -->
+    <WeekTrainingCarousel v-if="hasSchedule" v-model:active-index="activeDayIndex" :days="scheduleDays">
+      <template #default="{ day }">
+        <p class="eyebrow carousel-date">{{ formatDateWithWeekday(day.date) }}</p>
+        <!-- 갔다와서: 디브리핑 (#372) -->
+        <article v-if="day.state === 'done' && activeDoneRun" class="carousel-card">
+          <strong class="carousel-card-title">✅ 디브리핑</strong>
+          <p class="carousel-card-line">{{ activeDoneRun.type }} · {{ activeDoneRun.distanceKm?.toFixed(1) }}km<span v-if="activeDoneRun.durationSec"> · {{ formatDuration(activeDoneRun.durationSec) }}</span></p>
+          <p class="helper">오늘 세션을 마쳤어요. 회복 신호를 살피며 다음 세션을 준비해요.</p>
+        </article>
+        <!-- 나가기 전: 작전 브리핑 -->
+        <SessionBriefingCard
+          v-else-if="activeBriefing && (day.state === 'today' || day.state === 'future')"
+          :briefing="activeBriefing"
+          :session-type="activeSession ? sessionTypeLabel(activeSession.sessionType) : ''"
+          :ceiling-text="briefingCeilingText"
+          :busy="intentBusy"
+          @acknowledge="onBriefingAck"
+          @request-alternative="onBriefingAlternative"
+        />
+        <!-- 휴식/예정 없음 -->
+        <article v-else class="carousel-card">
+          <strong class="carousel-card-title">🌙 휴식</strong>
+          <p class="helper">예정 세션이 없어요. 가볍게 풀거나 쉬어가요.</p>
+        </article>
+      </template>
+    </WeekTrainingCarousel>
+
+    <button v-else class="hero-card hero-card-interactive" type="button" @click="openNextSessionDetail">
       <div class="hero-body">
         <section class="day-block">
           <p class="eyebrow">오늘 · {{ formatDateWithWeekday(todayDate) }}</p>
@@ -719,6 +877,30 @@ async function applyPhaseTransition() {
 </template>
 
 <style scoped>
+/* #362: 주간 캐러셀 슬라이드(디브리핑/휴식) */
+.carousel-date {
+  margin-bottom: var(--space-2, 8px);
+}
+.carousel-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  padding: var(--space-4, 16px);
+  background: var(--color-surface-card);
+  border-radius: var(--radius-card, 20px);
+  box-shadow: var(--shadow-card);
+}
+.carousel-card-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+.carousel-card-line {
+  margin: 0;
+  font-size: var(--text-info-size, 14px);
+  color: var(--color-text);
+}
+
 /* #352: 오늘/다음 훈련 2섹션 카드 */
 .hero-body {
   display: flex;
