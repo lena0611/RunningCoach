@@ -184,13 +184,23 @@ const activeDoneRun = computed(() =>
 const activeBriefing = computed<SessionBriefing | null>(() => {
   const session = activeSession.value
   if (!session || activeDoneRun.value) return null
+  // 오늘 세션이면 SessionIntent(의도·성공기준·타겟)를 흡수해 단일 카드로(중복 의도 카드 제거).
+  const intent =
+    activeDay.value?.state === 'today' && activePlannedIntent.value
+      ? {
+          why: activePlannedIntent.value.why,
+          successCriteria: activePlannedIntent.value.successCriteria,
+          targets: activePlannedIntent.value.targets
+        }
+      : null
   return buildSessionBriefing(session, {
     goal: activeGoal.value,
     injury: activeInjury.value,
     chronic: chronicLoad.value,
     vdot: resolvePaceModel(memoryStore.memory.athleteProfile).vdot,
     adaptiveProfile: memoryStore.memory.adaptiveTrainingProfile,
-    progression: adaptiveProgress.value.criteria
+    progression: adaptiveProgress.value.criteria,
+    intent
   })
 })
 const briefingCeilingText = computed(() =>
@@ -589,7 +599,8 @@ async function applyPhaseTransition() {
       @close="phaseModalOpen = false"
     />
 
-    <SectionGroup v-if="activePlannedIntent" title="훈련 의도" :surface="false">
+    <!-- 캐러셀 브리핑이 의도·성공기준·타겟을 흡수하므로, 폴백(스케줄 없음) 때만 옛 의도 카드 표시(중복 제거). -->
+    <SectionGroup v-if="activePlannedIntent && !hasSchedule" title="훈련 의도" :surface="false">
       <PreRunIntentCard
         :intent="activePlannedIntent"
         :busy="intentBusy"

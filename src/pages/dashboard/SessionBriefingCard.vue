@@ -33,6 +33,12 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
 
     <strong class="brief-title">🏃 {{ sessionType }}</strong>
     <p class="brief-goal">🎯 {{ briefing.goalLine }}</p>
+    <p v-if="briefing.targetsLine" class="brief-goal">🎯 타겟 {{ briefing.targetsLine }}</p>
+
+    <div v-if="briefing.why" class="brief-block">
+      <span class="brief-label">왜 오늘 이걸</span>
+      <p class="brief-text">{{ briefing.why }}</p>
+    </div>
 
     <div class="brief-block">
       <span class="brief-label">훈련 효과</span>
@@ -43,6 +49,13 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
       <span class="brief-label">어떻게 뛰나</span>
       <ul class="brief-list">
         <li v-for="(line, i) in briefing.execution" :key="i">{{ line }}</li>
+      </ul>
+    </div>
+
+    <div v-if="briefing.successCriteria.length" class="brief-block">
+      <span class="brief-label">성공 기준</span>
+      <ul class="brief-list">
+        <li v-for="(c, i) in briefing.successCriteria" :key="i">{{ c }}</li>
       </ul>
     </div>
 

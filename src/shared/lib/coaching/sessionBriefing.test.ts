@@ -146,6 +146,30 @@ describe('buildSessionBriefing', () => {
     expect(steady.execution.join(' ')).toContain('네거티브')
   })
 
+  it('SessionIntent 흡수: 의도(why)·성공기준·타겟 한 카드로 (수락 결정 지원)', () => {
+    const b = buildSessionBriefing(session({ sessionType: 'Easy + Strides' }), {
+      goal,
+      injury: null,
+      chronic: noChronic,
+      intent: {
+        why: '유산소 베이스가 약해 오늘 회복·기반을 다집니다.',
+        successCriteria: ['평균심박 138~148', 'RPE 3~4'],
+        targets: { hrCeilingBpm: 152, hrRange: [138, 148], rpeRange: [3, 4], paceHold: '일정 유지' }
+      }
+    })
+    expect(b.why).toContain('유산소 베이스')
+    expect(b.successCriteria).toContain('RPE 3~4')
+    expect(b.targetsLine).toContain('심박 138~148')
+    expect(b.targetsLine).toContain('RPE 3~4')
+  })
+
+  it('의도 없으면 why/성공기준 비고 카드가 깨지지 않는다(미래 슬라이드)', () => {
+    const b = buildSessionBriefing(session({ sessionType: 'Tempo', keySession: true }), { goal, injury: null, chronic: noChronic })
+    expect(b.why).toBe('')
+    expect(b.successCriteria).toEqual([])
+    expect(b.targetsLine).toBe('')
+  })
+
   it('Tempo 는 Daniels 근거가 붙는다', () => {
     const b = buildSessionBriefing(session({ sessionType: 'Tempo', keySession: true }), { goal, injury: null, chronic: noChronic })
     expect(b.evidence.some((e) => e.method.includes('Daniels'))).toBe(true)
