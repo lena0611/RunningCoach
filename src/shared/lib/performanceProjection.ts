@@ -30,11 +30,18 @@ export type RaceProjection = {
   readinessLevel: '충분' | '보통' | '부족'
   readinessSummary: string
   factors: ProjectionReadinessFactor[]
+  /**
+   * 신뢰구간(sec, [빠름, 느림]) — #367. 단일 기록 외삽 하나로 단정하지 않는다.
+   * 다중 기록 합의 + 거리 외삽 보정 center 둘레로, 외삽 거리·신뢰도·훈련량 적정도에 따라 폭이 넓어진다.
+   * (근거: Vickers&Vertosick 2016, Keogh&Smyth 2019 — running-coaching-standards "목표 달성 예측")
+   */
+  projectedRangeSec: [number, number] | null
 }
 
 // #312/#98: 대시보드와 코칭이 같은 6요소 전망을 쓰도록 coach-run 에 주입하는 compact 요약.
 export type CoachGoalProjectionSummary = {
   projectedSec: number | null
+  projectedRangeSec: [number, number] | null
   readinessScore: number | null
   readinessLevel: RaceProjection['readinessLevel'] | null
   deltaSec: number | null
@@ -44,6 +51,7 @@ export function summarizeGoalProjectionForCoach(projection: RaceProjection | nul
   if (!projection) return null
   return {
     projectedSec: projection.current?.projectedSec ?? null,
+    projectedRangeSec: projection.projectedRangeSec,
     readinessScore: projection.readinessScore,
     readinessLevel: projection.readinessLevel,
     deltaSec: projection.deltaSec
@@ -88,6 +96,7 @@ export function getRaceProjection(
   const factors = buildReadinessFactors(runs, targetDistanceKm, activeGoal?.targetDurationSec ?? null, current, today, activeInjury ?? null, ageWeight, ceilings)
   const readinessScore = weightedReadinessScore(factors)
   const readinessLevel = getReadinessLevel(readinessScore)
+  const projectedRangeSec = computeProjectionRange(signals, current, targetDistanceKm, factors)
 
   return {
     targetDistanceKm,
@@ -98,8 +107,56 @@ export function getRaceProjection(
     readinessScore,
     readinessLevel,
     readinessSummary: summarizeReadiness(readinessScore, factors),
-    factors
+    factors,
+    projectedRangeSec
   }
+}
+
+/**
+ * 다중 기록 합의 + 거리 외삽 보정 center 와 신뢰구간(sec, [빠름, 느림])을 산출한다 (#367).
+ * 단일 기록 외삽(current.projectedSec) 하나에 의존하지 않는다.
+ */
+export function computeProjectionRange(
+  signals: RaceProjectionSignal[],
+  current: RaceProjectionSignal,
+  targetDistanceKm: number,
+  factors: ProjectionReadinessFactor[]
+): [number, number] | null {
+  if (!signals.length) return null
+  const recent = signals.slice(0, 6)
+
+  // 1) 다중 기록 가중 합의(신뢰도·거리 근접도로 가중) — 단일 best 의존 완화.
+  const weightOf = (s: RaceProjectionSignal): number => {
+    const conf = s.confidence === 'high' ? 3 : s.confidence === 'medium' ? 2 : 1
+    const proximity = 1 / (1 + Math.abs(s.distanceKm - targetDistanceKm) / Math.max(targetDistanceKm, 1))
+    return conf * proximity
+  }
+  const wSum = recent.reduce((sum, s) => sum + weightOf(s), 0)
+  const consensus = wSum > 0 ? recent.reduce((sum, s) => sum + s.projectedSec * weightOf(s), 0) / wSum : current.projectedSec
+
+  // 2) 거리 외삽 보정: Riegel(지수 1.06)은 목표가 출처보다 훨씬 길면 속도를 과대(시간을 과소)예측.
+  //    출처 거리 중앙값 대비 목표가 길수록 center 를 보수적으로 늦춘다.
+  const medianSourceKm = median(recent.map((s) => s.distanceKm))
+  const ratio = medianSourceKm > 0 ? targetDistanceKm / medianSourceKm : 1
+  const extrapolation = Math.max(0, Math.log(Math.max(ratio, 1)))
+  const center = consensus * (1 + extrapolation * 0.04)
+
+  // 3) 신뢰구간 반폭: 기본 + 외삽 거리 + 신뢰도 부족 + 훈련량(유산소 베이스) 부족.
+  const confScore = current.confidence === 'high' ? 0 : current.confidence === 'medium' ? 0.04 : 0.09
+  const aerobic = factors.find((f) => f.key === 'aerobicBase')?.score ?? 50
+  const volumePenalty = clamp((75 - aerobic) / 75, 0, 1) * 0.06
+  const sampleBonus = recent.length >= 3 ? 0 : 0.03
+  const halfFraction = clamp(0.04 + extrapolation * 0.05 + confScore + volumePenalty + sampleBonus, 0.03, 0.3)
+  const half = Math.round(center * halfFraction)
+
+  return [Math.max(1, Math.round(center) - half), Math.round(center) + half]
+}
+
+function median(values: number[]): number {
+  if (!values.length) return 0
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
 }
 
 function chooseCurrentSignal(signals: RaceProjectionSignal[], targetDurationSec: number | null): RaceProjectionSignal {

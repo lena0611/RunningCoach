@@ -12,6 +12,7 @@ function projection(overrides: Partial<RaceProjection> = {}): RaceProjection {
     readinessLevel: '보통',
     readinessSummary: '',
     factors: [],
+    projectedRangeSec: [3700, 3980],
     ...overrides
   }
 }
@@ -19,7 +20,7 @@ function projection(overrides: Partial<RaceProjection> = {}): RaceProjection {
 describe('summarizeGoalProjectionForCoach', () => {
   it('대시보드 projection 의 핵심 수치를 그대로 요약(통일 보장)', () => {
     const s = summarizeGoalProjectionForCoach(projection())
-    expect(s).toEqual({ projectedSec: 3840, readinessScore: 72, readinessLevel: '보통', deltaSec: -120 })
+    expect(s).toEqual({ projectedSec: 3840, projectedRangeSec: [3700, 3980], readinessScore: 72, readinessLevel: '보통', deltaSec: -120 })
   })
 
   it('projection 이 없으면 null', () => {
