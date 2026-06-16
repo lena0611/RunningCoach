@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { TrainingInjuryItem } from '@/entities/training-memory/model'
 import type { ChronicLoadTrend } from '@/shared/lib/runStats'
-import { buildRestGuidance } from '@/shared/lib/coaching/restGuidance'
+import { buildRestGuidance, evaluateExtraRun } from '@/shared/lib/coaching/restGuidance'
 
 const stable: ChronicLoadTrend = { status: 'stable', increasePct: 5, last30Km: 100, prev30Km: 95, spikeThreshold: 50, risingThreshold: 30 }
 
@@ -35,5 +35,30 @@ describe('buildRestGuidance', () => {
     const g = buildRestGuidance(null, spike)
     expect(g.items.some((i) => i.includes('완전 휴식'))).toBe(true)
     expect(g.purpose).toContain('55%')
+  })
+})
+
+describe('evaluateExtraRun (예정에 없던 추가 런 평가)', () => {
+  it('가벼운 추가(Easy)+부하 안정+부상 없음 → 인정 톤(주의 아님)', () => {
+    const e = evaluateExtraRun({ type: 'Easy' }, null, stable)
+    expect(e.caution).toBe(false)
+    expect(e.headline).toContain('추가 런')
+  })
+
+  it('고강도 추가(Tempo) → 회복 건너뜀 주의', () => {
+    const e = evaluateExtraRun({ type: 'Tempo' }, null, stable)
+    expect(e.caution).toBe(true)
+    expect(e.note).toContain('회복')
+  })
+
+  it('부상 중 추가 런 → 통증 주의', () => {
+    const e = evaluateExtraRun({ type: 'Easy' }, injury({ area: '족저근막', severity: 2 }), stable)
+    expect(e.caution).toBe(true)
+    expect(e.note).toContain('족저근막')
+  })
+
+  it('부하 급증 중 가벼운 추가도 주의', () => {
+    const spike: ChronicLoadTrend = { status: 'spike', increasePct: 55, last30Km: 150, prev30Km: 97, spikeThreshold: 50, risingThreshold: 30 }
+    expect(evaluateExtraRun({ type: 'Easy' }, null, spike).caution).toBe(true)
   })
 })

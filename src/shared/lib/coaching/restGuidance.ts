@@ -18,6 +18,52 @@ export type RestGuidance = {
   evidence: EvidenceRef[]
 }
 
+/** 예정에 없던 추가 런(회복일에 뛴 경우 등) 평가. */
+export type ExtraRunEvaluation = {
+  headline: string
+  note: string
+  /** 회복을 건너뛴 비용이 큰지(부상·고부하·고강도) — true면 주의 톤. */
+  caution: boolean
+}
+
+const LOW_INTENSITY_TYPES: ReadonlySet<string> = new Set(['Easy', 'Recovery', 'Easy + Strides'])
+
+/**
+ * 예정에 없던 추가 런(스케줄 세션에 귀속되지 않음 = 따라잡기 아님)을 코치 관점에서 평가한다.
+ * 전략적 회복일을 건너뛴 비용을 부상·부하·강도로 판단해 인정/주의 톤을 결정한다.
+ */
+export function evaluateExtraRun(
+  run: { type: string },
+  injury: TrainingInjuryItem | null,
+  chronic: ChronicLoadTrend | null
+): ExtraRunEvaluation {
+  const injuryActive = Boolean(injury && (injury.status === 'active' || injury.status === 'monitoring'))
+  const loadHigh = Boolean(chronic && (chronic.status === 'spike' || chronic.status === 'rising'))
+  const isLight = LOW_INTENSITY_TYPES.has(run.type)
+  const headline = '🎁 예정에 없던 추가 런'
+
+  if (injuryActive) {
+    const area = injury!.area || '관리 부위'
+    return {
+      headline,
+      note: `${area} 관리 중인데 회복일에 추가로 뛰었어요. 통증 신호를 꼭 확인하고, 무리였다면 다음 회복일은 지키세요.`,
+      caution: true
+    }
+  }
+  if (loadHigh || !isLight) {
+    return {
+      headline,
+      note: '오늘은 전략적 회복일이었어요. 회복을 건너뛴 셈이라 누적 피로를 살피고, 다음 며칠은 강도를 낮추는 편이 안전해요.',
+      caution: true
+    }
+  }
+  return {
+    headline,
+    note: '가벼운 추가 런이라 큰 부담은 아니에요. 다만 회복일이 줄었으니 다음 회복은 꼭 챙기세요.',
+    caution: false
+  }
+}
+
 const REST_EVIDENCE: EvidenceRef = {
   method: '회복은 훈련의 일부 (World Athletics)',
   summary: '휴식·회복은 훈련 자극을 적응으로 바꾸는 필수 단계. 전략적 휴식이 다음 세션 품질을 만든다.'
