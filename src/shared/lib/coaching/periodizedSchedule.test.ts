@@ -62,6 +62,10 @@ describe('allocatePhases', () => {
   it('아주 짧은 창은 Taper 로 압축', () => {
     expect(allocatePhases(2, 10)).toEqual(['Taper', 'Taper'])
   })
+
+  it('충분히 길면 Threshold 블록을 생성한다(B2: dead branch 아님)', () => {
+    expect(allocatePhases(16, 10)).toContain('Threshold')
+  })
 })
 
 describe('buildPeriodizedSchedule', () => {
@@ -93,6 +97,19 @@ describe('buildPeriodizedSchedule', () => {
     // Phase 진행
     expect(sched[0].phase).toBe('Base')
     expect(sched[sched.length - 1].phase).toBe('Taper')
+  })
+
+  it('첫 주가 비지 않는다(B1: 금요일 시작도 7일 내 세션 존재)', () => {
+    const friday = new Date('2026-01-09T00:00:00') // 금요일
+    const sched = buildPeriodizedSchedule({
+      goal: goal({ targetDate: '2026-04-04', distanceKm: 10 }),
+      profile: profile({ weeklyRunDaysTarget: 4 }),
+      today: friday
+    })
+    expect(sched.length).toBeGreaterThan(0)
+    // 첫 세션이 시작일 이후 7일 이내
+    expect(sched[0].date >= '2026-01-09').toBe(true)
+    expect(sched[0].date <= '2026-01-15').toBe(true)
   })
 
   it('중급(10K, PB 있음): 페이스대가 채워진다(measured)', () => {

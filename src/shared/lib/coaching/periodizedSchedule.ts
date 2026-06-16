@@ -44,8 +44,11 @@ export function allocatePhases(totalWeeks: number, goalDistanceKm: number): Trai
 
   const taper = Math.min(taperWeeks, Math.max(1, Math.floor(totalWeeks * 0.2)))
   let remaining = totalWeeks - taper
-  const raceSpecific = Math.min(raceSpecificWeeks, Math.max(0, Math.floor(remaining * 0.35)))
+  const raceSpecific = Math.min(raceSpecificWeeks, Math.max(0, Math.floor(remaining * 0.3)))
   remaining -= raceSpecific
+  // Threshold(역치 집중) 블록 — Daniels 진행 Base→Build→Threshold→Race Specific.
+  const threshold = remaining >= 3 ? Math.max(1, Math.floor(remaining * 0.25)) : 0
+  remaining -= threshold
   // 남는 주를 base(약간 더)·build 로 분배.
   const base = Math.ceil(remaining * 0.55)
   const build = remaining - base
@@ -53,6 +56,7 @@ export function allocatePhases(totalWeeks: number, goalDistanceKm: number): Trai
   return [
     ...Array(base).fill('Base'),
     ...Array(build).fill('Build'),
+    ...Array(threshold).fill('Threshold'),
     ...Array(raceSpecific).fill('Race Specific'),
     ...Array(taper).fill('Taper')
   ] as TrainingPhaseName[]
@@ -84,13 +88,18 @@ function weeklySessionTypes(phase: TrainingPhaseName, runDays: number): RunType[
     ? ['Recovery', 'Easy', 'Easy + Strides', 'Easy', 'Recovery']
     : ['Easy + Strides', 'Easy', 'Easy', 'Easy + Strides', 'Recovery']
 
-  const types = [...quality]
+  // 주간 polarization(80/20) 보호: quality 세션을 runDays-1 이하로 캡(최소 1 easy 보장).
+  // 단 롱런은 반드시 보존하므로 캡이 1 미만이 되지 않게 한다.
+  const maxQuality = Math.max(1, runDays - 1)
+  const cappedQuality = quality.slice(0, maxQuality)
+
+  const types = [...cappedQuality]
   let i = 0
   while (types.length < runDays && i < easyFillers.length * 2) {
     types.push(easyFillers[i % easyFillers.length])
     i++
   }
-  return types.slice(0, Math.max(runDays, quality.length))
+  return types.slice(0, Math.max(runDays, cappedQuality.length))
 }
 
 /** 키세션(롱런/quality)이 연속되지 않도록 hard/easy 교대로 요일 슬롯에 배치. */
@@ -103,7 +112,6 @@ function placeOnDays(types: RunType[], runDays: number, longRunDayIndex: number)
   const easy = types.filter((t) => !QUALITY_TYPES.has(t))
 
   // 롱런을 롱런 요일에.
-  const ordered: RunType[] = []
   const longRunSlotPos = slots.indexOf(longRunDayIndex)
   // hard/easy 교대 시퀀스 구성: 롱런 외 quality 를 easy 사이에 끼워넣는다.
   const nonLongQuality = quality.filter((t) => t !== longType)
@@ -129,7 +137,6 @@ function placeOnDays(types: RunType[], runDays: number, longRunDayIndex: number)
     placement.set(dayIdx, sequence[seqIdx % Math.max(sequence.length, 1)] ?? 'Easy')
     seqIdx++
   }
-  void ordered
   return placement
 }
 
@@ -145,23 +152,30 @@ function pickDaySlots(runDays: number, longRunDayIndex: number): number[] {
   return [...chosen].sort((a, b) => a - b)
 }
 
-/** 주간 목표 볼륨(km). base→peak 점진 증가, 4주마다 회복주, 테이퍼 감량. */
+/**
+ * 주간 목표 볼륨(km). base→peak 점진 증가, 4주마다 회복주(바닥은 base 이상), 테이퍼는 주차별 점진 감량.
+ * taperPos: 테이퍼 내 위치(0=첫 테이퍼주), taperLen: 테이퍼 총 주수. 테이퍼가 아니면 둘 다 0.
+ */
 function weeklyVolumeKm(
   weekIndex: number,
   phase: TrainingPhaseName,
   baseVolumeKm: number,
   peakVolumeKm: number,
-  totalWeeks: number
+  totalWeeks: number,
+  taperPos: number,
+  taperLen: number
 ): number {
   if (phase === 'Taper') {
-    // 테이퍼: 피크에서 점진 감량(주차 진행할수록 더 줄임).
-    return Math.round(peakVolumeKm * 0.6)
+    // 테이퍼: 0.75 → 0.45 로 주차 진행할수록 더 감량(피크 대비).
+    const frac = taperLen > 1 ? taperPos / (taperLen - 1) : 0
+    const factor = 0.75 - 0.3 * frac
+    return Math.round(peakVolumeKm * factor)
   }
   if (phase === 'Recovery') return Math.round(baseVolumeKm * 0.6)
-  // base→peak 선형 증가에 4주마다 회복주(-20%).
+  // base→peak 선형 증가에 4주마다 회복주(-20%, 단 base 미만으로는 안 내림).
   const progress = totalWeeks > 1 ? weekIndex / (totalWeeks - 1) : 1
   let volume = baseVolumeKm + (peakVolumeKm - baseVolumeKm) * progress
-  if ((weekIndex + 1) % 4 === 0) volume *= 0.8 // 회복주
+  if ((weekIndex + 1) % 4 === 0) volume = Math.max(baseVolumeKm, volume * 0.8) // 회복주(바닥 base)
   return Math.round(volume)
 }
 
@@ -265,17 +279,21 @@ export function buildPeriodizedSchedule(input: PeriodizationInput): ScheduledSes
   const baseVolumeKm = Math.max(goal.distanceKm * 2.5, 18)
   const peakVolumeKm = Math.max(goal.distanceKm * 4, 30)
 
+  const firstTaperWeek = phases.indexOf('Taper')
+  const taperLen = phases.filter((p) => p === 'Taper').length
+
   const drafts: ScheduledSessionDraft[] = []
   for (let week = 0; week < phases.length; week++) {
     const phase = phases[week]
     const types = weeklySessionTypes(phase, runDays)
     const placement = placeOnDays(types, runDays, longRunDayIndex)
-    const weeklyVol = weeklyVolumeKm(week, phase, baseVolumeKm, peakVolumeKm, totalWeeks)
+    const taperPos = phase === 'Taper' && firstTaperWeek >= 0 ? week - firstTaperWeek : 0
+    const weeklyVol = weeklyVolumeKm(week, phase, baseVolumeKm, peakVolumeKm, totalWeeks, taperPos, taperLen)
     const placedTypes = [...placement.values()]
 
     for (const [dayIdx, type] of placement) {
-      const date = dateForWeekDay(start, week, dayIdx, longRunDayIndex)
-      if (date < start || date > target) continue
+      const date = dateForWeekDay(start, week, dayIdx)
+      if (date > target) continue
       const distance = sessionDistance(type, weeklyVol, placedTypes.length)
       drafts.push({
         goalId: goal.id ?? null,
@@ -302,13 +320,15 @@ function dedupeByDate(drafts: ScheduledSessionDraft[]): ScheduledSessionDraft[] 
   return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date))
 }
 
-/** 주차(week) + 요일 인덱스 → 실제 날짜. 0주차는 start 가 속한 주. */
-function dateForWeekDay(start: Date, week: number, dayIndex: number, longRunDayIndex: number): Date {
-  void longRunDayIndex
-  // start 가 속한 주의 일요일(요일 인덱스 0)을 기준점으로.
+/**
+ * 주차(week) + 요일 인덱스 → 실제 날짜. 주는 **오늘(start) 기준 7일 롤링 윈도우**다.
+ * week 0 = [start..start+6] 이므로 시작일 이전 요일을 버려 첫 주가 비는 문제가 없다(B1 수정).
+ * 요일 인덱스는 윈도우 안에서 다음 해당 요일로 매핑한다.
+ */
+function dateForWeekDay(start: Date, week: number, dayIndex: number): Date {
   const startDow = start.getDay()
-  const weekStart = new Date(start.getTime() - startDow * MS_PER_DAY)
-  return new Date(weekStart.getTime() + (week * 7 + dayIndex) * MS_PER_DAY)
+  const offsetInWeek = (dayIndex - startDow + 7) % 7
+  return new Date(start.getTime() + (week * 7 + offsetInWeek) * MS_PER_DAY)
 }
 
 function startOfDay(d: Date): Date {

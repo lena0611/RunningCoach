@@ -145,8 +145,10 @@ export function computeProjectionRange(
   const confScore = current.confidence === 'high' ? 0 : current.confidence === 'medium' ? 0.04 : 0.09
   const aerobic = factors.find((f) => f.key === 'aerobicBase')?.score ?? 50
   const volumePenalty = clamp((75 - aerobic) / 75, 0, 1) * 0.06
-  const sampleBonus = recent.length >= 3 ? 0 : 0.03
-  const halfFraction = clamp(0.04 + extrapolation * 0.05 + confScore + volumePenalty + sampleBonus, 0.03, 0.3)
+  // 표본 부족 페널티: 단일 기록(n=1)은 합의가 불가능하므로 크게, n=2 는 중간, n>=3 는 0.
+  // (value #3 "다중 기록" 의도 — 기록 1개 외삽에 좁은 신뢰구간을 주지 않는다.)
+  const samplePenalty = recent.length <= 1 ? 0.1 : recent.length === 2 ? 0.05 : 0
+  const halfFraction = clamp(0.04 + extrapolation * 0.05 + confScore + volumePenalty + samplePenalty, 0.03, 0.35)
   const half = Math.round(center * halfFraction)
 
   return [Math.max(1, Math.round(center) - half), Math.round(center) + half]

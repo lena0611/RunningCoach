@@ -56,8 +56,12 @@ export async function updateScheduledSessionStatus(
   status: ScheduledSessionStatus,
   runId: string | null = null
 ): Promise<ScheduledSession> {
-  const patch: Record<string, unknown> = { status, updated_at: new Date().toISOString() }
-  if (status === 'done') patch.run_id = runId
+  // done 이면 매칭 runId 부착, 그 외(missed/superseded/planned 복귀)는 stale runId 제거.
+  const patch: Record<string, unknown> = {
+    status,
+    updated_at: new Date().toISOString(),
+    run_id: status === 'done' ? runId : null
+  }
   const { data, error } = await requireSupabase()
     .from('training_schedule')
     .update(patch)
