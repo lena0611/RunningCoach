@@ -12,7 +12,24 @@
 import type { RunType } from '@/entities/run/model'
 import type { ScheduledSession } from '@/entities/training-schedule/model'
 import type { AdaptiveTrainingProfile, TrainingGoal, TrainingInjuryItem } from '@/entities/training-memory/model'
+import type { SessionIntentTargets } from '@/entities/session-intent/model'
 import type { ChronicLoadTrend } from '@/shared/lib/runStats'
+
+/** SessionIntent(의도)에서 가져오는 결정 지원 정보. 브리핑이 흡수해 단일 카드로 보여준다. */
+export type BriefingIntent = {
+  why: string
+  successCriteria: string[]
+  targets: SessionIntentTargets
+}
+
+function targetsLineFrom(targets: SessionIntentTargets | null | undefined): string {
+  if (!targets) return ''
+  const parts: string[] = []
+  if (targets.hrRange) parts.push(`심박 ${targets.hrRange[0]}~${targets.hrRange[1]}`)
+  else if (targets.hrCeilingBpm) parts.push(`심박 ${targets.hrCeilingBpm} 이하`)
+  if (targets.rpeRange) parts.push(`RPE ${targets.rpeRange[0]}~${targets.rpeRange[1]}`)
+  return parts.join(' · ')
+}
 
 type ProgressionStatus = 'ready' | 'watch' | 'blocked'
 
@@ -52,10 +69,16 @@ export type EvidenceRef = {
 export type SessionBriefing = {
   /** ① 이번 훈련 목표(세션 제목 + 목표 연계). */
   goalLine: string
-  /** ③ 훈련 효과(왜 이걸 하나). */
+  /** 왜 오늘 이걸 하나(의도) — SessionIntent.why 흡수. 없으면 ''. */
+  why: string
+  /** ③ 훈련 효과(생리적 효과). */
   effect: string
   /** ② 세부 이행지침(어떻게 뛰나). 1~3줄. */
   execution: string[]
+  /** 성공 기준(수락 후 무엇을 달성하면 OK) — SessionIntent.successCriteria 흡수. */
+  successCriteria: string[]
+  /** 목표 심박/RPE 타겟 한 줄(예: "심박 152 이하 · RPE 3~4"). 없으면 ''. */
+  targetsLine: string
   /** ④ 조심할 점(부상·부하). 없으면 빈 배열. */
   cautions: string[]
   /** 근거 단서 → 바텀시트용 방법론 귀속. */
@@ -277,6 +300,8 @@ export type SessionBriefingContext = {
   adaptiveProfile?: AdaptiveTrainingProfile | null
   /** 라이브 평가된 수행 게이트(#336, evaluateProgressionCriteria/coachAdaptiveProgress). 누적 수행 이력 반영. */
   progression?: ProgressionSignal[] | null
+  /** 오늘 세션의 SessionIntent(#308/#309) — 의도(why)·성공기준·타겟. 브리핑이 흡수(중복 카드 제거). */
+  intent?: BriefingIntent | null
 }
 
 /** ScheduledSession + 장기맥락 → 4요소 작전 브리핑(결정론). */
@@ -301,8 +326,11 @@ export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBrie
 
   return {
     goalLine,
+    why: ctx.intent?.why ?? '',
     effect: effect.text,
     execution,
+    successCriteria: ctx.intent?.successCriteria ?? [],
+    targetsLine: targetsLineFrom(ctx.intent?.targets),
     cautions: caution.lines,
     evidence
   }
