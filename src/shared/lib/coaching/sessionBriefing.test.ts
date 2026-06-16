@@ -101,6 +101,22 @@ describe('buildSessionBriefing', () => {
     expect(b.cautions.some((c) => c.includes('55%'))).toBe(true)
   })
 
+  it('#354 정렬: Easy/Recovery 는 RPE 우선 프레임 + 근거', () => {
+    for (const t of ['Easy', 'Recovery', 'Easy + Strides'] as const) {
+      const b = buildSessionBriefing(session({ sessionType: t }), { goal, injury: null, chronic: noChronic })
+      expect(b.execution.some((l) => l.includes('RPE'))).toBe(true)
+      expect(b.evidence.some((e) => e.method.includes('RPE'))).toBe(true)
+    }
+  })
+
+  it('#354 정렬: LSD 세분화(Standard/Recovery/Progressive), Steady Long 효율·네거티브 보정', () => {
+    const lsd = buildSessionBriefing(session({ sessionType: 'LSD', keySession: true }), { goal, injury: null, chronic: noChronic })
+    expect(lsd.execution.join(' ')).toContain('Standard LSD')
+    expect(lsd.execution.join(' ')).toContain('Progressive')
+    const steady = buildSessionBriefing(session({ sessionType: 'Steady Long', keySession: true }), { goal, injury: null, chronic: noChronic })
+    expect(steady.execution.join(' ')).toContain('네거티브')
+  })
+
   it('Tempo 는 Daniels 근거가 붙는다', () => {
     const b = buildSessionBriefing(session({ sessionType: 'Tempo', keySession: true }), { goal, injury: null, chronic: noChronic })
     expect(b.evidence.some((e) => e.method.includes('Daniels'))).toBe(true)

@@ -71,6 +71,10 @@ const EVIDENCE = {
   progressiveLoad: {
     method: '점진적 부하',
     summary: '볼륨·강도·빈도를 동시에 크게 올리지 않는다. 최근 부하 추세와 통증 신호를 함께 본다.'
+  },
+  rpePriority: {
+    method: '강도 판정 RPE 우선 (#354)',
+    summary: 'Easy/Recovery는 심박·페이스보다 RPE·호흡을 우선해 강도를 판정한다. 상한 소폭 초과도 RPE 낮으면 인정.'
   }
 } as const
 
@@ -98,6 +102,10 @@ function effectFor(type: RunType): { text: string; evidence: EvidenceRef } {
 
 /** 전족(스트라이드/빠른 달리기)에 직접 부하가 가는 부위 — 이 부위 통증이면 스트라이드를 보류한다. */
 const FOREFOOT_LOAD_AREA = /족저|발|아킬레스|종아리|발목/
+
+/** #354 정렬: Easy/Recovery 강도 판정은 RPE>호흡>심박>페이스 순. 프리런 지침도 같은 프레임으로 안내. */
+const RPE_PRIORITY_LINE =
+  '강도 판정은 RPE·호흡 우선(심박·페이스는 보조) — 상한을 살짝 넘어도 편하면 유지, RPE가 높으면 페이스를 낮춰요'
 
 /**
  * 스트라이드 반복수를 단계·체력·부상에서 **산출**한다(고정값 아님).
@@ -169,6 +177,7 @@ function executionFor(
   switch (sessionType) {
     case 'Easy + Strides': {
       lines.push(`본런: 편한 대화 페이스${pace ? ` ${pace}` : ''}${amount ? `, ${amount}` : ''}`)
+      lines.push(RPE_PRIORITY_LINE) // #354 정렬: 강도 판정 RPE>호흡>심박>페이스
       const s = computeStrides(phase, vdot, injury, progression)
       if (s.hold) lines.push(s.holdReason)
       else lines.push(`마무리 스트라이드: 15~20초 빠르고 편하게 × ${s.reps}회, 사이 60~90초 완전 회복`)
@@ -181,12 +190,23 @@ function executionFor(
       break
     }
     case 'LSD':
+      // #354 정렬: LSD 는 Recovery/Standard/Progressive 로 판정됨. 프리런은 Standard 의도 + 유연 옵션.
+      lines.push(`${amount ? `${amount} ` : ''}대화 가능 강도${pace ? ` ${pace}` : ''}, 심박 안정 우선 (Standard LSD)`)
+      lines.push('컨디션 좋으면 후반 자연 페이스업(Progressive)도 OK, 무리면 더 느린 Recovery LSD로 낮춰도 돼요')
+      lines.push('판정 기준: 평균심박 하나가 아니라 지속시간·RPE·심박 드리프트·페이스 안정성을 함께')
+      break
     case 'Steady Long':
-      lines.push(`${amount ? `${amount} ` : ''}대화 가능 강도${pace ? ` ${pace}` : ''}, 심박 안정 우선`)
-      lines.push(sessionType === 'Steady Long' ? '후반 자연 가속만 허용, 급락 금지' : '후반 급락 없이 일정하게')
+      // #354 정렬: 전후반 심박차만으로 판단 안 함 — 후반 가속 보정한 효율을 본다.
+      lines.push(`${amount ? `${amount} ` : ''}일정한 강도${pace ? ` ${pace}` : ''}, 후반 효율 위주`)
+      lines.push('잘 통제된 네거티브 스플릿(후반 살짝 가속) 환영 — 후반 가속분은 드리프트에서 보정해 평가해요')
       break
     case 'Recovery':
       lines.push(`아주 느리게${pace ? ` ${pace}` : ''}${amount ? `, ${amount}` : ''} — 회복이 목적`)
+      lines.push(RPE_PRIORITY_LINE)
+      break
+    case 'Easy':
+      lines.push(`편한 대화 가능 페이스${pace ? ` ${pace}` : ''}${amount ? `, ${amount}` : ''}`)
+      lines.push(RPE_PRIORITY_LINE)
       break
     case 'Race':
       lines.push(`목표 레이스 페이스${pace ? ` ${pace}` : ''} 점검${amount ? `, ${amount}` : ''}`)
@@ -251,9 +271,11 @@ export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBrie
   const execution = executionFor(session, ctx.vdot ?? null, ctx.injury, progression, tempoCeilingBpm)
   const caution = cautionsFor(session, ctx.injury, ctx.chronic)
 
+  const easyFamily = session.sessionType === 'Easy' || session.sessionType === 'Recovery' || session.sessionType === 'Easy + Strides'
   const evidence: EvidenceRef[] = dedupeEvidence([
     effect.evidence,
     session.sessionType === 'Tempo' || session.sessionType === 'Race' ? EVIDENCE.daniels : null,
+    easyFamily ? EVIDENCE.rpePriority : null,
     caution.evidence
   ])
 
