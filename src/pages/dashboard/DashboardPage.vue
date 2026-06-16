@@ -36,7 +36,8 @@ import WeekTrainingCarousel, { type CarouselDay } from './WeekTrainingCarousel.v
 import SessionBriefingCard from './SessionBriefingCard.vue'
 import SessionDebriefCard from './SessionDebriefCard.vue'
 import { buildRestGuidance, evaluateExtraRun } from '@/shared/lib/coaching/restGuidance'
-import { analyzeExtraRunTrend, buildExtraRunInquiry } from '@/shared/lib/coaching/extraRunTrend'
+import { collectCoachMoments } from '@/shared/lib/coaching/coachMoments'
+import CoachMomentCard from './CoachMomentCard.vue'
 import { computeIntentFulfillment } from '@/entities/session-intent/computeIntentFulfillment'
 import { evaluateSteadyLong, STEADY_LONG_GRADE_LABEL, evaluateLsd, LSD_KIND_LABEL } from '@/shared/lib/coaching/sessionQuality'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
@@ -259,15 +260,30 @@ const debriefNextLine = computed(() => {
 // 전략적 휴식(#378): 휴식날도 회복·부상관리·근력 보강 안내
 const restGuidance = computed(() => buildRestGuidance(activeInjury.value, chronicLoad.value))
 
-// 추가 런 추세(#380 후속): 스케줄/의도에 귀속된 런 = 정규, 나머지 = 추가 런. 패턴+볼륨이면 코치가 넌지시 질문.
+// 코치 모먼트 엔진(#382): 유의미한 순간(부상·부하·추가런 등) 감지 → 우선순위로 적시 노출.
 const attributedRunIds = computed(() => {
   const ids = new Set<string>()
   for (const s of scheduleStore.sessions) if (s.runId) ids.add(s.runId)
   for (const i of sessionIntentStore.intents) if (i.runId) ids.add(i.runId)
   return ids
 })
-const extraRunTrend = computed(() => analyzeExtraRunTrend(runs.value, attributedRunIds.value, today.value))
-const extraRunInquiry = computed(() => buildExtraRunInquiry(extraRunTrend.value))
+const dismissedMomentKeys = ref(new Set<string>())
+const coachMoments = computed(() =>
+  collectCoachMoments(
+    {
+      runs: runs.value,
+      attributedRunIds: attributedRunIds.value,
+      chronic: chronicLoad.value,
+      injury: activeInjury.value,
+      today: today.value
+    },
+    dismissedMomentKeys.value
+  )
+)
+const topCoachMoment = computed(() => coachMoments.value[0] ?? null)
+function dismissMoment(key: string) {
+  dismissedMomentKeys.value = new Set([...dismissedMomentKeys.value, key])
+}
 
 function onBriefingAck() {
   toastStore.success('좋아요, 오늘은 이 훈련에 집중해요.')
@@ -587,11 +603,8 @@ async function applyPhaseTransition() {
 
 <template>
   <PageLayout variant="dashboard">
-    <!-- 추가 런 추세 nudge(#380 후속): 패턴+의미볼륨이면 코치가 관심 표현(의도 질문은 후속 증분) -->
-    <div v-if="extraRunInquiry" class="extra-run-nudge">
-      <span aria-hidden="true">👀</span>
-      <p>{{ extraRunInquiry.message }}</p>
-    </div>
+    <!-- 코치 모먼트(#382): 유의미한 순간에 코치가 먼저 말 건다(우선순위 최상위 1건) -->
+    <CoachMomentCard v-if="topCoachMoment" :moment="topCoachMoment" @dismiss="dismissMoment" />
 
     <!-- 위크 요약(#362): 이번 주가 뭘 위한 주인지 — 단계·포커스·핵심·볼륨·D-day -->
     <div v-if="hasSchedule && weekSummary" class="week-summary-bar">
@@ -996,21 +1009,6 @@ async function applyPhaseTransition() {
 .carousel-card-line {
   margin: 0;
   font-size: var(--text-info-size, 14px);
-  color: var(--color-text);
-}
-.extra-run-nudge {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  padding: var(--space-3, 12px);
-  margin-bottom: var(--space-2, 8px);
-  background: var(--color-primary-soft, var(--color-surface-card));
-  border-radius: var(--radius-button, 12px);
-}
-.extra-run-nudge p {
-  margin: 0;
-  font-size: var(--text-info-size, 14px);
-  line-height: var(--text-info-line, 1.5);
   color: var(--color-text);
 }
 .week-summary-bar {
