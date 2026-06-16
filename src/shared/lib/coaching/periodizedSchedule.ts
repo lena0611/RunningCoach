@@ -178,7 +178,7 @@ function sessionDistance(type: RunType, weeklyVolume: number, sessionCount: numb
   return round1(per)
 }
 
-function prescriptionFor(
+export function prescriptionFor(
   type: RunType,
   distanceKm: number,
   pace: PaceModel
