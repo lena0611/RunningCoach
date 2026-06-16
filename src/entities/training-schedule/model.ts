@@ -92,3 +92,33 @@ export function isPlannedSession(session: ScheduledSession): boolean {
 export function isActiveSession(session: ScheduledSession): boolean {
   return session.status === 'planned' || session.status === 'missed'
 }
+
+/** 런↔세션 매칭 허용 윈도우(일). SessionIntent 매처와 동일(±1) — 하루 늦게/일찍 한 세션도 인정. */
+export const SCHEDULE_MATCH_WINDOW_DAYS = 1
+
+function diffDays(a: string, b: string): number {
+  return Math.round((new Date(`${a}T00:00:00`).getTime() - new Date(`${b}T00:00:00`).getTime()) / (24 * 60 * 60 * 1000))
+}
+
+/**
+ * 런을 어느 ScheduledSession 에 귀속할지 고른다(동일 날짜 우선, 없으면 ±윈도우 내 가장 가까운 활성 세션,
+ * 동률이면 과거 미수행을 먼저 — "어제 빠진 세션 따라잡기"). 윈도우 밖이면 null = 진짜 엑스트라 런.
+ */
+export function selectSessionForRun(
+  sessions: ScheduledSession[],
+  run: { date: string },
+  windowDays = SCHEDULE_MATCH_WINDOW_DAYS
+): ScheduledSession | null {
+  const scored = sessions
+    .filter(isActiveSession)
+    .map((session) => ({ session, gap: diffDays(session.date, run.date) }))
+    .filter((entry) => Math.abs(entry.gap) <= windowDays)
+  if (!scored.length) return null
+  scored.sort(
+    (x, y) =>
+      Math.abs(x.gap) - Math.abs(y.gap) || // 가까운 날짜 우선
+      x.gap - y.gap || // 동률이면 과거(미수행) 먼저
+      x.session.date.localeCompare(y.session.date)
+  )
+  return scored[0].session
+}

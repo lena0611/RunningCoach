@@ -14,6 +14,7 @@
 import type { RunType } from '@/entities/run/model'
 import type { AthleteProfile, TrainingGoal } from '@/entities/training-memory/model'
 import type {
+  ScheduledSession,
   ScheduledSessionDraft,
   ScheduledSessionPrescription,
   TrainingPhaseName
@@ -102,54 +103,66 @@ function weeklySessionTypes(phase: TrainingPhaseName, runDays: number): RunType[
   return types.slice(0, Math.max(runDays, cappedQuality.length))
 }
 
-/** 키세션(롱런/quality)이 연속되지 않도록 hard/easy 교대로 요일 슬롯에 배치. */
-function placeOnDays(types: RunType[], runDays: number, longRunDayIndex: number): Map<number, RunType> {
-  const placement = new Map<number, RunType>()
-  // 주 7일 중 균등 분산할 요일 인덱스 선정(롱런 요일 포함).
-  const slots = pickDaySlots(runDays, longRunDayIndex)
-  const longType = types.find((t) => t === 'LSD' || t === 'Steady Long') ?? null
-  const quality = types.filter((t) => QUALITY_TYPES.has(t))
-  const easy = types.filter((t) => !QUALITY_TYPES.has(t))
-
-  // 롱런을 롱런 요일에.
-  const longRunSlotPos = slots.indexOf(longRunDayIndex)
-  // hard/easy 교대 시퀀스 구성: 롱런 외 quality 를 easy 사이에 끼워넣는다.
-  const nonLongQuality = quality.filter((t) => t !== longType)
-  const sequence: RunType[] = []
-  const easyQueue = [...easy]
-  const qualityQueue = [...nonLongQuality]
-  // easy 먼저 깔고 quality 를 간격 두고 삽입.
-  while (easyQueue.length || qualityQueue.length) {
-    if (easyQueue.length) sequence.push(easyQueue.shift() as RunType)
-    if (qualityQueue.length) {
-      sequence.push(qualityQueue.shift() as RunType)
-      if (easyQueue.length) sequence.push(easyQueue.shift() as RunType) // quality 뒤 easy 보장
-    }
-  }
-
-  let seqIdx = 0
-  for (let pos = 0; pos < slots.length; pos++) {
-    const dayIdx = slots[pos]
-    if (longType && pos === longRunSlotPos) {
-      placement.set(dayIdx, longType)
-      continue
-    }
-    placement.set(dayIdx, sequence[seqIdx % Math.max(sequence.length, 1)] ?? 'Easy')
-    seqIdx++
-  }
-  return placement
+/** 요일 인덱스 간 순환(주) 거리. 일~토를 원형으로 보고 최소 거리. */
+function circularDayDistance(a: number, b: number): number {
+  const d = Math.abs(a - b)
+  return Math.min(d, 7 - d)
 }
 
-/** runDays 개의 요일 인덱스를 주 전체에 균등 분산(롱런 요일 포함). */
-function pickDaySlots(runDays: number, longRunDayIndex: number): number[] {
-  const days = Math.min(Math.max(runDays, 1), 7)
-  const chosen = new Set<number>([longRunDayIndex])
-  // 롱런 요일에서 균등 간격으로 나머지 요일 선택.
-  const step = 7 / days
-  for (let i = 1; chosen.size < days && i < 14; i++) {
-    chosen.add((longRunDayIndex + Math.round(i * step)) % 7)
+/**
+ * 회복 인식형 배치: 키/하드 세션(롱런·Tempo 등)이 서로 붙지 않게 **최대 간격**으로 배치하고
+ * 나머지 훈련일을 easy 로 채운다. 안 뛰는 날은 휴식 → 하드 다음날은 자연히 easy/휴식이 된다.
+ * (회복 기준: 하드 사이 최소 1일 회복 — running-coaching-standards "회복은 훈련의 일부".)
+ */
+function placeOnDays(types: RunType[], runDays: number, longRunDayIndex: number): Map<number, RunType> {
+  const placement = new Map<number, RunType>()
+  const longType = types.find((t) => t === 'LSD' || t === 'Steady Long') ?? null
+  const nonLongQuality = types.filter((t) => QUALITY_TYPES.has(t) && t !== longType)
+  const easyTypes = types.filter((t) => !QUALITY_TYPES.has(t))
+  const targetDays = Math.min(Math.max(runDays, 1), 7)
+
+  const used = new Set<number>()
+  const hardDays: number[] = []
+
+  // 가장 떨어진(미사용) 요일을 고른다. ref 가 비면 선호 요일을 기준으로.
+  const pickFarthest = (ref: number[]): number => {
+    let best = -1
+    let bestScore = -1
+    for (let d = 0; d < 7; d++) {
+      if (used.has(d)) continue
+      const score = ref.length ? Math.min(...ref.map((h) => circularDayDistance(d, h))) : circularDayDistance(d, longRunDayIndex)
+      if (score > bestScore) {
+        bestScore = score
+        best = d
+      }
+    }
+    return best
   }
-  return [...chosen].sort((a, b) => a - b)
+
+  // 1) 롱런은 선호 요일에 고정(키세션).
+  if (longType) {
+    placement.set(longRunDayIndex, longType)
+    used.add(longRunDayIndex)
+    hardDays.push(longRunDayIndex)
+  }
+  // 2) 나머지 quality 를 7요일 전체에서 하드끼리 최대 분리되게 배치(슬롯 군집 회피 → 하드 사이 회복 보장).
+  for (const q of nonLongQuality) {
+    if (used.size >= 7) break
+    const d = pickFarthest(hardDays)
+    if (d < 0) break
+    placement.set(d, q)
+    used.add(d)
+    hardDays.push(d)
+  }
+  // 3) 남은 훈련일은 easy 로 — 이미 배치된 날들과 떨어지게 분산. 안 뽑힌 요일은 휴식.
+  let ei = 0
+  while (placement.size < targetDays && used.size < 7) {
+    const d = pickFarthest([...used])
+    if (d < 0) break
+    placement.set(d, easyTypes.length ? easyTypes[ei++ % easyTypes.length] : 'Easy')
+    used.add(d)
+  }
+  return placement
 }
 
 /**
@@ -350,4 +363,89 @@ function clamp(value: number, min: number, max: number): number {
 
 function round1(value: number): number {
   return Math.round(value * 10) / 10
+}
+
+const PHASE_LABEL_KO: Record<TrainingPhaseName, string> = {
+  Base: '기초기',
+  Build: '발전기',
+  Threshold: '역치기',
+  'Race Specific': '레이스 준비기',
+  Taper: '테이퍼',
+  Recovery: '회복기'
+}
+const PHASE_FOCUS_KO: Record<TrainingPhaseName, string> = {
+  Base: '유산소 기반 다지기',
+  Build: '역치·지속력 발전',
+  Threshold: '역치 자극 집중',
+  'Race Specific': '레이스 페이스 적응',
+  Taper: '볼륨 감량·신선도 회복',
+  Recovery: '회복 우선'
+}
+
+/** 이번 주 위크 요약 — 단계·포커스·핵심세션 수·주간 볼륨·D-day(매크로 위치). */
+export type WeekSummary = {
+  phase: TrainingPhaseName
+  phaseLabel: string
+  focusLine: string
+  keyCount: number
+  weekKm: number
+  /** "D-45" 형식. 목표일 없으면 ''. */
+  dDayText: string
+}
+
+/**
+ * 오늘이 속한 캘린더 주(일~토)의 스케줄을 요약한다. 트레이니에게 "이번 주가 통째로 뭘 위한 주인지"를 준다.
+ */
+export function buildWeekSummary(
+  sessions: ScheduledSession[],
+  today: Date,
+  targetDate: string | null
+): WeekSummary | null {
+  const start = startOfDay(today)
+  const weekStart = new Date(start.getTime() - start.getDay() * MS_PER_DAY)
+  const weekEnd = new Date(weekStart.getTime() + 6 * MS_PER_DAY)
+  const startStr = formatDateOnly(weekStart)
+  const endStr = formatDateOnly(weekEnd)
+
+  const week = sessions.filter(
+    (s) => s.date >= startStr && s.date <= endStr && s.status !== 'superseded'
+  )
+  if (!week.length) return null
+
+  // 단계: 오늘 세션 우선, 없으면 이번 주 최빈 단계.
+  const todayStr = formatDateOnly(start)
+  const todaySession = week.find((s) => s.date === todayStr)
+  const phase = todaySession?.phase ?? mostCommonPhase(week)
+  const keyCount = week.filter((s) => s.keySession).length
+  const weekKm = round1(week.reduce((sum, s) => sum + (s.prescription.distanceKm ?? 0), 0))
+
+  let dDayText = ''
+  if (targetDate) {
+    const target = startOfDay(new Date(`${targetDate}T00:00:00`))
+    const days = Math.round((target.getTime() - start.getTime()) / MS_PER_DAY)
+    if (days >= 0) dDayText = `D-${days}`
+  }
+
+  return {
+    phase,
+    phaseLabel: PHASE_LABEL_KO[phase],
+    focusLine: PHASE_FOCUS_KO[phase],
+    keyCount,
+    weekKm,
+    dDayText
+  }
+}
+
+function mostCommonPhase(sessions: ScheduledSession[]): TrainingPhaseName {
+  const counts = new Map<TrainingPhaseName, number>()
+  for (const s of sessions) counts.set(s.phase, (counts.get(s.phase) ?? 0) + 1)
+  let best: TrainingPhaseName = sessions[0].phase
+  let bestN = -1
+  for (const [p, n] of counts) {
+    if (n > bestN) {
+      bestN = n
+      best = p
+    }
+  }
+  return best
 }
