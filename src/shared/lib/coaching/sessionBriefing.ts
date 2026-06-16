@@ -11,8 +11,23 @@
 
 import type { RunType } from '@/entities/run/model'
 import type { ScheduledSession } from '@/entities/training-schedule/model'
-import type { TrainingGoal, TrainingInjuryItem } from '@/entities/training-memory/model'
+import type { AdaptiveTrainingProfile, TrainingGoal, TrainingInjuryItem } from '@/entities/training-memory/model'
 import type { ChronicLoadTrend } from '@/shared/lib/runStats'
+
+type ProgressionStatus = 'ready' | 'watch' | 'blocked'
+
+/** 세션 타입 → 관련 progressionCriterion id (적응 프로필에서 수행 게이트 상태를 읽는다). */
+function criterionIdFor(type: RunType): string {
+  if (type === 'Tempo' || type === 'Race') return 'tempo-ceiling-quality'
+  if (type === 'LSD' || type === 'Steady Long') return 'long-run-durability'
+  return 'easy-hr-stability'
+}
+
+function progressionStatusFor(type: RunType, profile: AdaptiveTrainingProfile | null | undefined): ProgressionStatus {
+  if (!profile) return 'watch'
+  const id = criterionIdFor(type)
+  return profile.progressionCriteria.find((c) => c.id === id)?.status ?? 'watch'
+}
 
 /** 코칭 근거(방법론·연구) 한 줄. 바텀시트에서만 노출. */
 export type EvidenceRef = {
@@ -91,7 +106,8 @@ const FOREFOOT_LOAD_AREA = /족저|발|아킬레스|종아리|발목/
 function computeStrides(
   phase: ScheduledSession['phase'],
   vdot: number | null,
-  injury: TrainingInjuryItem | null
+  injury: TrainingInjuryItem | null,
+  progression: ProgressionStatus
 ): { reps: number; hold: boolean; holdReason: string } {
   const byPhase: Record<ScheduledSession['phase'], number> = {
     Base: 5,
@@ -112,11 +128,15 @@ function computeStrides(
     }
     if (sev >= 2) reps = Math.max(2, reps - 2)
   }
+  // 적응 프로필 수행 게이트: Easy 심박 안정이 검증되면 품질 상향(+1), 막혀 있으면 보수(-1).
+  if (progression === 'ready') reps += 1
+  else if (progression === 'blocked') reps = Math.max(2, reps - 1)
   return { reps, hold: false, holdReason: '' }
 }
 
-/** 단계별 Tempo 지속(분)을 산출. 레이스에 가까울수록 길게. */
-function tempoMinutesFor(phase: ScheduledSession['phase']): string {
+/** 단계별 Tempo 지속(분)을 산출. 레이스에 가까울수록 길게, 수행 게이트가 막혀 있으면 보수적으로. */
+function tempoMinutesFor(phase: ScheduledSession['phase'], progression: ProgressionStatus): string {
+  if (progression === 'blocked') return '10~12분 짧게 — 상한 준수 우선'
   switch (phase) {
     case 'Build':
       return '15~18분 지속'
@@ -131,8 +151,14 @@ function tempoMinutesFor(phase: ScheduledSession['phase']): string {
   }
 }
 
-/** ② 세부 이행지침을 러너 상태에서 **산출**한다(단계·VDOT·부상·볼륨). 정적 처방 아님. */
-function executionFor(session: ScheduledSession, vdot: number | null, injury: TrainingInjuryItem | null): string[] {
+/** ② 세부 이행지침을 러너 상태에서 **산출**한다(단계·VDOT·부상·볼륨·적응 프로필). 정적 처방 아님. */
+function executionFor(
+  session: ScheduledSession,
+  vdot: number | null,
+  injury: TrainingInjuryItem | null,
+  progression: ProgressionStatus,
+  tempoCeilingBpm: number | null
+): string[] {
   const { sessionType, prescription, phase } = session
   const lines: string[] = []
   const dist = prescription.distanceKm ? `${prescription.distanceKm}km` : ''
@@ -143,15 +169,17 @@ function executionFor(session: ScheduledSession, vdot: number | null, injury: Tr
   switch (sessionType) {
     case 'Easy + Strides': {
       lines.push(`본런: 편한 대화 페이스${pace ? ` ${pace}` : ''}${amount ? `, ${amount}` : ''}`)
-      const s = computeStrides(phase, vdot, injury)
+      const s = computeStrides(phase, vdot, injury, progression)
       if (s.hold) lines.push(s.holdReason)
       else lines.push(`마무리 스트라이드: 15~20초 빠르고 편하게 × ${s.reps}회, 사이 60~90초 완전 회복`)
       break
     }
-    case 'Tempo':
-      lines.push(`${tempoMinutesFor(phase)}${pace ? ` ${pace}` : ''}, 심박 상한 준수`)
+    case 'Tempo': {
+      const ceiling = tempoCeilingBpm ? ` (심박 상한 ${tempoCeilingBpm} 준수)` : ', 심박 상한 준수'
+      lines.push(`${tempoMinutesFor(phase, progression)}${pace ? ` ${pace}` : ''}${ceiling}`)
       lines.push('무너지면 중단 — 자극 확보가 목적이지 기록 경신이 아니에요')
       break
+    }
     case 'LSD':
     case 'Steady Long':
       lines.push(`${amount ? `${amount} ` : ''}대화 가능 강도${pace ? ` ${pace}` : ''}, 심박 안정 우선`)
@@ -207,6 +235,8 @@ export type SessionBriefingContext = {
   chronic: ChronicLoadTrend | null
   /** 러너 VDOT(resolvePaceModel.vdot). 스트라이드 반복수 등 산출에 쓰임. 없으면 null. */
   vdot?: number | null
+  /** 적응 프로필(#326) — progressionCriteria 수행 게이트·tempoCeiling 적응값을 산출에 반영. */
+  adaptiveProfile?: AdaptiveTrainingProfile | null
 }
 
 /** ScheduledSession + 장기맥락 → 4요소 작전 브리핑(결정론). */
@@ -215,8 +245,10 @@ export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBrie
   const phaseLabel = phaseLabelKo(session.phase)
   const goalLine = `${goalLabel}${phaseLabel} — ${sessionTypeLabel(session.sessionType)}`
 
+  const progression = progressionStatusFor(session.sessionType, ctx.adaptiveProfile)
+  const tempoCeilingBpm = ctx.adaptiveProfile?.tempoCeiling?.adoptedBpm ?? null
   const effect = effectFor(session.sessionType)
-  const execution = executionFor(session, ctx.vdot ?? null, ctx.injury)
+  const execution = executionFor(session, ctx.vdot ?? null, ctx.injury, progression, tempoCeilingBpm)
   const caution = cautionsFor(session, ctx.injury, ctx.chronic)
 
   const evidence: EvidenceRef[] = dedupeEvidence([

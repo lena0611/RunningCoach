@@ -71,6 +71,21 @@ describe('buildSessionBriefing', () => {
     expect(b.execution.some((l) => /× \d+회/.test(l))).toBe(false) // 반복수 처방 없음(보류)
   })
 
+  it('적응 프로필 수행 게이트(ready)면 스트라이드 반복수 상향(blocked면 보수)', () => {
+    const reps = (status: 'ready' | 'watch' | 'blocked') => {
+      const profile = {
+        progressionCriteria: [{ id: 'easy-hr-stability', label: '', status, evidence: '', action: '' }],
+        tempoCeiling: { adoptedBpm: null, baseBpm: null, adoptedAt: null }
+      } as unknown as import('@/entities/training-memory/model').AdaptiveTrainingProfile
+      return Number(
+        buildSessionBriefing(session({ sessionType: 'Easy + Strides', phase: 'Base' }), { goal, injury: null, chronic: noChronic, adaptiveProfile: profile })
+          .execution.find((l) => l.includes('스트라이드'))?.match(/× (\d+)회/)?.[1] ?? 0
+      )
+    }
+    expect(reps('ready')).toBeGreaterThan(reps('watch'))
+    expect(reps('blocked')).toBeLessThan(reps('watch'))
+  })
+
   it('단계가 레이스에 가까울수록 스트라이드 반복수가 많다(산출)', () => {
     const reps = (phase: 'Base' | 'Race Specific') =>
       Number(
