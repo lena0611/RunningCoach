@@ -88,6 +88,23 @@ export async function supersedeSessionsFrom(goalId: string | null, fromDate: str
   return (data ?? []).length
 }
 
+/**
+ * 과거(beforeDate 미만)의 미수행 planned 세션을 missed 로 전환한다. 재정렬 후 호출해
+ * 과거 누락이 매 포커스마다 deviation 을 다시 트리거하는 무한 재정렬을 막는다(B2). 영향 행 수 반환.
+ */
+export async function markPastPlannedMissed(goalId: string | null, beforeDate: string): Promise<number> {
+  let query = requireSupabase()
+    .from('training_schedule')
+    .update({ status: 'missed', updated_at: new Date().toISOString() })
+    .lt('session_date', beforeDate)
+    .eq('status', 'planned')
+    .is('run_id', null)
+  query = goalId ? query.eq('goal_id', goalId) : query.is('goal_id', null)
+  const { data, error } = await query.select('id')
+  if (error) throw error
+  return (data ?? []).length
+}
+
 function toInsertRow(draft: ScheduledSessionDraft) {
   return {
     goal_id: draft.goalId,

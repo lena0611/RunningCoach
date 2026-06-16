@@ -113,8 +113,9 @@ function executionFor(session: ScheduledSession): string[] {
     default:
       lines.push(`편한 대화 가능 페이스${pace ? ` ${pace}` : ''}${amount ? `, ${amount}` : ''}`)
   }
+  // 처방 노트(스트라이드 프로토콜 등)가 위 지침과 중복되지 않으면 보조 한 줄로 노출.
   if (prescription.note && !lines.some((l) => l.includes(prescription.note))) {
-    // note 가 위 지침과 중복되지 않으면 보조 한 줄로.
+    lines.push(prescription.note)
   }
   return lines
 }
@@ -194,8 +195,26 @@ function dedupeEvidence(refs: (EvidenceRef | null)[]): EvidenceRef[] {
   return out
 }
 
-function sessionTypeLabel(type: RunType): string {
-  return type
+/** 세션 타입 사용자 표시 라벨(KO). 화면에 영문 enum 을 그대로 노출하지 않는다. */
+export function sessionTypeLabel(type: RunType): string {
+  switch (type) {
+    case 'Easy':
+      return '이지'
+    case 'Recovery':
+      return '회복주'
+    case 'Easy + Strides':
+      return '이지 + 스트라이드'
+    case 'Tempo':
+      return '템포'
+    case 'LSD':
+      return 'LSD(장거리)'
+    case 'Steady Long':
+      return '스테디 롱'
+    case 'Race':
+      return '레이스'
+    default:
+      return type
+  }
 }
 
 function phaseLabelKo(phase: ScheduledSession['phase']): string {

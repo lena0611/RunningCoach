@@ -8,8 +8,6 @@ import { computed } from 'vue'
  * 제스처: 탭 홈의 좌우 스와이프(탭 전환, tab-swipe-pager-contract)와 충돌하지 않도록 칩 탭 +
  * 화살표 네비게이션으로 동작한다. 영역은 data-no-swipe 로 탭 pager 와 분리한다.
  * 스와이프 제스처는 제스처 계약 합의 + 실기기 검증 후속(의도적 보류).
- *
- * lazy: active 가 바뀔 때 'activate' 를 emit 해 부모가 그 날 콘텐츠를 그때 채우게 한다.
  */
 export type CarouselDay = {
   date: string
@@ -27,7 +25,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:activeIndex': [index: number]
-  activate: [index: number]
 }>()
 
 const canPrev = computed(() => props.activeIndex > 0)
@@ -36,7 +33,6 @@ const canNext = computed(() => props.activeIndex < props.days.length - 1)
 function select(index: number) {
   if (index < 0 || index >= props.days.length || index === props.activeIndex) return
   emit('update:activeIndex', index)
-  emit('activate', index)
 }
 </script>
 

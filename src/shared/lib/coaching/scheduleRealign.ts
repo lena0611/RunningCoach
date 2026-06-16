@@ -35,12 +35,14 @@ function toDateOnly(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
-/** 지난 날짜의 미수행 세션(=실질적 누락)을 집계해 재정렬 필요 여부를 판단한다. */
+/**
+ * 지난 날짜의 미수행 세션(=실질적 누락)을 집계해 재정렬 필요 여부를 판단한다.
+ * `planned` 상태만 센다 — 재정렬 후 과거 누락을 `missed` 로 전환하면(markPastPlannedMissed)
+ * 같은 누락이 매번 다시 트리거되지 않는다(B2 무한 재정렬 방지).
+ */
 export function detectScheduleDeviation(sessions: ScheduledSession[], today: Date): ScheduleDeviation {
   const todayStr = toDateOnly(today)
-  const missed = sessions.filter(
-    (s) => s.date < todayStr && !s.runId && (s.status === 'planned' || s.status === 'missed')
-  )
+  const missed = sessions.filter((s) => s.date < todayStr && !s.runId && s.status === 'planned')
   const missedCount = missed.length
   const missedKeyCount = missed.filter((s) => s.keySession).length
 

@@ -185,14 +185,14 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
 
 .brief-primary {
   background: var(--color-primary);
-  color: #fff;
+  color: var(--color-on-primary, #fff);
   border: none;
 }
 
 .brief-secondary {
   background: transparent;
   color: var(--color-text);
-  border: 1px solid rgba(120, 120, 120, 0.3);
+  border: 1px solid var(--color-border, rgba(120, 120, 120, 0.3));
 }
 
 .brief-primary:disabled,

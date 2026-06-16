@@ -41,7 +41,7 @@ import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { buildPeriodizedSchedule } from '@/shared/lib/coaching/periodizedSchedule'
 import { buildRealignedSchedule } from '@/shared/lib/coaching/scheduleRealign'
 import { proposeAlternativeSession } from '@/shared/lib/coaching/alternativeSession'
-import { buildSessionBriefing, type SessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
+import { buildSessionBriefing, sessionTypeLabel, type SessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
 import { getChronicLoadTrend } from '@/shared/lib/runStats'
 import { isActiveSession, type ScheduledSession } from '@/entities/training-schedule/model'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
@@ -114,7 +114,16 @@ function dateOnly(d: Date): string {
 const WEEKDAY_KO = ['일', '월', '화', '수', '목', '금', '토']
 
 /** 목표에 targetDate+거리가 있으면 골격 생성, 없으면 재정렬 점검(best-effort, no-op 안전). */
-async function ensureSchedule() {
+let ensureInFlight: Promise<void> | null = null
+function ensureSchedule(): Promise<void> {
+  // in-flight 가드(B1): watch 가 여러 번 fire 해도 골격을 이중 생성하지 않는다.
+  if (ensureInFlight) return ensureInFlight
+  ensureInFlight = doEnsureSchedule().finally(() => {
+    ensureInFlight = null
+  })
+  return ensureInFlight
+}
+async function doEnsureSchedule() {
   if (!isSupabaseConfigured) return
   const goal = activeGoal.value
   if (!goal?.targetDate || !goal.distanceKm) return
@@ -137,9 +146,11 @@ async function ensureSchedule() {
   }
 }
 
+const CAROUSEL_DAYS_BEFORE = 2 // 오늘 이전 표시 일수 → 오늘의 인덱스
+const CAROUSEL_DAYS_AFTER = 4
 const scheduleDays = computed<CarouselDay[]>(() => {
   const out: CarouselDay[] = []
-  for (let offset = -2; offset <= 4; offset++) {
+  for (let offset = -CAROUSEL_DAYS_BEFORE; offset <= CAROUSEL_DAYS_AFTER; offset++) {
     const d = new Date(today.value)
     d.setDate(d.getDate() + offset)
     const date = dateOnly(d)
@@ -155,13 +166,13 @@ const scheduleDays = computed<CarouselDay[]>(() => {
             ? 'today'
             : 'future'
           : 'rest'
-    const chip = run ? `${run.type}` : session ? session.sessionType : '휴식'
+    const chip = run ? sessionTypeLabel(run.type) : session ? sessionTypeLabel(session.sessionType) : '휴식'
     out.push({ date, label: `${WEEKDAY_KO[d.getDay()]} ${d.getDate()}`, state, chip })
   }
   return out
 })
 const hasSchedule = computed(() => scheduleDays.value.some((d) => d.state !== 'rest' && d.state !== 'past'))
-const activeDayIndex = ref(2) // 기본 = 오늘(offset 0 → 인덱스 2)
+const activeDayIndex = ref(CAROUSEL_DAYS_BEFORE) // 기본 = 오늘(offset 0)
 const activeDay = computed(() => scheduleDays.value[activeDayIndex.value] ?? null)
 const activeSession = computed<ScheduledSession | null>(() =>
   activeDay.value ? scheduleStore.sessionOnDate(activeDay.value.date) : null
@@ -514,7 +525,7 @@ async function applyPhaseTransition() {
         <SessionBriefingCard
           v-else-if="activeBriefing && (day.state === 'today' || day.state === 'future')"
           :briefing="activeBriefing"
-          :session-type="activeSession?.sessionType ?? ''"
+          :session-type="activeSession ? sessionTypeLabel(activeSession.sessionType) : ''"
           :ceiling-text="briefingCeilingText"
           :busy="intentBusy"
           @acknowledge="onBriefingAck"

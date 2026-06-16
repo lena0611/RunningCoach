@@ -10,6 +10,7 @@ import { isSupabaseConfigured } from '@/shared/api/supabase'
 import {
   fetchTrainingSchedule,
   insertTrainingSessions,
+  markPastPlannedMissed,
   supersedeSessionsFrom,
   updateScheduledSessionStatus
 } from '@/shared/api/trainingScheduleRepository'
@@ -64,12 +65,17 @@ export const useTrainingScheduleStore = defineStore('trainingScheduleStore', {
       this.sessions.push(...created)
       return created
     },
-    /** A1 재정렬: fromDate 이후 활성 세션을 superseded 로 비우고, 재구축 drafts 를 insert. */
+    /**
+     * A1 재정렬: fromDate 이후 활성 세션을 superseded 로 비우고, 과거 planned 누락은 missed 로
+     * 확정(같은 누락 재트리거 방지, B2), 재구축 drafts 를 insert.
+     */
     async realign(goalId: string | null, fromDate: string, drafts: ScheduledSessionDraft[]): Promise<void> {
       if (!isSupabaseConfigured) return
       await supersedeSessionsFrom(goalId, fromDate)
+      await markPastPlannedMissed(goalId, fromDate)
       this.sessions.forEach((s) => {
         if (s.date >= fromDate && isActiveSession(s)) s.status = 'superseded'
+        else if (s.date < fromDate && s.status === 'planned' && !s.runId) s.status = 'missed'
       })
       await this.insertMany(drafts)
     },
