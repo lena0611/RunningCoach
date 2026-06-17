@@ -15,7 +15,7 @@ function injury(o: Partial<TrainingInjuryItem>): TrainingInjuryItem {
   return { id: 'i', area: o.area ?? '무릎', status: o.status ?? 'active', severity: o.severity ?? 3 } as unknown as TrainingInjuryItem
 }
 function ctx(over: Partial<CoachMomentContext>): CoachMomentContext {
-  return { runs: [], attributedRunIds: new Set(), chronic: stable, injury: null, today, ...over }
+  return { runs: [], attributedRunIds: new Set(), chronic: stable, injury: null, today, scheduleExists: true, ...over }
 }
 
 const extraRuns = [run('e1', '2026-06-16', 6), run('e2', '2026-06-12', 7), run('e3', '2026-06-08', 6)]
@@ -54,6 +54,11 @@ describe('collectCoachMoments', () => {
 
   it('준비도 부족/보통이면 격려 안 함(부상·부하 감지기가 담당)', () => {
     expect(collectCoachMoments(ctx({ goalProgress: { readinessScore: 40, readinessLevel: '부족', dDayText: '' } }))).toEqual([])
+  })
+
+  it('스케줄이 없으면 추가런 분류 안 함(무계획이면 비교 대상 없음)', () => {
+    const moments = collectCoachMoments(ctx({ runs: extraRuns, scheduleExists: false }))
+    expect(moments.some((m) => m.kind === 'extra-run')).toBe(false)
   })
 
   it('전체 우선순위: 부상>부하>이탈>추가런>목표진척', () => {

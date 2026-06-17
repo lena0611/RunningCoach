@@ -61,6 +61,8 @@ export type CoachMomentContext = {
   chronic: ChronicLoadTrend | null
   injury: TrainingInjuryItem | null
   today: Date
+  /** 실제 주기화 스케줄이 존재하는가. 없으면 "추가 런" 개념이 성립 안 함(비교할 계획 없음). */
+  scheduleExists?: boolean
   /** 누적 이탈(놓친 세션) — 있으면 코치가 일정 재정렬을 알린다. */
   deviation?: { shouldRealign: boolean; reason: string; missedCount: number } | null
   /** 목표 준비도 — '충분'이면 코치가 격려(긍정 소통). */
@@ -97,6 +99,8 @@ function detectLoadSpike(ctx: CoachMomentContext): CoachMoment | null {
 }
 
 function detectExtraRun(ctx: CoachMomentContext): CoachMoment | null {
+  // 실제 스케줄이 없으면 "지정 외 추가 런" 개념이 성립 안 함(비교 대상 없음).
+  if (!ctx.scheduleExists) return null
   const trend = analyzeExtraRunTrend(ctx.runs, ctx.attributedRunIds, ctx.today)
   const inquiry = buildExtraRunInquiry(trend)
   if (!inquiry) return null
