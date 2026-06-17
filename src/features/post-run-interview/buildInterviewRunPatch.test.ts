@@ -46,7 +46,7 @@ function run(overrides: Partial<RunLog> = {}): RunLog {
 }
 
 function result(overrides: Partial<PostRunInterviewResult> = {}): PostRunInterviewResult {
-  return { painSeverity: 'none', areaPainLevels: [], rpe: null, conditionScore: null, ...overrides }
+  return { painSeverity: 'none', painGroup: null, rpe: null, conditionScore: null, ...overrides }
 }
 
 describe('buildInterviewRunPatch', () => {
@@ -57,13 +57,10 @@ describe('buildInterviewRunPatch', () => {
     expect(patch.conditionScore).toBe(8)
   })
 
-  it('통증 보통 + 부위: painNote 에 정도와 부위/레벨 요약', () => {
-    const patch = buildInterviewRunPatch(
-      run(),
-      result({ painSeverity: 'moderate', areaPainLevels: [{ areaId: 'foot-sole-plantar', painLevel: 3 }] })
-    )
+  it('통증 보통 + 부위 그룹: painNote 에 정도·그룹 요약(거친 트리아지)', () => {
+    const patch = buildInterviewRunPatch(run(), result({ painSeverity: 'moderate', painGroup: 'foot' }))
     expect(patch.painNote).toContain('통증 보통')
-    expect(patch.painNote).toContain('3/5')
+    expect(patch.painNote).toContain('발')
   })
 
   it('rpe 미입력이면 기존 run.rpe 유지', () => {

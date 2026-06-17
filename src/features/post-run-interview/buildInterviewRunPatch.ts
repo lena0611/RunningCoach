@@ -5,13 +5,27 @@
  */
 
 import type { RunLog } from '@/entities/run/model'
-import { getInjuryAreaLabel, type InjuryAreaSelection } from '@/entities/training-memory/injuryAreas'
 
 export type PostRunPainSeverity = 'none' | 'mild' | 'moderate' | 'severe'
 
+/** 퀵 트리아지용 거친 부위 그룹. 상세 부위는 전용 부상 체크인 시트가 받는다(2계층). */
+export type PainGroup = 'foot' | 'lower' | 'upper'
+
+export const PAIN_GROUP_LABEL: Record<PainGroup, string> = {
+  foot: '발',
+  lower: '다리',
+  upper: '상체'
+}
+
+/** 러닝 부하가 직접 가는 그룹(발·다리) — 플랜 영향·부상 관리 제안 대상. 상체는 비차단. */
+export function isRunningLoadGroup(group: PainGroup | null): boolean {
+  return group === 'foot' || group === 'lower'
+}
+
 export type PostRunInterviewResult = {
   painSeverity: PostRunPainSeverity
-  areaPainLevels: InjuryAreaSelection[]
+  /** 통증 부위 거친 그룹(있을 때). 상세는 전용 부상 시트로. */
+  painGroup: PainGroup | null
   /** 난이도(RPE 1~10). 미입력이면 null. */
   rpe: number | null
   /** 오늘 컨디션(1~10). 회복/적응 로직이 소비. 미입력이면 null. */
@@ -24,21 +38,17 @@ const SEVERITY_LABEL: Record<Exclude<PostRunPainSeverity, 'none'>, string> = {
   severe: '심함'
 }
 
-function buildPainSummary(severity: PostRunPainSeverity, areas: InjuryAreaSelection[]): string {
+function buildPainSummary(severity: PostRunPainSeverity, group: PainGroup | null): string {
   if (severity === 'none') return ''
-  const areaText = areas
-    .filter((area) => area.painLevel !== null)
-    .map((area) => `${getInjuryAreaLabel(area.areaId)} ${area.painLevel}/5`)
-    .join(', ')
   const head = `통증 ${SEVERITY_LABEL[severity]}`
-  return areaText ? `${head} · ${areaText}` : head
+  return group ? `${head} · ${PAIN_GROUP_LABEL[group]}` : head
 }
 
 export function buildInterviewRunPatch(run: RunLog, result: PostRunInterviewResult): RunLog {
   return {
     ...run,
     rpe: result.rpe ?? run.rpe,
-    painNote: buildPainSummary(result.painSeverity, result.areaPainLevels),
+    painNote: buildPainSummary(result.painSeverity, result.painGroup),
     conditionScore: result.conditionScore ?? run.conditionScore
   }
 }
