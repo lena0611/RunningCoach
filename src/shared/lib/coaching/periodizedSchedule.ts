@@ -36,6 +36,11 @@ export type PeriodizationInput = {
    * 목표거리 역산 대신 "지금 내가 뛰는 만큼"에서 시작한다. null/0이면 보수적 기본값(콜드스타트).
    */
   currentWeeklyKm?: number | null
+  /**
+   * 관측 Easy 페이스(#405, A안) — 실제 Easy 심박 이하에서 뛴 페이스. 있으면 VDOT 추정 대신 이걸로
+   * Easy 계열(Easy/Recovery/LSD) 페이스를 처방해 심박과 충돌하지 않게 한다. null이면 VDOT 추정.
+   */
+  observedEasyPace?: { easyPaceSec: number; easyPaceRangeSec: [number, number] } | null
 }
 
 /** 안전하다고 보는 주간 볼륨 증가율(소프트). running-coaching-standards "시작점 앵커링"(~10%, 30%+ 급증 회피). */
@@ -295,7 +300,11 @@ export function buildPeriodizedSchedule(input: PeriodizationInput): ScheduledSes
 
   const runDays = clamp(profile.weeklyRunDaysTarget ?? 4, 3, 6)
   const longRunDayIndex = Math.max(0, DAY_NAMES.indexOf(profile.preferredLongRunDay || '토요일'))
-  const pace = resolvePaceModel(profile)
+  // Easy 페이스는 관측값(있으면)으로 보정 — VDOT 추정이 심박과 싸우는 문제 해결(#405).
+  const baseModel = resolvePaceModel(profile)
+  const pace = input.observedEasyPace
+    ? { ...baseModel, easyPaceSec: input.observedEasyPace.easyPaceSec, easyPaceRangeSec: input.observedEasyPace.easyPaceRangeSec }
+    : baseModel
 
   // 시작 볼륨 앵커링(#395): 목표거리 역산(×2.5)이 아니라 현재 주간 주행량에서 시작한다.
   // 데이터 없으면(콜드스타트) 보수적 기본값. 이미 목표 피크 이상으로 뛰면 피크를 현재 이상으로

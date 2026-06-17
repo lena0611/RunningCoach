@@ -46,7 +46,8 @@ import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { buildSessionIntentDraft, easierAlternative, type BuildSessionIntentArgs } from '@/features/build-session-intent/buildSessionIntentDraft'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
-import { assessGoalFeasibility, buildPeriodizedSchedule, buildWeekSummary } from '@/shared/lib/coaching/periodizedSchedule'
+import { assessGoalFeasibility, buildPeriodizedSchedule, buildWeekSummary, prescriptionFor } from '@/shared/lib/coaching/periodizedSchedule'
+import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
 import { buildRealignedSchedule } from '@/shared/lib/coaching/scheduleRealign'
 import { proposeAlternativeSession } from '@/shared/lib/coaching/alternativeSession'
 import { buildSessionBriefing, sessionTypeLabel, type SessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
@@ -96,6 +97,15 @@ const activeInjury = computed(() => getActiveInjuryItem(memoryStore.memory))
 const ageLoadWeight = computed(() => getAgeLoadWeight(memoryStore.memory.athleteProfile.birthYear, today.value))
 const observedMaxHr = computed(() => deriveObservedMaxHr(runs.value.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })), today.value))
 const heartRateModel = computed(() => deriveHeartRateModel(memoryStore.memory.athleteProfile, today.value.getFullYear(), observedMaxHr.value))
+// 관측 Easy 페이스(#405, A안): 실제 Easy 심박 이하에서 뛴 페이스. 있으면 VDOT 추정 대신 이걸로 처방(심박과 충돌 방지).
+const observedEasyPace = computed(() => deriveObservedEasyPace(runs.value, heartRateModel.value.easyCeilingBpm, today.value))
+// 보정 PaceModel: Easy 계열 페이스를 관측값으로 덮은 모델(브리핑 표시 즉시 보정용).
+const calibratedPaceModel = computed(() => {
+  const base = resolvePaceModel(memoryStore.memory.athleteProfile)
+  const obs = observedEasyPace.value
+  return obs ? { ...base, easyPaceSec: obs.easyPaceSec, easyPaceRangeSec: obs.easyPaceRangeSec } : base
+})
+const EASY_FAMILY_TYPES = new Set(['Easy', 'Easy + Strides', 'Recovery', 'LSD', 'Steady Long'])
 const raceProjection = computed(() =>
   getRaceProjection(runs.value, activeGoal.value, today.value, activeInjury.value, ageLoadWeight.value, {
     easyCeilingBpm: heartRateModel.value.easyCeilingBpm,
@@ -157,12 +167,13 @@ async function doEnsureSchedule() {
         goal,
         profile: memoryStore.memory.athleteProfile,
         today: today.value,
-        currentWeeklyKm: currentWeeklyKm.value
+        currentWeeklyKm: currentWeeklyKm.value,
+        observedEasyPace: observedEasyPace.value
       })
       if (drafts.length) await scheduleStore.insertMany(drafts)
       return
     }
-    const plan = buildRealignedSchedule(mine, goal, memoryStore.memory.athleteProfile, today.value, currentWeeklyKm.value)
+    const plan = buildRealignedSchedule(mine, goal, memoryStore.memory.athleteProfile, today.value, currentWeeklyKm.value, observedEasyPace.value)
     if (plan.drafts.length) {
       await scheduleStore.realign(goal.id, plan.fromDate, plan.drafts)
       if (plan.deviation.reason) toastStore.success(plan.deviation.reason)
@@ -215,8 +226,13 @@ const activeDoneRun = computed(() =>
   activeDay.value ? runs.value.find((r) => r.date === activeDay.value!.date) ?? null : null
 )
 const activeBriefing = computed<SessionBriefing | null>(() => {
-  const session = activeSession.value
-  if (!session || activeDoneRun.value) return null
+  const base = activeSession.value
+  if (!base || activeDoneRun.value) return null
+  // Easy 계열이면 관측 보정 페이스로 처방 페이스를 다시 계산해 표시(#405) — 저장된 VDOT 추정 페이스 대신.
+  const session =
+    observedEasyPace.value && EASY_FAMILY_TYPES.has(base.sessionType)
+      ? { ...base, prescription: prescriptionFor(base.sessionType, base.prescription.distanceKm ?? 0, calibratedPaceModel.value) }
+      : base
   // 오늘 세션이면 SessionIntent(의도·성공기준·타겟)를 흡수해 단일 카드로(중복 의도 카드 제거).
   const intent =
     activeDay.value?.state === 'today' && activePlannedIntent.value

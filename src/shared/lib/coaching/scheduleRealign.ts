@@ -78,14 +78,16 @@ export function buildRealignedSchedule(
   profile: AthleteProfile,
   today: Date,
   /** 현재 주간 주행량(최근 30일 평균) — 재정렬 시에도 현재 체력에 재앵커링한다(#395). */
-  currentWeeklyKm: number | null = null
+  currentWeeklyKm: number | null = null,
+  /** 관측 Easy 페이스(#405) — 재정렬 시에도 관측 보정 페이스로 처방. */
+  observedEasyPace: { easyPaceSec: number; easyPaceRangeSec: [number, number] } | null = null
 ): RealignPlan {
   const deviation = detectScheduleDeviation(sessions, today)
   const fromDate = toDateOnly(today)
   if (!deviation.shouldRealign) {
     return { fromDate, drafts: [], deviation }
   }
-  const drafts = buildPeriodizedSchedule({ goal, profile, today, currentWeeklyKm }).map((d) => ({
+  const drafts = buildPeriodizedSchedule({ goal, profile, today, currentWeeklyKm, observedEasyPace }).map((d) => ({
     ...d,
     source: 'realign' as const
   }))
