@@ -7,7 +7,7 @@ import type { CoachMoment } from '@/shared/lib/coaching/coachMoments'
  * 의도 질문(options)이 있으면 트레이니가 고르고, 코치가 분기 피드백(response)을 답한다.
  */
 const props = defineProps<{ moment: CoachMoment }>()
-const emit = defineEmits<{ dismiss: [key: string] }>()
+const emit = defineEmits<{ dismiss: [key: string]; action: [moment: CoachMoment] }>()
 
 const response = ref<string | null>(null)
 const sentiment = ref<string | null>(null)
@@ -33,6 +33,11 @@ function choose(option: { sentiment: string; response: string }) {
     </div>
 
     <p v-if="response" class="moment-response" :class="`moment-response-${sentiment}`">{{ response }}</p>
+
+    <div v-if="moment.action && !response" class="moment-actions">
+      <button type="button" class="moment-action-primary" @click="emit('action', moment)">{{ moment.action.label }}</button>
+      <button type="button" class="moment-action-ghost" @click="emit('dismiss', moment.key)">나중에</button>
+    </div>
   </article>
 </template>
 
@@ -93,5 +98,29 @@ function choose(option: { sentiment: string; response: string }) {
 }
 .moment-response-caution {
   background: var(--color-danger-soft, var(--color-surface-card));
+}
+.moment-actions {
+  display: flex;
+  gap: 8px;
+}
+.moment-action-primary {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: var(--radius-button, 12px);
+  border: none;
+  background: var(--color-primary);
+  color: var(--color-on-primary, #fff);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.moment-action-ghost {
+  padding: 8px 12px;
+  border-radius: var(--radius-button, 12px);
+  border: 1px solid var(--color-border, rgba(120, 120, 120, 0.3));
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 13px;
+  cursor: pointer;
 }
 </style>

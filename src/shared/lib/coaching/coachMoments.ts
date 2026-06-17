@@ -12,8 +12,15 @@ import type { RunLog } from '@/entities/run/model'
 import type { TrainingInjuryItem } from '@/entities/training-memory/model'
 import type { ChronicLoadTrend } from '@/shared/lib/runStats'
 import { analyzeExtraRunTrend, buildExtraRunInquiry } from '@/shared/lib/coaching/extraRunTrend'
+import { isRunningLoadGroup, PAIN_GROUP_LABEL, type PainGroup } from '@/features/post-run-interview/buildInterviewRunPatch'
 
-export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'extra-run' | 'goal-progress'
+export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'extra-run' | 'goal-progress'
+
+/** 모먼트가 제안하는 행동(전용 시트 열기 등). 트레이니 확인 후 실행. */
+export type CoachMomentAction = {
+  label: string
+  kind: 'open-injury-screening'
+}
 export type CoachMomentSentiment = 'positive' | 'neutral' | 'caution'
 
 /** 의도 질문의 선택지 — 고르면 분기 피드백(response)을 보여준다. */
@@ -33,7 +40,20 @@ export type CoachMoment = {
   message: string
   /** 있으면 의도 질문(관심 표현 후 트레이니가 응답). 없으면 단순 고지. */
   options?: CoachMomentOption[]
+  /** 있으면 제안 행동(전용 시트 열기 등). 트레이니 확인 시 실행. */
+  action?: CoachMomentAction
 }
+
+/** painNote(거친 그룹 라벨 포함)에서 부위 그룹을 역분류. */
+function painGroupFromNote(painNote: string | null | undefined): PainGroup | null {
+  if (!painNote) return null
+  if (painNote.includes(PAIN_GROUP_LABEL.foot)) return 'foot'
+  if (painNote.includes(PAIN_GROUP_LABEL.lower)) return 'lower'
+  if (painNote.includes(PAIN_GROUP_LABEL.upper)) return 'upper'
+  return null
+}
+
+const PAIN_FOLLOWUP_WINDOW_DAYS = 3
 
 export type CoachMomentContext = {
   runs: RunLog[]
@@ -136,7 +156,29 @@ function detectGoalProgress(ctx: CoachMomentContext): CoachMoment | null {
   }
 }
 
-const DETECTORS: Detector[] = [detectInjury, detectLoadSpike, detectDeviation, detectExtraRun, detectGoalProgress]
+function detectPainFollowup(ctx: CoachMomentContext): CoachMoment | null {
+  // 이미 관리 중인 활성 부상이 있으면 그쪽(부상 감지기/전용 체크인)이 담당.
+  if (ctx.injury && (ctx.injury.status === 'active' || ctx.injury.status === 'monitoring')) return null
+  const todayMs = new Date(ctx.today).setHours(0, 0, 0, 0)
+  const recent = ctx.runs.filter((r) => {
+    const d = new Date(`${r.date}T00:00:00`).getTime()
+    return (todayMs - d) / (24 * 60 * 60 * 1000) <= PAIN_FOLLOWUP_WINDOW_DAYS && (todayMs - d) >= 0
+  })
+  const loadPain = recent.find((r) => isRunningLoadGroup(painGroupFromNote(r.painNote)))
+  if (!loadPain) return null
+  const group = painGroupFromNote(loadPain.painNote)
+  const label = group ? PAIN_GROUP_LABEL[group] : ''
+  return {
+    key: 'pain-followup',
+    kind: 'pain-followup',
+    priority: 65,
+    icon: '🩹',
+    message: `최근 런에 ${label} 통증이 있었어요. 러닝에 직접 영향 주는 부위라, 부상으로 등록하면 강도·타입을 거기 맞춰 조정할게요. 지금 짧게 체크인할까요?`,
+    action: { label: '부상 체크인', kind: 'open-injury-screening' }
+  }
+}
+
+const DETECTORS: Detector[] = [detectInjury, detectLoadSpike, detectDeviation, detectPainFollowup, detectExtraRun, detectGoalProgress]
 
 /**
  * 등록된 감지기를 모두 돌려 유의미한 순간을 모으고, 우선순위 내림차순으로 정렬해 반환한다.

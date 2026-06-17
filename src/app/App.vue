@@ -20,6 +20,7 @@ import InjuryScreeningSheet from '@/shared/ui/InjuryScreeningSheet.vue'
 import PostRunInterviewSheet from '@/shared/ui/PostRunInterviewSheet.vue'
 import ToastHost from '@/shared/ui/ToastHost.vue'
 import { useToastStore } from '@/app/stores/toastStore'
+import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
 import { buildInterviewRunPatch, type PostRunInterviewResult } from '@/features/post-run-interview/buildInterviewRunPatch'
 import OnboardingFlow from '@/pages/onboarding/OnboardingFlow.vue'
 import CelebrationModal from '@/pages/dashboard/CelebrationModal.vue'
@@ -35,6 +36,7 @@ const runStore = useRunStore()
 const weatherStore = useWeatherStore()
 const levelStore = useLevelStore()
 const toastStore = useToastStore()
+const injuryFlowStore = useInjuryFlowStore()
 
 // 운동 직후 코치 인터뷰(#311): HealthKit 임포트 직후 표시, 결과는 run 주관 필드로 저장.
 const pendingInterviewRun = computed(() => runStore.runs.find((run) => run.id === runStore.pendingInterviewRunId) ?? null)
@@ -144,6 +146,16 @@ const suppressNextTabClick = ref(false)
 const injuryCheckInItemId = ref('')
 const injuryCheckInSaving = ref(false)
 const injuryScreeningOpen = ref(false)
+// 코치 모먼트(대시보드)가 부상 스크리닝 시트를 요청하면 연다(#386).
+watch(
+  () => injuryFlowStore.request,
+  (request) => {
+    if (request === 'screening') {
+      injuryScreeningOpen.value = true
+      injuryFlowStore.clear()
+    }
+  }
+)
 const SCREENING_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
 let activePanelObserver: ResizeObserver | null = null
 let activePanelMeasureFrame: number | null = null
