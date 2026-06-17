@@ -14,8 +14,8 @@ export type PostRunInterviewResult = {
   areaPainLevels: InjuryAreaSelection[]
   /** 난이도(RPE 1~10). 미입력이면 null. */
   rpe: number | null
-  /** 코치에게 전할 자유 의견. */
-  note: string
+  /** 오늘 컨디션(1~10). 회복/적응 로직이 소비. 미입력이면 null. */
+  conditionScore: number | null
 }
 
 const SEVERITY_LABEL: Record<Exclude<PostRunPainSeverity, 'none'>, string> = {
@@ -35,11 +35,10 @@ function buildPainSummary(severity: PostRunPainSeverity, areas: InjuryAreaSelect
 }
 
 export function buildInterviewRunPatch(run: RunLog, result: PostRunInterviewResult): RunLog {
-  const note = result.note.trim()
   return {
     ...run,
     rpe: result.rpe ?? run.rpe,
     painNote: buildPainSummary(result.painSeverity, result.areaPainLevels),
-    workoutFeeling: note || run.workoutFeeling
+    conditionScore: result.conditionScore ?? run.conditionScore
   }
 }

@@ -14,7 +14,7 @@ const draft = reactive({
   painSeverity: null as PostRunPainSeverity | null,
   areaPainLevels: [] as InjuryAreaSelection[],
   rpe: null as number | null,
-  note: ''
+  conditionScore: null as number | null
 })
 
 const drag = useBottomSheetDrag(() => emit('close'))
@@ -58,7 +58,7 @@ watch(
     draft.painSeverity = null
     draft.areaPainLevels = []
     draft.rpe = props.run?.rpe ?? null
-    draft.note = ''
+    draft.conditionScore = props.run?.conditionScore ?? null
   },
   { immediate: true }
 )
@@ -74,7 +74,7 @@ function submit() {
     painSeverity: draft.painSeverity,
     areaPainLevels: hasPain.value ? draft.areaPainLevels : [],
     rpe: draft.rpe,
-    note: draft.note.trim()
+    conditionScore: draft.conditionScore
   })
 }
 </script>
@@ -134,10 +134,17 @@ function submit() {
           null-label="선택"
         />
 
-        <label class="checkin-note">
-          코치에게 전할 말
-          <textarea v-model="draft.note" rows="2" placeholder="느낌이나 전하고 싶은 내용을 자유롭게." />
-        </label>
+        <ScaleSlider
+          v-model="draft.conditionScore"
+          label="오늘 컨디션"
+          :min="1"
+          :max="10"
+          min-label="나쁨"
+          max-label="좋음"
+          null-label="선택"
+        />
+
+        <p class="helper checkin-talk-hint">하고 싶은 말이 있으면 이 세션을 열어 코치와 바로 이야기할 수 있어요.</p>
       </div>
 
       <div class="injury-checkin-actions">

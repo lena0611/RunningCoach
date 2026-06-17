@@ -46,15 +46,15 @@ function run(overrides: Partial<RunLog> = {}): RunLog {
 }
 
 function result(overrides: Partial<PostRunInterviewResult> = {}): PostRunInterviewResult {
-  return { painSeverity: 'none', areaPainLevels: [], rpe: null, note: '', ...overrides }
+  return { painSeverity: 'none', areaPainLevels: [], rpe: null, conditionScore: null, ...overrides }
 }
 
 describe('buildInterviewRunPatch', () => {
-  it('통증 없음: painNote 비우고 자유의견은 workoutFeeling 으로', () => {
-    const patch = buildInterviewRunPatch(run(), result({ painSeverity: 'none', rpe: 6, note: '컨디션 좋았어요' }))
+  it('통증 없음: painNote 비우고 RPE·컨디션 반영', () => {
+    const patch = buildInterviewRunPatch(run(), result({ painSeverity: 'none', rpe: 6, conditionScore: 8 }))
     expect(patch.painNote).toBe('')
     expect(patch.rpe).toBe(6)
-    expect(patch.workoutFeeling).toBe('컨디션 좋았어요')
+    expect(patch.conditionScore).toBe(8)
   })
 
   it('통증 보통 + 부위: painNote 에 정도와 부위/레벨 요약', () => {
@@ -71,8 +71,13 @@ describe('buildInterviewRunPatch', () => {
     expect(patch.rpe).toBe(4)
   })
 
-  it('자유의견 비면 기존 workoutFeeling 유지', () => {
-    const patch = buildInterviewRunPatch(run(), result({ note: '   ' }))
-    expect(patch.workoutFeeling).toBe('기존 느낌')
+  it('컨디션 미입력이면 기존 run.conditionScore 유지', () => {
+    const patch = buildInterviewRunPatch(run({ conditionScore: 7 }), result({ conditionScore: null }))
+    expect(patch.conditionScore).toBe(7)
+  })
+
+  it('인터뷰는 자유메모를 더 이상 받지 않는다(자유 표현은 세션 코치 대화로)', () => {
+    const patch = buildInterviewRunPatch(run({ workoutFeeling: '기존 느낌' }), result({}))
+    expect(patch.workoutFeeling).toBe('기존 느낌') // 인터뷰가 덮어쓰지 않음
   })
 })
