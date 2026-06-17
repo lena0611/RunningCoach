@@ -29,13 +29,27 @@ const SEVERITIES: { value: PostRunPainSeverity; label: string }[] = [
 const hasPain = computed(() => draft.painSeverity !== null && draft.painSeverity !== 'none')
 const canSubmit = computed(() => draft.painSeverity !== null)
 
+// 런 날짜 기준 라벨 — 어제 뛴 걸 오늘 임포트하면 "오늘"이 아니라 "어제"로(다음날 임포트 대응).
+const runDayLabel = computed(() => {
+  const date = props.run?.date
+  if (!date) return '오늘'
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const runDay = new Date(`${date}T00:00:00`)
+  const diff = Math.round((today.getTime() - runDay.getTime()) / (24 * 60 * 60 * 1000))
+  if (diff <= 0) return '오늘'
+  if (diff === 1) return '어제'
+  if (diff < 7) return `${diff}일 전`
+  return date.slice(5).replace('-', '/') // M/D
+})
+
 const sessionLine = computed(() => {
   const run = props.run
   if (!run) return ''
   const distance = Number.isFinite(run.distanceKm) && run.distanceKm > 0 ? `${run.distanceKm.toFixed(1)}km` : ''
   const minutes = run.durationSec ? Math.round(run.durationSec / 60) : null
   const record = [distance, minutes ? `${minutes}분` : ''].filter(Boolean).join(' · ')
-  return record ? `방금 ${record} 기록이 들어왔어요. 오늘 어땠나요?` : '오늘 운동 어땠나요?'
+  return record ? `방금 ${record} 기록이 들어왔어요. ${runDayLabel.value} 어땠나요?` : `${runDayLabel.value} 운동 어땠나요?`
 })
 
 watch(
@@ -80,7 +94,7 @@ function submit() {
       <div class="bottom-sheet-heading bottom-sheet-drag-zone" @pointerdown="drag.startDrag">
         <div>
           <span class="context-chip">코치 인터뷰</span>
-          <h2>오늘 어땠나요?</h2>
+          <h2>{{ runDayLabel }} 어땠나요?</h2>
         </div>
         <button class="stack-icon-button sheet-close" type="button" aria-label="건너뛰기" @click="emit('close')">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
@@ -112,7 +126,7 @@ function submit() {
 
         <ScaleSlider
           v-model="draft.rpe"
-          label="오늘 난이도"
+          :label="`${runDayLabel} 난이도`"
           :min="1"
           :max="10"
           min-label="쉬움"
