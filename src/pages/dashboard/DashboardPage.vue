@@ -180,7 +180,8 @@ const scheduleDays = computed<CarouselDay[]>(() => {
   }
   return out
 })
-const hasSchedule = computed(() => scheduleDays.value.some((d) => d.state !== 'rest' && d.state !== 'past'))
+// 실제 주기화 스케줄(목표+targetDate로 생성된 세션)이 있을 때만 캐러셀. 완료런만으론 표시 안 함(무계획 오인 방지).
+const hasSchedule = computed(() => scheduleStore.sessions.length > 0)
 // 위크 요약(이번 주 단계·포커스·핵심·볼륨·D-day) — "이번 주가 통째로 뭘 위한 주인지"
 const weekSummary = computed(() => buildWeekSummary(scheduleStore.sessions, today.value, activeGoal.value?.targetDate ?? null))
 const activeDayIndex = ref(CAROUSEL_DAYS_BEFORE) // 기본 = 오늘(offset 0)
@@ -233,12 +234,10 @@ const activeFulfillment = computed(() => {
   const intent = activeDoneIntent.value
   return run && intent ? computeIntentFulfillment(intent, run) : null
 })
-// 실제 주기화 스케줄이 존재하는가(목표+targetDate로 생성됨). 없으면 "추가 런" 개념 자체가 성립 안 함.
-const scheduleExists = computed(() => scheduleStore.sessions.length > 0)
 // 진짜 엑스트라 런 = 스케줄이 있는데 그 세션/의도에 귀속 안 됨(따라잡기 아님). 스케줄 없으면 추가 런 아님.
 const activeExtraEval = computed(() => {
   const run = activeDoneRun.value
-  if (!run || !scheduleExists.value) return null
+  if (!run || !hasSchedule.value) return null
   const attributed = scheduleStore.sessions.some((s) => s.runId === run.id) || Boolean(activeDoneIntent.value)
   if (attributed) return null
   return evaluateExtraRun(run, activeInjury.value, chronicLoad.value)
@@ -257,8 +256,9 @@ const activeGradeLine = computed<string | null>(() => {
   return null
 })
 const debriefNextLine = computed(() => {
-  const next = dayView.value.next
-  return next ? `${formatDateWithWeekday(next.date)} · ${next.title}` : null
+  // 새 주기화 스케줄 기준 다음 세션(옛 weeklyPattern dayView.next 아님 — 불일치 방지).
+  const next = scheduleStore.upcoming(todayDate.value)[0] ?? null
+  return next ? `${formatDateWithWeekday(next.date)} · ${sessionTypeLabel(next.sessionType)}` : null
 })
 
 // 전략적 휴식(#378): 휴식날도 회복·부상관리·근력 보강 안내
@@ -280,7 +280,7 @@ const coachMoments = computed(() =>
       chronic: chronicLoad.value,
       injury: activeInjury.value,
       today: today.value,
-      scheduleExists: scheduleExists.value,
+      scheduleExists: hasSchedule.value,
       deviation: detectScheduleDeviation(scheduleStore.sessions, today.value),
       goalProgress: raceProjection.value
         ? {

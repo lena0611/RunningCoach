@@ -72,6 +72,7 @@ function choose(option: { sentiment: string; response: string }) {
   font-size: var(--text-info-size, 14px);
   line-height: var(--text-info-line, 1.5);
   color: var(--color-text);
+  overflow-wrap: anywhere;
 }
 .moment-options {
   display: flex;
