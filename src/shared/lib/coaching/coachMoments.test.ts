@@ -40,6 +40,35 @@ describe('collectCoachMoments', () => {
     expect(moments.map((m) => m.kind)).toEqual(['injury', 'load-spike', 'extra-run'])
   })
 
+  it('이탈(놓침)이면 deviation 모먼트', () => {
+    const moments = collectCoachMoments(ctx({ deviation: { shouldRealign: true, reason: '핵심 세션 2개를 놓쳤어요.', missedCount: 2 } }))
+    expect(moments.some((m) => m.kind === 'deviation')).toBe(true)
+  })
+
+  it('준비도 충분이면 긍정 격려(goal-progress)', () => {
+    const moments = collectCoachMoments(ctx({ goalProgress: { readinessScore: 82, readinessLevel: '충분', dDayText: 'D-30' } }))
+    const g = moments.find((m) => m.kind === 'goal-progress')
+    expect(g).toBeTruthy()
+    expect(g!.message).toContain('82%')
+  })
+
+  it('준비도 부족/보통이면 격려 안 함(부상·부하 감지기가 담당)', () => {
+    expect(collectCoachMoments(ctx({ goalProgress: { readinessScore: 40, readinessLevel: '부족', dDayText: '' } }))).toEqual([])
+  })
+
+  it('전체 우선순위: 부상>부하>이탈>추가런>목표진척', () => {
+    const moments = collectCoachMoments(
+      ctx({
+        runs: extraRuns,
+        chronic: spike,
+        injury: injury({ severity: 4 }),
+        deviation: { shouldRealign: true, reason: 'x', missedCount: 3 },
+        goalProgress: { readinessScore: 80, readinessLevel: '충분', dDayText: '' }
+      })
+    )
+    expect(moments.map((m) => m.kind)).toEqual(['injury', 'load-spike', 'deviation', 'extra-run', 'goal-progress'])
+  })
+
   it('dismissed 키는 제외', () => {
     const moments = collectCoachMoments(ctx({ runs: extraRuns, chronic: spike }), new Set(['load-spike']))
     expect(moments.some((m) => m.kind === 'load-spike')).toBe(false)
