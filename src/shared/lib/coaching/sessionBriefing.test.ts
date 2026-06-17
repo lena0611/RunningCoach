@@ -174,4 +174,11 @@ describe('buildSessionBriefing', () => {
     const b = buildSessionBriefing(session({ sessionType: 'Tempo', keySession: true }), { goal, injury: null, chronic: noChronic })
     expect(b.evidence.some((e) => e.method.includes('Daniels'))).toBe(true)
   })
+
+  it('paceBasis(#405): Easy 계열만 페이스 근거 노출, 비-Easy(Tempo)는 빈값', () => {
+    const easy = buildSessionBriefing(session({ sessionType: 'Easy' }), { goal, injury: null, chronic: noChronic, easyPaceBasis: '내 Easy 런 5건 기준' })
+    expect(easy.paceBasis).toBe('내 Easy 런 5건 기준')
+    const tempo = buildSessionBriefing(session({ sessionType: 'Tempo', keySession: true }), { goal, injury: null, chronic: noChronic, easyPaceBasis: '내 Easy 런 5건 기준' })
+    expect(tempo.paceBasis).toBe('')
+  })
 })

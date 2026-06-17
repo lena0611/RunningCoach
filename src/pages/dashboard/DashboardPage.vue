@@ -249,7 +249,11 @@ const activeBriefing = computed<SessionBriefing | null>(() => {
     vdot: resolvePaceModel(memoryStore.memory.athleteProfile).vdot,
     adaptiveProfile: memoryStore.memory.adaptiveTrainingProfile,
     progression: adaptiveProgress.value.criteria,
-    intent
+    intent,
+    // 페이스 근거 투명화(#405) — 관측 보정이면 표본 수, 아니면 추정 안내. (나중에 "나의 통계"로 흡수)
+    easyPaceBasis: observedEasyPace.value
+      ? `내 Easy 런 ${observedEasyPace.value.sampleCount}건 기준 (심박 ${heartRateModel.value.easyCeilingBpm ?? '-'} 이하)`
+      : 'VDOT 추정 — Easy 심박 이하 런 3건 모이면 내 데이터로 보정돼요'
   })
 })
 const briefingCeilingText = computed(() =>
