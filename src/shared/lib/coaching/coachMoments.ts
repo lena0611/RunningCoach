@@ -13,7 +13,7 @@ import type { TrainingInjuryItem } from '@/entities/training-memory/model'
 import type { ChronicLoadTrend } from '@/shared/lib/runStats'
 import { analyzeExtraRunTrend, buildExtraRunInquiry } from '@/shared/lib/coaching/extraRunTrend'
 
-export type CoachMomentKind = 'injury' | 'load-spike' | 'extra-run'
+export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'extra-run' | 'goal-progress'
 export type CoachMomentSentiment = 'positive' | 'neutral' | 'caution'
 
 /** 의도 질문의 선택지 — 고르면 분기 피드백(response)을 보여준다. */
@@ -41,6 +41,10 @@ export type CoachMomentContext = {
   chronic: ChronicLoadTrend | null
   injury: TrainingInjuryItem | null
   today: Date
+  /** 누적 이탈(놓친 세션) — 있으면 코치가 일정 재정렬을 알린다. */
+  deviation?: { shouldRealign: boolean; reason: string; missedCount: number } | null
+  /** 목표 준비도 — '충분'이면 코치가 격려(긍정 소통). */
+  goalProgress?: { readinessScore: number; readinessLevel: '충분' | '보통' | '부족'; dDayText: string } | null
 }
 
 type Detector = (ctx: CoachMomentContext) => CoachMoment | null
@@ -107,7 +111,32 @@ function detectExtraRun(ctx: CoachMomentContext): CoachMoment | null {
   }
 }
 
-const DETECTORS: Detector[] = [detectInjury, detectLoadSpike, detectExtraRun]
+function detectDeviation(ctx: CoachMomentContext): CoachMoment | null {
+  const d = ctx.deviation
+  if (!d || !d.shouldRealign) return null
+  return {
+    key: 'deviation',
+    kind: 'deviation',
+    priority: 60,
+    icon: '🧭',
+    message: d.reason || `최근 ${d.missedCount}개를 놓쳐서, 목표일은 그대로 두고 오늘부터 일정을 다시 맞췄어요.`
+  }
+}
+
+function detectGoalProgress(ctx: CoachMomentContext): CoachMoment | null {
+  const g = ctx.goalProgress
+  // 긍정 소통 전용 — 준비도가 '충분'할 때만 격려(낮을 땐 부상/부하 감지기가 담당).
+  if (!g || g.readinessLevel !== '충분') return null
+  return {
+    key: 'goal-progress',
+    kind: 'goal-progress',
+    priority: 30,
+    icon: '🎉',
+    message: `목표 준비도 ${g.readinessScore}% — 충분해요! 지금 흐름이 좋아요${g.dDayText ? ` (${g.dDayText})` : ''}. 이대로 가면서 다음 단계 상향도 검토해볼 만해요.`
+  }
+}
+
+const DETECTORS: Detector[] = [detectInjury, detectLoadSpike, detectDeviation, detectExtraRun, detectGoalProgress]
 
 /**
  * 등록된 감지기를 모두 돌려 유의미한 순간을 모으고, 우선순위 내림차순으로 정렬해 반환한다.

@@ -37,6 +37,7 @@ import SessionBriefingCard from './SessionBriefingCard.vue'
 import SessionDebriefCard from './SessionDebriefCard.vue'
 import { buildRestGuidance, evaluateExtraRun } from '@/shared/lib/coaching/restGuidance'
 import { collectCoachMoments } from '@/shared/lib/coaching/coachMoments'
+import { detectScheduleDeviation } from '@/shared/lib/coaching/scheduleRealign'
 import CoachMomentCard from './CoachMomentCard.vue'
 import { computeIntentFulfillment } from '@/entities/session-intent/computeIntentFulfillment'
 import { evaluateSteadyLong, STEADY_LONG_GRADE_LABEL, evaluateLsd, LSD_KIND_LABEL } from '@/shared/lib/coaching/sessionQuality'
@@ -275,7 +276,15 @@ const coachMoments = computed(() =>
       attributedRunIds: attributedRunIds.value,
       chronic: chronicLoad.value,
       injury: activeInjury.value,
-      today: today.value
+      today: today.value,
+      deviation: detectScheduleDeviation(scheduleStore.sessions, today.value),
+      goalProgress: raceProjection.value
+        ? {
+            readinessScore: raceProjection.value.readinessScore,
+            readinessLevel: raceProjection.value.readinessLevel,
+            dDayText: weekSummary.value?.dDayText ?? ''
+          }
+        : null
     },
     dismissedMomentKeys.value
   )
