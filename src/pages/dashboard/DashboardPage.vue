@@ -98,7 +98,9 @@ const ageLoadWeight = computed(() => getAgeLoadWeight(memoryStore.memory.athlete
 const observedMaxHr = computed(() => deriveObservedMaxHr(runs.value.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })), today.value))
 const heartRateModel = computed(() => deriveHeartRateModel(memoryStore.memory.athleteProfile, today.value.getFullYear(), observedMaxHr.value))
 // 관측 Easy 페이스(#405, A안): 실제 Easy 심박 이하에서 뛴 페이스. 있으면 VDOT 추정 대신 이걸로 처방(심박과 충돌 방지).
-const observedEasyPace = computed(() => deriveObservedEasyPace(runs.value, heartRateModel.value.easyCeilingBpm, today.value))
+const observedEasyPace = computed(() =>
+  deriveObservedEasyPace(runs.value, heartRateModel.value.easyCeilingBpm, today.value, heartRateModel.value.recoveryCeilingBpm)
+)
 // 보정 PaceModel: Easy 계열 페이스를 관측값으로 덮은 모델(브리핑 표시 즉시 보정용).
 const calibratedPaceModel = computed(() => {
   const base = resolvePaceModel(memoryStore.memory.athleteProfile)
