@@ -76,14 +76,16 @@ export function buildRealignedSchedule(
   sessions: ScheduledSession[],
   goal: TrainingGoal,
   profile: AthleteProfile,
-  today: Date
+  today: Date,
+  /** 현재 주간 주행량(최근 30일 평균) — 재정렬 시에도 현재 체력에 재앵커링한다(#395). */
+  currentWeeklyKm: number | null = null
 ): RealignPlan {
   const deviation = detectScheduleDeviation(sessions, today)
   const fromDate = toDateOnly(today)
   if (!deviation.shouldRealign) {
     return { fromDate, drafts: [], deviation }
   }
-  const drafts = buildPeriodizedSchedule({ goal, profile, today }).map((d) => ({
+  const drafts = buildPeriodizedSchedule({ goal, profile, today, currentWeeklyKm }).map((d) => ({
     ...d,
     source: 'realign' as const
   }))

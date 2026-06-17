@@ -14,7 +14,7 @@ import type { ChronicLoadTrend } from '@/shared/lib/runStats'
 import { analyzeExtraRunTrend, buildExtraRunInquiry } from '@/shared/lib/coaching/extraRunTrend'
 import { isRunningLoadGroup, PAIN_GROUP_LABEL, type PainGroup } from '@/features/post-run-interview/buildInterviewRunPatch'
 
-export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'extra-run' | 'goal-progress'
+export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'extra-run' | 'goal-progress' | 'goal-feasibility'
 
 /** 모먼트가 제안하는 행동(전용 시트 열기 등). 트레이니 확인 후 실행. */
 export type CoachMomentAction = {
@@ -69,6 +69,8 @@ export type CoachMomentContext = {
   deviation?: { shouldRealign: boolean; reason: string; missedCount: number } | null
   /** 목표 준비도 — '충분'이면 코치가 격려(긍정 소통). */
   goalProgress?: { readinessScore: number; readinessLevel: '충분' | '보통' | '부족'; dDayText: string } | null
+  /** 목표 실현가능성(#395) — 현재 체력 대비 목표가 무리면 솔직히 경고+대안(message). assessGoalFeasibility 결과 주입. */
+  goalFeasibility?: { feasible: boolean; message: string | null } | null
 }
 
 type Detector = (ctx: CoachMomentContext) => CoachMoment | null
@@ -184,7 +186,27 @@ function detectPainFollowup(ctx: CoachMomentContext): CoachMoment | null {
   }
 }
 
-const DETECTORS: Detector[] = [detectInjury, detectLoadSpike, detectDeviation, detectPainFollowup, detectExtraRun, detectGoalProgress]
+function detectGoalFeasibility(ctx: CoachMomentContext): CoachMoment | null {
+  const f = ctx.goalFeasibility
+  if (!f || f.feasible || !f.message) return null
+  return {
+    key: 'goal-feasibility',
+    kind: 'goal-feasibility',
+    priority: 55,
+    icon: '🎯',
+    message: f.message
+  }
+}
+
+const DETECTORS: Detector[] = [
+  detectInjury,
+  detectLoadSpike,
+  detectPainFollowup,
+  detectDeviation,
+  detectGoalFeasibility,
+  detectExtraRun,
+  detectGoalProgress
+]
 
 /**
  * 등록된 감지기를 모두 돌려 유의미한 순간을 모으고, 우선순위 내림차순으로 정렬해 반환한다.

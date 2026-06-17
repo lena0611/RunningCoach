@@ -45,6 +45,13 @@ describe('collectCoachMoments', () => {
     expect(moments.some((m) => m.kind === 'deviation')).toBe(true)
   })
 
+  it('목표가 무리면 goal-feasibility 경고(#395), feasible이면 없음', () => {
+    const warn = collectCoachMoments(ctx({ goalFeasibility: { feasible: false, message: '매주 약 40%씩 늘려야 해요 — 목표일을 미루는 걸 권해요.' } }))
+    expect(warn.some((m) => m.kind === 'goal-feasibility')).toBe(true)
+    const ok = collectCoachMoments(ctx({ goalFeasibility: { feasible: true, message: null } }))
+    expect(ok.some((m) => m.kind === 'goal-feasibility')).toBe(false)
+  })
+
   it('준비도 충분이면 긍정 격려(goal-progress)', () => {
     const moments = collectCoachMoments(ctx({ goalProgress: { readinessScore: 82, readinessLevel: '충분', dDayText: 'D-30' } }))
     const g = moments.find((m) => m.kind === 'goal-progress')
