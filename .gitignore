@@ -32,3 +32,10 @@ native/**/*.xcuserstate
 native/**/xcuserdata/
 native/**/WebApp/
 native/.githooks/
+
+
+# 서드파티 스킬(skills CLI 설치, 툴링이라 미추적 — 하네스 source-command 스킬은 계속 추적)
+/.agents/skills/grill-me/
+/.agents/skills/grill-with-docs/
+/.claude/skills/
+/skills-lock.json
