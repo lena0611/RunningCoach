@@ -50,6 +50,7 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
       <ul class="brief-list">
         <li v-for="(line, i) in briefing.execution" :key="i">{{ line }}</li>
       </ul>
+      <p v-if="briefing.paceBasis" class="brief-pace-basis">{{ briefing.paceBasis }}</p>
     </div>
 
     <div v-if="briefing.successCriteria.length" class="brief-block">
@@ -162,6 +163,12 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
 
 .brief-caution .brief-list {
   color: var(--color-text);
+}
+
+.brief-pace-basis {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--color-muted);
 }
 
 .brief-evidence-btn {

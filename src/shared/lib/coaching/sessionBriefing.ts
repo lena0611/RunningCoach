@@ -85,6 +85,8 @@ export type SessionBriefing = {
   targetsLine: string
   /** ④ 조심할 점(부상·부하). 없으면 빈 배열. */
   cautions: string[]
+  /** 페이스 근거 한 줄(#405) — "내 Easy 런 N건 기준"(관측 보정) 또는 추정 안내. 없으면 ''. */
+  paceBasis: string
   /** 근거 단서 → 바텀시트용 방법론 귀속. */
   evidence: EvidenceRef[]
 }
@@ -306,7 +308,11 @@ export type SessionBriefingContext = {
   progression?: ProgressionSignal[] | null
   /** 오늘 세션의 SessionIntent(#308/#309) — 의도(why)·성공기준·타겟. 브리핑이 흡수(중복 카드 제거). */
   intent?: BriefingIntent | null
+  /** Easy 계열 페이스 근거 한 줄(#405) — 관측 보정/추정 여부. 호출부가 산출해 주입. 나중에 "나의 통계"로 흡수 예정. */
+  easyPaceBasis?: string | null
 }
+
+const EASY_PACE_FAMILY: ReadonlySet<RunType> = new Set(['Easy', 'Easy + Strides', 'Recovery', 'LSD', 'Steady Long'])
 
 /** ScheduledSession + 장기맥락 → 4요소 작전 브리핑(결정론). */
 export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBriefingContext): SessionBriefing {
@@ -336,6 +342,7 @@ export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBrie
     successCriteria: ctx.intent?.successCriteria ?? [],
     targetsLine: targetsLineFrom(ctx.intent?.targets),
     cautions: caution.lines,
+    paceBasis: EASY_PACE_FAMILY.has(session.sessionType) ? ctx.easyPaceBasis ?? '' : '',
     evidence
   }
 }
