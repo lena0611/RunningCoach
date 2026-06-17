@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue'
 import type { RunLog } from '@/entities/run/model'
-import type { InjuryAreaSelection } from '@/entities/training-memory/injuryAreas'
-import type { PostRunInterviewResult, PostRunPainSeverity } from '@/features/post-run-interview/buildInterviewRunPatch'
+import type { PainGroup, PostRunInterviewResult, PostRunPainSeverity } from '@/features/post-run-interview/buildInterviewRunPatch'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
-import InjuryBodySelector from './InjuryBodySelector.vue'
 import ScaleSlider from './ScaleSlider.vue'
 
 const props = defineProps<{ run: RunLog | null; open: boolean; saving?: boolean }>()
@@ -12,10 +10,16 @@ const emit = defineEmits<{ close: []; submit: [value: PostRunInterviewResult] }>
 
 const draft = reactive({
   painSeverity: null as PostRunPainSeverity | null,
-  areaPainLevels: [] as InjuryAreaSelection[],
+  painGroup: null as PainGroup | null,
   rpe: null as number | null,
   conditionScore: null as number | null
 })
+
+const PAIN_GROUPS: { value: PainGroup; label: string }[] = [
+  { value: 'foot', label: '발' },
+  { value: 'lower', label: '다리' },
+  { value: 'upper', label: '상체' }
+]
 
 const drag = useBottomSheetDrag(() => emit('close'))
 
@@ -56,7 +60,7 @@ watch(
   () => props.run?.id,
   () => {
     draft.painSeverity = null
-    draft.areaPainLevels = []
+    draft.painGroup = null
     draft.rpe = props.run?.rpe ?? null
     draft.conditionScore = props.run?.conditionScore ?? null
   },
@@ -65,14 +69,14 @@ watch(
 
 function setSeverity(value: PostRunPainSeverity) {
   draft.painSeverity = value
-  if (value === 'none') draft.areaPainLevels = []
+  if (value === 'none') draft.painGroup = null
 }
 
 function submit() {
   if (!canSubmit.value || !draft.painSeverity) return
   emit('submit', {
     painSeverity: draft.painSeverity,
-    areaPainLevels: hasPain.value ? draft.areaPainLevels : [],
+    painGroup: hasPain.value ? draft.painGroup : null,
     rpe: draft.rpe,
     conditionScore: draft.conditionScore
   })
@@ -120,8 +124,20 @@ function submit() {
           </div>
         </div>
 
-        <div v-if="hasPain">
-          <InjuryBodySelector v-model="draft.areaPainLevels" label="어디가 불편했나요" />
+        <div v-if="hasPain" class="checkin-question">
+          <strong>어느 쪽이었나요?</strong>
+          <div class="segmented-choice">
+            <button
+              v-for="g in PAIN_GROUPS"
+              :key="g.value"
+              type="button"
+              :class="{ active: draft.painGroup === g.value }"
+              @click="draft.painGroup = g.value"
+            >
+              {{ g.label }}
+            </button>
+          </div>
+          <p class="helper">정확한 부위·정도는 나중에 코치가 부상 체크인으로 짧게 도와드려요.</p>
         </div>
 
         <ScaleSlider
