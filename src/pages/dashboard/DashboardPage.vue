@@ -291,6 +291,23 @@ const debriefNextLine = computed(() => {
   return next ? `${formatDateWithWeekday(next.date)} · ${sessionTypeLabel(next.sessionType)}` : null
 })
 
+// 루틴 퀘스트의 "다음 세션"도 캐러셀과 같은 주기화 스케줄에서 도출(옛 getNextSessionRecommendation
+// weeklyPattern 추천과 불일치 방지 — 퀘스트 vs 금주 스케줄 어긋남 수정). 스케줄 없으면 옛 추천 폴백.
+const questNextSession = computed(() => {
+  if (hasSchedule.value) {
+    const next = scheduleStore.upcoming(todayDate.value)[0]
+    if (next) {
+      return {
+        title: sessionTypeLabel(next.sessionType),
+        reason: next.prescription.note || sessionTypeLabel(next.sessionType),
+        dayName: formatDateWithWeekday(next.date),
+        plannedDate: next.date
+      }
+    }
+  }
+  return nextSession.value
+})
+
 // 전략적 휴식(#378): 휴식날도 회복·부상관리·근력 보강 안내
 const restGuidance = computed(() => buildRestGuidance(activeInjury.value, chronicLoad.value))
 
@@ -761,7 +778,7 @@ async function applyPhaseTransition() {
 
     <QuestPanel
       :progress="runnerProgress"
-      :next-session="nextSession"
+      :next-session="questNextSession"
       :weekly-done="weeklyRunCount"
       :weekly-target="weeklyRunTarget"
     />
