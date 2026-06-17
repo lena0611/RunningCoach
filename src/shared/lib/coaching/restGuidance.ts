@@ -94,12 +94,13 @@ export function buildRestGuidance(
   if (injuryActive) {
     const area = injury!.area || '관리 부위'
     const sev = injury!.severity ?? 0
-    purpose = `${area} 통증 ${sev}/5 관리가 오늘의 목적이에요. 통증을 키우지 않으면서 회복·강화합니다.`
-    const plan = (injury!.strengthPlan ?? []).slice(0, 3)
-    if (plan.length) items.push(`${area} 재활/강화: ${plan.join(' · ')}`)
-    else items.push(`${area} 부위 통증 범위 내 가벼운 모빌리티·스트레칭`)
-    if (injury!.returnToRunCriteria) items.push(`복귀 기준: ${injury!.returnToRunCriteria}`)
-    items.push('통증이 커지면 중단하고, 필요하면 전문가 상담')
+    purpose = `${area} 통증 ${sev}/5 관리가 오늘의 목적이에요. 통증을 키우지 않으면서 회복합니다.`
+    // 대시보드 카드는 간결하게 — 핵심 재활 동작 1가지 + 짧은 가드. 상세 프로토콜·복귀 기준은
+    // 부상 체크인(코치 모먼트)에서 다룬다(텍스트 벽 방지).
+    const plan = injury!.strengthPlan ?? []
+    if (plan.length) items.push(`가벼운 재활·강화: ${plan[0]}`)
+    else items.push('통증 범위 내 가벼운 모빌리티·스트레칭')
+    items.push('통증 0~2/5에서만, 커지면 즉시 중단')
     evidence.push(LOAD_EVIDENCE)
     return { purpose, items, evidence }
   }
