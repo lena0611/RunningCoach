@@ -239,10 +239,16 @@ const activeFulfillment = computed(() => {
   const intent = activeDoneIntent.value
   return run && intent ? computeIntentFulfillment(intent, run) : null
 })
+// 플랜 시작일(가장 이른 세션 날짜). 이 날짜 이전 런은 "플랜 없던 시절"이라 추가런 판정에서 제외.
+const scheduleStartDate = computed(() =>
+  scheduleStore.sessions.reduce<string | null>((min, s) => (!min || s.date < min ? s.date : min), null)
+)
 // 진짜 엑스트라 런 = 스케줄이 있는데 그 세션/의도에 귀속 안 됨(따라잡기 아님). 스케줄 없으면 추가 런 아님.
 const activeExtraEval = computed(() => {
   const run = activeDoneRun.value
   if (!run || !hasSchedule.value) return null
+  // 플랜 시작 이전 런은 예정/예정 외를 따질 대상이 아니다(귀속할 플랜이 없었음). [[web-change-verify-render-and-migration]] 일반화: #390 추세 가드와 동일 기준.
+  if (scheduleStartDate.value && run.date < scheduleStartDate.value) return null
   const attributed = scheduleStore.sessions.some((s) => s.runId === run.id) || Boolean(activeDoneIntent.value)
   if (attributed) return null
   return evaluateExtraRun(run, activeInjury.value, chronicLoad.value)
@@ -286,7 +292,7 @@ const coachMoments = computed(() =>
       injury: activeInjury.value,
       today: today.value,
       scheduleExists: hasSchedule.value,
-      scheduleStartDate: scheduleStore.sessions.reduce<string | null>((min, s) => (!min || s.date < min ? s.date : min), null),
+      scheduleStartDate: scheduleStartDate.value,
       deviation: detectScheduleDeviation(scheduleStore.sessions, today.value),
       goalProgress: raceProjection.value
         ? {
