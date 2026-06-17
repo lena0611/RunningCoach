@@ -34,38 +34,44 @@ function median(values: number[]): number {
 }
 
 /**
- * 최근 런 중 **평균 심박이 Easy 상한 이하**(= 진짜 Easy 효력)였던 런들의 페이스 중앙값을 구한다.
- * 표본이 부족하거나 상한이 없으면 null → 호출부는 기존 VDOT 추정으로 폴백.
+ * 최근 런 중 **진짜 Easy 효력**이었던 런들의 페이스 중앙값을 구한다.
+ *
+ * 1차로 "Easy 심박존(Z2: 회복 상한 초과 ~ 이지 상한 이하)" 런만 쓴다 — 회복(아주 느린) 런이
+ * 중앙값을 과하게 느리게 끌어내리는 걸 막는다(#405 정밀화). Z2 표본이 부족하면 "이지 상한 이하 전체"로
+ * 폴백(여전히 심박 안전), 그것도 부족하면 null(→ 호출부 VDOT 추정 폴백).
  */
 export function deriveObservedEasyPace(
   runs: RunLog[],
   easyCeilingBpm: number | null,
-  today: Date
+  today: Date,
+  /** 회복존 상한(Z1 top). 주면 Z2 밴드(이 값 초과 ~ easyCeiling)로 좁혀 더 정확한 Easy 페이스를 뽑는다. */
+  recoveryCeilingBpm: number | null = null
 ): ObservedEasyPace | null {
   if (!easyCeilingBpm) return null
   const start = new Date(today)
   start.setHours(0, 0, 0, 0)
   const since = start.getTime() - (WINDOW_DAYS - 1) * MS_PER_DAY
 
-  const paces = runs
-    .filter(
-      (r) =>
-        r.avgHeartRate != null &&
-        r.avgHeartRate > 0 &&
-        r.avgHeartRate <= easyCeilingBpm &&
-        (r.durationSec ?? 0) > 0 &&
-        (r.distanceKm ?? 0) >= MIN_DISTANCE_KM &&
-        new Date(`${r.date}T00:00:00`).getTime() >= since
-    )
-    .map((r) => r.durationSec! / r.distanceKm)
+  const inPool = (r: RunLog) =>
+    r.avgHeartRate != null &&
+    r.avgHeartRate > 0 &&
+    r.avgHeartRate <= easyCeilingBpm &&
+    (r.durationSec ?? 0) > 0 &&
+    (r.distanceKm ?? 0) >= MIN_DISTANCE_KM &&
+    new Date(`${r.date}T00:00:00`).getTime() >= since
 
-  if (paces.length < MIN_SAMPLES) return null
+  const pool = runs.filter(inPool)
+  // Z2(진짜 Easy) 밴드 우선 — 회복존 런 제외. 부족하면 이지 상한 이하 전체로 폴백.
+  const z2 = recoveryCeilingBpm ? pool.filter((r) => (r.avgHeartRate as number) > recoveryCeilingBpm) : pool
+  const chosen = z2.length >= MIN_SAMPLES ? z2 : pool
+  if (chosen.length < MIN_SAMPLES) return null
 
+  const paces = chosen.map((r) => r.durationSec! / r.distanceKm)
   const mid = Math.round(median(paces))
   // 관측 중앙값 ±5% 의 보수적 권장 구간([느린, 빠른]).
   return {
     easyPaceSec: mid,
     easyPaceRangeSec: [Math.round(mid * 1.05), Math.round(mid * 0.95)],
-    sampleCount: paces.length
+    sampleCount: chosen.length
   }
 }
