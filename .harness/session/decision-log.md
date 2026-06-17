@@ -4,6 +4,19 @@
 
 > 하네스 본체의 변경 이력이나 릴리스 노트가 아닙니다. 하네스 본체 변경 기록은 하네스 저장소의 `CHANGELOG.md` 또는 릴리스 태그를 확인합니다.
 
+## 2026-06-17 - 플랜 시작점을 "현재 체력 → 검증된 시스템 등급"으로 앵커링 (#326, /grill-me 합의)
+
+`buildPeriodizedSchedule`의 phase는 `allocatePhases(totalWeeks, goalDistanceKm)`로 **목표일+목표거리만** 쓰고, `baseVolumeKm = 목표거리×2.5`로 시작 볼륨을 역산한다. 현재 체력/누적 볼륨(`chronicLoad.last30Km`, `readinessScore`, VDOT)은 페이스·요일에만 반영되고 **시작 phase/볼륨 결정엔 안 물려 있다** → 고볼륨 러너엔 과소, 초보엔 과다 처방 위험. /grill-me 설계 인터뷰로 다음 확정.
+
+- **볼륨 앵커링(범위).** 현재 체력은 단계 *순서*가 아니라 **시작 등급/볼륨**을 정한다. 단계 순서(Base→Build→…→Taper)는 체력 무관 유지(Base 빌딩 생략 금지).
+- **검증된 시스템을 정본으로.** 볼륨 공식을 발명하지 않고 명명된 코칭 시스템을 토대로 삼는다. 그 시스템들(Pfitzinger·Higdon·Hansons)은 이미 *현재 주행량/수준으로 플랜 등급 선택* 구조 → "현재 체력 앵커링" = "맞는 등급 선택". **거리별 대표 시스템 매핑**(5K·10K→Daniels, 하프·풀→Pfitzinger 등, 구체 매핑은 구현 시 보정).
+- **현재 주행량 = 최근 한 달 평균.** 데이터 없으면(신규·복귀) **목표 설정 시 1회 입력**, 그것도 없으면 보수적 최저 등급.
+- **점진적 부하는 절제된 근거로(내가 리서치·반영, 사용자에 안 물음).** 10% 룰은 근거 약함(Buist RCT). 대신 ~30%+ 급증 회피(Nielsen), ACWR 0.8~1.3(Gabbett), 3~4주 회복주. 상세·출처: `running-coaching-standards.md` "시작점 앵커링".
+- **목표 과다 시 솔직히 경고 + 대안**(목표일 미루기/목표 낮추기) — "정직한 코치" 가치.
+- **IP 주의**: 상용 플랜 표 복제 금지, 공개 원리·공식·등급 로직에 귀속+출처 명시.
+- 교훈([[design-interview-ask-product-not-science]]): 설계 인터뷰에서 **제품/비전 결정만 사용자에 묻고, 근거 있는 도메인 파라미터(증가율 등)는 직접 리서치·반영**한다(사용자 지적).
+- → 권위: `running-coaching-standards.md` "시작점 앵커링", 에픽 #326. 구현은 하위 이슈로 스펙.
+
 ## 2026-06-15 - 공통 하네스 0.2.56→0.2.64 업데이트 (CLAUDE.md 프로젝트 내용 복원 주의)
 
 `npm run harness:update -- --base-only`로 base(harness-seed)를 0.2.64로 올림(스택 vue3-vite-pinia-router 0.1.32 최신 유지). 주요 변경: npm 없이 동작하는 `harness` 런처, git hook의 런처 호출, 스택 manifest `verify` 섹션, guard의 package.json-free 동작 등(상세 `npm run harness:changelog`).
