@@ -23,11 +23,13 @@ describe('buildRestGuidance', () => {
     expect(g.evidence.length).toBeGreaterThan(0)
   })
 
-  it('활성 부상이면 재활/강화 + 복귀 기준 우선', () => {
+  it('활성 부상이면 간결한 재활 1동작 + 통증 가드(텍스트 벽 방지)', () => {
     const g = buildRestGuidance(injury({ area: '족저근막', severity: 2 }), stable)
     expect(g.purpose).toContain('족저근막')
     expect(g.items.some((i) => i.includes('재활') || i.includes('강화'))).toBe(true)
-    expect(g.items.some((i) => i.includes('복귀 기준'))).toBe(true)
+    expect(g.items.some((i) => i.includes('통증'))).toBe(true)
+    // 대시보드 카드는 간결 — 항목 수를 제한(상세 프로토콜은 부상 체크인에서)
+    expect(g.items.length).toBeLessThanOrEqual(2)
   })
 
   it('부하 급증이면 완전 휴식 권장', () => {

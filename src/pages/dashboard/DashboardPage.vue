@@ -1028,6 +1028,7 @@ async function applyPhaseTransition() {
   background: var(--color-surface-card);
   border-radius: var(--radius-card, 20px);
   box-shadow: var(--shadow-card);
+  min-width: 0;
 }
 .carousel-card-title {
   font-size: 18px;
@@ -1038,6 +1039,7 @@ async function applyPhaseTransition() {
   margin: 0;
   font-size: var(--text-info-size, 14px);
   color: var(--color-text);
+  overflow-wrap: anywhere;
 }
 .schedule-loading {
   padding: var(--space-5, 24px) var(--space-4, 16px);
@@ -1049,6 +1051,7 @@ async function applyPhaseTransition() {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
+  min-width: 0;
   gap: 6px 10px;
   padding: var(--space-2, 8px) var(--space-3, 12px);
   margin-bottom: var(--space-2, 8px);
@@ -1076,6 +1079,8 @@ async function applyPhaseTransition() {
   font-size: var(--text-info-size, 14px);
   line-height: var(--text-info-line, 1.5);
   color: var(--color-text);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* #352: 오늘/다음 훈련 2섹션 카드 */

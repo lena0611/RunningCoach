@@ -1420,6 +1420,8 @@ body.tab-swiping {
 
 .page {
   display: grid;
+  /* 단일 컬럼이 자식 콘텐츠로 뷰포트를 넘어가지 않도록(grid blowout 차단) */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--section-stack-gap);
   max-width: 1080px;
   margin: 0 auto;
