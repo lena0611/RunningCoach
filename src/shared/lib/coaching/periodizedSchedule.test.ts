@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AthleteProfile, TrainingGoal } from '@/entities/training-memory/model'
-import { allocatePhases, buildPeriodizedSchedule } from '@/shared/lib/coaching/periodizedSchedule'
+import { allocatePhases, assessGoalFeasibility, buildPeriodizedSchedule } from '@/shared/lib/coaching/periodizedSchedule'
 
 function goal(overrides: Partial<TrainingGoal>): TrainingGoal {
   return {
@@ -163,5 +163,50 @@ describe('buildPeriodizedSchedule', () => {
     expect(sched.some((s) => s.phase === 'Taper')).toBe(true)
     // 롱런이 키세션으로 표시됨
     expect(sched.some((s) => (s.sessionType === 'LSD' || s.sessionType === 'Steady Long') && s.keySession)).toBe(true)
+  })
+
+  // #395 시작 볼륨 앵커링: 시작일(월 1/5) 기준 첫 7일 세션 거리 합 ≈ 시작 주간 볼륨.
+  const firstWeekKm = (sched: ReturnType<typeof buildPeriodizedSchedule>) =>
+    sched.filter((s) => s.date <= '2026-01-11').reduce((sum, s) => sum + (s.prescription.distanceKm ?? 0), 0)
+
+  it('#395 시작 볼륨이 현재 주행량에 앵커링된다(고볼륨 러너 > 입문자)', () => {
+    const g = goal({ targetDate: '2026-07-05', distanceKm: 10 })
+    const beginner = buildPeriodizedSchedule({ goal: g, profile: profile({}), today, currentWeeklyKm: 15 })
+    const fit = buildPeriodizedSchedule({ goal: g, profile: profile({}), today, currentWeeklyKm: 60 })
+    expect(firstWeekKm(fit)).toBeGreaterThan(firstWeekKm(beginner))
+  })
+
+  it('#395 현재 주행량 데이터 없으면 보수적 기본값(목표거리 역산 폭증 아님)', () => {
+    const cold = buildPeriodizedSchedule({ goal: goal({ targetDate: '2026-07-05', distanceKm: 10 }), profile: profile({}), today })
+    // 콜드스타트 base = min(10×2.5, 20)=20 → 첫주 ~20km(옛 역산 25 아님)
+    expect(firstWeekKm(cold)).toBeGreaterThan(8)
+    expect(firstWeekKm(cold)).toBeLessThan(24)
+  })
+
+  it('#395 이미 목표 피크 이상으로 뛰면 무리한 증량 없이 현재에 앵커(base ≤ peak)', () => {
+    // 10K 목표 피크는 40km/주인데 현재 80km/주 → 40 역산이 아니라 80에 앵커
+    const sched = buildPeriodizedSchedule({ goal: goal({ targetDate: '2026-07-05', distanceKm: 10 }), profile: profile({}), today, currentWeeklyKm: 80 })
+    expect(firstWeekKm(sched)).toBeGreaterThan(50)
+  })
+})
+
+describe('assessGoalFeasibility (#395)', () => {
+  const today = new Date('2026-01-05T00:00:00')
+
+  it('시간 충분 + 현재 주행량 적당 → feasible(경고 없음)', () => {
+    const f = assessGoalFeasibility({ goal: goal({ targetDate: '2026-07-05', distanceKm: 10 }), profile: profile({}), today, currentWeeklyKm: 25 })
+    expect(f.feasible).toBe(true)
+    expect(f.message).toBeNull()
+  })
+
+  it('거의 안 뛰는데 목표가 임박 → 솔직한 경고 + 대안', () => {
+    const f = assessGoalFeasibility({ goal: goal({ targetDate: '2026-03-01', distanceKm: 42 }), profile: profile({}), today, currentWeeklyKm: 8 })
+    expect(f.feasible).toBe(false)
+    expect(f.message).toContain('목표')
+  })
+
+  it('이미 목표 피크 이상이면 feasible', () => {
+    const f = assessGoalFeasibility({ goal: goal({ targetDate: '2026-03-01', distanceKm: 10 }), profile: profile({}), today, currentWeeklyKm: 60 })
+    expect(f.feasible).toBe(true)
   })
 })

@@ -46,7 +46,7 @@ import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { buildSessionIntentDraft, easierAlternative, type BuildSessionIntentArgs } from '@/features/build-session-intent/buildSessionIntentDraft'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
-import { buildPeriodizedSchedule, buildWeekSummary } from '@/shared/lib/coaching/periodizedSchedule'
+import { assessGoalFeasibility, buildPeriodizedSchedule, buildWeekSummary } from '@/shared/lib/coaching/periodizedSchedule'
 import { buildRealignedSchedule } from '@/shared/lib/coaching/scheduleRealign'
 import { proposeAlternativeSession } from '@/shared/lib/coaching/alternativeSession'
 import { buildSessionBriefing, sessionTypeLabel, type SessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
@@ -113,6 +113,19 @@ const weeklyRunTarget = computed(() => memoryStore.memory.athleteProfile.weeklyR
 // === 목표 기반 주기화 스케줄 + 주간 캐러셀 (에픽 #362) ===
 const scheduleStore = useTrainingScheduleStore()
 const chronicLoad = computed(() => getChronicLoadTrend(runs.value, today.value, ageLoadWeight.value))
+// #395 시작 볼륨 앵커: 최근 30일 총거리 → 주간 평균(데이터 없으면 null → 엔진이 보수적 기본값).
+const currentWeeklyKm = computed(() => (chronicLoad.value.last30Km > 0 ? (chronicLoad.value.last30Km * 7) / 30 : null))
+// #395 목표 실현가능성: 현재 체력 대비 목표가 무리면 코치가 솔직히 경고+대안(coach-moment로 노출).
+const goalFeasibility = computed(() =>
+  activeGoal.value
+    ? assessGoalFeasibility({
+        goal: activeGoal.value,
+        profile: memoryStore.memory.athleteProfile,
+        today: today.value,
+        currentWeeklyKm: currentWeeklyKm.value
+      })
+    : null
+)
 
 function dateOnly(d: Date): string {
   const y = d.getFullYear()
@@ -140,12 +153,18 @@ async function doEnsureSchedule() {
     if (!scheduleStore.loaded) await scheduleStore.load(goal.id)
     const mine = scheduleStore.sessions.filter((s) => s.goalId === goal.id)
     const hasActive = mine.some(isActiveSession)
+    // 생성·재정렬 둘 다 같은 앵커(currentWeeklyKm computed)를 쓴다(#395, 정책 단일화).
     if (!hasActive) {
-      const drafts = buildPeriodizedSchedule({ goal, profile: memoryStore.memory.athleteProfile, today: today.value })
+      const drafts = buildPeriodizedSchedule({
+        goal,
+        profile: memoryStore.memory.athleteProfile,
+        today: today.value,
+        currentWeeklyKm: currentWeeklyKm.value
+      })
       if (drafts.length) await scheduleStore.insertMany(drafts)
       return
     }
-    const plan = buildRealignedSchedule(mine, goal, memoryStore.memory.athleteProfile, today.value)
+    const plan = buildRealignedSchedule(mine, goal, memoryStore.memory.athleteProfile, today.value, currentWeeklyKm.value)
     if (plan.drafts.length) {
       await scheduleStore.realign(goal.id, plan.fromDate, plan.drafts)
       if (plan.deviation.reason) toastStore.success(plan.deviation.reason)
@@ -300,7 +319,8 @@ const coachMoments = computed(() =>
             readinessLevel: raceProjection.value.readinessLevel,
             dDayText: weekSummary.value?.dDayText ?? ''
           }
-        : null
+        : null,
+      goalFeasibility: goalFeasibility.value
     },
     dismissedMomentKeys.value
   )

@@ -31,7 +31,15 @@ export type PeriodizationInput = {
   goal: TrainingGoal
   profile: AthleteProfile
   today: Date
+  /**
+   * 현재 주간 주행량(최근 30일 평균, km) — 시작 볼륨 앵커(#395).
+   * 목표거리 역산 대신 "지금 내가 뛰는 만큼"에서 시작한다. null/0이면 보수적 기본값(콜드스타트).
+   */
+  currentWeeklyKm?: number | null
 }
+
+/** 안전하다고 보는 주간 볼륨 증가율(소프트). running-coaching-standards "시작점 앵커링"(~10%, 30%+ 급증 회피). */
+export const SAFE_WEEKLY_GROWTH = 0.1
 
 /** 주차별 Phase 배분 결과(0번째 주가 가장 이른 주). */
 export function allocatePhases(totalWeeks: number, goalDistanceKm: number): TrainingPhaseName[] {
@@ -273,7 +281,7 @@ function estimateDurationMin(type: RunType, distanceKm: number, pace: PaceModel)
  * targetDate/distanceKm 가 없으면 [] (주기화 불가).
  */
 export function buildPeriodizedSchedule(input: PeriodizationInput): ScheduledSessionDraft[] {
-  const { goal, profile, today } = input
+  const { goal, profile, today, currentWeeklyKm } = input
   if (!goal.targetDate || !goal.distanceKm || goal.distanceKm <= 0) return []
 
   const start = startOfDay(today)
@@ -289,8 +297,14 @@ export function buildPeriodizedSchedule(input: PeriodizationInput): ScheduledSes
   const longRunDayIndex = Math.max(0, DAY_NAMES.indexOf(profile.preferredLongRunDay || '토요일'))
   const pace = resolvePaceModel(profile)
 
-  const baseVolumeKm = Math.max(goal.distanceKm * 2.5, 18)
-  const peakVolumeKm = Math.max(goal.distanceKm * 4, 30)
+  // 시작 볼륨 앵커링(#395): 목표거리 역산(×2.5)이 아니라 현재 주간 주행량에서 시작한다.
+  // 데이터 없으면(콜드스타트) 보수적 기본값. 이미 목표 피크 이상으로 뛰면 피크를 현재 이상으로
+  // 올려 유지하고 base ≤ peak 불변식을 지킨다. (running-coaching-standards "시작점 앵커링")
+  const goalPeakKm = Math.max(goal.distanceKm * 4, 30)
+  const coldStartBaseKm = Math.min(goal.distanceKm * 2.5, 20)
+  const anchorKm = currentWeeklyKm && currentWeeklyKm > 0 ? currentWeeklyKm : coldStartBaseKm
+  const peakVolumeKm = Math.max(goalPeakKm, anchorKm)
+  const baseVolumeKm = Math.min(anchorKm, peakVolumeKm)
 
   const firstTaperWeek = phases.indexOf('Taper')
   const taperLen = phases.filter((p) => p === 'Taper').length
@@ -322,6 +336,44 @@ export function buildPeriodizedSchedule(input: PeriodizationInput): ScheduledSes
 
   // 날짜 오름차순 + 중복 날짜 제거(키세션 우선 보존).
   return dedupeByDate(drafts)
+}
+
+export type GoalFeasibility = {
+  /** 안전한 진행으로 목표일까지 닿을 수 있는가. */
+  feasible: boolean
+  /** 목표 피크까지 필요한 평균 주간 증가율(복리, 0~). */
+  requiredWeeklyGrowth: number
+  /** 무리할 때 솔직한 경고 + 대안 메시지. 무리 아니면 null. */
+  message: string | null
+}
+
+/**
+ * 현재 주간 주행량에서 목표일까지 **안전한 진행으로 닿을 수 있는지** 평가한다(#395).
+ * 필요한 평균 주간 증가율(복리)이 안전 상한을 크게 넘으면 솔직히 경고하고 대안을 제시한다.
+ * (근거: running-coaching-standards "시작점 앵커링" — ~30%+ 급증은 부상 연관(Nielsen),
+ *  점진적 부하로 만성 부하를 키워야 보호적(Gabbett).)
+ */
+export function assessGoalFeasibility(input: PeriodizationInput): GoalFeasibility {
+  const { goal, today, currentWeeklyKm } = input
+  if (!goal.targetDate || !goal.distanceKm || goal.distanceKm <= 0) {
+    return { feasible: true, requiredWeeklyGrowth: 0, message: null }
+  }
+  const start = startOfDay(today)
+  const target = startOfDay(new Date(`${goal.targetDate}T00:00:00`))
+  const weeks = Math.max(1, Math.ceil((target.getTime() - start.getTime()) / MS_PER_DAY / 7))
+  const goalPeakKm = Math.max(goal.distanceKm * 4, 30)
+  const current = currentWeeklyKm && currentWeeklyKm > 0 ? currentWeeklyKm : Math.min(goal.distanceKm * 2.5, 20)
+  if (current >= goalPeakKm) return { feasible: true, requiredWeeklyGrowth: 0, message: null }
+  // current * (1+g)^weeks = peak  →  g = (peak/current)^(1/weeks) - 1
+  const growth = Math.pow(goalPeakKm / current, 1 / weeks) - 1
+  // 평균 필요 증가율이 안전 상한의 1.5배(≈15%/주)를 넘으면 무리로 본다.
+  if (growth <= SAFE_WEEKLY_GROWTH * 1.5) return { feasible: true, requiredWeeklyGrowth: growth, message: null }
+  const pct = Math.round(growth * 100)
+  return {
+    feasible: false,
+    requiredWeeklyGrowth: growth,
+    message: `지금 주행량(약 ${Math.round(current)}km/주)에서 목표일까지 안전하게 끌어올리려면 매주 약 ${pct}%씩 늘려야 해요 — 부상 위험이 큽니다. 목표일을 조금 미루거나 목표 거리를 낮추는 걸 권해요.`
+  }
 }
 
 function dedupeByDate(drafts: ScheduledSessionDraft[]): ScheduledSessionDraft[] {
