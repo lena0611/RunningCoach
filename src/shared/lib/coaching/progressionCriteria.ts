@@ -3,7 +3,8 @@ import {
   defaultProgressionCriteria,
   getActiveInjuryItem,
   type ProgressionCriterion,
-  type TrainingMemory
+  type TrainingMemory,
+  type TrainingPhaseName
 } from '@/entities/training-memory/model'
 import type { AdaptiveMetric } from '@/entities/training-memory/adaptivePersistence'
 import { evaluateLapDrift } from '@/shared/lib/lapDrift'
@@ -113,10 +114,21 @@ function evaluateInjuryRecoveryGate(
   return { status: 'ready', evidence: `부상 없음 + 회복 양호(권장 휴식 ${recovery.effectiveRestDays}일) — 게이트 통과.` }
 }
 
+/** Tempo 세션이 처방되는 단계(주기화 weeklySessionTypes 기준). Base·Recovery엔 Tempo가 없어 Tempo 기준은 N/A. */
+const TEMPO_PHASES: ReadonlySet<TrainingPhaseName> = new Set(['Build', 'Threshold', 'Race Specific', 'Taper'])
+
+/** 현재 단계에 해당 기준이 적용되는가. 미적용이면 'n/a'로 표시·집계 제외(#402). */
+function criterionApplies(id: string, phase: TrainingPhaseName | null): boolean {
+  if (id === 'tempo-ceiling-quality') return phase === null || TEMPO_PHASES.has(phase)
+  return true
+}
+
 export function evaluateProgressionCriteria(
   runs: RunLog[],
   memory: TrainingMemory,
-  adoptedMetrics: AdaptiveMetric[] = []
+  adoptedMetrics: AdaptiveMetric[] = [],
+  /** 현재 단계 — 그 단계에 처방되지 않는 세션의 기준은 N/A로 둔다(없으면 모든 기준 평가). */
+  currentPhase: TrainingPhaseName | null = null
 ): EvaluatedProgressionCriteria {
   const injuryActive = Boolean(getActiveInjuryItem(memory))
   const tempo = summarizeTempoCoaching(runs, memory)
@@ -130,13 +142,18 @@ export function evaluateProgressionCriteria(
   }
 
   const criteria: ProgressionCriterion[] = defaultProgressionCriteria.map((template) => {
+    if (!criterionApplies(template.id, currentPhase)) {
+      return { ...template, status: 'n/a' as CriterionStatus, evidence: '이 단계에선 해당 세션이 없어 다음 단계에서 평가해요.' }
+    }
     const evaluated = evaluations[template.id] ?? { status: template.status, evidence: template.evidence }
     return { ...template, status: evaluated.status, evidence: evaluated.evidence }
   })
 
   const statusMap: Record<string, CriterionStatus> = {}
   for (const criterion of criteria) statusMap[criterion.id] = criterion.status
-  const readyCount = criteria.filter((criterion) => criterion.status === 'ready').length
+  // 집계·게이트는 현재 단계에 적용되는 기준만 본다(N/A 제외).
+  const applicable = criteria.filter((criterion) => criterion.status !== 'n/a')
+  const readyCount = applicable.filter((criterion) => criterion.status === 'ready').length
 
-  return { criteria, readyCount, statusMap, allReady: readyCount === criteria.length && criteria.length > 0 }
+  return { criteria, readyCount, statusMap, allReady: applicable.length > 0 && readyCount === applicable.length }
 }

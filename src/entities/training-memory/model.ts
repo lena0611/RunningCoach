@@ -183,7 +183,8 @@ export type TrainingPhasePlan = {
 export type ProgressionCriterion = {
   id: string
   label: string
-  status: 'ready' | 'watch' | 'blocked'
+  /** 'n/a' = 현재 단계에 해당 없음(예: Base엔 Tempo 세션이 없어 Tempo 기준 미적용). 전환 게이트·집계에서 제외. */
+  status: 'ready' | 'watch' | 'blocked' | 'n/a'
   evidence: string
   action: string
 }
