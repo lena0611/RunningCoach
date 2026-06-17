@@ -211,3 +211,13 @@
 - 스키마 노트(F1 #363): `training_schedule.goal_id`는 **`text`** — `TrainingGoal.id`가 UUID 아닌 `goal-N`/`defaultGoalId` 문자열이라 의도적. 기존 `pacelab_session_intents.goal_id uuid`는 잠재 불일치(이 작업 산물 아님, 후속 정합 검토).
 - 코드 리뷰(엔진 레이어): 핵심가치 5개 충족, blocker 2건(B1 주 앵커 첫주 비움→오늘 기준 롤링윈도우 / B2 Threshold 미생성→allocatePhases 추가) + should-fix(run_id stale 제거·테이퍼 점진감량·회복주 base 바닥·표본부족 신뢰구간 페널티) 반영. UI 레이어(C·D) 미배선은 의도(후속 phase).
 - → 권위: `.harness/project/running-coaching-standards.md`에 "훈련 스케줄 모델(주기화)" 기준 추가. `.claude` memory `summary-page-garage-vision`·`coach-scheduling-research`.
+
+## 2026-06-17 - 포스트런 인터뷰 정규화 + 코칭 데이터 B-하이브리드 정책
+- 원칙: 인터뷰는 **HealthKit가 못 주는 주관 신호 중, 코칭 로직이 실제 소비하는 항목만** 묻는다(필드별 소비처 코드 확인).
+  - 유지: RPE(난이도) — performanceProjection·sessionQuality·tempo/easy/recovery 적응이 소비. 통증(severity·부위) — 부상 회복 factor·적응이 소비.
+  - 추가: **컨디션 점수(conditionScore)** — recoveryCycle/tempo 적응·trendInsights가 소비하는데 인터뷰가 안 받던 갭. 1~10(나쁨~좋음), RunForm과 동일.
+  - 미수집: 수면(sleepQuality)·스트레스(stressLevel) — 로직 소비처 없음(묻는 비용만).
+  - 자유메모 제거: workoutFeeling은 결정론 미사용·AI 전용 → 인터뷰에서 빼고 자유 표현은 **기존 세션 코치 대화(coach input bar, requestCoachRun)** 로 연계.
+- 데이터 정책(B-하이브리드): **정규화 = 결정론 로직/상태의 단일 출처(SSOT)**, **자유텍스트 = AI 코치 대화·뉘앙스 전용**(로직·상태 미변경), **상태 변화는 제안→사용자 확인**(자유텍스트가 부상 severity 등 자동 변경 금지 — 안전, [[coach-always-on-block-deterministic]]).
+- 후속 증분: (a) 통증 변화(나아짐/그대로/심해짐) 캡처 → 부상 severity 갱신 "제안" 코치 모먼트 (b) 추가런 이유 캡처 → extra-run 모먼트 분기 (c) 인터뷰 메모 입력 시 세션 코치 대화 자동 시드.
+- → 권위: `.claude` memory `coach-proactive-communication-vision`. 인터뷰 = `PostRunInterviewSheet`/`buildInterviewRunPatch`.
