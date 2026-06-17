@@ -233,10 +233,12 @@ const activeFulfillment = computed(() => {
   const intent = activeDoneIntent.value
   return run && intent ? computeIntentFulfillment(intent, run) : null
 })
-// 진짜 엑스트라 런(스케줄 세션·의도에 귀속 안 됨 = 따라잡기 아님) → 회복일 건너뛴 비용 평가
+// 실제 주기화 스케줄이 존재하는가(목표+targetDate로 생성됨). 없으면 "추가 런" 개념 자체가 성립 안 함.
+const scheduleExists = computed(() => scheduleStore.sessions.length > 0)
+// 진짜 엑스트라 런 = 스케줄이 있는데 그 세션/의도에 귀속 안 됨(따라잡기 아님). 스케줄 없으면 추가 런 아님.
 const activeExtraEval = computed(() => {
   const run = activeDoneRun.value
-  if (!run) return null
+  if (!run || !scheduleExists.value) return null
   const attributed = scheduleStore.sessions.some((s) => s.runId === run.id) || Boolean(activeDoneIntent.value)
   if (attributed) return null
   return evaluateExtraRun(run, activeInjury.value, chronicLoad.value)
@@ -278,6 +280,7 @@ const coachMoments = computed(() =>
       chronic: chronicLoad.value,
       injury: activeInjury.value,
       today: today.value,
+      scheduleExists: scheduleExists.value,
       deviation: detectScheduleDeviation(scheduleStore.sessions, today.value),
       goalProgress: raceProjection.value
         ? {
