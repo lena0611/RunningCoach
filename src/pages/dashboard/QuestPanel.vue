@@ -1,52 +1,41 @@
 <script setup lang="ts">
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
-import type { RunnerProgress } from '@/shared/lib/level/levelModel'
 
-// nextSession 은 getNextSessionRecommendation 결과의 구조적 부분집합만 받는다(루틴 퀘스트 표시용).
+/**
+ * 이번 주 미션 (#401). 풀 주기화 스케줄의 "이번 주"를 완수 가능한 목표로 보여준다.
+ * 캐러셀(달력 뷰)·레벨카드(RPG)와 중복 없이, "이번 주에 뭘 끝내면 되는지"의 실행 레이어.
+ * RPG 레벨링(승급/유지)은 레벨카드 담당이라 여기서 다루지 않는다.
+ */
 defineProps<{
-  progress: RunnerProgress
-  nextSession: { title: string; reason: string; dayName: string; plannedDate: string }
-  weeklyDone?: number
-  weeklyTarget?: number
+  mission: {
+    focusLine: string
+    sessionsDone: number
+    sessionsTotal: number
+    keyDone: number
+    keyTotal: number
+    doneKm: number
+    plannedKm: number
+  }
 }>()
 </script>
 
 <template>
-  <SectionGroup title="퀘스트" surface-variant="subtle">
+  <SectionGroup title="이번 주 미션" surface-variant="subtle">
     <div class="quest-list">
-      <article class="quest">
-        <span class="quest-tag quest-tag-routine">◆ 루틴</span>
+      <article class="quest" :class="{ 'quest-ready': mission.keyTotal > 0 && mission.keyDone >= mission.keyTotal }">
+        <span class="quest-tag quest-tag-routine">◆ 핵심 세션</span>
         <div class="quest-body">
-          <strong>{{ nextSession.title }}</strong>
-          <small>{{ nextSession.dayName }} 예정 · {{ nextSession.reason }}</small>
-          <small v-if="weeklyTarget" class="quest-week">
-            이번 주 {{ weeklyDone ?? 0 }}/{{ weeklyTarget }}회<template v-if="(weeklyDone ?? 0) >= (weeklyTarget ?? 0)"> · 완주 +30 🪙</template>
-          </small>
-        </div>
-      </article>
-
-      <article v-if="progress.nextClass && progress.gate1" class="quest" :class="{ 'quest-ready': progress.gate1.eligible }">
-        <span class="quest-tag quest-tag-promotion">▲ 승급</span>
-        <div class="quest-body">
-          <strong>{{ progress.nextClass.label }} 도전</strong>
-          <small v-if="progress.gate1.eligible">🔓 자격 충족 — 나만의 레이싱으로 {{ progress.nextClass.label }} 완주 시 승급</small>
-          <small v-else>자격 {{ progress.gate1.percent }}% · {{ progress.gate1.reasons.join(' · ') }}</small>
-        </div>
-      </article>
-      <article v-else class="quest">
-        <span class="quest-tag quest-tag-promotion">▲ 승급</span>
-        <div class="quest-body">
-          <strong>최고 클래스 달성</strong>
-          <small>풀 러너 🏅 — 다음 거리 클래스 없음</small>
+          <strong>{{ mission.keyDone }}/{{ mission.keyTotal }} 완수</strong>
+          <small v-if="mission.focusLine">{{ mission.focusLine }}</small>
+          <small v-if="mission.keyTotal > 0 && mission.keyDone >= mission.keyTotal" class="quest-week">이번 주 핵심 완료 🎉</small>
         </div>
       </article>
 
       <article class="quest">
-        <span class="quest-tag quest-tag-maintenance">◇ 유지</span>
+        <span class="quest-tag quest-tag-maintenance">📊 주간 볼륨</span>
         <div class="quest-body">
-          <strong>{{ progress.distanceClass.label }} 폼 점검</strong>
-          <small v-if="progress.maintenanceDue">측정이 오래됐어요 — 타임트라이얼로 등급 갱신 · +20 🪙</small>
-          <small v-else>폼 최신 · 재측정 불필요</small>
+          <strong>{{ mission.doneKm }}/{{ mission.plannedKm }}km</strong>
+          <small>이번 주 세션 {{ mission.sessionsDone }}/{{ mission.sessionsTotal }}회</small>
         </div>
       </article>
     </div>
@@ -57,7 +46,6 @@ defineProps<{
 .quest-list {
   display: flex;
   flex-direction: column;
-  gap: 0;
 }
 
 .quest {
@@ -68,7 +56,7 @@ defineProps<{
 }
 
 .quest + .quest {
-  border-top: 1px solid var(--color-hairline);
+  border-top: 1px solid rgba(120, 120, 120, 0.15);
 }
 
 .quest:first-child {
@@ -81,21 +69,25 @@ defineProps<{
 
 .quest-tag {
   flex: 0 0 auto;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   padding: 3px 8px;
   border-radius: var(--radius-pill, 999px);
-  white-space: nowrap;
-  background: rgba(120, 120, 120, 0.14);
-  color: var(--color-muted);
+}
+
+.quest-ready .quest-tag-routine {
+  background: rgba(34, 160, 107, 0.16);
+  color: #22a06b;
 }
 
 .quest-tag-routine {
+  background: var(--color-primary-soft, rgba(120, 120, 120, 0.12));
   color: var(--color-primary);
 }
 
-.quest-ready .quest-tag-promotion {
-  color: #22a06b;
+.quest-tag-maintenance {
+  background: rgba(120, 120, 120, 0.12);
+  color: var(--color-muted);
 }
 
 .quest-body {
@@ -106,18 +98,17 @@ defineProps<{
 }
 
 .quest-body strong {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--color-text);
 }
 
 .quest-body small {
   font-size: 12px;
   color: var(--color-muted);
-  /* 루틴 이유 등 긴 문구는 2줄로 클램프(퀘스트 카드 간결화). */
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.quest-week {
+  color: #22a06b !important;
 }
 </style>

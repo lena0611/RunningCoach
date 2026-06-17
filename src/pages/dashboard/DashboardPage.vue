@@ -11,7 +11,7 @@ import type { RunLog } from '@/entities/run/model'
 import RunSummaryCard from '@/widgets/run-summary-card/RunSummaryCard.vue'
 import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
 import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
-import { getAgeLoadWeight, getEasyRatio, getFatigueWarning, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getThisWeekRuns, getTrainingDayView, sumDistance } from '@/shared/lib/runStats'
+import { getAgeLoadWeight, getEasyRatio, getFatigueWarning, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getTrainingDayView, sumDistance } from '@/shared/lib/runStats'
 import { formatDateWithWeekday, formatDuration } from '@/shared/lib/format'
 import { getRaceProjection } from '@/shared/lib/performanceProjection'
 import { resolveRunnerProgress } from '@/shared/lib/level/levelModel'
@@ -107,8 +107,6 @@ const runnerProgress = computed(() =>
     maxDistanceM: levelStore.selfReportedMaxDistanceM
   })
 )
-const weeklyRunCount = computed(() => getThisWeekRuns(runs.value, today.value).length)
-const weeklyRunTarget = computed(() => memoryStore.memory.athleteProfile.weeklyRunDaysTarget ?? 0)
 
 // === 목표 기반 주기화 스케줄 + 주간 캐러셀 (에픽 #362) ===
 const scheduleStore = useTrainingScheduleStore()
@@ -291,21 +289,32 @@ const debriefNextLine = computed(() => {
   return next ? `${formatDateWithWeekday(next.date)} · ${sessionTypeLabel(next.sessionType)}` : null
 })
 
-// 루틴 퀘스트의 "다음 세션"도 캐러셀과 같은 주기화 스케줄에서 도출(옛 getNextSessionRecommendation
-// weeklyPattern 추천과 불일치 방지 — 퀘스트 vs 금주 스케줄 어긋남 수정). 스케줄 없으면 옛 추천 폴백.
-const questNextSession = computed(() => {
-  if (hasSchedule.value) {
-    const next = scheduleStore.upcoming(todayDate.value)[0]
-    if (next) {
-      return {
-        title: sessionTypeLabel(next.sessionType),
-        reason: next.prescription.note || sessionTypeLabel(next.sessionType),
-        dayName: formatDateWithWeekday(next.date),
-        plannedDate: next.date
-      }
-    }
+// 이번 주 미션(#401): 풀 주기화 스케줄의 "이번 주"를 완수 가능한 목표로 — 핵심 세션·볼륨 진행.
+// 캐러셀(달력)·레벨카드(RPG)와 중복 없이 "이번 주에 뭘 끝내면 되는지"의 실행 레이어.
+const weekMission = computed(() => {
+  if (!hasSchedule.value) return null
+  const base = new Date(today.value)
+  const mondayOffset = (base.getDay() + 6) % 7 // 월요일=0 기준
+  const monday = new Date(base)
+  monday.setDate(base.getDate() - mondayOffset)
+  const sunday = new Date(monday)
+  sunday.setDate(monday.getDate() + 6)
+  const lo = dateOnly(monday)
+  const hi = dateOnly(sunday)
+  const wk = scheduleStore.sessions.filter((s) => isActiveSession(s) && s.date >= lo && s.date <= hi)
+  if (!wk.length) return null
+  const isDone = (s: ScheduledSession) => s.status === 'done' || Boolean(s.runId)
+  const keys = wk.filter((s) => s.keySession)
+  const sumKm = (arr: ScheduledSession[]) => Math.round(arr.reduce((sum, s) => sum + (s.prescription.distanceKm ?? 0), 0))
+  return {
+    focusLine: weekSummary.value?.focusLine ?? '',
+    sessionsTotal: wk.length,
+    sessionsDone: wk.filter(isDone).length,
+    keyTotal: keys.length,
+    keyDone: keys.filter(isDone).length,
+    plannedKm: sumKm(wk),
+    doneKm: sumKm(wk.filter(isDone))
   }
-  return nextSession.value
 })
 
 // 전략적 휴식(#378): 휴식날도 회복·부상관리·근력 보강 안내
@@ -776,12 +785,7 @@ async function applyPhaseTransition() {
       />
     </SectionGroup>
 
-    <QuestPanel
-      :progress="runnerProgress"
-      :next-session="questNextSession"
-      :weekly-done="weeklyRunCount"
-      :weekly-target="weeklyRunTarget"
-    />
+    <QuestPanel v-if="weekMission" :mission="weekMission" />
 
     <SectionGroup title="레이싱하기" :surface="false">
       <button class="stat-card stat-card-interactive" type="button" @click="raceOpen = true">
