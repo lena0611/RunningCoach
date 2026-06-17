@@ -69,6 +69,23 @@ describe('collectCoachMoments', () => {
     expect(moments.map((m) => m.kind)).toEqual(['injury', 'load-spike', 'deviation', 'extra-run', 'goal-progress'])
   })
 
+  it('러닝부하 부위(발/다리) 통증이 최근 런에 있고 활성부상 없으면 부상 체크인 제안', () => {
+    const runs = [{ id: 'p', date: '2026-06-16', distanceKm: 6, painNote: '통증 보통 · 다리' } as unknown as RunLog]
+    const m = collectCoachMoments(ctx({ runs })).find((x) => x.kind === 'pain-followup')
+    expect(m).toBeTruthy()
+    expect(m!.action?.kind).toBe('open-injury-screening')
+  })
+
+  it('상체 통증은 러닝 플랜 비차단 — 부상 제안 안 함', () => {
+    const runs = [{ id: 'u', date: '2026-06-16', distanceKm: 6, painNote: '통증 경미 · 상체' } as unknown as RunLog]
+    expect(collectCoachMoments(ctx({ runs })).some((x) => x.kind === 'pain-followup')).toBe(false)
+  })
+
+  it('이미 활성 부상이 있으면 pain-followup 안 함(전용 체크인이 담당)', () => {
+    const runs = [{ id: 'p', date: '2026-06-16', distanceKm: 6, painNote: '통증 보통 · 발' } as unknown as RunLog]
+    expect(collectCoachMoments(ctx({ runs, injury: injury({ severity: 2 }) })).some((x) => x.kind === 'pain-followup')).toBe(false)
+  })
+
   it('dismissed 키는 제외', () => {
     const moments = collectCoachMoments(ctx({ runs: extraRuns, chronic: spike }), new Set(['load-spike']))
     expect(moments.some((m) => m.kind === 'load-spike')).toBe(false)

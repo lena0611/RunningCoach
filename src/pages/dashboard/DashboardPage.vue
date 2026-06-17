@@ -38,6 +38,7 @@ import SessionDebriefCard from './SessionDebriefCard.vue'
 import { buildRestGuidance, evaluateExtraRun } from '@/shared/lib/coaching/restGuidance'
 import { collectCoachMoments } from '@/shared/lib/coaching/coachMoments'
 import { detectScheduleDeviation } from '@/shared/lib/coaching/scheduleRealign'
+import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
 import CoachMomentCard from './CoachMomentCard.vue'
 import { computeIntentFulfillment } from '@/entities/session-intent/computeIntentFulfillment'
 import { evaluateSteadyLong, STEADY_LONG_GRADE_LABEL, evaluateLsd, LSD_KIND_LABEL } from '@/shared/lib/coaching/sessionQuality'
@@ -292,6 +293,10 @@ const coachMoments = computed(() =>
 const topCoachMoment = computed(() => coachMoments.value[0] ?? null)
 function dismissMoment(key: string) {
   dismissedMomentKeys.value = new Set([...dismissedMomentKeys.value, key])
+}
+function onMomentAction(moment: { key: string; action?: { kind: string } }) {
+  if (moment.action?.kind === 'open-injury-screening') useInjuryFlowStore().requestScreening()
+  dismissMoment(moment.key)
 }
 
 function onBriefingAck() {
@@ -613,7 +618,7 @@ async function applyPhaseTransition() {
 <template>
   <PageLayout variant="dashboard">
     <!-- 코치 모먼트(#382): 유의미한 순간에 코치가 먼저 말 건다(우선순위 최상위 1건) -->
-    <CoachMomentCard v-if="topCoachMoment" :moment="topCoachMoment" @dismiss="dismissMoment" />
+    <CoachMomentCard v-if="topCoachMoment" :moment="topCoachMoment" @dismiss="dismissMoment" @action="onMomentAction" />
 
     <!-- 위크 요약(#362): 이번 주가 뭘 위한 주인지 — 단계·포커스·핵심·볼륨·D-day -->
     <div v-if="hasSchedule && weekSummary" class="week-summary-bar">
