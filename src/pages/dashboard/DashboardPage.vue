@@ -182,6 +182,11 @@ const scheduleDays = computed<CarouselDay[]>(() => {
 })
 // 실제 주기화 스케줄(목표+targetDate로 생성된 세션)이 있을 때만 캐러셀. 완료런만으론 표시 안 함(무계획 오인 방지).
 const hasSchedule = computed(() => scheduleStore.sessions.length > 0)
+// 목표에 targetDate+거리가 있으면 스케줄이 곧 생성됨 → 로딩 중엔 옛 히어로 폴백을 깜빡이지 말고 플레이스홀더(FOUC 방지).
+const expectsSchedule = computed(
+  () => isSupabaseConfigured && Boolean(activeGoal.value?.targetDate && activeGoal.value?.distanceKm)
+)
+const scheduleLoadingPlaceholder = computed(() => expectsSchedule.value && !hasSchedule.value && !scheduleStore.error)
 // 위크 요약(이번 주 단계·포커스·핵심·볼륨·D-day) — "이번 주가 통째로 뭘 위한 주인지"
 const weekSummary = computed(() => buildWeekSummary(scheduleStore.sessions, today.value, activeGoal.value?.targetDate ?? null))
 const activeDayIndex = ref(CAROUSEL_DAYS_BEFORE) // 기본 = 오늘(offset 0)
@@ -667,6 +672,11 @@ async function applyPhaseTransition() {
       </template>
     </WeekTrainingCarousel>
 
+    <!-- 스케줄 로딩 중: 옛 히어로 폴백 깜빡임 방지 플레이스홀더(#390) -->
+    <div v-else-if="scheduleLoadingPlaceholder" class="schedule-loading">
+      <p class="helper">이번 주 코칭 계획을 불러오는 중…</p>
+    </div>
+
     <button v-else class="hero-card hero-card-interactive" type="button" @click="openNextSessionDetail">
       <div class="hero-body">
         <section class="day-block">
@@ -1028,6 +1038,12 @@ async function applyPhaseTransition() {
   margin: 0;
   font-size: var(--text-info-size, 14px);
   color: var(--color-text);
+}
+.schedule-loading {
+  padding: var(--space-5, 24px) var(--space-4, 16px);
+  text-align: center;
+  background: var(--color-surface-card);
+  border-radius: var(--radius-card, 20px);
 }
 .week-summary-bar {
   display: flex;

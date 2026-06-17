@@ -113,19 +113,15 @@ function onPointerUp(event: PointerEvent) {
       </button>
     </div>
 
-    <div class="week-slide-nav">
-      <button type="button" class="week-arrow" :disabled="!canPrev" aria-label="이전 날" @click="select(activeIndex - 1)">‹</button>
-      <div
-        class="week-slide"
-        :style="slideStyle"
-        @pointerdown="onPointerDown"
-        @pointermove="onPointerMove"
-        @pointerup="onPointerUp"
-        @pointercancel="onPointerUp"
-      >
-        <slot :day="days[activeIndex]" :index="activeIndex" />
-      </div>
-      <button type="button" class="week-arrow" :disabled="!canNext" aria-label="다음 날" @click="select(activeIndex + 1)">›</button>
+    <div
+      class="week-slide"
+      :style="slideStyle"
+      @pointerdown="onPointerDown"
+      @pointermove="onPointerMove"
+      @pointerup="onPointerUp"
+      @pointercancel="onPointerUp"
+    >
+      <slot :day="days[activeIndex]" :index="activeIndex" />
     </div>
   </section>
 </template>
@@ -135,6 +131,8 @@ function onPointerUp(event: PointerEvent) {
   display: flex;
   flex-direction: column;
   gap: var(--space-3, 12px);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .week-strip {
@@ -188,35 +186,11 @@ function onPointerUp(event: PointerEvent) {
   content: '✓ ';
 }
 
-.week-slide-nav {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
 .week-slide {
-  flex: 1;
+  width: 100%;
   min-width: 0;
   /* 세로 팬은 브라우저(페이지 스크롤)에 양보, 좌우 드래그만 자체 처리 */
   touch-action: pan-y;
   will-change: transform;
-}
-
-.week-arrow {
-  flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-pill, 999px);
-  border: none;
-  background: transparent;
-  color: var(--color-muted);
-  font-size: 22px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.week-arrow:disabled {
-  opacity: 0.25;
-  cursor: default;
 }
 </style>
