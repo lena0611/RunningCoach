@@ -32,9 +32,13 @@ function targetsLineFrom(targets: SessionIntentTargets | null | undefined): stri
 }
 
 type ProgressionStatus = 'ready' | 'watch' | 'blocked'
+/** N/A(현재 단계 해당 없음, #402)는 브리핑 게이트에선 중립(watch)으로 본다. */
+function narrowProgressionStatus(s: ProgressionStatus | 'n/a' | undefined): ProgressionStatus {
+  return s === 'n/a' || s === undefined ? 'watch' : s
+}
 
 /** 라이브 평가된 수행 게이트 1건(evaluateProgressionCriteria #336 결과). 누적 수행 이력의 압축. */
-export type ProgressionSignal = { id: string; status: ProgressionStatus; evidence: string }
+export type ProgressionSignal = { id: string; status: ProgressionStatus | 'n/a'; evidence: string }
 
 /** 세션 타입 → 관련 progressionCriterion id. */
 function criterionIdFor(type: RunType): string {
@@ -54,9 +58,9 @@ function resolveProgression(
 ): { status: ProgressionStatus; evidence: string } {
   const id = criterionIdFor(type)
   const live = progression?.find((c) => c.id === id)
-  if (live) return { status: live.status, evidence: live.evidence }
+  if (live) return { status: narrowProgressionStatus(live.status), evidence: live.evidence }
   const stored = profile?.progressionCriteria.find((c) => c.id === id)
-  return { status: stored?.status ?? 'watch', evidence: stored?.evidence ?? '' }
+  return { status: narrowProgressionStatus(stored?.status), evidence: stored?.evidence ?? '' }
 }
 
 /** 코칭 근거(방법론·연구) 한 줄. 바텀시트에서만 노출. */

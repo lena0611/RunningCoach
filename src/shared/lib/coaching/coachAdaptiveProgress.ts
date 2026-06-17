@@ -17,7 +17,7 @@ import { summarizeAdaptiveModels } from '@/shared/lib/coaching/adaptiveModelsSum
 
 export type CoachAdaptiveProgressSummary = {
   currentPhase: TrainingPhaseName
-  criteria: Array<{ id: string; label: string; status: 'ready' | 'watch' | 'blocked'; evidence: string }>
+  criteria: Array<{ id: string; label: string; status: 'ready' | 'watch' | 'blocked' | 'n/a'; evidence: string }>
   readyCount: number
   allReady: boolean
   phaseProposal: {
@@ -48,9 +48,9 @@ export function buildCoachAdaptiveProgress(
   memory: TrainingMemory,
   adoptedMetrics: AdaptiveMetric[] = []
 ): CoachAdaptiveProgressSummary {
-  const evaluated = evaluateProgressionCriteria(runs, memory, adoptedMetrics)
-  const models = summarizeAdaptiveModels(runs, memory, adoptedMetrics)
   const currentPhase = memory.adaptiveTrainingProfile.trainingPhase.currentPhase
+  const evaluated = evaluateProgressionCriteria(runs, memory, adoptedMetrics, currentPhase)
+  const models = summarizeAdaptiveModels(runs, memory, adoptedMetrics)
   const injuryActive = Boolean(getActiveInjuryItem(memory))
 
   const activeGoal = memory.goals.find((goal) => goal.id === memory.activeGoalId) ?? memory.goals[0] ?? null

@@ -5,9 +5,11 @@ import type { CoachAdaptiveProgressSummary } from '@/shared/lib/coaching/coachAd
 const props = defineProps<{ summary: CoachAdaptiveProgressSummary }>()
 defineEmits<{ (e: 'open'): void }>()
 
-const STATUS_ICON: Record<string, string> = { ready: '✅', watch: '⏳', blocked: '❌' }
+const STATUS_ICON: Record<string, string> = { ready: '✅', watch: '⏳', blocked: '❌', 'n/a': '–' }
+// 적용되는 기준만 분모로(N/A=이 단계 해당 없음 제외). #402
+const applicableCount = computed(() => props.summary.criteria.filter((c) => c.status !== 'n/a').length)
 const readyRatio = computed(() => {
-  const total = props.summary.criteria.length || 1
+  const total = applicableCount.value || 1
   return Math.round((props.summary.readyCount / total) * 100)
 })
 const transitionReady = computed(() => props.summary.phaseProposal.shouldTransition)
@@ -29,7 +31,7 @@ const transitionReady = computed(() => props.summary.phaseProposal.shouldTransit
 
     <div class="phase-identity">
       <strong class="phase-name">{{ summary.currentPhase }}</strong>
-      <span class="phase-ready">{{ summary.readyCount }}/{{ summary.criteria.length }} 준비</span>
+      <span class="phase-ready">{{ summary.readyCount }}/{{ applicableCount }} 준비</span>
     </div>
 
     <div class="gauge">
@@ -37,9 +39,9 @@ const transitionReady = computed(() => props.summary.phaseProposal.shouldTransit
     </div>
 
     <ul class="phase-criteria">
-      <li v-for="criterion in summary.criteria" :key="criterion.id">
+      <li v-for="criterion in summary.criteria" :key="criterion.id" :class="{ 'phase-criterion-na': criterion.status === 'n/a' }">
         <span class="phase-criterion-icon">{{ STATUS_ICON[criterion.status] ?? '·' }}</span>
-        <span class="phase-criterion-label">{{ criterion.label }}</span>
+        <span class="phase-criterion-label">{{ criterion.label }}<span v-if="criterion.status === 'n/a'" class="phase-criterion-hint"> · 다음 단계</span></span>
       </li>
     </ul>
 
@@ -138,6 +140,15 @@ const transitionReady = computed(() => props.summary.phaseProposal.shouldTransit
 
 .phase-criterion-icon {
   flex: 0 0 auto;
+}
+
+.phase-criterion-na {
+  opacity: 0.5;
+}
+
+.phase-criterion-hint {
+  color: var(--color-muted);
+  font-size: 11px;
 }
 
 .phase-cta {
