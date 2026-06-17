@@ -40,10 +40,18 @@ function round1(v: number): number {
  * 추가 런 추세를 분석한다. attributedRunIds = 스케줄 세션/의도에 귀속된 런 id 집합(따라잡기 포함).
  * 거기 없는 런이 "예정 외 추가 런".
  */
-export function analyzeExtraRunTrend(runs: RunLog[], attributedRunIds: Set<string>, today: Date): ExtraRunTrend {
+export function analyzeExtraRunTrend(
+  runs: RunLog[],
+  attributedRunIds: Set<string>,
+  today: Date,
+  /** 플랜 시작일(YYYY-MM-DD). 이 날짜 이전 런은 "플랜 없던 시절"이라 추가런으로 세지 않는다. */
+  planStartDate: string | null = null
+): ExtraRunTrend {
   const start = new Date(today)
   start.setHours(0, 0, 0, 0)
-  const since = start.getTime() - (WINDOW_DAYS - 1) * MS_PER_DAY
+  const windowSince = start.getTime() - (WINDOW_DAYS - 1) * MS_PER_DAY
+  const planSince = planStartDate ? new Date(`${planStartDate}T00:00:00`).getTime() : -Infinity
+  const since = Math.max(windowSince, planSince)
 
   const recent = runs.filter((r) => new Date(`${r.date}T00:00:00`).getTime() >= since)
   const totalKm = recent.reduce((s, r) => s + (r.distanceKm ?? 0), 0)

@@ -281,6 +281,7 @@ const coachMoments = computed(() =>
       injury: activeInjury.value,
       today: today.value,
       scheduleExists: hasSchedule.value,
+      scheduleStartDate: scheduleStore.sessions.reduce<string | null>((min, s) => (!min || s.date < min ? s.date : min), null),
       deviation: detectScheduleDeviation(scheduleStore.sessions, today.value),
       goalProgress: raceProjection.value
         ? {

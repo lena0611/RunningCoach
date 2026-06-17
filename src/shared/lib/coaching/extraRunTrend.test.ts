@@ -38,6 +38,17 @@ describe('analyzeExtraRunTrend', () => {
     const t = analyzeExtraRunTrend(runs, new Set(), today)
     expect(t.count).toBe(1)
   })
+
+  it('플랜 시작일 이전 런은 추가런으로 안 셈(갓 생성된 플랜)', () => {
+    const runs = [
+      run('before1', '2026-06-14', 6),
+      run('before2', '2026-06-15', 7),
+      run('after1', '2026-06-17', 6)
+    ]
+    // 플랜이 오늘(6/17) 시작 → 이전 런은 제외, after1만 카운트
+    const t = analyzeExtraRunTrend(runs, new Set(), today, '2026-06-17')
+    expect(t.count).toBe(1)
+  })
 })
 
 describe('buildExtraRunInquiry', () => {
