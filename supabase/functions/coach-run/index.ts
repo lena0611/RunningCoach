@@ -192,6 +192,17 @@ Deno.serve(async (req) => {
     const goalProjection = normalizeGoalProjection(body.goalProjection)
     const adaptiveProgress = normalizeAdaptiveProgress(body.adaptiveProgress)
     const sessionEvidence = normalizeSessionEvidence(body.sessionEvidence)
+    const upcomingSchedule = Array.isArray(body.upcomingSchedule)
+      ? (body.upcomingSchedule as Record<string, unknown>[])
+          .filter((s) => s && typeof s.date === 'string')
+          .slice(0, 5)
+          .map((s) => ({
+            date: String(s.date).slice(0, 10),
+            type: typeof s.type === 'string' ? s.type : '',
+            distanceKm: typeof s.distanceKm === 'number' ? s.distanceKm : null,
+            keySession: s.keySession === true
+          }))
+      : null
     const runnerLevel = normalizeRunnerLevel(body.runnerLevel)
     const responseStyle = normalizeResponseStyle(body.responseStyle, runnerLevel)
     const shouldStream = body.stream === true
@@ -202,7 +213,7 @@ Deno.serve(async (req) => {
     const rateLimit = await consumeRateLimit(admin, userId, 'coach-run')
     if (!rateLimit.ok) return json({ error: rateLimit.error, retryAfterSec: rateLimit.retryAfterSec }, 429)
 
-    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress, sessionEvidence)
+    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress, sessionEvidence, upcomingSchedule)
     const ownedSelectedRunId = context.selectedRun?.id ?? null
     if (shouldStream) {
       return streamCoachRun(admin, userId, ownedSelectedRunId, userNote, openaiKey, model, context)
@@ -756,7 +767,7 @@ function unifyPerformanceProjection(
   }
 }
 
-async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null, sessionEvidence: CoachSessionEvidence | null = null) {
+async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null, sessionEvidence: CoachSessionEvidence | null = null, upcomingSchedule: { date: string; type: string; distanceKm: number | null; keySession: boolean }[] | null = null) {
   const memorySelect = 'id, content, created_at, importance, last_referenced_at, reference_count'
   const [
     { data: memoryRow },
@@ -1086,6 +1097,9 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     trainingMethodology: buildTrainingMethodologyAlgorithm(),
     trainingKnowledge,
     adaptiveProgress,
+    upcomingSchedule,
+    upcomingSchedulePolicy:
+      'context.upcomingSchedule는 실제 주기화 스케줄의 다음 세션들(날짜·유형·거리)이다. "## 다음 훈련"은 반드시 이 실제 세션을 기준으로 말하고, weeklyPattern/prescriptionTemplates로 다른 세션(예: 다음이 토요일 LSD인데 화요일 Easy)을 지어내지 마라. 요약 화면(캐러셀)과 어긋나면 안 된다. 부상·회복으로 하향이 필요하면 "그 스케줄 세션(예: 토요일 LSD)을 이렇게 조정/대체하자"처럼 실제 세션을 기준으로 조정한다. upcomingSchedule이 비어있거나 null일 때만 일반 가이드로 답한다.',
     sessionEvidence,
     sessionEvidencePolicy:
       'context.sessionEvidence는 웹이 선택 세션 타입별로 산출한 다단계 품질 증거다(#354). 규칙이 pass/fail 최종 판정을 내린 게 아니라 "증거"이며, 최종 해석은 네가 목표·부상·날씨·성향을 얹어서 한다. ' +
@@ -1481,7 +1495,7 @@ function buildCoachInstructions(context: unknown) {
     'Steady Long/LSD에서 후반에 페이스를 끌어올린 네거티브 스플릿은 기본적으로 긍정 신호다. 보정 드리프트가 낮으면 "심박이 따라붙어 과했다"고 단정하지 말고 "체력이 남아 후반 가속이 가능했다"는 쪽으로 먼저 해석한다.',
     'coachingDecisionBoard.goalProjectionCheck는 목표 예상과 루틴 상향 가능성을 보는 보조 근거다. 예측값 하나만 믿지 말고 역치훈련, Easy 기반, Long Run 지속성, 회복/부상 게이트와 함께 본다.',
     'coachingDecisionBoard.routineUpdateCheck는 루틴 유지/상향/하향/보류 결론의 초안이다. "## 루틴 업데이트"에서는 이 결론과 근거를 1~3개만 짧게 말한다.',
-    'selectedRunLapAnalysis가 있으면 "## 핵심 지표"에 구간 진행에 따른 페이스 흐름과 심박 흐름을 반드시 넣는다. 예: "- 페이스: 10분44초 → 10분05초 → 10분29초 → 9분57초 → 9분28초", "- 심박: 108 → 116 → 114 → 118 → 121", "- 케이던스: 159~164".',
+    'selectedRunLapAnalysis가 있으면 "## 핵심 지표"에 구간 진행 페이스·심박 흐름을 반드시 넣되, 단순 문장 나열이 아니라 코드블록으로 정렬해 한눈에 보이게 한다(렌더러가 코드블록·표 지원). 예:\n```\n페이스  8:56 → 9:50 → 10:05 → … → 5:50 → 7:34\n심박     99 →  114 →  123 → … →  157 →  140\n케이던스 159~179\n```\n거리·시간·평균페이스·평균심박·RPE 같은 요약 수치는 "- " 목록 또는 2~3열 작은 표로 정리한다.',
     'selectedRunLapAnalysis의 구간은 시간 흐름을 일정 간격으로 나눈 분석 구간이다(세션 상세의 거리 스플릿/1km 랩과 다른 개념이며 개수도 다를 수 있다). 코칭 본문에서는 항상 "구간"(예: "후반 7번째 구간부터")으로 표현하고 "랩"이라고 쓰지 않는다. 거리 스플릿 개수와 다르다고 사용자가 혼동하지 않게 한다.',
     'selectedRunLapAnalysis가 있으면 평균 페이스/평균 심박만 말하고 끝내지 않는다. 러닝 중간 과정, 즉 초반을 서둘렀는지, 심박이 먼저 터졌는지, 잘 눌러 시작했는지, 후반에 페이스를 올려도 심박 품질이 유지됐는지 분석한다.',
     'selectedRunExecutionGuide가 있으면 세션 유형별 처방 경계를 사용한다. 심박 상한은 heartRateModel/boundaries의 개인 파생값을 그대로 쓰고, 임의의 고정 숫자를 만들지 않는다. 상한이 null이면 심박 상한을 말하지 말고 페이스/RPE/드리프트로 본다. Long Run은 후반 심박 드리프트, Easy + Strides는 "이지 본런 + 본런 끝 짧은 스트라이드(반복수는 처방마다 가변, 고정 8회 아님)"로 본다. 스트라이드는 속도 기준 신경근 자극이라 그 구간 심박이 튀는 것은 정상이며 강도 초과로 보지 않는다.',
@@ -1491,7 +1505,7 @@ function buildCoachInstructions(context: unknown) {
     '현재 처방 숫자는 영구 고정값이 아니다. 사용자가 실행 가능한 Workoutdoors 세팅 기준으로 제시하되, 누적 데이터와 회복 반응이 충분하면 AI가 먼저 숫자/구성 변경을 제안한다.',
     'Tempo에서는 selectedRunExecutionGuide.boundaries.heartRateCeilingBpm(=heartRateModel.tempoCeilingBpm)을 상한으로 쓴다. maxHeartRate가 그 상한을 넘으면 몇 번째 구간부터 넘었는지 짧게 말하고, 없으면 "상한을 넘기지 않았다"처럼 품질 근거로 쓴다. 본문 숫자는 그 상한 값을 쓴다(165 고정 아님). 단 Race/Time Trial/한계시험은 심박 상한이 없다 — 전력 측정이 목적이므로 높은 심박·페이스를 "상한 초과"로 처벌하지 말고, 균등 페이스(초반 절제·후반 유지)와 결과(현재 체력 갱신)로 평가한다.',
     'Easy/Recovery/Easy + Strides 강도 판정은 평균심박(+RPE·드리프트)을 1차로 본다. 최고심박(maxHeartRate) 단발 스파이크는 언덕·신호 대기·스트라이드 가속처럼 자연스러운 것이므로 그것만으로 "이지 상한을 넘겼다/강도 초과"라고 처벌하지 마라. 평균심박이 이지 상한 + 약간의 여유까지 안정적이면 본런 강도를 잘 지킨 것이다. 진짜 과강 Easy(평균심박 자체가 상한을 뚜렷이 초과)일 때만 "다음엔 초반을 더 눌러보자"처럼 부드럽게 짚는다.',
-    '다음 훈련을 제안할 때는 세션명만 말하지 말고 사용자가 Workoutdoors에 바로 세팅할 수 있는 세부 지침을 준다. 심박 숫자는 heartRateModel의 개인 상한 값만 쓰고(예: Easy는 easyCeilingBpm 넘기지 말기, Tempo는 max tempoCeilingBpm 넘기지 말기), 상한이 null이면 심박 숫자 대신 페이스/RPE로 안내한다. Easy + Strides는 "이지 본런 + 본런 끝 스트라이드 몇 회(짧고 빠르게, 속도 기준, 사이 완전 회복)".',
+    'context.upcomingSchedule가 있으면 "## 다음 훈련"은 그 실제 주기화 스케줄의 다음 세션(날짜·유형·거리)을 기준으로 말한다 — weeklyPattern/prescriptionTemplates보다 우선이고 요약 화면(캐러셀)과 반드시 일치시킨다. 예: 다음이 토요일 LSD면 "화요일 Easy"라고 지어내지 말고 "토요일 LSD(약 N km)"를 기준으로 처방·조정한다. 부상/회복으로 낮춰야 하면 그 스케줄 세션을 어떻게 조정/대체할지로 말한다. 다음 훈련을 제안할 때는 세션명만 말하지 말고 사용자가 Workoutdoors에 바로 세팅할 수 있는 세부 지침을 준다. 심박 숫자는 heartRateModel의 개인 상한 값만 쓰고(예: Easy는 easyCeilingBpm 넘기지 말기, Tempo는 max tempoCeilingBpm 넘기지 말기), 상한이 null이면 심박 숫자 대신 페이스/RPE로 안내한다. Easy + Strides는 "이지 본런 + 본런 끝 스트라이드 몇 회(짧고 빠르게, 속도 기준, 사이 완전 회복)".',
     '세션 유형별 구간당 페이스/심박 경계 가이드가 현재 사용자에게 맞지 않아 보이면 "## 루틴 업데이트"에서 유지/조정 여부를 말한다. 조정이 필요할 때는 trainingMemoryPatch.activeGoalStrategyNotes 또는 aiNotes에 새 기준을 저장한다.',
     'recentPrescriptionComplianceSignals를 보고 최근 여러 세션에서 처방 준수율 패턴이 있는지 활용한다. 반복적으로 잘 지키는 기준은 다음 처방 상향 근거가 되고, 반복적으로 넘는 기준은 처방 하향/보류 근거가 된다.',
     'context.trainingMethodology는 외부 러닝/지구력 훈련 문헌을 앱 기준선으로 압축한 것이다. 이 기준선을 무시하지 말고, Easy 기반, 제한된 강훈련, 점진적 과부하, 목표 특이성, 회복 게이트를 기본 알고리즘으로 삼는다.',
