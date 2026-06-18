@@ -13,11 +13,14 @@ const props = defineProps<{
   sessionType: string
   ceilingText?: string | null
   busy?: boolean
+  /** 한계 시험(TT) 세션이면 기본 액션을 '한계 도전으로 측정'으로 바꾼다(#411). */
+  timeTrial?: boolean
 }>()
 
 const emit = defineEmits<{
   acknowledge: []
   'request-alternative': [direction: 'easier' | 'harder']
+  'start-time-trial': []
 }>()
 
 const evidenceOpen = ref(false)
@@ -72,17 +75,27 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
     </button>
 
     <footer class="brief-actions">
-      <button type="button" class="brief-primary" :disabled="busy" @click="emit('acknowledge')">
-        이 훈련으로 갈게요
-      </button>
-      <div class="brief-alt">
-        <button type="button" class="brief-secondary" :disabled="busy" @click="emit('request-alternative', 'easier')">
-          더 쉽게
+      <template v-if="timeTrial">
+        <button type="button" class="brief-primary" :disabled="busy" @click="emit('start-time-trial')">
+          🏁 한계 도전으로 측정하기
         </button>
-        <button type="button" class="brief-secondary" :disabled="busy" @click="emit('request-alternative', 'harder')">
-          더 강하게
+        <button type="button" class="brief-secondary" :disabled="busy" @click="emit('acknowledge')">
+          오늘은 기록만(측정 생략)
         </button>
-      </div>
+      </template>
+      <template v-else>
+        <button type="button" class="brief-primary" :disabled="busy" @click="emit('acknowledge')">
+          이 훈련으로 갈게요
+        </button>
+        <div class="brief-alt">
+          <button type="button" class="brief-secondary" :disabled="busy" @click="emit('request-alternative', 'easier')">
+            더 쉽게
+          </button>
+          <button type="button" class="brief-secondary" :disabled="busy" @click="emit('request-alternative', 'harder')">
+            더 강하게
+          </button>
+        </div>
+      </template>
     </footer>
 
     <EvidenceSheet :open="evidenceOpen" :evidence="briefing.evidence" @close="evidenceOpen = false" />
