@@ -42,6 +42,8 @@ import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
 import CoachMomentCard from './CoachMomentCard.vue'
 import { computeIntentFulfillment } from '@/entities/session-intent/computeIntentFulfillment'
 import { evaluateSteadyLong, STEADY_LONG_GRADE_LABEL, evaluateLsd, LSD_KIND_LABEL, evaluateEasyRecovery } from '@/shared/lib/coaching/sessionQuality'
+import { gradeTempoRun, type TempoGrade } from '@/shared/lib/coaching/tempoAdaptation'
+import { evaluateLapDrift } from '@/shared/lib/lapDrift'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { buildSessionIntentDraft, easierAlternative, type BuildSessionIntentArgs } from '@/features/build-session-intent/buildSessionIntentDraft'
@@ -374,6 +376,13 @@ const activeExtraEval = computed(() => {
   if (attributed) return null
   return evaluateExtraRun(run, activeInjury.value, chronicLoad.value)
 })
+// Tempo A/B/C/D 등급 → 디브리핑 한 줄 라벨(이진 성공/실패 아님, #301).
+const TEMPO_GRADE_LABEL: Record<TempoGrade, string> = {
+  A: '잘 수행 ✓',
+  B: '양호 ✓',
+  C: '아쉬움 ⚠',
+  D: '자극 부족'
+}
 const activeGradeLine = computed<string | null>(() => {
   const run = activeDoneRun.value
   if (!run) return null
@@ -383,7 +392,9 @@ const activeGradeLine = computed<string | null>(() => {
   }
   if (run.type === 'LSD') {
     const e = evaluateLsd(run, { easyCeilingBpm: heartRateModel.value.easyCeilingBpm, recoveryCeilingBpm: heartRateModel.value.recoveryCeilingBpm })
-    return `${LSD_KIND_LABEL[e.kind]}${e.reasons[0] ? ` · ${e.reasons[0]}` : ''}`
+    // kind(회복/표준/점증) + 후반 안정성을 함께 보여준다(reasons[0]은 항상 kind 문구라 부담 신호가 안 보이던 문제).
+    const stability = e.hrDriftBpm === null ? '심박 데이터 없음' : e.stable ? '심박 안정 ✓' : '후반 드리프트 ⚠'
+    return `${LSD_KIND_LABEL[e.kind]} · ${stability}`
   }
   // 이지·회복·이지+스트라이드: RPE 우선 강도 유지 판정(#354). 빈 디브리핑 방지.
   if (run.type === 'Easy' || run.type === 'Recovery' || run.type === 'Easy + Strides') {
@@ -395,15 +406,11 @@ const activeGradeLine = computed<string | null>(() => {
     const label = e.intentHeld ? (e.rpeOverride ? '강도 유지(RPE 우선) ✓' : '강도 유지 ✓') : '강도 초과 ⚠'
     return `${label}${e.reasons[0] ? ` · ${e.reasons[0]}` : ''}`
   }
-  // 템포: 별도 평가 함수가 없어 상한 준수만 간단히 본다(상세 평가는 후속).
+  // 템포: 정본 gradeTempoRun(A/B/C/D — 자극 확보 × 상한 준수 × 후반 유지). 추세·적응과 동일 기준(#301).
   if (run.type === 'Tempo') {
-    const ceil = heartRateModel.value.tempoCeilingBpm
-    const hr = run.maxHeartRate ?? run.avgHeartRate
-    if (ceil !== null && hr !== null) {
-      const over = hr - ceil
-      return over <= 0 ? `템포 상한 준수 ✓ · 최고 ${hr} ≤ 상한 ${ceil}` : `상한 ${over}bpm 초과 ⚠ · 최고 ${hr}`
-    }
-    return '템포 — 심박 상한 준수가 핵심'
+    const g = gradeTempoRun(run, heartRateModel.value.tempoCeilingBpm, evaluateLapDrift(run).level)
+    const label = TEMPO_GRADE_LABEL[g.grade]
+    return `${label}${g.reasons[0] ? ` · ${g.reasons[0]}` : ''}`
   }
   return null
 })
