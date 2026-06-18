@@ -46,7 +46,7 @@ import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { buildSessionIntentDraft, easierAlternative, type BuildSessionIntentArgs } from '@/features/build-session-intent/buildSessionIntentDraft'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
-import { assessGoalFeasibility, buildPeriodizedSchedule, buildWeekSummary, prescriptionFor, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
+import { assessGoalFeasibility, buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, prescriptionFor, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
 import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
 import { buildRealignedSchedule } from '@/shared/lib/coaching/scheduleRealign'
 import { proposeAlternativeSession } from '@/shared/lib/coaching/alternativeSession'
@@ -168,12 +168,30 @@ function ensureSchedule(): Promise<void> {
 async function doEnsureSchedule() {
   if (!isSupabaseConfigured) return
   const goal = activeGoal.value
-  if (!goal?.targetDate || !goal.distanceKm) return
+  if (!goal) return
+  const archetype = goalArchetype(goal.category)
+  // 성과는 목표일+거리 필요. 비성과(체중·체형/건강·습관)는 마감 없이 상시 리듬(#398).
+  if (archetype === 'performance' && (!goal.targetDate || !goal.distanceKm)) return
   try {
     if (!scheduleStore.loaded) await scheduleStore.load(goal.id)
     const mine = scheduleStore.sessions.filter((s) => s.goalId === goal.id)
     const hasActive = mine.some(isActiveSession)
-    // 생성·재정렬 둘 다 같은 앵커(currentWeeklyKm computed)를 쓴다(#395, 정책 단일화).
+    if (archetype !== 'performance') {
+      // 비성과: 비주기화 상시 주간 리듬. 롤링 소진(활성 없음) 시 재생성. 재정렬 없음.
+      if (!hasActive) {
+        const drafts = buildSteadyWeeklyRhythm({
+          archetype,
+          profile: memoryStore.memory.athleteProfile,
+          today: today.value,
+          currentWeeklyKm: currentWeeklyKm.value,
+          observedEasyPace: observedEasyPace.value,
+          goalId: goal.id
+        })
+        if (drafts.length) await scheduleStore.insertMany(drafts)
+      }
+      return
+    }
+    // 성과: 주기화 생성·재정렬. 둘 다 같은 앵커(currentWeeklyKm)를 쓴다(#395, 정책 단일화).
     if (!hasActive) {
       const drafts = buildPeriodizedSchedule({
         goal,
@@ -222,9 +240,16 @@ const scheduleDays = computed<CarouselDay[]>(() => {
 })
 // 실제 주기화 스케줄(목표+targetDate로 생성된 세션)이 있을 때만 캐러셀. 완료런만으론 표시 안 함(무계획 오인 방지).
 const hasSchedule = computed(() => scheduleStore.sessions.length > 0)
-// 목표에 targetDate+거리가 있으면 스케줄이 곧 생성됨 → 로딩 중엔 옛 히어로 폴백을 깜빡이지 말고 플레이스홀더(FOUC 방지).
+// 목표 아키타입(#398): 성과만 주기화·예측·단계카드, 비성과는 상시 리듬.
+const isPerformanceGoal = computed(() => (activeGoal.value ? goalArchetype(activeGoal.value.category) === 'performance' : false))
+// 스케줄이 곧 생성될 목표면 로딩 중 옛 히어로 폴백을 깜빡이지 말고 플레이스홀더(FOUC 방지).
+// 성과=목표일+거리, 비성과=활성 목표만 있으면(마감 불필요).
 const expectsSchedule = computed(
-  () => isSupabaseConfigured && Boolean(activeGoal.value?.targetDate && activeGoal.value?.distanceKm)
+  () =>
+    isSupabaseConfigured &&
+    (isPerformanceGoal.value
+      ? Boolean(activeGoal.value?.targetDate && activeGoal.value?.distanceKm)
+      : Boolean(activeGoal.value))
 )
 const scheduleLoadingPlaceholder = computed(() => expectsSchedule.value && !hasSchedule.value && !scheduleStore.error)
 // 위크 요약(이번 주 단계·포커스·핵심·볼륨·D-day) — "이번 주가 통째로 뭘 위한 주인지"
@@ -798,7 +823,8 @@ async function applyPhaseTransition() {
       <LevelCard :progress="runnerProgress" :coins="levelStore.coins" hide-eyebrow />
     </SectionGroup>
 
-    <SectionGroup title="훈련 단계" :surface="false">
+    <!-- 훈련 단계(주기화 전환)는 성과 목표에만 — 비성과는 단계 개념 없음(#398) -->
+    <SectionGroup v-if="isPerformanceGoal" title="훈련 단계" :surface="false">
       <TrainingPhaseCard :summary="adaptiveProgress" @open="phaseModalOpen = true" />
     </SectionGroup>
 
