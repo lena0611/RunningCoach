@@ -11,7 +11,7 @@ import type { RunLog } from '@/entities/run/model'
 import RunSummaryCard from '@/widgets/run-summary-card/RunSummaryCard.vue'
 import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
 import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
-import { getAgeLoadWeight, getEasyRatio, getFatigueWarning, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getTrainingDayView, sumDistance } from '@/shared/lib/runStats'
+import { getAgeLoadWeight, getEasyRatio, getFatigueWarning, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getTrainingDayView, sumDistance, type NextSessionRecommendation } from '@/shared/lib/runStats'
 import { formatDateWithWeekday, formatDuration } from '@/shared/lib/format'
 import { getRaceProjection } from '@/shared/lib/performanceProjection'
 import { resolveRunnerProgress } from '@/shared/lib/level/levelModel'
@@ -272,12 +272,16 @@ const activeBriefing = computed<SessionBriefing | null>(() => {
       ? { ...base, prescription: prescriptionFor(base.sessionType, base.prescription.distanceKm ?? 0, calibratedPaceModel.value) }
       : base
   // 오늘 세션이면 SessionIntent(의도·성공기준·타겟)를 흡수해 단일 카드로(중복 의도 카드 제거).
+  // 단 의도가 '오늘 + 스케줄 세션 타입과 일치'할 때만 흡수한다 — 옛 추천엔진으로 만든 다른 날/다른 타입
+  // 의도(예: 목요일 Tempo)가 오늘 이지 브리핑에 모순된 타겟(심박 146~158·RPE 6~7)을 섞는 것 방지(#398 후속).
+  const planned = todayPlannedIntent.value
+  const intentMatchesToday = planned && (!base || planned.sessionType === base.sessionType)
   const intent =
-    activeDay.value?.state === 'today' && activePlannedIntent.value
+    activeDay.value?.state === 'today' && planned && intentMatchesToday
       ? {
-          why: activePlannedIntent.value.why,
-          successCriteria: activePlannedIntent.value.successCriteria,
-          targets: activePlannedIntent.value.targets
+          why: planned.why,
+          successCriteria: planned.successCriteria,
+          targets: planned.targets
         }
       : null
   return buildSessionBriefing(session, {
@@ -452,14 +456,33 @@ const sessionIntentStore = useSessionIntentStore()
 const toastStore = useToastStore()
 const intentBusy = ref(false)
 const activePlannedIntent = computed(() => sessionIntentStore.activePlannedIntent)
+// 오늘 날짜의 planned 의도(브리핑 흡수용) — 최신순 activePlannedIntent가 미래 stale 의도를 집는 것 방지(#398 후속).
+const todayPlannedIntent = computed(
+  () => sessionIntentStore.intents.find((i) => i.plannedDate === todayDate.value && i.status === 'planned') ?? null
+)
 const weakestFactorLabel = computed(() => {
   const factors = raceProjection.value?.factors ?? []
   if (!factors.length) return null
   return [...factors].sort((a, b) => a.score - b.score)[0]?.label ?? null
 })
 function intentArgs(overrideType?: BuildSessionIntentArgs['overrideType']): BuildSessionIntentArgs {
+  // 스케줄이 있으면 오늘 의도를 '스케줄 세션'에서 만든다(옛 추천엔진 대신) — 타입·타겟·날짜 정합(#398 후속).
+  const s = hasSchedule.value ? activeSession.value : null
+  const recommendation: NextSessionRecommendation = s
+    ? {
+        title: sessionTypeLabel(s.sessionType),
+        reason: s.prescription.note || '오늘 계획된 세션을 수행합니다.',
+        intensity: '',
+        plannedDate: s.date,
+        dayName: '',
+        injuryAdjusted: false,
+        injuryNote: '',
+        loadCaution: false,
+        loadNote: ''
+      }
+    : nextSession.value
   return {
-    recommendation: nextSession.value,
+    recommendation,
     heartRateModel: {
       easyCeilingBpm: heartRateModel.value.easyCeilingBpm,
       tempoCeilingBpm: heartRateModel.value.tempoCeilingBpm,
@@ -467,7 +490,7 @@ function intentArgs(overrideType?: BuildSessionIntentArgs['overrideType']): Buil
     },
     weakestFactorLabel: weakestFactorLabel.value,
     activeGoalId: activeGoal.value?.id ?? null,
-    overrideType
+    overrideType: overrideType ?? (s ? s.sessionType : undefined)
   }
 }
 async function ensureTodayIntent() {
