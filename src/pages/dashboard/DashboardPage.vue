@@ -388,8 +388,10 @@ const activeGradeLine = computed<string | null>(() => {
   // 이지·회복·이지+스트라이드: RPE 우선 강도 유지 판정(#354). 빈 디브리핑 방지.
   if (run.type === 'Easy' || run.type === 'Recovery' || run.type === 'Easy + Strides') {
     const isRecovery = run.type === 'Recovery'
+    // 스트라이드 세션은 가속 구간 심박 상승이 정상이라 평균심박으로 본런 강도를 판정(브리핑과 정렬).
+    const hasStrides = run.type === 'Easy + Strides'
     const ceilingBpm = isRecovery ? heartRateModel.value.recoveryCeilingBpm : heartRateModel.value.easyCeilingBpm
-    const e = evaluateEasyRecovery(run, { ceilingBpm, isRecovery })
+    const e = evaluateEasyRecovery(run, { ceilingBpm, isRecovery, hasStrides })
     const label = e.intentHeld ? (e.rpeOverride ? '강도 유지(RPE 우선) ✓' : '강도 유지 ✓') : '강도 초과 ⚠'
     return `${label}${e.reasons[0] ? ` · ${e.reasons[0]}` : ''}`
   }

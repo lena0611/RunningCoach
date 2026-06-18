@@ -224,11 +224,14 @@ const RPE_OVERRIDE_CAP_BPM = 15
  */
 export function evaluateEasyRecovery(
   run: RunLog,
-  opts: { ceilingBpm: number | null; isRecovery: boolean }
+  opts: { ceilingBpm: number | null; isRecovery: boolean; hasStrides?: boolean }
 ): EasyRecoveryEvaluation {
   const reasons: string[] = []
   // Recovery는 평균심박, Easy는 max(있으면)/avg로 본다.
-  const effectiveHr = opts.isRecovery ? run.avgHeartRate : run.maxHeartRate ?? run.avgHeartRate
+  // Easy + Strides는 짧은 가속(스트라이드)에서 심박이 튀는 게 "정상"(브리핑: 스트라이드는 심박 무관·속도 기준)이라
+  // 최고심박으로 보면 본런 Easy를 잘 했어도 강도 초과로 오판한다 → 평균심박으로 본런 강도를 판정한다.
+  const useAvgHr = opts.isRecovery || opts.hasStrides === true
+  const effectiveHr = useAvgHr ? run.avgHeartRate : run.maxHeartRate ?? run.avgHeartRate
   const margin = opts.isRecovery ? 0 : EASY_OVER_MARGIN
   const overByBpm = opts.ceilingBpm !== null && effectiveHr !== null ? effectiveHr - opts.ceilingBpm : null
   const over = overByBpm !== null && overByBpm > margin
@@ -237,7 +240,13 @@ export function evaluateEasyRecovery(
   const rpeLow = run.rpe !== null && run.rpe <= rpeLowThreshold
 
   if (!over) {
-    reasons.push(opts.isRecovery ? '심박 회복 범위 유지' : 'Easy 심박 범위 유지')
+    reasons.push(
+      opts.hasStrides
+        ? '본런 Easy 심박 범위 유지 — 스트라이드 가속·심박 상승은 의도된 정상'
+        : opts.isRecovery
+          ? '심박 회복 범위 유지'
+          : 'Easy 심박 범위 유지'
+    )
     return { intentHeld: true, overByBpm, rpeOverride: false, reasons }
   }
 
@@ -301,16 +310,22 @@ export function buildCoachSessionEvidence(
       reasons: lsd.reasons
     }
   }
-  if (run.type === 'Easy' || run.type === 'Recovery') {
+  if (run.type === 'Easy' || run.type === 'Recovery' || run.type === 'Easy + Strides') {
     const isRecovery = run.type === 'Recovery'
+    const hasStrides = run.type === 'Easy + Strides'
     const er = evaluateEasyRecovery(run, {
       ceilingBpm: isRecovery ? opts.recoveryCeilingBpm ?? null : opts.easyCeilingBpm ?? null,
-      isRecovery
+      isRecovery,
+      hasStrides
     })
+    // 스트라이드 세션은 AI가 가속 구간 심박을 강도 초과로 오판하지 않도록 컨텍스트를 함께 준다.
+    const reasons = hasStrides
+      ? ['스트라이드는 속도 기준 신경근 자극이라 그 구간 심박 상승은 의도된 정상(이지 심박 상한과 무관) — 본런 Easy 유지 여부로 판정한다', ...er.reasons]
+      : er.reasons
     return {
       runType: run.type,
       easyRecovery: { intentHeld: er.intentHeld, overByBpm: er.overByBpm, rpeOverride: er.rpeOverride },
-      reasons: er.reasons
+      reasons
     }
   }
   return { runType: run.type, reasons: [] }
