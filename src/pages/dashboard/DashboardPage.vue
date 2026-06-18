@@ -502,6 +502,17 @@ watch(
   { immediate: true }
 )
 
+// 활성 목표가 바뀌면 그 목표의 스케줄로 교체·재생성(수동 새로고침 불필요, #398 증분3).
+// 초기(undefined→id)는 위 loaded-watch가 처리하므로 prev==null은 건너뛴다 — 진짜 '전환'만 반응.
+watch(
+  () => activeGoal.value?.id ?? null,
+  async (id, prev) => {
+    if (!id || id === prev || prev == null) return
+    await scheduleStore.load(id)
+    void ensureSchedule()
+  }
+)
+
 watch(
   () => route.path,
   (path) => {
@@ -891,8 +902,9 @@ async function applyPhaseTransition() {
         <div v-else class="stat-card-data">
           <strong class="stat-card-value stat-card-text-value">{{ activeGoal.title }}</strong>
           <small v-if="goalMetaText">{{ goalMetaText }}</small>
-          <small class="dashboard-goal-projection">{{ goalProjectionText }}</small>
-          <small v-if="goalProtectionText" class="dashboard-goal-projection">{{ goalProtectionText }}</small>
+          <!-- 레이스 예측은 성과 목표에만(비성과는 진행지표가 '이번 주 미션'으로 대체, #398) -->
+          <small v-if="isPerformanceGoal" class="dashboard-goal-projection">{{ goalProjectionText }}</small>
+          <small v-if="isPerformanceGoal && goalProtectionText" class="dashboard-goal-projection">{{ goalProtectionText }}</small>
         </div>
         <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
       </button>
