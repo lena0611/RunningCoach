@@ -33,6 +33,12 @@ function injury(overrides: Partial<TrainingInjuryItem>): TrainingInjuryItem {
 
 const noChronic: ChronicLoadTrend = { status: 'stable', increasePct: 5, last30Km: 100, prev30Km: 95, spikeThreshold: 50, risingThreshold: 30 }
 
+// execution 은 라이프사이클 BriefingStep[]. 텍스트 매칭/스트라이드 반복수 추출 헬퍼.
+type Briefing = ReturnType<typeof buildSessionBriefing>
+const execText = (b: Briefing) => b.execution.map((s) => `${s.label} ${s.detail}`).join(' ')
+const strideDetail = (b: Briefing) => b.execution.find((s) => s.label === '스트라이드')?.detail ?? ''
+const strideReps = (b: Briefing) => Number(strideDetail(b).match(/× (\d+)회/)?.[1] ?? 0)
+
 describe('buildSessionBriefing', () => {
   it('Easy + Strides: 4요소(목표·효과·이행지침·근거) 채워짐', () => {
     const b = buildSessionBriefing(session({ sessionType: 'Easy + Strides', phase: 'Base' }), { goal, injury: null, chronic: noChronic })
@@ -40,8 +46,10 @@ describe('buildSessionBriefing', () => {
     expect(b.goalLine).toContain('기초기')
     expect(b.effect).toBeTruthy()
     expect(b.execution.length).toBeGreaterThanOrEqual(2)
-    expect(b.execution.some((l) => l.includes('스트라이드'))).toBe(true)
-    expect(b.execution.some((l) => l.includes('6:10~6:40/km'))).toBe(true)
+    expect(b.execution.some((s) => s.label === '웜업')).toBe(true) // 라이프사이클: 웜업 단계 포함
+    expect(b.execution.some((s) => s.label === '쿨다운')).toBe(true) // 쿨다운 단계 포함
+    expect(b.execution.some((s) => s.label === '스트라이드')).toBe(true)
+    expect(execText(b)).toContain('6:10~6:40/km')
     expect(b.evidence.length).toBeGreaterThan(0)
     expect(b.cautions).toEqual([])
   })
@@ -55,10 +63,7 @@ describe('buildSessionBriefing', () => {
 
   it('부상 severity 가 스트라이드 반복수를 산출 단계에서 감축(무릎 등 비전족)', () => {
     const reps = (inj: ReturnType<typeof injury> | null) =>
-      Number(
-        buildSessionBriefing(session({ sessionType: 'Easy + Strides', phase: 'Base' }), { goal, injury: inj, chronic: noChronic })
-          .execution.find((l) => l.includes('스트라이드'))?.match(/× (\d+)회/)?.[1] ?? 0
-      )
+      strideReps(buildSessionBriefing(session({ sessionType: 'Easy + Strides', phase: 'Base' }), { goal, injury: inj, chronic: noChronic }))
     const healthy = reps(null)
     const hurt = reps(injury({ severity: 3, area: '무릎' }))
     expect(hurt).toBeGreaterThan(0)
@@ -67,8 +72,8 @@ describe('buildSessionBriefing', () => {
 
   it('전족 부상(족저)이면 스트라이드를 보류로 산출', () => {
     const b = buildSessionBriefing(session({ sessionType: 'Easy + Strides', phase: 'Base' }), { goal, injury: injury({ severity: 2, area: '족저근막' }), chronic: noChronic })
-    expect(b.execution.some((l) => l.includes('보류'))).toBe(true)
-    expect(b.execution.some((l) => /× \d+회/.test(l))).toBe(false) // 반복수 처방 없음(보류)
+    expect(b.execution.some((s) => s.detail.includes('보류'))).toBe(true)
+    expect(b.execution.some((s) => /× \d+회/.test(s.detail))).toBe(false) // 반복수 처방 없음(보류)
   })
 
   it('적응 프로필 수행 게이트(ready)면 스트라이드 반복수 상향(blocked면 보수)', () => {
@@ -77,10 +82,7 @@ describe('buildSessionBriefing', () => {
         progressionCriteria: [{ id: 'easy-hr-stability', label: '', status, evidence: '', action: '' }],
         tempoCeiling: { adoptedBpm: null, baseBpm: null, adoptedAt: null }
       } as unknown as import('@/entities/training-memory/model').AdaptiveTrainingProfile
-      return Number(
-        buildSessionBriefing(session({ sessionType: 'Easy + Strides', phase: 'Base' }), { goal, injury: null, chronic: noChronic, adaptiveProfile: profile })
-          .execution.find((l) => l.includes('스트라이드'))?.match(/× (\d+)회/)?.[1] ?? 0
-      )
+      return strideReps(buildSessionBriefing(session({ sessionType: 'Easy + Strides', phase: 'Base' }), { goal, injury: null, chronic: noChronic, adaptiveProfile: profile }))
     }
     expect(reps('ready')).toBeGreaterThan(reps('watch'))
     expect(reps('blocked')).toBeLessThan(reps('watch'))
@@ -94,10 +96,9 @@ describe('buildSessionBriefing', () => {
       progression: [{ id: 'easy-hr-stability', status: 'ready', evidence: '최근 Easy 3회 모두 상한 이하 — 안정.' }]
     })
     // ready → 스트라이드 상향
-    const reps = Number(b.execution.find((l) => l.includes('스트라이드'))?.match(/× (\d+)회/)?.[1] ?? 0)
-    expect(reps).toBeGreaterThan(0)
+    expect(strideReps(b)).toBeGreaterThan(0)
     // 근거(누적 수행 이력) 노출
-    expect(b.execution.some((l) => l.includes('최근 수행') && l.includes('Easy 3회'))).toBe(true)
+    expect(b.execution.some((s) => s.label === '최근 수행' && s.detail.includes('Easy 3회'))).toBe(true)
   })
 
   it('라이브 progression 이 저장 프로필보다 우선', () => {
@@ -106,21 +107,18 @@ describe('buildSessionBriefing', () => {
       tempoCeiling: { adoptedBpm: null, baseBpm: null, adoptedAt: null }
     } as unknown as import('@/entities/training-memory/model').AdaptiveTrainingProfile
     const reps = (live: 'ready' | 'blocked') =>
-      Number(
+      strideReps(
         buildSessionBriefing(session({ sessionType: 'Easy + Strides', phase: 'Base' }), {
           goal, injury: null, chronic: noChronic, adaptiveProfile: profile,
           progression: [{ id: 'easy-hr-stability', status: live, evidence: 'x' }]
-        }).execution.find((l) => l.includes('스트라이드'))?.match(/× (\d+)회/)?.[1] ?? 0
+        })
       )
     expect(reps('ready')).toBeGreaterThan(reps('blocked')) // 저장은 blocked지만 라이브 ready가 우선
   })
 
   it('단계가 레이스에 가까울수록 스트라이드 반복수가 많다(산출)', () => {
     const reps = (phase: 'Base' | 'Race Specific') =>
-      Number(
-        buildSessionBriefing(session({ sessionType: 'Easy + Strides', phase }), { goal, injury: null, chronic: noChronic })
-          .execution.find((l) => l.includes('스트라이드'))?.match(/× (\d+)회/)?.[1] ?? 0
-      )
+      strideReps(buildSessionBriefing(session({ sessionType: 'Easy + Strides', phase }), { goal, injury: null, chronic: noChronic }))
     expect(reps('Race Specific')).toBeGreaterThan(reps('Base'))
   })
 
@@ -133,17 +131,37 @@ describe('buildSessionBriefing', () => {
   it('#354 정렬: Easy/Recovery 는 RPE 우선 프레임 + 근거', () => {
     for (const t of ['Easy', 'Recovery', 'Easy + Strides'] as const) {
       const b = buildSessionBriefing(session({ sessionType: t }), { goal, injury: null, chronic: noChronic })
-      expect(b.execution.some((l) => l.includes('RPE'))).toBe(true)
+      expect(b.execution.some((s) => s.detail.includes('RPE'))).toBe(true)
       expect(b.evidence.some((e) => e.method.includes('RPE'))).toBe(true)
+    }
+  })
+
+  it('모든 세션 타입에 웜업→본(런/훈련)→쿨다운 라이프사이클이 기본 제공된다', () => {
+    const types = ['Easy', 'Recovery', 'Easy + Strides', 'Tempo', 'LSD', 'Steady Long', 'Race'] as const
+    for (const t of types) {
+      const b = buildSessionBriefing(session({ sessionType: t, keySession: t === 'Tempo' || t === 'Race' }), { goal, injury: null, chronic: noChronic })
+      const labels = b.execution.map((s) => s.label)
+      expect(labels).toContain('웜업')
+      expect(labels.some((l) => l === '본런' || l === '본훈련')).toBe(true)
+      expect(labels).toContain('쿨다운')
+    }
+  })
+
+  it('품질/한계시험 세션은 정식 웜업(조깅+드릴+스트라이드)을 처방한다', () => {
+    for (const t of ['Tempo', 'Race'] as const) {
+      const b = buildSessionBriefing(session({ sessionType: t, keySession: true }), { goal, injury: null, chronic: noChronic })
+      const warmup = b.execution.find((s) => s.label === '웜업')?.detail ?? ''
+      expect(warmup).toContain('드릴')
+      expect(warmup).toContain('스트라이드')
     }
   })
 
   it('#354 정렬: LSD 세분화(Standard/Recovery/Progressive), Steady Long 효율·네거티브 보정', () => {
     const lsd = buildSessionBriefing(session({ sessionType: 'LSD', keySession: true }), { goal, injury: null, chronic: noChronic })
-    expect(lsd.execution.join(' ')).toContain('Standard LSD')
-    expect(lsd.execution.join(' ')).toContain('Progressive')
+    expect(execText(lsd)).toContain('Standard LSD')
+    expect(execText(lsd)).toContain('Progressive')
     const steady = buildSessionBriefing(session({ sessionType: 'Steady Long', keySession: true }), { goal, injury: null, chronic: noChronic })
-    expect(steady.execution.join(' ')).toContain('네거티브')
+    expect(execText(steady)).toContain('네거티브')
   })
 
   it('SessionIntent 흡수: 의도(why)·성공기준·타겟 한 카드로 (수락 결정 지원)', () => {
