@@ -41,7 +41,7 @@ import { detectScheduleDeviation } from '@/shared/lib/coaching/scheduleRealign'
 import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
 import CoachMomentCard from './CoachMomentCard.vue'
 import { computeIntentFulfillment } from '@/entities/session-intent/computeIntentFulfillment'
-import { evaluateSteadyLong, STEADY_LONG_GRADE_LABEL, evaluateLsd, LSD_KIND_LABEL } from '@/shared/lib/coaching/sessionQuality'
+import { evaluateSteadyLong, STEADY_LONG_GRADE_LABEL, evaluateLsd, LSD_KIND_LABEL, evaluateEasyRecovery } from '@/shared/lib/coaching/sessionQuality'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { buildSessionIntentDraft, easierAlternative, type BuildSessionIntentArgs } from '@/features/build-session-intent/buildSessionIntentDraft'
@@ -288,6 +288,13 @@ const activeMethodSlug = computed(() =>
 function openMethodGlossary() {
   if (activeMethodSlug.value) glossaryStore.requestOpen(activeMethodSlug.value)
 }
+// 포스트런 디브리핑: 완료 런 타입 → 용어집 슬러그('이 세션이 뭔가요?' 링크).
+const activeDoneMethodSlug = computed(() =>
+  activeDoneRun.value ? SESSION_TYPE_GLOSSARY_SLUG[activeDoneRun.value.type] ?? '' : ''
+)
+function openDoneMethodGlossary() {
+  if (activeDoneMethodSlug.value) glossaryStore.requestOpen(activeDoneMethodSlug.value)
+}
 const activeDoneRun = computed(() =>
   activeDay.value ? runs.value.find((r) => r.date === activeDay.value!.date) ?? null : null
 )
@@ -371,6 +378,24 @@ const activeGradeLine = computed<string | null>(() => {
   if (run.type === 'LSD') {
     const e = evaluateLsd(run, { easyCeilingBpm: heartRateModel.value.easyCeilingBpm, recoveryCeilingBpm: heartRateModel.value.recoveryCeilingBpm })
     return `${LSD_KIND_LABEL[e.kind]}${e.reasons[0] ? ` · ${e.reasons[0]}` : ''}`
+  }
+  // 이지·회복·이지+스트라이드: RPE 우선 강도 유지 판정(#354). 빈 디브리핑 방지.
+  if (run.type === 'Easy' || run.type === 'Recovery' || run.type === 'Easy + Strides') {
+    const isRecovery = run.type === 'Recovery'
+    const ceilingBpm = isRecovery ? heartRateModel.value.recoveryCeilingBpm : heartRateModel.value.easyCeilingBpm
+    const e = evaluateEasyRecovery(run, { ceilingBpm, isRecovery })
+    const label = e.intentHeld ? (e.rpeOverride ? '강도 유지(RPE 우선) ✓' : '강도 유지 ✓') : '강도 초과 ⚠'
+    return `${label}${e.reasons[0] ? ` · ${e.reasons[0]}` : ''}`
+  }
+  // 템포: 별도 평가 함수가 없어 상한 준수만 간단히 본다(상세 평가는 후속).
+  if (run.type === 'Tempo') {
+    const ceil = heartRateModel.value.tempoCeilingBpm
+    const hr = run.maxHeartRate ?? run.avgHeartRate
+    if (ceil !== null && hr !== null) {
+      const over = hr - ceil
+      return over <= 0 ? `템포 상한 준수 ✓ · 최고 ${hr} ≤ 상한 ${ceil}` : `상한 ${over}bpm 초과 ⚠ · 최고 ${hr}`
+    }
+    return '템포 — 심박 상한 준수가 핵심'
   }
   return null
 })
@@ -826,6 +851,8 @@ async function applyPhaseTransition() {
           :fulfillment="activeFulfillment"
           :extra-eval="activeExtraEval"
           :next-line="debriefNextLine"
+          :method-slug="activeDoneMethodSlug"
+          @open-method="openDoneMethodGlossary"
         />
         <!-- 나가기 전: 작전 브리핑 -->
         <SessionBriefingCard
