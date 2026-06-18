@@ -55,9 +55,10 @@ export function buildCoachAdaptiveProgress(
 
   const activeGoal = memory.goals.find((goal) => goal.id === memory.activeGoalId) ?? memory.goals[0] ?? null
   const weeksToRace = weeksUntil(activeGoal?.targetDate ?? null)
-  // 최근 90일 내 Race(5km 근처) 수행을 5km TT 성공 근거로 본다.
+  // 최근 5km 근처 한계 시험(TT) 수행을 게이트 근거로 본다 — type 'Race' 또는 self-race 태그(가상레이싱). (#411)
   const hadRecent5kTT = runs.some(
-    (run) => run.type === 'Race' && run.distanceKm >= 4.5 && run.distanceKm <= 6
+    (run) =>
+      (run.type === 'Race' || run.tags?.includes('self-race')) && run.distanceKm >= 4.5 && run.distanceKm <= 6
   )
 
   const phaseProposal = evaluatePhaseTransition(currentPhase, evaluated, {

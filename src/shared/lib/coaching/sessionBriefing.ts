@@ -136,7 +136,7 @@ function effectFor(type: RunType): { text: string; evidence: EvidenceRef } {
     case 'Steady Long':
       return { text: '긴 거리 지속력과 후반 유지력을 만들어 레이스 후반을 버티게 해요.', evidence: EVIDENCE.longRun }
     case 'Race':
-      return { text: '목표 레이스 페이스 감각을 점검하고 페이싱을 몸에 익혀요.', evidence: EVIDENCE.daniels }
+      return { text: '한계 시험으로 현재 체력을 정확히 측정해, 추정이 아닌 실측으로 다음 블록 페이스를 정해요.', evidence: EVIDENCE.daniels }
     default:
       return { text: '오늘 세션으로 목표를 향한 기초 체력을 다져요.', evidence: EVIDENCE.polarized }
   }
@@ -252,7 +252,8 @@ function executionFor(
       lines.push(RPE_PRIORITY_LINE)
       break
     case 'Race':
-      lines.push(`목표 레이스 페이스${pace ? ` ${pace}` : ''} 점검${amount ? `, ${amount}` : ''}`)
+      lines.push(`${amount ? `${amount} ` : ''}전력으로 측정 — 충분히 워밍업 후 일정하게 끝까지 밀어붙여요`)
+      lines.push('결과로 현재 체력(VDOT)·페이스가 갱신돼요. 무리한 초반 오버페이스는 금물')
       break
     default:
       lines.push(`편한 대화 가능 페이스${pace ? ` ${pace}` : ''}${amount ? `, ${amount}` : ''}`)
@@ -374,7 +375,7 @@ export function sessionTypeLabel(type: RunType): string {
     case 'Steady Long':
       return '스테디 롱'
     case 'Race':
-      return '레이스'
+      return '한계 시험'
     default:
       return type
   }

@@ -27,6 +27,30 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000
 /** quality(고강도 자극) 세션 타입 — 80/20 가드레일·키세션 판정의 기준. */
 const QUALITY_TYPES: ReadonlySet<RunType> = new Set(['Tempo', 'LSD', 'Steady Long', 'Race'])
 
+/** 한계 시험(타임트라이얼, 'Race')을 끼우는 단계 — 블록 끝에서 재측정(#411). Taper/Recovery/RaceSpecific 제외. */
+const TIME_TRIAL_PHASES: ReadonlySet<TrainingPhaseName> = new Set(['Base', 'Build', 'Threshold'])
+
+/**
+ * 단계 블록 마지막 주에 한계 시험(TT='Race')을 키세션으로 끼운다 — VDOT 재측정·단계 게이트용(#411).
+ * 롱런은 보존하고 Tempo 한 개를 TT로 대체(없으면 Easy 계열 하나를 대체). 이미 있으면 그대로.
+ */
+function injectTimeTrial(types: RunType[]): RunType[] {
+  if (types.includes('Race')) return types
+  const out = [...types]
+  const tempoIdx = out.indexOf('Tempo')
+  if (tempoIdx >= 0) {
+    out[tempoIdx] = 'Race'
+    return out
+  }
+  for (let i = out.length - 1; i >= 0; i--) {
+    if (out[i] !== 'LSD' && out[i] !== 'Steady Long') {
+      out[i] = 'Race'
+      return out
+    }
+  }
+  return out
+}
+
 export type PeriodizationInput = {
   goal: TrainingGoal
   profile: AthleteProfile
@@ -210,6 +234,8 @@ function sessionDistance(type: RunType, weeklyVolume: number, sessionCount: numb
   const longShare = 0.35
   if (type === 'LSD' || type === 'Steady Long') return round1(weeklyVolume * longShare)
   // 나머지를 균등 분배.
+  // 한계 시험(TT)은 짧은 전력 측정 — 주간 볼륨 배분이 아니라 고정 단거리(2~5km).
+  if (type === 'Race') return round1(Math.min(5, Math.max(2, weeklyVolume * 0.3)))
   const rest = weeklyVolume * (1 - longShare)
   const restCount = Math.max(sessionCount - 1, 1)
   const per = rest / restCount
@@ -240,7 +266,7 @@ function paceRangeFor(type: RunType, pace: PaceModel): string {
         ? `${formatPaceSec(pace.easyPaceRangeSec[0])}~${formatPaceSec(pace.easyPaceRangeSec[1])}`
         : ''
     case 'Race':
-      return pace.marathonPaceSec ? `${formatPaceSec(pace.marathonPaceSec)}(레이스)` : ''
+      return '' // 한계 시험(TT)은 전력 측정 — 페이스 목표 없음(결과로 체력 갱신)
     case 'Recovery':
       return pace.easyPaceRangeSec ? `${formatPaceSec(pace.easyPaceRangeSec[0])} 이상(느리게)` : ''
     default: // Easy, Easy + Strides
@@ -263,7 +289,7 @@ function noteFor(type: RunType): string {
     case 'Recovery':
       return '아주 느리게, 회복이 목적'
     case 'Race':
-      return '목표 레이스 페이스 점검'
+      return '한계 시험(타임트라이얼) — 전력으로 측정해 현재 체력을 갱신해요'
     default:
       return '편한 대화 가능 페이스'
   }
@@ -321,7 +347,10 @@ export function buildPeriodizedSchedule(input: PeriodizationInput): ScheduledSes
   const drafts: ScheduledSessionDraft[] = []
   for (let week = 0; week < phases.length; week++) {
     const phase = phases[week]
-    const types = weeklySessionTypes(phase, runDays)
+    // 단계 블록 마지막 주면 한계 시험(TT) 삽입 — 다음 단계 진입 전 재측정(#411).
+    const isPhaseEnd = week === phases.length - 1 || phases[week + 1] !== phase
+    const baseTypes = weeklySessionTypes(phase, runDays)
+    const types = isPhaseEnd && TIME_TRIAL_PHASES.has(phase) ? injectTimeTrial(baseTypes) : baseTypes
     const placement = placeOnDays(types, runDays, longRunDayIndex)
     const taperPos = phase === 'Taper' && firstTaperWeek >= 0 ? week - firstTaperWeek : 0
     const weeklyVol = weeklyVolumeKm(week, phase, baseVolumeKm, peakVolumeKm, totalWeeks, taperPos, taperLen)
