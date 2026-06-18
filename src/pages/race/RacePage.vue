@@ -271,7 +271,7 @@ onUnmounted(() => {
 })
 
 function opponentLabel(o: OpponentOption): string {
-  if (o.kind === 'none') return '없음 — 자유 레이싱'
+  if (o.kind === 'none') return '없음 — 한계 시험(TT)'
   const km = o.distanceM ? o.distanceM / 1000 : 0
   return `내 ${km}km 베스트 · ${fmtTime(o.elapsedSec)}`
 }
@@ -350,7 +350,7 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
 <template>
   <section class="memory-stack-page">
     <header class="memory-stack-header">
-      <div><h2>레이싱</h2></div>
+      <div><h2>한계 도전</h2></div>
       <button class="stack-icon-button" type="button" aria-label="닫기" @click="emit('close')">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
       </button>
@@ -359,43 +359,32 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
     <main class="memory-stack-content">
       <!-- 브리지 없음(웹) 폴백 -->
       <SectionGroup v-if="!live.available && !previewMode" title="안내">
-        <p class="race-text">가상레이싱은 <strong>iOS 앱</strong>에서만 가능합니다.</p>
-        <p class="race-muted">앱에서 화면을 잠그고 달리면 음성으로 경쟁 상황을 안내합니다.</p>
+        <p class="race-text">한계 도전은 <strong>iOS 앱</strong>에서만 가능합니다.</p>
+        <p class="race-muted">앱에서 화면을 잠그고 달리면 음성으로 고스트와의 격차를 안내합니다.</p>
       </SectionGroup>
 
-      <!-- ① 설정 -->
+      <!-- ① 설정 (다자간 보류 — 한계 도전 단일 흐름, #411) -->
       <template v-else-if="step === 'setup'">
-        <div class="race-modes" role="tablist">
-          <button type="button" role="tab" :aria-selected="raceMode === 'solo'" :class="{ active: raceMode === 'solo' }" @click="raceMode = 'solo'">🏃 나와의 대결</button>
-          <button type="button" role="tab" :aria-selected="raceMode === 'crew'" :class="{ active: raceMode === 'crew' }" @click="raceMode = 'crew'">👥 크루와 대결</button>
-        </div>
-
-        <SectionGroup v-if="raceMode === 'crew'" title="크루와 대결">
-          <p class="race-muted">추후 공개됩니다.</p>
-        </SectionGroup>
-
-        <template v-else>
-          <template v-if="lastSettings">
-            <SectionGroup title="레이싱 설정">
-              <div class="race-setting-list">
-                <ListRow title="거리" clickable @click="openSettings">
-                  <template #addon><span class="row-value">{{ lastSettings.distanceLabel }}</span><svg class="row-chevron" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6" /></svg></template>
-                </ListRow>
-                <ListRow title="상대" clickable @click="openSettings">
-                  <template #addon><span class="row-value">{{ lastSettings.opponentLabel }}</span><svg class="row-chevron" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6" /></svg></template>
-                </ListRow>
-                <ListRow title="음성 안내" clickable @click="openSettings">
-                  <template #addon><span class="row-value">{{ lastSettings.voiceLabel }}</span><svg class="row-chevron" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6" /></svg></template>
-                </ListRow>
-              </div>
-            </SectionGroup>
-          </template>
-
-          <SectionGroup v-else title="나와의 대결">
-            <p class="race-muted">고스트(과거 기록)와 달리거나, 자유 레이싱으로 기록에 도전하세요. 거리·상대·음성 안내를 먼저 설정합니다.</p>
-            <button class="race-cta inline" type="button" @click="openSettings">설정하러 가기</button>
+        <template v-if="lastSettings">
+          <SectionGroup title="한계 도전 설정">
+            <div class="race-setting-list">
+              <ListRow title="거리" clickable @click="openSettings">
+                <template #addon><span class="row-value">{{ lastSettings.distanceLabel }}</span><svg class="row-chevron" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6" /></svg></template>
+              </ListRow>
+              <ListRow title="상대" clickable @click="openSettings">
+                <template #addon><span class="row-value">{{ lastSettings.opponentLabel }}</span><svg class="row-chevron" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6" /></svg></template>
+              </ListRow>
+              <ListRow title="음성 안내" clickable @click="openSettings">
+                <template #addon><span class="row-value">{{ lastSettings.voiceLabel }}</span><svg class="row-chevron" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6" /></svg></template>
+              </ListRow>
+            </div>
           </SectionGroup>
         </template>
+
+        <SectionGroup v-else title="한계 도전">
+          <p class="race-muted">과거의 나(고스트)와 겨뤄 한계를 갱신하거나, 상대 없이 한계 시험(TT)으로 현재 체력을 측정해요. 거리·상대·음성 안내를 먼저 설정합니다.</p>
+          <button class="race-cta inline" type="button" @click="openSettings">설정하러 가기</button>
+        </SectionGroup>
       </template>
 
       <!-- ② 라이브 -->
