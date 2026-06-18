@@ -364,7 +364,13 @@ const activeExtraEval = computed(() => {
   if (!run || !hasSchedule.value) return null
   // 플랜 시작 이전 런은 예정/예정 외를 따질 대상이 아니다(귀속할 플랜이 없었음). [[web-change-verify-render-and-migration]] 일반화: #390 추세 가드와 동일 기준.
   if (scheduleStartDate.value && run.date < scheduleStartDate.value) return null
-  const attributed = scheduleStore.sessions.some((s) => s.runId === run.id) || Boolean(activeDoneIntent.value)
+  // 귀속 판정: ① 세션에 runId 링크됨, ② 의도 있음, ③ 그 날짜에 활성 계획 세션 존재.
+  // ③은 임포트 시 런↔세션 링크(matchRun)가 안 걸려도 "예정된 날 뛴 것"을 예정 외로 오판하지 않게 한다
+  // (캐러셀·이번주 미션과 동일한 날짜 기준 귀속). 링크 누락으로 오늘의 본세션이 "예정에 없던 런"으로 뜨던 버그.
+  const attributed =
+    scheduleStore.sessions.some((s) => s.runId === run.id) ||
+    Boolean(activeDoneIntent.value) ||
+    scheduleStore.sessions.some((s) => s.date === run.date && isActiveSession(s))
   if (attributed) return null
   return evaluateExtraRun(run, activeInjury.value, chronicLoad.value)
 })
@@ -401,7 +407,9 @@ const activeGradeLine = computed<string | null>(() => {
 })
 const debriefNextLine = computed(() => {
   // 새 주기화 스케줄 기준 다음 세션(옛 weeklyPattern dayView.next 아님 — 불일치 방지).
-  const next = scheduleStore.upcoming(todayDate.value)[0] ?? null
+  // 방금 완료한 날(activeDoneRun.date) 이후로 — 링크 누락으로 오늘 세션이 미완료로 남아도 "다음"에 자기 자신이 안 뜨게.
+  const after = activeDoneRun.value?.date ?? todayDate.value
+  const next = scheduleStore.upcoming(todayDate.value).find((s) => s.date > after) ?? null
   return next ? `${formatDateWithWeekday(next.date)} · ${sessionTypeLabel(next.sessionType)}` : null
 })
 
