@@ -634,26 +634,26 @@ export const GLOSSARY_FALLBACK_TERMS: GlossaryTerm[] = [
     orderIndex: 30
   },
 
-  // 레이싱
+  // 한계 도전
   {
     id: 'racing',
     slug: 'racing',
-    term: '레이싱하기',
-    aka: ['racing', '레이싱', '대결'],
+    term: '한계 도전',
+    aka: ['한계 도전', '레이싱', 'racing', '한계 시험', '타임트라이얼', 'TT'],
     category: 'competition',
-    shortDef: '같은 거리를 두고 과거의 나(고스트)나 다른 러너와 겨루는 모드.',
-    detail: '훈련과 직교하는 경쟁 경험입니다. 혼자 겨루는 “나와의 대결”과 여러 명이 각자의 장소에서 동시에 겨루는 “크루와 대결”(후속 공개)로 나뉩니다. 결과는 러닝 기록에 레이싱 주석으로 연결됩니다.',
-    relatedSlugs: ['solo-race', 'crew-race', 'ghost'],
+    shortDef: '과거의 나(고스트)와 겨루거나 한계 시험(TT)으로 현재 체력을 측정·갱신하는 모드.',
+    detail: '훈련 계획의 재측정 관문이자 등급 승급의 계기입니다. 상대가 “없음”이면 한계 시험(TT, 순수 전력 측정), 과거의 나(고스트)면 게임화된 측정 — 같은 거리를 그때의 나처럼 달리는 고스트와 실시간 격차를 음성으로 안내받습니다. 결과(기록)는 현재 체력(VDOT)·등급을 갱신합니다. (다자간 실시간 경쟁은 후속·보류)',
+    relatedSlugs: ['solo-race', 'ghost'],
     orderIndex: 10
   },
   {
     id: 'solo-race',
     slug: 'solo-race',
-    term: '나와의 대결',
-    aka: ['solo race', '혼자하기', '나와의 대결'],
+    term: '한계 시험 / 고스트 대전',
+    aka: ['solo race', '한계 시험', '고스트 대전', 'TT', '타임트라이얼'],
     category: 'competition',
-    shortDef: '과거의 내 기록(고스트)이나 내 베스트와 혼자 겨루는 레이싱.',
-    detail: '지금 내 실력을 가볍게 시험해 보고 싶을 때 씁니다. 타겟은 “없음”(고스트 없이 측정만)이거나 “내 베스트”입니다. 같은 거리를 그때의 나처럼 달리는 고스트와 실시간 격차를 음성으로 안내받습니다.',
+    shortDef: '상대 없이 전력 측정(TT)하거나, 과거의 나(고스트)와 겨뤄 한계를 갱신.',
+    detail: '타겟이 “없음”이면 순수 한계 시험(TT, 측정만), “내 베스트(고스트)”면 게임화된 측정입니다 — 둘 다 결과가 VDOT·등급으로 이어집니다. 스케줄은 단계 블록 끝에 한계 시험을 재측정 관문으로 처방합니다.',
     relatedSlugs: ['racing', 'ghost', 'my-best'],
     orderIndex: 20
   },
@@ -661,10 +661,10 @@ export const GLOSSARY_FALLBACK_TERMS: GlossaryTerm[] = [
     id: 'crew-race',
     slug: 'crew-race',
     term: '크루와 대결',
-    aka: ['crew race', '여러명이서', '크루와 대결'],
+    aka: ['crew race', '여러명이서', '크루와 대결', '다자간'],
     category: 'competition',
-    shortDef: '여러 명이 각자의 장소에서 동시에 같은 거리를 겨루는 레이싱(후속 공개).',
-    detail: '떨어져 있어도 함께 달리는 경험을 목표로 한 모드입니다. 아직 준비 중이며 공개 전까지는 “나와의 대결”만 사용할 수 있습니다.',
+    shortDef: '여러 명이 각자의 장소에서 동시에 겨루는 모드 — 현재 보류(시장 차별성 낮음).',
+    detail: '떨어져 있어도 함께 달리는 경험을 목표로 한 모드이나, 시중 앱에 흔해 경쟁력이 낮다고 보아 현재 보류입니다. 지금은 한계 도전(고스트 대전·한계 시험)에 집중합니다.',
     relatedSlugs: ['racing', 'solo-race'],
     orderIndex: 30
   },

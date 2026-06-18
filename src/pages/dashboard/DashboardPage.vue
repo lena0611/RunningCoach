@@ -809,16 +809,16 @@ async function applyPhaseTransition() {
 
     <QuestPanel v-if="weekMission" :mission="weekMission" />
 
-    <SectionGroup title="레이싱하기" :surface="false">
+    <SectionGroup title="한계 도전" :surface="false">
       <button class="stat-card stat-card-interactive" type="button" @click="raceOpen = true">
         <div class="stat-card-data">
           <template v-if="lastRace">
             <strong class="stat-card-value stat-card-text-value">{{ lastRace.distanceKm.toFixed(2) }}km · {{ formatDuration(lastRace.durationSec ?? 0) }}</strong>
-            <small>마지막 레이싱 · {{ formatDateWithWeekday(lastRace.date) }}</small>
+            <small>마지막 한계 도전 · {{ formatDateWithWeekday(lastRace.date) }}</small>
           </template>
           <template v-else>
-            <strong class="stat-card-value stat-card-text-value">첫 레이싱을 시작해보세요</strong>
-            <small>아직 레이싱 기록이 없어요. 고스트와 달리거나 자유 레이싱으로 기록에 도전하세요.</small>
+            <strong class="stat-card-value stat-card-text-value">한계 도전으로 체력을 측정해요</strong>
+            <small>과거의 나(고스트)와 겨루거나 한계 시험(TT)으로 현재 실력을 갱신하세요. 기록은 등급 승급으로 이어져요.</small>
           </template>
         </div>
         <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
