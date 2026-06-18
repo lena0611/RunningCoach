@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { useCompetitionStore } from '@/app/stores/competitionStore'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { computeIntentFulfillment } from '@/entities/session-intent/computeIntentFulfillment'
@@ -43,6 +44,7 @@ import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 const runStore = useRunStore()
 const competitionStore = useCompetitionStore()
 const memoryStore = useMemoryStore()
+const scheduleStore = useTrainingScheduleStore()
 const healthKitSyncStore = useHealthKitSyncStore()
 const weatherStore = useWeatherStore()
 const route = useRoute()
@@ -848,6 +850,17 @@ async function sendCoachRequest(note: string) {
       tempoCoaching: summarizeTempoCoaching(runStore.sortedRuns, memoryStore.memory),
       goalProjection: coachGoalProjection.value,
       adaptiveProgress: buildCoachAdaptiveProgress(runStore.sortedRuns, memoryStore.memory),
+      // 실제 주기화 스케줄의 다음 세션들 — 코치 "다음 훈련"이 weeklyPattern으로 엉뚱한 세션을 지어내지 않게(요약탭과 일치).
+      upcomingSchedule: (() => {
+        const today = new Date()
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+        return scheduleStore.upcoming(todayStr).slice(0, 3).map((s) => ({
+          date: s.date,
+          type: s.sessionType,
+          distanceKm: s.prescription.distanceKm ?? null,
+          keySession: s.keySession
+        }))
+      })(),
       sessionEvidence: (() => {
         const now = new Date()
         const observed = deriveObservedMaxHr(runStore.sortedRuns.map((r) => ({ maxHeartRate: r.maxHeartRate, date: r.date })), now)

@@ -81,6 +81,8 @@ export async function requestCoachRunStream(
     goalProjection?: CoachGoalProjectionSummary | null
     adaptiveProgress?: CoachAdaptiveProgressSummary | null
     sessionEvidence?: CoachSessionEvidence | null
+    /** 실제 주기화 스케줄의 다음 세션들(코치 "다음 훈련"이 weeklyPattern으로 지어내지 않게). */
+    upcomingSchedule?: { date: string; type: string; distanceKm: number | null; keySession: boolean }[] | null
   }
 ): Promise<CoachReport> {
   const client = requireSupabase()
@@ -106,6 +108,7 @@ export async function requestCoachRunStream(
       goalProjection: options.goalProjection ?? null,
       adaptiveProgress: options.adaptiveProgress ?? null,
       sessionEvidence: options.sessionEvidence ?? null,
+      upcomingSchedule: options.upcomingSchedule ?? null,
       stream: true,
       commandId: options.commandId ?? null,
       runnerLevel: options.runnerLevel ?? 'beginner',
