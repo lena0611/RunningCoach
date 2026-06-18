@@ -6,6 +6,7 @@ import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useSettingsStore, type ManualThemeMode, type NotificationSettings } from '@/app/stores/settingsStore'
+import { useGlossaryStore } from '@/app/stores/glossaryStore'
 import { getActiveGoal, getActiveInjuryItem, type PersonalBest, type TrainingMemory } from '@/entities/training-memory/model'
 import { isHealthKitBridgeAvailable } from '@/features/import-healthkit-run/healthKitBridge'
 import { syncNativeNotifications } from '@/features/sync-native-notifications/notificationBridge'
@@ -35,6 +36,18 @@ const drawerOpen = ref(false)
 const heartRateHelpOpen = ref(false)
 const heartRateTestGuideOpen = ref(false)
 const glossaryOpen = ref(false)
+const glossaryFocusSlug = ref('')
+const glossaryStore = useGlossaryStore()
+// 다른 화면(세션 카드 등)이 특정 용어로 용어집 열기를 요청하면 연다(deep-link).
+watch(
+  () => glossaryStore.pendingOpenSlug,
+  (slug) => {
+    if (slug === null) return
+    glossaryFocusSlug.value = slug
+    glossaryOpen.value = true
+    glossaryStore.clearPendingOpen()
+  }
+)
 const drawerPanel = ref<'account' | 'profile' | 'settings'>('account')
 const saving = ref(false)
 const error = ref('')
@@ -709,5 +722,5 @@ function goGlossary() {
 
   <HeartRateTestGuideSheet :open="heartRateTestGuideOpen" @close="heartRateTestGuideOpen = false" />
 
-  <GlossarySheet :open="glossaryOpen" @close="glossaryOpen = false" />
+  <GlossarySheet :open="glossaryOpen" :focus-slug="glossaryFocusSlug" @close="glossaryOpen = false; glossaryFocusSlug = ''" />
 </template>

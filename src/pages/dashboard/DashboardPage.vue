@@ -46,6 +46,7 @@ import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { buildSessionIntentDraft, easierAlternative, type BuildSessionIntentArgs } from '@/features/build-session-intent/buildSessionIntentDraft'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
+import { useGlossaryStore } from '@/app/stores/glossaryStore'
 import { assessGoalFeasibility, buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, prescriptionFor, trainingWeekRange, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
 import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
 import { buildRealignedSchedule } from '@/shared/lib/coaching/scheduleRealign'
@@ -270,6 +271,23 @@ const activeDay = computed(() => scheduleDays.value[activeDayIndex.value] ?? nul
 const activeSession = computed<ScheduledSession | null>(() =>
   activeDay.value ? scheduleStore.sessionOnDate(activeDay.value.date) : null
 )
+// 세션 타입 → 용어집 슬러그(훈련법 해설 deep-link). 카드 제목 탭 시 그 항목으로 용어집을 연다.
+const glossaryStore = useGlossaryStore()
+const SESSION_TYPE_GLOSSARY_SLUG: Partial<Record<ScheduledSession['sessionType'], string>> = {
+  Easy: 'easy',
+  Recovery: 'recovery',
+  'Easy + Strides': 'easy-strides',
+  Tempo: 'tempo',
+  LSD: 'lsd',
+  'Steady Long': 'steady-long',
+  Race: 'race-tt'
+}
+const activeMethodSlug = computed(() =>
+  activeSession.value ? SESSION_TYPE_GLOSSARY_SLUG[activeSession.value.sessionType] ?? '' : ''
+)
+function openMethodGlossary() {
+  if (activeMethodSlug.value) glossaryStore.requestOpen(activeMethodSlug.value)
+}
 const activeDoneRun = computed(() =>
   activeDay.value ? runs.value.find((r) => r.date === activeDay.value!.date) ?? null : null
 )
@@ -817,9 +835,11 @@ async function applyPhaseTransition() {
           :ceiling-text="briefingCeilingText"
           :busy="intentBusy"
           :time-trial="activeSession?.sessionType === 'Race'"
+          :method-slug="activeMethodSlug"
           @acknowledge="onBriefingAck"
           @request-alternative="onBriefingAlternative"
           @start-time-trial="raceOpen = true"
+          @open-method="openMethodGlossary"
         />
         <!-- 휴식: 전략적 휴식(#378) — 회복·부상관리·근력 -->
         <article v-else class="carousel-card">

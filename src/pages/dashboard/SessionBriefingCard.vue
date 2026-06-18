@@ -15,12 +15,15 @@ const props = defineProps<{
   busy?: boolean
   /** 한계 시험(TT) 세션이면 기본 액션을 '한계 도전으로 측정'으로 바꾼다(#411). */
   timeTrial?: boolean
+  /** 이 세션 타입의 용어집 슬러그(있으면 제목 탭 → 훈련법 해설 열기). */
+  methodSlug?: string
 }>()
 
 const emit = defineEmits<{
   acknowledge: []
   'request-alternative': [direction: 'easier' | 'harder']
   'start-time-trial': []
+  'open-method': []
 }>()
 
 const evidenceOpen = ref(false)
@@ -34,7 +37,11 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
       <span v-if="ceilingText" class="brief-badge">{{ ceilingText }}</span>
     </header>
 
-    <strong class="brief-title">🏃 {{ sessionType }}</strong>
+    <button v-if="methodSlug" type="button" class="brief-title brief-title-button" @click="emit('open-method')">
+      🏃 {{ sessionType }}<span class="brief-title-info" aria-hidden="true">ⓘ</span>
+      <span class="sr-only">훈련법 설명 보기</span>
+    </button>
+    <strong v-else class="brief-title">🏃 {{ sessionType }}</strong>
     <p class="brief-goal">🎯 {{ briefing.goalLine }}</p>
     <p v-if="briefing.targetsLine" class="brief-goal">🎯 타겟 {{ briefing.targetsLine }}</p>
 
@@ -140,6 +147,36 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
   font-size: 20px;
   font-weight: 700;
   color: var(--color-text);
+}
+
+.brief-title-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 0;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.brief-title-info {
+  font-size: 13px;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .brief-goal {

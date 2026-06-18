@@ -12,9 +12,19 @@ export const useGlossaryStore = defineStore('glossaryStore', {
     loading: false,
     loaded: false,
     usingFallback: true,
-    error: ''
+    error: '',
+    // 다른 화면(세션 카드 등)에서 용어집을 특정 항목으로 열어달라는 요청. AppHeader가 소비한다.
+    // null=요청 없음, ''=항목 지정 없이 열기, 'slug'=해당 항목으로 열고 스크롤.
+    pendingOpenSlug: null as string | null
   }),
   actions: {
+    /** 용어집 열기 요청(슬러그 지정 시 그 항목으로 포커스). */
+    requestOpen(slug = '') {
+      this.pendingOpenSlug = slug
+    },
+    clearPendingOpen() {
+      this.pendingOpenSlug = null
+    },
     async load(force = false) {
       if (this.loaded && !force) return
       this.error = ''
