@@ -173,7 +173,8 @@ async function doEnsureSchedule() {
   // 성과는 목표일+거리 필요. 비성과(체중·체형/건강·습관)는 마감 없이 상시 리듬(#398).
   if (archetype === 'performance' && (!goal.targetDate || !goal.distanceKm)) return
   try {
-    if (!scheduleStore.loaded) await scheduleStore.load(goal.id)
+    // 미로딩이거나 '다른 목표'가 로딩돼 있으면 활성 목표 세션으로 재로딩(#398 — 탭 복귀·목표 전환 stale 방지).
+    if (!scheduleStore.loaded || scheduleStore.loadedGoalId !== goal.id) await scheduleStore.load(goal.id)
     const mine = scheduleStore.sessions.filter((s) => s.goalId === goal.id)
     const hasActive = mine.some(isActiveSession)
     if (archetype !== 'performance') {
