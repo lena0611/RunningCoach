@@ -14,7 +14,7 @@ import type { ChronicLoadTrend } from '@/shared/lib/runStats'
 import { analyzeExtraRunTrend, buildExtraRunInquiry } from '@/shared/lib/coaching/extraRunTrend'
 import { isRunningLoadGroup, PAIN_GROUP_LABEL, type PainGroup } from '@/features/post-run-interview/buildInterviewRunPatch'
 
-export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'extra-run' | 'goal-progress' | 'goal-feasibility'
+export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'extra-run' | 'goal-progress' | 'goal-feasibility' | 'time-trial'
 
 /** 모먼트가 제안하는 행동(전용 시트 열기 등). 트레이니 확인 후 실행. */
 export type CoachMomentAction = {
@@ -71,6 +71,8 @@ export type CoachMomentContext = {
   goalProgress?: { readinessScore: number; readinessLevel: '충분' | '보통' | '부족'; dDayText: string } | null
   /** 목표 실현가능성(#395) — 현재 체력 대비 목표가 무리면 솔직히 경고+대안(message). assessGoalFeasibility 결과 주입. */
   goalFeasibility?: { feasible: boolean; message: string | null } | null
+  /** 최근 한계 시험(TT) 결과(#411) — VDOT·등급 갱신 계기. 측정→승급 연결 메시지. daysAgo 작을 때만 노출. */
+  timeTrialResult?: { daysAgo: number; nextClassLabel: string | null; gatePercent: number | null; eligible: boolean } | null
 }
 
 type Detector = (ctx: CoachMomentContext) => CoachMoment | null
@@ -198,11 +200,30 @@ function detectGoalFeasibility(ctx: CoachMomentContext): CoachMoment | null {
   }
 }
 
+function detectTimeTrialResult(ctx: CoachMomentContext): CoachMoment | null {
+  const tt = ctx.timeTrialResult
+  if (!tt || tt.daysAgo > 3) return null
+  const grade =
+    tt.nextClassLabel === null
+      ? ''
+      : tt.eligible
+        ? ` ${tt.nextClassLabel} 승급 도전 자격을 충족했어요 — 한계 도전으로 완주하면 승급!`
+        : ` ${tt.nextClassLabel} 승급까지 ${tt.gatePercent ?? 0}%.`
+  return {
+    key: 'time-trial',
+    kind: 'time-trial',
+    priority: 58,
+    icon: '🏁',
+    message: `한계 시험 완료! 기록이 반영돼 현재 체력(VDOT)·페이스가 갱신됐어요.${grade}`
+  }
+}
+
 const DETECTORS: Detector[] = [
   detectInjury,
   detectLoadSpike,
   detectPainFollowup,
   detectDeviation,
+  detectTimeTrialResult,
   detectGoalFeasibility,
   detectExtraRun,
   detectGoalProgress

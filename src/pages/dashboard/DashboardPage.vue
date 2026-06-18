@@ -119,6 +119,20 @@ const runnerProgress = computed(() =>
     maxDistanceM: levelStore.selfReportedMaxDistanceM
   })
 )
+// 최근 한계 시험(TT) 결과(#411): self-race 태그 또는 type 'Race' 런 중 가장 최근. 3일 내면 승급 연결 메시지.
+const timeTrialResult = computed(() => {
+  const tt = runs.value.find((r) => r.tags?.includes('self-race') || r.type === 'Race')
+  if (!tt) return null
+  const daysAgo = Math.round((today.value.getTime() - new Date(`${tt.date}T00:00:00`).getTime()) / 86400000)
+  if (daysAgo < 0 || daysAgo > 3) return null
+  const p = runnerProgress.value
+  return {
+    daysAgo,
+    nextClassLabel: p.nextClass?.label ?? null,
+    gatePercent: p.gate1?.percent ?? null,
+    eligible: Boolean(p.gate1?.eligible)
+  }
+})
 
 // === 목표 기반 주기화 스케줄 + 주간 캐러셀 (에픽 #362) ===
 const scheduleStore = useTrainingScheduleStore()
@@ -368,7 +382,8 @@ const coachMoments = computed(() =>
             dDayText: weekSummary.value?.dDayText ?? ''
           }
         : null,
-      goalFeasibility: goalFeasibility.value
+      goalFeasibility: goalFeasibility.value,
+      timeTrialResult: timeTrialResult.value
     },
     dismissedMomentKeys.value
   )
@@ -732,8 +747,10 @@ async function applyPhaseTransition() {
           :session-type="activeSession ? sessionTypeLabel(activeSession.sessionType) : ''"
           :ceiling-text="briefingCeilingText"
           :busy="intentBusy"
+          :time-trial="activeSession?.sessionType === 'Race'"
           @acknowledge="onBriefingAck"
           @request-alternative="onBriefingAlternative"
+          @start-time-trial="raceOpen = true"
         />
         <!-- 휴식: 전략적 휴식(#378) — 회복·부상관리·근력 -->
         <article v-else class="carousel-card">

@@ -45,6 +45,15 @@ describe('collectCoachMoments', () => {
     expect(moments.some((m) => m.kind === 'deviation')).toBe(true)
   })
 
+  it('최근 한계 시험(TT)이면 time-trial 모먼트 + 승급 연결(#411)', () => {
+    const eligible = collectCoachMoments(ctx({ timeTrialResult: { daysAgo: 1, nextClassLabel: '골드', gatePercent: 100, eligible: true } }))
+    const m = eligible.find((x) => x.kind === 'time-trial')
+    expect(m).toBeTruthy()
+    expect(m!.message).toContain('골드 승급 도전 자격')
+    // 오래된 TT(3일 초과)는 노출 안 함
+    expect(collectCoachMoments(ctx({ timeTrialResult: { daysAgo: 5, nextClassLabel: '골드', gatePercent: 90, eligible: false } })).some((x) => x.kind === 'time-trial')).toBe(false)
+  })
+
   it('목표가 무리면 goal-feasibility 경고(#395), feasible이면 없음', () => {
     const warn = collectCoachMoments(ctx({ goalFeasibility: { feasible: false, message: '매주 약 40%씩 늘려야 해요 — 목표일을 미루는 걸 권해요.' } }))
     expect(warn.some((m) => m.kind === 'goal-feasibility')).toBe(true)
