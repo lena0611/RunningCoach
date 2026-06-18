@@ -25,7 +25,9 @@ export const useTrainingScheduleStore = defineStore('trainingScheduleStore', {
     sessions: [] as ScheduledSession[],
     loaded: false,
     loading: false,
-    error: ''
+    error: '',
+    /** 현재 로딩된 세션이 어느 목표의 것인지(#398). 활성 목표가 바뀌면 재로딩 판단에 쓴다. */
+    loadedGoalId: null as string | null | undefined
   }),
   getters: {
     /** 날짜별 활성(planned/missed) 세션 1건 조회. */
@@ -53,6 +55,7 @@ export const useTrainingScheduleStore = defineStore('trainingScheduleStore', {
       try {
         this.sessions = await fetchTrainingSchedule(goalId)
         this.loaded = true
+        this.loadedGoalId = goalId ?? null
       } catch (err) {
         this.error = err instanceof Error ? err.message : '훈련 스케줄을 불러오지 못했습니다.'
       } finally {
