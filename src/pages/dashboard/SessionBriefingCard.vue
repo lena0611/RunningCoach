@@ -50,8 +50,11 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
 
     <div class="brief-block">
       <span class="brief-label">어떻게 뛰나</span>
-      <ul class="brief-list">
-        <li v-for="(line, i) in briefing.execution" :key="i">{{ line }}</li>
+      <ul class="brief-list brief-lifecycle">
+        <li v-for="(step, i) in briefing.execution" :key="i">
+          <span class="brief-step-label">{{ step.label }}</span>
+          <span class="brief-step-detail">{{ step.detail }}</span>
+        </li>
       </ul>
       <p v-if="briefing.paceBasis" class="brief-pace-basis">{{ briefing.paceBasis }}</p>
     </div>
@@ -176,6 +179,33 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
 
 .brief-caution .brief-list {
   color: var(--color-text);
+}
+
+/* 라이프사이클(웜업→본훈련→쿨다운): 불릿 대신 단계 라벨 + 본문 2열. */
+.brief-lifecycle {
+  list-style: none;
+  padding-left: 0;
+  gap: 6px;
+}
+
+.brief-lifecycle li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.brief-step-label {
+  flex: 0 0 auto;
+  min-width: 3.8em;
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--color-primary);
+}
+
+.brief-step-detail {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .brief-pace-basis {

@@ -70,6 +70,12 @@ export type EvidenceRef = {
   url?: string
 }
 
+/**
+ * "어떻게 뛰나" 한 단계. label = 라이프사이클 단계(웜업/본런/본훈련/스트라이드/쿨다운) 또는
+ * 노트 범주(강도/주의/옵션/판정/결과/최근 수행). 카드는 label 을 굵게, detail 을 본문으로 렌더.
+ */
+export type BriefingStep = { label: string; detail: string }
+
 export type SessionBriefing = {
   /** ① 이번 훈련 목표(세션 제목 + 목표 연계). */
   goalLine: string
@@ -77,8 +83,8 @@ export type SessionBriefing = {
   why: string
   /** ③ 훈련 효과(생리적 효과). */
   effect: string
-  /** ② 세부 이행지침(어떻게 뛰나). 1~3줄. */
-  execution: string[]
+  /** ② 세부 이행지침(어떻게 뛰나) — 웜업→본훈련→(스트라이드)→쿨다운 라이프사이클 + 강도/주의 노트. */
+  execution: BriefingStep[]
   /** 성공 기준(수락 후 무엇을 달성하면 OK) — SessionIntent.successCriteria 흡수. */
   successCriteria: string[]
   /** 목표 심박/RPE 타겟 한 줄(예: "심박 152 이하 · RPE 3~4"). 없으면 ''. */
@@ -201,6 +207,16 @@ function tempoMinutesFor(phase: ScheduledSession['phase'], progression: Progress
   }
 }
 
+// 라이프사이클 처방 기준(딥리서치: Daniels/Pfitzinger/RAMP·스트라이드·정적스트레칭 근거).
+// - 저강도(Easy/Recovery/LSD/Steady): 별도 웜업/쿨다운 없이 런 자체에 ease-in/ease-out 내장.
+// - 품질(Tempo)·한계시험(Race): 조깅+드릴+스트라이드 정식 웜업 + 조깅 쿨다운을 본세트에 더한다.
+// - 정적 스트레칭은 회복 근거 약함 → "선택"으로만 표기.
+const EASE_IN_WARMUP = '처음 5~10분은 더 느리게 시작해 몸을 풀어요 (이지런 자체가 워밍업이라 별도 준비는 불필요)'
+const EASE_OUT_COOLDOWN = '마지막 몇 분은 더 천천히 → 2~5분 걷기로 마무리'
+const ROLLING_WARMUP = '첫 1~2km는 천천히 시작 (롤링 워밍업)'
+const QUALITY_WARMUP = '10~15분 가벼운 조깅 + 다이내믹 드릴(레그스윙·A스킵·런지) + 스트라이드 2~4회로 몸을 깨워요'
+const QUALITY_COOLDOWN = '10~15분 아주 느린 조깅 후 걷기로 심박을 천천히 내려요 (정적 스트레칭은 선택)'
+
 /** ② 세부 이행지침을 러너 상태에서 **산출**한다(단계·VDOT·부상·볼륨·적응 프로필). 정적 처방 아님. */
 function executionFor(
   session: ScheduledSession,
@@ -209,60 +225,84 @@ function executionFor(
   progression: ProgressionStatus,
   progressionEvidence: string,
   tempoCeilingBpm: number | null
-): string[] {
+): BriefingStep[] {
   const { sessionType, prescription, phase } = session
-  const lines: string[] = []
+  const steps: BriefingStep[] = []
   const dist = prescription.distanceKm ? `${prescription.distanceKm}km` : ''
   const dur = prescription.durationMin ? `${prescription.durationMin}분` : ''
   const amount = [dist, dur].filter(Boolean).join(' · ')
   const pace = prescription.paceRange
+  const withAmount = amount ? `, ${amount}` : ''
 
   switch (sessionType) {
     case 'Easy + Strides': {
-      lines.push(`본런: 편한 대화 페이스${pace ? ` ${pace}` : ''}${amount ? `, ${amount}` : ''}`)
-      lines.push(RPE_PRIORITY_LINE) // #354 정렬: 강도 판정 RPE>호흡>심박>페이스
+      steps.push({ label: '웜업', detail: EASE_IN_WARMUP })
+      steps.push({ label: '본런', detail: `편한 대화 페이스${pace ? ` ${pace}` : ''}${withAmount}` })
       const s = computeStrides(phase, vdot, injury, progression)
-      if (s.hold) lines.push(s.holdReason)
-      else lines.push(`마무리 스트라이드: 15~20초 빠르고 편하게 × ${s.reps}회, 사이 60~90초 완전 회복`)
+      if (s.hold) steps.push({ label: '스트라이드', detail: s.holdReason })
+      else
+        steps.push({
+          label: '스트라이드',
+          detail: `본런 끝에 15~20초(70~100m) 빠르고 편하게 × ${s.reps}회 — 전력 아닌 ~90~95%, 사이 60~90초 완전 걷기 회복`
+        })
+      steps.push({ label: '쿨다운', detail: '마지막 스트라이드 후 1~3분 걷기로 마무리' })
+      steps.push({ label: '강도', detail: RPE_PRIORITY_LINE }) // #354 정렬: RPE>호흡>심박>페이스
       break
     }
     case 'Tempo': {
       const ceiling = tempoCeilingBpm ? ` (심박 상한 ${tempoCeilingBpm} 준수)` : ', 심박 상한 준수'
-      lines.push(`${tempoMinutesFor(phase, progression)}${pace ? ` ${pace}` : ''}${ceiling}`)
-      lines.push('무너지면 중단 — 자극 확보가 목적이지 기록 경신이 아니에요')
+      steps.push({ label: '웜업', detail: `${QUALITY_WARMUP} — 템포 전 꼭 필요해요` })
+      steps.push({
+        label: '본훈련',
+        detail: `${tempoMinutesFor(phase, progression)}${pace ? ` ${pace}` : ''}${ceiling} — "편하게 힘든" 강도(10~15분 더 갈 수 있을 정도)`
+      })
+      steps.push({ label: '쿨다운', detail: QUALITY_COOLDOWN })
+      steps.push({ label: '주의', detail: '무너지면 중단 — 자극 확보가 목적이지 기록 경신이 아니에요' })
       break
     }
     case 'LSD':
       // #354 정렬: LSD 는 Recovery/Standard/Progressive 로 판정됨. 프리런은 Standard 의도 + 유연 옵션.
-      lines.push(`${amount ? `${amount} ` : ''}대화 가능 강도${pace ? ` ${pace}` : ''}, 심박 안정 우선 (Standard LSD)`)
-      lines.push('컨디션 좋으면 후반 자연 페이스업(Progressive)도 OK, 무리면 더 느린 Recovery LSD로 낮춰도 돼요')
-      lines.push('판정 기준: 평균심박 하나가 아니라 지속시간·RPE·심박 드리프트·페이스 안정성을 함께')
+      steps.push({ label: '웜업', detail: ROLLING_WARMUP })
+      steps.push({ label: '본훈련', detail: `${amount ? `${amount} ` : ''}대화 가능 강도${pace ? ` ${pace}` : ''}, 심박 안정 우선 (Standard LSD)` })
+      steps.push({ label: '옵션', detail: '컨디션 좋으면 후반 자연 페이스업(Progressive)도 OK, 무리면 더 느린 Recovery LSD로 낮춰도 돼요' })
+      steps.push({ label: '쿨다운', detail: '마지막 1km는 천천히 → 5분 걷기, 수분·영양 보충' })
+      steps.push({ label: '판정', detail: '평균심박 하나가 아니라 지속시간·RPE·심박 드리프트·페이스 안정성을 함께' })
       break
     case 'Steady Long':
       // #354 정렬: 전후반 심박차만으로 판단 안 함 — 후반 가속 보정한 효율을 본다.
-      lines.push(`${amount ? `${amount} ` : ''}일정한 강도${pace ? ` ${pace}` : ''}, 후반 효율 위주`)
-      lines.push('잘 통제된 네거티브 스플릿(후반 살짝 가속) 환영 — 후반 가속분은 드리프트에서 보정해 평가해요')
+      steps.push({ label: '웜업', detail: ROLLING_WARMUP })
+      steps.push({ label: '본훈련', detail: `${amount ? `${amount} ` : ''}일정한 강도${pace ? ` ${pace}` : ''}, 후반 효율 위주` })
+      steps.push({ label: '옵션', detail: '잘 통제된 네거티브 스플릿(후반 살짝 가속) 환영 — 후반 가속분은 드리프트에서 보정해 평가해요' })
+      steps.push({ label: '쿨다운', detail: '마지막은 천천히 → 걷기로 마무리, 수분·영양 보충' })
       break
     case 'Recovery':
-      lines.push(`아주 느리게${pace ? ` ${pace}` : ''}${amount ? `, ${amount}` : ''} — 회복이 목적`)
-      lines.push(RPE_PRIORITY_LINE)
+      steps.push({ label: '웜업', detail: '걷듯이 아주 천천히 시작해요' })
+      steps.push({ label: '본런', detail: `아주 느리게${pace ? ` ${pace}` : ''}${withAmount} — 회복이 목적` })
+      steps.push({ label: '쿨다운', detail: '마지막은 걷기로 마무리' })
+      steps.push({ label: '강도', detail: RPE_PRIORITY_LINE })
       break
     case 'Easy':
-      lines.push(`편한 대화 가능 페이스${pace ? ` ${pace}` : ''}${amount ? `, ${amount}` : ''}`)
-      lines.push(RPE_PRIORITY_LINE)
+      steps.push({ label: '웜업', detail: EASE_IN_WARMUP })
+      steps.push({ label: '본런', detail: `편한 대화 가능 페이스${pace ? ` ${pace}` : ''}${withAmount}` })
+      steps.push({ label: '쿨다운', detail: EASE_OUT_COOLDOWN })
+      steps.push({ label: '강도', detail: RPE_PRIORITY_LINE })
       break
     case 'Race':
-      lines.push(`${amount ? `${amount} ` : ''}전력으로 측정 — 충분히 워밍업 후 일정하게 끝까지 밀어붙여요`)
-      lines.push('결과로 현재 체력(VDOT)·페이스가 갱신돼요. 무리한 초반 오버페이스는 금물')
+      steps.push({ label: '웜업', detail: '10~15분 조깅 + 다이내믹 드릴 + 스트라이드 4~6회(목표 페이스까지 점증). 출발 5~10분 전 완료' })
+      steps.push({ label: '본훈련', detail: `${amount ? `${amount} ` : ''}전력으로 측정 — 일정 페이스로 끝까지, 초반 오버페이스 금물` })
+      steps.push({ label: '쿨다운', detail: '10~15분 아주 느린 조깅 + 걷기로 심박 회복' })
+      steps.push({ label: '결과', detail: '현재 체력(VDOT)·페이스가 갱신돼요' })
       break
     default:
-      lines.push(`편한 대화 가능 페이스${pace ? ` ${pace}` : ''}${amount ? `, ${amount}` : ''}`)
+      steps.push({ label: '웜업', detail: '처음 5~10분은 더 느리게 시작해 몸을 풀어요' })
+      steps.push({ label: '본런', detail: `편한 대화 가능 페이스${pace ? ` ${pace}` : ''}${withAmount}` })
+      steps.push({ label: '쿨다운', detail: EASE_OUT_COOLDOWN })
   }
   // 누적 수행 이력(#336 라이브 평가)이 상향/보수 신호일 때 그 근거를 투명하게 노출.
   if ((progression === 'ready' || progression === 'blocked') && progressionEvidence) {
-    lines.push(`최근 수행: ${progressionEvidence}`)
+    steps.push({ label: '최근 수행', detail: progressionEvidence })
   }
-  return lines
+  return steps
 }
 
 /** ④ 조심할 점 — 부상 severity·부하 추세에서 결정론으로. */
