@@ -311,6 +311,8 @@ export type SessionBriefingContext = {
   intent?: BriefingIntent | null
   /** Easy 계열 페이스 근거 한 줄(#405) — 관측 보정/추정 여부. 호출부가 산출해 주입. 나중에 "나의 통계"로 흡수 예정. */
   easyPaceBasis?: string | null
+  /** 비성과 목표(#398)면 goalLine에 주기화 단계('기초기' 등)를 안 붙인다. */
+  nonPeriodized?: boolean
 }
 
 const EASY_PACE_FAMILY: ReadonlySet<RunType> = new Set(['Easy', 'Easy + Strides', 'Recovery', 'LSD', 'Steady Long'])
@@ -318,8 +320,9 @@ const EASY_PACE_FAMILY: ReadonlySet<RunType> = new Set(['Easy', 'Easy + Strides'
 /** ScheduledSession + 장기맥락 → 4요소 작전 브리핑(결정론). */
 export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBriefingContext): SessionBriefing {
   const goalLabel = ctx.goal?.title ? `'${ctx.goal.title}' ` : ''
-  const phaseLabel = phaseLabelKo(session.phase)
-  const goalLine = `${goalLabel}${phaseLabel} — ${sessionTypeLabel(session.sessionType)}`
+  // 비성과는 주기화 단계가 없으므로 goalLine에서 단계 라벨을 뺀다(#398).
+  const phaseLabel = ctx.nonPeriodized ? '' : `${phaseLabelKo(session.phase)} `
+  const goalLine = `${goalLabel}${phaseLabel}— ${sessionTypeLabel(session.sessionType)}`
 
   const prog = resolveProgression(session.sessionType, ctx.progression, ctx.adaptiveProfile)
   const tempoCeilingBpm = ctx.adaptiveProfile?.tempoCeiling?.adoptedBpm ?? null
