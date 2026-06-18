@@ -11,12 +11,18 @@
 import type { RunLog } from '@/entities/run/model'
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
-/** 최근 이 기간 내 런만 본다(체력 변화 반영). */
+/** 최근 이 기간 내 런만 본다(체력 변화 반영). 이 밖은 가중 0. */
 const WINDOW_DAYS = 90
 /** 신뢰할 최소 표본 수. 그 미만이면 null(추정 폴백). */
 const MIN_SAMPLES = 3
 /** 워밍업/짧은 구간 노이즈 제외 최소 거리. */
 const MIN_DISTANCE_KM = 2
+/**
+ * 최근 가중 감쇠 상수(일). 가중 = exp(-경과일/τ). τ=28이면 4주 전 런은 ≈0.37배, 8주 ≈0.14배.
+ * 근거: EWMA가 롤링평균보다 최근 적응을 더 잘 반영(Williams 2017, BJSM) + 코치는 최근 4~6주
+ * 수행으로 페이스 재설정(Daniels VDOT 재평가 4~8주). running-coaching-standards "관측 Easy 페이스".
+ */
+const RECENCY_TAU_DAYS = 28
 
 export type ObservedEasyPace = {
   /** 대표 Easy 페이스(중앙값, sec/km). */
@@ -27,10 +33,16 @@ export type ObservedEasyPace = {
   sampleCount: number
 }
 
-function median(values: number[]): number {
-  const sorted = [...values].sort((a, b) => a - b)
-  const mid = Math.floor(sorted.length / 2)
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+/** 최근 가중(지수감쇠) 평균. 각 표본 가중 = exp(-경과일/τ) → 최근 런이 더 무겁다(EWMA식). */
+function recencyWeightedMean(samples: { pace: number; ageDays: number }[]): number {
+  let wSum = 0
+  let pSum = 0
+  for (const s of samples) {
+    const w = Math.exp(-Math.max(0, s.ageDays) / RECENCY_TAU_DAYS)
+    wSum += w
+    pSum += w * s.pace
+  }
+  return wSum > 0 ? pSum / wSum : 0
 }
 
 /**
@@ -66,9 +78,13 @@ export function deriveObservedEasyPace(
   const chosen = z2.length >= MIN_SAMPLES ? z2 : pool
   if (chosen.length < MIN_SAMPLES) return null
 
-  const paces = chosen.map((r) => r.durationSec! / r.distanceKm)
-  const mid = Math.round(median(paces))
-  // 관측 중앙값 ±5% 의 보수적 권장 구간([느린, 빠른]).
+  // 최근 가중(EWMA식): 최근 런을 더 무겁게 → 체력이 좋아지면 추천 페이스가 빨리 따라온다.
+  const samples = chosen.map((r) => ({
+    pace: r.durationSec! / r.distanceKm,
+    ageDays: (start.getTime() - new Date(`${r.date}T00:00:00`).getTime()) / MS_PER_DAY
+  }))
+  const mid = Math.round(recencyWeightedMean(samples))
+  // 대표값 ±5% 의 보수적 권장 구간([느린, 빠른]).
   return {
     easyPaceSec: mid,
     easyPaceRangeSec: [Math.round(mid * 1.05), Math.round(mid * 0.95)],

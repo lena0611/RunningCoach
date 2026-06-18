@@ -49,6 +49,17 @@ PaceLAB 코칭의 정당성은 "우리가 똑똑해서"가 아니라 **외부의
 - 과도한 주간 증가율과 부상 연관 — Nielsen et al., JOSPT 2014. https://www.jospt.org/doi/10.2519/jospt.2014.5164
 - 시스템 등급제 — Pfitzinger 피크 마일리지대 플랜, Hal Higdon Novice/Intermediate/Advanced, Hansons Marathon Method(원저서). Daniels VDOT 페이스는 `vdotPaces.ts`에 이미 미러링.
 
+## 관측 기반 Easy 페이스 보정 + 최근 가중 (#405)
+
+처방 Easy 페이스는 VDOT(특히 워치 VO2max 추정)로 환산하면 **실제 심박과 충돌**할 수 있다(페이스대로 뛰면 Easy 심박 상한 초과). 그래서 **사용자가 실제로 Easy 심박존에서 뛴 페이스**를 학습해 처방한다(measured > estimate, 페이스는 보조·심박이 정본).
+
+- **표본 = 진짜 Easy(Z2 밴드).** 최근 90일 런 중 평균 심박이 **회복 상한 초과 ~ 이지 상한 이하**(Z2)인 런만 쓴다. 회복존(아주 느린) 런이 섞이면 중앙값이 과하게 느려지므로 제외. Z2 표본<3이면 "이지 상한 이하 전체"로 폴백, 그것도 부족하면 VDOT 추정 폴백.
+- **최근 가중(EWMA식 지수감쇠).** 동일 가중 평균 대신 **가중 = exp(−경과일/τ), τ=28일**로 최근 런을 더 무겁게 본다 → 체력이 좋아지면 추천 페이스가 빠르게 따라온다. 근거:
+  - EWMA가 롤링평균보다 최근 적응/피로를 더 잘 반영(더 민감). Williams et al. 2017, Br J Sports Med — https://pubmed.ncbi.nlm.nih.gov/28003238/ , 체계적 비교 https://www.researchgate.net/publication/350357728 .
+  - 코치는 **최근 4~6주 수행으로 페이스 재설정, 4~8주마다 재평가**(Daniels VDOT). τ=28일은 이 재평가 주기에 정렬(4주 전 ≈0.37배, 8주 ≈0.14배). VDOT 재평가 관행: https://support.vdoto2.com/2022/03/adjusting-your-training-paces-on-v-o2/ .
+- **자동 추종**: 대시보드 로드 시마다 재계산(런 데이터 reactive). 별도 조작 없이 향상을 반영하되, 지수감쇠라 단발 런엔 과민반응하지 않는다.
+- 신뢰도 투명화: 브리핑에 "내 Easy 런 N건 기준" 표기(나중에 "나의 통계"로 흡수, #408).
+
 ## 목표 달성 예측 — 단일 기록 외삽 금지, 훈련량 결합 + 신뢰구간
 
 레이스 준비도/예상 기록은 **단일 기록 외삽 하나로 단정하지 않는다.** 보조 근거로만 쓰고 신뢰구간을 동반한다.
