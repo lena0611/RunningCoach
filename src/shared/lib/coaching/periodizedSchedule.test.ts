@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AthleteProfile, TrainingGoal } from '@/entities/training-memory/model'
-import { allocatePhases, assessGoalFeasibility, buildPeriodizedSchedule } from '@/shared/lib/coaching/periodizedSchedule'
+import { allocatePhases, assessGoalFeasibility, buildPeriodizedSchedule, buildSteadyWeeklyRhythm, goalArchetype } from '@/shared/lib/coaching/periodizedSchedule'
 
 function goal(overrides: Partial<TrainingGoal>): TrainingGoal {
   return {
@@ -202,6 +202,47 @@ describe('buildPeriodizedSchedule', () => {
     // 10K 목표 피크는 40km/주인데 현재 80km/주 → 40 역산이 아니라 80에 앵커
     const sched = buildPeriodizedSchedule({ goal: goal({ targetDate: '2026-07-05', distanceKm: 10 }), profile: profile({}), today, currentWeeklyKm: 80 })
     expect(firstWeekKm(sched)).toBeGreaterThan(50)
+  })
+})
+
+describe('목표 타입별 코칭 (#398)', () => {
+  const today = new Date('2026-06-18T00:00:00')
+
+  it('goalArchetype: category → 아키타입 매핑', () => {
+    expect(goalArchetype('race')).toBe('performance')
+    expect(goalArchetype('fitness')).toBe('fat-loss')
+    expect(goalArchetype('health')).toBe('wellbeing')
+    expect(goalArchetype('habit')).toBe('wellbeing')
+    expect(goalArchetype('maintenance')).toBe('wellbeing')
+  })
+
+  it('상시 주간 리듬: 주기화 단계/키세션/TT 없음, Easy 중심 롤링', () => {
+    const sched = buildSteadyWeeklyRhythm({ archetype: 'fat-loss', profile: profile({ weeklyRunDaysTarget: 4 }), today, weeks: 4 })
+    expect(sched.length).toBeGreaterThan(8)
+    expect(sched.every((s) => s.phase === 'Base')).toBe(true) // 비주기화
+    expect(sched.some((s) => s.keySession)).toBe(false) // 키세션 없음
+    expect(sched.some((s) => s.sessionType === 'Race')).toBe(false) // TT 없음
+    expect(sched.some((s) => s.sessionType === 'Tempo')).toBe(false) // 강자극 없음
+    // Easy 계열만(Easy/Recovery/LSD)
+    expect(sched.every((s) => ['Easy', 'Recovery', 'LSD'].includes(s.sessionType))).toBe(true)
+  })
+
+  it('건강·습관은 지방연소보다 저부담(주당 세션 수 ≤)', () => {
+    const fat = buildSteadyWeeklyRhythm({ archetype: 'fat-loss', profile: profile({}), today, weeks: 1 })
+    const well = buildSteadyWeeklyRhythm({ archetype: 'wellbeing', profile: profile({}), today, weeks: 1 })
+    expect(well.length).toBeLessThanOrEqual(fat.length)
+  })
+
+  it('관측 Easy 페이스가 있으면 리듬 처방에 반영', () => {
+    const sched = buildSteadyWeeklyRhythm({
+      archetype: 'wellbeing',
+      profile: profile({}),
+      today,
+      weeks: 1,
+      observedEasyPace: { easyPaceSec: 450, easyPaceRangeSec: [473, 428] }
+    })
+    const easy = sched.find((s) => s.sessionType === 'Easy')
+    expect(easy?.prescription.paceRange).toBeTruthy()
   })
 })
 

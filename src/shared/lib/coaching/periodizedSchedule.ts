@@ -244,6 +244,23 @@ function sessionDistance(type: RunType, weeklyVolume: number, sessionCount: numb
   return round1(per)
 }
 
+/**
+ * 관측 Easy 페이스(#405)를 PaceModel에 덮는다. 관측은 실측이므로 base confidence가 'none'이면
+ * 'measured'로 올려 paceRangeFor early-return을 피한다(없으면 페이스가 빈 문자열로 떨어짐).
+ */
+export function withObservedEasy(
+  base: PaceModel,
+  observed: { easyPaceSec: number; easyPaceRangeSec: [number, number] } | null | undefined
+): PaceModel {
+  if (!observed) return base
+  return {
+    ...base,
+    confidence: base.confidence === 'none' ? 'measured' : base.confidence,
+    easyPaceSec: observed.easyPaceSec,
+    easyPaceRangeSec: observed.easyPaceRangeSec
+  }
+}
+
 export function prescriptionFor(
   type: RunType,
   distanceKm: number,
@@ -327,10 +344,7 @@ export function buildPeriodizedSchedule(input: PeriodizationInput): ScheduledSes
   const runDays = clamp(profile.weeklyRunDaysTarget ?? 4, 3, 6)
   const longRunDayIndex = Math.max(0, DAY_NAMES.indexOf(profile.preferredLongRunDay || '토요일'))
   // Easy 페이스는 관측값(있으면)으로 보정 — VDOT 추정이 심박과 싸우는 문제 해결(#405).
-  const baseModel = resolvePaceModel(profile)
-  const pace = input.observedEasyPace
-    ? { ...baseModel, easyPaceSec: input.observedEasyPace.easyPaceSec, easyPaceRangeSec: input.observedEasyPace.easyPaceRangeSec }
-    : baseModel
+  const pace = withObservedEasy(resolvePaceModel(profile), input.observedEasyPace)
 
   // 시작 볼륨 앵커링(#395): 목표거리 역산(×2.5)이 아니라 현재 주간 주행량에서 시작한다.
   // 데이터 없으면(콜드스타트) 보수적 기본값. 이미 목표 피크 이상으로 뛰면 피크를 현재 이상으로
@@ -373,6 +387,79 @@ export function buildPeriodizedSchedule(input: PeriodizationInput): ScheduledSes
   }
 
   // 날짜 오름차순 + 중복 날짜 제거(키세션 우선 보존).
+  return dedupeByDate(drafts)
+}
+
+// ── 목표 타입별 코칭 (#398) ────────────────────────────────────────────────
+export type GoalArchetype = 'performance' | 'fat-loss' | 'wellbeing'
+
+/** TrainingGoal.category → 코칭 아키타입. race=성과, fitness=체중·체형, 그 외=건강·습관. */
+export function goalArchetype(category: TrainingGoal['category']): GoalArchetype {
+  if (category === 'race') return 'performance'
+  if (category === 'fitness') return 'fat-loss'
+  return 'wellbeing'
+}
+
+/** 비성과 아키타입 주간 가이드(running-coaching-standards "목표 타입별 코칭"). */
+const RHYTHM_SPEC: Record<'fat-loss' | 'wellbeing', { runDays: number; weeklyKmDefault: number }> = {
+  // 지방연소: 존2 고볼륨(주 3~4회·1회 약간 길게). 체중감량 1차 동인은 에너지균형, 운동은 지속성.
+  'fat-loss': { runDays: 4, weeklyKmDefault: 24 },
+  // 건강·습관: WHO/ACSM 150~300분/주, 저부담·규칙성.
+  wellbeing: { runDays: 3, weeklyKmDefault: 18 }
+}
+
+export type SteadyRhythmInput = {
+  archetype: 'fat-loss' | 'wellbeing'
+  profile: AthleteProfile
+  today: Date
+  /** 롤링 생성 주 수(기본 6). */
+  weeks?: number
+  /** 현재 주간 주행량 앵커(#395 재사용). 없으면 아키타입 기본값. */
+  currentWeeklyKm?: number | null
+  /** 관측 Easy 페이스(#405). */
+  observedEasyPace?: { easyPaceSec: number; easyPaceRangeSec: [number, number] } | null
+  goalId?: string | null
+}
+
+/**
+ * 비성과(체중·체형/건강·습관) 목표용 **상시 주간 리듬** 생성(#398). 주기화(단계·피크·테이퍼) 없이
+ * 존2 중심 Easy 리듬을 롤링으로 반복한다. 키세션·TT 없음. 같은 캐러셀이 소비.
+ */
+export function buildSteadyWeeklyRhythm(input: SteadyRhythmInput): ScheduledSessionDraft[] {
+  const { archetype, profile, today, goalId = null } = input
+  const weeks = input.weeks ?? 6
+  const spec = RHYTHM_SPEC[archetype]
+  const runDays = clamp(profile.weeklyRunDaysTarget ?? spec.runDays, 3, 5)
+  const longRunDayIndex = Math.max(0, DAY_NAMES.indexOf(profile.preferredLongRunDay || '토요일'))
+  const pace = withObservedEasy(resolvePaceModel(profile), input.observedEasyPace)
+  const weeklyKm = input.currentWeeklyKm && input.currentWeeklyKm > 0 ? input.currentWeeklyKm : spec.weeklyKmDefault
+
+  // 주간 타입: 대부분 Easy. 지방연소는 1회 긴 존2(LSD, easy 페이스)+회복 섞음. 건강·습관은 Easy/Recovery 저부담.
+  const types: RunType[] = []
+  for (let i = 0; i < runDays; i++) {
+    if (archetype === 'fat-loss') types.push(i === 0 ? 'LSD' : i % 3 === 2 ? 'Recovery' : 'Easy')
+    else types.push(i % 2 === 1 ? 'Recovery' : 'Easy')
+  }
+
+  const start = startOfDay(today)
+  const drafts: ScheduledSessionDraft[] = []
+  for (let week = 0; week < weeks; week++) {
+    const placement = placeOnDays(types, runDays, longRunDayIndex)
+    const placed = [...placement.values()]
+    for (const [dayIdx, type] of placement) {
+      const date = dateForWeekDay(start, week, dayIdx)
+      const distance = sessionDistance(type, weeklyKm, placed.length)
+      drafts.push({
+        goalId,
+        date: formatDateOnly(date),
+        phase: 'Base', // 비주기화 — 유산소 유지(중립)
+        sessionType: type,
+        keySession: false, // 비성과: 키세션/TT 없음
+        prescription: prescriptionFor(type, distance, pace),
+        source: 'generator'
+      })
+    }
+  }
   return dedupeByDate(drafts)
 }
 
