@@ -210,8 +210,10 @@ export type EasyRecoveryEvaluation = {
   reasons: string[]
 }
 
-// Easy는 상한 +5까지 허용(기존 기준), Recovery는 상한 자체 기준. RPE 낮음 기준은 Recovery가 더 보수적.
+// Easy/Recovery 모두 평균심박 +margin 까지 허용. Recovery 상한(Z1)이 Easy 상한(Z2)보다 이미 한 존 낮아
+// 보수성이 충분하므로, margin 0(1bpm 초과로 즉시 처벌)이 아니라 약간의 여유를 둔다(cardiac drift·HR lag 흡수).
 const EASY_OVER_MARGIN = 5
+const RECOVERY_OVER_MARGIN = 4
 const RECOVERY_RPE_LOW = 3
 const EASY_RPE_LOW = 4
 // RPE가 낮아도 이만큼 넘으면 데이터 불일치로 보고 override하지 않는다.
@@ -227,12 +229,11 @@ export function evaluateEasyRecovery(
   opts: { ceilingBpm: number | null; isRecovery: boolean; hasStrides?: boolean }
 ): EasyRecoveryEvaluation {
   const reasons: string[] = []
-  // Recovery는 평균심박, Easy는 max(있으면)/avg로 본다.
-  // Easy + Strides는 짧은 가속(스트라이드)에서 심박이 튀는 게 "정상"(브리핑: 스트라이드는 심박 무관·속도 기준)이라
-  // 최고심박으로 보면 본런 Easy를 잘 했어도 강도 초과로 오판한다 → 평균심박으로 본런 강도를 판정한다.
-  const useAvgHr = opts.isRecovery || opts.hasStrides === true
-  const effectiveHr = useAvgHr ? run.avgHeartRate : run.maxHeartRate ?? run.avgHeartRate
-  const margin = opts.isRecovery ? 0 : EASY_OVER_MARGIN
+  // Easy·Recovery·Easy+Strides 모두 평균심박으로 본런 강도를 판정한다(#402 정합성 감사).
+  // 최고심박 단발 스파이크(언덕·신호·스트라이드 가속)는 이지의 "지속 강도"가 아니라 처벌하지 않는다 —
+  // 브리핑(RPE 우선·살짝 넘어도 OK)·표준문서(평균 1차)와 정렬. 진짜 과강 Easy는 평균이 상한+margin을 넘어 잡힌다.
+  const effectiveHr = run.avgHeartRate ?? run.maxHeartRate ?? null
+  const margin = opts.isRecovery ? RECOVERY_OVER_MARGIN : EASY_OVER_MARGIN
   const overByBpm = opts.ceilingBpm !== null && effectiveHr !== null ? effectiveHr - opts.ceilingBpm : null
   const over = overByBpm !== null && overByBpm > margin
 
