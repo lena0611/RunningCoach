@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AthleteProfile, TrainingGoal } from '@/entities/training-memory/model'
-import { allocatePhases, assessGoalFeasibility, buildPeriodizedSchedule, buildSteadyWeeklyRhythm, goalArchetype } from '@/shared/lib/coaching/periodizedSchedule'
+import { allocatePhases, assessGoalFeasibility, buildPeriodizedSchedule, buildSteadyWeeklyRhythm, goalArchetype, trainingWeekRange } from '@/shared/lib/coaching/periodizedSchedule'
 
 function goal(overrides: Partial<TrainingGoal>): TrainingGoal {
   return {
@@ -41,6 +41,28 @@ function profile(overrides: Partial<AthleteProfile>): AthleteProfile {
 }
 
 const HARD_TYPES = ['Tempo', 'Race']
+
+describe('trainingWeekRange (이번 주 SSOT, 월~일)', () => {
+  it('주중(목요일) 기준 그 주 월요일~일요일을 돌려준다', () => {
+    // 2026-06-18 = 목요일 → 월 2026-06-15, 일 2026-06-21
+    const r = trainingWeekRange(new Date('2026-06-18T09:00:00'))
+    expect(r.start).toBe('2026-06-15')
+    expect(r.end).toBe('2026-06-21')
+  })
+
+  it('일요일은 그 주의 마지막 날(이전 월요일 시작)로 본다', () => {
+    // 2026-06-21 = 일요일 → 월 2026-06-15
+    const r = trainingWeekRange(new Date('2026-06-21T23:00:00'))
+    expect(r.start).toBe('2026-06-15')
+    expect(r.end).toBe('2026-06-21')
+  })
+
+  it('월요일은 그 주의 첫 날이다', () => {
+    const r = trainingWeekRange(new Date('2026-06-15T00:30:00'))
+    expect(r.start).toBe('2026-06-15')
+    expect(r.end).toBe('2026-06-21')
+  })
+})
 
 describe('allocatePhases', () => {
   it('충분한 창이면 Base 로 시작해 Taper 로 끝난다', () => {
