@@ -45,6 +45,8 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
     <p class="brief-goal">🎯 {{ briefing.goalLine }}</p>
     <p v-if="briefing.targetsLine" class="brief-goal">🎯 타겟 {{ briefing.targetsLine }}</p>
 
+    <p v-if="briefing.keyPoint" class="brief-keypoint"><span class="brief-keypoint-tag">오늘의 핵심</span>{{ briefing.keyPoint }}</p>
+
     <div v-if="briefing.why" class="brief-block">
       <span class="brief-label">왜 오늘 이걸</span>
       <p class="brief-text">{{ briefing.why }}</p>
@@ -183,6 +185,26 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
   margin: 0;
   font-size: 13px;
   color: var(--color-muted);
+}
+
+.brief-keypoint {
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-button, 12px);
+  background: var(--color-primary-soft, rgba(34, 160, 107, 0.12));
+  border-left: 3px solid var(--color-primary);
+  font-size: var(--text-info-size, 14px);
+  line-height: var(--text-info-line, 1.5);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.brief-keypoint-tag {
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-primary);
 }
 
 .brief-block {

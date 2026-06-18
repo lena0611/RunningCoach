@@ -136,6 +136,18 @@ describe('buildSessionBriefing', () => {
     }
   })
 
+  it('모든 세션 타입에 "오늘의 핵심"(keyPoint)이 상시 채워진다 (의도 없어도)', () => {
+    const types = ['Easy', 'Recovery', 'Easy + Strides', 'Tempo', 'LSD', 'Steady Long', 'Race'] as const
+    for (const t of types) {
+      const b = buildSessionBriefing(session({ sessionType: t }), { goal, injury: null, chronic: noChronic })
+      expect(b.keyPoint.length).toBeGreaterThan(5)
+    }
+    // 타입마다 핵심이 다르다(고정 문장 아님)
+    const easy = buildSessionBriefing(session({ sessionType: 'Easy' }), { goal, injury: null, chronic: noChronic })
+    const tempo = buildSessionBriefing(session({ sessionType: 'Tempo' }), { goal, injury: null, chronic: noChronic })
+    expect(easy.keyPoint).not.toBe(tempo.keyPoint)
+  })
+
   it('모든 세션 타입에 웜업→본(런/훈련)→쿨다운 라이프사이클이 기본 제공된다', () => {
     const types = ['Easy', 'Recovery', 'Easy + Strides', 'Tempo', 'LSD', 'Steady Long', 'Race'] as const
     for (const t of types) {

@@ -18,7 +18,11 @@ defineProps<{
   fulfillment: IntentFulfillment | null
   extraEval: ExtraRunEvaluation | null
   nextLine: string | null
+  /** 이 세션 타입의 용어집 슬러그(있으면 "이 세션이 뭔가요?" 링크 → 훈련법 해설). */
+  methodSlug?: string
 }>()
+
+const emit = defineEmits<{ 'open-method': [] }>()
 </script>
 
 <template>
@@ -32,9 +36,12 @@ defineProps<{
       <p>{{ extraEval.note }}</p>
     </div>
     <IntentFulfillmentCard v-else-if="intent && fulfillment" :intent="intent" :fulfillment="fulfillment" />
-    <p v-else class="helper">오늘 세션을 마쳤어요. 회복 신호를 살피며 다음 세션을 준비해요.</p>
+    <p v-else-if="!gradeLine" class="helper">오늘 세션을 마쳤어요. 회복 신호를 살피며 다음 세션을 준비해요.</p>
 
     <p v-if="nextLine" class="debrief-next">다음 · {{ nextLine }}</p>
+    <button v-if="methodSlug" type="button" class="debrief-method-link" @click="emit('open-method')">
+      이 세션이 뭔가요? ⓘ
+    </button>
   </article>
 </template>
 
@@ -67,6 +74,17 @@ defineProps<{
   margin: var(--space-1, 4px) 0 0;
   font-size: 12px;
   color: var(--color-muted);
+}
+.debrief-method-link {
+  align-self: flex-start;
+  margin-top: var(--space-1, 4px);
+  padding: 0;
+  background: transparent;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary);
+  cursor: pointer;
 }
 .debrief-extra {
   display: flex;

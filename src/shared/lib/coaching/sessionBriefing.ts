@@ -77,6 +77,8 @@ export type EvidenceRef = {
 export type BriefingStep = { label: string; detail: string }
 
 export type SessionBriefing = {
+  /** 🎯 오늘의 핵심 — "딱 하나만 지키면 되는 것"(세션 타입별 결정론). 포스트런이 이 핵심을 채점한다. */
+  keyPoint: string
   /** ① 이번 훈련 목표(세션 제목 + 목표 연계). */
   goalLine: string
   /** 왜 오늘 이걸 하나(의도) — SessionIntent.why 흡수. 없으면 ''. */
@@ -357,6 +359,31 @@ export type SessionBriefingContext = {
 
 const EASY_PACE_FAMILY: ReadonlySet<RunType> = new Set(['Easy', 'Easy + Strides', 'Recovery', 'LSD', 'Steady Long'])
 
+/**
+ * 🎯 오늘의 핵심 — 세션 타입별 "딱 하나만 지키면 되는 것"(결정론). 포스트런 채점 기준(sessionQuality)과 정렬.
+ * 상세 이행은 execution(라이프사이클)에, 여기엔 "오늘의 합격선" 한 줄만.
+ */
+function keyPointFor(type: RunType): string {
+  switch (type) {
+    case 'Easy':
+      return '심박 상한 이하로 대화가 가능한 강도 유지 — 페이스보다 심박 안정(RPE·호흡 우선). 살짝 넘어도 편하면 OK.'
+    case 'Easy + Strides':
+      return '본런은 이지(심박 상한 이하)로 — 스트라이드는 심박 말고 "속도"로, 가볍고 빠르게.'
+    case 'Recovery':
+      return '아주 편하게, 회복이 목적 — 여기서 욕심내지 않기.'
+    case 'Tempo':
+      return '"편하게 힘든" 강도로 심박 상한 지키며 끝까지 — 무너지면 중단(기록 경신 아님).'
+    case 'LSD':
+      return '느리고 길게, 대화 가능 강도 — 후반 심박 드리프트를 작게.'
+    case 'Steady Long':
+      return '일정한 강도로 후반까지 효율 유지 — 잘 통제된 네거티브 스플릿이면 더 좋아요.'
+    case 'Race':
+      return '충분히 웜업하고 일정 페이스로 끝까지 — 초반 오버페이스 금물.'
+    default:
+      return '편한 대화가 가능한 강도를 유지해요.'
+  }
+}
+
 /** ScheduledSession + 장기맥락 → 4요소 작전 브리핑(결정론). */
 export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBriefingContext): SessionBriefing {
   const goalLabel = ctx.goal?.title ? `'${ctx.goal.title}' ` : ''
@@ -379,6 +406,7 @@ export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBrie
   ])
 
   return {
+    keyPoint: keyPointFor(session.sessionType),
     goalLine,
     why: ctx.intent?.why ?? '',
     effect: effect.text,
