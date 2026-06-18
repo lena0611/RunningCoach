@@ -22,7 +22,8 @@ defineProps<{
 <template>
   <SectionGroup title="이번 주 미션" surface-variant="subtle">
     <div class="quest-list">
-      <article class="quest" :class="{ 'quest-ready': mission.keyTotal > 0 && mission.keyDone >= mission.keyTotal }">
+      <!-- 핵심 세션은 키세션이 있을 때만(비성과 상시 리듬은 키세션 없음 → 0/0 미표시, #398) -->
+      <article v-if="mission.keyTotal > 0" class="quest" :class="{ 'quest-ready': mission.keyDone >= mission.keyTotal }">
         <span class="quest-tag quest-tag-routine">◆ 핵심 세션</span>
         <div class="quest-body">
           <strong>{{ mission.keyDone }}/{{ mission.keyTotal }} 완수</strong>

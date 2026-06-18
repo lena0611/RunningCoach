@@ -573,10 +573,18 @@ export type WeekSummary = {
 /**
  * 오늘이 속한 캘린더 주(일~토)의 스케줄을 요약한다. 트레이니에게 "이번 주가 통째로 뭘 위한 주인지"를 준다.
  */
+/** 비성과 아키타입용 위크요약 라벨(단계 대신). running-coaching-standards "목표 타입별 코칭". */
+const NON_PERF_SUMMARY: Record<'fat-loss' | 'wellbeing', { label: string; focus: string }> = {
+  'fat-loss': { label: '체중·체형', focus: '존2 유산소 리듬' },
+  wellbeing: { label: '건강·습관', focus: '규칙적 유산소' }
+}
+
 export function buildWeekSummary(
   sessions: ScheduledSession[],
   today: Date,
-  targetDate: string | null
+  targetDate: string | null,
+  /** 목표 아키타입(#398). 비성과는 단계/D-day 대신 유형 라벨, 마감 없음. */
+  archetype: GoalArchetype = 'performance'
 ): WeekSummary | null {
   const start = startOfDay(today)
   const weekStart = new Date(start.getTime() - start.getDay() * MS_PER_DAY)
@@ -596,17 +604,20 @@ export function buildWeekSummary(
   const keyCount = week.filter((s) => s.keySession).length
   const weekKm = round1(week.reduce((sum, s) => sum + (s.prescription.distanceKm ?? 0), 0))
 
+  // 비성과는 마감 없는 상시 — D-day 미표시.
   let dDayText = ''
-  if (targetDate) {
+  if (archetype === 'performance' && targetDate) {
     const target = startOfDay(new Date(`${targetDate}T00:00:00`))
     const days = Math.round((target.getTime() - start.getTime()) / MS_PER_DAY)
     if (days >= 0) dDayText = `D-${days}`
   }
 
+  // 비성과는 단계(기초기 등) 대신 유형 라벨.
+  const nonPerf = archetype !== 'performance' ? NON_PERF_SUMMARY[archetype] : null
   return {
     phase,
-    phaseLabel: PHASE_LABEL_KO[phase],
-    focusLine: PHASE_FOCUS_KO[phase],
+    phaseLabel: nonPerf?.label ?? PHASE_LABEL_KO[phase],
+    focusLine: nonPerf?.focus ?? PHASE_FOCUS_KO[phase],
     keyCount,
     weekKm,
     dDayText

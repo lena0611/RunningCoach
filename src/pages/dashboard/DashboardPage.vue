@@ -254,7 +254,10 @@ const expectsSchedule = computed(
 )
 const scheduleLoadingPlaceholder = computed(() => expectsSchedule.value && !hasSchedule.value && !scheduleStore.error)
 // 위크 요약(이번 주 단계·포커스·핵심·볼륨·D-day) — "이번 주가 통째로 뭘 위한 주인지"
-const weekSummary = computed(() => buildWeekSummary(scheduleStore.sessions, today.value, activeGoal.value?.targetDate ?? null))
+const activeArchetype = computed(() => (activeGoal.value ? goalArchetype(activeGoal.value.category) : 'performance'))
+const weekSummary = computed(() =>
+  buildWeekSummary(scheduleStore.sessions, today.value, activeGoal.value?.targetDate ?? null, activeArchetype.value)
+)
 const activeDayIndex = ref(CAROUSEL_DAYS_BEFORE) // 기본 = 오늘(offset 0)
 const activeDay = computed(() => scheduleDays.value[activeDayIndex.value] ?? null)
 const activeSession = computed<ScheduledSession | null>(() =>
@@ -295,7 +298,8 @@ const activeBriefing = computed<SessionBriefing | null>(() => {
     // 페이스 근거 투명화(#405) — 관측 보정이면 표본 수, 아니면 추정 안내. (나중에 "나의 통계"로 흡수)
     easyPaceBasis: observedEasyPace.value
       ? `내 Easy 런 ${observedEasyPace.value.sampleCount}건 기준 (심박 ${heartRateModel.value.easyCeilingBpm ?? '-'} 이하)`
-      : 'VDOT 추정 — Easy 심박 이하 런 3건 모이면 내 데이터로 보정돼요'
+      : 'VDOT 추정 — Easy 심박 이하 런 3건 모이면 내 데이터로 보정돼요',
+    nonPeriodized: !isPerformanceGoal.value
   })
 })
 const briefingCeilingText = computed(() =>
@@ -778,7 +782,7 @@ async function applyPhaseTransition() {
     <div v-if="hasSchedule && weekSummary" class="week-summary-bar">
       <span class="week-summary-phase">{{ weekSummary.phaseLabel }}</span>
       <span class="week-summary-focus">{{ weekSummary.focusLine }}</span>
-      <span class="week-summary-meta">핵심 {{ weekSummary.keyCount }} · 약 {{ weekSummary.weekKm }}km<template v-if="weekSummary.dDayText"> · {{ weekSummary.dDayText }}</template></span>
+      <span class="week-summary-meta"><template v-if="isPerformanceGoal">핵심 {{ weekSummary.keyCount }} · </template>약 {{ weekSummary.weekKm }}km<template v-if="weekSummary.dDayText"> · {{ weekSummary.dDayText }}</template></span>
     </div>
 
     <!-- 목표 기반 주간 캐러셀 (에픽 #362). 스케줄이 있으면 히어로 대신 표시. -->
