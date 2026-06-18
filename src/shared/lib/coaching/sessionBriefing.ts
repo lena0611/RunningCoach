@@ -243,7 +243,7 @@ function executionFor(
       else
         steps.push({
           label: '스트라이드',
-          detail: `본런 끝에 15~20초(70~100m) 빠르고 편하게 × ${s.reps}회 — 전력 아닌 ~90~95%, 사이 60~90초 완전 걷기 회복`
+          detail: `본런 끝에 15~20초(70~100m) × ${s.reps}회 — 심박 아닌 '속도' 기준이에요(최고 속도의 ~90%, 여유 있게 빠르게·전력 질주 아님, 폼에 집중). 너무 짧아 이지 심박 상한과는 무관(잠깐 올라도 정상), 사이 60~90초 완전 걷기 회복`
         })
       steps.push({ label: '쿨다운', detail: '마지막 스트라이드 후 1~3분 걷기로 마무리' })
       steps.push({ label: '강도', detail: RPE_PRIORITY_LINE }) // #354 정렬: RPE>호흡>심박>페이스
