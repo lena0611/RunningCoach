@@ -46,7 +46,7 @@ import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { buildSessionIntentDraft, easierAlternative, type BuildSessionIntentArgs } from '@/features/build-session-intent/buildSessionIntentDraft'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
-import { assessGoalFeasibility, buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, prescriptionFor, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
+import { assessGoalFeasibility, buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, prescriptionFor, trainingWeekRange, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
 import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
 import { buildRealignedSchedule } from '@/shared/lib/coaching/scheduleRealign'
 import { proposeAlternativeSession } from '@/shared/lib/coaching/alternativeSession'
@@ -252,7 +252,14 @@ const expectsSchedule = computed(
       ? Boolean(activeGoal.value?.targetDate && activeGoal.value?.distanceKm)
       : Boolean(activeGoal.value))
 )
-const scheduleLoadingPlaceholder = computed(() => expectsSchedule.value && !hasSchedule.value && !scheduleStore.error)
+// 스케줄/메모리가 아직 정착 중이면 목표 없는 히어로(화살표만 보이는 폴백)를 깜빡이지 말고 플레이스홀더로.
+// (콜드 첫 페인트: memory 미로드 → activeGoal null → expectsSchedule false → 폴백 히어로가 잠깐 뜨던 문제)
+const scheduleLoadingPlaceholder = computed(
+  () =>
+    !hasSchedule.value &&
+    !scheduleStore.error &&
+    (expectsSchedule.value || scheduleStore.loading || memoryStore.loading || !memoryStore.loaded)
+)
 // 위크 요약(이번 주 단계·포커스·핵심·볼륨·D-day) — "이번 주가 통째로 뭘 위한 주인지"
 const activeArchetype = computed(() => (activeGoal.value ? goalArchetype(activeGoal.value.category) : 'performance'))
 const weekSummary = computed(() =>
@@ -359,27 +366,29 @@ const debriefNextLine = computed(() => {
 // 캐러셀(달력)·레벨카드(RPG)와 중복 없이 "이번 주에 뭘 끝내면 되는지"의 실행 레이어.
 const weekMission = computed(() => {
   if (!hasSchedule.value) return null
-  const base = new Date(today.value)
-  const mondayOffset = (base.getDay() + 6) % 7 // 월요일=0 기준
-  const monday = new Date(base)
-  monday.setDate(base.getDate() - mondayOffset)
-  const sunday = new Date(monday)
-  sunday.setDate(monday.getDate() + 6)
-  const lo = dateOnly(monday)
-  const hi = dateOnly(sunday)
+  // "이번 주"는 위크요약과 동일 창(월~일 SSOT). 과거엔 미션=월~일, 요약=일~토로 어긋나 볼륨이 달라 보였다.
+  const { start: lo, end: hi } = trainingWeekRange(today.value)
   const wk = scheduleStore.sessions.filter((s) => isActiveSession(s) && s.date >= lo && s.date <= hi)
   if (!wk.length) return null
-  const isDone = (s: ScheduledSession) => s.status === 'done' || Boolean(s.runId)
+  // 완수 판정은 캐러셀(✓)과 동일하게 "그 날짜에 실제 런이 있으면 완료"로 본다.
+  // 세션 runId 링크에만 의존하면 임포트된 런이 스케줄 세션에 연결되기 전까지 0으로 누락된다.
+  const runsInWeek = runs.value.filter((r) => r.date >= lo && r.date <= hi)
+  const runDates = new Set(runsInWeek.map((r) => r.date))
+  const isDone = (s: ScheduledSession) => s.status === 'done' || Boolean(s.runId) || runDates.has(s.date)
   const keys = wk.filter((s) => s.keySession)
-  const sumKm = (arr: ScheduledSession[]) => Math.round(arr.reduce((sum, s) => sum + (s.prescription.distanceKm ?? 0), 0))
+  const sumPlanned = (arr: ScheduledSession[]) => Math.round(arr.reduce((sum, s) => sum + (s.prescription.distanceKm ?? 0), 0))
+  // 완주 볼륨은 계획 km이 아닌 실제 런 거리(이번 주 누적)로 — "이번 주에 실제로 얼마 뛰었나".
+  const doneKm = Math.round(runsInWeek.reduce((sum, r) => sum + (r.distanceKm ?? 0), 0))
   return {
     focusLine: weekSummary.value?.focusLine ?? '',
     sessionsTotal: wk.length,
-    sessionsDone: wk.filter(isDone).length,
+    // 실제로 이번 주 뛴 횟수(볼륨 라인과 동일 기준). 계획 세션 매칭이 아니라 실주행 수 — 스케줄 생성 이전
+    // 과거 요일에 뛴 런도 "이번 주 활동"으로 잡힌다.
+    sessionsDone: runsInWeek.length,
     keyTotal: keys.length,
     keyDone: keys.filter(isDone).length,
-    plannedKm: sumKm(wk),
-    doneKm: sumKm(wk.filter(isDone))
+    plannedKm: sumPlanned(wk),
+    doneKm
   }
 })
 

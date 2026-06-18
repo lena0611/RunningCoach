@@ -579,6 +579,19 @@ const NON_PERF_SUMMARY: Record<'fat-loss' | 'wellbeing', { label: string; focus:
   wellbeing: { label: '건강·습관', focus: '규칙적 유산소' }
 }
 
+/**
+ * "이번 주" 단일 기준(SSOT). 훈련 주는 **월요일 시작–일요일 종료**로 통일한다.
+ * 위크요약·이번주 미션이 같은 창을 쓰도록 여기서만 정의한다(과거: 요약=일~토, 미션=월~일로 어긋나
+ * 같은 주인데 볼륨이 달라 보이던 버그). 캐러셀 day-strip은 오늘 중심 롤링이라 별개(네비게이션용).
+ */
+export function trainingWeekRange(today: Date): { start: string; end: string } {
+  const base = startOfDay(today)
+  const mondayOffset = (base.getDay() + 6) % 7 // 월요일=0
+  const weekStart = new Date(base.getTime() - mondayOffset * MS_PER_DAY)
+  const weekEnd = new Date(weekStart.getTime() + 6 * MS_PER_DAY)
+  return { start: formatDateOnly(weekStart), end: formatDateOnly(weekEnd) }
+}
+
 export function buildWeekSummary(
   sessions: ScheduledSession[],
   today: Date,
@@ -587,10 +600,7 @@ export function buildWeekSummary(
   archetype: GoalArchetype = 'performance'
 ): WeekSummary | null {
   const start = startOfDay(today)
-  const weekStart = new Date(start.getTime() - start.getDay() * MS_PER_DAY)
-  const weekEnd = new Date(weekStart.getTime() + 6 * MS_PER_DAY)
-  const startStr = formatDateOnly(weekStart)
-  const endStr = formatDateOnly(weekEnd)
+  const { start: startStr, end: endStr } = trainingWeekRange(today)
 
   const week = sessions.filter(
     (s) => s.date >= startStr && s.date <= endStr && s.status !== 'superseded'
