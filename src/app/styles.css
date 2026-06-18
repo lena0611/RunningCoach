@@ -123,6 +123,7 @@
 }
 
 .trend-lens-row {
+  position: relative; /* 혹시 자식 화살표가 absolute로 새더라도 뷰포트가 아닌 이 행에 묶이도록(잔존 방지 보강) */
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
@@ -178,8 +179,13 @@
   line-height: var(--text-caption-line);
 }
 
-.trend-lens-row-arrow {
+/* 이 화살표는 그리드 3번째 in-flow 컬럼이라 static 이어야 한다. 전역 `.card-arrow{position:absolute}`가
+   소스 순서상 뒤에 와서 동일 특이성에서 이겨버리므로(→ 뷰포트 기준 absolute로 새어 "찌꺼기"), 두 클래스로
+   특이성을 높여 static 을 강제하고 absolute 잔재(top/right)도 해제한다. */
+.trend-lens-row-arrow.card-arrow {
   position: static;
+  top: auto;
+  right: auto;
   flex: 0 0 auto;
 }
 
