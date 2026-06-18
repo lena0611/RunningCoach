@@ -169,6 +169,21 @@ describe('buildPeriodizedSchedule', () => {
   const firstWeekKm = (sched: ReturnType<typeof buildPeriodizedSchedule>) =>
     sched.filter((s) => s.date <= '2026-01-11').reduce((sum, s) => sum + (s.prescription.distanceKm ?? 0), 0)
 
+  it('#411 단계 블록 끝에 한계 시험(Race/TT)이 키세션으로 삽입된다', () => {
+    const sched = buildPeriodizedSchedule({
+      goal: goal({ targetDate: '2026-07-05', distanceKm: 10 }),
+      profile: profile({ weeklyRunDaysTarget: 4 }),
+      today
+    })
+    const races = sched.filter((s) => s.sessionType === 'Race')
+    expect(races.length).toBeGreaterThan(0)
+    expect(races.every((s) => s.keySession)).toBe(true)
+    // Base 블록 끝에도 재측정 TT가 있어야(추정→실측 전환 지점)
+    expect(sched.some((s) => s.sessionType === 'Race' && s.phase === 'Base')).toBe(true)
+    // TT는 짧은 단거리(≤5km)
+    expect(races.every((s) => (s.prescription.distanceKm ?? 0) <= 5)).toBe(true)
+  })
+
   it('#395 시작 볼륨이 현재 주행량에 앵커링된다(고볼륨 러너 > 입문자)', () => {
     const g = goal({ targetDate: '2026-07-05', distanceKm: 10 })
     const beginner = buildPeriodizedSchedule({ goal: g, profile: profile({}), today, currentWeeklyKm: 15 })
