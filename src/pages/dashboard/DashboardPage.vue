@@ -46,7 +46,7 @@ import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { buildSessionIntentDraft, easierAlternative, type BuildSessionIntentArgs } from '@/features/build-session-intent/buildSessionIntentDraft'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
-import { assessGoalFeasibility, buildPeriodizedSchedule, buildWeekSummary, prescriptionFor } from '@/shared/lib/coaching/periodizedSchedule'
+import { assessGoalFeasibility, buildPeriodizedSchedule, buildWeekSummary, prescriptionFor, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
 import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
 import { buildRealignedSchedule } from '@/shared/lib/coaching/scheduleRealign'
 import { proposeAlternativeSession } from '@/shared/lib/coaching/alternativeSession'
@@ -102,11 +102,7 @@ const observedEasyPace = computed(() =>
   deriveObservedEasyPace(runs.value, heartRateModel.value.easyCeilingBpm, today.value, heartRateModel.value.recoveryCeilingBpm)
 )
 // 보정 PaceModel: Easy 계열 페이스를 관측값으로 덮은 모델(브리핑 표시 즉시 보정용).
-const calibratedPaceModel = computed(() => {
-  const base = resolvePaceModel(memoryStore.memory.athleteProfile)
-  const obs = observedEasyPace.value
-  return obs ? { ...base, easyPaceSec: obs.easyPaceSec, easyPaceRangeSec: obs.easyPaceRangeSec } : base
-})
+const calibratedPaceModel = computed(() => withObservedEasy(resolvePaceModel(memoryStore.memory.athleteProfile), observedEasyPace.value))
 const EASY_FAMILY_TYPES = new Set(['Easy', 'Easy + Strides', 'Recovery', 'LSD', 'Steady Long'])
 const raceProjection = computed(() =>
   getRaceProjection(runs.value, activeGoal.value, today.value, activeInjury.value, ageLoadWeight.value, {

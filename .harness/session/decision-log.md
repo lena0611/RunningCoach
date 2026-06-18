@@ -4,6 +4,18 @@
 
 > 하네스 본체의 변경 이력이나 릴리스 노트가 아닙니다. 하네스 본체 변경 기록은 하네스 저장소의 `CHANGELOG.md` 또는 릴리스 태그를 확인합니다.
 
+## 2026-06-18 - 목표 타입 3종 아키타입으로 코칭 일반화 (#398, /grill-me 합의)
+
+performance 전용 코칭을 **3종 아키타입**(성과·체중·체형·건강·습관)으로 확장. 기존 5 category 정규화 매핑(race→성과, fitness→체중·체형, health·habit·maintenance→건강·습관).
+
+- **새 2종은 마감 없는 상시 꾸준함** — 주당 빈도·존2 시간·규칙성으로 성공. 체중·체형은 선택적 목표 체중. **주기화(피크/테이퍼) 안 함.**
+- **처방/화면**: 같은 캐러셀 재사용, 비주기화 "반복 주간 리듬"(존2 중심). 유형별 빈도·시간·강도 가이드.
+- **진행지표 맞춤**: 체중·체형=주간 존2 시간·빈도(+선택 체중 추세), 건강·습관=연속 주·규칙성. **레이스 예측·페이스 압박은 성과 유형에만.**
+- **도메인 파라미터(리서치 반영)**: 체중·체형=존2/Fatmax 주3~4회·45~90분·~180분+/주(에너지 균형이 1차, 운동은 지속성), 건강·습관=WHO/ACSM 150~300분/주 분산·저부담. 상세·출처: `running-coaching-standards.md` "목표 타입별 코칭".
+- **구현(1→2 순서, P1-ready)**: category→archetype 매핑 + 비성과용 상시 주간 리듬 생성기(신규 순수 함수). raceProjection·goalFeasibility는 성과 유형에만. 새 로직 순수·shared 역방향 import 안 늘림(경계 래칫 준수).
+- **범위 밖**: 체중 기록/추세 입력 파이프라인은 v1 미포함(목표 체중 선택 표시만).
+- → 권위: `running-coaching-standards.md` "목표 타입별 코칭", 이슈 #398. 교훈 [[design-interview-ask-product-not-science]].
+
 ## 2026-06-17 - 플랜 시작점을 "현재 체력 → 검증된 시스템 등급"으로 앵커링 (#326, /grill-me 합의)
 
 `buildPeriodizedSchedule`의 phase는 `allocatePhases(totalWeeks, goalDistanceKm)`로 **목표일+목표거리만** 쓰고, `baseVolumeKm = 목표거리×2.5`로 시작 볼륨을 역산한다. 현재 체력/누적 볼륨(`chronicLoad.last30Km`, `readinessScore`, VDOT)은 페이스·요일에만 반영되고 **시작 phase/볼륨 결정엔 안 물려 있다** → 고볼륨 러너엔 과소, 초보엔 과다 처방 위험. /grill-me 설계 인터뷰로 다음 확정.
