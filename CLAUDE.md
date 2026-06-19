@@ -31,6 +31,7 @@
 - `.harness/project/ui-guidelines.md` (UI/화면/컴포넌트/스타일/레이아웃 작업 시 **구현 전 필수 선행**)
 - `.harness/project/ui-system-contract.md` (UI 토큰·공유 컴포넌트 1차 강제 계약 — UI 작업 시 먼저 읽는다)
 - `.harness/project/workflow-rules.md`
+- `.harness/project/professional-coach-review-trigger.md` (`#전문코치리뷰` 트리거 시 필수)
 - `.harness/project/commit-push-rules.md`
 - `.harness/project/stack-preset-rules.md`
 - `.harness/project/template-contract.md`
@@ -39,6 +40,9 @@
 - `.harness/skills/README.md`
 - `.harness/documentation/README.md`
 - `.harness/stacks/README.md`
+
+## 채팅 트리거
+- 사용자가 채팅에 **`#전문코치리뷰`**(또는 `#전문코치 리뷰`, `#코치리뷰`)라고 입력하면 `.harness/project/professional-coach-review-trigger.md` 프로토콜을 실행합니다. 방금/현재 문맥의 코칭 작업이 딥리서치의 권위 있는 코치 의도와 부합하는지, 사용자(초보 러너) 요청에 휘둘려 전문 코치라면 안 할 선택을 하지 않았는지 도메인 교차검증합니다. **코드 리뷰가 아닙니다**(코드 품질은 `/codex`).
 
 ## 모노레포 구조 (#250)
 - 이 repo는 **웹 + 네이티브(iOS) 모노레포**입니다. 웹은 repo root(`src/`, `vite.config.ts`, `.harness/` 등 그대로), 네이티브는 `native/`(`native/RunningCoach.xcodeproj`, Swift 소스, 브리지)에 있습니다.
