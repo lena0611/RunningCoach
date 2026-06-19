@@ -152,7 +152,7 @@ function submit() {
 
         <ScaleSlider
           v-model="draft.conditionScore"
-          label="오늘 컨디션"
+          :label="`${runDayLabel} 컨디션`"
           :min="1"
           :max="10"
           min-label="나쁨"
