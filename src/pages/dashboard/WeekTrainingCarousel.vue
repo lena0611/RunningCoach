@@ -14,7 +14,12 @@ export type CarouselDay = {
   date: string
   /** 요일+일 라벨(예: "화 16"). */
   label: string
-  state: 'past' | 'today' | 'future' | 'rest' | 'done'
+  /**
+   * done: 런 매칭. today/future: 예정. rest: 세션 없음(휴식).
+   * open: 현재 주 지난 날 미수행(따라잡기 가능). missed: 닫힌 주 미수행 확정. skipped: 사용자 포기.
+   * (past 는 레거시 — 주 고정 스트립에선 open/missed/rest 로 대체.)
+   */
+  state: 'past' | 'today' | 'future' | 'rest' | 'done' | 'open' | 'missed' | 'skipped'
   /** 칩에 표시할 짧은 세션 라벨/아이콘 텍스트. */
   chip: string
 }
@@ -184,6 +189,36 @@ function onPointerUp(event: PointerEvent) {
 
 .week-chip-done .week-chip-tag::before {
   content: '✓ ';
+}
+
+/* 현재 주 미수행(따라잡기 가능) — 주의(amber) */
+.week-chip-open {
+  border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
+}
+.week-chip-open .week-chip-tag {
+  color: var(--color-warning-text);
+}
+.week-chip-open .week-chip-tag::before {
+  content: '⚠ ';
+}
+
+/* 닫힌 주 미수행 확정 — 더 가라앉은 amber */
+.week-chip-missed .week-chip-day,
+.week-chip-missed .week-chip-tag {
+  color: var(--color-warning-text);
+  opacity: 0.85;
+}
+.week-chip-missed .week-chip-tag::before {
+  content: '⚠ ';
+}
+
+/* 사용자 포기 — 점선·취소선 muted */
+.week-chip-skipped {
+  border-style: dashed;
+}
+.week-chip-skipped .week-chip-tag {
+  color: var(--color-muted);
+  text-decoration: line-through;
 }
 
 .week-slide {

@@ -17,6 +17,8 @@ const props = defineProps<{
   timeTrial?: boolean
   /** 이 세션 타입의 용어집 슬러그(있으면 제목 탭 → 훈련법 해설 열기). */
   methodSlug?: string
+  /** 변경(쉽게/어렵게)된 세션이면 코치의 원래 제안 라벨(예: "Tempo 8km"). 있으면 원본 표시+되돌리기 노출. */
+  originalLabel?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -24,6 +26,9 @@ const emit = defineEmits<{
   'request-alternative': [direction: 'easier' | 'harder']
   'start-time-trial': []
   'open-method': []
+  skip: []
+  reschedule: []
+  revert: []
 }>()
 
 const evidenceOpen = ref(false)
@@ -44,6 +49,11 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
     <strong v-else class="brief-title">🏃 {{ sessionType }}</strong>
     <p class="brief-goal">🎯 {{ briefing.goalLine }}</p>
     <p v-if="briefing.targetsLine" class="brief-goal">🎯 타겟 {{ briefing.targetsLine }}</p>
+
+    <div v-if="originalLabel" class="brief-orig">
+      <span class="brief-orig-text">원래 제안 <strong>{{ originalLabel }}</strong> · 변경됨</span>
+      <button type="button" class="brief-revert" :disabled="busy" @click="emit('revert')">되돌리기</button>
+    </div>
 
     <p v-if="briefing.keyPoint" class="brief-keypoint"><span class="brief-keypoint-tag">오늘의 핵심</span>{{ briefing.keyPoint }}</p>
 
@@ -105,6 +115,14 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
           </button>
           <button type="button" class="brief-secondary" :disabled="busy" @click="emit('request-alternative', 'harder')">
             더 강하게
+          </button>
+        </div>
+        <div class="brief-alt">
+          <button type="button" class="brief-secondary" :disabled="busy" @click="emit('reschedule')">
+            📅 다른 날로
+          </button>
+          <button type="button" class="brief-secondary brief-skip" :disabled="busy" @click="emit('skip')">
+            건너뛰기
           </button>
         </div>
       </template>
@@ -321,5 +339,45 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
 .brief-secondary:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.brief-orig {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+  padding: 8px 10px;
+  border-radius: var(--radius-button, 12px);
+  background: var(--color-field, rgba(120, 120, 120, 0.08));
+  border: 1px solid var(--color-border, rgba(120, 120, 120, 0.18));
+}
+
+.brief-orig-text {
+  font-size: 12px;
+  color: var(--color-muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.brief-revert {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.brief-revert:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.brief-skip {
+  color: var(--color-warning-text, var(--color-muted));
 }
 </style>
