@@ -653,11 +653,12 @@ async function confirmRemove() {
   error.value = ''
   try {
     await runStore.deleteRun(run.id)
-    if (detailRun.value?.id === run.id) detailRun.value = null
-    if (editing.value?.id === run.id) editing.value = null
-    if (coachRun.value?.id === run.id) coachRun.value = null
+    // 삭제한 세션을 보던 패널을 모두 닫는다(상세/편집/코치). 어차피 기록 탭 목록으로 퇴장하므로 무조건 닫아 잔류를 막는다.
+    detailRun.value = null
+    editing.value = null
+    coachRun.value = null
     pendingDeleteRun.value = null
-    // 상세/코치 패널은 위에서 닫혔다. 세션 상세를 이끌었던 기록 탭(목록)으로 자연 복귀하고 딥링크(?runId) 쿼리만 정리한다.
+    // 세션 상세를 이끌었던 기록 탭(목록)으로 자연 복귀하고 딥링크(?runId) 쿼리만 정리한다.
     toastStore.success('삭제되었습니다.')
     await router.replace({ path: '/runs' })
   } catch (err) {
