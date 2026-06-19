@@ -199,6 +199,17 @@ function placeOnDays(types: RunType[], runDays: number, longRunDayIndex: number)
     placement.set(d, easyTypes.length ? easyTypes[ei++ % easyTypes.length] : 'Easy')
     used.add(d)
   }
+  // 4) 롱런 직후 슬롯은 "가장 약한" 세션으로 — 회복런(Recovery)이 정석, Easy+Strides 금지.
+  //    지친 다리에 스트라이드(신경근 자극)를 붙이지 않고, 다음날을 흡수·회복에 쓴다.
+  //    근거: SSOT §루틴 변경(Long Run 품질 게이트 "다음날 회복주 또는 휴식")·하드/이지 교대.
+  //    휴식이면(슬롯 비어 있으면) 그대로 둔다 — 휴식도 회복이다.
+  if (longType) {
+    const postLongDay = (longRunDayIndex + 1) % 7
+    const placed = placement.get(postLongDay)
+    if (placed && !QUALITY_TYPES.has(placed)) {
+      placement.set(postLongDay, 'Recovery')
+    }
+  }
   return placement
 }
 
