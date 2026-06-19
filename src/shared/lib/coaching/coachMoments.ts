@@ -14,12 +14,12 @@ import type { ChronicLoadTrend } from '@/shared/lib/runStats'
 import { analyzeExtraRunTrend, buildExtraRunInquiry } from '@/shared/lib/coaching/extraRunTrend'
 import { isRunningLoadGroup, PAIN_GROUP_LABEL, type PainGroup } from '@/features/post-run-interview/buildInterviewRunPatch'
 
-export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'extra-run' | 'goal-progress' | 'goal-feasibility' | 'time-trial'
+export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'extra-run' | 'goal-progress' | 'goal-feasibility' | 'time-trial' | 'weekend-triage'
 
 /** 모먼트가 제안하는 행동(전용 시트 열기 등). 트레이니 확인 후 실행. */
 export type CoachMomentAction = {
   label: string
-  kind: 'open-injury-screening'
+  kind: 'open-injury-screening' | 'open-weekend-triage'
 }
 export type CoachMomentSentiment = 'positive' | 'neutral' | 'caution'
 
@@ -67,6 +67,8 @@ export type CoachMomentContext = {
   scheduleStartDate?: string | null
   /** 누적 이탈(놓친 세션) — 있으면 코치가 일정 재정렬을 알린다. */
   deviation?: { shouldRealign: boolean; reason: string; missedCount: number } | null
+  /** 주말 트리아지(주 마감 임박+백로그 초과) — 살릴 키 세션 라벨·놓아줄 개수. weekEndTriage 결과 주입. */
+  weekendTriage?: { saveLabel: string; releaseCount: number } | null
   /** 목표 준비도 — '충분'이면 코치가 격려(긍정 소통). */
   goalProgress?: { readinessScore: number; readinessLevel: '충분' | '보통' | '부족'; dDayText: string } | null
   /** 목표 실현가능성(#395) — 현재 체력 대비 목표가 무리면 솔직히 경고+대안(message). assessGoalFeasibility 결과 주입. */
@@ -218,11 +220,25 @@ function detectTimeTrialResult(ctx: CoachMomentContext): CoachMoment | null {
   }
 }
 
+function detectWeekendTriage(ctx: CoachMomentContext): CoachMoment | null {
+  const t = ctx.weekendTriage
+  if (!t) return null
+  return {
+    key: 'weekend-triage',
+    kind: 'weekend-triage',
+    priority: 55,
+    icon: '🧭',
+    message: `주말이 빠듯해요. 다 하려 하지 말고 이번 주 핵심(${t.saveLabel}) 하나만 살릴까요? 나머지 ${t.releaseCount}개는 죄책감 없이 놓아줘도 괜찮아요 — 회복도 훈련의 일부예요.`,
+    action: { label: '이번 주 정리하기', kind: 'open-weekend-triage' }
+  }
+}
+
 const DETECTORS: Detector[] = [
   detectInjury,
   detectLoadSpike,
   detectPainFollowup,
   detectDeviation,
+  detectWeekendTriage,
   detectTimeTrialResult,
   detectGoalFeasibility,
   detectExtraRun,

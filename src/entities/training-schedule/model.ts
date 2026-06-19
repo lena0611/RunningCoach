@@ -16,8 +16,13 @@ import type { TrainingPhaseName } from '@/entities/training-memory/model'
 
 export type { TrainingPhaseName }
 
-/** planned: 생성됨(미수행). done: 런 매칭됨. superseded: 대체/재정렬로 폐기. missed: 날짜 지났는데 미수행. */
-export type ScheduledSessionStatus = 'planned' | 'done' | 'superseded' | 'missed'
+/**
+ * planned: 생성됨(미수행). done: 런 매칭됨. superseded: 대체/재정렬로 폐기.
+ * missed: **닫힌 주**(이번 주 월요일 이전)에 미수행으로 확정(수동적 — 주간 정산이 부여).
+ * skipped: 사용자가 **의도적으로 포기**(능동적 선택). missed 와 달리 사용자 의사다.
+ *   missed/skipped 둘 다 active 아님(런 매칭·주간 미션 집계 제외), 단 UI 카드는 계속 보이고 재시도(reschedule) 가능.
+ */
+export type ScheduledSessionStatus = 'planned' | 'done' | 'superseded' | 'missed' | 'skipped'
 
 /** generator: F2 골격 생성. realign: A1 재정렬. manual: 사용자/작전 바꾸기. */
 export type ScheduledSessionSource = 'generator' | 'realign' | 'manual'
@@ -88,7 +93,7 @@ export function isPlannedSession(session: ScheduledSession): boolean {
   return session.status === 'planned' && !session.runId
 }
 
-/** 재정렬·대체 대상이 되는 활성 세션(planned/missed)인가. superseded/done 은 제외. */
+/** 재정렬·대체 대상이 되는 활성 세션(planned/missed)인가. superseded/done/skipped 는 제외. */
 export function isActiveSession(session: ScheduledSession): boolean {
   return session.status === 'planned' || session.status === 'missed'
 }

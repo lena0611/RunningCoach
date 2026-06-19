@@ -21,11 +21,20 @@ import type {
 } from '@/entities/training-schedule/model'
 import { formatPaceSec, resolvePaceModel, type PaceModel } from '@/shared/lib/vdotPaces'
 
+// 코칭 스케줄 타입 재노출 — 코칭 순수로직(reschedule/weeklyTriage 등)이 entities 를 직접 import 하지 않고
+// 이 코칭 허브를 거쳐 쓰게 한다(#397 shared→entities 역방향 최소화, 아키텍처 래칫 정합).
+export type { ScheduledSession, ScheduledSessionDraft }
+
 const DAY_NAMES = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
-/** quality(고강도 자극) 세션 타입 — 80/20 가드레일·키세션 판정의 기준. */
-const QUALITY_TYPES: ReadonlySet<RunType> = new Set(['Tempo', 'LSD', 'Steady Long', 'Race'])
+/** quality(고강도 자극) 세션 타입 — 80/20 가드레일·키세션 판정의 단일 기준(SSOT). */
+export const QUALITY_TYPES: ReadonlySet<RunType> = new Set(['Tempo', 'LSD', 'Steady Long', 'Race'])
+
+/** 하드/quality(=키) 세션인가. 주간 하드부하 가드·트리아지가 이 단일 정의를 재사용한다. */
+export function isHardType(type: RunType): boolean {
+  return QUALITY_TYPES.has(type)
+}
 
 /** 한계 시험(타임트라이얼, 'Race')을 끼우는 단계 — 블록 끝에서 재측정(#411). Taper/Recovery/RaceSpecific 제외. */
 const TIME_TRIAL_PHASES: ReadonlySet<TrainingPhaseName> = new Set(['Base', 'Build', 'Threshold'])
@@ -614,7 +623,7 @@ export function buildWeekSummary(
   const { start: startStr, end: endStr } = trainingWeekRange(today)
 
   const week = sessions.filter(
-    (s) => s.date >= startStr && s.date <= endStr && s.status !== 'superseded'
+    (s) => s.date >= startStr && s.date <= endStr && s.status !== 'superseded' && s.status !== 'skipped'
   )
   if (!week.length) return null
 

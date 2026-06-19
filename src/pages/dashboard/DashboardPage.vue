@@ -35,6 +35,8 @@ import QuestPanel from './QuestPanel.vue'
 import WeekTrainingCarousel, { type CarouselDay } from './WeekTrainingCarousel.vue'
 import SessionBriefingCard from './SessionBriefingCard.vue'
 import SessionDebriefCard from './SessionDebriefCard.vue'
+import RescheduleSheet from './RescheduleSheet.vue'
+import WeekendTriageSheet from './WeekendTriageSheet.vue'
 import { buildRestGuidance, evaluateExtraRun } from '@/shared/lib/coaching/restGuidance'
 import { collectCoachMoments } from '@/shared/lib/coaching/coachMoments'
 import { detectScheduleDeviation } from '@/shared/lib/coaching/scheduleRealign'
@@ -53,6 +55,8 @@ import { assessGoalFeasibility, buildPeriodizedSchedule, buildSteadyWeeklyRhythm
 import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
 import { buildRealignedSchedule } from '@/shared/lib/coaching/scheduleRealign'
 import { proposeAlternativeSession } from '@/shared/lib/coaching/alternativeSession'
+import { proposeReschedule, proposeMoveToToday, proposeSwap } from '@/shared/lib/coaching/reschedule'
+import { weeklyHardLoadGuard, weekEndTriage } from '@/shared/lib/coaching/weeklyTriage'
 import { buildSessionBriefing, sessionTypeLabel, type SessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
 import { resolvePaceModel } from '@/shared/lib/vdotPaces'
 import { getChronicLoadTrend } from '@/shared/lib/runStats'
@@ -193,10 +197,8 @@ async function doEnsureSchedule() {
         })
         if (drafts.length) await scheduleStore.insertMany(drafts)
       }
-      return
-    }
-    // 성과: 주기화 생성·재정렬. 둘 다 같은 앵커(currentWeeklyKm)를 쓴다(#395, 정책 단일화).
-    if (!hasActive) {
+    } else if (!hasActive) {
+      // 성과·콜드스타트: 주기화 골격 생성(currentWeeklyKm 앵커, #395).
       const drafts = buildPeriodizedSchedule({
         goal,
         profile: memoryStore.memory.athleteProfile,
@@ -205,43 +207,70 @@ async function doEnsureSchedule() {
         observedEasyPace: observedEasyPace.value
       })
       if (drafts.length) await scheduleStore.insertMany(drafts)
-      return
+    } else {
+      // 성과·운영중: 누적 이탈/앵커 드리프트 시 forward 재정렬.
+      const plan = buildRealignedSchedule(mine, goal, memoryStore.memory.athleteProfile, today.value, currentWeeklyKm.value, observedEasyPace.value)
+      if (plan.drafts.length) {
+        await scheduleStore.realign(goal.id, plan.fromDate, plan.drafts)
+        if (plan.deviation.reason) toastStore.success(plan.deviation.reason)
+      }
     }
-    const plan = buildRealignedSchedule(mine, goal, memoryStore.memory.athleteProfile, today.value, currentWeeklyKm.value, observedEasyPace.value)
-    if (plan.drafts.length) {
-      await scheduleStore.realign(goal.id, plan.fromDate, plan.drafts)
-      if (plan.deviation.reason) toastStore.success(plan.deviation.reason)
-    }
+    // 주간 정산(무조건·멱등): 닫힌 주(월~일)의 미수행 planned → missed 확정. realign 시도 뒤에 둬서
+    // 닫힌 주 누락이 재정렬 트리거로 먼저 평가되게 한다. 현재 주의 지난 날은 'open'(따라잡기 가능)으로 유지.
+    await scheduleStore.settleClosedWeeks(goal.id, trainingWeekRange(today.value).start)
   } catch {
     // best-effort: 스케줄 생성 실패가 대시보드를 막지 않는다.
   }
 }
 
-const CAROUSEL_DAYS_BEFORE = 2 // 오늘 이전 표시 일수 → 오늘의 인덱스
-const CAROUSEL_DAYS_AFTER = 4
+// 주 고정 데이-스트립(월~일) ± weekOffset 주. 오늘 중심 롤링이 아니라 "이번 주"를 한눈에 조망·조정(설계 2026-06-19).
+const weekOffset = ref(0)
+const todayWeekdayIndex = computed(() => (new Date(today.value).getDay() + 6) % 7) // 월=0
+function weekMonday(offsetWeeks: number): Date {
+  const base = new Date(today.value)
+  base.setDate(base.getDate() + offsetWeeks * 7)
+  return new Date(`${trainingWeekRange(base).start}T00:00:00`)
+}
 const scheduleDays = computed<CarouselDay[]>(() => {
+  const monday = weekMonday(weekOffset.value)
+  const todayStr = dateOnly(today.value)
   const out: CarouselDay[] = []
-  for (let offset = -CAROUSEL_DAYS_BEFORE; offset <= CAROUSEL_DAYS_AFTER; offset++) {
-    const d = new Date(today.value)
-    d.setDate(d.getDate() + offset)
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday)
+    d.setDate(d.getDate() + i)
     const date = dateOnly(d)
-    const session = scheduleStore.sessionOnDate(date)
     const run = runs.value.find((r) => r.date === date) ?? null
-    const isToday = offset === 0
-    const state: CarouselDay['state'] = run
-      ? 'done'
-      : offset < 0
-        ? 'past'
-        : session
-          ? isToday
-            ? 'today'
-            : 'future'
-          : 'rest'
-    const chip = run ? sessionTypeLabel(run.type) : session ? sessionTypeLabel(session.sessionType) : '휴식'
+    // 그 날의 표시 세션(폐기 제외). 우선순위 planned(active) > missed > skipped.
+    const onDay = scheduleStore.sessions.filter((s) => s.date === date && s.status !== 'superseded')
+    const planned = onDay.find((s) => s.status === 'planned')
+    const missed = onDay.find((s) => s.status === 'missed')
+    const skipped = onDay.find((s) => s.status === 'skipped')
+    const display = planned ?? missed ?? skipped ?? null
+    let state: CarouselDay['state']
+    if (run) state = 'done'
+    else if (planned) state = date === todayStr ? 'today' : date < todayStr ? 'open' : 'future'
+    else if (missed) state = 'missed'
+    else if (skipped) state = 'skipped'
+    else state = 'rest'
+    const chip = run ? sessionTypeLabel(run.type) : display ? sessionTypeLabel(display.sessionType) : '휴식'
     out.push({ date, label: `${WEEKDAY_KO[d.getDay()]} ${d.getDate()}`, state, chip })
   }
   return out
 })
+const weekLabel = computed(() => {
+  const base = new Date(today.value)
+  base.setDate(base.getDate() + weekOffset.value * 7)
+  const r = trainingWeekRange(base)
+  const fmt = (s: string) => { const p = s.split('-'); return `${Number(p[1])}/${Number(p[2])}` }
+  const range = `${fmt(r.start)}~${fmt(r.end)}`
+  if (weekOffset.value === 0) return `이번 주 · ${range}`
+  if (weekOffset.value === -1) return `지난주 · ${range}`
+  if (weekOffset.value === 1) return `다음주 · ${range}`
+  return range
+})
+function navWeek(delta: number) {
+  weekOffset.value = Math.max(-8, Math.min(8, weekOffset.value + delta))
+}
 // 실제 주기화 스케줄(목표+targetDate로 생성된 세션)이 있을 때만 캐러셀. 완료런만으론 표시 안 함(무계획 오인 방지).
 const hasSchedule = computed(() => scheduleStore.sessions.length > 0)
 // 목표 아키타입(#398): 성과만 주기화·예측·단계카드, 비성과는 상시 리듬.
@@ -268,11 +297,27 @@ const activeArchetype = computed(() => (activeGoal.value ? goalArchetype(activeG
 const weekSummary = computed(() =>
   buildWeekSummary(scheduleStore.sessions, today.value, activeGoal.value?.targetDate ?? null, activeArchetype.value)
 )
-const activeDayIndex = ref(CAROUSEL_DAYS_BEFORE) // 기본 = 오늘(offset 0)
+const activeDayIndex = ref((new Date(today.value).getDay() + 6) % 7) // 기본 = 이번 주 오늘(월=0)
+// 주를 넘기면 활성 일자를 그 주 첫날로(현재 주면 오늘로) 맞춘다.
+watch(weekOffset, (v) => {
+  activeDayIndex.value = v === 0 ? todayWeekdayIndex.value : 0
+})
 const activeDay = computed(() => scheduleDays.value[activeDayIndex.value] ?? null)
 const activeSession = computed<ScheduledSession | null>(() =>
   activeDay.value ? scheduleStore.sessionOnDate(activeDay.value.date) : null
 )
+// 안 뛴 날/포기(open·missed·skipped) 슬라이드용 세션(폐기 제외, planned>missed>skipped).
+const activeOpenSession = computed<ScheduledSession | null>(() => {
+  const day = activeDay.value
+  if (!day || !(day.state === 'open' || day.state === 'missed' || day.state === 'skipped')) return null
+  const onDay = scheduleStore.sessions.filter((s) => s.date === day.date && s.status !== 'superseded')
+  return (
+    onDay.find((s) => s.status === 'planned') ??
+    onDay.find((s) => s.status === 'missed') ??
+    onDay.find((s) => s.status === 'skipped') ??
+    null
+  )
+})
 // 세션 타입 → 용어집 슬러그(훈련법 해설 deep-link). 카드 제목 탭 시 그 항목으로 용어집을 연다.
 const glossaryStore = useGlossaryStore()
 const SESSION_TYPE_GLOSSARY_SLUG: Partial<Record<ScheduledSession['sessionType'], string>> = {
@@ -474,6 +519,12 @@ const coachMoments = computed(() =>
       scheduleExists: hasSchedule.value,
       scheduleStartDate: scheduleStartDate.value,
       deviation: detectScheduleDeviation(scheduleStore.sessions, today.value),
+      weekendTriage: weekendTriageData.value
+        ? {
+            saveLabel: sessionTypeLabel(weekendTriageData.value.saveSession.sessionType),
+            releaseCount: weekendTriageData.value.releaseSessions.length
+          }
+        : null,
       goalProgress: raceProjection.value
         ? {
             readinessScore: raceProjection.value.readinessScore,
@@ -493,7 +544,21 @@ function dismissMoment(key: string) {
 }
 function onMomentAction(moment: { key: string; action?: { kind: string } }) {
   if (moment.action?.kind === 'open-injury-screening') useInjuryFlowStore().requestScreening()
+  else if (moment.action?.kind === 'open-weekend-triage') triageOpen.value = true
   dismissMoment(moment.key)
+}
+
+// 스케줄 변경 액션 공통 래퍼(중복 쓰기 방지 busy + 실패 토스트).
+async function runScheduleOp(fn: () => Promise<void>) {
+  if (intentBusy.value) return
+  intentBusy.value = true
+  try {
+    await fn()
+  } catch {
+    toastStore.error('일정을 바꾸지 못했어요.')
+  } finally {
+    intentBusy.value = false
+  }
 }
 
 function onBriefingAck() {
@@ -501,9 +566,8 @@ function onBriefingAck() {
 }
 async function onBriefingAlternative(direction: 'easier' | 'harder') {
   const session = activeSession.value
-  if (!session || intentBusy.value) return
-  intentBusy.value = true
-  try {
+  if (!session) return
+  await runScheduleOp(async () => {
     const { draft, warning, atBoundary } = proposeAlternativeSession(
       session,
       activeGoal.value,
@@ -516,12 +580,179 @@ async function onBriefingAlternative(direction: 'easier' | 'harder') {
     }
     await scheduleStore.setStatus(session.id, 'superseded')
     await scheduleStore.insertMany([draft])
-    if (warning) toastStore.success(warning)
-  } catch {
-    toastStore.error('작전을 바꾸지 못했어요.')
-  } finally {
-    intentBusy.value = false
+    // 상향(harder)엔 주간 하드 부하 소프트 경고를 덧붙인다(막지 않음 — 이미 적용됨).
+    const guard =
+      direction === 'harder'
+        ? weeklyHardLoadGuard(scheduleStore.sessions, today.value, memoryStore.memory.athleteProfile?.weeklyRunDaysTarget ?? 4)
+        : null
+    const msg = [warning, guard?.exceeds ? guard.message : ''].filter(Boolean).join(' ')
+    if (msg) toastStore.success(msg)
+  })
+}
+
+// 변경된(manual) 세션의 코치 원래 제안(같은 날 superseded 원본) — 원본 표시·되돌리기용.
+const activeOriginal = computed<ScheduledSession | null>(() => {
+  const s = activeSession.value
+  if (!s || s.source !== 'manual') return null
+  return (
+    scheduleStore.sessions
+      .filter((x) => x.date === s.date && x.status === 'superseded' && x.goalId === s.goalId && x.source !== 'manual')
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0] ?? null
+  )
+})
+const activeOriginalLabel = computed(() => {
+  const o = activeOriginal.value
+  if (!o) return null
+  const km = o.prescription.distanceKm ? ` ${o.prescription.distanceKm}km` : ''
+  return `${sessionTypeLabel(o.sessionType)}${km}`
+})
+
+async function onBriefingSkip() {
+  const s = activeSession.value
+  if (!s) return
+  // 키 세션은 드롭 전에 "이번 주 다른 날로?"를 먼저 권한다(SSOT §훈련 스케줄 모델).
+  if (s.keySession) {
+    openReschedule(s, true)
+    return
   }
+  await runScheduleOp(async () => {
+    await scheduleStore.skip(s.id)
+    toastStore.success('이번 주 이 세션은 건너뛸게요. 회복도 훈련의 일부예요.')
+  })
+}
+function onBriefingReschedule() {
+  if (activeSession.value) openReschedule(activeSession.value, false)
+}
+async function onBriefingRevert() {
+  const modified = activeSession.value
+  const original = activeOriginal.value
+  if (!modified || !original) return
+  await runScheduleOp(async () => {
+    await scheduleStore.revert(modified.id, original.id)
+    toastStore.success('코치의 원래 제안으로 되돌렸어요.')
+  })
+}
+
+// 안 뛴 날/포기 카드 액션
+async function onMoveToToday() {
+  const s = activeOpenSession.value
+  if (!s) return
+  await runScheduleOp(async () => {
+    const { draft } = proposeMoveToToday(s, today.value)
+    await scheduleStore.reschedule([s.id], [draft])
+    weekOffset.value = 0
+    activeDayIndex.value = todayWeekdayIndex.value
+    toastStore.success('오늘 세션으로 가져왔어요.')
+  })
+}
+function onOpenReschedule() {
+  if (activeOpenSession.value) openReschedule(activeOpenSession.value, false)
+}
+async function onOpenSkip() {
+  const s = activeOpenSession.value
+  if (!s || s.status === 'skipped') return
+  await runScheduleOp(async () => {
+    await scheduleStore.skip(s.id)
+    toastStore.success('이번 주는 놓아줄게요. 회복도 훈련의 일부예요.')
+  })
+}
+
+// === 조정(다른 날로) 피커 — 이번 주 안 권장, 점유일은 스왑 ===
+const rescheduleTarget = ref<ScheduledSession | null>(null)
+const rescheduleKeySkip = ref(false) // true=키세션 포기 전 "다른 날로?" 맥락
+const rescheduleOpen = computed(() => rescheduleTarget.value !== null)
+function openReschedule(session: ScheduledSession, keySkipContext: boolean) {
+  rescheduleTarget.value = session
+  rescheduleKeySkip.value = keySkipContext
+}
+function closeReschedule() {
+  rescheduleTarget.value = null
+  rescheduleKeySkip.value = false
+}
+const rescheduleCandidates = computed(() => {
+  const target = rescheduleTarget.value
+  if (!target) return []
+  const monday = weekMonday(0) // 이번 주(오늘 주) 안에서 옮긴다
+  const todayStr = dateOnly(today.value)
+  const out: { date: string; label: string; done: boolean; occupantLabel: string | null; isTarget: boolean; selectable: boolean }[] = []
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday)
+    d.setDate(d.getDate() + i)
+    const date = dateOnly(d)
+    const done = Boolean(runs.value.find((r) => r.date === date))
+    const occ = scheduleStore.sessionOnDate(date)
+    const isTarget = date === target.date
+    const occupantLabel = occ && occ.id !== target.id ? sessionTypeLabel(occ.sessionType) : null
+    // 목적지는 오늘 이후·완료 아님·대상 자신 아님(과거는 따라잡기 대신 '오늘로 가져오기'로).
+    const selectable = !done && !isTarget && date >= todayStr
+    out.push({ date, label: `${WEEKDAY_KO[d.getDay()]} ${d.getDate()}`, done, occupantLabel, isTarget, selectable })
+  }
+  return out
+})
+const rescheduleTitle = computed(() =>
+  rescheduleTarget.value ? `${sessionTypeLabel(rescheduleTarget.value.sessionType)} 언제로 옮길까요?` : ''
+)
+async function pickRescheduleDay(date: string) {
+  const target = rescheduleTarget.value
+  if (!target) return
+  const occupant = scheduleStore.sessionOnDate(date)
+  await runScheduleOp(async () => {
+    if (occupant && occupant.id !== target.id) {
+      const swap = proposeSwap(target, occupant)
+      await scheduleStore.reschedule(swap.supersedeIds, swap.drafts)
+      toastStore.success(swap.warning || '두 세션의 날짜를 맞바꿨어요.')
+    } else {
+      const { draft, warning } = proposeReschedule(target, date)
+      await scheduleStore.reschedule([target.id], [draft])
+      toastStore.success(warning || '일정을 옮겼어요.')
+    }
+    closeReschedule()
+  })
+}
+async function skipFromRescheduleSheet() {
+  // 키세션 포기 맥락에서 "그래도 건너뛰기"
+  const target = rescheduleTarget.value
+  if (!target) return
+  await runScheduleOp(async () => {
+    await scheduleStore.skip(target.id)
+    closeReschedule()
+    toastStore.success('이번 주 이 세션은 건너뛸게요. 회복도 훈련의 일부예요.')
+  })
+}
+
+// === 주말 트리아지 ===
+const weekendTriageData = computed(() =>
+  activeGoal.value
+    ? weekEndTriage(scheduleStore.sessions.filter((s) => s.goalId === activeGoal.value!.id), today.value)
+    : null
+)
+const triageSaveLabel = computed(() =>
+  weekendTriageData.value ? sessionTypeLabel(weekendTriageData.value.saveSession.sessionType) : ''
+)
+const triageReleaseLabels = computed(() =>
+  weekendTriageData.value ? weekendTriageData.value.releaseSessions.map((s) => sessionTypeLabel(s.sessionType)) : []
+)
+const triageOpen = ref(false)
+async function triageSave() {
+  const t = weekendTriageData.value
+  if (!t) return
+  await runScheduleOp(async () => {
+    if (t.saveSession.date < dateOnly(today.value)) {
+      const { draft } = proposeMoveToToday(t.saveSession, today.value)
+      await scheduleStore.reschedule([t.saveSession.id], [draft])
+    }
+    triageOpen.value = false
+    toastStore.success(`${sessionTypeLabel(t.saveSession.sessionType)} 하나에 집중해요. 잘하고 있어요.`)
+  })
+}
+async function triageRelease() {
+  const t = weekendTriageData.value
+  if (!t) return
+  await runScheduleOp(async () => {
+    for (const s of t.releaseSessions) await scheduleStore.skip(s.id)
+    triageOpen.value = false
+    toastStore.success('나머지는 놓아줬어요. 회복도 훈련의 일부예요.')
+  })
 }
 
 // Pre-Run 의도(#309): 결정론 신호를 조합해 오늘 의도를 만들고 하루 1건 영속한다.
@@ -854,6 +1085,13 @@ async function applyPhaseTransition() {
       <span class="week-summary-meta"><template v-if="isPerformanceGoal">핵심 {{ weekSummary.keyCount }} · </template>약 {{ weekSummary.weekKm }}km<template v-if="weekSummary.dDayText"> · {{ weekSummary.dDayText }}</template></span>
     </div>
 
+    <!-- 주 단위 네비(월~일 고정 스트립): 지난주·다음주 조망 -->
+    <div v-if="hasSchedule" class="week-nav">
+      <button type="button" class="week-nav-btn" :disabled="weekOffset <= -8" aria-label="지난 주" @click="navWeek(-1)">◀</button>
+      <span class="week-nav-label">{{ weekLabel }}</span>
+      <button type="button" class="week-nav-btn" :disabled="weekOffset >= 8" aria-label="다음 주" @click="navWeek(1)">▶</button>
+    </div>
+
     <!-- 목표 기반 주간 캐러셀 (에픽 #362). 스케줄이 있으면 히어로 대신 표시. -->
     <WeekTrainingCarousel v-if="hasSchedule" v-model:active-index="activeDayIndex" :days="scheduleDays">
       <template #default="{ day }">
@@ -880,11 +1118,49 @@ async function applyPhaseTransition() {
           :busy="intentBusy"
           :time-trial="activeSession?.sessionType === 'Race'"
           :method-slug="activeMethodSlug"
+          :original-label="activeOriginalLabel"
           @acknowledge="onBriefingAck"
           @request-alternative="onBriefingAlternative"
           @start-time-trial="raceOpen = true"
           @open-method="openMethodGlossary"
+          @skip="onBriefingSkip"
+          @reschedule="onBriefingReschedule"
+          @revert="onBriefingRevert"
         />
+        <!-- 안 뛴 날(open/missed)·포기(skipped): 조정 액션 인라인 카드 -->
+        <article
+          v-else-if="activeOpenSession && (day.state === 'open' || day.state === 'missed' || day.state === 'skipped')"
+          class="carousel-card open-card"
+        >
+          <strong class="carousel-card-title">
+            <template v-if="day.state === 'skipped'">🍃 포기한 세션</template>
+            <template v-else>⚠ 안 뛴 날</template>
+          </strong>
+          <p class="carousel-card-line">
+            {{ sessionTypeLabel(activeOpenSession.sessionType)
+            }}<template v-if="activeOpenSession.prescription.distanceKm"> · {{ activeOpenSession.prescription.distanceKm }}km</template>
+          </p>
+          <p class="open-card-help">
+            <template v-if="day.state === 'skipped'">이번 주 놓아준 세션이에요. 다시 하고 싶으면 다른 날로 등록할 수 있어요.</template>
+            <template v-else-if="day.state === 'open'">아직 이번 주 안이라 따라잡을 수 있어요. 어떻게 할까요?</template>
+            <template v-else>지난주에 못 한 세션이에요. 다시 시도하거나 놓아줘도 괜찮아요.</template>
+          </p>
+          <div class="open-card-actions">
+            <button type="button" class="open-card-primary" :disabled="intentBusy" @click="onMoveToToday">📥 오늘로 가져오기</button>
+            <div class="open-card-row">
+              <button type="button" class="open-card-secondary" :disabled="intentBusy" @click="onOpenReschedule">📅 다른 날로</button>
+              <button
+                v-if="day.state !== 'skipped'"
+                type="button"
+                class="open-card-secondary open-card-release"
+                :disabled="intentBusy"
+                @click="onOpenSkip"
+              >
+                놓아주기
+              </button>
+            </div>
+          </div>
+        </article>
         <!-- 휴식: 전략적 휴식(#378) — 회복·부상관리·근력 -->
         <article v-else class="carousel-card">
           <strong class="carousel-card-title">🌙 전략적 휴식</strong>
@@ -983,6 +1259,29 @@ async function applyPhaseTransition() {
         </div>
       </Transition>
     </Teleport>
+
+    <!-- 세션 조정(다른 날로) 피커 -->
+    <RescheduleSheet
+      :open="rescheduleOpen"
+      :title="rescheduleTitle"
+      :candidates="rescheduleCandidates"
+      :key-skip="rescheduleKeySkip"
+      :busy="intentBusy"
+      @pick="pickRescheduleDay"
+      @skip="skipFromRescheduleSheet"
+      @close="closeReschedule"
+    />
+
+    <!-- 주말 트리아지(키 세션 하나 살리고 나머지 놓아주기) -->
+    <WeekendTriageSheet
+      :open="triageOpen"
+      :save-label="triageSaveLabel"
+      :release-labels="triageReleaseLabels"
+      :busy="intentBusy"
+      @save="triageSave"
+      @release="triageRelease"
+      @close="triageOpen = false"
+    />
 
     <SectionGroup v-if="runStore.loading || runStore.error" title="데이터 상태">
       <template #actions>
@@ -1262,6 +1561,83 @@ async function applyPhaseTransition() {
   color: var(--color-text);
   overflow-wrap: anywhere;
 }
+
+/* 주 단위 네비(월~일 고정 스트립의 지난주/다음주 페이징) */
+.week-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 2px 0;
+}
+.week-nav-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.week-nav-btn {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-button, 12px);
+  border: 1px solid var(--color-border, rgba(120, 120, 120, 0.2));
+  background: var(--color-surface-card);
+  color: var(--color-muted);
+  box-shadow: none;
+  cursor: pointer;
+  font-size: 12px;
+}
+.week-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* 안 뛴 날/포기 인라인 카드 액션 */
+.open-card-help {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+.open-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.open-card-row {
+  display: flex;
+  gap: 8px;
+}
+.open-card-primary,
+.open-card-secondary {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: var(--radius-button, 12px);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: none;
+}
+.open-card-primary {
+  background: var(--color-primary);
+  color: var(--color-on-primary, #fff);
+  border: none;
+}
+.open-card-secondary {
+  background: transparent;
+  color: var(--color-text);
+  border: 1px solid var(--color-border, rgba(120, 120, 120, 0.3));
+}
+.open-card-release {
+  color: var(--color-warning-text, var(--color-muted));
+}
+.open-card-primary:disabled,
+.open-card-secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .schedule-loading {
   padding: var(--space-5, 24px) var(--space-4, 16px);
   text-align: center;

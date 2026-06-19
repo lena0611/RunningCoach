@@ -70,18 +70,48 @@ export const useTrainingScheduleStore = defineStore('trainingScheduleStore', {
       return created
     },
     /**
-     * A1 재정렬: fromDate 이후 활성 세션을 superseded 로 비우고, 과거 planned 누락은 missed 로
-     * 확정(같은 누락 재트리거 방지, B2), 재구축 drafts 를 insert.
+     * A1 재정렬: fromDate 이후 활성 세션을 superseded 로 비우고 재구축 drafts 를 insert.
+     * open→missed 확정은 realign 책임이 아니다 — settleClosedWeeks 가 닫힌 주(월~일)만 확정한다
+     * (현재 주의 지난 날은 'open' 으로 열어 둔다). 호출부(doEnsureSchedule)가 realign 직후 정산을 돌린다.
      */
     async realign(goalId: string | null, fromDate: string, drafts: ScheduledSessionDraft[]): Promise<void> {
       if (!isSupabaseConfigured) return
       await supersedeSessionsFrom(goalId, fromDate)
-      await markPastPlannedMissed(goalId, fromDate)
       this.sessions.forEach((s) => {
         if (s.date >= fromDate && isActiveSession(s)) s.status = 'superseded'
-        else if (s.date < fromDate && s.status === 'planned' && !s.runId) s.status = 'missed'
       })
       await this.insertMany(drafts)
+    },
+    /**
+     * 주간 정산: **닫힌 주**(weekStart=이번 주 월요일) 이전의 미수행 planned 세션을 missed 로 확정한다.
+     * 현재 주는 건드리지 않는다(지난 날도 'open' — 따라잡기 가능). 로드 시 무조건·멱등으로 돌린다.
+     * weekStart 는 호출부가 trainingWeekRange(today).start 로 계산해 넘긴다(스토어→코칭lib 의존 회피).
+     */
+    async settleClosedWeeks(goalId: string | null, weekStart: string): Promise<void> {
+      if (!isSupabaseConfigured) return
+      await markPastPlannedMissed(goalId, weekStart)
+      this.sessions.forEach((s) => {
+        if (s.date < weekStart && s.status === 'planned' && !s.runId) s.status = 'missed'
+      })
+    },
+    /** 사용자가 세션을 의도적으로 포기(skipped). active 제외 — 단 UI 카드는 계속 보이고 재시도 가능. */
+    async skip(id: string): Promise<void> {
+      await this.setStatus(id, 'skipped')
+    },
+    /**
+     * 세션 조정/이동/스왑: 원본(들)을 superseded 로 비우고 새 날짜 draft(들)을 insert.
+     * 이동=supersede 1+insert 1, 스왑=supersede 2+insert 2. (작전 바꾸기와 동일한 supersede+insert 패턴)
+     */
+    async reschedule(supersedeIds: string[], drafts: ScheduledSessionDraft[]): Promise<void> {
+      if (!isSupabaseConfigured) return
+      for (const id of supersedeIds) await this.setStatus(id, 'superseded')
+      await this.insertMany(drafts)
+    },
+    /** 작전 되돌리기: 변경본(modified)을 superseded 로 비우고 원본(superseded)을 planned 로 복원. */
+    async revert(modifiedId: string, originalId: string): Promise<void> {
+      if (!isSupabaseConfigured) return
+      await this.setStatus(modifiedId, 'superseded')
+      await this.setStatus(originalId, 'planned')
     },
     /**
      * 런 임포트 직후: 동일 날짜 또는 ±윈도우 내 가장 가까운 활성 세션을 done 으로 매칭(없으면 no-op).

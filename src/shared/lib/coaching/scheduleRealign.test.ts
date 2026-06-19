@@ -73,16 +73,29 @@ describe('detectScheduleDeviation', () => {
     expect(detectScheduleDeviation(sessions, today).shouldRealign).toBe(false)
   })
 
-  it('지난 미수행 3개면 재정렬 트리거', () => {
+  it('닫힌 주 미수행 3개면 재정렬 트리거', () => {
+    // today=목 2026-01-15 → 현재 주=월 01-12~일 01-18. 닫힌 주(01-12 이전) 미수행만 센다.
     const sessions = [
-      session({ date: '2026-01-08' }),
-      session({ date: '2026-01-10' }),
-      session({ date: '2026-01-12' })
+      session({ date: '2026-01-05' }),
+      session({ date: '2026-01-07' }),
+      session({ date: '2026-01-09' })
     ]
     const dev = detectScheduleDeviation(sessions, today)
     expect(dev.missedCount).toBe(3)
     expect(dev.shouldRealign).toBe(true)
     expect(dev.reason).toBeTruthy()
+  })
+
+  it('현재 주의 지난 날은 누락이 아니다(open) — 닫힌 주만 센다', () => {
+    // 현재 주(월 01-12~) 안의 지난 날(월·화·수)은 아직 따라잡기 가능한 open. 주가 닫혀야 확정된다.
+    const sessions = [
+      session({ date: '2026-01-12' }),
+      session({ date: '2026-01-13' }),
+      session({ date: '2026-01-14' })
+    ]
+    const dev = detectScheduleDeviation(sessions, today)
+    expect(dev.missedCount).toBe(0)
+    expect(dev.shouldRealign).toBe(false)
   })
 
   it('키세션 2개 누락이면 임계 미만 총량이어도 트리거', () => {

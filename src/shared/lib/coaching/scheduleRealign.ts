@@ -10,7 +10,7 @@
 
 import type { AthleteProfile, TrainingGoal } from '@/entities/training-memory/model'
 import type { ScheduledSession, ScheduledSessionDraft } from '@/entities/training-schedule/model'
-import { buildPeriodizedSchedule } from '@/shared/lib/coaching/periodizedSchedule'
+import { buildPeriodizedSchedule, trainingWeekRange } from '@/shared/lib/coaching/periodizedSchedule'
 
 /** 재정렬 트리거 임계치(조정 가능). 단일 벤더(Runna) 사례 기반 기본값. */
 export const REALIGN_MISSED_THRESHOLD = 3
@@ -71,7 +71,7 @@ function summarizeUpcomingWeek(
   end.setDate(end.getDate() + 7)
   const endStr = toDateOnly(end)
   const week = sessions
-    .filter((s) => s.date >= startStr && s.date < endStr && s.status !== 'superseded')
+    .filter((s) => s.date >= startStr && s.date < endStr && s.status !== 'superseded' && s.status !== 'skipped')
     .sort((a, b) => a.date.localeCompare(b.date))
   if (!week.length) return { plannedWeeklyKm: null, upcomingPhase: null }
   const plannedWeeklyKm = week.reduce((sum, s) => sum + (s.prescription?.distanceKm ?? 0), 0)
@@ -82,17 +82,18 @@ function summarizeUpcomingWeek(
 }
 
 /**
- * 지난 날짜의 미수행 세션(=실질적 누락)을 집계해 재정렬 필요 여부를 판단한다.
- * `planned` 상태만 센다 — 재정렬 후 과거 누락을 `missed` 로 전환하면(markPastPlannedMissed)
- * 같은 누락이 매번 다시 트리거되지 않는다(B2 무한 재정렬 방지).
+ * **닫힌 주**(이번 주 월요일 이전)의 미수행 세션(=실질적 누락)을 집계해 재정렬 필요 여부를 판단한다.
+ * 현재 주의 지난 날은 결손으로 세지 않는다 — 'open'(따라잡기 가능)이라 주가 닫혀야 비로소 확정된다.
+ * `planned` 상태만 센다 — 주간 정산(trainingScheduleStore.settleClosedWeeks)이 닫힌 주 planned 를
+ * `missed` 로 확정하면 같은 누락이 매 포커스마다 다시 트리거되지 않는다(B2 무한 재정렬 방지).
  */
 export function detectScheduleDeviation(
   sessions: ScheduledSession[],
   today: Date,
   ctx: DeviationContext = {}
 ): ScheduleDeviation {
-  const todayStr = toDateOnly(today)
-  const missed = sessions.filter((s) => s.date < todayStr && !s.runId && s.status === 'planned')
+  const { start: weekStart } = trainingWeekRange(today)
+  const missed = sessions.filter((s) => s.date < weekStart && !s.runId && s.status === 'planned')
   const missedCount = missed.length
   const missedKeyCount = missed.filter((s) => s.keySession).length
   const missedTrigger =
