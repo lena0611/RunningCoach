@@ -657,9 +657,9 @@ async function confirmRemove() {
     if (editing.value?.id === run.id) editing.value = null
     if (coachRun.value?.id === run.id) coachRun.value = null
     pendingDeleteRun.value = null
-    // 삭제한 세션을 보던 페이지(상세/코치/딥링크)는 보여줄 데이터가 없으므로 퇴장시키고 결과를 알린다.
+    // 상세/코치 패널은 위에서 닫혔다. 세션 상세를 이끌었던 기록 탭(목록)으로 자연 복귀하고 딥링크(?runId) 쿼리만 정리한다.
     toastStore.success('삭제되었습니다.')
-    await router.replace('/')
+    await router.replace({ path: '/runs' })
   } catch (err) {
     error.value = err instanceof Error ? err.message : '삭제 실패'
     toastStore.error(error.value)
