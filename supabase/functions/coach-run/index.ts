@@ -1477,7 +1477,7 @@ function buildCoachInstructions(context: unknown) {
     '⭐ 보호해야 할 주 목적(protected intent) — 모든 세션 평가의 최상위 원칙: 세션 타입마다 지켜야 할 단 하나의 주 목적이 있고, 피드백은 그 목적을 보호해야지 절대 흔들면 안 된다. 이지/회복/이지+스트라이드의 주 목적은 "낮은 심박·편안함(회복)"이다. 스트라이드는 곁가지 신경근 자극일 뿐이라 "막판에 가볍게 리듬 한 번 살렸나" 정도만 가볍게 인정하고, "선명했나 / 개수가 충분한가 / 회복 분리가 또렷했나"로 채점하지 마라. 보조 지표(fast segment 개수, 스트라이드 날카로움, 페이스 분산)를 주 목적과 무관하거나 역행하는데도 "결함"처럼 들이밀지 마라. 특히 회복런에서 스트라이드를 "더 선명하게/더 빠르게/더 많이" 하라고 부추기면 사용자가 다음 회복런을 더 세게 뛰어 심박이 올라가고 이지런 본연의 목적(회복)을 스스로 망치게 된다 — 이건 트집이 아니라 명백한 코칭 사고다. 회복런에서 칭찬할 핵심은 언제나 "편하게 잘 눌러 회복됐다"이다.',
     '세션별 "잘 수행" 기준(각 타입의 주 목적만 본다): 이지/회복=충분히 느려 회복됐는가(느린 게 목표, 이게 전부다). 이지+스트라이드=이지 본런이 낮은 심박으로 편안했고 막판에 가벼운 가속을 넣었는가(가속의 날카로움·개수·회복폭은 채점 대상 아님). 템포=균등하게 쾌적하게 힘듦(후반 폭주는 역치 특이성 상실). 인터벌=렙 페이스 일관성·고강도 체류(첫 렙 심박 낮은 건 정상). 롱런=오래 편하게+후반 안 무너짐(빠른 롱런 영웅담 금지). Race/한계시험=통제된 출발→일관→강한 마무리(빠를수록 좋다 아님, 상한 없음).',
     'Easy + Strides 해석(중요·말투 본보기): 이 처방이 왜 있는지 기억하라 — 이지 위주로만 뛰면 빠른 감각이 무뎌질까봐, 이지 본래 의도(낮은 심박·회복)는 지키면서 신경근의 "빠른 감각"만 가볍게 살리려고 막판에 스트라이드를 섞는 것이다. 그러니 성공 = 이지를 편안하게 잘 눌렀고(주 목적) + 막판에 그 감각을 톡 살렸다(곁가지). 칭찬의 핵심은 "이지를 편안하게 잘 눌러 회복이 된 것"이다 — "이지 잘 유지하다가 막판에 스트라이드로 빠른 감각 한 번 살린 거 보이네요. 우리가 하려던 거 정확히 그거예요." 후반 km 평균이 빨라지고 케이던스가 오르는 건 스트라이드가 들어간 정상 신호이니 "강도 초과 / 품질 하향 / 의도보다 셌다"로 깎지 마라. 스트라이드가 "선명했는지·개수가 충분한지·회복 분리가 또렷했는지"는 회복런에서 채점하지도, 언급하지도 마라 — 그건 인터벌·템포 같은 품질 세션의 잣대이고, 회복런에 들이대면 사용자가 다음엔 더 세게 질러 이지 심박을 망친다(처방의 전제 자체를 배신하는 것). 부상(발바닥 active)이 있으면 "다음에도 막판 가속은 짧고 가볍게 톡, 무리 말고"처럼 보호하는 한마디만 부드럽게 더한다. "오늘 편하게 잘 뛰었어요" 같은 따뜻한 한마디로 닫는다.',
-    'Easy + Strides에서 "후반에 심박이 따라붙었다 / 회복감이 희미해졌다 / 후반 자극이 커졌다 / 막판에 욕심이 섞였다" 같은 판정을 특히 경계하라 — 이건 회복 분리 채점이 다른 말로 새어나오는 것이다. 막판 빠른 구간(스트라이드)에서 심박이 오르는 건 세션 설계 그대로이지 회복의 흐트러짐이 아니다. 본런 평균심박이 이지 상한 아래로 눌렸고(주 목적 충족) RPE가 낮으면 그날은 잘 수행한 이지+스트라이드다 — 스트라이드가 막판 심박을 올렸다는 이유로 그날을 "욕심/과함"으로 규정하지 마라. (예: 평균 129.5, 상한 139, RPE 3, 막판 5:50 스트라이드에서 157 → 직후 140으로 하강 = 회복까지 된 모범 수행. 이걸 "욕심 섞인 날"로 부르면 틀린 것이다.) 사용자가 낮은 RPE로 "편했다"고 느낀 것을 데이터 패턴으로 뒤집어 "과했다"고 판정하지 마라 — 평균심박이 상한 아래면 본인 체감(RPE)을 신뢰한다. 부상이 있으면 오늘을 실패로 규정하지 말고 "다음에도 막판 가속은 짧고 가볍게"라는 앞을 향한 보호 조언만 더한다(오늘은 잘한 날, 조언은 미래용).',
+    'Easy + Strides에서 "후반에 심박이 따라붙었다 / 회복감이 희미해졌다 / 후반 자극이 커졌다 / 막판에 욕심이 섞였다 / 후반 심박 드리프트가 25bpm으로 크다 / 후반까지 더 조용하게 눌러야 한다" 같은 판정을 특히 경계하라 — 이건 모두 회복 분리/전후반 심박 차 채점이 다른 말로 새어나오는 것이다. 이 세션의 전후반 심박 차(드리프트)는 막판 스트라이드 때문에 부풀려진 무의미한 값이라 평가 데이터에서 제거했다(lapAnalysis에 null + frontBackHrDriftNote 참고). "드리프트"라는 말도 쓰지 마라 — 드리프트는 같은 페이스에서 서서히 오르는 현상이고 스트라이드 가속은 그게 아니다. 막판 빠른 구간(스트라이드)에서 심박이 오르는 건 세션 설계 그대로이지 회복의 흐트러짐이 아니다. 본런 평균심박이 이지 상한 아래로 눌렸고(주 목적 충족) RPE가 낮으면 그날은 잘 수행한 이지+스트라이드다 — 스트라이드가 막판 심박을 올렸다는 이유로 그날을 "욕심/과함"으로 규정하지 마라. (예: 평균 129.5, 상한 139, RPE 3, 막판 5:50 스트라이드에서 157 → 직후 140으로 하강 = 회복까지 된 모범 수행. 이걸 "욕심 섞인 날"로 부르면 틀린 것이다.) 사용자가 낮은 RPE로 "편했다"고 느낀 것을 데이터 패턴으로 뒤집어 "과했다"고 판정하지 마라 — 평균심박이 상한 아래면 본인 체감(RPE)을 신뢰한다. 부상이 있으면 오늘을 실패로 규정하지 말고 "다음에도 막판 가속은 짧고 가볍게"라는 앞을 향한 보호 조언만 더한다(오늘은 잘한 날, 조언은 미래용).',
     '이전 코칭 스레드(selectedRunCoachThread)·과거 스니펫의 옛 답변을 평가의 출발점으로 삼지 마라. 데이터와 sessionEvidence(평균심박 판정 등)에서 새로 평가한다. 특히 첫 문장을 옛 결론("기본은 지켰지만 품질은 유지 쪽" 같은 차가운 판정)으로 시작하지 말고, 반드시 따뜻한 인정으로 연다. 옛 답변이 같은 세션을 부정적/차갑게 봤어도 그 톤·문구를 반복·강화하지 말고, 새 기준으로 자연스럽게 바로잡는다.',
     '운동 시각 맥락을 챙겨라(선택적): 늦은 저녁/밤 러닝이면 운동 후 몸이 안정되기까지 두세 시간 걸려 수면에 영향을 줄 수 있다. 저녁·밤 세션이거나 회복이 화제일 때는 가끔 "요즘 잠은 잘 주무세요? 수면 질은 어때요?"처럼 수면·회복을 챙기는 따뜻한 질문을 자연스럽게 던진다(매번은 말 것). 수면/HRV 데이터가 있으면 함께 본다. 이런 관계적 챙김이 "나를 안다·끝까지 챙긴다"는 신뢰를 만든다.',
     '답변은 보고서가 아니라 대화처럼 느껴져야 한다.',
@@ -3027,9 +3027,13 @@ function buildLapProcessEvidence(analysis: ReturnType<typeof buildLapProgression
     firstHalf: analysis.firstHalf,
     secondHalf: analysis.secondHalf,
     paceDeltaSecSecondHalfMinusFirstHalf: analysis.paceDeltaSecSecondHalfMinusFirstHalf,
-    heartRateDriftBpmSecondHalfMinusFirstHalf: analysis.heartRateDriftBpmSecondHalfMinusFirstHalf,
+    // 끝-가속형은 전후반 심박 차가 스트라이드 때문에 부풀려지므로 평가 입력에서 제거한다(코치가 "후반 드리프트 Xbpm"으로 트집 못 잡게).
+    heartRateDriftBpmSecondHalfMinusFirstHalf: analysis.endLoadedStrideSession ? null : analysis.heartRateDriftBpmSecondHalfMinusFirstHalf,
     paceTrend: analysis.paceTrend,
-    heartRateQuality: analysis.heartRateQuality,
+    heartRateQuality: analysis.endLoadedStrideSession ? 'end_strides_not_evaluated' : analysis.heartRateQuality,
+    frontBackHrDriftNote: analysis.endLoadedStrideSession
+      ? '끝-가속형(이지+스트라이드): 막판 스트라이드가 후반 평균 심박을 올리므로 전후반 심박 차(드리프트)는 무의미해 제거했다. 드리프트/회복 흐트러짐/강도 초과로 평가하지 말고, 전반 이지 본런 심박이 눌렸는지로만 본다.'
+      : null,
     maxLapHeartRate: analysis.maxLapHeartRate,
     lapHeartRatesOverTempoCeiling: analysis.lapHeartRatesOverTempoCeiling,
     startControlHint: analysis.startControlHint,
@@ -3039,6 +3043,14 @@ function buildLapProcessEvidence(analysis: ReturnType<typeof buildLapProgression
 
 function buildLapCoachingFocus(analysis: AvailableLapAnalysis) {
   const focus: string[] = []
+  if (analysis.endLoadedStrideSession) {
+    // 끝-가속형: 전후반 심박 차/드리프트로 "무리한 가속"을 판정하지 않는다(스트라이드가 후반에 있으니 당연한 값).
+    focus.push('막판 스트라이드가 후반 페이스·심박을 끌어올리는 끝-가속형이다. 전후반 심박 차/드리프트로 "무리한 가속/회복 흐트러짐"을 판정하지 마라 — 예상된 정상. 평가는 전반 이지 본런 심박이 눌렸는지로만 한다.')
+    if (analysis.startControlHint === 'controlled_start') {
+      focus.push('초반을 눌러 시작한 흐름 — 이지 본런을 잘 지켰다는 신호다.')
+    }
+    return focus
+  }
   if (analysis.startControlHint === 'fast_start') {
     focus.push('초반이 평균보다 빨랐다. 심박도 같이 올랐는지 확인한다.')
   } else if (analysis.startControlHint === 'controlled_start') {
@@ -4746,9 +4758,13 @@ function buildLapProgressionAnalysis(run: RunLogRow | null, tempoHeartRateCeilin
     .filter((lap) => tempoHeartRateCeilingBpm !== null && (lap.avgHeartRate ?? 0) > tempoHeartRateCeilingBpm)
     .map((lap) => ({ index: lap.index, avgHeartRate: lap.avgHeartRate }))
   const cadenceValues = cadenceLaps.map((lap) => lap.cadence).filter((value): value is number => value !== null)
+  // 끝-가속형 세션(이지+스트라이드): 스트라이드가 후반에 몰려 후반 평균 심박을 끌어올리므로
+  // 전후반 심박 차(드리프트)는 의미 없는 값이다. 하류에서 평가 신호로 쓰지 않게 표시한다.
+  const endLoadedStrideSession = run.type === 'Easy + Strides'
 
   return {
     available: true,
+    endLoadedStrideSession,
     source: metricSampleMetrics.length >= 4 ? 'metric_samples' : 'laps',
     lapCount: laps.length,
     laps,
@@ -4766,9 +4782,13 @@ function buildLapProgressionAnalysis(run: RunLogRow | null, tempoHeartRateCeilin
       avgHeartRate: secondHalfHeartRate === null ? null : Math.round(secondHalfHeartRate)
     },
     paceDeltaSecSecondHalfMinusFirstHalf: paceDeltaSec,
-    heartRateDriftBpmSecondHalfMinusFirstHalf: heartRateDriftBpm,
+    // 끝-가속형(이지+스트라이드)은 전후반 심박 차가 스트라이드로 부풀려져 무의미하므로 평가 입력에서 제거한다.
+    heartRateDriftBpmSecondHalfMinusFirstHalf: endLoadedStrideSession ? null : heartRateDriftBpm,
     paceTrend: describePaceTrend(paceDeltaSec),
-    heartRateQuality: describeHeartRateQuality(heartRateDriftBpm),
+    heartRateQuality: endLoadedStrideSession ? 'end_strides_not_evaluated' : describeHeartRateQuality(heartRateDriftBpm),
+    frontBackHrDriftNote: endLoadedStrideSession
+      ? '끝-가속형(이지+스트라이드): 막판 스트라이드가 후반 평균 심박을 올리므로 전후반 심박 차(드리프트)는 무의미해 제거했다. 드리프트/회복 흐트러짐/강도 초과로 평가하지 말고, 전반 이지 본런 심박이 눌렸는지로만 본다.'
+      : null,
     maxLapHeartRate,
     tempoHeartRateCeilingBpm,
     lapHeartRatesOverTempoCeiling: lapsOverTempoCeiling,
