@@ -10,6 +10,7 @@ import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { computeIntentFulfillment } from '@/entities/session-intent/computeIntentFulfillment'
 import IntentFulfillmentCard from '@/shared/ui/IntentFulfillmentCard.vue'
 import { useWeatherStore } from '@/app/stores/weatherStore'
+import { useToastStore } from '@/app/stores/toastStore'
 import { runTypes, type RunLog, type RunType } from '@/entities/run/model'
 import type { TrainingGoal, TrainingInjuryCheckIn, TrainingMemory } from '@/entities/training-memory/model'
 import { detectGoalIntent, type GoalIntentProposal } from '@/features/detect-goal-intent/detectGoalIntent'
@@ -47,6 +48,7 @@ const memoryStore = useMemoryStore()
 const scheduleStore = useTrainingScheduleStore()
 const healthKitSyncStore = useHealthKitSyncStore()
 const weatherStore = useWeatherStore()
+const toastStore = useToastStore()
 const route = useRoute()
 const router = useRouter()
 const isRunLogRoute = computed(() => route.path === '/runs')
@@ -655,8 +657,12 @@ async function confirmRemove() {
     if (editing.value?.id === run.id) editing.value = null
     if (coachRun.value?.id === run.id) coachRun.value = null
     pendingDeleteRun.value = null
+    // 삭제한 세션을 보던 페이지(상세/코치/딥링크)는 보여줄 데이터가 없으므로 퇴장시키고 결과를 알린다.
+    toastStore.success('삭제되었습니다.')
+    await router.replace('/')
   } catch (err) {
     error.value = err instanceof Error ? err.message : '삭제 실패'
+    toastStore.error(error.value)
   } finally {
     deletingId.value = null
   }
