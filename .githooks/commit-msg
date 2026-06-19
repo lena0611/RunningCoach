@@ -1,0 +1,23 @@
+#!/usr/bin/env sh
+set -eu
+
+if [ -z "${NVM_DIR:-}" ]; then
+  export NVM_DIR="$HOME/.nvm"
+fi
+
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  # git hook은 로그인 셸의 nvm 상태를 물려받지 않을 수 있으므로 프로젝트 Node를 직접 적용한다.
+  set +u
+  . "$NVM_DIR/nvm.sh"
+  nvm use >/dev/null 2>&1 || true
+  set -u
+fi
+
+. .harness/bin/dual-node.sh
+harness_dual_node_activate
+
+node .harness/bin/check-node-version.mjs
+
+# 코칭 도메인 변경 강제 게이트(#전문코치리뷰): Coach-Review 증명 없으면 차단
+# (run-previous-hook는 pre-commit/pre-push만 지원하므로 commit-msg 체인은 호출하지 않는다.)
+node .harness/bin/coach-review-gate.mjs "$1"
