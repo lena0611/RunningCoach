@@ -146,6 +146,31 @@ describe('buildPeriodizedSchedule', () => {
     expect(easy?.prescription.paceRange).toBeTruthy()
   })
 
+  it('롱런 직후 슬롯은 Recovery(또는 휴식) — Easy+Strides 금지', () => {
+    // 6일/주로 조밀하게 → 롱런 다음날에 세션이 놓일 가능성을 높여 규칙을 검증.
+    const sched = buildPeriodizedSchedule({
+      goal: goal({ targetDate: '2026-05-30', distanceKm: 10 }),
+      profile: profile({ weeklyRunDaysTarget: 6 }),
+      today,
+      currentWeeklyKm: 45
+    })
+    const byDate = new Map(sched.map((s) => [s.date, s]))
+    const longs = sched.filter((s) => s.sessionType === 'LSD' || s.sessionType === 'Steady Long')
+    expect(longs.length).toBeGreaterThan(3)
+    let checkedAdjacent = 0
+    for (const lr of longs) {
+      const next = new Date(`${lr.date}T00:00:00`)
+      next.setDate(next.getDate() + 1)
+      const nextStr = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`
+      const nextSession = byDate.get(nextStr)
+      if (!nextSession) continue // 휴식이면 OK
+      checkedAdjacent++
+      expect(nextSession.sessionType).not.toBe('Easy + Strides')
+      expect(nextSession.sessionType).toBe('Recovery')
+    }
+    expect(checkedAdjacent).toBeGreaterThan(0) // 최소 한 번은 인접 슬롯을 실제로 검증
+  })
+
   it('80/20 가드레일: 고강도(Tempo/Race) 볼륨 비중이 30% 이하', () => {
     const sched = buildPeriodizedSchedule({
       goal: goal({ targetDate: '2026-04-04', distanceKm: 10 }),
