@@ -15,7 +15,7 @@ function session(overrides: Partial<ScheduledSession>): ScheduledSession {
     phase: overrides.phase ?? 'Base',
     sessionType: overrides.sessionType ?? 'Easy',
     keySession: overrides.keySession ?? false,
-    prescription: defaultScheduledSessionPrescription(),
+    prescription: overrides.prescription ?? defaultScheduledSessionPrescription(),
     status: overrides.status ?? 'planned',
     source: 'generator',
     runId: overrides.runId ?? null,
@@ -105,6 +105,52 @@ describe('detectScheduleDeviation', () => {
     const dev = detectScheduleDeviation(sessions, today)
     expect(dev.shouldRealign).toBe(false)
   })
+
+  it('앵커 드리프트(up): 누락 없어도 실제 체력이 처방 볼륨보다 25%+ 크면 재앵커', () => {
+    // 잘 소화 중(미래 세션만)인데 실제 주행량이 플랜보다 훨씬 큼 → 체력 성장 반영
+    const sessions = [session({ date: '2026-01-20', status: 'planned' })]
+    const dev = detectScheduleDeviation(sessions, today, {
+      currentWeeklyKm: 32.5,
+      plannedWeeklyKm: 18,
+      upcomingPhase: 'Base'
+    })
+    expect(dev.missedCount).toBe(0)
+    expect(dev.anchorDrift).toBe(true)
+    expect(dev.anchorDriftDir).toBe('up')
+    expect(dev.shouldRealign).toBe(true)
+    expect(dev.reason).toContain('늘어')
+  })
+
+  it('앵커 드리프트(up)는 Taper/Recovery 의 의도된 저볼륨에선 무시', () => {
+    const dev = detectScheduleDeviation([], today, {
+      currentWeeklyKm: 32.5,
+      plannedWeeklyKm: 18,
+      upcomingPhase: 'Taper'
+    })
+    expect(dev.anchorDrift).toBe(false)
+    expect(dev.shouldRealign).toBe(false)
+  })
+
+  it('앵커 드리프트(down): 실제 체력이 처방보다 25%+ 작으면 하향 재앵커', () => {
+    const dev = detectScheduleDeviation([], today, {
+      currentWeeklyKm: 12,
+      plannedWeeklyKm: 18,
+      upcomingPhase: 'Base'
+    })
+    expect(dev.anchorDriftDir).toBe('down')
+    expect(dev.shouldRealign).toBe(true)
+    expect(dev.reason).toContain('줄어')
+  })
+
+  it('밴드(±25%) 안이면 앵커 드리프트 비발동', () => {
+    const dev = detectScheduleDeviation([], today, {
+      currentWeeklyKm: 20,
+      plannedWeeklyKm: 18,
+      upcomingPhase: 'Base'
+    })
+    expect(dev.anchorDrift).toBe(false)
+    expect(dev.shouldRealign).toBe(false)
+  })
 })
 
 describe('buildRealignedSchedule', () => {
@@ -125,5 +171,27 @@ describe('buildRealignedSchedule', () => {
     expect(plan.drafts.every((d) => d.source === 'realign')).toBe(true)
     expect(plan.drafts.every((d) => d.date >= '2026-01-15')).toBe(true)
     expect(plan.drafts.every((d) => d.date <= '2026-04-15')).toBe(true)
+  })
+
+  it('누락 없이도 체력이 플랜보다 크게 성장하면 현재 체력으로 재앵커(자가치유)', () => {
+    // 향후 7일 저볼륨 플랜(주 ~10.5km)인데 실제는 주 32km → 상향 재앵커되어야.
+    const lowRx = { distanceKm: 3.5, durationMin: 24, paceRange: '', note: '' }
+    const sessions = [
+      session({ date: '2026-01-16', status: 'planned', prescription: lowRx }),
+      session({ date: '2026-01-18', status: 'planned', prescription: lowRx }),
+      session({ date: '2026-01-20', status: 'planned', prescription: lowRx })
+    ]
+    const plan = buildRealignedSchedule(
+      sessions,
+      goal({ targetDate: '2026-04-15' }),
+      profile(),
+      today,
+      32 // currentWeeklyKm: 실제 최근 주행량
+    )
+    expect(plan.deviation.anchorDriftDir).toBe('up')
+    expect(plan.drafts.length).toBeGreaterThan(5)
+    // 재앵커된 롱런(LSD)이 기존 저볼륨 처방(3.5km)보다 커야 한다(현재 체력 반영).
+    const lsd = plan.drafts.find((d) => d.sessionType === 'LSD' || d.sessionType === 'Steady Long')
+    expect(lsd?.prescription.distanceKm ?? 0).toBeGreaterThan(8)
   })
 })
