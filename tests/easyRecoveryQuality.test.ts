@@ -9,15 +9,26 @@ describe('evaluateEasyRecovery (#354 §2)', () => {
     expect(r.rpeOverride).toBe(false)
   })
 
-  it('Recovery: 심박 소폭 초과해도 RPE 낮으면 유지 (RPE 우선)', () => {
-    // 예시: ceiling 139, avg 141(+2), RPE 2 → 유지
+  it('Recovery: 마진 이내 소폭 초과는 그냥 유지 (RECOVERY_OVER_MARGIN=4, override 불필요)', () => {
+    // ceiling 139, avg 141(+2)는 마진(4) 이내 → 센서노이즈/소폭은 트집 없이 유지, override 아님
     const r = evaluateEasyRecovery(makeRun({ type: 'Recovery', avgHeartRate: 141, rpe: 2 }), {
       ceilingBpm: 139,
       isRecovery: true
     })
     expect(r.intentHeld).toBe(true)
-    expect(r.rpeOverride).toBe(true)
+    expect(r.rpeOverride).toBe(false)
     expect(r.overByBpm).toBe(2)
+  })
+
+  it('Recovery: 마진 초과해도 RPE 낮으면 유지 (RPE 우선 override)', () => {
+    // ceiling 139, avg 149(+10)는 마진(4) 초과지만 RPE 2 → 체감 우선으로 유지(override)
+    const r = evaluateEasyRecovery(makeRun({ type: 'Recovery', avgHeartRate: 149, rpe: 2 }), {
+      ceilingBpm: 139,
+      isRecovery: true
+    })
+    expect(r.intentHeld).toBe(true)
+    expect(r.rpeOverride).toBe(true)
+    expect(r.overByBpm).toBe(10)
   })
 
   it('심박 초과 + RPE 높으면 유지 아님', () => {
