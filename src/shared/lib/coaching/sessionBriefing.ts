@@ -236,6 +236,18 @@ function executionFor(
   const pace = prescription.paceRange
   const withAmount = amount ? `, ${amount}` : ''
 
+  // 저강도(Easy/Recovery/LSD/Steady Long) 본세트 지문: 시간·강도 우선 → 거리는 가이드 → 페이스는 결과(목표 아님).
+  // 거리·시간·페이스를 동시 타깃으로 던지면 사용자가 헷갈린다. dose는 시간, 강도는 심박/RPE/대화가 정본.
+  // 근거: SSOT §기준선("Easy 판정은 페이스보다 심박/RPE/대화 가능성 우선")·§세션 라이프사이클(저강도 dose=time-on-feet).
+  const lowIntensityMainSet = (effort: string, tag = '') => {
+    const lead = dur ? `${dur} 동안 ${effort}` : effort
+    const distGuide = dist ? ` (거리는 약 ${dist} 기준)` : ''
+    const paceClause = pace
+      ? ` 페이스 ${pace}는 목표가 아니라 결과예요 — 숨·심박이 편한지를 먼저 봐요.`
+      : ' 숨·심박이 편한지를 먼저 봐요.'
+    return `${lead}${distGuide}.${paceClause}${tag}`
+  }
+
   switch (sessionType) {
     case 'Easy + Strides': {
       steps.push({ label: '웜업', detail: EASE_IN_WARMUP })
@@ -265,7 +277,7 @@ function executionFor(
     case 'LSD':
       // #354 정렬: LSD 는 Recovery/Standard/Progressive 로 판정됨. 프리런은 Standard 의도 + 유연 옵션.
       steps.push({ label: '웜업', detail: ROLLING_WARMUP })
-      steps.push({ label: '본훈련', detail: `${amount ? `${amount} ` : ''}대화 가능 강도${pace ? ` ${pace}` : ''}, 심박 안정 우선 (Standard LSD)` })
+      steps.push({ label: '본훈련', detail: lowIntensityMainSet('대화 가능한 편한 강도', ' (Standard LSD)') })
       steps.push({ label: '옵션', detail: '컨디션 좋으면 후반 자연 페이스업(Progressive)도 OK, 무리면 더 느린 Recovery LSD로 낮춰도 돼요' })
       steps.push({ label: '쿨다운', detail: '마지막 1km는 천천히 → 5분 걷기, 수분·영양 보충' })
       steps.push({ label: '판정', detail: '평균심박 하나가 아니라 지속시간·RPE·심박 드리프트·페이스 안정성을 함께' })
@@ -273,19 +285,19 @@ function executionFor(
     case 'Steady Long':
       // #354 정렬: 전후반 심박차만으로 판단 안 함 — 후반 가속 보정한 효율을 본다.
       steps.push({ label: '웜업', detail: ROLLING_WARMUP })
-      steps.push({ label: '본훈련', detail: `${amount ? `${amount} ` : ''}일정한 강도${pace ? ` ${pace}` : ''}, 후반 효율 위주` })
+      steps.push({ label: '본훈련', detail: lowIntensityMainSet('일정한 편한 강도, 후반 효율 위주') })
       steps.push({ label: '옵션', detail: '잘 통제된 네거티브 스플릿(후반 살짝 가속) 환영 — 후반 가속분은 드리프트에서 보정해 평가해요' })
       steps.push({ label: '쿨다운', detail: '마지막은 천천히 → 걷기로 마무리, 수분·영양 보충' })
       break
     case 'Recovery':
       steps.push({ label: '웜업', detail: '걷듯이 아주 천천히 시작해요' })
-      steps.push({ label: '본런', detail: `아주 느리게${pace ? ` ${pace}` : ''}${withAmount} — 회복이 목적` })
+      steps.push({ label: '본런', detail: lowIntensityMainSet('아주 느리게(회복이 목적)') })
       steps.push({ label: '쿨다운', detail: '마지막은 걷기로 마무리' })
       steps.push({ label: '강도', detail: RPE_PRIORITY_LINE })
       break
     case 'Easy':
       steps.push({ label: '웜업', detail: EASE_IN_WARMUP })
-      steps.push({ label: '본런', detail: `편한 대화 가능 페이스${pace ? ` ${pace}` : ''}${withAmount}` })
+      steps.push({ label: '본런', detail: lowIntensityMainSet('편한 대화 가능 강도') })
       steps.push({ label: '쿨다운', detail: EASE_OUT_COOLDOWN })
       steps.push({ label: '강도', detail: RPE_PRIORITY_LINE })
       break

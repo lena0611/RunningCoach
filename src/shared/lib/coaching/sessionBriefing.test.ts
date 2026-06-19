@@ -176,6 +176,19 @@ describe('buildSessionBriefing', () => {
     expect(execText(steady)).toContain('네거티브')
   })
 
+  it('저강도 지문: 시간 우선 + 거리=가이드 + 페이스=결과(다중 타깃 혼란 방지)', () => {
+    // 처방 distanceKm:6, durationMin:35, paceRange '6:10~6:40/km'
+    const lsd = buildSessionBriefing(session({ sessionType: 'LSD', phase: 'Base' }), { goal, injury: null, chronic: noChronic })
+    const main = lsd.execution.find((s) => s.label === '본훈련')?.detail ?? ''
+    expect(main).toContain('35분 동안') // 시간(dose) 우선
+    expect(main).toContain('거리는 약 6km 기준') // 거리는 가이드
+    expect(main).toContain('목표가 아니라 결과') // 페이스 디엠퍼사이즈
+    expect(main).toContain('숨·심박이 편한지를 먼저') // 강도(심박/RPE) 우선
+    // Easy/Recovery 도 동일 프레이밍
+    const easy = buildSessionBriefing(session({ sessionType: 'Easy' }), { goal, injury: null, chronic: noChronic })
+    expect(easy.execution.find((s) => s.label === '본런')?.detail ?? '').toContain('35분 동안')
+  })
+
   it('SessionIntent 흡수: 의도(why)·성공기준·타겟 한 카드로 (수락 결정 지원)', () => {
     const b = buildSessionBriefing(session({ sessionType: 'Easy + Strides' }), {
       goal,
