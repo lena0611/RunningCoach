@@ -27,6 +27,8 @@
 - `.harness/project/local-methodology.md`
 - `.harness/project/standards-layers.md`
 - `.harness/project/domain-rules.md`
+- `.harness/project/running-coaching-standards.md` (코칭 동작·처방·브리핑·피드백 작업 시 **구현 전 필수 선행**)
+- `.harness/project/running-injury-knowledge.md` (부상·통증 관련 코칭 작업 시 **구현 전 필수 선행**)
 - `.harness/project/architecture-rules.md`
 - `.harness/project/ui-guidelines.md` (UI/화면/컴포넌트/스타일/레이아웃 작업 시 **구현 전 필수 선행**)
 - `.harness/project/ui-system-contract.md` (UI 토큰·공유 컴포넌트 1차 강제 계약 — UI 작업 시 먼저 읽는다)
@@ -43,7 +45,7 @@
 
 ## 채팅 트리거
 - 사용자가 채팅에 **`#전문코치리뷰`**(또는 `#전문코치 리뷰`, `#코치리뷰`)라고 입력하면 `.harness/project/professional-coach-review-trigger.md` 프로토콜을 실행합니다. 방금/현재 문맥의 코칭 작업이 딥리서치의 권위 있는 코치 의도와 부합하는지, 사용자(초보 러너) 요청에 휘둘려 전문 코치라면 안 할 선택을 하지 않았는지 도메인 교차검증합니다. **코드 리뷰가 아닙니다**(코드 품질은 `/codex`).
-- 코칭 동작/지식 변경은 **착수 전**에 코치 SSOT를 먼저 보고 배치 사항은 코드 짜기 전 사용자와 그릴(사전 조율)합니다. 필요한 코치 지식이 없으면 심층 리서치로 확보한 뒤 SSOT에 적재하고 진행합니다.
+- **코칭 작업 기본 절차(예외 없이)**: 코칭 동작/지식(coach-run, sessionQuality/sessionBriefing 등 `src/shared/lib/coaching`, CoachMessage, 처방·브리핑·피드백)을 건드리는 작업은 **코드를 짜기 전에 먼저** 코치 SSOT(`running-coaching-standards.md`, 부상 관련 시 `running-injury-knowledge.md`)와 관련 메모리를 읽습니다. 사용자 요청이 권위 코치 의도와 배치되면 **구현 전에** 사용자와 그릴(사전 조율)합니다. 필요한 코치 지식이 SSOT에 없으면 심층 리서치로 확보→SSOT 적재 후 진행합니다. 이건 권장이 아니라 기본값입니다.
 - **코칭 도메인 커밋 게이트(강제)**: 코칭 도메인 파일이 스테이징되면 `commit-msg` 훅이 커밋 메시지의 `Coach-Review:` 트레일러를 요구합니다. #전문코치리뷰 수행 후 배치되면 그릴(커밋 보류), 통과면 `Coach-Review: pass — <근거/출처>`(비코칭 기계 변경은 `Coach-Review: n/a — <사유>`)를 답니다.
 
 ## 모노레포 구조 (#250)
