@@ -27,6 +27,7 @@ function session(overrides: Partial<ScheduledSession> & { date: string }): Sched
 // 주 = 월 2026-01-12 ~ 일 2026-01-18.
 const thursday = new Date('2026-01-15T00:00:00')
 const saturday = new Date('2026-01-17T00:00:00')
+const sunday = new Date('2026-01-18T00:00:00')
 
 describe('weeklyHardLoadGuard', () => {
   it('이번 주 하드가 상한(runDays-1) 이상이면 exceeds + 경고', () => {
@@ -67,45 +68,57 @@ describe('weeklyHardLoadGuard', () => {
 })
 
 describe('weekEndTriage', () => {
-  it('주말 임박+백로그가 남은 날 초과면 키 세션 하나 살리고 나머지 놓아준다', () => {
-    // 토요일(남은 날=토·일=2). 미수행 3개(LSD 토 + Easy 화·수) → 3 > 2 → 트리아지.
+  it('일요일·과거 밀린 백로그가 더블로도 안 될 때 키 하나 살리고 과거분 놓아준다', () => {
+    // 일요일(남은 날=일=1). 과거 due 미수행 3개(목·금 Easy + 토 LSD) → 3 > 1 → 트리아지.
     const sessions = [
       session({ id: 'lsd', date: '2026-01-17', sessionType: 'LSD' }),
-      session({ id: 'e1', date: '2026-01-13', sessionType: 'Easy' }),
-      session({ id: 'e2', date: '2026-01-14', sessionType: 'Easy' }),
+      session({ id: 'e1', date: '2026-01-15', sessionType: 'Easy' }),
+      session({ id: 'e2', date: '2026-01-16', sessionType: 'Easy' }),
       session({ date: '2026-01-12', sessionType: 'Easy', status: 'done', runId: 'r1' })
     ]
-    const t = weekEndTriage(sessions, saturday)
+    const t = weekEndTriage(sessions, sunday)
     expect(t).not.toBeNull()
-    expect(t!.saveSession.id).toBe('lsd')
-    expect(t!.releaseSessions.map((s) => s.id).sort()).toEqual(['e1', 'e2'])
+    expect(t!.saveSession.id).toBe('lsd') // 키(롱런) 보호
+    expect(t!.releaseSessions.map((s) => s.id).sort()).toEqual(['e1', 'e2']) // 과거 밀린 이지만
     expect(t!.message).toBeTruthy()
+  })
+
+  it('정상 미래 세션은 백로그로 안 센다(놓아주라고 하지 않음)', () => {
+    // 토요일. 과거 밀린 건 목 이지 1개뿐, 토 LSD=오늘·일 이지=미래(정상). backlog=1 ≤ 남은 2 → 비노출.
+    const sessions = [
+      session({ id: 'thu', date: '2026-01-15', sessionType: 'Easy' }),
+      session({ id: 'lsd', date: '2026-01-17', sessionType: 'LSD' }),
+      session({ id: 'sun', date: '2026-01-18', sessionType: 'Easy' })
+    ]
+    expect(weekEndTriage(sessions, saturday)).toBeNull()
   })
 
   it('주 초반(목)이라 마감 임박 아니면 null', () => {
     const sessions = [
-      session({ id: 'lsd', date: '2026-01-17', sessionType: 'LSD' }),
       session({ date: '2026-01-13', sessionType: 'Easy' }),
-      session({ date: '2026-01-14', sessionType: 'Easy' })
+      session({ date: '2026-01-14', sessionType: 'Easy' }),
+      session({ id: 'lsd', date: '2026-01-17', sessionType: 'LSD' })
     ]
     expect(weekEndTriage(sessions, thursday)).toBeNull()
   })
 
-  it('백로그가 남은 용량 이하면 트리아지 비노출', () => {
-    // 토요일·미수행 2개지만 남은 날도 2 → 따라잡기 가능 → null.
+  it('더블로 따라잡을 만하면(과거 ≤ 남은 날) 비노출', () => {
+    // 토요일·과거 밀린 2개(화·수)지만 남은 날도 2(토·일) → 더블로 가능 → null.
     const sessions = [
-      session({ id: 'lsd', date: '2026-01-17', sessionType: 'LSD' }),
-      session({ date: '2026-01-18', sessionType: 'Easy' })
+      session({ date: '2026-01-13', sessionType: 'Easy' }),
+      session({ date: '2026-01-14', sessionType: 'Easy' }),
+      session({ id: 'lsd', date: '2026-01-17', sessionType: 'LSD' })
     ]
     expect(weekEndTriage(sessions, saturday)).toBeNull()
   })
 
-  it('살릴 키 세션이 없으면 null(이지만 남은 건 자유)', () => {
+  it('살릴 키 세션이 없으면 null', () => {
+    // 일요일·과거 밀린 3개지만 전부 이지(키 없음) → 살릴 핵심이 없어 트리아지 비노출.
     const sessions = [
-      session({ date: '2026-01-13', sessionType: 'Easy' }),
-      session({ date: '2026-01-14', sessionType: 'Easy' }),
-      session({ date: '2026-01-15', sessionType: 'Easy' })
+      session({ date: '2026-01-15', sessionType: 'Easy' }),
+      session({ date: '2026-01-16', sessionType: 'Easy' }),
+      session({ date: '2026-01-17', sessionType: 'Easy' })
     ]
-    expect(weekEndTriage(sessions, saturday)).toBeNull()
+    expect(weekEndTriage(sessions, sunday)).toBeNull()
   })
 })

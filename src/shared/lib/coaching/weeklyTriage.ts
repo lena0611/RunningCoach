@@ -88,31 +88,34 @@ export function weekEndTriage(sessions: ScheduledSession[], today: Date): WeekEn
   const endDate = new Date(`${end}T00:00:00`)
   const todayDate = new Date(`${todayStr}T00:00:00`)
   const daysLeftIncl = Math.round((endDate.getTime() - todayDate.getTime()) / MS_PER_DAY) + 1
-  if (daysLeftIncl > 2) return null
+  if (daysLeftIncl > 2) return null // 주 막판(남은 1~2일)에만
 
-  // 미수행 백로그: 이번 주, 아직 안 한(planned/missed, 런 없음) 세션 — 과거 open + 남은 날 예정 포함.
-  const undone = sessions.filter(
-    (s) =>
-      s.date >= start &&
-      s.date <= end &&
-      !s.runId &&
-      (s.status === 'planned' || s.status === 'missed')
+  // 백로그 = **실제로 밀린(과거 due) 미수행**만. 오늘·미래의 정상 예정 세션은 백로그가 아니다
+  // (아직 따라잡을 수 있음 — 정상 일정을 "놓아주라"고 하면 안 된다). missed/planned 둘 다 포함.
+  const backlog = sessions.filter(
+    (s) => s.date >= start && s.date < todayStr && !s.runId && (s.status === 'planned' || s.status === 'missed')
   )
-  // 남은 날(오늘 포함) 용량으로 다 못 따라잡을 때만(백로그 > 남은 날).
-  if (undone.length < 2 || undone.length <= daysLeftIncl) return null
+  // "더블(하루 2회)로도 남은 날에 다 못 끼울 때만" 발동(SSOT). 남은 날 수 = 더블 catch-up 슬롯(일 1개).
+  // backlog ≤ 남은 날이면 따라잡기 가능 → 비노출(닦달 금지). 이 조건상 backlog ≥ 2 일 때만 발동.
+  if (backlog.length <= daysLeftIncl) return null
 
-  const keyCandidates = undone
+  // 살릴 키 세션 = 이번 주 미수행(과거+오늘+미래) 중 키, 우선순위 최상(오늘/미래의 키도 보호 대상).
+  const keyCandidates = sessions
+    .filter((s) => s.date >= start && s.date <= end && !s.runId && (s.status === 'planned' || s.status === 'missed'))
     .filter((s) => s.keySession || isHardType(s.sessionType))
     .sort(
       (a, b) =>
-        Number(b.date >= todayStr) - Number(a.date >= todayStr) || // 남은 날(미래) 우선
+        Number(b.date >= todayStr) - Number(a.date >= todayStr) || // 남은 날(오늘/미래) 우선
         keyPriority(b) - keyPriority(a) || // 롱런/레이스 > 템포
         a.date.localeCompare(b.date)
     )
   const saveSession = keyCandidates[0]
   if (!saveSession) return null
 
-  const releaseSessions = undone.filter((s) => s.id !== saveSession.id)
+  // 놓아줄 것 = 과거 밀린 백로그(살릴 키는 제외). 정상 미래 세션은 포함하지 않는다.
+  const releaseSessions = backlog.filter((s) => s.id !== saveSession.id)
+  if (!releaseSessions.length) return null
+
   const message =
     '주말이 빠듯해요. 다 하려 하지 말고 이번 주 핵심 하나만 살릴까요? 나머지는 죄책감 없이 놓아줘도 괜찮아요 — 회복도 훈련의 일부예요.'
   return { saveSession, releaseSessions, message }

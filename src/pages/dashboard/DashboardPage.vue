@@ -741,8 +741,10 @@ async function triageSave() {
       const { draft } = proposeMoveToToday(t.saveSession, today.value)
       await scheduleStore.reschedule([t.saveSession.id], [draft])
     }
+    // 나머지(과거 밀린 것)는 놓아준다 → 백로그 해소로 트리아지 재노출 방지("집중하기"가 안 멈추던 버그).
+    for (const s of t.releaseSessions) await scheduleStore.skip(s.id)
     triageOpen.value = false
-    toastStore.success(`${sessionTypeLabel(t.saveSession.sessionType)} 하나에 집중해요. 잘하고 있어요.`)
+    toastStore.success(`${sessionTypeLabel(t.saveSession.sessionType)} 하나에 집중해요. 나머지는 놓아줬어요.`)
   })
 }
 async function triageRelease() {
