@@ -6,14 +6,14 @@
 > 하네스 본체의 개발 기록이 아닙니다. 설치된 프로젝트의 현재 작업 맥락만 기록합니다.
 > 상세 인수인계는 (있으면) 프로젝트 루트 `HANDOFF.md`. 장기 지식은 에이전트 메모리.
 
-## ⭐ 현재 작업 — 코칭 인간화 대수술(#402) 배포 완료, 검증·정리 단계 (2026-06-19)
-- **완료·라이브**: coach-run을 "데이터 판정단"에서 **흐름으로 서사 읽는 안내자**로 재정의(원칙 0~5). 스트라이드 비채점·전후반 드리프트 소스 차단·Easy/LSD 초반통제·삭제 UX·인터뷰 라벨 정합. 모두 머지(PR #443~448)+**엣지 v106 배포**. 메모리 [[coach-not-data-referee]].
-  - ⚠️ v105는 #402 본체(#436~#443) 누락 stale였음(머지만 되고 미배포). 2026-06-19 v106 재배포로 정정. 교훈: 머지≠배포 — coach-run은 병합 후 `supabase functions list`로 버전·시각 확인.
-- **신설 운영장치**: `#전문코치리뷰` 트리거 + 코칭 작업 전 SSOT 선독(의무) + commit-msg `Coach-Review` 게이트. 메모리 [[professional-coach-review-trigger]].
-- **다음**: ① **#359**(롱런 네거티브 스플릿 오판) 코드·배포(v106) 완료 → **토요일(6/20) LSD 실주행 스모크**(네거티브 스플릿 안정 판정 + 토큰 미노출) 후 close ② #307 에픽 인터뷰 스모크(새 임포트 필요)·#374 실기기 ③ grill 설계 백로그 정리(라벨 `needs:design-grill` 또는 메모리).
+## ⭐ 현재 작업 — 제안훈련 응답 + 주간 정산 + 주 고정 뷰(#454) 배포 완료, 검증·정리 단계 (2026-06-20)
+- **완료·라이브**: 미래 카드 **포기(skipped 신설)·조정·되돌리기·오늘로 가져오기** + 전제 **주간 정산**(닫힌 주만 missed 확정 — `settleClosedWeeks` 단일소유·weekStart 경계, `detectScheduleDeviation` 경계도 weekStart, realign 확정책임 제거) + **데이-스트립 월~일 고정+주 페이징**. PR **#454** main 머지(`94331e7`) + **마이그레이션 `202606190001` 원격 배포 확인**. harness:check(607+vue-tsc build) 통과. 메모리 [[schedule-response-and-weekly-settlement]].
+  - 충돌은 v1에서 **스왑**으로만. 같은 날 더블/N세션 + 네이티브 6h minGap은 **후속 #455** 분리. 아키텍처 래칫(#397)은 코칭 타입을 `periodizedSchedule` 재노출 경유로 받아 83 유지.
+- **직전·라이브**: #402 코칭 인간화(coach-run 서사 코치·v106), `#전문코치리뷰` 트리거 + 코칭 SSOT 선독 의무 + commit-msg `Coach-Review` 게이트. 메모리 [[coach-not-data-referee]], [[professional-coach-review-trigger]].
+- **다음**: ① **#454 나머지 플로우 실렌더 스팟체크**(주 페이징·다른날로/스왑·포기 잔존·주말 트리아지 — 되돌리기는 확인됨) → 통과 시 에픽 #362 마무리 ② **#359** 토요일(오늘 6/20) LSD 실주행 스모크 후 close ③ #307 인터뷰 스모크·#374 실기기 ④ grill 백로그 정리.
 
 ## 현재 상태
-- updatedAt: 2026-06-19
+- updatedAt: 2026-06-20
 - baseHarness / activeStack / harnessMode: `.harness/policy/profile.json` 참고
 - 코칭 작업 시 `.harness/project/professional-coach-review-trigger.md` 강제(SSOT 선독→배치 시 그릴→커밋 게이트).
 
