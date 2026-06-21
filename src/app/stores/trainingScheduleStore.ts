@@ -124,6 +124,24 @@ export const useTrainingScheduleStore = defineStore('trainingScheduleStore', {
       if (!target) return
       await this.setStatus(target.id, 'done', run.id)
     },
+    /**
+     * 이미 들어온 런들을 아직 연결 안 된 예정 세션에 일괄 매칭(done) — 과거 HealthKit 인입(매칭 누락)·
+     * 이동 직후 등 '수행했는데 planned 로 남은' 세션 치유. 이미 연결된 런·활성 세션 없음이면 건너뜀(멱등).
+     * 정산(settleClosedWeeks) 전에 돌려야 수행 세션이 missed 로 오확정되지 않는다.
+     */
+    async reconcileRuns(
+      runs: { id: string; date: string; type?: ScheduledSession['sessionType'] }[]
+    ): Promise<void> {
+      if (!isSupabaseConfigured || !this.sessions.some(isActiveSession)) return
+      const linkedRunIds = new Set(this.sessions.filter((s) => s.runId).map((s) => s.runId))
+      for (const run of runs) {
+        if (linkedRunIds.has(run.id)) continue
+        const target = selectSessionForRun(this.sessions, run)
+        if (!target) continue
+        await this.setStatus(target.id, 'done', run.id)
+        linkedRunIds.add(run.id)
+      }
+    },
     async setStatus(id: string, status: ScheduledSessionStatus, runId: string | null = null): Promise<void> {
       if (!isSupabaseConfigured) return
       const updated = await updateScheduledSessionStatus(id, status, runId)
