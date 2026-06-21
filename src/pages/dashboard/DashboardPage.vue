@@ -637,12 +637,20 @@ async function onBriefingRevert() {
 async function onMoveToToday() {
   const s = activeOpenSession.value
   if (!s) return
+  const occupant = scheduleStore.sessionOnDate(dateOnly(today.value))
   await runScheduleOp(async () => {
-    const { draft } = proposeMoveToToday(s, today.value)
-    await scheduleStore.reschedule([s.id], [draft])
+    if (occupant && occupant.id !== s.id) {
+      // 오늘 이미 세션 있음 → 같은 날 더블(미지원) 대신 스왑(오늘 세션을 가져온 세션의 원래 날짜로). 진짜 더블은 #455.
+      const swap = proposeSwap(s, occupant)
+      await scheduleStore.reschedule(swap.supersedeIds, swap.drafts)
+      toastStore.success(`오늘로 가져왔어요. 오늘 있던 ${sessionTypeLabel(occupant.sessionType)}는 ${sessionTypeLabel(s.sessionType)}의 원래 날짜로 자리를 바꿨어요.`)
+    } else {
+      const { draft } = proposeMoveToToday(s, today.value)
+      await scheduleStore.reschedule([s.id], [draft])
+      toastStore.success('오늘 세션으로 가져왔어요.')
+    }
     weekOffset.value = 0
     activeDayIndex.value = todayWeekdayIndex.value
-    toastStore.success('오늘 세션으로 가져왔어요.')
   })
 }
 function onOpenReschedule() {

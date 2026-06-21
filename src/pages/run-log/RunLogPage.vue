@@ -310,6 +310,10 @@ onMounted(() => {
   if (!memoryStore.loading) {
     memoryStore.load()
   }
+  // 달력 "예정 세션 수행" 링이 날짜축 스케줄의 done 세션을 읽으므로 로드 보장(Supabase 미설정/오프라인이면 no-op).
+  if (!scheduleStore.loaded && !scheduleStore.loading) {
+    void scheduleStore.load()
+  }
   void competitionStore.ensureLoaded()
   setupObserver()
   setupRunMonthStickyOffset()
@@ -1230,6 +1234,15 @@ function shiftMonth(monthKey: string, offset: number) {
   return toMonthKey(new Date(year, month - 1 + offset, 1))
 }
 
+// 달력 "예정 세션 수행" 링: 새 날짜축 스케줄에서 그 런에 연결된 done 세션이 있으면 ON(요일·source 무관 —
+// 이동/요일 변경 세션도 잡힘). 스토어가 비었거나(오프라인/미로딩) 아직 매칭 전이면 옛 weeklyPattern 매칭으로 폴백.
+const scheduledRunIdSet = computed(
+  () => new Set(scheduleStore.sessions.filter((s) => s.status === 'done' && s.runId).map((s) => s.runId as string))
+)
+function runIsScheduled(run: RunLog): boolean {
+  return scheduledRunIdSet.value.has(run.id) || isScheduledSession(run.date, run.type, memoryStore.memory.weeklyPattern)
+}
+
 function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>): CalendarCell[] {
   const [year, month] = monthKey.split('-').map(Number)
   const first = new Date(year, month - 1, 1)
@@ -1248,7 +1261,7 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>): Calen
       day,
       runs,
       markerType: markerRun?.type ?? null,
-      hasScheduledRun: runs.some((run) => isScheduledSession(run.date, run.type, memoryStore.memory.weeklyPattern))
+      hasScheduledRun: runs.some(runIsScheduled)
     })
   }
   return cells
@@ -1257,8 +1270,8 @@ function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>): Calen
 function getCalendarMarkerRun(runs: RunLog[]) {
   if (!runs.length) return null
   const sortedRuns = [...runs].sort((a, b) => {
-    const aScheduled = isScheduledSession(a.date, a.type, memoryStore.memory.weeklyPattern)
-    const bScheduled = isScheduledSession(b.date, b.type, memoryStore.memory.weeklyPattern)
+    const aScheduled = runIsScheduled(a)
+    const bScheduled = runIsScheduled(b)
     if (aScheduled !== bScheduled) return aScheduled ? -1 : 1
     return b.distanceKm - a.distanceKm
   })

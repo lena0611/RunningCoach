@@ -117,7 +117,7 @@ export const useTrainingScheduleStore = defineStore('trainingScheduleStore', {
      * 런 임포트 직후: 동일 날짜 또는 ±윈도우 내 가장 가까운 활성 세션을 done 으로 매칭(없으면 no-op).
      * "어제 빠진 세션을 오늘 따라잡기"를 엑스트라+미수행 이중계산 대신 따라잡음으로 인정한다.
      */
-    async matchRun(run: { id: string; date: string }): Promise<void> {
+    async matchRun(run: { id: string; date: string; type?: ScheduledSession['sessionType'] }): Promise<void> {
       if (!isSupabaseConfigured) return
       if (!this.loaded) await this.load()
       const target = selectSessionForRun(this.sessions, run)
