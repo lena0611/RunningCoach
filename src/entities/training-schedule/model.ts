@@ -111,7 +111,7 @@ function diffDays(a: string, b: string): number {
  */
 export function selectSessionForRun(
   sessions: ScheduledSession[],
-  run: { date: string },
+  run: { date: string; type?: RunType },
   windowDays = SCHEDULE_MATCH_WINDOW_DAYS
 ): ScheduledSession | null {
   const scored = sessions
@@ -119,10 +119,15 @@ export function selectSessionForRun(
     .map((session) => ({ session, gap: diffDays(session.date, run.date) }))
     .filter((entry) => Math.abs(entry.gap) <= windowDays)
   if (!scored.length) return null
+  // 같은 날짜에 세션이 여럿(더블)이어도 결정론적으로 고른다: 런 타입과 일치하는 세션 → 키세션 우선.
+  // (이전엔 동일날짜 tie 가 배열 순서 의존이라 엉뚱한 세션이 done 되고 실제 수행 세션이 planned 로 남았다.)
+  const typeRank = (s: ScheduledSession) => (run.type && s.sessionType === run.type ? 0 : 1)
   scored.sort(
     (x, y) =>
       Math.abs(x.gap) - Math.abs(y.gap) || // 가까운 날짜 우선
       x.gap - y.gap || // 동률이면 과거(미수행) 먼저
+      typeRank(x.session) - typeRank(y.session) || // 런 타입과 일치하는 세션 우선
+      Number(y.session.keySession) - Number(x.session.keySession) || // 키세션 우선
       x.session.date.localeCompare(y.session.date)
   )
   return scored[0].session

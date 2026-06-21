@@ -75,6 +75,9 @@ export const useRunStore = defineStore('runStore', {
       if (isSupabaseConfigured) {
         const inserted = await insertRunLogs(items, source)
         this.runs.push(...inserted)
+        // 벌크/HealthKit 인입도 단건(addRun)과 동일하게 예정 세션·의도를 done 매칭한다.
+        // 누락 시 수행해도 스케줄이 planned 로 남아 정산에서 missed 오확정 + 디브리핑 달성률 카드 소실.
+        for (const run of inserted) await this.matchSessionIntent(run)
         this.flagInterviewForImport(inserted, source)
         return inserted
       }
@@ -145,7 +148,7 @@ export const useRunStore = defineStore('runStore', {
       }
       try {
         // 스케줄 세션도 done 매칭 — 안 하면 수행한 세션이 'planned'로 남아 재정렬에서 미수행 오판(#378).
-        await useTrainingScheduleStore().matchRun({ id: run.id, date: run.date })
+        await useTrainingScheduleStore().matchRun({ id: run.id, date: run.date, type: run.type })
       } catch {
         // best-effort
       }
