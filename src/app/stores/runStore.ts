@@ -4,6 +4,8 @@ import type { ExtractedRunData, RunLog } from '@/entities/run/model'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
+import { inferRunType } from '@/features/infer-run-type/inferRunType'
+import type { HeartRateModel } from '@/shared/lib/heartRateZones'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { deleteRunLog, fetchRunLogs, insertRunLog, insertRunLogs, updateRunLog } from '@/shared/api/runRepository'
 
@@ -132,6 +134,44 @@ export const useRunStore = defineStore('runStore', {
         return this.runs[index]
       }
       return run
+    },
+    /**
+     * 과거 오분류 롱런 라벨 자가치유(로드 시 멱등): 자동 추론으로 들어온 런 중 **Easy/Recovery 로 잘못 잡힌**
+     * 런을 재추론해, 거리/시간 기준 롱런(LSD/Steady Long)으로 재판정되면 타입을 교정한다.
+     * 과거 inferRunType 의 롱런 게이트가 토요일/12km 에만 걸려, 비-토요일로 옮겨 뛴 10~12km 긴 이지런이
+     * Easy 로 박히던 버그의 기존 기록 치유(타입은 임포트 시점 고정이라 포워드 수정만으론 안 바뀜).
+     * - 사용자 수동 지정(type:user)·수기 입력(manual/image_extracted) 런은 건드리지 않는다.
+     * - Easy/Recovery → LSD/Steady Long 방향만 교정(이지↔이지 churn 없음). 한 번 교정되면 다음 로드엔 후보가
+     *   아니므로 멱등. 롱런 게이트는 거리/시간(런별 고정값) 기반이라 심박모델 드리프트에도 흔들리지 않는다.
+     * 반환: 타입이 바뀐 런 목록(스케줄 매칭 재연결 repointReinferredRuns 입력).
+     */
+    async reinferMislabeledLongRuns(heartRateModel: HeartRateModel | null): Promise<RunLog[]> {
+      const changed: RunLog[] = []
+      for (const run of this.runs) {
+        if (run.source !== 'healthkit' && run.source !== 'file_import') continue
+        if (run.tags?.includes('type:user')) continue
+        if (run.type !== 'Easy' && run.type !== 'Recovery') continue
+        const inferred = inferRunType({
+          date: run.date,
+          distanceKm: run.distanceKm,
+          avgPaceSec: run.avgPaceSec,
+          avgHeartRate: run.avgHeartRate,
+          laps: run.laps,
+          fastSegments: run.fastSegments,
+          metricSamples: run.metricSamples,
+          routePoints: run.routePoints,
+          weeklyPattern: [],
+          heartRateModel
+        })
+        if (inferred !== 'LSD' && inferred !== 'Steady Long') continue
+        const updated = await this.updateRun({
+          ...run,
+          type: inferred,
+          tags: Array.from(new Set([...(run.tags ?? []), 'type:reinferred']))
+        })
+        changed.push(updated)
+      }
+      return changed
     },
     async deleteRun(id: string) {
       if (isSupabaseConfigured) {

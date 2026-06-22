@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import {
   isActiveSession,
   isPlannedSession,
+  selectBetterTypeMatchForRun,
   selectSessionForRun,
   type ScheduledSession,
   type ScheduledSessionDraft,
@@ -140,6 +141,26 @@ export const useTrainingScheduleStore = defineStore('trainingScheduleStore', {
         if (!target) continue
         await this.setStatus(target.id, 'done', run.id)
         linkedRunIds.add(run.id)
+      }
+    },
+    /**
+     * 라벨 재추론(runStore.reinferMislabeledLongRuns)으로 타입이 바뀐 런이, 이미 done 으로 연결된 세션과
+     * 타입이 어긋나고 같은 윈도우 안에 **새 타입과 정확히 맞는** 활성 세션(예: 같은 날 LSD)이 있으면 그쪽으로
+     * 재연결한다. 잘못 크레딧된 세션은 planned 로 되돌려(주간 정산이 missed 로 정직하게 확정) "같은 날 Easy done·
+     * LSD missed" 더블 오매칭을 치유한다. 정확 타입 일치가 있을 때만 동작 — 결정론·멱등(정산 전에 호출).
+     */
+    async repointReinferredRuns(
+      runs: { id: string; date: string; type?: ScheduledSession['sessionType'] }[]
+    ): Promise<void> {
+      if (!isSupabaseConfigured) return
+      for (const run of runs) {
+        if (!run.type) continue
+        const linked = this.sessions.find((s) => s.runId === run.id && s.status === 'done')
+        if (!linked || linked.sessionType === run.type) continue
+        const better = selectBetterTypeMatchForRun(this.sessions, run, linked.id)
+        if (!better) continue
+        await this.setStatus(linked.id, 'planned', null) // 잘못 크레딧된 세션 비우기(정산이 missed 확정)
+        await this.setStatus(better.id, 'done', run.id) // 실제 수행한 타입의 세션에 크레딧
       }
     },
     async setStatus(id: string, status: ScheduledSessionStatus, runId: string | null = null): Promise<void> {

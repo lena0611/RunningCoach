@@ -185,6 +185,9 @@ async function doEnsureSchedule() {
     // 이미 들어온 런(특히 매칭이 안 돌던 시절의 HealthKit 인입)을 예정 세션에 정합(done 치유).
     // 정산 전에 돌려야 수행했는데 planned 로 남은 세션이 missed 로 오확정되지 않는다.
     await scheduleStore.reconcileRuns(runs.value)
+    // 라벨 재추론(reinferRunTypesOnce)으로 타입이 바뀐 런이 같은 날 더 맞는 세션(예: LSD)에 잘못 연결돼 있으면
+    // 그쪽으로 재연결(정산 전). "같은 날 Easy done·LSD missed" 더블 오매칭 치유.
+    await scheduleStore.repointReinferredRuns(runs.value)
     const mine = scheduleStore.sessions.filter((s) => s.goalId === goal.id)
     const hasActive = mine.some(isActiveSession)
     if (archetype !== 'performance') {
@@ -834,10 +837,31 @@ async function onRequestAlternative() {
     intentBusy.value = false
   }
 }
+// 과거 오분류 롱런 라벨 자가치유(로드당 1회·멱등·목표 비종속). runs+memory 로딩 후 1회 돈다.
+// 스케줄 reconcile 전에 끝내야 매칭이 교정된 타입을 보고 같은 날 LSD 등으로 올바로 연결된다.
+let reinferDone = false
+let reinferInFlight: Promise<void> | null = null
+function reinferRunTypesOnce(): Promise<void> {
+  if (!isSupabaseConfigured || reinferDone) return Promise.resolve()
+  if (reinferInFlight) return reinferInFlight
+  reinferInFlight = runStore
+    .reinferMislabeledLongRuns(heartRateModel.value)
+    .then(() => {
+      reinferDone = true
+    })
+    .catch(() => {
+      // best-effort: 라벨 치유 실패가 대시보드를 막지 않는다.
+    })
+    .finally(() => {
+      reinferInFlight = null
+    })
+  return reinferInFlight
+}
 watch(
   () => [runStore.loaded, memoryStore.loaded] as const,
-  () => {
+  async () => {
     void ensureTodayIntent()
+    await reinferRunTypesOnce()
     void ensureSchedule()
   },
   { immediate: true }

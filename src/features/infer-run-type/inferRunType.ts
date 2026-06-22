@@ -45,6 +45,12 @@ const strideTimingTolerance = {
   minWarmupSec: 240
 }
 
+// 롱런(LSD/Steady Long)으로 인정하는 발 위 시간(time-on-feet) 하한.
+// 코칭 SSOT(저강도 dose 우선순위, running-coaching-standards.md:91)는 롱런을 거리가 아니라 시간으로 본다 —
+// "유산소 자극은 발 위의 시간이 본질이고, 느린/초보 러너에겐 거리보다 시간이 안전". 80분은 통상 Easy 페이스로
+// 12km를 달린 시간대(~78~84분)와 정합하므로, 거리 기준 12km와 같은 강도를 시간으로 표현한 값이다.
+const LONG_RUN_MIN_DURATION_SEC = 80 * 60
+
 export function inferRunType(input: InferRunTypeInput): RunType {
   const distanceKm = Number(input.distanceKm || 0)
   const avgPaceSec = input.avgPaceSec
@@ -62,7 +68,13 @@ export function inferRunType(input: InferRunTypeInput): RunType {
   if (distanceKm <= 0) return 'Unknown'
 
   if (distanceKm >= 10) {
-    if (isSaturday || distanceKm >= 12) {
+    // 롱런 판정은 요일이 아니라 거리/시간이 가른다(SSOT §저강도 dose: time-on-feet 우선, running-coaching-standards.md:91).
+    // 거리만 보면(특히 10~12km 구간) 느린 러너의 긴 롱런이 과소판정돼 이지로 떨어진다(LSD를 비-토요일로 옮겨 뛴 케이스).
+    // → 거리 12km 이상이거나 발 위 시간(평균페이스×거리)이 LONG_RUN_MIN_DURATION_SEC 이상이면 요일과 무관하게 롱런으로 본다.
+    //   토요일은 통상 롱런 요일이라 약한 보조 신호로 유지(기존 동작 회귀 방지).
+    const timeOnFeetSec = avgPaceSec !== null ? distanceKm * avgPaceSec : null
+    const isLongByDuration = timeOnFeetSec !== null && timeOnFeetSec >= LONG_RUN_MIN_DURATION_SEC
+    if (isSaturday || distanceKm >= 12 || isLongByDuration) {
       return isSteadyLong(input.laps, avgPaceSec, input.avgHeartRate, hr) ? 'Steady Long' : 'LSD'
     }
   }
