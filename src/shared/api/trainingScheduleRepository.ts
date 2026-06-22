@@ -74,6 +74,22 @@ export async function updateScheduledSessionStatus(
 }
 
 /**
+ * 세션 슬롯(AM/PM) 갱신 — 같은 날 더블(#455) 추가 시 기존 단일 세션을 'AM' 으로 표시한다.
+ * status·runId·prescription 등 다른 필드는 보존(slot 만 패치). 런 매칭 시각 우선(결정 B)을 살리려면
+ * 기존 세션도 슬롯이 있어야 한다(둘 다 null 이면 시각 매칭이 중립이라 타입에 위임됨).
+ */
+export async function updateScheduledSessionSlot(id: string, slot: ScheduledSession['slot']): Promise<ScheduledSession> {
+  const { data, error } = await requireSupabase()
+    .from('training_schedule')
+    .update({ slot, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select('*')
+    .single()
+  if (error) throw error
+  return fromRow(data)
+}
+
+/**
  * A1 재정렬용: 특정 날짜(포함) 이후의 활성(planned/missed) 세션을 superseded 로 전환.
  * 재구축 insert 전에 호출해 미래 구간을 비운다. 영향받은 행 수를 반환.
  */

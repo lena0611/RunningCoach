@@ -22,6 +22,8 @@ export type CarouselDay = {
   state: 'past' | 'today' | 'future' | 'rest' | 'done' | 'open' | 'missed' | 'skipped'
   /** 칩에 표시할 짧은 세션 라벨/아이콘 텍스트. */
   chip: string
+  /** 같은 날 더블(#455, AM+PM 2세션)이면 true → "×2 AM·PM" shoulder 배지. */
+  double?: boolean
 }
 
 const props = defineProps<{
@@ -111,8 +113,10 @@ function onPointerUp(event: PointerEvent) {
         :aria-selected="i === activeIndex"
         class="week-chip"
         :class="[`week-chip-${d.state}`, { 'week-chip-active': i === activeIndex }]"
+        :aria-label="d.double ? `${d.label} · 같은 날 2세션(오전·오후)` : undefined"
         @click="select(i)"
       >
+        <span v-if="d.double" class="week-chip-double">×2</span>
         <span class="week-chip-day">{{ d.label }}</span>
         <span class="week-chip-tag">{{ d.chip }}</span>
       </button>
@@ -144,7 +148,8 @@ function onPointerUp(event: PointerEvent) {
   display: flex;
   gap: 6px;
   overflow-x: auto;
-  padding-bottom: 2px;
+  /* 상단 여백 = shoulder 배지(top:-7px)가 overflow 로 잘리지 않게 확보 */
+  padding: 9px 0 2px;
   scrollbar-width: none;
 }
 .week-strip::-webkit-scrollbar {
@@ -152,6 +157,7 @@ function onPointerUp(event: PointerEvent) {
 }
 
 .week-chip {
+  position: relative;
   flex: 0 0 auto;
   min-width: 56px;
   display: flex;
@@ -165,6 +171,24 @@ function onPointerUp(event: PointerEvent) {
   color: var(--color-muted);
   cursor: pointer;
   font-size: 11px;
+}
+
+/* 같은 날 더블(#455) shoulder 배지 — 2세션 이상인 날만(달력 run-count chip 규칙).
+   컴팩트 알림형: 우상단 코너에 작게, 배경색 링으로 칩/이웃과 분리(겹침·쏠림 방지). AM·PM은 상세 패널·aria가 전달. */
+.week-chip-double {
+  position: absolute;
+  top: -8px;
+  right: -2px;
+  min-width: 18px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-primary);
+  color: var(--color-on-primary, #fff);
+  box-shadow: 0 0 0 2px var(--color-bg, var(--color-surface-card));
+  white-space: nowrap;
 }
 
 .week-chip-active {

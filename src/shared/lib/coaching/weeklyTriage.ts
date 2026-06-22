@@ -69,6 +69,30 @@ export type WeekEndTriage = {
   message: string
 }
 
+/**
+ * 이번 주(월~일) 남은 날 수(오늘 포함). 주 막판 판단·더블 catch-up 슬롯 계산에 쓴다.
+ * 더블(#455) 제안 로직(doubleSession.ts)과 트리아지가 동일 기준을 공유하도록 export 한다.
+ */
+export function weekDaysLeftInclusive(today: Date): number {
+  const { end } = trainingWeekRange(today)
+  const endDate = new Date(`${end}T00:00:00`)
+  const todayDate = new Date(`${toDateOnly(today)}T00:00:00`)
+  return Math.round((endDate.getTime() - todayDate.getTime()) / MS_PER_DAY) + 1
+}
+
+/**
+ * 이번 주 '실제로 밀린'(과거 due) 미수행 백로그. 오늘·미래의 정상 예정 세션은 백로그가 아니다
+ * (아직 따라잡을 수 있음 — 정상 일정을 "놓아주라"고 하면 안 된다). missed/planned 둘 다 포함, 런 매칭 안 된 것만.
+ * 트리아지·더블(#455) 제안이 같은 백로그 정의를 공유하도록 export 한다.
+ */
+export function currentWeekBacklog(sessions: ScheduledSession[], today: Date): ScheduledSession[] {
+  const { start } = trainingWeekRange(today)
+  const todayStr = toDateOnly(today)
+  return sessions.filter(
+    (s) => s.date >= start && s.date < todayStr && !s.runId && (s.status === 'planned' || s.status === 'missed')
+  )
+}
+
 /** 키 세션 살리기 우선순위(롱런/레이스 > 템포). 같으면 남은 날(미래) 우선, 그 다음 이른 날. */
 function keyPriority(s: ScheduledSession): number {
   if (s.sessionType === 'Race') return 4
@@ -85,16 +109,11 @@ function keyPriority(s: ScheduledSession): number {
 export function weekEndTriage(sessions: ScheduledSession[], today: Date): WeekEndTriage | null {
   const { start, end } = trainingWeekRange(today)
   const todayStr = toDateOnly(today)
-  const endDate = new Date(`${end}T00:00:00`)
-  const todayDate = new Date(`${todayStr}T00:00:00`)
-  const daysLeftIncl = Math.round((endDate.getTime() - todayDate.getTime()) / MS_PER_DAY) + 1
+  const daysLeftIncl = weekDaysLeftInclusive(today)
   if (daysLeftIncl > 2) return null // 주 막판(남은 1~2일)에만
 
-  // 백로그 = **실제로 밀린(과거 due) 미수행**만. 오늘·미래의 정상 예정 세션은 백로그가 아니다
-  // (아직 따라잡을 수 있음 — 정상 일정을 "놓아주라"고 하면 안 된다). missed/planned 둘 다 포함.
-  const backlog = sessions.filter(
-    (s) => s.date >= start && s.date < todayStr && !s.runId && (s.status === 'planned' || s.status === 'missed')
-  )
+  // 백로그 = **실제로 밀린(과거 due) 미수행**만(currentWeekBacklog — 더블 제안과 동일 정의).
+  const backlog = currentWeekBacklog(sessions, today)
   // "더블(하루 2회)로도 남은 날에 다 못 끼울 때만" 발동(SSOT). 남은 날 수 = 더블 catch-up 슬롯(일 1개).
   // backlog ≤ 남은 날이면 따라잡기 가능 → 비노출(닦달 금지). 이 조건상 backlog ≥ 2 일 때만 발동.
   if (backlog.length <= daysLeftIncl) return null

@@ -37,6 +37,8 @@ import SessionBriefingCard from './SessionBriefingCard.vue'
 import SessionDebriefCard from './SessionDebriefCard.vue'
 import RescheduleSheet from './RescheduleSheet.vue'
 import WeekendTriageSheet from './WeekendTriageSheet.vue'
+import SessionDoublePanel from './SessionDoublePanel.vue'
+import DoublesAddSheet from './DoublesAddSheet.vue'
 import { buildRestGuidance, evaluateExtraRun } from '@/shared/lib/coaching/restGuidance'
 import { collectCoachMoments } from '@/shared/lib/coaching/coachMoments'
 import { detectScheduleDeviation } from '@/shared/lib/coaching/scheduleRealign'
@@ -57,6 +59,8 @@ import { buildRealignedSchedule } from '@/shared/lib/coaching/scheduleRealign'
 import { proposeAlternativeSession } from '@/shared/lib/coaching/alternativeSession'
 import { proposeReschedule, proposeMoveToToday, proposeSwap } from '@/shared/lib/coaching/reschedule'
 import { weeklyHardLoadGuard, weekEndTriage } from '@/shared/lib/coaching/weeklyTriage'
+import { buildDoubleSuggestion, evaluateDoubleEligibility, buildPmEasyDraft, type DoubleEligibility } from '@/shared/lib/coaching/doubleSession'
+import type { CriterionStatus } from '@/shared/lib/coaching/progressionCriteria'
 import { buildSessionBriefing, sessionTypeLabel, type SessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
 import { resolvePaceModel } from '@/shared/lib/vdotPaces'
 import { getChronicLoadTrend } from '@/shared/lib/runStats'
@@ -259,7 +263,9 @@ const scheduleDays = computed<CarouselDay[]>(() => {
     else if (skipped) state = 'skipped'
     else state = 'rest'
     const chip = run ? sessionTypeLabel(run.type) : display ? sessionTypeLabel(display.sessionType) : '휴식'
-    out.push({ date, label: `${WEEKDAY_KO[d.getDay()]} ${d.getDate()}`, state, chip })
+    // 같은 날 더블(#455): 실슬롯(planned/missed/done, 포기 제외) 2개 이상이면 ×2 배지.
+    const double = onDay.filter((s) => s.status !== 'skipped').length >= 2
+    out.push({ date, label: `${WEEKDAY_KO[d.getDay()]} ${d.getDate()}`, state, chip, double })
   }
   return out
 })
@@ -312,6 +318,11 @@ const activeDay = computed(() => scheduleDays.value[activeDayIndex.value] ?? nul
 const activeSession = computed<ScheduledSession | null>(() =>
   activeDay.value ? scheduleStore.sessionOnDate(activeDay.value.date) : null
 )
+// 같은 날 더블(#455): 그 날 활성 세션 전부(AM→PM). 2건이면 더블 패널을 렌더한다.
+const activeSessions = computed<ScheduledSession[]>(() =>
+  activeDay.value ? scheduleStore.sessionsOnDate(activeDay.value.date) : []
+)
+const isActiveDayDouble = computed(() => activeSessions.value.length >= 2)
 // 안 뛴 날/포기(open·missed·skipped) 슬라이드용 세션(폐기 제외, planned>missed>skipped).
 const activeOpenSession = computed<ScheduledSession | null>(() => {
   const day = activeDay.value
@@ -539,7 +550,10 @@ const coachMoments = computed(() =>
           }
         : null,
       goalFeasibility: goalFeasibility.value,
-      timeTrialResult: timeTrialResult.value
+      timeTrialResult: timeTrialResult.value,
+      doubleSuggestion: doubleSuggestionData.value
+        ? { backlogLabel: doubleSuggestionData.value.backlogLabel, amDayLabel: doubleSuggestionData.value.amDayLabel }
+        : null
     },
     dismissedMomentKeys.value
   )
@@ -551,6 +565,7 @@ function dismissMoment(key: string) {
 function onMomentAction(moment: { key: string; action?: { kind: string } }) {
   if (moment.action?.kind === 'open-injury-screening') useInjuryFlowStore().requestScreening()
   else if (moment.action?.kind === 'open-weekend-triage') triageOpen.value = true
+  else if (moment.action?.kind === 'open-doubles-add') openDoublesAdd(doubleSuggestionData.value?.amSession ?? null)
   dismissMoment(moment.key)
 }
 
@@ -644,6 +659,11 @@ async function onMoveToToday() {
   const s = activeOpenSession.value
   if (!s) return
   const occupant = scheduleStore.sessionOnDate(dateOnly(today.value))
+  // 오늘이 이미 더블(2세션)이면 3세션 미지원 — 가져오기 차단(#455 N≥3 보류).
+  if (scheduleStore.sessionsOnDate(dateOnly(today.value)).filter((x) => x.id !== s.id).length >= 2) {
+    toastStore.error('오늘은 이미 2세션이에요. 같은 날 3세션은 아직 지원하지 않아요.')
+    return
+  }
   await runScheduleOp(async () => {
     if (occupant && occupant.id !== s.id) {
       // 오늘 이미 세션 있음 → 같은 날 더블(미지원) 대신 스왑(오늘 세션을 가져온 세션의 원래 날짜로). 진짜 더블은 #455.
@@ -694,11 +714,14 @@ const rescheduleCandidates = computed(() => {
     d.setDate(d.getDate() + i)
     const date = dateOnly(d)
     const done = Boolean(runs.value.find((r) => r.date === date))
-    const occ = scheduleStore.sessionOnDate(date)
+    const occs = scheduleStore.sessionsOnDate(date).filter((o) => o.id !== target.id)
     const isTarget = date === target.date
-    const occupantLabel = occ && occ.id !== target.id ? sessionTypeLabel(occ.sessionType) : null
-    // 목적지는 오늘 이후·완료 아님·대상 자신 아님(과거는 따라잡기 대신 '오늘로 가져오기'로).
-    const selectable = !done && !isTarget && date >= todayStr
+    // 같은 날 더블(#455): 점유 세션을 슬롯과 함께 라벨링(예: "Tempo(오전) + Easy(오후)").
+    const occupantLabel = occs.length
+      ? occs.map((o) => `${sessionTypeLabel(o.sessionType)}${o.slot === 'AM' ? '(오전)' : o.slot === 'PM' ? '(오후)' : ''}`).join(' + ')
+      : null
+    // 목적지는 오늘 이후·완료 아님·대상 자신 아님. 이미 더블(2세션)인 날은 3세션 미지원이라 선택 불가.
+    const selectable = !done && !isTarget && date >= todayStr && occs.length < 2
     out.push({ date, label: `${WEEKDAY_KO[d.getDay()]} ${d.getDate()}`, done, occupantLabel, isTarget, selectable })
   }
   return out
@@ -710,6 +733,11 @@ async function pickRescheduleDay(date: string) {
   const target = rescheduleTarget.value
   if (!target) return
   const occupant = scheduleStore.sessionOnDate(date)
+  // 이미 더블(2세션)인 날로는 옮기지 않는다 — 3세션 미지원(#455 N≥3 보류).
+  if (scheduleStore.sessionsOnDate(date).filter((x) => x.id !== target.id).length >= 2) {
+    toastStore.error('그 날은 이미 2세션이에요. 같은 날 3세션은 아직 지원하지 않아요.')
+    return
+  }
   await runScheduleOp(async () => {
     if (occupant && occupant.id !== target.id) {
       const swap = proposeSwap(target, occupant)
@@ -768,6 +796,68 @@ async function triageRelease() {
     for (const s of t.releaseSessions) await scheduleStore.skip(s.id)
     triageOpen.value = false
     toastStore.success('나머지는 놓아줬어요. 회복도 훈련의 일부예요.')
+  })
+}
+
+// === 같은 날 더블(#455) ===
+// 단일 quality 적응 신호(tempo-ceiling-quality) — 적격 게이트 입력. 없으면 'n/a'.
+const qualityAdaptationStatus = computed<CriterionStatus>(
+  () => adaptiveProgress.value.criteria.find((c) => c.id === 'tempo-ceiling-quality')?.status ?? 'n/a'
+)
+const doubleEligibility = computed<DoubleEligibility>(() =>
+  evaluateDoubleEligibility({
+    memory: memoryStore.memory,
+    runs: runs.value,
+    qualityAdaptation: qualityAdaptationStatus.value,
+    today: today.value
+  })
+)
+// 코치 자동제안 신호(따라잡기 — 주말 트리아지의 자매 갈래). 적격·급성부하·백로그를 라이브러리가 판단.
+const doubleSuggestionData = computed(() =>
+  buildDoubleSuggestion({
+    sessions: scheduleStore.sessions,
+    memory: memoryStore.memory,
+    runs: runs.value,
+    qualityAdaptation: qualityAdaptationStatus.value,
+    chronicSpike: chronicLoad.value.status === 'spike',
+    today: today.value
+  })
+)
+// 수동 진입(세션 행 '+오후 이지 추가') 노출 조건: 적격 + 오늘/미래 단일 세션이고 PM 여지가 있을 때(결정 D — 미달이면 숨김).
+const canAddDoubleForActive = computed(() => {
+  const s = activeSession.value
+  if (!s || !doubleEligibility.value.eligible) return false
+  if (s.slot === 'PM' || s.date < dateOnly(today.value)) return false
+  const onDate = scheduleStore.sessionsOnDate(s.date)
+  return onDate.length < 2 && !onDate.some((x) => x.slot === 'PM')
+})
+const doublesAddOpen = ref(false)
+const doublesAddTarget = ref<ScheduledSession | null>(null)
+function openDoublesAdd(session: ScheduledSession | null) {
+  if (!session) return
+  doublesAddTarget.value = session
+  doublesAddOpen.value = true
+}
+async function onDoublesAdd(payload: { durationMin: number }) {
+  const am = doublesAddTarget.value
+  if (!am) return
+  await runScheduleOp(async () => {
+    const pmDraft = buildPmEasyDraft({ goalId: am.goalId, date: am.date, phase: am.phase, durationMin: payload.durationMin })
+    const created = await scheduleStore.addDouble(am.id, pmDraft)
+    doublesAddOpen.value = false
+    if (created) toastStore.success('오후 이지 세션을 더블로 추가했어요. 둘째는 천천히 — 최소 5시간 벌려요.')
+    else toastStore.error('같은 날 오후 세션이 이미 있어요.')
+  })
+}
+// 더블 패널 행 액션(세션별 조정/포기) — 기존 핸들러 재사용.
+function onDoublePanelAction(payload: { session: ScheduledSession; kind: 'reschedule' | 'skip' }) {
+  if (payload.kind === 'reschedule') openReschedule(payload.session, false)
+  else void onSkipSession(payload.session)
+}
+async function onSkipSession(s: ScheduledSession) {
+  await runScheduleOp(async () => {
+    await scheduleStore.skip(s.id)
+    toastStore.success('이 세션은 건너뛸게요. 회복도 훈련의 일부예요.')
   })
 }
 
@@ -1146,6 +1236,14 @@ async function applyPhaseTransition() {
           :method-slug="activeDoneMethodSlug"
           @open-method="openDoneMethodGlossary"
         />
+        <!-- 같은 날 더블(#455): 오전·오후 grouped 패널(2세션) -->
+        <SessionDoublePanel
+          v-else-if="isActiveDayDouble && (day.state === 'today' || day.state === 'future' || day.state === 'open' || day.state === 'missed')"
+          :am-session="activeSessions[0]"
+          :pm-session="activeSessions[1]"
+          :busy="intentBusy"
+          @action="onDoublePanelAction"
+        />
         <!-- 나가기 전: 작전 브리핑 -->
         <SessionBriefingCard
           v-else-if="activeBriefing && (day.state === 'today' || day.state === 'future')"
@@ -1156,6 +1254,7 @@ async function applyPhaseTransition() {
           :time-trial="activeSession?.sessionType === 'Race'"
           :method-slug="activeMethodSlug"
           :original-label="activeOriginalLabel"
+          :can-add-double="canAddDoubleForActive"
           @acknowledge="onBriefingAck"
           @request-alternative="onBriefingAlternative"
           @start-time-trial="raceOpen = true"
@@ -1163,6 +1262,7 @@ async function applyPhaseTransition() {
           @skip="onBriefingSkip"
           @reschedule="onBriefingReschedule"
           @revert="onBriefingRevert"
+          @add-double="openDoublesAdd(activeSession)"
         />
         <!-- 안 뛴 날(open/missed)·포기(skipped): 조정 액션 인라인 카드 -->
         <article
@@ -1318,6 +1418,16 @@ async function applyPhaseTransition() {
       @save="triageSave"
       @release="triageRelease"
       @close="triageOpen = false"
+    />
+
+    <!-- 같은 날 더블(#455): 오후 이지 추가 시트(적격 카드 + 차단 variant) -->
+    <DoublesAddSheet
+      :open="doublesAddOpen"
+      :am-session="doublesAddTarget"
+      :eligibility="doubleEligibility"
+      :busy="intentBusy"
+      @add="onDoublesAdd"
+      @close="doublesAddOpen = false"
     />
 
     <SectionGroup v-if="runStore.loading || runStore.error" title="데이터 상태">

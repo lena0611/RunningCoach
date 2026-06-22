@@ -130,6 +130,19 @@ export function getChronicLoadTrend(runs: RunLog[], today = new Date(), ageWeigh
   return { status, increasePct, last30Km, prev30Km, spikeThreshold, risingThreshold }
 }
 
+/**
+ * 급성:만성 작업부하 비율(ACWR) = 최근 7일 볼륨 ÷ (최근 28일 볼륨 / 4).
+ * >1.5 면 부하 스파이크(건병증·피로골절 위험 가중 — running-injury-knowledge.md §부상위험 ACWR).
+ * 만성 기반이 빈약하면(주 평균 < chronicLoadMinBaselineKm/4) 신뢰할 수 없어 null.
+ * getChronicLoadTrend(30일 절대 추세)와 병행한다 — ACWR 는 최근 급성 램프(부하 압축, 예: 같은 날 더블)에 더 민감하다.
+ */
+export function getAcwr(runs: RunLog[], today = new Date()): number | null {
+  const acute7 = sumDistance(getRunsWithinDays(runs, 7, today))
+  const chronicWeekly = sumDistance(getRunsWithinDays(runs, 28, today)) / 4
+  if (chronicWeekly < chronicLoadMinBaselineKm / 4) return null
+  return Math.round((acute7 / chronicWeekly) * 100) / 100
+}
+
 // 7일 급성 경고와 30일 중장기 경고를 합쳐 요약 피로 카드용 한 줄을 만든다.
 export function getFatigueWarning(runs: RunLog[], today = new Date(), ageWeight = 0): { caution: boolean; message: string } {
   const chronic = getChronicLoadTrend(runs, today, ageWeight)
