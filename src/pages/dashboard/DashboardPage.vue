@@ -831,8 +831,15 @@ const canAddDoubleForActive = computed(() => {
   const onDate = scheduleStore.sessionsOnDate(s.date)
   return onDate.length < 2 && !onDate.some((x) => x.slot === 'PM')
 })
+// 오전 세션에 매칭된 런의 종료시각(ISO). 더블 minGap 동적 안내(#462)의 기준 — 없으면(미수행) 일반 안내.
+function amSessionEndAt(am: ScheduledSession | null | undefined): string | null {
+  if (!am?.runId) return null
+  return runs.value.find((r) => r.id === am.runId)?.endAt ?? null
+}
+const activeDoubleAmEndAt = computed<string | null>(() => amSessionEndAt(activeSessions.value[0]))
 const doublesAddOpen = ref(false)
 const doublesAddTarget = ref<ScheduledSession | null>(null)
+const doublesAddAmEndAt = computed<string | null>(() => amSessionEndAt(doublesAddTarget.value))
 function openDoublesAdd(session: ScheduledSession | null) {
   if (!session) return
   doublesAddTarget.value = session
@@ -1241,6 +1248,7 @@ async function applyPhaseTransition() {
           v-else-if="isActiveDayDouble && (day.state === 'today' || day.state === 'future' || day.state === 'open' || day.state === 'missed')"
           :am-session="activeSessions[0]"
           :pm-session="activeSessions[1]"
+          :am-end-at="activeDoubleAmEndAt"
           :busy="intentBusy"
           @action="onDoublePanelAction"
         />
@@ -1424,6 +1432,7 @@ async function applyPhaseTransition() {
     <DoublesAddSheet
       :open="doublesAddOpen"
       :am-session="doublesAddTarget"
+      :am-end-at="doublesAddAmEndAt"
       :eligibility="doubleEligibility"
       :busy="intentBusy"
       @add="onDoublesAdd"
