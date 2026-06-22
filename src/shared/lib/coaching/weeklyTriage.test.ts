@@ -14,6 +14,7 @@ function session(overrides: Partial<ScheduledSession> & { date: string }): Sched
     date: overrides.date,
     phase: 'Base',
     sessionType: type,
+    slot: overrides.slot ?? null,
     keySession: key,
     prescription: { distanceKm: 8, durationMin: 48, paceRange: '', note: '' },
     status,

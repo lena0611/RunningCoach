@@ -11,6 +11,7 @@ function session(overrides: Partial<ScheduledSession>): ScheduledSession {
     date: '2026-02-10',
     phase: overrides.phase ?? 'Build',
     sessionType: overrides.sessionType ?? 'Tempo',
+    slot: overrides.slot ?? null,
     keySession: overrides.keySession ?? true,
     prescription: { ...defaultScheduledSessionPrescription(), distanceKm: overrides.prescription?.distanceKm ?? 8 },
     status: 'planned',

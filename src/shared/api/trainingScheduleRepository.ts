@@ -18,6 +18,7 @@ type ScheduledSessionRow = {
   session_date: string
   phase: ScheduledSession['phase']
   session_type: ScheduledSession['sessionType']
+  slot: ScheduledSession['slot']
   key_session: boolean
   prescription: unknown
   status: ScheduledSessionStatus
@@ -111,6 +112,7 @@ function toInsertRow(draft: ScheduledSessionDraft) {
     session_date: draft.date,
     phase: draft.phase,
     session_type: draft.sessionType,
+    slot: draft.slot ?? null,
     key_session: draft.keySession,
     prescription: draft.prescription,
     source: draft.source
@@ -125,6 +127,7 @@ function fromRow(row: ScheduledSessionRow): ScheduledSession {
     date: row.session_date,
     phase: row.phase,
     sessionType: row.session_type,
+    slot: row.slot ?? null,
     keySession: row.key_session,
     prescription: normalizeScheduledSessionPrescription(row.prescription),
     status: row.status,

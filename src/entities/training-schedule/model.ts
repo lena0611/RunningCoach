@@ -24,6 +24,12 @@ export type { TrainingPhaseName }
  */
 export type ScheduledSessionStatus = 'planned' | 'done' | 'superseded' | 'missed' | 'skipped'
 
+/**
+ * 같은 날 2세션(더블, #455)의 슬롯. null = 단일 세션 날(기본). 'AM' = 오전(강도/키), 'PM' = 오후(이지/회복).
+ * 강도 워크아웃은 AM, 둘째(PM)는 이지가 원칙(SSOT §같은 날 2세션). minGap 계산·표시·런 매칭 순서에 쓴다.
+ */
+export type SessionSlot = 'AM' | 'PM' | null
+
 /** generator: F2 골격 생성. realign: A1 재정렬. manual: 사용자/작전 바꾸기. */
 export type ScheduledSessionSource = 'generator' | 'realign' | 'manual'
 
@@ -46,6 +52,8 @@ export type ScheduledSession = {
   date: string
   phase: TrainingPhaseName
   sessionType: RunType
+  /** 같은 날 더블 슬롯(#455). null = 단일 세션 날. 'AM'(강도/키)·'PM'(이지). */
+  slot: SessionSlot
   /** 주기화 골격의 키 세션(Tempo/Long/TT 등). 재정렬 시 우선 보존. */
   keySession: boolean
   prescription: ScheduledSessionPrescription
@@ -63,6 +71,8 @@ export type ScheduledSessionDraft = {
   date: string
   phase: TrainingPhaseName
   sessionType: RunType
+  /** 더블 슬롯(#455). 단일 세션 생성(generator/realign)은 생략 → 저장 시 null. 더블 추가만 'AM'/'PM' 지정. */
+  slot?: SessionSlot
   keySession: boolean
   prescription: ScheduledSessionPrescription
   source: ScheduledSessionSource
@@ -111,7 +121,7 @@ function diffDays(a: string, b: string): number {
  */
 export function selectSessionForRun(
   sessions: ScheduledSession[],
-  run: { date: string; type?: RunType },
+  run: { date: string; type?: RunType; startAt?: string | null },
   windowDays = SCHEDULE_MATCH_WINDOW_DAYS
 ): ScheduledSession | null {
   const scored = sessions
@@ -119,13 +129,22 @@ export function selectSessionForRun(
     .map((session) => ({ session, gap: diffDays(session.date, run.date) }))
     .filter((entry) => Math.abs(entry.gap) <= windowDays)
   if (!scored.length) return null
-  // 같은 날짜에 세션이 여럿(더블)이어도 결정론적으로 고른다: 런 타입과 일치하는 세션 → 키세션 우선.
+  // 같은 날짜에 세션이 여럿(더블)이어도 결정론적으로 고른다.
   // (이전엔 동일날짜 tie 가 배열 순서 의존이라 엉뚱한 세션이 done 되고 실제 수행 세션이 planned 로 남았다.)
   const typeRank = (s: ScheduledSession) => (run.type && s.sessionType === run.type ? 0 : 1)
+  // 같은 날 더블(AM/PM)이면 런 시작 시각으로 슬롯을 가른다(결정 B: 시각 1순위, 동률 시 타입 폴백, #455).
+  // 오전(시작<12시) 런→AM 슬롯, 오후→PM 슬롯. startAt 없거나 단일(null slot)이면 중립(타입에 위임).
+  const runHour = run.startAt ? new Date(run.startAt).getHours() : null
+  const slotRank = (s: ScheduledSession) => {
+    if (runHour === null || !s.slot) return 1
+    const amRun = runHour < 12
+    return (amRun && s.slot === 'AM') || (!amRun && s.slot === 'PM') ? 0 : 1
+  }
   scored.sort(
     (x, y) =>
       Math.abs(x.gap) - Math.abs(y.gap) || // 가까운 날짜 우선
       x.gap - y.gap || // 동률이면 과거(미수행) 먼저
+      slotRank(x.session) - slotRank(y.session) || // 더블이면 런 시작 시각의 슬롯 우선
       typeRank(x.session) - typeRank(y.session) || // 런 타입과 일치하는 세션 우선
       Number(y.session.keySession) - Number(x.session.keySession) || // 키세션 우선
       x.session.date.localeCompare(y.session.date)
