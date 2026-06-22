@@ -2,7 +2,7 @@
  * 같은 날 2세션(더블/make-up) 코칭 로직 (#455).
  *
  * 두 번 뛰기는 볼륨을 늘리는 **고급 도구**이지 초보의 기본기가 아니다(SSOT §같은 날 2세션).
- * 이 모듈은 순수 로직만 둔다 — 영속/표시는 store·UI가, 네이티브 minGap 하드차단은 iOS가(Phase 4) 맡는다.
+ * 이 모듈은 순수 로직만 둔다 — 영속/표시는 store·UI가, 인앱 라이브 시작 둘째 세션의 minGap 강한 확인은 RacePage(웹)가 맡는다(#462).
  *
  *  - evaluateDoubleEligibility: 누가 더블을 받는가(경력·볼륨·부상·단일 quality 적응). 초보 앱이라 게이트는 강하게.
  *  - forcePmEasyType / buildPmEasyDraft: 둘째(PM)는 이지/회복 강제(quality는 AM, 일일 quality ≤1).
@@ -41,7 +41,7 @@ export const DOUBLE_MIN_WEEKLY_VOLUME_KM = 80
 export const DOUBLE_ACWR_CEILING = 1.5
 
 // ── 세션 간 최소 간격(minGap) ──────────────────────────────────────────────────
-/** 두 세션 간 하한(시간). 이보다 짧으면 회복·글리코겐 재합성 창 부족 → 네이티브 하드차단(Phase 4). */
+/** 두 세션 간 하한(시간). 이보다 짧으면 회복·글리코겐 재합성 창 부족 → 인앱 라이브 시작 시 강한 확인+오버라이드(#462, RacePage). */
 export const DOUBLE_MIN_GAP_HOURS = 5
 /** 권장 간격 하한(시간). 7~9시간이 최적(Marathon Handbook). */
 export const DOUBLE_RECOMMENDED_GAP_HOURS = 7
@@ -81,7 +81,8 @@ export type DoubleGapStatus = {
  * 같은 날 더블의 세션 간 간격을 동적으로 평가한다(#462 v1 — 웹 선제 안내).
  * 오전 런 종료시각(`amEndAt`)이 있으면 기준시각(`at`, 기본 now)까지 경과로 verdict 와
  * 권장 오후 시작 시각(오전 종료 +minGap / +권장)을 계산하고, 없으면 'planning' 을 돌려준다.
- * 순수 함수 — 표시는 UI. 실제 시작을 관측하는 하드 런타임 가드는 네이티브 후속이 맡는다(인앱 '시작' 이벤트 없음).
+ * 순수 함수 — 표시는 UI. 인앱 라이브 시작(RacePage)으로 시작하는 둘째 세션엔 이 verdict로 강한 확인을 띄운다
+ * (#462, 물리 차단 아님·오버라이드 허용). 워치 임포트 런은 인앱 '시작' 이벤트가 없어 안내만.
  */
 export function evaluateDoubleGap(input: { amEndAt: string | null | undefined; at?: Date }): DoubleGapStatus {
   const raw = input.amEndAt ?? null
