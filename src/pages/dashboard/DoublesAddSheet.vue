@@ -1,25 +1,30 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 import ScaleSlider from '@/shared/ui/ScaleSlider.vue'
 import type { ScheduledSession } from '@/entities/training-schedule/model'
 import { sessionTypeLabel } from '@/shared/lib/coaching/sessionBriefing'
+import { formatTime } from '@/shared/lib/format'
 import {
   DOUBLE_MIN_GAP_HOURS,
   DOUBLE_RECOMMENDED_GAP_HOURS,
   PM_DOUBLE_DEFAULT_DURATION_MIN,
+  evaluateDoubleGap,
   type DoubleEligibility
 } from '@/shared/lib/coaching/doubleSession'
 
 /**
  * 같은 날 더블(#455) 오후 이지 추가 시트. 진입 = 코치 자동제안 또는 수동(세션 행 '+오후 이지 추가').
  * 적격(evaluateDoubleEligibility)이면 시간 슬라이더 + minGap 안내 + 추가, 미달이면 차단 카드(결정 D).
- * 둘째는 항상 이지/회복(buildPmEasyDraft가 강제). 실제 시각 minGap 하드차단은 네이티브 Phase 4.
+ * 둘째는 항상 이지/회복(buildPmEasyDraft가 강제). minGap 안내는 오전 런 실제 종료시각 기준 동적(#462 v1);
+ * 실제 시작을 관측하는 하드 런타임 가드는 네이티브 후속.
  */
 const props = defineProps<{
   open: boolean
   /** PM 을 붙일 오전(기존) 세션. */
   amSession: ScheduledSession | null
+  /** 오전 세션에 매칭된 런의 종료시각(ISO). 있으면(이미 오전을 뜀) 권장 오후 시작 시각을 안내. */
+  amEndAt?: string | null
   eligibility: DoubleEligibility | null
   busy?: boolean
 }>()
@@ -28,6 +33,16 @@ const emit = defineEmits<{ add: [payload: { durationMin: number }]; close: [] }>
 
 const drag = useBottomSheetDrag(() => emit('close'))
 const durationMin = ref<number | null>(PM_DOUBLE_DEFAULT_DURATION_MIN)
+
+const gapNote = computed(() => {
+  const g = evaluateDoubleGap({ amEndAt: props.amEndAt })
+  if (g.phase === 'planning' || !g.amEndAt) {
+    return `오전 세션과 최소 ${DOUBLE_MIN_GAP_HOURS}시간(권장 ${DOUBLE_RECOMMENDED_GAP_HOURS}~9시간) 벌려요. 오전을 끝내면 권장 시작 시각을 알려드려요.`
+  }
+  const earliest = formatTime(g.earliestStartAt)
+  const optimal = formatTime(g.optimalStartAt)
+  return `오전 ${formatTime(g.amEndAt)} 종료 — 오후는 ${earliest} 이후(권장 ${optimal}~) 천천히 시작해요.`
+})
 
 watch(
   () => props.open,
@@ -94,7 +109,7 @@ function submit() {
             />
             <p class="gap-note">
               <span aria-hidden="true">⏱</span>
-              오전 세션과 최소 {{ DOUBLE_MIN_GAP_HOURS }}시간(권장 {{ DOUBLE_RECOMMENDED_GAP_HOURS }}~9시간) 벌려요. 실제 시작 시각 가드는 워치에서 막아요.
+              {{ gapNote }}
             </p>
             <div class="doubles-cta">
               <button type="button" class="doubles-primary" :disabled="busy" @click="submit">추가하기</button>

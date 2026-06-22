@@ -11,6 +11,7 @@ import {
   buildPmEasyDraft,
   classifyDoubleGap,
   evaluateDoubleEligibility,
+  evaluateDoubleGap,
   forcePmEasyType,
   type BuildDoubleSuggestionInput
 } from '@/shared/lib/coaching/doubleSession'
@@ -232,5 +233,39 @@ describe('buildDoubleSuggestion', () => {
   it('주 막판이 아니면(남은 날 >2) 제안 안 함', () => {
     const wed = new Date('2026-06-17T00:00:00') // 수요일 — 남은 날 5일
     expect(buildDoubleSuggestion(input({ today: wed, runs: runsForWeeklyKm(80, wed) }))).toBeNull()
+  })
+})
+
+describe('evaluateDoubleGap (실제 시각 기반 동적 안내, #462)', () => {
+  const amEnd = '2026-06-20T09:40:00'
+  const amEndMs = new Date(amEnd).getTime()
+
+  it('오전 런 미완료(amEndAt 없음/무효)면 planning — 시각 미정', () => {
+    for (const v of [null, undefined, '', 'not-a-date']) {
+      const g = evaluateDoubleGap({ amEndAt: v })
+      expect(g.phase).toBe('planning')
+      expect(g.verdict).toBeNull()
+      expect(g.earliestStartAt).toBeNull()
+    }
+  })
+
+  it('오전 종료 후 5h 미만이면 blocked + 권장 오후 시작 = 종료+5h/+7h', () => {
+    const g = evaluateDoubleGap({ amEndAt: amEnd, at: new Date('2026-06-20T12:00:00') }) // 2.33h 경과
+    expect(g.phase).toBe('measured')
+    expect(g.verdict).toBe('blocked')
+    expect(g.gapHours).toBeCloseTo(2.333, 2)
+    // earliest = 종료 + 5h, optimal = 종료 + 7h (TZ 무관하게 ms 차이로 검증)
+    expect(new Date(g.earliestStartAt!).getTime() - amEndMs).toBe(5 * 3_600_000)
+    expect(new Date(g.optimalStartAt!).getTime() - amEndMs).toBe(7 * 3_600_000)
+  })
+
+  it('5~7h 경과면 tight(빠듯 — 소프트 안내)', () => {
+    const g = evaluateDoubleGap({ amEndAt: amEnd, at: new Date('2026-06-20T15:00:00') }) // 5.33h
+    expect(g.verdict).toBe('tight')
+  })
+
+  it('7h 이상 경과면 ok(충분히 회복)', () => {
+    const g = evaluateDoubleGap({ amEndAt: amEnd, at: new Date('2026-06-20T17:00:00') }) // 7.33h
+    expect(g.verdict).toBe('ok')
   })
 })

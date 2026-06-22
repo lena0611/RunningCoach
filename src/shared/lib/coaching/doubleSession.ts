@@ -55,6 +55,52 @@ export function classifyDoubleGap(gapHours: number): DoubleGapVerdict {
   return 'ok'
 }
 
+const HOUR_MS = 3_600_000
+
+/**
+ * 세션 간 간격을 **오전 런 실제 종료시각 기준**으로 평가한 동적 안내 상태(Phase 4 #462).
+ *  - phase 'planning': 오전 런이 아직 안 끝남(amEndAt 없음) → 시각 미정, 일반 minGap 안내만.
+ *  - phase 'measured': 오전 종료시각 기준 경과·판정·권장 오후 시작 시각(하한/최적)을 계산.
+ * 시각은 ISO 문자열로 돌려준다(UI 의 formatTime 입력에 그대로 맞춤).
+ */
+export type DoubleGapStatus = {
+  phase: 'planning' | 'measured'
+  /** measured: 오전 종료~기준시각 경과(시간). planning: null. */
+  gapHours: number | null
+  /** measured: classifyDoubleGap 판정. planning: null. */
+  verdict: DoubleGapVerdict | null
+  /** 오전 종료 시각(ISO). measured만. */
+  amEndAt: string | null
+  /** 오후 시작 권장 하한 = 오전 종료 + minGap(ISO). measured만. */
+  earliestStartAt: string | null
+  /** 오후 시작 최적 = 오전 종료 + 권장 간격(ISO). measured만. */
+  optimalStartAt: string | null
+}
+
+/**
+ * 같은 날 더블의 세션 간 간격을 동적으로 평가한다(#462 v1 — 웹 선제 안내).
+ * 오전 런 종료시각(`amEndAt`)이 있으면 기준시각(`at`, 기본 now)까지 경과로 verdict 와
+ * 권장 오후 시작 시각(오전 종료 +minGap / +권장)을 계산하고, 없으면 'planning' 을 돌려준다.
+ * 순수 함수 — 표시는 UI. 실제 시작을 관측하는 하드 런타임 가드는 네이티브 후속이 맡는다(인앱 '시작' 이벤트 없음).
+ */
+export function evaluateDoubleGap(input: { amEndAt: string | null | undefined; at?: Date }): DoubleGapStatus {
+  const raw = input.amEndAt ?? null
+  const amEnd = raw ? new Date(raw) : null
+  if (!amEnd || !Number.isFinite(amEnd.getTime())) {
+    return { phase: 'planning', gapHours: null, verdict: null, amEndAt: null, earliestStartAt: null, optimalStartAt: null }
+  }
+  const at = input.at ?? new Date()
+  const gapHours = (at.getTime() - amEnd.getTime()) / HOUR_MS
+  return {
+    phase: 'measured',
+    gapHours,
+    verdict: classifyDoubleGap(gapHours),
+    amEndAt: amEnd.toISOString(),
+    earliestStartAt: new Date(amEnd.getTime() + DOUBLE_MIN_GAP_HOURS * HOUR_MS).toISOString(),
+    optimalStartAt: new Date(amEnd.getTime() + DOUBLE_RECOMMENDED_GAP_HOURS * HOUR_MS).toISOString()
+  }
+}
+
 /**
  * 더블을 추가해도 급성 부하상 안전한가. ACWR > DOUBLE_ACWR_CEILING(1.5)면 위험 → 추가 보류
  * (더블은 부하를 압축하므로 ACWR 가드 적용 — SSOT §부상 연계). 만성 기반이 빈약해 ACWR 산출 불가(null)면
