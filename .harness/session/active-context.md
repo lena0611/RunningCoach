@@ -6,14 +6,16 @@
 > 하네스 본체의 개발 기록이 아닙니다. 설치된 프로젝트의 현재 작업 맥락만 기록합니다.
 > 상세 인수인계는 (있으면) 프로젝트 루트 `HANDOFF.md`. 장기 지식은 에이전트 메모리.
 
-## ⭐ 현재 작업 — 제안훈련 응답 + 주간 정산 + 주 고정 뷰(#454) 배포 완료, 검증·정리 단계 (2026-06-20)
-- **완료·라이브**: 미래 카드 **포기(skipped 신설)·조정·되돌리기·오늘로 가져오기** + 전제 **주간 정산**(닫힌 주만 missed 확정 — `settleClosedWeeks` 단일소유·weekStart 경계, `detectScheduleDeviation` 경계도 weekStart, realign 확정책임 제거) + **데이-스트립 월~일 고정+주 페이징**. PR **#454** main 머지(`94331e7`) + **마이그레이션 `202606190001` 원격 배포 확인**. harness:check(607+vue-tsc build) 통과. 메모리 [[schedule-response-and-weekly-settlement]].
-  - 충돌은 v1에서 **스왑**으로만. 같은 날 더블/N세션 + 네이티브 6h minGap은 **후속 #455** 분리. 아키텍처 래칫(#397)은 코칭 타입을 `periodizedSchedule` 재노출 경유로 받아 83 유지.
-- **직전·라이브**: #402 코칭 인간화(coach-run 서사 코치·v106), `#전문코치리뷰` 트리거 + 코칭 SSOT 선독 의무 + commit-msg `Coach-Review` 게이트. 메모리 [[coach-not-data-referee]], [[professional-coach-review-trigger]].
-- **다음**: ① **#454 나머지 플로우 실렌더 스팟체크**(주 페이징·다른날로/스왑·포기 잔존·주말 트리아지 — 되돌리기는 확인됨) → 통과 시 에픽 #362 마무리 ② **#359** 토요일(오늘 6/20) LSD 실주행 스모크 후 close ③ #307 인터뷰 스모크·#374 실기기 ④ grill 백로그 정리.
+## ⭐ 현재 작업 — 같은 날 더블 웹(#455) + minGap 웹 동적 안내(#462 v1) 배포 완료 (2026-06-22)
+- **완료·라이브 — #455 더블 웹(Phase 1~3)**: slot 모델(AM/PM)·런매칭·적격 게이트(경력36mo·볼륨80km·active부상·단일quality·ACWR≤1.5)·PM 이지 강제·코치 자동제안·UI(캐러셀 ×2 배지·더블 패널·추가 시트·차단 카드). 마이그레이션 `202606220001`(slot 칼럼) 원격 배포.
+- **완료·라이브 — #462 v1**: 더블 세션 간 minGap을 **오전 런 실제 종료시각 기준 웹 동적 안내**(`evaluateDoubleGap`: 종료+5h 하한/+7h 최적 권장 오후 시작 + blocked/tight/ok 색). 더블 패널·추가 시트 gap 바 동적화. harness:check(test **649**+build) 통과. 컴포넌트 렌더 테스트 추가(레포 첫 .vue 마운트). 메모리 [[schedule-response-and-weekly-settlement]].
+  - **설계 전환(#462)**: 웹엔 일반 훈련 세션 '시작' 이벤트 없음(워치→HealthKit import) → enterRace 하드차단 불가. v1=웹 안내만(인터랙티브 차단 없음), **진짜 시작 감지 하드가드는 네이티브 후속 #462(재오픈·OPEN)**. SSOT minGap "두 단계"로 정합, decision-log 2026-06-22.
+  - ⚠ **머지 사고 교훈**: #463 스쿼시 머지가 파일 누락(24→11파일) → #464 롤포워드 복구. **이후 모든 머지는 트리 검증**(`git diff <branch-tip> origin/main` 빈결과) **필수**, 의심 시 `--merge`. 메모리 [[pr-squash-merge-race-verify-tree]].
+- **직전·라이브**: #454 제안훈련 응답+주간정산+주 고정 뷰(`94331e7`), #402 코칭 인간화(v106), `#전문코치리뷰` + 코칭 SSOT 선독 의무 + commit-msg `Coach-Review` 게이트. 메모리 [[coach-not-data-referee]], [[professional-coach-review-trigger]].
+- **다음**: ① **#462 네이티브 하드가드**(슬롯 실시각화·`LiveRunTracker.start()` 가드·종료시각 영속·브리지 원자 동시변경·수동 Xcode) ② 실기기 시각 스팟체크(#455 더블 카드·#462 동적 gap 바 색감 — 렌더 로직은 컴포넌트 테스트로 검증됨, 적격 더블 생기면) ③ **#454 나머지 플로우** 스팟체크 → 에픽 #362 마무리 ④ #359 토 LSD 스모크·#307 인터뷰·#374 실기기 ⑤ grill 백로그 정리.
 
 ## 현재 상태
-- updatedAt: 2026-06-20
+- updatedAt: 2026-06-22
 - baseHarness / activeStack / harnessMode: `.harness/policy/profile.json` 참고
 - 코칭 작업 시 `.harness/project/professional-coach-review-trigger.md` 강제(SSOT 선독→배치 시 그릴→커밋 게이트).
 
