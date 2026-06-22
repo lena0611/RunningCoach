@@ -146,6 +146,49 @@ describe('inferRunType', () => {
       heartRateModel: hrModel
     })).toBe('Steady Long')
   })
+
+  it('infers LSD for a long easy run moved off Saturday when time-on-feet is long (>=80min), even under 12km', () => {
+    // 11.4km / 1:31:33(≈8:02/km=482s) — 토요일 LSD를 일요일로 옮겨 뛴 케이스. 거리는 12km 미만이지만
+    // 발 위 시간이 ~91분이라 명백한 롱런. 요일·12km에 걸려 Easy로 떨어지면 안 된다(running-coaching-standards.md:91).
+    expect(inferRunType({
+      date: '2026-05-03', // 일요일(2026-05-02 토요일의 다음 날)
+      distanceKm: 11.4,
+      avgPaceSec: 482,
+      avgHeartRate: 138,
+      laps: buildLongRunLaps([
+        [485, 136],
+        [483, 137],
+        [482, 137],
+        [481, 138],
+        [480, 138],
+        [482, 138],
+        [481, 139],
+        [480, 139],
+        [482, 138],
+        [481, 139],
+        [480, 139]
+      ]),
+      fastSegments: [],
+      metricSamples: [],
+      weeklyPattern: ['일요일: LSD'],
+      heartRateModel: hrModel
+    })).toBe('LSD')
+  })
+
+  it('keeps a mid-length easy run as Easy off Saturday when time-on-feet is under the long-run threshold', () => {
+    // 10.5km / 73.5분(420s/km) — 12km 미만 + 80분 미만 + 비토요일이면 롱런 신호가 없으므로 Easy 유지(과분류 가드).
+    expect(inferRunType({
+      date: '2026-05-04', // 월요일
+      distanceKm: 10.5,
+      avgPaceSec: 420,
+      avgHeartRate: 138,
+      laps: [],
+      fastSegments: [],
+      metricSamples: [],
+      weeklyPattern: ['월요일: Easy'],
+      heartRateModel: hrModel
+    })).toBe('Easy')
+  })
 })
 
 function buildStrideSamples(): RunMetricSample[] {

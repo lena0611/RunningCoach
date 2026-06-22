@@ -132,3 +132,33 @@ export function selectSessionForRun(
   )
   return scored[0].session
 }
+
+/**
+ * 라벨 재추론(reinferMislabeledLongRuns) 후, 이미 done 으로 연결된 런이 같은 윈도우 안에서
+ * **새 타입과 정확히 일치하는** 활성(planned/missed) 세션을 만나면 그 세션을 돌려준다(없으면 null).
+ * 매칭 재연결(repoint)에 쓴다 — 같은 날 Easy(잘못 done)+LSD(missed) 더블을 LSD 쪽으로 옮기는 치유.
+ * **정확 타입 일치가 있을 때만** 동작하므로 결정론·멱등이다(재연결 후엔 연결 세션 타입이 맞아 다시 트리거되지 않음).
+ * excludeSessionId 는 현재 잘못 연결된(done) 세션 — 그 자신은 후보에서 뺀다(active 도 아니지만 방어적으로).
+ */
+export function selectBetterTypeMatchForRun(
+  sessions: ScheduledSession[],
+  run: { date: string; type?: RunType },
+  excludeSessionId: string,
+  windowDays = SCHEDULE_MATCH_WINDOW_DAYS
+): ScheduledSession | null {
+  if (!run.type) return null
+  const scored = sessions
+    .filter(isActiveSession)
+    .filter((session) => session.id !== excludeSessionId && session.sessionType === run.type)
+    .map((session) => ({ session, gap: diffDays(session.date, run.date) }))
+    .filter((entry) => Math.abs(entry.gap) <= windowDays)
+  if (!scored.length) return null
+  scored.sort(
+    (x, y) =>
+      Math.abs(x.gap) - Math.abs(y.gap) || // 가까운 날짜 우선
+      x.gap - y.gap || // 동률이면 과거(미수행) 먼저
+      Number(y.session.keySession) - Number(x.session.keySession) || // 키세션 우선
+      x.session.date.localeCompare(y.session.date)
+  )
+  return scored[0].session
+}
