@@ -1,3 +1,10 @@
+<!-- harness-managed:start -->
+<!--
+  이 블록은 공통 하네스(harness-seed)가 소유하며 harness:update가 자동 갱신합니다.
+  블록 안(harness-managed:start ~ harness-managed:end)은 직접 수정하지 마세요. 다음 업데이트 때 본체 정본으로 다시 채워집니다.
+  프로젝트 고유 지침은 이 블록 "아래"(harness-managed:end 다음)에 작성하면 업데이트와 무관하게 영구 보존됩니다.
+  관리 블록 기준과 프로젝트 영역 지침이 충돌하면 .harness/project/standards-layers.md의 "충돌 해석 순서"를 따릅니다.
+-->
 # CLAUDE
 
 이 파일이 모든 에이전트의 기준 진입점입니다. 사내 표준 에이전트는 Claude입니다.
@@ -27,13 +34,8 @@
 - `.harness/project/local-methodology.md`
 - `.harness/project/standards-layers.md`
 - `.harness/project/domain-rules.md`
-- `.harness/project/running-coaching-standards.md` (코칭 동작·처방·브리핑·피드백 작업 시 **구현 전 필수 선행**)
-- `.harness/project/running-injury-knowledge.md` (부상·통증 관련 코칭 작업 시 **구현 전 필수 선행**)
 - `.harness/project/architecture-rules.md`
-- `.harness/project/ui-guidelines.md` (UI/화면/컴포넌트/스타일/레이아웃 작업 시 **구현 전 필수 선행**)
-- `.harness/project/ui-system-contract.md` (UI 토큰·공유 컴포넌트 1차 강제 계약 — UI 작업 시 먼저 읽는다)
 - `.harness/project/workflow-rules.md`
-- `.harness/project/professional-coach-review-trigger.md` (`#전문코치리뷰` 트리거 시 필수)
 - `.harness/project/commit-push-rules.md`
 - `.harness/project/stack-preset-rules.md`
 - `.harness/project/template-contract.md`
@@ -42,18 +44,6 @@
 - `.harness/skills/README.md`
 - `.harness/documentation/README.md`
 - `.harness/stacks/README.md`
-
-## 채팅 트리거
-- 사용자가 채팅에 **`#전문코치리뷰`**(또는 `#전문코치 리뷰`, `#코치리뷰`)라고 입력하면 `.harness/project/professional-coach-review-trigger.md` 프로토콜을 실행합니다. 방금/현재 문맥의 코칭 작업이 딥리서치의 권위 있는 코치 의도와 부합하는지, 사용자(초보 러너) 요청에 휘둘려 전문 코치라면 안 할 선택을 하지 않았는지 도메인 교차검증합니다. **코드 리뷰가 아닙니다**(코드 품질은 `/codex`).
-- **코칭 작업 기본 절차(예외 없이)**: 코칭 동작/지식(coach-run, sessionQuality/sessionBriefing 등 `src/shared/lib/coaching`, CoachMessage, 처방·브리핑·피드백)을 건드리는 작업은 **코드를 짜기 전에 먼저** 코치 SSOT(`running-coaching-standards.md`, 부상 관련 시 `running-injury-knowledge.md`)와 관련 메모리를 읽습니다. 사용자 요청이 권위 코치 의도와 배치되면 **구현 전에** 사용자와 그릴(사전 조율)합니다. 필요한 코치 지식이 SSOT에 없으면 심층 리서치로 확보→SSOT 적재 후 진행합니다. 이건 권장이 아니라 기본값입니다.
-- **코칭 도메인 커밋 게이트(강제)**: 코칭 도메인 파일이 스테이징되면 `commit-msg` 훅이 커밋 메시지의 `Coach-Review:` 트레일러를 요구합니다. #전문코치리뷰 수행 후 배치되면 그릴(커밋 보류), 통과면 `Coach-Review: pass — <근거/출처>`(비코칭 기계 변경은 `Coach-Review: n/a — <사유>`)를 답니다.
-
-## 모노레포 구조 (#250)
-- 이 repo는 **웹 + 네이티브(iOS) 모노레포**입니다. 웹은 repo root(`src/`, `vite.config.ts`, `.harness/` 등 그대로), 네이티브는 `native/`(`native/RunningCoach.xcodeproj`, Swift 소스, 브리지)에 있습니다.
-- **단일 `.git`/단일 origin.** 웹과 네이티브 변경을 **하나의 commit/PR로 원자적**으로 한다 — 특히 `runContext*` 브리지 계약은 웹 `src/features/*/*Bridge.ts`와 네이티브 `native/RunningCoach/RunContextWebView.swift`를 **동시 변경**한다.
-- 네이티브 빌드 검증은 harness:check 대상이 아니라 **수동(Xcode/`xcodebuild`)** 입니다. native 변경은 critical-path 수동 검증 경로로 다룹니다.
-- worktree는 단일 `.git` 기준으로 만들고, iOS 작업도 같은 worktree의 `native/` 하위에서 합니다.
-- 과거 별도 네이티브 repo(`RunningCoach-Native-Swift`)는 archive됨. DeviceCheck 보안 강화는 보류(#248).
 
 ## 기준
 - 하네스 본체는 `.harness/`에 있습니다.
@@ -75,3 +65,29 @@
 - 실제 업무 진행을 개발자에게 보고할 때는 원시 내부 추론이 아니라 `[harness] request/context/impact/action/decision/verify` 형태의 visible trace로 요약합니다. 단순 질문 응답, 잡담, 메타 확인처럼 업무 진행 보고가 아닌 턴에는 이 형식을 강요하지 않습니다.
 - 에이전트 작업에서는 로컬 git hook 설치 여부와 무관하게 기준 계층을 따릅니다. 다만 완료 승인 전에는 무거운 검증과 side effect 있는 작업을 실행하지 않습니다. 승인 후 최종화 단계에서 `최종 검증만` 요청은 직접 검사, `커밋/푸시` 요청은 설치된 hook 검사에 맡겨 중복 실행을 피합니다.
 - 새 프로젝트 방향이 비어 있으면 구현보다 `.harness/project/bootstrap.md` 인터뷰를 먼저 진행합니다.
+<!-- harness-managed:end -->
+
+<!--
+  이 줄 아래는 프로젝트 소유 영역입니다. 프로젝트 고유의 에이전트 진입 지침(아키텍처 경계, 읽기 순서 예외, 워크플로우 보충 등)을 자유롭게 작성하세요.
+  harness:update는 위 harness-managed 블록만 갱신하고 이 영역은 보존합니다.
+-->
+
+## 작업별로 골라 읽는 추가 기준 (프로젝트 전용 — 위 managed 블록의 "작업별로 골라 읽는 기준"에 더한다)
+- `.harness/project/running-coaching-standards.md` (코칭 동작·처방·브리핑·피드백 작업 시 **구현 전 필수 선행**)
+- `.harness/project/running-injury-knowledge.md` (부상·통증 관련 코칭 작업 시 **구현 전 필수 선행**)
+- `.harness/project/ui-guidelines.md` (UI/화면/컴포넌트/스타일/레이아웃 작업 시 **구현 전 필수 선행**)
+- `.harness/project/ui-system-contract.md` (UI 토큰·공유 컴포넌트 1차 강제 계약 — UI 작업 시 먼저 읽는다)
+- `.harness/project/professional-coach-review-trigger.md` (`#전문코치리뷰` 트리거 시 필수)
+
+## 채팅 트리거
+- 사용자가 채팅에 **`#전문코치리뷰`**(또는 `#전문코치 리뷰`, `#코치리뷰`)라고 입력하면 `.harness/project/professional-coach-review-trigger.md` 프로토콜을 실행합니다. 방금/현재 문맥의 코칭 작업이 딥리서치의 권위 있는 코치 의도와 부합하는지, 사용자(초보 러너) 요청에 휘둘려 전문 코치라면 안 할 선택을 하지 않았는지 도메인 교차검증합니다. **코드 리뷰가 아닙니다**(코드 품질은 `/codex`).
+- **코칭 작업 기본 절차(예외 없이)**: 코칭 동작/지식(coach-run, sessionQuality/sessionBriefing 등 `src/shared/lib/coaching`, CoachMessage, 처방·브리핑·피드백)을 건드리는 작업은 **코드를 짜기 전에 먼저** 코치 SSOT(`running-coaching-standards.md`, 부상 관련 시 `running-injury-knowledge.md`)와 관련 메모리를 읽습니다. 사용자 요청이 권위 코치 의도와 배치되면 **구현 전에** 사용자와 그릴(사전 조율)합니다. 필요한 코치 지식이 SSOT에 없으면 심층 리서치로 확보→SSOT 적재 후 진행합니다. 이건 권장이 아니라 기본값입니다.
+- **코칭 도메인 커밋 게이트(강제)**: 코칭 도메인 파일이 스테이징되면 `commit-msg` 훅이 커밋 메시지의 `Coach-Review:` 트레일러를 요구합니다. #전문코치리뷰 수행 후 배치되면 그릴(커밋 보류), 통과면 `Coach-Review: pass — <근거/출처>`(비코칭 기계 변경은 `Coach-Review: n/a — <사유>`)를 답니다.
+
+## 모노레포 구조 (#250)
+- 이 repo는 **웹 + 네이티브(iOS) 모노레포**입니다. 웹은 repo root(`src/`, `vite.config.ts`, `.harness/` 등 그대로), 네이티브는 `native/`(`native/RunningCoach.xcodeproj`, Swift 소스, 브리지)에 있습니다.
+- **단일 `.git`/단일 origin.** 웹과 네이티브 변경을 **하나의 commit/PR로 원자적**으로 한다 — 특히 `runContext*` 브리지 계약은 웹 `src/features/*/*Bridge.ts`와 네이티브 `native/RunningCoach/RunContextWebView.swift`를 **동시 변경**한다.
+- 네이티브 빌드 검증은 harness:check 대상이 아니라 **수동(Xcode/`xcodebuild`)** 입니다. native 변경은 critical-path 수동 검증 경로로 다룹니다.
+- worktree는 단일 `.git` 기준으로 만들고, iOS 작업도 같은 worktree의 `native/` 하위에서 합니다.
+- 과거 별도 네이티브 repo(`RunningCoach-Native-Swift`)는 archive됨. DeviceCheck 보안 강화는 보류(#248).
+
