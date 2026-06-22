@@ -94,12 +94,26 @@ const dynamicArtifactPrefixes = [
   '.github/templates/.applied/',
 ]
 
+// 본체(seed-mode) 전용 문서. 소비자 프로젝트에는 배포되지 않으므로 document-registry에 등록하지 않는다.
+// 본체 저장소에는 파일이 존재하지만 registry 미등록이 정상이므로 orphan으로 보지 않는다.
+// (init.mjs의 SEED_ONLY_DOC_PATHS와 동기화 — 한쪽을 바꾸면 다른 쪽도 함께 갱신)
+const seedOnlyDocs = new Set([
+  '.harness/project/body-release-checklist.md',
+])
+
 function toPosix(p) {
   return p.split(path.sep).join('/')
 }
 
 function exists(rel) {
   if (dynamicArtifactPaths.has(rel)) {
+    return true
+  }
+
+  // seed-only 문서는 소비자 프로젝트에 배포되지 않으므로(소비자엔 부재가 정상),
+  // 다른 문서가 이 경로를 링크/코드경로로 참조해도 broken으로 보지 않는다.
+  // 본체에는 실제 존재하므로 본체 검사에도 영향이 없다.
+  if (seedOnlyDocs.has(rel)) {
     return true
   }
 
@@ -199,6 +213,10 @@ function findOrphans(registered) {
       continue
     }
 
+    if (seedOnlyDocs.has(file)) {
+      continue
+    }
+
     if (file.startsWith('.github/ISSUE_TEMPLATE/')) {
       continue
     }
@@ -227,6 +245,27 @@ function findMissingFromRegistry(registered) {
 
 const linkPattern = /\[[^\]]*\]\(([^)\s]+)\)/g
 const codePathPattern = /`((?:src|scripts|\.github|\.harness|\.claude|\.githooks)\/[A-Za-z0-9_./-]+)`/g
+
+// 백틱 코드 경로 중 "특정 파일 참조"가 아니라 무결성 검사 대상에서 빼야 하는 경로를 판별한다.
+// - glob/생략(`*`, `...`)은 패턴 표기.
+// - trailing slash(`.github/workflows/`, `.harness/policy/`)는 "이런 위치를 보라"는 디렉토리 예시이지 파일 링크가 아니다.
+// - `.github/workflows/` 하위는 본체 CI 어댑터 경로다. 소비자 프로젝트에는 기본 주입되지 않으므로(소비자 환경엔 없을 수 있음) 검사하지 않는다.
+//   본체에선 실제 존재하므로 검사해도 통과하지만, 소비자에서의 환경 의존 오탐을 없애기 위해 항상 제외한다.
+export function isIgnorableCodePath(target) {
+  if (target.includes('*') || target.includes('...')) {
+    return true
+  }
+
+  if (target.endsWith('/')) {
+    return true
+  }
+
+  if (target.startsWith('.github/workflows/')) {
+    return true
+  }
+
+  return false
+}
 
 function stripFence(text) {
   return text.replace(/```[\s\S]*?```/g, '')
@@ -279,7 +318,7 @@ function findBrokenLinks() {
     for (const match of text.matchAll(codePathPattern)) {
       const target = match[1]
 
-      if (target.includes('*') || target.includes('...')) {
+      if (isIgnorableCodePath(target)) {
         continue
       }
 
@@ -389,4 +428,7 @@ function main() {
   }
 }
 
-main()
+// 직접 실행할 때만 검사를 돌린다. 테스트가 isIgnorableCodePath를 import할 때는 부작용이 없어야 한다.
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+  main()
+}

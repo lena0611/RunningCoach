@@ -200,10 +200,9 @@
       "owner": "ai-standard/harness-seed",
       "source": {
         "type": "local",
-        "path": ".harness/policy/sync-protocol.md"
+        "path": ".harness/project/portability-guide.md"
       },
       "documents": [
-        ".harness/policy/sync-protocol.md",
         ".harness/project/portability-guide.md",
         "README.md"
       ],
@@ -219,7 +218,6 @@
       ],
       "triggerPaths": [
         "scripts/init.mjs",
-        "scripts/test-init.mjs",
         ".harness/bin/update-harness.mjs",
         ".harness/bin/apply-stack.mjs",
         ".harness/policy/profile.json",
@@ -245,10 +243,10 @@
       "owner": "ai-standard/harness-seed",
       "source": {
         "type": "local",
-        "path": ".harness/policy/sync-protocol.md"
+        "path": ".harness/project/portability-guide.md"
       },
       "documents": [
-        ".harness/policy/sync-protocol.md"
+        ".harness/project/portability-guide.md"
       ],
       "ownedAreas": [
         "scripts/init.mjs",
@@ -466,7 +464,6 @@
         ".harness/skills/**",
         ".harness/bin/build-context.mjs",
         ".harness/documentation/context-registry.json",
-        ".harness/documentation/document-registry.json",
         "CLAUDE.md",
         "AGENTS.md"
       ],
