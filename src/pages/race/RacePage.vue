@@ -11,6 +11,8 @@ import type { AnnounceConfig, PeriodicAnnounceKind } from '@/features/live-run/l
 import type { LiveGapPayload, LiveTickPayload } from '@/features/live-run/liveRunBridge'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import ListRow from '@/shared/ui/ListRow.vue'
+import { formatTime } from '@/shared/lib/format'
+import { evaluateDoubleGap, type DoubleGapStatus } from '@/shared/lib/coaching/doubleSession'
 
 type Step = 'setup' | 'live' | 'summary'
 type RaceMode = 'solo' | 'crew'
@@ -46,6 +48,9 @@ const lastSettings = ref<RaceSettings | null>(null)
 const started = ref(false)
 const countdown = ref<number | null>(null)
 let countdownTimer: ReturnType<typeof setTimeout> | null = null
+// 같은 날 둘째 세션 minGap 강한 확인(#462) — 직전 런이 5h 이내 종료면 회복 권고 후 '그래도 시작' 오버라이드 허용.
+const gapConfirm = ref<DoubleGapStatus | null>(null)
+let gapOverridden = false
 
 const distances = computed(() => listDistanceOptions(runStore.selectedUserRuns))
 const selectedDistanceM = ref<number | null>(null)
@@ -175,6 +180,8 @@ function enterRace() {
   resultRecorded.value = false
   started.value = false
   countdown.value = null
+  gapConfirm.value = null
+  gapOverridden = false
   if (live.available) {
     live.start({
       sessionId: `live-${Date.now()}`,
@@ -190,9 +197,25 @@ function enterRace() {
 // GPS 확보 후 사용 가능. ['ok','weak'] 신호 틱이 오면 준비 완료. 브리지 없으면(미리보기) 허용.
 const gpsReady = computed(() => !live.available || ['ok', 'weak'].includes(live.tick.value?.signalState ?? ''))
 
+// 직전(가장 최근 종료) 런 기준 같은 날 둘째 세션 간격을 평가한다. 5h 창이 곧 '같은 날 둘째'를
+// 의미하므로 종료 후 5h가 지났으면 verdict='ok' 라 확인이 뜨지 않는다(날짜키/타임존 매칭 불필요).
+function evaluateSecondRunGap(): DoubleGapStatus {
+  const lastEndAt = runStore.sortedRuns.find((r) => r.endAt)?.endAt ?? null
+  return evaluateDoubleGap({ amEndAt: lastEndAt })
+}
+
 // 명시적 '시작' → 3·2·1 카운트다운 후 실제 측정 시작(begin).
 function beginCountdown() {
   if (countdown.value !== null || started.value || !gpsReady.value) return
+  // 같은 날 둘째 세션 회복 간격(minGap) 강한 확인 — 물리 차단이 아니라 회복 권고 + '그래도 시작'
+  // 오버라이드(코치 SSOT §같은 날 2세션: minGap은 안내, 성인 런 물리 차단 금지).
+  if (!gapOverridden) {
+    const gap = evaluateSecondRunGap()
+    if (gap.verdict === 'blocked') {
+      gapConfirm.value = gap
+      return
+    }
+  }
   countdown.value = 3
   const tick = () => {
     if (countdown.value === null) return
@@ -211,6 +234,17 @@ function startTracking() {
   started.value = true
   racedAtStart.value = new Date().toISOString() // 결과↔RunLog 근접 매칭의 1차 키(#233)
   if (live.available) live.begin() // 준비된 GPS 세션에서 클럭·측정 시작
+}
+
+// minGap 확인에서 '그래도 시작' — 오버라이드 후 카운트다운 재진입(코치 톤: 막지 않고 존중).
+function proceedDespiteGap() {
+  gapConfirm.value = null
+  gapOverridden = true
+  beginCountdown()
+}
+
+function dismissGapConfirm() {
+  gapConfirm.value = null
 }
 
 // 시작 시점 선택된 상대를 타겟 PB 로 캡처. '없음'(자유 TT)이면 null → 태깅만, 결과 미생성.
@@ -261,6 +295,8 @@ function resetRace() {
   racedAtStart.value = ''
   resultRecorded.value = false
   started.value = false
+  gapConfirm.value = null
+  gapOverridden = false
   clearCountdown()
   step.value = 'setup'
 }
@@ -474,6 +510,25 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
       </Transition>
     </Teleport>
 
+    <!-- 같은 날 둘째 세션 minGap 강한 확인(#462) — 물리 차단이 아니라 회복 권고 + '그래도 시작' 오버라이드 -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="gapConfirm" class="race-gap-confirm" role="dialog" aria-modal="true" aria-labelledby="gap-confirm-title">
+          <div class="gap-confirm-card">
+            <h3 id="gap-confirm-title" class="gap-confirm-title">회복할 시간이에요</h3>
+            <p class="gap-confirm-body">
+              마지막 런이 끝난 지 얼마 안 됐어요. 회복과 재충전을 위해 보통 <strong>5시간 이상</strong> 쉬는 걸 권해요.<template v-if="gapConfirm.optimalStartAt"> 가장 좋은 건 <strong>{{ formatTime(gapConfirm.optimalStartAt) }}</strong> 이후예요.</template>
+              그래도 지금 시작할까요?
+            </p>
+            <div class="gap-confirm-actions">
+              <button type="button" class="race-btn secondary" @click="dismissGapConfirm">조금 더 쉬기</button>
+              <button type="button" class="race-btn danger" @click="proceedDespiteGap">그래도 시작</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
     <!-- 2차 스택: 레이싱 설정 -->
     <Teleport to="body">
       <Transition name="stack-page">
@@ -659,6 +714,14 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
 }
 .fade-enter-active, .fade-leave-active { transition: opacity 160ms ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+/* 같은 날 둘째 세션 minGap 강한 확인 오버레이(#462) */
+.race-gap-confirm { position: fixed; inset: 0; z-index: 1160; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(6px); }
+.gap-confirm-card { width: 100%; max-width: 360px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 18px; padding: 22px 20px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3); }
+.gap-confirm-title { margin: 0 0 8px; font-size: 1.12rem; font-weight: 800; color: var(--color-text); }
+.gap-confirm-body { margin: 0 0 18px; font-size: 0.95rem; line-height: 1.55; color: var(--color-muted); }
+.gap-confirm-body strong { color: var(--color-text); font-weight: 700; }
+.gap-confirm-actions { display: flex; gap: 10px; }
 
 .summary-title { font-size: 1.5rem; font-weight: 700; color: var(--color-text); }
 .summary-grid { display: flex; flex-direction: column; gap: 0; }
