@@ -622,8 +622,15 @@ export function buildWeekSummary(
   const start = startOfDay(today)
   const { start: startStr, end: endStr } = trainingWeekRange(today)
 
+  // rested(선언한 휴식, #473) 제외 — 안 그러면 휴식 주의 처방 km/핵심 세션이 주간 요약 헤더에 잡혀
+  // weekMission(isActiveSession 기반)과 같은 주의 볼륨이 어긋나고, 쉬는 주를 "약 N km" 로 닦달한다.
   const week = sessions.filter(
-    (s) => s.date >= startStr && s.date <= endStr && s.status !== 'superseded' && s.status !== 'skipped'
+    (s) =>
+      s.date >= startStr &&
+      s.date <= endStr &&
+      s.status !== 'superseded' &&
+      s.status !== 'skipped' &&
+      s.status !== 'rested'
   )
   if (!week.length) return null
 
