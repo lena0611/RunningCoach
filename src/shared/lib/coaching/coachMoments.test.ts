@@ -112,4 +112,16 @@ describe('collectCoachMoments', () => {
     expect(moments.some((m) => m.kind === 'load-spike')).toBe(false)
     expect(moments.some((m) => m.kind === 'extra-run')).toBe(true)
   })
+
+  it('더블 제안 신호가 주입되면 double-suggest 모먼트(추가 행동 포함, #455)', () => {
+    const m = collectCoachMoments(ctx({ doubleSuggestion: { backlogLabel: '월요일 Easy', amDayLabel: '오늘 Tempo' } })).find((x) => x.kind === 'double-suggest')
+    expect(m).toBeTruthy()
+    expect(m!.message).toContain('월요일 Easy')
+    expect(m!.message).toContain('오늘 Tempo')
+    expect(m!.action?.kind).toBe('open-doubles-add')
+  })
+
+  it('더블 제안 신호가 없으면 double-suggest 비노출', () => {
+    expect(collectCoachMoments(ctx({})).some((m) => m.kind === 'double-suggest')).toBe(false)
+  })
 })

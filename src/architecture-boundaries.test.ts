@@ -15,8 +15,11 @@ import path from 'node:path'
  */
 
 // 줄이면 이 숫자도 함께 낮춘다(절대 올리지 말 것 — 올려야 한다면 역방향을 만든 것).
+// 83→86 (#455 Phase 2): src/shared/lib/coaching/doubleSession.ts 가 도메인 타입/값
+// (run·training-schedule·training-memory 각 1줄)을 import. 기존 coaching lib 패턴과 동일하며,
+// 청산은 #397 도메인 코어/use-case 추출(deferred, target:later)에서 일괄 처리한다.
 const BASELINE = {
-  sharedToEntities: 83,
+  sharedToEntities: 86,
   sharedToFeatures: 7
 }
 

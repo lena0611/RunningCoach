@@ -14,6 +14,7 @@ import {
   insertTrainingSessions,
   markPastPlannedMissed,
   supersedeSessionsFrom,
+  updateScheduledSessionSlot,
   updateScheduledSessionStatus
 } from '@/shared/api/trainingScheduleRepository'
 
@@ -31,10 +32,17 @@ export const useTrainingScheduleStore = defineStore('trainingScheduleStore', {
     loadedGoalId: null as string | null | undefined
   }),
   getters: {
-    /** 날짜별 활성(planned/missed) 세션 1건 조회. */
-    sessionOnDate(state) {
-      return (date: string): ScheduledSession | null =>
-        state.sessions.find((s) => s.date === date && isActiveSession(s)) ?? null
+    /** 날짜별 활성(planned/missed) 세션 전부(AM→PM→단일 정렬). 같은 날 더블(#455) 표시·충돌 판정에 쓴다. */
+    sessionsOnDate(state) {
+      const slotRank = (s: ScheduledSession) => (s.slot === 'AM' ? 0 : s.slot === 'PM' ? 1 : 2)
+      return (date: string): ScheduledSession[] =>
+        state.sessions
+          .filter((s) => s.date === date && isActiveSession(s))
+          .sort((a, b) => slotRank(a) - slotRank(b))
+    },
+    /** 날짜별 활성 세션 1건(하위호환 — 더블이면 AM 우선). */
+    sessionOnDate(): (date: string) => ScheduledSession | null {
+      return (date: string) => this.sessionsOnDate(date)[0] ?? null
     },
     /** 오늘 이후의 계획 세션(날짜 오름차순). */
     upcoming(state) {
@@ -107,6 +115,33 @@ export const useTrainingScheduleStore = defineStore('trainingScheduleStore', {
       if (!isSupabaseConfigured) return
       for (const id of supersedeIds) await this.setStatus(id, 'superseded')
       await this.insertMany(drafts)
+    },
+    /**
+     * 같은 날 더블(#455): 기존 세션(amSessionId → AM)에 오후 PM 세션을 덧붙인다.
+     * - 기존 세션 slot 이 null 이면 'AM' 으로 표시(런 매칭 시각 우선 — 결정 B).
+     * - pmDraft 를 slot 'PM' 으로 insert.
+     * 구조 불변식만 강제한다: **같은 날·중복 PM 금지·N≥3 금지**(같은 날 활성 PM 이 이미 있으면 no-op).
+     * **PM=이지 강제·적격 게이트는 호출부(coaching lib: buildPmEasyDraft / evaluateDoubleEligibility)** 책임 —
+     * store↔coaching 의존을 피한다(settleClosedWeeks 가 weekStart 를 주입받는 것과 같은 경계).
+     * 추가 못 하면(미설정/대상 없음/중복) null 반환.
+     */
+    async addDouble(amSessionId: string, pmDraft: ScheduledSessionDraft): Promise<ScheduledSession | null> {
+      if (!isSupabaseConfigured) return null
+      const am = this.sessions.find((s) => s.id === amSessionId)
+      if (!am || am.status === 'superseded') return null
+      if (pmDraft.date !== am.date) return null // 같은 날만 더블
+      // 중복 PM / 트리플 가드: 같은 날 활성(폐기·포기 아님) PM 이 이미 있으면 막는다(N≥3 보류).
+      const hasActivePm = this.sessions.some(
+        (s) => s.date === am.date && s.slot === 'PM' && s.status !== 'superseded' && s.status !== 'skipped'
+      )
+      if (hasActivePm) return null
+      // 기존 단일 세션을 AM 으로 표시(이미 슬롯이 있으면 보존).
+      if (am.slot === null) {
+        const updatedAm = await updateScheduledSessionSlot(am.id, 'AM')
+        this.replace(updatedAm)
+      }
+      const [created] = await this.insertMany([{ ...pmDraft, slot: 'PM' }])
+      return created ?? null
     },
     /** 작전 되돌리기: 변경본(modified)을 superseded 로 비우고 원본(superseded)을 planned 로 복원. */
     async revert(modifiedId: string, originalId: string): Promise<void> {

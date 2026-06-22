@@ -19,6 +19,8 @@ const props = defineProps<{
   methodSlug?: string
   /** 변경(쉽게/어렵게)된 세션이면 코치의 원래 제안 라벨(예: "Tempo 8km"). 있으면 원본 표시+되돌리기 노출. */
   originalLabel?: string | null
+  /** 적격이면 '오후 이지 추가'(같은 날 더블, #455) 수동 진입 노출(결정 D — 미달이면 숨김). */
+  canAddDouble?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -29,6 +31,7 @@ const emit = defineEmits<{
   skip: []
   reschedule: []
   revert: []
+  'add-double': []
 }>()
 
 const evidenceOpen = ref(false)
@@ -125,6 +128,9 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
             건너뛰기
           </button>
         </div>
+        <button v-if="canAddDouble" type="button" class="brief-add-double" :disabled="busy" @click="emit('add-double')">
+          ＋ 오후 이지 추가 (같은 날 더블)
+        </button>
       </template>
     </footer>
 
@@ -379,5 +385,21 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
 
 .brief-skip {
   color: var(--color-warning-text, var(--color-muted));
+}
+
+.brief-add-double {
+  padding: 9px 12px;
+  border-radius: var(--radius-button, 12px);
+  border: 1px dashed var(--color-primary);
+  background: var(--color-primary-soft, rgba(34, 160, 107, 0.1));
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: none;
+}
+.brief-add-double:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 </style>

@@ -14,12 +14,12 @@ import type { ChronicLoadTrend } from '@/shared/lib/runStats'
 import { analyzeExtraRunTrend, buildExtraRunInquiry } from '@/shared/lib/coaching/extraRunTrend'
 import { isRunningLoadGroup, PAIN_GROUP_LABEL, type PainGroup } from '@/features/post-run-interview/buildInterviewRunPatch'
 
-export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'extra-run' | 'goal-progress' | 'goal-feasibility' | 'time-trial' | 'weekend-triage'
+export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'extra-run' | 'goal-progress' | 'goal-feasibility' | 'time-trial' | 'weekend-triage' | 'double-suggest'
 
 /** 모먼트가 제안하는 행동(전용 시트 열기 등). 트레이니 확인 후 실행. */
 export type CoachMomentAction = {
   label: string
-  kind: 'open-injury-screening' | 'open-weekend-triage'
+  kind: 'open-injury-screening' | 'open-weekend-triage' | 'open-doubles-add'
 }
 export type CoachMomentSentiment = 'positive' | 'neutral' | 'caution'
 
@@ -75,6 +75,11 @@ export type CoachMomentContext = {
   goalFeasibility?: { feasible: boolean; message: string | null } | null
   /** 최근 한계 시험(TT) 결과(#411) — VDOT·등급 갱신 계기. 측정→승급 연결 메시지. daysAgo 작을 때만 노출. */
   timeTrialResult?: { daysAgo: number; nextClassLabel: string | null; gatePercent: number | null; eligible: boolean } | null
+  /**
+   * 같은 날 더블(#455) 자동제안 — 현재 주 '열린 장부' 따라잡기. buildDoubleSuggestion 결과를 라벨만 주입.
+   * 적격 미달·트리아지 오버플로 구간이면 caller 가 null 로 둔다(더블 비제안). 주말 트리아지의 자매 갈래.
+   */
+  doubleSuggestion?: { backlogLabel: string; amDayLabel: string } | null
 }
 
 type Detector = (ctx: CoachMomentContext) => CoachMoment | null
@@ -233,12 +238,31 @@ function detectWeekendTriage(ctx: CoachMomentContext): CoachMoment | null {
   }
 }
 
+/**
+ * 같은 날 더블(#455) 자동제안 — 적격 러너의 따라잡기. 주말 트리아지(놓아주기)의 직전 구간:
+ * "더블로 살릴 수 있을 때" 오후 이지를 붙이자고 부드럽게 제안한다. 닦달 금지(거절 가능).
+ * caller(buildDoubleSuggestion)가 적격·백로그·간격을 다 판단해 신호를 주입했을 때만 노출.
+ */
+function detectDoubleSuggestion(ctx: CoachMomentContext): CoachMoment | null {
+  const d = ctx.doubleSuggestion
+  if (!d) return null
+  return {
+    key: 'double-suggest',
+    kind: 'double-suggest',
+    priority: 54, // 주말 트리아지(55) 바로 아래 — 둘은 조건상 상호배타(따라잡기 가능 vs 오버플로).
+    icon: '🔁',
+    message: `이번 주가 빠듯한데, ${d.backlogLabel}을 ${d.amDayLabel} 뒤 오후 이지로 붙여 따라잡을 수 있어요(오전 강도 + 오후 이지). 둘째는 회복이 목적이라 천천히 — 두 세션은 최소 5시간(권장 7~9시간) 벌려요.`,
+    action: { label: '오후 이지 더블 추가', kind: 'open-doubles-add' }
+  }
+}
+
 const DETECTORS: Detector[] = [
   detectInjury,
   detectLoadSpike,
   detectPainFollowup,
   detectDeviation,
   detectWeekendTriage,
+  detectDoubleSuggestion,
   detectTimeTrialResult,
   detectGoalFeasibility,
   detectExtraRun,
