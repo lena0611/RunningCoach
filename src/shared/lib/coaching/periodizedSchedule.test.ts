@@ -1,6 +1,26 @@
 import { describe, expect, it } from 'vitest'
 import type { AthleteProfile, TrainingGoal } from '@/entities/training-memory/model'
-import { allocatePhases, assessGoalFeasibility, buildPeriodizedSchedule, buildSteadyWeeklyRhythm, goalArchetype, trainingWeekRange } from '@/shared/lib/coaching/periodizedSchedule'
+import { defaultScheduledSessionPrescription, type ScheduledSession } from '@/entities/training-schedule/model'
+import { allocatePhases, assessGoalFeasibility, buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, trainingWeekRange } from '@/shared/lib/coaching/periodizedSchedule'
+
+function session(overrides: Partial<ScheduledSession> & { date: string }): ScheduledSession {
+  return {
+    id: overrides.id ?? overrides.date,
+    userId: 'u1',
+    goalId: overrides.goalId ?? 'g1',
+    date: overrides.date,
+    phase: overrides.phase ?? 'Base',
+    sessionType: overrides.sessionType ?? 'Easy',
+    slot: overrides.slot ?? null,
+    keySession: overrides.keySession ?? false,
+    prescription: overrides.prescription ?? defaultScheduledSessionPrescription(),
+    status: overrides.status ?? 'planned',
+    source: overrides.source ?? 'generator',
+    runId: overrides.runId ?? null,
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z'
+  }
+}
 
 function goal(overrides: Partial<TrainingGoal>): TrainingGoal {
   return {
@@ -311,5 +331,22 @@ describe('assessGoalFeasibility (#395)', () => {
   it('이미 목표 피크 이상이면 feasible', () => {
     const f = assessGoalFeasibility({ goal: goal({ targetDate: '2026-03-01', distanceKm: 10 }), profile: profile({}), today, currentWeeklyKm: 60 })
     expect(f.feasible).toBe(true)
+  })
+})
+
+describe('buildWeekSummary — rested 제외 (#473)', () => {
+  const today = new Date('2026-01-15T00:00:00') // 목요일, 주=월 01-12~일 01-18
+  const rx = (km: number) => ({ distanceKm: km, durationMin: null, paceRange: '', note: '' })
+
+  it('rested(선언한 휴식) 세션은 주간 요약 km·핵심 카운트에서 빠진다 — 쉬는 주를 "약 N km" 로 닦달 안 함', () => {
+    const sessions = [
+      session({ date: '2026-01-13', sessionType: 'Easy', prescription: rx(6) }), // planned 6km
+      session({ date: '2026-01-15', sessionType: 'Tempo', keySession: true, prescription: rx(10), status: 'rested' }),
+      session({ date: '2026-01-17', sessionType: 'LSD', keySession: true, prescription: rx(15), status: 'rested' })
+    ]
+    const summary = buildWeekSummary(sessions, today, null, 'performance')
+    expect(summary).not.toBeNull()
+    expect(summary!.weekKm).toBe(6) // rested 10+15 제외, planned 6만
+    expect(summary!.keyCount).toBe(0) // rested 핵심 2개 제외
   })
 })

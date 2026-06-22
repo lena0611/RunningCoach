@@ -60,7 +60,9 @@ function toDateOnly(d: Date): string {
 
 /**
  * 플랜이 처방한 "이번 주"(오늘부터 7일) 볼륨과 대표 단계를 요약한다. 앵커 드리프트 판정용.
- * superseded 제외(planned+완료 포함). 대표 단계는 가장 이른 세션의 phase.
+ * superseded/skipped/rested 제외(planned+완료 포함). 대표 단계는 가장 이른 세션의 phase.
+ * rested(선언한 휴식, #473)는 처방 볼륨에서 빼야 한다 — 안 그러면 실주행이 0인데 plannedWeeklyKm 만 높아
+ * 앵커 드리프트 'down' 으로 "주행량이 줄어 다시 짰어요" 재정렬이 발동(휴식을 실패처럼 닦달, 자가모순).
  */
 function summarizeUpcomingWeek(
   sessions: ScheduledSession[],
@@ -71,7 +73,14 @@ function summarizeUpcomingWeek(
   end.setDate(end.getDate() + 7)
   const endStr = toDateOnly(end)
   const week = sessions
-    .filter((s) => s.date >= startStr && s.date < endStr && s.status !== 'superseded' && s.status !== 'skipped')
+    .filter(
+      (s) =>
+        s.date >= startStr &&
+        s.date < endStr &&
+        s.status !== 'superseded' &&
+        s.status !== 'skipped' &&
+        s.status !== 'rested'
+    )
     .sort((a, b) => a.date.localeCompare(b.date))
   if (!week.length) return { plannedWeeklyKm: null, upcomingPhase: null }
   const plannedWeeklyKm = week.reduce((sum, s) => sum + (s.prescription?.distanceKm ?? 0), 0)

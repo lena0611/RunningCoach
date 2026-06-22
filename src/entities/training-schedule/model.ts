@@ -21,8 +21,11 @@ export type { TrainingPhaseName }
  * missed: **닫힌 주**(이번 주 월요일 이전)에 미수행으로 확정(수동적 — 주간 정산이 부여).
  * skipped: 사용자가 **의도적으로 포기**(능동적 선택). missed 와 달리 사용자 의사다.
  *   missed/skipped 둘 다 active 아님(런 매칭·주간 미션 집계 제외), 단 UI 카드는 계속 보이고 재시도(reschedule) 가능.
+ * rested: 사용자가 **선언한 휴식 기간**의 세션(#473, SSOT §휴식과 복귀). 의도된 회복이며 **missed 아님**.
+ *   active/planned 아님 → 주간 정산(missed 확정)·트리아지·재정렬·런 매칭·미션 집계에서 자동 제외(닦달 차단).
+ *   "쉬는 건 실패가 아니다" — 경고색·취소선 없이 차분히 표시한다.
  */
-export type ScheduledSessionStatus = 'planned' | 'done' | 'superseded' | 'missed' | 'skipped'
+export type ScheduledSessionStatus = 'planned' | 'done' | 'superseded' | 'missed' | 'skipped' | 'rested'
 
 /**
  * 같은 날 2세션(더블, #455)의 슬롯. null = 단일 세션 날(기본). 'AM' = 오전(강도/키), 'PM' = 오후(이지/회복).
@@ -103,9 +106,17 @@ export function isPlannedSession(session: ScheduledSession): boolean {
   return session.status === 'planned' && !session.runId
 }
 
-/** 재정렬·대체 대상이 되는 활성 세션(planned/missed)인가. superseded/done/skipped 는 제외. */
+/** 재정렬·대체 대상이 되는 활성 세션(planned/missed)인가. superseded/done/skipped/rested 는 제외. */
 export function isActiveSession(session: ScheduledSession): boolean {
   return session.status === 'planned' || session.status === 'missed'
+}
+
+/**
+ * 사용자가 선언한 휴식 기간의 세션인가(#473). active/planned 아님 — 닦달 경로에서 자동 제외되지만,
+ * UI(차분한 💤 표시·복귀 배너)는 이 술어로 rested 를 명시적으로 인지한다(generic rest 와 구분).
+ */
+export function isRestedSession(session: ScheduledSession): boolean {
+  return session.status === 'rested'
 }
 
 /** 런↔세션 매칭 허용 윈도우(일). SessionIntent 매처와 동일(±1) — 하루 늦게/일찍 한 세션도 인정. */

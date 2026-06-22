@@ -122,6 +122,30 @@ export async function markPastPlannedMissed(goalId: string | null, beforeDate: s
   return (data ?? []).length
 }
 
+/**
+ * 휴식 선언(#473): [startDate, endDate] (양끝 포함) 구간의 **미수행** 세션(planned/missed, run 미연결)을
+ * 'rested' 로 일괄 전환한다. done/superseded/skipped 는 건드리지 않는다(실제 결과·사용자 의사 보존).
+ * missed 도 포함해 전환 — 과거에 missed 로 확정된 날이 선언 구간에 들어오면 닦달 흔적을 회복으로 정리한다.
+ * goalId scoping 은 supersedeSessionsFrom 과 동일. 영향받은 행 수를 반환.
+ */
+export async function markSessionsRested(
+  goalId: string | null,
+  startDate: string,
+  endDate: string
+): Promise<number> {
+  let query = requireSupabase()
+    .from('training_schedule')
+    .update({ status: 'rested', run_id: null, updated_at: new Date().toISOString() })
+    .gte('session_date', startDate)
+    .lte('session_date', endDate)
+    .in('status', ['planned', 'missed'])
+    .is('run_id', null)
+  query = goalId ? query.eq('goal_id', goalId) : query.is('goal_id', null)
+  const { data, error } = await query.select('id')
+  if (error) throw error
+  return (data ?? []).length
+}
+
 function toInsertRow(draft: ScheduledSessionDraft) {
   return {
     goal_id: draft.goalId,

@@ -23,9 +23,10 @@ function toDateOnly(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
-/** 하드/키로 카운트되는 살아있는 세션(폐기·포기 제외). 완료+계획 모두 그 주의 하드 부하다. */
+/** 하드/키로 카운트되는 살아있는 세션(폐기·포기·휴식 제외). 완료+계획 모두 그 주의 하드 부하다. */
 function isCountedHard(s: ScheduledSession): boolean {
-  if (s.status === 'superseded' || s.status === 'skipped' || s.status === 'missed') return false
+  // rested(선언한 휴식, #473)는 하드 부하 아님 — 안 그러면 휴식 중에 "이번 주 강한 세션이 이미 N개" 오경고.
+  if (s.status === 'superseded' || s.status === 'skipped' || s.status === 'missed' || s.status === 'rested') return false
   return s.keySession || isHardType(s.sessionType)
 }
 

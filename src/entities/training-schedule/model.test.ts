@@ -3,6 +3,7 @@ import {
   defaultScheduledSessionPrescription,
   isActiveSession,
   isPlannedSession,
+  isRestedSession,
   normalizeScheduledSessionPrescription,
   selectBetterTypeMatchForRun,
   selectSessionForRun,
@@ -64,6 +65,14 @@ describe('isPlannedSession / isActiveSession', () => {
     expect(isActiveSession(session({ status: 'done' }))).toBe(false)
     expect(isActiveSession(session({ status: 'superseded' }))).toBe(false)
   })
+
+  it('rested(선언한 휴식, #473)는 active 도 planned 도 아니다 — 닦달·매칭에서 자동 제외', () => {
+    const rested = session({ status: 'rested' })
+    expect(isActiveSession(rested)).toBe(false) // 재정렬·대체 대상 아님
+    expect(isPlannedSession(rested)).toBe(false) // upcoming/미수행 후보 아님
+    expect(isRestedSession(rested)).toBe(true) // UI 는 이 술어로 명시 인지
+    expect(isRestedSession(session({ status: 'planned' }))).toBe(false)
+  })
 })
 
 describe('selectSessionForRun (런↔세션 매칭, 어제 빠진 세션 따라잡기)', () => {
@@ -81,6 +90,11 @@ describe('selectSessionForRun (런↔세션 매칭, 어제 빠진 세션 따라�
   it('윈도우 밖이면 매칭 없음 = 진짜 엑스트라 런', () => {
     const sessions = [session({ id: 'far', date: '2026-06-16' })]
     expect(selectSessionForRun(sessions, { date: '2026-06-20' })).toBeNull()
+  })
+
+  it('rested(선언한 휴식) 세션엔 런이 매칭되지 않는다(#473) — 쉬는 날 뛰어도 그 세션을 done 으로 안 바꾼다', () => {
+    const sessions = [session({ id: 'rest', date: '2026-06-16', status: 'rested' })]
+    expect(selectSessionForRun(sessions, { date: '2026-06-16' })).toBeNull()
   })
 
   it('과거 미수행을 미래 세션보다 먼저 따라잡음(동률 시)', () => {

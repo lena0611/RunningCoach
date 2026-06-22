@@ -13,6 +13,7 @@ import {
   fetchTrainingSchedule,
   insertTrainingSessions,
   markPastPlannedMissed,
+  markSessionsRested,
   supersedeSessionsFrom,
   updateScheduledSessionSlot,
   updateScheduledSessionStatus
@@ -106,6 +107,28 @@ export const useTrainingScheduleStore = defineStore('trainingScheduleStore', {
     /** 사용자가 세션을 의도적으로 포기(skipped). active 제외 — 단 UI 카드는 계속 보이고 재시도 가능. */
     async skip(id: string): Promise<void> {
       await this.setStatus(id, 'skipped')
+    },
+    /**
+     * 범용 휴식 선언(#473, SSOT §휴식과 복귀): [startDate, endDate] (양끝 포함) 구간의 미수행 세션
+     * (planned/missed, run 미연결)을 'rested' 로 일괄 전환한다. 부상·날씨·개인 일정 등 이유 무관.
+     * rested 는 active/planned 아니므로 정산·트리아지·재정렬·런 매칭이 자동으로 건드리지 않는다(닦달 차단).
+     * done/superseded/skipped 는 보존. 영향받은 세션 수를 반환(없으면 0). 휴식 기간 메타(이유·복귀일)는
+     * 별도(memoryStore.activeRest)에 저장한다 — 이 액션은 스케줄 레이어의 상태 전환만 담당한다.
+     */
+    async declareRest(goalId: string | null, startDate: string, endDate: string): Promise<number> {
+      if (!isSupabaseConfigured) return 0
+      const affected = await markSessionsRested(goalId, startDate, endDate)
+      this.sessions.forEach((s) => {
+        if (
+          s.date >= startDate &&
+          s.date <= endDate &&
+          (s.status === 'planned' || s.status === 'missed') &&
+          !s.runId
+        ) {
+          s.status = 'rested'
+        }
+      })
+      return affected
     },
     /**
      * 세션 조정/이동/스왑: 원본(들)을 superseded 로 비우고 새 날짜 draft(들)을 insert.

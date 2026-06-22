@@ -58,11 +58,13 @@ describe('weeklyHardLoadGuard', () => {
     expect(weeklyHardLoadGuard(sessions, thursday, 4, 'cur').hardCount).toBe(1)
   })
 
-  it('폐기·포기·결손 세션은 하드로 안 센다', () => {
+  it('폐기·포기·결손·휴식 세션은 하드로 안 센다', () => {
     const sessions = [
       session({ date: '2026-01-12', sessionType: 'Tempo', status: 'superseded' }),
       session({ date: '2026-01-13', sessionType: 'Tempo', status: 'skipped' }),
-      session({ date: '2026-01-14', sessionType: 'Tempo', status: 'missed' })
+      session({ date: '2026-01-14', sessionType: 'Tempo', status: 'missed' }),
+      // rested(선언한 휴식, #473): 휴식 중에 "이번 주 강한 세션이 이미 N개" 오경고가 뜨면 안 된다.
+      session({ date: '2026-01-15', sessionType: 'Tempo', status: 'rested' })
     ]
     expect(weeklyHardLoadGuard(sessions, thursday, 4).hardCount).toBe(0)
   })
@@ -82,6 +84,16 @@ describe('weekEndTriage', () => {
     expect(t!.saveSession.id).toBe('lsd') // 키(롱런) 보호
     expect(t!.releaseSessions.map((s) => s.id).sort()).toEqual(['e1', 'e2']) // 과거 밀린 이지만
     expect(t!.message).toBeTruthy()
+  })
+
+  it('rested(선언한 휴식, #473) 과거 세션은 백로그가 아니다 — 트리아지로 놓아주라고 닦달하지 않는다', () => {
+    // 일요일. 과거 due 가 전부 rested(선언한 휴식)면 backlog=0 → 트리아지 비노출.
+    const sessions = [
+      session({ id: 'r1', date: '2026-01-15', sessionType: 'Easy', status: 'rested' }),
+      session({ id: 'r2', date: '2026-01-16', sessionType: 'Easy', status: 'rested' }),
+      session({ id: 'r3', date: '2026-01-17', sessionType: 'LSD', status: 'rested' })
+    ]
+    expect(weekEndTriage(sessions, sunday)).toBeNull()
   })
 
   it('정상 미래 세션은 백로그로 안 센다(놓아주라고 하지 않음)', () => {

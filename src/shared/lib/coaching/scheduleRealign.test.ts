@@ -165,6 +165,18 @@ describe('detectScheduleDeviation', () => {
     expect(dev.anchorDrift).toBe(false)
     expect(dev.shouldRealign).toBe(false)
   })
+
+  it('rested(선언한 휴식, #473)는 닫힌 주에 있어도 미수행 누락으로 세지 않는다', () => {
+    const sessions = [
+      session({ date: '2026-01-05', status: 'rested' }),
+      session({ date: '2026-01-07', status: 'rested' }),
+      session({ date: '2026-01-09', status: 'rested', keySession: true })
+    ]
+    const dev = detectScheduleDeviation(sessions, today)
+    expect(dev.missedCount).toBe(0)
+    expect(dev.missedKeyCount).toBe(0)
+    expect(dev.shouldRealign).toBe(false)
+  })
 })
 
 describe('buildRealignedSchedule', () => {
@@ -173,6 +185,21 @@ describe('buildRealignedSchedule', () => {
     const plan = buildRealignedSchedule(sessions, goal(), profile(), today)
     expect(plan.drafts).toEqual([])
     expect(plan.fromDate).toBe('2026-01-15')
+  })
+
+  it('휴식 선언 주(rested)는 처방 볼륨에서 빠져 앵커 드리프트 닦달이 발동하지 않는다(#473)', () => {
+    // 향후 7일이 전부 rested(선언한 휴식). 실주행이 거의 0이어도 rested 처방 km 가 plannedWeeklyKm 에
+    // 안 잡혀 down 드리프트("주행량이 줄어 다시 짰어요")가 발동하지 않아야 한다 — 휴식을 실패로 닦달 금지.
+    const restRx = { distanceKm: 8, durationMin: 50, paceRange: '', note: '' }
+    const sessions = [
+      session({ date: '2026-01-16', status: 'rested', prescription: restRx }),
+      session({ date: '2026-01-18', status: 'rested', prescription: restRx }),
+      session({ date: '2026-01-20', status: 'rested', prescription: restRx })
+    ]
+    const plan = buildRealignedSchedule(sessions, goal({ targetDate: '2026-04-15' }), profile(), today, 1)
+    expect(plan.deviation.anchorDrift).toBe(false)
+    expect(plan.deviation.shouldRealign).toBe(false)
+    expect(plan.drafts).toEqual([])
   })
 
   it('재정렬 시 오늘부터 목표일 고정 골격 재생성(source=realign)', () => {
