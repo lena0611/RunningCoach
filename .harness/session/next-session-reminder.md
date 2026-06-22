@@ -5,18 +5,18 @@
 `project-memory.md`, `.harness/project/workflow-rules.md`, `decision-log.md`를 우선합니다.
 > 상세 인수인계가 있으면 프로젝트 루트 `HANDOFF.md`를 먼저 본다.
 
-## ⭐ 현재 위치 (2026-06-22) — 같은 날 더블(#455) + minGap #462 완료(웹 강한 확인) — 네이티브 하드가드 불필요로 정리
-- **#455 더블 웹(Phase 1~3)** 라이브: slot 모델(AM/PM)·런매칭·적격 게이트(경력36mo·볼륨80km·부상·단일quality·ACWR≤1.5)·PM 이지 강제·코치 자동제안·UI(캐러셀 ×2 배지·더블 패널·추가 시트·차단 카드). 마이그레이션 `202606220001`(slot) 배포.
-- **#462 완료** 라이브(PR #469 `ecd9b57`): 더블 minGap = ① v1 웹 동적 안내(`evaluateDoubleGap` 종료+5h/+7h·blocked/tight/ok 색) + ② **최종 웹 강한 확인**. 네이티브 하드가드는 **불필요로 정리** — 인앱 관측 가능한 '시작'은 라이브 트래킹(`RacePage` 셀프레이스)뿐 + 더블 PM은 워치 import라 네이티브가 가로챌 지점 없음 → 시작을 직접 일으키는 웹에서 `RacePage.beginCountdown`이 직전 종료 런 `blocked`(<5h)면 회복 권고 오버레이('조금 더 쉬기'/'그래도 시작'). 결정=AskUserQuestion(범위=인앱 라이브 시작에만/강도=강한 확인+오버라이드). 메모리 [[schedule-response-and-weekly-settlement]].
-  - ⚠ **머지 사고**: #463 스쿼시가 파일 누락(24→11)→#464 롤포워드 복구. **이후 머지는 트리 검증 필수**(`git diff <tip> origin/main` 빈결과), 의심 시 `--merge`. 메모리 [[pr-squash-merge-race-verify-tree]].
-- 직전: #454(제안훈련 응답+주간정산+주 고정 뷰 `94331e7`), #402 코칭 인간화(v106), `#전문코치리뷰` + 코칭 SSOT 선독 의무 + commit-msg `Coach-Review` 게이트. 메모리 [[coach-not-data-referee]], [[professional-coach-review-trigger]].
+## ⭐ 현재 위치 (2026-06-23) — 휴식/복귀 기능(#473) 설계·SSOT 적재 완료, Phase 1 구현 대기
+- **#473 범용 휴식+복귀 코칭** 설계 확정(부상/장마/개인 일정 휴식·**기간 사용자 지정**·**닦달 차단**). 딥리서치(복귀 프로토콜, 적대검증)→SSOT 적재(PR#474: `running-coaching-standards.md §휴식과 복귀`·`running-injury-knowledge.md §3-B`). 이슈 #473 3단계(P1 MVP/P2 복귀램프/P3 에픽). **P1 구현 미착수 = 다음 1순위.** 설계·복귀 프로토콜 전부 메모리 [[rest-and-return-coaching]].
+- 이번 세션 머지 라이브: **#462 더블 minGap 웹 강한 확인**(PR#469, RacePage — 인앱 라이브 시작에만·강한 확인+오버라이드, 네이티브 하드가드 불필요로 정리) → **#455 에픽 클로즈** / **공통 하네스 0.2.70**(PR#471, 진입파일 마커 머지) + **루트 CLAUDE.md 마커 마이그레이션**(PR#472) / 로컬 브랜치 38→2 정리·레거시 worktree 2개 제거.
+- 직전 라이브: #454(제안훈련 응답+주간정산+주 고정 뷰), #402 코칭 인간화. `#전문코치리뷰`+코칭 SSOT 선독 의무+commit-msg `Coach-Review` 게이트. 메모리 [[coach-not-data-referee]], [[professional-coach-review-trigger]], [[schedule-response-and-weekly-settlement]].
+  - ⚠ **머지 규칙**: squash 후 `git diff <tip> origin/main` 빈결과 트리 검증 필수(#463 24→11 누락 사고), 의심 시 `--merge`. [[pr-squash-merge-race-verify-tree]].
 
 ## 다음 1순위
-1. **실기기 시각 스팟체크** — #462 강한 확인 오버레이(셀프레이스로 같은 날 둘째 시작 시) + #455 더블 카드(배지·패널·추가 시트·차단 카드) + #462 동적 gap 바 색감. 신기능이라 *적격+같은날 직전 런*이라야 떠서 자연스럽게 생길 때(렌더 로직은 컴포넌트 테스트로 검증됨, 위험 낮음).
-2. **#454 나머지 플로우 실렌더 스팟체크** — 주 페이징·다른날로/스왑·포기 잔존·주말 트리아지. 통과면 에픽 #362 마무리.
-3. **#359**(롱런 네거티브 스플릿+토큰 노출) — 코드·배포 완료, 토 LSD 실주행 스모크만 남음.
-4. **#307 인터뷰 스모크**(HealthKit 새 임포트 직후 트리거, 실데이터 필요)·**#374** 주기화·개러지 캐러셀 실기기.
-5. **grill 설계 백로그 정리** — 게이트 이슈(#260·#397·#411/#398/#408/#279/#375)·메모리-only 비전(요약탭 개러지·분석 3계층·IA 개편·능동소통) → `needs:design-grill` 라벨/메모리 통합.
+1. **#473 Phase 1 구현(휴식 선언 + 닦달 차단)** — `rested` 상태 신설(+DB CHECK 마이그, skipped `202606190001` 선례)→settle/triage/realign이 `planned`만 보므로 자동 닦달 제외 / `declareRest(start, days|until, reason?)` store 액션(범용·부상 무관) / 차분 주간카드(💤 칩 + "쉬는 중 D-N" 배너 + 복귀일 조정/지금 복귀) / 코치 톤("푹 쉬세요")+대안1회 / 복귀 정리. **PR 2~3개 분할(코어=데이터+store+차단 먼저).** 코칭 도메인→`Coach-Review`. 설계·복귀 프로토콜 전부 [[rest-and-return-coaching]]·SSOT §휴식과 복귀·§3-B. (착수 전 기존 감사 anchor: model.ts:25 status enum, trainingScheduleStore skip(id):106, settleClosedWeeks:99, scheduleRealign detectScheduleDeviation:90, weeklyTriage:88, DashboardPage carousel state:259, WeekTrainingCarousel.)
+2. **실기기 시각 스팟체크** — #462 강한 확인 오버레이(셀프레이스로 같은 날 둘째 시작 시) + #455 더블 카드 + 동적 gap 바(자연 발생 시, 위험 낮음).
+3. **#454 나머지 플로우 실렌더 스팟체크** — 주 페이징·다른날로/스왑·포기 잔존·주말 트리아지. 통과면 에픽 #362 마무리.
+4. **#359**(롱런 네거티브 스플릿) 토 LSD 스모크 · **#307** 인터뷰 스모크 · **#374** 주기화·개러지 실기기.
+5. **grill 설계 백로그 정리** — 게이트 이슈(#260·#397·#411/#398/#408/#279/#375)·메모리-only 비전 → `needs:design-grill` 라벨/메모리 통합.
 6. (이슈 미등록) 네이티브 fast-segment 임계 5:45→5:50 튜닝(수동 Xcode).
 
 ## 먼저 확인할 것
