@@ -10,6 +10,7 @@ function session(overrides: Partial<ScheduledSession>): ScheduledSession {
     date: overrides.date ?? '2026-01-16',
     phase: overrides.phase ?? 'Base',
     sessionType: overrides.sessionType ?? 'Tempo',
+    slot: overrides.slot ?? null,
     keySession: overrides.keySession ?? false,
     prescription: overrides.prescription ?? { distanceKm: 8, durationMin: 48, paceRange: '5:10~5:35/km', note: '본 템포 20분' },
     status: overrides.status ?? 'planned',

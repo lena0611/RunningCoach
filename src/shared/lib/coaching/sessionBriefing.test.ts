@@ -9,6 +9,7 @@ function session(overrides: Partial<ScheduledSession>): ScheduledSession {
     id: 's1', userId: 'u1', goalId: 'g1', date: '2026-02-10',
     phase: overrides.phase ?? 'Base',
     sessionType: overrides.sessionType ?? 'Easy + Strides',
+    slot: overrides.slot ?? null,
     keySession: overrides.keySession ?? false,
     prescription: { ...defaultScheduledSessionPrescription(), distanceKm: 6, durationMin: 35, paceRange: '6:10~6:40/km', ...(overrides.prescription ?? {}) },
     status: 'planned', source: 'generator', runId: null,

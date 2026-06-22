@@ -188,7 +188,7 @@ export const useRunStore = defineStore('runStore', {
       }
       try {
         // 스케줄 세션도 done 매칭 — 안 하면 수행한 세션이 'planned'로 남아 재정렬에서 미수행 오판(#378).
-        await useTrainingScheduleStore().matchRun({ id: run.id, date: run.date, type: run.type })
+        await useTrainingScheduleStore().matchRun({ id: run.id, date: run.date, type: run.type, startAt: run.startAt })
       } catch {
         // best-effort
       }
