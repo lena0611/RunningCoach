@@ -46,6 +46,10 @@ private final class RunContextNotificationManager {
     private let settingsKey = "pacelab.notificationSettings"
     private let pendingHealthKitNotificationWindow: TimeInterval = 10 * 60
     private var pendingHealthKitDetectedAt: Date?
+    // HealthKit 옵저버는 한 워크아웃의 단계적 기록(워크아웃·경로·심박·구간)마다 콜백돼 "새 러닝 감지"가 연발된다.
+    // 마지막 발화 후 이 창 안의 재발화는 같은 동기화 버스트로 보고 1회로 합친다(UserDefaults 영속 → 백그라운드 깨움에도 유지).
+    private let healthKitDetectedDebounceWindow: TimeInterval = 10 * 60
+    private let lastHealthKitDetectedKey = "pacelab.lastHealthKitDetectedAt"
 
     func updateSettings(_ settings: RunContextNotificationSettings) {
         UserDefaults.standard.set([
@@ -114,11 +118,28 @@ private final class RunContextNotificationManager {
     }
 
     private func showHealthKitDetectedNotification() {
+        // 디바운스: 한 워크아웃의 단계적 기록으로 옵저버가 여러 번 깨도 알림은 1회만(연발 방지).
+        if recentlyShownHealthKitDetected() {
+            print("[RunContext Notifications] HealthKit detected notification debounced (recent burst)")
+            return
+        }
+        recordHealthKitDetectedShown()
+        // 고정 id — 짧은 시간차로 들어온 대기 알림이 쌓이지 않고 교체된다.
         showImmediateNotification(
-            id: "healthkit-detected-\(Date().timeIntervalSince1970)",
+            id: "healthkit-detected",
             title: "새 러닝 기록이 감지됐습니다",
             body: "PaceLAB을 열면 HealthKit 기록을 동기화합니다."
         )
+    }
+
+    private func recentlyShownHealthKitDetected() -> Bool {
+        let last = UserDefaults.standard.double(forKey: lastHealthKitDetectedKey)
+        guard last > 0 else { return false }
+        return Date().timeIntervalSince1970 - last < healthKitDetectedDebounceWindow
+    }
+
+    private func recordHealthKitDetectedShown() {
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: lastHealthKitDetectedKey)
     }
 
     private func schedule(_ request: RunContextNotificationRequest) {
