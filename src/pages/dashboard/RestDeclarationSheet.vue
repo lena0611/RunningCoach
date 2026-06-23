@@ -15,6 +15,8 @@ const props = defineProps<{
   busy?: boolean
   /** 진입점에서 이유를 미리 정해 열 때(#473 — 부상 체크인 "한동안 쉴게요"=injury). null=사용자 선택. */
   presetReason?: RestReason | null
+  /** 복귀일 조정으로 열 때 현재 마지막 쉬는 날(YYYY-MM-DD)을 미리 채운다 — 날짜만 바꿔도 저장 활성. null=미지정. */
+  presetUntil?: string | null
 }>()
 
 const emit = defineEmits<{ declare: [{ untilDate: string; reason: RestReason }]; close: [] }>()
@@ -71,6 +73,11 @@ watch(
     if (open) {
       reset()
       if (props.presetReason) reason.value = props.presetReason
+      // 복귀일 조정: 현재 복귀일을 직접 날짜로 미리 채워 저장을 바로 활성화(미래 날짜일 때만).
+      if (props.presetUntil && props.presetUntil >= props.today) {
+        preset.value = 'custom'
+        customUntil.value = props.presetUntil
+      }
     }
   }
 )
