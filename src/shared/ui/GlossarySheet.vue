@@ -9,6 +9,7 @@ import {
   type GlossaryCategory
 } from '@/entities/glossary/model'
 import ClearableField from '@/shared/ui/ClearableField.vue'
+import StackPage from '@/shared/ui/StackPage.vue'
 
 const props = defineProps<{ open: boolean; focusSlug?: string }>()
 const emit = defineEmits<{ close: [] }>()
@@ -79,85 +80,70 @@ const resultCount = computed(() => filteredGroups.value.reduce((sum, group) => s
 </script>
 
 <template>
-  <Teleport to="body">
-    <Transition name="stack-page">
-      <div v-if="open" class="memory-stack-layer" data-no-swipe>
-        <section class="memory-stack-page">
-          <header class="memory-stack-header">
-            <button class="stack-icon-button" type="button" aria-label="계정 정보로 돌아가기" @click="emit('close')">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
-            </button>
-            <div>
-              <h2>용어 안내</h2>
-            </div>
-          </header>
+  <StackPage
+    :open="open"
+    back
+    title="용어 안내"
+    dismiss-label="계정 정보로 돌아가기"
+    content-class="glossary-content"
+    @close="emit('close')"
+  >
+    <p class="helper glossary-intro">PaceLAB의 코칭·추세·기록 화면에서 쓰는 러닝 용어를 한곳에 모았습니다.</p>
 
-          <main class="memory-stack-content glossary-content">
-            <p class="helper glossary-intro">PaceLAB의 코칭·추세·기록 화면에서 쓰는 러닝 용어를 한곳에 모았습니다.</p>
+    <div class="glossary-search">
+      <ClearableField v-model="query" type="search" inputmode="search" placeholder="용어 검색 (예: 페이스, LTHR, 템포)" />
+    </div>
 
-            <div class="glossary-search">
-              <ClearableField v-model="query" type="search" inputmode="search" placeholder="용어 검색 (예: 페이스, LTHR, 템포)" />
-            </div>
+    <div class="glossary-chips" role="tablist" aria-label="용어 분류">
+      <button
+        v-for="chip in categoryChips"
+        :key="chip.value"
+        class="glossary-chip"
+        :class="{ active: activeCategory === chip.value }"
+        type="button"
+        role="tab"
+        :aria-selected="activeCategory === chip.value"
+        @click="activeCategory = chip.value"
+      >
+        {{ chip.label }}
+      </button>
+    </div>
 
-            <div class="glossary-chips" role="tablist" aria-label="용어 분류">
-              <button
-                v-for="chip in categoryChips"
-                :key="chip.value"
-                class="glossary-chip"
-                :class="{ active: activeCategory === chip.value }"
-                type="button"
-                role="tab"
-                :aria-selected="activeCategory === chip.value"
-                @click="activeCategory = chip.value"
-              >
-                {{ chip.label }}
-              </button>
-            </div>
+    <p class="glossary-count helper">
+      <template v-if="query.trim() || activeCategory !== 'all'">{{ resultCount }}개 표시 / 전체 {{ totalCount }}개</template>
+      <template v-else>전체 {{ totalCount }}개 용어</template>
+    </p>
 
-            <p class="glossary-count helper">
-              <template v-if="query.trim() || activeCategory !== 'all'">{{ resultCount }}개 표시 / 전체 {{ totalCount }}개</template>
-              <template v-else>전체 {{ totalCount }}개 용어</template>
-            </p>
+    <p v-if="resultCount === 0" class="glossary-empty helper">검색 결과가 없습니다. 다른 단어로 찾아보세요.</p>
 
-            <p v-if="resultCount === 0" class="glossary-empty helper">검색 결과가 없습니다. 다른 단어로 찾아보세요.</p>
-
-            <section v-for="group in filteredGroups" :key="group.category" class="glossary-group">
-              <div class="glossary-group-heading">
-                <h3>{{ group.label }}</h3>
-                <p class="helper">{{ group.description }}</p>
-              </div>
-              <dl class="glossary-list">
-                <div
-                  v-for="term in group.terms"
-                  :key="term.slug"
-                  class="glossary-term"
-                  :class="{ 'glossary-term-highlight': highlightedSlug === term.slug }"
-                  :data-glossary-slug="term.slug"
-                >
-                  <dt>
-                    {{ term.term }}
-                    <span v-if="term.aka.length" class="glossary-aka">{{ term.aka.join(' · ') }}</span>
-                  </dt>
-                  <dd>
-                    <strong class="glossary-short">{{ term.shortDef }}</strong>
-                    <span class="glossary-detail">{{ term.detail }}</span>
-                  </dd>
-                </div>
-              </dl>
-            </section>
-          </main>
-        </section>
+    <section v-for="group in filteredGroups" :key="group.category" class="glossary-group">
+      <div class="glossary-group-heading">
+        <h3>{{ group.label }}</h3>
+        <p class="helper">{{ group.description }}</p>
       </div>
-    </Transition>
-  </Teleport>
+      <dl class="glossary-list">
+        <div
+          v-for="term in group.terms"
+          :key="term.slug"
+          class="glossary-term"
+          :class="{ 'glossary-term-highlight': highlightedSlug === term.slug }"
+          :data-glossary-slug="term.slug"
+        >
+          <dt>
+            {{ term.term }}
+            <span v-if="term.aka.length" class="glossary-aka">{{ term.aka.join(' · ') }}</span>
+          </dt>
+          <dd>
+            <strong class="glossary-short">{{ term.shortDef }}</strong>
+            <span class="glossary-detail">{{ term.detail }}</span>
+          </dd>
+        </div>
+      </dl>
+    </section>
+  </StackPage>
 </template>
 
 <style scoped>
-.glossary-content {
-  gap: 18px;
-  padding-top: 20px;
-}
-
 .glossary-intro {
   margin: 0;
 }

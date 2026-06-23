@@ -5550,6 +5550,12 @@ button.run-session-row {
   -webkit-overflow-scrolling: touch;
 }
 
+/* GlossarySheet 본문(StackPage content-class)의 간격 조정 — #275 공통화 시 스코프드→전역 이전 */
+.glossary-content {
+  gap: 18px;
+  padding-top: 20px;
+}
+
 .stack-save-row {
   display: flex;
   align-items: center;

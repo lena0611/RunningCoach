@@ -21,6 +21,7 @@ import ListRow from '@/shared/ui/ListRow.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
+import StackPage from '@/shared/ui/StackPage.vue'
 import StatCard from '@/shared/ui/StatCard.vue'
 import TrendLensChart from '@/shared/ui/TrendLensChart.vue'
 
@@ -260,78 +261,62 @@ function evidenceRoleTone(role: TrendEvidenceRun['role']) {
       </SectionGroup>
     </template>
 
-    <Teleport to="body">
-      <Transition name="stack-page">
-        <div v-if="openLens" class="memory-stack-layer" data-no-swipe>
-          <section class="memory-stack-page">
-            <header class="memory-stack-header">
-              <div>
-                <h2>{{ openLensOption?.label }}</h2>
-              </div>
-              <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeLensDetail">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
-              </button>
-            </header>
-            <main class="memory-stack-content">
-              <SectionCard class="trend-hero-card" :class="`trend-hero-${result.hero.tone}`">
-                <div>
-                  <span class="trend-hero-label">{{ heroToneLabel }}</span>
-                  <h3 :class="{ 'trend-hero-text-value': !isMetricValue(result.hero.value) }">{{ result.hero.value }}</h3>
-                  <strong>{{ result.hero.label }}</strong>
-                  <p>{{ result.hero.detail }}</p>
-                </div>
-                <span class="trend-confidence">{{ heroConfidenceLabel }}</span>
-              </SectionCard>
-
-              <MetricGrid v-if="result.cards.length">
-                <StatCard
-                  v-for="card in result.cards"
-                  :key="card.id"
-                  :label="card.label"
-                  :value="card.value"
-                  :unit="card.unit ?? ''"
-                  :hint="card.hint"
-                  :tone="card.tone === 'good' ? 'primary' : card.tone === 'warning' ? 'warning' : undefined"
-                  :value-kind="cardValueKind(card)"
-                />
-              </MetricGrid>
-
-              <SectionGroup title="시각화" :surface="false">
-                <TrendLensChart v-if="result.chart.length" :points="result.chart" :unit="chartUnit" />
-                <EmptyState v-else title="표시할 추세가 없습니다." description="이 Lens에서 비교 가능한 기록이 아직 부족합니다." />
-              </SectionGroup>
-
-              <SectionGroup title="해석">
-                <div class="trend-explanation-list">
-                  <p v-for="item in result.explanations" :key="item">{{ item }}</p>
-                </div>
-              </SectionGroup>
-
-              <SectionGroup title="다음 처방 영향" :surface="false">
-                <div class="trend-prescription-card" :class="`trend-prescription-${result.prescriptionImpact.status}`">
-                  <strong>{{ result.prescriptionImpact.title }}</strong>
-                  <p v-for="reason in result.prescriptionImpact.reasons" :key="reason">{{ reason }}</p>
-                </div>
-              </SectionGroup>
-
-              <SectionGroup v-if="evidenceRuns.length" title="근거 세션" :surface="false">
-                <div class="trend-evidence-list">
-                  <ListRow
-                    v-for="item in evidenceRuns"
-                    :key="`${item.runId}-${item.role}`"
-                    clickable
-                    :kicker="evidenceRoleLabel(item.role)"
-                    :title="item.run.sessionTitle || item.run.type"
-                    :detail="`${formatDateWithWeekday(item.run.date)} · ${item.reason}`"
-                    :tone="evidenceRoleTone(item.role)"
-                    @click="openRun(item.runId)"
-                  />
-                </div>
-              </SectionGroup>
-            </main>
-          </section>
+    <StackPage :open="!!openLens" :title="openLensOption?.label" @close="closeLensDetail">
+      <SectionCard class="trend-hero-card" :class="`trend-hero-${result.hero.tone}`">
+        <div>
+          <span class="trend-hero-label">{{ heroToneLabel }}</span>
+          <h3 :class="{ 'trend-hero-text-value': !isMetricValue(result.hero.value) }">{{ result.hero.value }}</h3>
+          <strong>{{ result.hero.label }}</strong>
+          <p>{{ result.hero.detail }}</p>
         </div>
-      </Transition>
-    </Teleport>
+        <span class="trend-confidence">{{ heroConfidenceLabel }}</span>
+      </SectionCard>
+
+      <MetricGrid v-if="result.cards.length">
+        <StatCard
+          v-for="card in result.cards"
+          :key="card.id"
+          :label="card.label"
+          :value="card.value"
+          :unit="card.unit ?? ''"
+          :hint="card.hint"
+          :tone="card.tone === 'good' ? 'primary' : card.tone === 'warning' ? 'warning' : undefined"
+          :value-kind="cardValueKind(card)"
+        />
+      </MetricGrid>
+
+      <SectionGroup title="시각화" :surface="false">
+        <TrendLensChart v-if="result.chart.length" :points="result.chart" :unit="chartUnit" />
+        <EmptyState v-else title="표시할 추세가 없습니다." description="이 Lens에서 비교 가능한 기록이 아직 부족합니다." />
+      </SectionGroup>
+
+      <SectionGroup title="해석">
+        <div class="trend-explanation-list">
+          <p v-for="item in result.explanations" :key="item">{{ item }}</p>
+        </div>
+      </SectionGroup>
+
+      <SectionGroup title="다음 처방 영향" :surface="false">
+        <div class="trend-prescription-card" :class="`trend-prescription-${result.prescriptionImpact.status}`">
+          <strong>{{ result.prescriptionImpact.title }}</strong>
+          <p v-for="reason in result.prescriptionImpact.reasons" :key="reason">{{ reason }}</p>
+        </div>
+      </SectionGroup>
+
+      <SectionGroup v-if="evidenceRuns.length" title="근거 세션" :surface="false">
+        <div class="trend-evidence-list">
+          <ListRow
+            v-for="item in evidenceRuns"
+            :key="`${item.runId}-${item.role}`"
+            clickable
+            :kicker="evidenceRoleLabel(item.role)"
+            :title="item.run.sessionTitle || item.run.type"
+            :detail="`${formatDateWithWeekday(item.run.date)} · ${item.reason}`"
+            :tone="evidenceRoleTone(item.role)"
+            @click="openRun(item.runId)"
+          />
+        </div>
+      </SectionGroup>
+    </StackPage>
   </PageLayout>
 </template>
