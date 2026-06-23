@@ -17,9 +17,10 @@ export type CarouselDay = {
   /**
    * done: 런 매칭. today/future: 예정. rest: 세션 없음(휴식).
    * open: 현재 주 지난 날 미수행(따라잡기 가능). missed: 닫힌 주 미수행 확정. skipped: 사용자 포기.
+   * rested: 사용자가 선언한 휴식 기간(#473) — 차분한 💤, 경고색·취소선 없음(missed/skipped 와 구분).
    * (past 는 레거시 — 주 고정 스트립에선 open/missed/rest 로 대체.)
    */
-  state: 'past' | 'today' | 'future' | 'rest' | 'done' | 'open' | 'missed' | 'skipped'
+  state: 'past' | 'today' | 'future' | 'rest' | 'done' | 'open' | 'missed' | 'skipped' | 'rested'
   /** 칩에 표시할 짧은 세션 라벨/아이콘 텍스트. */
   chip: string
   /** 같은 날 더블(#455, AM+PM 2세션)이면 true → "×2 AM·PM" shoulder 배지. */
@@ -243,6 +244,16 @@ function onPointerUp(event: PointerEvent) {
 .week-chip-skipped .week-chip-tag {
   color: var(--color-muted);
   text-decoration: line-through;
+}
+
+/* 선언한 휴식(#473) — 차분한 회복. 경고색·취소선 금지(쉬는 건 실패가 아니다).
+   부드러운 primary-soft 틴트로 "의도된·돌봄받는 휴식"을 표현하고, 라벨은 💤(scheduleDays 가 주입). */
+.week-chip-rested {
+  background: var(--color-primary-soft, var(--color-surface-card));
+}
+.week-chip-rested .week-chip-day,
+.week-chip-rested .week-chip-tag {
+  color: var(--color-muted);
 }
 
 .week-slide {

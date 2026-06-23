@@ -29,7 +29,7 @@ import TrainingPhaseCard from './TrainingPhaseCard.vue'
 import PhaseTransitionModal from './PhaseTransitionModal.vue'
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { appendPhaseTransition } from '@/shared/api/adaptiveTrainingRepository'
-import type { TrainingPhaseName } from '@/entities/training-memory/model'
+import type { RestReason, TrainingPhaseName } from '@/entities/training-memory/model'
 import PreRunIntentCard from './PreRunIntentCard.vue'
 import QuestPanel from './QuestPanel.vue'
 import WeekTrainingCarousel, { type CarouselDay } from './WeekTrainingCarousel.vue'
@@ -39,6 +39,8 @@ import RescheduleSheet from './RescheduleSheet.vue'
 import WeekendTriageSheet from './WeekendTriageSheet.vue'
 import SessionDoublePanel from './SessionDoublePanel.vue'
 import DoublesAddSheet from './DoublesAddSheet.vue'
+import RestDeclarationSheet from './RestDeclarationSheet.vue'
+import { deriveRestState } from '@/entities/training-memory/restWindow'
 import { buildRestGuidance, evaluateExtraRun } from '@/shared/lib/coaching/restGuidance'
 import { collectCoachMoments } from '@/shared/lib/coaching/coachMoments'
 import { detectScheduleDeviation } from '@/shared/lib/coaching/scheduleRealign'
@@ -158,6 +160,9 @@ const goalFeasibility = computed(() =>
     : null
 )
 
+// 휴식 선언 상태(#473): activeRest + 오늘 기준 파생(active·복귀 D-N·복귀일 등). 차분 배너·복귀 컨트롤이 쓴다.
+const restState = computed(() => deriveRestState(memoryStore.memory.activeRest, todayDate.value))
+
 function dateOnly(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -228,6 +233,12 @@ async function doEnsureSchedule() {
     // 주간 정산(무조건·멱등): 닫힌 주(월~일)의 미수행 planned → missed 확정. realign 시도 뒤에 둬서
     // 닫힌 주 누락이 재정렬 트리거로 먼저 평가되게 한다. 현재 주의 지난 날은 'open'(따라잡기 가능)으로 유지.
     await scheduleStore.settleClosedWeeks(goal.id, trainingWeekRange(today.value).start)
+    // 휴식 선언(#473) 보존: realign/콜드스타트가 휴식 구간에 planned 를 새로 깔았으면 다시 rested 로 되돌린다
+    // (builder 를 건드리지 않고 멱등 재적용 — 휴식 중 닦달 재발/중복카드 방지). 복귀일이 지났으면 건너뛴다.
+    const rest = memoryStore.memory.activeRest
+    if (rest && rest.untilDate >= dateOnly(today.value)) {
+      await scheduleStore.declareRest(goal.id, rest.startDate, rest.untilDate)
+    }
   } catch {
     // best-effort: 스케줄 생성 실패가 대시보드를 막지 않는다.
   }
@@ -255,16 +266,18 @@ const scheduleDays = computed<CarouselDay[]>(() => {
     const planned = onDay.find((s) => s.status === 'planned')
     const missed = onDay.find((s) => s.status === 'missed')
     const skipped = onDay.find((s) => s.status === 'skipped')
+    const rested = onDay.find((s) => s.status === 'rested')
     const display = planned ?? missed ?? skipped ?? null
     let state: CarouselDay['state']
     if (run) state = 'done'
     else if (planned) state = date === todayStr ? 'today' : date < todayStr ? 'open' : 'future'
     else if (missed) state = 'missed'
     else if (skipped) state = 'skipped'
+    else if (rested) state = 'rested' // 선언한 휴식(#473) — 차분한 💤, 'rest' fall-through 전에 명시 분기
     else state = 'rest'
-    const chip = run ? sessionTypeLabel(run.type) : display ? sessionTypeLabel(display.sessionType) : '휴식'
-    // 같은 날 더블(#455): 실슬롯(planned/missed/done, 포기 제외) 2개 이상이면 ×2 배지.
-    const double = onDay.filter((s) => s.status !== 'skipped').length >= 2
+    const chip = run ? sessionTypeLabel(run.type) : display ? sessionTypeLabel(display.sessionType) : rested ? '💤' : '휴식'
+    // 같은 날 더블(#455): 실슬롯(planned/missed/done, 포기·휴식 제외) 2개 이상이면 ×2 배지.
+    const double = onDay.filter((s) => s.status !== 'skipped' && s.status !== 'rested').length >= 2
     out.push({ date, label: `${WEEKDAY_KO[d.getDay()]} ${d.getDate()}`, state, chip, double })
   }
   return out
@@ -688,6 +701,54 @@ async function onOpenSkip() {
   await runScheduleOp(async () => {
     await scheduleStore.skip(s.id)
     toastStore.success('이번 주는 놓아줄게요. 회복도 훈련의 일부예요.')
+  })
+}
+
+// === 휴식 선언/복귀 (#473, SSOT §휴식과 복귀) ===
+const restSheetOpen = ref(false)
+function openRestSheet() {
+  restSheetOpen.value = true
+}
+function dayAfterIso(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`)
+  d.setDate(d.getDate() + 1)
+  return dateOnly(d)
+}
+/** 휴식 선언/복귀일 조정 공통: [start, until] 을 rested 로 맞추고(연장 포함), until 이후 잔여 rested 는 되돌린다(단축). */
+async function onDeclareRest(payload: { untilDate: string; reason: RestReason }) {
+  const goal = activeGoal.value
+  await runScheduleOp(async () => {
+    // 조정이면 기존 시작일 유지, 신규면 오늘 시작.
+    const start = restState.value.active && restState.value.startDate ? restState.value.startDate : todayDate.value
+    if (goal) {
+      await scheduleStore.declareRest(goal.id, start, payload.untilDate)
+      await scheduleStore.unrestFrom(goal.id, dayAfterIso(payload.untilDate)) // 단축 시 잔여 tail 복원
+    }
+    await memoryStore.setActiveRest({
+      startDate: start,
+      untilDate: payload.untilDate,
+      reason: payload.reason,
+      declaredAt: new Date().toISOString()
+    })
+    restSheetOpen.value = false
+    weekOffset.value = 0
+    toastStore.success('푹 쉬세요. 일정은 정리해둘게요 — 돌아오면 가볍게 시작해요.')
+  })
+}
+/**
+ * 지금 복귀: 오늘 이후 rested 를 planned 로 되돌리고(즉시 in-memory 반영) 휴식 메타 해제.
+ * 복귀 시 목표일 고정 forward 재정렬의 "회복 후 정리" 톤은 PR3 — 여기서 ensureSchedule 을 강제 호출하면
+ * 다음 정산이 generic "놓쳐서 다시 짰어요" 토스트를 띄울 수 있어(복귀에 부적절) 일부러 호출하지 않는다.
+ * 자연스러운 다음 ensure 사이클이 정산을 처리하고, PR3 가 복귀 전용 톤을 입힌다.
+ */
+async function returnFromRestNow() {
+  const goal = activeGoal.value
+  await runScheduleOp(async () => {
+    if (goal) await scheduleStore.unrestFrom(goal.id, todayDate.value)
+    await memoryStore.setActiveRest(null)
+    weekOffset.value = 0
+    activeDayIndex.value = todayWeekdayIndex.value
+    toastStore.success('돌아온 걸 환영해요. 오늘부터 가볍게 다시 시작해요.')
   })
 }
 
@@ -1306,6 +1367,24 @@ async function applyPhaseTransition() {
             </div>
           </div>
         </article>
+        <!-- 선언한 휴식(#473): 차분한 "쉬는 중 · 복귀 D-N" 배너 + 복귀 컨트롤. 경고색·취소선 금지 -->
+        <article v-else-if="day.state === 'rested'" class="carousel-card rest-declared-card">
+          <strong class="carousel-card-title">💤 쉬는 중</strong>
+          <p class="carousel-card-line">
+            <template v-if="restState.daysUntilReturn !== null && restState.daysUntilReturn > 0">
+              복귀까지 D-{{ restState.daysUntilReturn
+              }}<template v-if="restState.returnDate"> · {{ formatDateWithWeekday(restState.returnDate) }}부터 가볍게 시작해요</template>.
+            </template>
+            <template v-else>돌아올 준비가 되면 언제든 가볍게 시작해요.</template>
+          </p>
+          <p class="open-card-help">충분히 쉬는 것도 훈련의 일부예요. 일정은 정리해뒀으니 마음 편히 쉬어요.</p>
+          <div class="open-card-actions">
+            <button type="button" class="open-card-primary" :disabled="intentBusy" @click="returnFromRestNow">▶ 지금 복귀</button>
+            <div class="open-card-row">
+              <button type="button" class="open-card-secondary" :disabled="intentBusy" @click="openRestSheet">📅 복귀일 조정</button>
+            </div>
+          </div>
+        </article>
         <!-- 휴식: 전략적 휴식(#378) — 회복·부상관리·근력 -->
         <article v-else class="carousel-card">
           <strong class="carousel-card-title">🌙 전략적 휴식</strong>
@@ -1350,6 +1429,11 @@ async function applyPhaseTransition() {
         </p>
       </div>
       <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+    </button>
+
+    <!-- 휴식 선언 진입(#473): 쉬는 중이 아닐 때만. 닦달이 아니라 "필요하면 쓰는 도구"로 차분히 노출. -->
+    <button v-if="hasSchedule && !restState.active" type="button" class="rest-declare-entry" @click="openRestSheet">
+      💤 한동안 쉬어갈까요?
     </button>
 
     <SectionGroup title="내 레벨" :surface="false">
@@ -1438,6 +1522,9 @@ async function applyPhaseTransition() {
       @add="onDoublesAdd"
       @close="doublesAddOpen = false"
     />
+
+    <!-- 휴식 선언(#473): 기간·이유 선택 → declareRest. 부상·날씨·개인 일정 등 범용. -->
+    <RestDeclarationSheet :open="restSheetOpen" :today="todayDate" :busy="intentBusy" @declare="onDeclareRest" @close="restSheetOpen = false" />
 
     <SectionGroup v-if="runStore.loading || runStore.error" title="데이터 상태">
       <template #actions>
@@ -1792,6 +1879,25 @@ async function applyPhaseTransition() {
 .open-card-secondary:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* 휴식 선언 진입(#473): 차분한 muted 고스트 — 닦달/강조가 아니라 필요할 때 쓰는 조용한 도구. */
+.rest-declare-entry {
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius-button, 12px);
+  border: 1px dashed var(--color-border, rgba(120, 120, 120, 0.3));
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.rest-declared-card .open-card-help {
+  color: var(--color-muted);
 }
 
 .schedule-loading {

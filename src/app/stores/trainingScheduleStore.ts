@@ -15,6 +15,7 @@ import {
   markPastPlannedMissed,
   markSessionsRested,
   supersedeSessionsFrom,
+  unmarkRestedFrom,
   updateScheduledSessionSlot,
   updateScheduledSessionStatus
 } from '@/shared/api/trainingScheduleRepository'
@@ -127,6 +128,18 @@ export const useTrainingScheduleStore = defineStore('trainingScheduleStore', {
         ) {
           s.status = 'rested'
         }
+      })
+      return affected
+    },
+    /**
+     * 휴식 복귀/단축(#473): fromDate(포함) 이후 'rested' 세션을 'planned' 로 되돌린다("지금 복귀"·복귀일 앞당김).
+     * 과거(이미 쉰 날)는 보존. 되돌린 뒤 정상 정산·재정렬 파이프라인(doEnsureSchedule)이 이어서 forward 정리한다.
+     */
+    async unrestFrom(goalId: string | null, fromDate: string): Promise<number> {
+      if (!isSupabaseConfigured) return 0
+      const affected = await unmarkRestedFrom(goalId, fromDate)
+      this.sessions.forEach((s) => {
+        if (s.date >= fromDate && s.status === 'rested') s.status = 'planned'
       })
       return affected
     },

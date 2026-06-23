@@ -29,6 +29,24 @@ export type TrainingMemory = {
   runningStyle: string[]
   heatStrategy: string[]
   aiNotes: string[]
+  /**
+   * 현재 진행 중인 휴식 선언(#473). 한 번에 하나만(다중/이력은 Phase 3). null = 휴식 아님.
+   * 닦달 차단은 세션 status='rested' 가 담당하고, 이 메타는 복귀 D-N 배너·복귀 감지·대안 제시 조건에 쓴다.
+   */
+  activeRest: ActiveRest | null
+}
+
+/** 휴식 이유 태그(#473) — 부하/부상성(injury) 여부가 "가벼운 회복주" 대안 제시 조건을 가른다. */
+export type RestReason = 'injury' | 'weather' | 'personal' | 'other'
+
+/** 선언한 휴식 기간(#473). untilDate(포함)까지 쉬고 그 다음날 복귀. 날짜는 YYYY-MM-DD. */
+export type ActiveRest = {
+  startDate: string
+  /** 마지막 휴식일(포함). 복귀일 = untilDate + 1일. */
+  untilDate: string
+  reason: RestReason
+  /** 선언 시각(ISO) — 대안 제시 1회성 판단·이력에 쓴다. */
+  declaredAt: string
 }
 
 export type RunnerIdentity = {
@@ -573,7 +591,8 @@ export const initialTrainingMemory: TrainingMemory = {
   aiNotes: [
     '코칭은 단일 기록보다 최근 훈련 흐름과 격주 롱런 패턴을 함께 봐야 한다',
     '다음 훈련 추천은 피로도, 최근 14일 기록, 장거리 주차 여부를 함께 반영한다'
-  ]
+  ],
+  activeRest: null
 }
 
 /**
@@ -666,8 +685,23 @@ export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null |
     activeGoalId,
     injuryItems,
     activeInjuryItemId,
-    goal: activeGoal.title
+    goal: activeGoal.title,
+    activeRest: normalizeActiveRest(memory?.activeRest)
   }
+}
+
+const REST_REASONS: RestReason[] = ['injury', 'weather', 'personal', 'other']
+/** 휴식 선언 메타(#473)를 안전한 형태로 강제한다. 필수 날짜가 없거나 형식이 깨지면 null(휴식 아님). */
+export function normalizeActiveRest(raw: unknown): ActiveRest | null {
+  if (!raw || typeof raw !== 'object') return null
+  const obj = raw as Record<string, unknown>
+  const startDate = typeof obj.startDate === 'string' ? obj.startDate : ''
+  const untilDate = typeof obj.untilDate === 'string' ? obj.untilDate : ''
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(untilDate)) return null
+  if (untilDate < startDate) return null
+  const reason = REST_REASONS.includes(obj.reason as RestReason) ? (obj.reason as RestReason) : 'other'
+  const declaredAt = typeof obj.declaredAt === 'string' && obj.declaredAt ? obj.declaredAt : `${startDate}T00:00:00.000Z`
+  return { startDate, untilDate, reason, declaredAt }
 }
 
 function normalizeRunnerLevelSetting(value: unknown): RunnerLevelSetting {
