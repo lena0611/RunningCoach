@@ -11,7 +11,8 @@ import type { RunLog } from '@/entities/run/model'
 import RunSummaryCard from '@/widgets/run-summary-card/RunSummaryCard.vue'
 import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
 import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
-import { getAgeLoadWeight, getEasyRatio, getFatigueWarning, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getTrainingDayView, sumDistance, type NextSessionRecommendation } from '@/shared/lib/runStats'
+import { getAgeLoadWeight, getEasyRatio, getFatigueWarning, getLongestRunKmWithinDays, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getTrainingDayView, sumDistance, type NextSessionRecommendation } from '@/shared/lib/runStats'
+import { returnRampWindowSessions, returnSessionCapKm } from '@/shared/lib/coaching/returnRamp'
 import { formatDateWithWeekday, formatDuration } from '@/shared/lib/format'
 import { getRaceProjection } from '@/shared/lib/performanceProjection'
 import { resolveRunnerProgress } from '@/shared/lib/level/levelModel'
@@ -29,7 +30,7 @@ import TrainingPhaseCard from './TrainingPhaseCard.vue'
 import PhaseTransitionModal from './PhaseTransitionModal.vue'
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { appendPhaseTransition } from '@/shared/api/adaptiveTrainingRepository'
-import type { RestReason, TrainingPhaseName } from '@/entities/training-memory/model'
+import type { ActiveRest, RestReason, TrainingGoal, TrainingPhaseName } from '@/entities/training-memory/model'
 import PreRunIntentCard from './PreRunIntentCard.vue'
 import QuestPanel from './QuestPanel.vue'
 import WeekTrainingCarousel, { type CarouselDay } from './WeekTrainingCarousel.vue'
@@ -249,11 +250,24 @@ async function doEnsureSchedule() {
       })
       if (drafts.length) await scheduleStore.insertMany(drafts)
     } else {
-      // 성과·운영중: 누적 이탈/앵커 드리프트 시 forward 재정렬.
-      const plan = buildRealignedSchedule(mine, goal, memoryStore.memory.athleteProfile, today.value, currentWeeklyKm.value, observedEasyPace.value)
-      if (plan.drafts.length) {
-        await scheduleStore.realign(goal.id, plan.fromDate, plan.drafts)
-        if (plan.deviation.reason) toastStore.success(plan.deviation.reason)
+      const rest = memoryStore.memory.activeRest
+      const todayIso = dateOnly(today.value)
+      if (rest && rest.untilDate < todayIso && !rest.returnRampApplied) {
+        // 복귀 램프(#473 Phase 2) 자연 만료 경로: 휴식이 끝났는데 아직 강제 적용 안 했으면, drift 유무와 무관하게
+        // 현재 체력 재앵커 + 초반 세션 Easy·캡으로 "회복 후 정리"를 1회 강제(SSOT 라인 89는 무조건적 복귀 처방).
+        // 짧은 휴식(<7일, returnRampPayload=null)은 무램프 — 원래 계획대로 이어간다(단기 손실 무시 수준).
+        const payload = returnRampPayload(rest)
+        if (payload) await applyReturnRampDrafts(goal, payload)
+        await memoryStore.setActiveRest({ ...rest, returnRampApplied: true })
+      } else {
+        // 성과·운영중: 누적 이탈/앵커 드리프트 시 forward 재정렬.
+        // 복귀 윈도(메타 살아있는 isOver) 동안엔 returnRamp 를 재전달해 캡을 보존하고 generic 닦달 토스트를 억제한다.
+        const returnRamp = rest && restState.value.isOver ? returnRampPayload(rest) : null
+        const plan = buildRealignedSchedule(mine, goal, memoryStore.memory.athleteProfile, today.value, currentWeeklyKm.value, observedEasyPace.value, returnRamp)
+        if (plan.drafts.length) {
+          await scheduleStore.realign(goal.id, plan.fromDate, plan.drafts)
+          if (plan.deviation.reason && !returnRamp) toastStore.success(plan.deviation.reason)
+        }
       }
     }
     // 주간 정산(무조건·멱등): 닫힌 주(월~일)의 미수행 planned → missed 확정. realign 시도 뒤에 둬서
@@ -269,6 +283,36 @@ async function doEnsureSchedule() {
   } catch {
     // best-effort: 스케줄 생성 실패가 대시보드를 막지 않는다.
   }
+}
+
+/**
+ * 복귀 램프(#473 Phase 2) 페이로드 — 휴식 '기간'으로 초반 캡 세션 수·세션 거리 상한을 계산한다.
+ * layoffDays = 휴식 기간(durationDays = untilDate-startDate+1) — '앱을 언제 다시 열었나'(경과일)가 아니라
+ * 디트레이닝 손실 추정이어야 하므로(SSOT 라인 84). longLayoff(restWindow durationDays)와 동일 측정으로 통일.
+ * 짧은 휴식(<7일)이면 windowSessions=0 → null(무램프, 원래 계획대로). capKm = 직전30일 최장+10%(자기조절).
+ */
+function returnRampPayload(rest: ActiveRest): { capKm: number; windowSessions: number } | null {
+  const layoffDays = diffDaysIso(rest.untilDate, rest.startDate) + 1
+  const windowSessions = returnRampWindowSessions(layoffDays)
+  if (windowSessions === 0) return null
+  return { capKm: returnSessionCapKm(getLongestRunKmWithinDays(runs.value, 30, today.value)), windowSessions }
+}
+
+/**
+ * 복귀 램프 강제 적용 — 현재(낮아진) 체력으로 forward 재앵커 + 초반 windowSessions 개 Easy·캡으로 점진 복원.
+ * shouldRealign 게이트와 무관하게 항상 적용해 SSOT 라인 89 "복귀 초반 세션들 Easy·상한"을 보장한다(F1 수정).
+ * generic 닦달 토스트 없음 — "회복 후 정리" 톤은 복귀 토스트/rest-return 모먼트가 담당.
+ */
+async function applyReturnRampDrafts(goal: TrainingGoal, payload: { capKm: number; windowSessions: number }) {
+  const drafts = buildPeriodizedSchedule({
+    goal,
+    profile: memoryStore.memory.athleteProfile,
+    today: today.value,
+    currentWeeklyKm: currentWeeklyKm.value,
+    observedEasyPace: observedEasyPace.value,
+    returnRamp: payload
+  }).map((d) => ({ ...d, source: 'realign' as const }))
+  if (drafts.length) await scheduleStore.realign(goal.id, dateOnly(today.value), drafts)
 }
 
 // 주 고정 데이-스트립(월~일) ± weekOffset 주. 오늘 중심 롤링이 아니라 "이번 주"를 한눈에 조망·조정(설계 2026-06-19).
@@ -756,6 +800,11 @@ function dayAfterIso(iso: string): string {
   d.setDate(d.getDate() + 1)
   return dateOnly(d)
 }
+function dayBeforeIso(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`)
+  d.setDate(d.getDate() - 1)
+  return dateOnly(d)
+}
 /** 휴식 선언/복귀일 조정 공통: [start, until] 을 rested 로 맞추고(연장 포함), until 이후 잔여 rested 는 되돌린다(단축). */
 async function onDeclareRest(payload: { untilDate: string; reason: RestReason }) {
   const goal = activeGoal.value
@@ -778,16 +827,27 @@ async function onDeclareRest(payload: { untilDate: string; reason: RestReason })
   })
 }
 /**
- * 지금 복귀: 오늘 이후 rested 를 planned 로 되돌리고(즉시 in-memory 반영) 휴식 메타 해제.
- * 복귀 시 목표일 고정 forward 재정렬의 "회복 후 정리" 톤은 PR3 — 여기서 ensureSchedule 을 강제 호출하면
- * 다음 정산이 generic "놓쳐서 다시 짰어요" 토스트를 띄울 수 있어(복귀에 부적절) 일부러 호출하지 않는다.
- * 자연스러운 다음 ensure 사이클이 정산을 처리하고, PR3 가 복귀 전용 톤을 입힌다.
+ * 지금 복귀(#473 Phase 2): 오늘 이후 rested→planned 복원 + 휴식 메타를 "어제 종료된 복귀 윈도"로 전환한 뒤
+ * ensure 를 돌린다. 명시 복귀와 자연 만료를 **같은 자연만료 경로**(doEnsureSchedule 의 untilDate<today &&
+ * !returnRampApplied 분기)로 통일한다 — 그래야 복귀 윈도(isOver) 동안 후속 재정렬도 returnRamp 를 재전달해
+ * 캡이 up-drift 재정렬에 소실되지 않고 generic 닦달 토스트도 억제된다(F1). 메타 정리는 expireRestMetaIfOver 가 맡는다.
+ * 짧은 휴식(<7일)은 returnRampPayload=null 이라 램프 미적용(원래 계획대로).
  */
 async function returnFromRestNow() {
   const goal = activeGoal.value
+  const rest = memoryStore.memory.activeRest
   await runScheduleOp(async () => {
     if (goal) await scheduleStore.unrestFrom(goal.id, todayDate.value)
-    await memoryStore.setActiveRest(null)
+    if (rest) {
+      // untilDate=어제 → isOver=true(복귀 윈도). 1일 휴식 당일 복귀 같은 퇴화 케이스(어제<시작일)는 메타 해제.
+      const endIso = dayBeforeIso(todayDate.value)
+      await memoryStore.setActiveRest(endIso >= rest.startDate ? { ...rest, untilDate: endIso } : null)
+    }
+    // 진행 중 ensure(이전 메타로 시작됐을 수 있음)를 비운 뒤 새 ensure 가 새 메타로 자연만료 램프를 강제한다.
+    // drain 으로 충분한 이유: ensure 를 fire 하는 watcher 는 loaded 플래그·activeGoal.id 뿐이라 setActiveRest 로 재발화되지 않는다.
+    // (향후 activeRest 변화에 ensure 를 묶으면 이 직렬화 가정이 깨지므로 가드를 다시 도입해야 한다.)
+    if (ensureInFlight) await ensureInFlight.catch(() => {})
+    await ensureSchedule()
     weekOffset.value = 0
     activeDayIndex.value = todayWeekdayIndex.value
     toastStore.success('돌아온 걸 환영해요. 오늘부터 가볍게 다시 시작해요.')
@@ -1099,12 +1159,15 @@ function refreshDashboardContext() {
   void weatherStore.refreshAfterActivation()
 }
 
-// 복귀 정리(#473 PR3): 복귀 모먼트 창(복귀일+2일)이 지나면 휴식 메타 해제 → 정상 흐름 복귀.
-// doEnsureSchedule(스케줄 빌드 게이트, 일부 목표서 조기 return)과 분리해 목표 종류·targetDate 유무와 무관하게 항상 정리.
-// 과거 rested 세션은 의도된 휴식 기록이라 보존(missed 로 닦달하지 않는다). 멱등 — 한 번 해제되면 재발동 안 함.
+// 복귀 정리(#473): 복귀 모먼트 창(복귀일+2일)이 지나면 휴식 메타 해제 → 정상 흐름 복귀.
+// 단 복귀 램프(Phase 2)가 아직 강제 적용되지 않았으면(returnRampApplied=false) 메타를 보존해, 늦게(복귀일+3 이후)
+// 처음 접속해도 자연 만료 램프가 1회 걸리게 한다(F3). 그래도 14일이 지나면 하드캡으로 정리한다.
+// doEnsureSchedule(스케줄 게이트)과 분리해 목표 종류·targetDate 무관하게 정리. 과거 rested 세션은 보존(닦달 금지).
 function expireRestMetaIfOver() {
   const rest = memoryStore.memory.activeRest
-  if (rest && diffDaysIso(dateOnly(today.value), dayAfterIso(rest.untilDate)) > 2) {
+  if (!rest) return
+  const daysSinceReturn = diffDaysIso(dateOnly(today.value), dayAfterIso(rest.untilDate))
+  if ((rest.returnRampApplied && daysSinceReturn > 2) || daysSinceReturn > 14) {
     void memoryStore.setActiveRest(null)
   }
 }

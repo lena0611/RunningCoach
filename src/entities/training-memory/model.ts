@@ -50,6 +50,11 @@ export type ActiveRest = {
   reason: RestReason
   /** 선언 시각(ISO) — 대안 제시 1회성 판단·이력에 쓴다. */
   declaredAt: string
+  /**
+   * 복귀 램프(#473 Phase 2)를 이 휴식에 대해 한 번 강제 적용했는가. 자연 만료 경로에서 매 포커스마다
+   * 재빌드하지 않도록 1회성 가드(멱등). 적용 후 expireRestMetaIfOver 가 모먼트 창이 지나면 메타를 정리한다.
+   */
+  returnRampApplied?: boolean
 }
 
 export type RunnerIdentity = {
@@ -704,7 +709,8 @@ export function normalizeActiveRest(raw: unknown): ActiveRest | null {
   if (untilDate < startDate) return null
   const reason = REST_REASONS.includes(obj.reason as RestReason) ? (obj.reason as RestReason) : 'other'
   const declaredAt = typeof obj.declaredAt === 'string' && obj.declaredAt ? obj.declaredAt : `${startDate}T00:00:00.000Z`
-  return { startDate, untilDate, reason, declaredAt }
+  const returnRampApplied = obj.returnRampApplied === true
+  return { startDate, untilDate, reason, declaredAt, returnRampApplied }
 }
 
 function normalizeRunnerLevelSetting(value: unknown): RunnerLevelSetting {

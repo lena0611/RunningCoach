@@ -16,6 +16,11 @@ export function sumDistance(runs: RunLog[]): number {
   return round(runs.reduce((sum, run) => sum + run.distanceKm, 0))
 }
 
+/** 직전 N일 최장 런 거리(km). 복귀 램프 세션 상한 입력(#473 — 직전30일 최장+10%). 런 없으면 0. */
+export function getLongestRunKmWithinDays(runs: RunLog[], days: number, today = new Date()): number {
+  return getRunsWithinDays(runs, days, today).reduce((max, run) => Math.max(max, run.distanceKm), 0)
+}
+
 export function getThisWeekRuns(runs: RunLog[], today = new Date()): RunLog[] {
   const start = new Date(today)
   const day = start.getDay()

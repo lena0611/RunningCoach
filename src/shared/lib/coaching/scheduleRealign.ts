@@ -169,7 +169,9 @@ export function buildRealignedSchedule(
   /** 현재 주간 주행량(최근 30일 평균) — 재정렬 시에도 현재 체력에 재앵커링한다(#395). */
   currentWeeklyKm: number | null = null,
   /** 관측 Easy 페이스(#405) — 재정렬 시에도 관측 보정 페이스로 처방. */
-  observedEasyPace: { easyPaceSec: number; easyPaceRangeSec: [number, number] } | null = null
+  observedEasyPace: { easyPaceSec: number; easyPaceRangeSec: [number, number] } | null = null,
+  /** 복귀 램프(#473 Phase 2) — 휴식 복귀 재정렬이면 초반 세션들을 Easy·캡으로. caller 가 capKm·windowSessions 계산해 전달. */
+  returnRamp: { capKm: number; windowSessions: number } | null = null
 ): RealignPlan {
   const { plannedWeeklyKm, upcomingPhase } = summarizeUpcomingWeek(sessions, today)
   const deviation = detectScheduleDeviation(sessions, today, {
@@ -181,7 +183,7 @@ export function buildRealignedSchedule(
   if (!deviation.shouldRealign) {
     return { fromDate, drafts: [], deviation }
   }
-  const drafts = buildPeriodizedSchedule({ goal, profile, today, currentWeeklyKm, observedEasyPace }).map((d) => ({
+  const drafts = buildPeriodizedSchedule({ goal, profile, today, currentWeeklyKm, observedEasyPace, returnRamp }).map((d) => ({
     ...d,
     source: 'realign' as const
   }))

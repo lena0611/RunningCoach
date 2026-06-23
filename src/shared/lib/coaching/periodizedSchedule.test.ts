@@ -84,6 +84,39 @@ describe('trainingWeekRange (이번 주 SSOT, 월~일)', () => {
   })
 })
 
+describe('buildPeriodizedSchedule 복귀 램프(#473 Phase 2)', () => {
+  const rampGoal = goal({ targetDate: '2026-12-31', distanceKm: 10 })
+  const rampProfile = profile({})
+  const rampToday = new Date('2026-06-01T00:00:00')
+
+  it('returnRamp 면 초반 windowSessions 개 세션을 Easy 계열 + 거리 ≤ capKm 로 캡', () => {
+    const drafts = buildPeriodizedSchedule({ goal: rampGoal, profile: rampProfile, today: rampToday, currentWeeklyKm: 30, returnRamp: { capKm: 3, windowSessions: 3 } })
+    expect(drafts.length).toBeGreaterThan(3)
+    // 초반 3개 모두 캡(첫 1개만이 아니라 — RR-1 회귀 방지: 둘째·셋째가 키세션/롱런이어도 Easy·캡)
+    for (const d of drafts.slice(0, 3)) {
+      expect(['Easy', 'Recovery']).toContain(d.sessionType)
+      expect(d.keySession).toBe(false)
+      expect(d.prescription.distanceKm ?? 0).toBeLessThanOrEqual(3)
+      expect(d.prescription.distanceKm ?? 0).toBeGreaterThan(0)
+    }
+  })
+
+  it('windowSessions 밖 세션은 캡 안 함(점진 복원은 재앵커가 담당)', () => {
+    const capped = buildPeriodizedSchedule({ goal: rampGoal, profile: rampProfile, today: rampToday, currentWeeklyKm: 30, returnRamp: { capKm: 3, windowSessions: 2 } })
+    // 처음 2개는 ≤3km, 그 뒤 어딘가엔 3km 초과 세션이 존재(전체를 평탄화하지 않음)
+    expect(capped[0].prescription.distanceKm ?? 0).toBeLessThanOrEqual(3)
+    expect(capped[1].prescription.distanceKm ?? 0).toBeLessThanOrEqual(3)
+    expect(capped.slice(2).some((d) => (d.prescription.distanceKm ?? 0) > 3)).toBe(true)
+  })
+
+  it('windowSessions=0 이면 캡 미적용(회귀) — 첫 세션이 capKm 초과 가능', () => {
+    const plain = buildPeriodizedSchedule({ goal: rampGoal, profile: rampProfile, today: rampToday, currentWeeklyKm: 30 })
+    const noRamp = buildPeriodizedSchedule({ goal: rampGoal, profile: rampProfile, today: rampToday, currentWeeklyKm: 30, returnRamp: { capKm: 3, windowSessions: 0 } })
+    expect(noRamp[0].prescription.distanceKm).toBe(plain[0].prescription.distanceKm)
+    expect(noRamp[0].sessionType).toBe(plain[0].sessionType)
+  })
+})
+
 describe('allocatePhases', () => {
   it('충분한 창이면 Base 로 시작해 Taper 로 끝난다', () => {
     const phases = allocatePhases(16, 10)
