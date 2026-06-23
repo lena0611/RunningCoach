@@ -39,6 +39,7 @@ import RunSessionList from '@/shared/ui/RunSessionList.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import SchedulingHelpSheet from '@/shared/ui/SchedulingHelpSheet.vue'
+import StackPage from '@/shared/ui/StackPage.vue'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 
