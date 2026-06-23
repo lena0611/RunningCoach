@@ -61,4 +61,38 @@ test.describe('#473 휴식/복귀', () => {
     }).toPass({ timeout: 20000 })
     await expect(page.getByRole('button', { name: /한동안 쉬어갈까요/ })).toBeVisible()
   })
+
+  test('복귀 램프: 과거 휴식(레이스 목표) 복귀 시 첫 세션 Easy·캡 (DEV 시드)', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+
+    const onboardingSkip = page.getByRole('dialog', { name: '시작 인터뷰' }).getByRole('button', { name: '건너뛰기' })
+    if (await onboardingSkip.isVisible().catch(() => false)) await onboardingSkip.click()
+
+    // 레이스 목표 + 2주 전 시작·이틀 전 끝난 휴식을 시드(실제 경과를 흉내).
+    const seeded = await page.evaluate(() => (window as unknown as { __pacelabE2E: { seedReturnRamp: () => Promise<{ ok: boolean }> } }).__pacelabE2E.seedReturnRamp())
+    expect(seeded?.ok).toBe(true)
+
+    // 새로고침 → doEnsureSchedule 자연만료 분기가 복귀 램프를 적용한다.
+    await page.reload()
+    await page.waitForLoadState('networkidle')
+
+    // 복귀 첫(가장 이른 미래) 세션이 Easy 계열 + 거리 캡(직전30일 런 0 → floor 3km)으로 점진 복원되는지.
+    await expect
+      .poll(
+        async () => {
+          const s = await page.evaluate(() => (window as unknown as { __pacelabE2E: { firstUpcomingSession: () => { sessionType: string; distanceKm: number | null } | null } }).__pacelabE2E.firstUpcomingSession())
+          return s ? `${s.sessionType}|${s.distanceKm}` : 'null'
+        },
+        { timeout: 25_000, intervals: [500, 1000, 2000, 3000] }
+      )
+      .toMatch(/^(Easy|Recovery)\|/)
+
+    const first = await page.evaluate(() => (window as unknown as { __pacelabE2E: { firstUpcomingSession: () => { sessionType: string; distanceKm: number | null } | null } }).__pacelabE2E.firstUpcomingSession())
+    expect(['Easy', 'Recovery']).toContain(first?.sessionType)
+    expect(first?.distanceKm ?? 99).toBeLessThanOrEqual(3.1) // ≤ 직전30일 최장(0)+10% floor 3km
+
+    // 복귀 "회복 후 정리" 모먼트(놓침 프레이밍 아님).
+    await expect(page.getByText(/돌아온 걸 환영|가볍게 다시 시작/).first()).toBeVisible()
+  })
 })

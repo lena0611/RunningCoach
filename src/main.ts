@@ -65,6 +65,16 @@ if (!isSupabaseConfigured || authStore.isAuthenticated) {
   })
 }
 
+// DEV 전용 E2E 시드 훅(#473 복귀 램프 검증). 동적 import + DEV 게이트라 프로덕션 번들엔 빠진다.
+if (import.meta.env.DEV) {
+  void import('@/app/devE2ESeed').then((m) => {
+    ;(window as unknown as { __pacelabE2E?: Record<string, unknown> }).__pacelabE2E = {
+      seedReturnRamp: m.seedReturnRamp,
+      firstUpcomingSession: m.firstUpcomingSession
+    }
+  })
+}
+
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs)
