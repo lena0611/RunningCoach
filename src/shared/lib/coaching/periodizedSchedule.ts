@@ -74,6 +74,12 @@ export type PeriodizationInput = {
    * Easy 계열(Easy/Recovery/LSD) 페이스를 처방해 심박과 충돌하지 않게 한다. null이면 VDOT 추정.
    */
   observedEasyPace?: { easyPaceSec: number; easyPaceRangeSec: [number, number] } | null
+  /**
+   * 복귀 램프(#473 Phase 2). 있으면 가장 이른 windowSessions 개 세션을 Easy 로 낮추고 거리를 capKm 로 캡한다
+   * (SSOT §휴식과 복귀 — 복귀 초반 세션들 Easy + ≤직전30일최장+10%, 매 세션 규칙). 그 뒤 세션은
+   * currentWeeklyKm 재앵커가 점진 복원을 맡는다. capKm·windowSessions 는 caller 가 휴식 길이로 계산해 넘긴다.
+   */
+  returnRamp?: { capKm: number; windowSessions: number } | null
 }
 
 /** 안전하다고 보는 주간 볼륨 증가율(소프트). running-coaching-standards "시작점 앵커링"(~10%, 30%+ 급증 회피). */
@@ -407,7 +413,31 @@ export function buildPeriodizedSchedule(input: PeriodizationInput): ScheduledSes
   }
 
   // 날짜 오름차순 + 중복 날짜 제거(키세션 우선 보존).
-  return dedupeByDate(drafts)
+  const ordered = dedupeByDate(drafts)
+  // 복귀 램프(#473 Phase 2): 가장 이른 windowSessions 개 세션을 Easy·캡으로 낮춰 점진 복원의 1차 가드레일.
+  if (input.returnRamp && input.returnRamp.windowSessions > 0) {
+    const n = Math.min(input.returnRamp.windowSessions, ordered.length)
+    for (let i = 0; i < n; i++) ordered[i] = capReturnSession(ordered[i], input.returnRamp.capKm, pace)
+  }
+  return ordered
+}
+
+/**
+ * 복귀 초반 세션(#473 Phase 2)을 Easy 로 낮추고 거리를 상한으로 캡한다(SSOT §휴식과 복귀, 복귀 초반 세션들).
+ * 강도·스트라이드 세션(QUALITY 또는 Easy + Strides)은 'Easy' 로 — 복귀 초반 강한 자극·전력 측정 회피.
+ * Easy/Recovery 는 타입 유지하고 거리만 캡(상한이므로 더 짧으면 그대로). 처방(페이스·노트·시간)은 새 타입·거리로 재생성.
+ */
+function capReturnSession(draft: ScheduledSessionDraft, capKm: number, pace: PaceModel): ScheduledSessionDraft {
+  const isHard = QUALITY_TYPES.has(draft.sessionType) || draft.sessionType === 'Easy + Strides'
+  const type: RunType = isHard ? 'Easy' : draft.sessionType
+  const original = draft.prescription.distanceKm
+  const cappedKm = original != null && original > 0 ? Math.min(original, capKm) : capKm
+  return {
+    ...draft,
+    sessionType: type,
+    keySession: false,
+    prescription: prescriptionFor(type, round1(cappedKm), pace)
+  }
 }
 
 // ── 목표 타입별 코칭 (#398) ────────────────────────────────────────────────

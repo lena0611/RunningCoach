@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { RunLog } from '@/entities/run/model'
 import type { TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
 import { normalizeTrainingMemory } from '@/entities/training-memory/model'
-import { getAgeLoadWeight, getChronicLoadTrend, getNextSessionRecommendation } from './runStats'
+import { getAgeLoadWeight, getChronicLoadTrend, getLongestRunKmWithinDays, getNextSessionRecommendation } from './runStats'
 
 const today = new Date('2026-06-02T00:00:00')
 const dayNames = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
@@ -36,6 +36,20 @@ function daysAgo(n: number): string {
 }
 
 const runs: RunLog[] = []
+
+describe('getLongestRunKmWithinDays (#473 복귀 램프 입력)', () => {
+  it('직전 N일 최장 런 거리', () => {
+    expect(getLongestRunKmWithinDays([run(daysAgo(2), 8), run(daysAgo(10), 12), run(daysAgo(20), 5)], 30, today)).toBe(12)
+  })
+  it('윈도 밖 런은 제외', () => {
+    // 45일 전 20km(밖) + 5일 전 6km(안) → 6
+    expect(getLongestRunKmWithinDays([run(daysAgo(45), 20), run(daysAgo(5), 6)], 30, today)).toBe(6)
+  })
+  it('런 없으면 0(긴 완전 휴식)', () => {
+    expect(getLongestRunKmWithinDays([], 30, today)).toBe(0)
+    expect(getLongestRunKmWithinDays([run(daysAgo(45), 20)], 30, today)).toBe(0)
+  })
+})
 
 describe('getNextSessionRecommendation injury gate', () => {
   it('keeps the quality session when there is no injury', () => {
