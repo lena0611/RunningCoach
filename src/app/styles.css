@@ -5971,12 +5971,13 @@ button.run-session-row {
   transform: translateX(0);
 }
 
-/* 1차 스택은 아래에서 위로 슬라이드인(2차부터는 stack-page 우→좌). */
+/* 1차 스택은 아래에서 위로 슬라이드인(2차부터는 stack-page 우→좌).
+   위→아래 움직임이 또렷이 보이도록 조금 느리게(240→360ms). */
 .stack-page-up-enter-active,
 .stack-page-up-leave-active {
   transition:
-    transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
-    opacity 180ms ease;
+    transform 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 240ms ease;
 }
 
 .stack-page-up-enter-from,
