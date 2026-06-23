@@ -6,8 +6,9 @@
 > 하네스 본체의 개발 기록이 아닙니다. 설치된 프로젝트의 현재 작업 맥락만 기록합니다.
 > 상세 인수인계는 (있으면) 프로젝트 루트 `HANDOFF.md`. 장기 지식은 에이전트 메모리.
 
-## ⭐ 현재 작업 — 휴식/복귀(#473) **Phase 1 + Phase 2 복귀 램프 코어 완료**, 라이브 스모크만 (2026-06-23)
-- **#473 Phase 1(PR#476·477·478) + Phase 2 복귀 램프 코어(PR#480) 완료·라이브**: Phase 1=rested 닦달 차단·💤 배너·코치 보이스. **Phase 2 PR#480=복귀 시 현재 체력 재앵커+초반 N개 세션 Easy·거리캡(≤직전30일 최장+10% BJSM), drift 무관 무조건 강제, 4주 경계 차등(durationDays <7무램프/7~27→2/≥28→3), 명시·자연 복귀 통일+복귀윈도 캡 보존**. 2회 적대리뷰 반영. **다음 1순위 = 라이브 렌더 스모크**(휴식 선언 + 복귀 시 첫 세션 Easy·짧게+"회복 후 정리"·닦달 미발동). 그 후 부상 walk-run 후속 PR(현재 공백) 또는 coach-run LLM 휴식 인지. 상세 [[rest-and-return-coaching]]·이슈 #473 코멘트.
+## ⭐ 현재 작업 — 휴식/복귀(#473) **Phase 1·2 코어 완료·라이브 검증·배포 끝** + 자율 QA 인프라 (2026-06-23)
+- **#473 Phase 1(PR#476·477·478) + Phase 2 복귀 램프 코어(PR#480) 완료·라이브**: Phase 1=rested 닦달 차단·💤 배너·코치 보이스. Phase 2=복귀 시 현재 체력 재앵커+초반 N개 세션 Easy·거리캡(≤직전30일 최장+10% BJSM)·drift 무관 강제·4주 차등·복귀윈도 캡 보존. **라이브 검증 완료**(인증 E2E + MCP 브라우저): 선언·억제·회복주·복귀·복귀 램프(첫 세션 Easy·캡). + 복귀일 조정 저장 버그(PR#482) + session_intents goal_id uuid→text 400 버그(PR#485·배포·201 검증) + iOS 'HealthKit 새 러닝 감지' 알림 연발 디바운스(PR#486, **Xcode 재빌드 검증 대기**). **다음 = #473 후속 택1**: 부상 walk-run 처방(공백)·coach-run LLM 휴식 인지·#473 클로즈. 상세 [[rest-and-return-coaching]]·이슈 #473 코멘트.
+- **🧪 자율 QA 인프라(이번 세션 신설)**: 테스트 계정(lena0611+qa) 저장 세션 + `playwright.rest.config.ts` + DEV 시드 훅(`window.__pacelabE2E`, `src/app/devE2ESeed.ts`). `npx playwright test --config playwright.rest.config.ts`. 규칙 [[agent-verifies-via-local-qa]]·CLAUDE.md "검증·보고 방식".
 - **직전 세션 라이브**: #462 더블 minGap 웹 강한 확인(PR#469)→**#455 에픽 클로즈** / 공통 하네스 0.2.70(PR#471)+루트 CLAUDE.md 마커(PR#472).
 - **직전·라이브**: #454 제안훈련 응답+주간정산+주 고정 뷰, #402 코칭 인간화. `#전문코치리뷰`+코칭 SSOT 선독 의무+commit-msg `Coach-Review` 게이트. 메모리 [[coach-not-data-referee]], [[professional-coach-review-trigger]], [[schedule-response-and-weekly-settlement]].
   - ⚠ **머지 규칙**: squash 후 `git diff <tip> origin/main` 빈결과 트리 검증 필수(#463 24→11 누락 사고), 의심 시 `--merge`. 메모리 [[pr-squash-merge-race-verify-tree]].
