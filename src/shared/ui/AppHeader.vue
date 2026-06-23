@@ -22,6 +22,7 @@ import FormGrid from '@/shared/ui/FormGrid.vue'
 import GlossarySheet from '@/shared/ui/GlossarySheet.vue'
 import HeartRateHelpSheet from '@/shared/ui/HeartRateHelpSheet.vue'
 import HeartRateTestGuideSheet from '@/shared/ui/HeartRateTestGuideSheet.vue'
+import StackPage from '@/shared/ui/StackPage.vue'
 
 defineProps<{ isAuthenticated: boolean }>()
 const emit = defineEmits<{ signOut: [] }>()
@@ -446,277 +447,249 @@ function goGlossary() {
     </button>
   </header>
 
-  <Teleport to="body">
-    <Transition name="stack-page">
-      <div v-if="drawerOpen" class="memory-stack-layer" data-no-swipe>
-        <section class="memory-stack-page">
-          <header class="memory-stack-header memory-stack-header-actions">
-            <div>
-              <h2>계정 정보</h2>
-            </div>
-            <div class="stack-header-actions">
-              <button class="stack-icon-button" type="button" aria-label="설정 열기" @click="drawerPanel = 'settings'">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" /><path d="M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1 1.6V21a2 2 0 0 1-4 0v-.1a1.8 1.8 0 0 0-1-1.6 1.8 1.8 0 0 0-2 .4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.8 1.8 0 0 0 .4-2 1.8 1.8 0 0 0-1.6-1H3a2 2 0 0 1 0-4h.1a1.8 1.8 0 0 0 1.6-1 1.8 1.8 0 0 0-.4-2l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.8 1.8 0 0 0 2 .4 1.8 1.8 0 0 0 1-1.6V3a2 2 0 0 1 4 0v.1a1.8 1.8 0 0 0 1 1.6 1.8 1.8 0 0 0 2-.4l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.8 1.8 0 0 0-.4 2 1.8 1.8 0 0 0 1.6 1H21a2 2 0 0 1 0 4h-.1a1.8 1.8 0 0 0-1.5 1Z" /></svg>
-              </button>
-              <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeDrawer">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
-              </button>
-            </div>
-          </header>
-
-          <main class="memory-stack-content">
-            <div class="account-summary">
-              <div class="account-avatar">{{ accountLabel.slice(0, 1).toUpperCase() }}</div>
-              <div>
-                <strong>{{ accountLabel }}</strong>
-                <span>{{ accountEmail }}</span>
-              </div>
-            </div>
-
-            <dl class="account-details">
-              <div>
-                <dt>목표</dt>
-                <dd>{{ activeGoalTitle }}</dd>
-              </div>
-              <div>
-                <dt>러닝 경력</dt>
-                <dd>{{ formatExperience(memoryStore.memory.athleteProfile.runningExperienceMonths) }}</dd>
-              </div>
-              <div>
-                <dt>러너 레벨</dt>
-                <dd>{{ runnerLevelDisplay }}</dd>
-              </div>
-              <div>
-                <dt>선호 롱런</dt>
-                <dd>{{ memoryStore.memory.athleteProfile.preferredLongRunDay || '미입력' }}</dd>
-              </div>
-              <div>
-                <dt>심박 상한</dt>
-                <dd>{{ activeHeartRateDisplay }}</dd>
-              </div>
-              <div>
-                <dt>부상관리</dt>
-                <dd>{{ activeInjuryTitle }}</dd>
-              </div>
-            </dl>
-
-            <button class="drawer-link-row" type="button" @click="goGlossary">
-              <span class="drawer-link-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1.2 1-1.2 1.9" /><path d="M12 16.5h.01" /></svg>
-              </span>
-              <span class="drawer-link-text">
-                <strong>용어 안내</strong>
-                <span>러닝·코칭 용어를 한곳에서 찾아보기</span>
-              </span>
-              <svg class="drawer-link-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
-            </button>
-
-            <ActionGroup class="drawer-actions">
-              <button type="button" @click="drawerPanel = 'profile'">정보수정</button>
-              <button class="ghost" type="button" @click="signOutAndClose">로그아웃</button>
-            </ActionGroup>
-          </main>
-        </section>
+  <StackPage :open="drawerOpen" title="계정 정보" wide-actions>
+    <template #actions>
+      <div class="stack-header-actions">
+        <button class="stack-icon-button" type="button" aria-label="설정 열기" @click="drawerPanel = 'settings'">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" /><path d="M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1 1.6V21a2 2 0 0 1-4 0v-.1a1.8 1.8 0 0 0-1-1.6 1.8 1.8 0 0 0-2 .4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.8 1.8 0 0 0 .4-2 1.8 1.8 0 0 0-1.6-1H3a2 2 0 0 1 0-4h.1a1.8 1.8 0 0 0 1.6-1 1.8 1.8 0 0 0-.4-2l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.8 1.8 0 0 0 2 .4 1.8 1.8 0 0 0 1-1.6V3a2 2 0 0 1 4 0v.1a1.8 1.8 0 0 0 1 1.6 1.8 1.8 0 0 0 2-.4l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.8 1.8 0 0 0-.4 2 1.8 1.8 0 0 0 1.6 1H21a2 2 0 0 1 0 4h-.1a1.8 1.8 0 0 0-1.5 1Z" /></svg>
+        </button>
+        <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeDrawer">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+        </button>
       </div>
-    </Transition>
-
-    <Transition name="stack-page">
-      <div v-if="drawerOpen && drawerPanel === 'profile'" class="memory-stack-layer stack-layer-top" data-no-swipe>
-        <section class="memory-stack-page">
-          <header class="memory-stack-header">
-            <button class="stack-icon-button" type="button" aria-label="계정 정보로 돌아가기" @click="drawerPanel = 'account'">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
-            </button>
-            <div>
-              <h2>개인정보 수정</h2>
-            </div>
-          </header>
-
-          <main class="memory-stack-content">
-            <p v-if="error" class="error">{{ error }}</p>
-            <FormGrid as="form" @submit.prevent="saveProfile">
-            <label class="full">
-              계정 표시 이름
-              <ClearableField v-model="draftName" autocomplete="name" />
-            </label>
-            <BottomSheetSelect v-model="birthYearValue" label="출생연도" :options="birthYearOptions" />
-            <BottomSheetSelect v-model="draft.athleteProfile.sex" label="성별" :options="sexOptions" />
-            <BottomSheetSelect v-model="runningExperienceValue" label="러닝 경력" :options="runningExperienceOptions" />
-            <BottomSheetSelect v-model="draft.athleteProfile.runnerLevel" label="러너 레벨" :options="runnerLevelOptions" />
-            <BottomSheetSelect v-model="weeklyRunDaysTargetValue" label="목표 주간 러닝 횟수" :options="weeklyRunDaysTargetOptions" />
-            <BottomSheetSelect v-model="draft.athleteProfile.preferredLongRunDay" label="선호 롱런 요일" :options="weekdayOptions" />
-            <BottomSheetSelect v-model="heartRateModeValue" label="심박 기준" :options="heartRateModeOptions">
-              <template #label-suffix>
-                <button class="help-icon-button help-icon-button-sm" type="button" aria-label="심박 기준 산출 방식 보기" @click="heartRateHelpOpen = true">?</button>
-              </template>
-            </BottomSheetSelect>
-            <div class="full hr-summary">
-              <p><strong>현재 적용</strong> · {{ activeHeartRateDisplay }}</p>
-              <p class="hr-recommended">앱 추천 · {{ recommendedHeartRateDisplay }}</p>
-            </div>
-            <template v-if="heartRateModeValue === 'manual'">
-              <label>
-                <span class="hr-field-label-row">역치심박 LTHR
-                  <button type="button" class="hr-measure-link" @click="heartRateTestGuideOpen = true">측정 방법</button>
-                </span>
-                <ClearableField v-model="lactateThresholdHrValue" type="number" number inputmode="numeric" placeholder="30분 테스트 평균" />
-              </label>
-              <label>
-                최대심박(측정)
-                <ClearableField v-model="maxHeartRateValue" type="number" number inputmode="numeric" placeholder="측정값" />
-              </label>
-              <label>
-                안정심박
-                <ClearableField v-model="restingHeartRateValue" type="number" number inputmode="numeric" placeholder="아침 안정 시" />
-              </label>
-            </template>
-            <p class="full hr-hint">
-              심박존·상한은 역치심박(LTHR) &gt; 측정 최대심박 &gt; 나이 + 누적 기록 보정 순으로 개인화합니다.
-              산출 방식과 근거는 <strong>심박 기준</strong> 옆 <strong>?</strong>를 눌러 확인하세요.
-            </p>
-            <div class="full vo2-card">
-              <div class="vo2-card-head">
-                <h3>심폐 체력 (VO2max)</h3>
-                <button
-                  v-if="healthKitBridgeAvailable"
-                  type="button"
-                  class="vo2-refresh"
-                  :disabled="healthKitSyncStore.vo2MaxRequesting"
-                  @click="refreshVo2Max"
-                >{{ healthKitSyncStore.vo2MaxRequesting ? '불러오는 중' : 'HealthKit 갱신' }}</button>
-              </div>
-              <p v-if="draft.athleteProfile.vo2Max !== null" class="vo2-value">
-                {{ draft.athleteProfile.vo2Max }} <span class="vo2-unit">mL/kg·min</span>
-                <span v-if="vo2MaxSourceLabel" class="vo2-meta">{{ vo2MaxSourceLabel }}<template v-if="vo2MaxSampleDateLabel"> · {{ vo2MaxSampleDateLabel }}</template></span>
-              </p>
-              <label>
-                직접 입력 (HealthKit 값이 없을 때)
-                <ClearableField v-model="vo2MaxValue" type="number" number inputmode="decimal" placeholder="예: 48.5" />
-              </label>
-              <div v-if="paceModelSummary" class="vo2-pace">
-                <p class="vo2-pace-title">추정 페이스 <span class="vo2-pace-tag">보조</span></p>
-                <p class="vo2-pace-line">{{ paceModelSummary }}</p>
-                <p class="vo2-pace-basis">{{ paceModelBasis }}</p>
-              </div>
-              <p class="full hr-hint">
-                심폐 체력은 심박 상한을 만들지 않습니다. 페이스 추정의 보조 신호로만 쓰며, 실제 강도 기준은 심박 상한입니다.
-                <template v-if="!healthKitBridgeAvailable"> HealthKit 자동 갱신은 iOS 앱에서만 동작합니다.</template>
-              </p>
-            </div>
-            <label class="full">
-              거리별 PB
-              <ClearableField
-                :model-value="formatPersonalBests()"
-                as="textarea"
-                rows="4"
-                placeholder="5, 28:30, 2026-05-01, race"
-                @update:model-value="draft.athleteProfile.personalBests = parsePersonalBests(String($event ?? ''))"
-              />
-            </label>
-            <button class="full" type="submit" :disabled="saving">{{ saving ? '저장 중' : '저장' }}</button>
-          </FormGrid>
-          </main>
-        </section>
+    </template>
+    <div class="account-summary">
+      <div class="account-avatar">{{ accountLabel.slice(0, 1).toUpperCase() }}</div>
+      <div>
+        <strong>{{ accountLabel }}</strong>
+        <span>{{ accountEmail }}</span>
       </div>
-    </Transition>
+    </div>
 
-    <Transition name="stack-page">
-      <div v-if="drawerOpen && drawerPanel === 'settings'" class="memory-stack-layer stack-layer-top" data-no-swipe>
-        <section class="memory-stack-page">
-          <header class="memory-stack-header">
-            <button class="stack-icon-button" type="button" aria-label="계정 정보로 돌아가기" @click="drawerPanel = 'account'">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
-            </button>
-            <div>
-              <h2>설정</h2>
-            </div>
-          </header>
-
-          <main class="memory-stack-content">
-          <section class="settings-section">
-            <div class="settings-section-heading">
-              <p class="eyebrow">Theme</p>
-              <h3>화면 테마</h3>
-            </div>
-
-            <div class="settings-row">
-              <div>
-                <strong>iOS 테마 자동 따라가기</strong>
-                <span>기기 appearance가 바뀌면 PaceLAB도 같이 바뀝니다.</span>
-              </div>
-              <button
-                class="switch-control"
-                :class="{ on: settingsStore.followsSystem }"
-                type="button"
-                role="switch"
-                :aria-checked="settingsStore.followsSystem"
-                @click="settingsStore.setFollowSystem(!settingsStore.followsSystem)"
-              >
-                <span />
-              </button>
-            </div>
-
-            <BottomSheetSelect
-              v-if="!settingsStore.followsSystem"
-              :model-value="settingsStore.manualTheme"
-              label="수동 테마"
-              :options="themeModeOptions"
-              @update:model-value="setThemeMode"
-            />
-
-            <p class="helper">현재 적용: {{ settingsStore.effectiveTheme === 'light' ? '라이트' : '다크' }}</p>
-          </section>
-
-          <section class="settings-section">
-            <div class="settings-section-heading">
-              <p class="eyebrow">Notifications</p>
-              <h3>알림</h3>
-            </div>
-
-            <div class="settings-row">
-              <div>
-                <strong>전체 알림</strong>
-                <span>훈련 스케줄과 HealthKit 신규 기록 알림을 한 번에 켜고 끕니다.</span>
-              </div>
-              <button
-                class="switch-control"
-                :class="{ on: settingsStore.notificationSettings.allEnabled }"
-                type="button"
-                role="switch"
-                :aria-checked="settingsStore.notificationSettings.allEnabled"
-                @click="setAllNotifications(!settingsStore.notificationSettings.allEnabled)"
-              >
-                <span />
-              </button>
-            </div>
-
-            <div class="notification-list" :class="{ disabled: !settingsStore.notificationSettings.allEnabled }">
-              <div v-for="row in notificationRows" :key="row.key" class="settings-row compact">
-                <div>
-                  <strong>{{ row.title }}</strong>
-                  <span>{{ row.detail }}</span>
-                </div>
-                <button
-                  class="switch-control"
-                  :class="{ on: settingsStore.notificationSettings.allEnabled && settingsStore.notificationSettings[row.key] }"
-                  type="button"
-                  role="switch"
-                  :aria-checked="settingsStore.notificationSettings.allEnabled && settingsStore.notificationSettings[row.key]"
-                  :disabled="!settingsStore.notificationSettings.allEnabled"
-                  @click="setNotification(row.key, !settingsStore.notificationSettings[row.key])"
-                >
-                  <span />
-                </button>
-              </div>
-            </div>
-
-            <p class="helper">iPhone에서는 알림 권한을 허용해야 배너가 표시됩니다. 루틴 변경 후에는 가까운 2주 알림을 다시 예약합니다.</p>
-          </section>
-          </main>
-        </section>
+    <dl class="account-details">
+      <div>
+        <dt>목표</dt>
+        <dd>{{ activeGoalTitle }}</dd>
       </div>
-    </Transition>
-  </Teleport>
+      <div>
+        <dt>러닝 경력</dt>
+        <dd>{{ formatExperience(memoryStore.memory.athleteProfile.runningExperienceMonths) }}</dd>
+      </div>
+      <div>
+        <dt>러너 레벨</dt>
+        <dd>{{ runnerLevelDisplay }}</dd>
+      </div>
+      <div>
+        <dt>선호 롱런</dt>
+        <dd>{{ memoryStore.memory.athleteProfile.preferredLongRunDay || '미입력' }}</dd>
+      </div>
+      <div>
+        <dt>심박 상한</dt>
+        <dd>{{ activeHeartRateDisplay }}</dd>
+      </div>
+      <div>
+        <dt>부상관리</dt>
+        <dd>{{ activeInjuryTitle }}</dd>
+      </div>
+    </dl>
+
+    <button class="drawer-link-row" type="button" @click="goGlossary">
+      <span class="drawer-link-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1.2 1-1.2 1.9" /><path d="M12 16.5h.01" /></svg>
+      </span>
+      <span class="drawer-link-text">
+        <strong>용어 안내</strong>
+        <span>러닝·코칭 용어를 한곳에서 찾아보기</span>
+      </span>
+      <svg class="drawer-link-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+    </button>
+
+    <ActionGroup class="drawer-actions">
+      <button type="button" @click="drawerPanel = 'profile'">정보수정</button>
+      <button class="ghost" type="button" @click="signOutAndClose">로그아웃</button>
+    </ActionGroup>
+  </StackPage>
+
+  <StackPage
+    :open="drawerOpen && drawerPanel === 'profile'"
+    title="개인정보 수정"
+    back
+    dismiss-label="계정 정보로 돌아가기"
+    layer-class="stack-layer-top"
+    @close="drawerPanel = 'account'"
+  >
+    <p v-if="error" class="error">{{ error }}</p>
+    <FormGrid as="form" @submit.prevent="saveProfile">
+    <label class="full">
+      계정 표시 이름
+      <ClearableField v-model="draftName" autocomplete="name" />
+    </label>
+    <BottomSheetSelect v-model="birthYearValue" label="출생연도" :options="birthYearOptions" />
+    <BottomSheetSelect v-model="draft.athleteProfile.sex" label="성별" :options="sexOptions" />
+    <BottomSheetSelect v-model="runningExperienceValue" label="러닝 경력" :options="runningExperienceOptions" />
+    <BottomSheetSelect v-model="draft.athleteProfile.runnerLevel" label="러너 레벨" :options="runnerLevelOptions" />
+    <BottomSheetSelect v-model="weeklyRunDaysTargetValue" label="목표 주간 러닝 횟수" :options="weeklyRunDaysTargetOptions" />
+    <BottomSheetSelect v-model="draft.athleteProfile.preferredLongRunDay" label="선호 롱런 요일" :options="weekdayOptions" />
+    <BottomSheetSelect v-model="heartRateModeValue" label="심박 기준" :options="heartRateModeOptions">
+      <template #label-suffix>
+        <button class="help-icon-button help-icon-button-sm" type="button" aria-label="심박 기준 산출 방식 보기" @click="heartRateHelpOpen = true">?</button>
+      </template>
+    </BottomSheetSelect>
+    <div class="full hr-summary">
+      <p><strong>현재 적용</strong> · {{ activeHeartRateDisplay }}</p>
+      <p class="hr-recommended">앱 추천 · {{ recommendedHeartRateDisplay }}</p>
+    </div>
+    <template v-if="heartRateModeValue === 'manual'">
+      <label>
+        <span class="hr-field-label-row">역치심박 LTHR
+          <button type="button" class="hr-measure-link" @click="heartRateTestGuideOpen = true">측정 방법</button>
+        </span>
+        <ClearableField v-model="lactateThresholdHrValue" type="number" number inputmode="numeric" placeholder="30분 테스트 평균" />
+      </label>
+      <label>
+        최대심박(측정)
+        <ClearableField v-model="maxHeartRateValue" type="number" number inputmode="numeric" placeholder="측정값" />
+      </label>
+      <label>
+        안정심박
+        <ClearableField v-model="restingHeartRateValue" type="number" number inputmode="numeric" placeholder="아침 안정 시" />
+      </label>
+    </template>
+    <p class="full hr-hint">
+      심박존·상한은 역치심박(LTHR) &gt; 측정 최대심박 &gt; 나이 + 누적 기록 보정 순으로 개인화합니다.
+      산출 방식과 근거는 <strong>심박 기준</strong> 옆 <strong>?</strong>를 눌러 확인하세요.
+    </p>
+    <div class="full vo2-card">
+      <div class="vo2-card-head">
+        <h3>심폐 체력 (VO2max)</h3>
+        <button
+          v-if="healthKitBridgeAvailable"
+          type="button"
+          class="vo2-refresh"
+          :disabled="healthKitSyncStore.vo2MaxRequesting"
+          @click="refreshVo2Max"
+        >{{ healthKitSyncStore.vo2MaxRequesting ? '불러오는 중' : 'HealthKit 갱신' }}</button>
+      </div>
+      <p v-if="draft.athleteProfile.vo2Max !== null" class="vo2-value">
+        {{ draft.athleteProfile.vo2Max }} <span class="vo2-unit">mL/kg·min</span>
+        <span v-if="vo2MaxSourceLabel" class="vo2-meta">{{ vo2MaxSourceLabel }}<template v-if="vo2MaxSampleDateLabel"> · {{ vo2MaxSampleDateLabel }}</template></span>
+      </p>
+      <label>
+        직접 입력 (HealthKit 값이 없을 때)
+        <ClearableField v-model="vo2MaxValue" type="number" number inputmode="decimal" placeholder="예: 48.5" />
+      </label>
+      <div v-if="paceModelSummary" class="vo2-pace">
+        <p class="vo2-pace-title">추정 페이스 <span class="vo2-pace-tag">보조</span></p>
+        <p class="vo2-pace-line">{{ paceModelSummary }}</p>
+        <p class="vo2-pace-basis">{{ paceModelBasis }}</p>
+      </div>
+      <p class="full hr-hint">
+        심폐 체력은 심박 상한을 만들지 않습니다. 페이스 추정의 보조 신호로만 쓰며, 실제 강도 기준은 심박 상한입니다.
+        <template v-if="!healthKitBridgeAvailable"> HealthKit 자동 갱신은 iOS 앱에서만 동작합니다.</template>
+      </p>
+    </div>
+    <label class="full">
+      거리별 PB
+      <ClearableField
+        :model-value="formatPersonalBests()"
+        as="textarea"
+        rows="4"
+        placeholder="5, 28:30, 2026-05-01, race"
+        @update:model-value="draft.athleteProfile.personalBests = parsePersonalBests(String($event ?? ''))"
+      />
+    </label>
+    <button class="full" type="submit" :disabled="saving">{{ saving ? '저장 중' : '저장' }}</button>
+  </FormGrid>
+  </StackPage>
+
+  <StackPage
+    :open="drawerOpen && drawerPanel === 'settings'"
+    title="설정"
+    back
+    dismiss-label="계정 정보로 돌아가기"
+    layer-class="stack-layer-top"
+    @close="drawerPanel = 'account'"
+  >
+    <section class="settings-section">
+      <div class="settings-section-heading">
+        <p class="eyebrow">Theme</p>
+        <h3>화면 테마</h3>
+      </div>
+
+      <div class="settings-row">
+        <div>
+          <strong>iOS 테마 자동 따라가기</strong>
+          <span>기기 appearance가 바뀌면 PaceLAB도 같이 바뀝니다.</span>
+        </div>
+        <button
+          class="switch-control"
+          :class="{ on: settingsStore.followsSystem }"
+          type="button"
+          role="switch"
+          :aria-checked="settingsStore.followsSystem"
+          @click="settingsStore.setFollowSystem(!settingsStore.followsSystem)"
+        >
+          <span />
+        </button>
+      </div>
+
+      <BottomSheetSelect
+        v-if="!settingsStore.followsSystem"
+        :model-value="settingsStore.manualTheme"
+        label="수동 테마"
+        :options="themeModeOptions"
+        @update:model-value="setThemeMode"
+      />
+
+      <p class="helper">현재 적용: {{ settingsStore.effectiveTheme === 'light' ? '라이트' : '다크' }}</p>
+    </section>
+
+    <section class="settings-section">
+      <div class="settings-section-heading">
+        <p class="eyebrow">Notifications</p>
+        <h3>알림</h3>
+      </div>
+
+      <div class="settings-row">
+        <div>
+          <strong>전체 알림</strong>
+          <span>훈련 스케줄과 HealthKit 신규 기록 알림을 한 번에 켜고 끕니다.</span>
+        </div>
+        <button
+          class="switch-control"
+          :class="{ on: settingsStore.notificationSettings.allEnabled }"
+          type="button"
+          role="switch"
+          :aria-checked="settingsStore.notificationSettings.allEnabled"
+          @click="setAllNotifications(!settingsStore.notificationSettings.allEnabled)"
+        >
+          <span />
+        </button>
+      </div>
+
+      <div class="notification-list" :class="{ disabled: !settingsStore.notificationSettings.allEnabled }">
+        <div v-for="row in notificationRows" :key="row.key" class="settings-row compact">
+          <div>
+            <strong>{{ row.title }}</strong>
+            <span>{{ row.detail }}</span>
+          </div>
+          <button
+            class="switch-control"
+            :class="{ on: settingsStore.notificationSettings.allEnabled && settingsStore.notificationSettings[row.key] }"
+            type="button"
+            role="switch"
+            :aria-checked="settingsStore.notificationSettings.allEnabled && settingsStore.notificationSettings[row.key]"
+            :disabled="!settingsStore.notificationSettings.allEnabled"
+            @click="setNotification(row.key, !settingsStore.notificationSettings[row.key])"
+          >
+            <span />
+          </button>
+        </div>
+      </div>
+
+      <p class="helper">iPhone에서는 알림 권한을 허용해야 배너가 표시됩니다. 루틴 변경 후에는 가까운 2주 알림을 다시 예약합니다.</p>
+    </section>
+  </StackPage>
 
   <HeartRateHelpSheet :open="heartRateHelpOpen" @close="heartRateHelpOpen = false" />
 

@@ -39,6 +39,7 @@ import RunSessionList from '@/shared/ui/RunSessionList.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import SchedulingHelpSheet from '@/shared/ui/SchedulingHelpSheet.vue'
+import StackPage from '@/shared/ui/StackPage.vue'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 
@@ -1414,82 +1415,56 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
       <p v-if="error" class="error">{{ error }}</p>
     </SectionGroup>
 
-    <Teleport to="body">
-      <Transition name="stack-page">
-        <div v-if="detailRun" class="memory-stack-layer" data-no-swipe>
-        <section class="memory-stack-page">
-          <header class="memory-stack-header">
-            <div>
-              <h2>세션 상세</h2>
-            </div>
-            <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeDetail">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
-            </button>
-          </header>
-          <RunDetailContent :run="detailRun" :weekly-pattern="memoryStore.memory.weeklyPattern">
-            <template #actions>
-                <div class="run-detail-actions" aria-label="세션 관리">
-                  <button
-                    v-if="canRefreshFromHealthKit(detailRun)"
-                    class="icon-only-button"
-                    :class="{ spinning: healthKitSyncStore.refreshingRunId === detailRun.id }"
-                    type="button"
-                    :disabled="healthKitSyncStore.refreshingRunId === detailRun.id"
-                    aria-label="HealthKit 세션 다시 갱신"
-                    @click.stop="healthKitSyncStore.requestRunRefresh(detailRun)"
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M20 11a8 8 0 0 0-14.8-4.2" />
-                      <path d="M5 3v4h4" />
-                      <path d="M4 13a8 8 0 0 0 14.8 4.2" />
-                      <path d="M19 21v-4h-4" />
-                    </svg>
-                  </button>
-                  <button class="icon-only-button" type="button" aria-label="기록 수정" @click.stop="startEdit(detailRun)">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M4.5 19.5h4.2L18.8 9.4a2.1 2.1 0 0 0 0-3l-1.2-1.2a2.1 2.1 0 0 0-3 0L4.5 15.3z" />
-                      <path d="m13.6 6.2 4.2 4.2" />
-                    </svg>
-                  </button>
-                  <button class="icon-only-button danger" type="button" :disabled="deletingId === detailRun.id" aria-label="기록 삭제" @click.stop="askRemove(detailRun)">
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M5.5 7h13" />
-                      <path d="M9.5 7V5.5h5V7" />
-                      <path d="m8 9 .6 9.5h6.8L16 9" />
-                      <path d="M10.5 11.5v4" />
-                      <path d="M13.5 11.5v4" />
-                    </svg>
-                  </button>
-                </div>
-            </template>
-          </RunDetailContent>
-          <footer class="stack-action-bar run-detail-cta">
-            <button type="button" :disabled="!isSupabaseConfigured" @click.stop="openCoach(detailRun)">
-              {{ detailCoachButtonLabel(detailRun) }}
-            </button>
-          </footer>
-        </section>
-        </div>
-      </Transition>
-
-      <Transition name="stack-page">
-        <div v-if="addingRun" class="memory-stack-layer stack-layer-top" data-no-swipe>
-          <section class="memory-stack-page">
-            <header class="memory-stack-header">
-              <div>
-                <h2>기록 추가</h2>
-              </div>
-              <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeAddRun(false)">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+    <StackPage :open="!!detailRun" title="세션 상세" bare footer-class="run-detail-cta" @close="closeDetail">
+      <RunDetailContent v-if="detailRun" :run="detailRun" :weekly-pattern="memoryStore.memory.weeklyPattern">
+        <template #actions>
+            <div class="run-detail-actions" aria-label="세션 관리">
+              <button
+                v-if="canRefreshFromHealthKit(detailRun)"
+                class="icon-only-button"
+                :class="{ spinning: healthKitSyncStore.refreshingRunId === detailRun.id }"
+                type="button"
+                :disabled="healthKitSyncStore.refreshingRunId === detailRun.id"
+                aria-label="HealthKit 세션 다시 갱신"
+                @click.stop="healthKitSyncStore.requestRunRefresh(detailRun)"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M20 11a8 8 0 0 0-14.8-4.2" />
+                  <path d="M5 3v4h4" />
+                  <path d="M4 13a8 8 0 0 0 14.8 4.2" />
+                  <path d="M19 21v-4h-4" />
+                </svg>
               </button>
-            </header>
-            <main class="memory-stack-content">
-              <UploadRunPage stack-mode @saved="closeAddRun(true)" />
-            </main>
-          </section>
-        </div>
-      </Transition>
+              <button class="icon-only-button" type="button" aria-label="기록 수정" @click.stop="startEdit(detailRun)">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4.5 19.5h4.2L18.8 9.4a2.1 2.1 0 0 0 0-3l-1.2-1.2a2.1 2.1 0 0 0-3 0L4.5 15.3z" />
+                  <path d="m13.6 6.2 4.2 4.2" />
+                </svg>
+              </button>
+              <button class="icon-only-button danger" type="button" :disabled="deletingId === detailRun.id" aria-label="기록 삭제" @click.stop="askRemove(detailRun)">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5.5 7h13" />
+                  <path d="M9.5 7V5.5h5V7" />
+                  <path d="m8 9 .6 9.5h6.8L16 9" />
+                  <path d="M10.5 11.5v4" />
+                  <path d="M13.5 11.5v4" />
+                </svg>
+              </button>
+            </div>
+        </template>
+      </RunDetailContent>
+      <template #footer>
+        <button v-if="detailRun" type="button" :disabled="!isSupabaseConfigured" @click.stop="openCoach(detailRun)">
+          {{ detailCoachButtonLabel(detailRun) }}
+        </button>
+      </template>
+    </StackPage>
 
+    <StackPage :open="addingRun" title="기록 추가" layer-class="stack-layer-top" @close="closeAddRun(false)">
+      <UploadRunPage stack-mode @saved="closeAddRun(true)" />
+    </StackPage>
+
+    <Teleport to="body">
       <Transition name="stack-page">
         <div v-if="coachRun" class="memory-stack-layer stack-layer-top" data-no-swipe @pointerdown.capture="dismissCoachKeyboardOnOutsideTap">
         <section class="memory-stack-page">
@@ -1589,32 +1564,19 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
         </section>
         </div>
       </Transition>
+    </Teleport>
 
-      <Transition name="stack-page">
-        <div v-if="editing" class="memory-stack-layer stack-layer-top" data-no-swipe>
-        <section class="memory-stack-page">
-          <header class="memory-stack-header">
-            <button v-if="detailRun" class="stack-icon-button" type="button" aria-label="뒤로" @click="closeEdit">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
-            </button>
-            <div>
-              <h2>기록 수정</h2>
-            </div>
-            <button v-if="!detailRun" class="stack-icon-button" type="button" aria-label="닫기" @click="closeEdit">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
-            </button>
-          </header>
-          <main class="memory-stack-content">
-            <RunForm v-model="editing" />
-            <button class="danger full" type="button" @click="askRemove(editing)">이 기록 삭제</button>
-          </main>
-          <footer class="stack-action-bar">
-            <button type="button" :disabled="saving || !isEditDirty" @click="saveEdit">{{ saving ? '저장 중' : isEditDirty ? '변경사항 저장' : '저장됨' }}</button>
-          </footer>
-        </section>
-        </div>
-      </Transition>
+    <StackPage :open="!!editing" title="기록 수정" :back="Boolean(detailRun)" layer-class="stack-layer-top" @close="closeEdit">
+      <template v-if="editing">
+        <RunForm v-model="editing" />
+        <button class="danger full" type="button" @click="askRemove(editing)">이 기록 삭제</button>
+      </template>
+      <template #footer>
+        <button type="button" :disabled="saving || !isEditDirty" @click="saveEdit">{{ saving ? '저장 중' : isEditDirty ? '변경사항 저장' : '저장됨' }}</button>
+      </template>
+    </StackPage>
 
+    <Teleport to="body">
       <div v-if="pendingDeleteRun" class="bottom-sheet-layer confirm-layer" role="presentation" @click.self="pendingDeleteRun = null">
         <section class="bottom-sheet confirm-sheet" :class="{ 'bottom-sheet-dragging': deleteSheetDrag.dragging.value }" :style="deleteSheetDrag.sheetStyle.value" role="dialog" aria-modal="true" aria-label="삭제 확인">
           <div class="bottom-sheet-handle bottom-sheet-drag-zone" @pointerdown="deleteSheetDrag.startDrag" />

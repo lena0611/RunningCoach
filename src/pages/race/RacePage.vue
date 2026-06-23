@@ -11,6 +11,7 @@ import type { AnnounceConfig, PeriodicAnnounceKind } from '@/features/live-run/l
 import type { LiveGapPayload, LiveTickPayload } from '@/features/live-run/liveRunBridge'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import ListRow from '@/shared/ui/ListRow.vue'
+import StackPage from '@/shared/ui/StackPage.vue'
 import { formatTime } from '@/shared/lib/format'
 import { evaluateDoubleGap, type DoubleGapStatus } from '@/shared/lib/coaching/doubleSession'
 
@@ -530,81 +531,67 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
     </Teleport>
 
     <!-- 2차 스택: 레이싱 설정 -->
-    <Teleport to="body">
-      <Transition name="stack-page">
-        <div v-if="settingsOpen" class="memory-stack-layer" data-no-swipe>
-          <section class="memory-stack-page">
-            <header class="memory-stack-header">
-              <button class="stack-icon-button" type="button" aria-label="뒤로" @click="settingsOpen = false">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
-              </button>
-              <div><h2>레이싱 설정</h2></div>
-            </header>
-            <main class="memory-stack-content">
-              <SectionGroup title="거리 설정">
-                <div v-if="distances.length" class="race-chips">
-                  <button v-for="d in distances" :key="d.distanceM" type="button" :class="{ active: selectedDistanceM === d.distanceM }" @click="selectDistance(d.distanceM)">{{ d.label }}</button>
-                </div>
-                <p v-else class="race-muted">5km 이상 기록이 쌓이면 거리가 표시됩니다. 그 전엔 '없음'으로 자유 레이싱할 수 있어요.</p>
-              </SectionGroup>
-
-              <SectionGroup title="상대 설정">
-                <div class="race-options">
-                  <label v-for="o in opponents" :key="o.runId ?? 'none'" class="race-option" :class="{ active: selectedOpponentRunId === o.runId }">
-                    <input type="radio" :checked="selectedOpponentRunId === o.runId" @change="selectedOpponentRunId = o.runId" />
-                    <span class="option-main">{{ opponentLabel(o) }}</span>
-                    <span v-if="o.kind === 'none'" class="option-sub">고스트 없이 측정만. 이번 기록이 다음 타겟이 됩니다.</span>
-                    <span v-else class="option-sub">{{ fmtPace(o.avgPaceSec) }} · {{ o.date }}</span>
-                  </label>
-                </div>
-              </SectionGroup>
-
-              <SectionGroup title="음성 안내 설정">
-                <div class="race-tabs" role="tablist">
-                  <button type="button" role="tab" :aria-selected="periodicKind === 'distance'" :class="{ active: periodicKind === 'distance' }" @click="periodicKind = 'distance'">거리</button>
-                  <button type="button" role="tab" :aria-selected="periodicKind === 'time'" :class="{ active: periodicKind === 'time' }" @click="periodicKind = 'time'">시간</button>
-                  <button type="button" role="tab" :aria-selected="periodicKind === 'silent'" :class="{ active: periodicKind === 'silent' }" @click="periodicKind = 'silent'">조용히</button>
-                </div>
-                <div v-if="periodicKind !== 'silent'" class="race-sub">
-                  <span class="race-sub-label">{{ periodicKind === 'distance' ? '구간마다 안내' : '시간마다 안내' }}</span>
-                  <div v-if="periodicKind === 'distance'" class="race-sub-options">
-                    <button type="button" :class="{ active: stepM === 100 }" @click="stepM = 100">100m</button>
-                    <button type="button" :class="{ active: stepM === 500 }" @click="stepM = 500">500m</button>
-                    <button type="button" :class="{ active: stepM === 1000 }" @click="stepM = 1000">1km</button>
-                  </div>
-                  <div v-else class="race-sub-options">
-                    <button type="button" :class="{ active: stepSec === 60 }" @click="stepSec = 60">1분</button>
-                    <button type="button" :class="{ active: stepSec === 180 }" @click="stepSec = 180">3분</button>
-                    <button type="button" :class="{ active: stepSec === 300 }" @click="stepSec = 300">5분</button>
-                  </div>
-                </div>
-                <p v-else class="race-sub-silent">음성 안내 없이 측정만 합니다.</p>
-                <div class="race-sub" :class="{ 'is-disabled': !hasGhost }">
-                  <span class="race-sub-label">
-                    격차 표시 단위
-                    <small v-if="!hasGhost" class="toggle-hint">상대를 선택하면 설정할 수 있어요</small>
-                  </span>
-                  <div class="race-sub-options">
-                    <button type="button" :class="{ active: gapMode === 'distance' }" :disabled="!hasGhost" @click="gapMode = 'distance'">거리</button>
-                    <button type="button" :class="{ active: gapMode === 'time' }" :disabled="!hasGhost" @click="gapMode = 'time'">시간</button>
-                  </div>
-                </div>
-                <label class="race-toggle" :class="{ 'is-disabled': !hasGhost }">
-                  <span class="toggle-label">
-                    역전 알림 (추월/추월당함)
-                    <small v-if="!hasGhost" class="toggle-hint">상대를 선택하면 켤 수 있어요</small>
-                  </span>
-                  <input type="checkbox" v-model="reversalAlert" :disabled="!hasGhost" />
-                </label>
-              </SectionGroup>
-            </main>
-            <footer class="stack-footer">
-              <button class="race-cta" type="button" @click="saveSettings">설정 저장</button>
-            </footer>
-          </section>
+    <StackPage :open="settingsOpen" title="레이싱 설정" back dismiss-label="뒤로" @close="settingsOpen = false">
+      <SectionGroup title="거리 설정">
+        <div v-if="distances.length" class="race-chips">
+          <button v-for="d in distances" :key="d.distanceM" type="button" :class="{ active: selectedDistanceM === d.distanceM }" @click="selectDistance(d.distanceM)">{{ d.label }}</button>
         </div>
-      </Transition>
-    </Teleport>
+        <p v-else class="race-muted">5km 이상 기록이 쌓이면 거리가 표시됩니다. 그 전엔 '없음'으로 자유 레이싱할 수 있어요.</p>
+      </SectionGroup>
+
+      <SectionGroup title="상대 설정">
+        <div class="race-options">
+          <label v-for="o in opponents" :key="o.runId ?? 'none'" class="race-option" :class="{ active: selectedOpponentRunId === o.runId }">
+            <input type="radio" :checked="selectedOpponentRunId === o.runId" @change="selectedOpponentRunId = o.runId" />
+            <span class="option-main">{{ opponentLabel(o) }}</span>
+            <span v-if="o.kind === 'none'" class="option-sub">고스트 없이 측정만. 이번 기록이 다음 타겟이 됩니다.</span>
+            <span v-else class="option-sub">{{ fmtPace(o.avgPaceSec) }} · {{ o.date }}</span>
+          </label>
+        </div>
+      </SectionGroup>
+
+      <SectionGroup title="음성 안내 설정">
+        <div class="race-tabs" role="tablist">
+          <button type="button" role="tab" :aria-selected="periodicKind === 'distance'" :class="{ active: periodicKind === 'distance' }" @click="periodicKind = 'distance'">거리</button>
+          <button type="button" role="tab" :aria-selected="periodicKind === 'time'" :class="{ active: periodicKind === 'time' }" @click="periodicKind = 'time'">시간</button>
+          <button type="button" role="tab" :aria-selected="periodicKind === 'silent'" :class="{ active: periodicKind === 'silent' }" @click="periodicKind = 'silent'">조용히</button>
+        </div>
+        <div v-if="periodicKind !== 'silent'" class="race-sub">
+          <span class="race-sub-label">{{ periodicKind === 'distance' ? '구간마다 안내' : '시간마다 안내' }}</span>
+          <div v-if="periodicKind === 'distance'" class="race-sub-options">
+            <button type="button" :class="{ active: stepM === 100 }" @click="stepM = 100">100m</button>
+            <button type="button" :class="{ active: stepM === 500 }" @click="stepM = 500">500m</button>
+            <button type="button" :class="{ active: stepM === 1000 }" @click="stepM = 1000">1km</button>
+          </div>
+          <div v-else class="race-sub-options">
+            <button type="button" :class="{ active: stepSec === 60 }" @click="stepSec = 60">1분</button>
+            <button type="button" :class="{ active: stepSec === 180 }" @click="stepSec = 180">3분</button>
+            <button type="button" :class="{ active: stepSec === 300 }" @click="stepSec = 300">5분</button>
+          </div>
+        </div>
+        <p v-else class="race-sub-silent">음성 안내 없이 측정만 합니다.</p>
+        <div class="race-sub" :class="{ 'is-disabled': !hasGhost }">
+          <span class="race-sub-label">
+            격차 표시 단위
+            <small v-if="!hasGhost" class="toggle-hint">상대를 선택하면 설정할 수 있어요</small>
+          </span>
+          <div class="race-sub-options">
+            <button type="button" :class="{ active: gapMode === 'distance' }" :disabled="!hasGhost" @click="gapMode = 'distance'">거리</button>
+            <button type="button" :class="{ active: gapMode === 'time' }" :disabled="!hasGhost" @click="gapMode = 'time'">시간</button>
+          </div>
+        </div>
+        <label class="race-toggle" :class="{ 'is-disabled': !hasGhost }">
+          <span class="toggle-label">
+            역전 알림 (추월/추월당함)
+            <small v-if="!hasGhost" class="toggle-hint">상대를 선택하면 켤 수 있어요</small>
+          </span>
+          <input type="checkbox" v-model="reversalAlert" :disabled="!hasGhost" />
+        </label>
+      </SectionGroup>
+      <template #footer>
+        <button class="race-cta" type="button" @click="saveSettings">설정 저장</button>
+      </template>
+    </StackPage>
   </section>
 </template>
 
