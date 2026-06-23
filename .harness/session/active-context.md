@@ -6,9 +6,9 @@
 > 하네스 본체의 개발 기록이 아닙니다. 설치된 프로젝트의 현재 작업 맥락만 기록합니다.
 > 상세 인수인계는 (있으면) 프로젝트 루트 `HANDOFF.md`. 장기 지식은 에이전트 메모리.
 
-## ⭐ 현재 작업 — 휴식/복귀 기능(#473) 설계·SSOT 적재 완료, Phase 1 구현 대기 (2026-06-23)
-- **다음 1순위 — #473 Phase 1(범용 휴식 선언 + 닦달 차단)**: 부상/장마/개인 일정 휴식(기간 사용자 지정). `rested` 상태 신설(+DB CHECK 마이그)→settle/triage/realign이 `planned`만 보므로 자동 닦달 제외 / `declareRest(start,days|until,reason?)` store / 차분 주간카드(💤+"쉬는 중 D-N" 배너) / 코치 톤("푹 쉬세요")+대안1회 / 복귀 정리. PR 2~3 분할(코어 먼저). 코칭 도메인→`Coach-Review`. **설계·복귀 프로토콜 전부 메모리 [[rest-and-return-coaching]]**(딥리서치→SSOT 적재 PR#474 §휴식과 복귀·§3-B).
-- **이번 세션 완료·라이브**: #462 더블 minGap 웹 강한 확인(PR#469, RacePage — 인앱 라이브 시작에만·오버라이드 허용; 네이티브 하드가드 불필요로 정리)→**#455 에픽 클로즈** / 공통 하네스 0.2.70(PR#471 진입파일 마커 머지)+루트 CLAUDE.md 마커 마이그레이션(PR#472) / 로컬 브랜치 38→2·레거시 worktree 2개 정리.
+## ⭐ 현재 작업 — 휴식/복귀 기능(#473) **Phase 1 완료**(PR1-3 머지), 라이브 스모크만 (2026-06-23)
+- **#473 Phase 1 완료·라이브**: PR1 #476(rested+declareRest+닦달 차단 코어+마이그 배포) · PR2 #477(activeRest+💤 스트립/배너+선언 시트) · **PR3 #478(코치 보이스: 휴식 중 닦달 억제[안전 모먼트 예외]·"푹 쉬세요"+회복주 1회·복귀 "회복 후 정리"·>4주 목표재점검·shouldOfferRecoveryRun 게이트·부상 회복주 walk-run·부상 체크인 "한동안 쉴게요" 진입; 4렌즈 적대리뷰 반영)**. **다음 1순위 = 라이브 렌더 스모크**(💤 배너+"푹 쉬세요" 카드·복귀 톤·닦달 미발동). 그 후 Phase 2(복귀 램프) 또는 coach-run LLM 휴식 인지. 상세 [[rest-and-return-coaching]]·이슈 #473 코멘트.
+- **직전 세션 라이브**: #462 더블 minGap 웹 강한 확인(PR#469)→**#455 에픽 클로즈** / 공통 하네스 0.2.70(PR#471)+루트 CLAUDE.md 마커(PR#472).
 - **직전·라이브**: #454 제안훈련 응답+주간정산+주 고정 뷰, #402 코칭 인간화. `#전문코치리뷰`+코칭 SSOT 선독 의무+commit-msg `Coach-Review` 게이트. 메모리 [[coach-not-data-referee]], [[professional-coach-review-trigger]], [[schedule-response-and-weekly-settlement]].
   - ⚠ **머지 규칙**: squash 후 `git diff <tip> origin/main` 빈결과 트리 검증 필수(#463 24→11 누락 사고), 의심 시 `--merge`. 메모리 [[pr-squash-merge-race-verify-tree]].
 - **그 다음**: 실기기 스팟체크(#462 강한 확인 오버레이·#455 더블 카드) → #454 나머지 플로우 → #359/#307/#374 스모크 → grill 설계 백로그.
