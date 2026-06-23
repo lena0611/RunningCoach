@@ -5,16 +5,17 @@
 `project-memory.md`, `.harness/project/workflow-rules.md`, `decision-log.md`를 우선합니다.
 > 상세 인수인계가 있으면 프로젝트 루트 `HANDOFF.md`를 먼저 본다.
 
-## ⭐ 현재 위치 (2026-06-23) — 휴식/복귀(#473) **Phase 1 완료 + Phase 2 복귀 램프 코어 완료**, 라이브 스모크만
-- **#473 Phase 1(PR#476·477·478) + Phase 2 복귀 램프 코어(PR#480) 완료·라이브.** Phase 1=rested 닦달 차단·💤 배너·코치 보이스(억제[안전 모먼트 예외]·"푹 쉬세요"+회복주1회·복귀 "회복 후 정리"·부상 회복주 walk-run 톤). **Phase 2 PR#480=복귀 시 현재 체력 재앵커+초반 N개 세션 Easy·거리캡(≤직전30일 최장+10% BJSM), drift 무관 무조건 강제, 4주 경계 차등(durationDays <7무램프/7~27→2/≥28→3), 명시·자연 복귀 통일+복귀윈도 캡 보존(returnRampApplied 멱등).** 2회 적대리뷰 반영. PR별 상세·한계 전부 [[rest-and-return-coaching]]·이슈 #473 코멘트.
-  - ⏳ **남은 것: 라이브 렌더 스모크**(휴식 선언→💤배너+"푹 쉬세요", 복귀 시 첫 세션 Easy·짧게+"회복 후 정리"·닦달 미발동, 7일+ 휴식이라야 램프 가시).
-  - **Phase 2 후속(미착수)**: **부상 복귀 walk-run 점진 처방**(현재 reason-blind 거리램프로 처리 중=공백, injury KB §3-B) · **coach-run LLM 휴식 인지**(채팅 코치 아직 모름). Phase 3=풀 휴식모드(goal paused·캘린더 구간).
+## ⭐ 현재 위치 (2026-06-23) — 휴식/복귀(#473) **Phase 1·2 코어 완료·라이브 검증·배포 끝** + 자율 QA 인프라 구축
+- **#473 Phase 1(PR#476·477·478) + Phase 2 복귀 램프 코어(PR#480) 완료·라이브.** Phase 1=rested 닦달 차단·💤 배너·코치 보이스(억제[안전 모먼트 예외]·"푹 쉬세요"+회복주1회·복귀 "회복 후 정리"·부상 회복주 walk-run 톤). Phase 2=복귀 시 현재 체력 재앵커+초반 N개 세션 Easy·거리캡(≤직전30일 최장+10% BJSM)·drift 무관 강제·4주 차등(durationDays <7무램프/7~27→2/≥28→3)·복귀윈도 캡 보존(returnRampApplied). 2회 적대리뷰 반영. 상세 [[rest-and-return-coaching]]·이슈 #473 코멘트.
+  - ✅ **라이브 검증 완료(수동 스모크 불요)**: 인증 E2E(`playwright.rest.config.ts` + 테스트계정 lena0611+qa 저장세션)로 선언·닦달억제·회복주1회·복귀·**복귀 램프(첫 세션 Easy·캡, DEV 시드 훅)** 자동 통과 + MCP 브라우저 라이브 확인. 복귀일 조정 저장 버그(PR#482) + session_intents goal_id uuid→text 400 버그(마이그 202606230002·PR#485·db push 배포·POST 201 검증)도 처리.
+  - **Phase 2 후속(미착수=다음 후보)**: **부상 복귀 walk-run 점진 처방**(현재 reason-blind 거리램프=공백, injury KB §3-B) · **coach-run LLM 휴식 인지**(채팅 코치 아직 모름). Phase 3=풀 휴식모드(goal paused·캘린더 구간).
+  - 🧪 **자율 QA 인프라(이번 세션 신설, 재사용)**: 테스트 계정 + 저장 세션 + Playwright 인증 E2E + DEV 시드 훅(`window.__pacelabE2E`, `src/app/devE2ESeed.ts`). 실행 `npx playwright test --config playwright.rest.config.ts`. 규칙=CLAUDE.md "검증·보고 방식"·[[agent-verifies-via-local-qa]]. 세션 만료 시 테스트계정 재로그인→storageState 재생성.
 - 직전 세션 머지 라이브: **#462 더블 minGap 웹 강한 확인**(PR#469) → **#455 에픽 클로즈** / 공통 하네스 0.2.70(PR#471) + 루트 CLAUDE.md 마커(PR#472).
 - 직전 라이브: #454(제안훈련 응답+주간정산+주 고정 뷰), #402 코칭 인간화. `#전문코치리뷰`+코칭 SSOT 선독 의무+commit-msg `Coach-Review` 게이트. 메모리 [[coach-not-data-referee]], [[professional-coach-review-trigger]], [[schedule-response-and-weekly-settlement]].
   - ⚠ **머지 규칙**: squash 후 `git diff <tip> origin/main` 빈결과 트리 검증 필수(#463 24→11 누락 사고), 의심 시 `--merge`. [[pr-squash-merge-race-verify-tree]].
 
 ## 다음 1순위
-1. **#473 휴식/복귀 라이브 렌더 스모크** — 실앱에서 (a) 휴식 선언 → 💤 스트립 + "쉬는 중·복귀 D-N" 배너 + "푹 쉬세요"(회복주 1회) 카드, 닦달(트리아지·재정렬·놓침 토스트) 미발동, (b) **복귀(7일+ 휴식이라야 램프 가시) → 첫 세션이 Easy·짧게(거리캡) + "회복 후 정리"**(놓침 프레이밍 없음) 눈으로 확인. 통과하면 **#473 Phase 1·2 코어 클로즈**, 이어서 **부상 복귀 walk-run 후속 PR**(injury KB §3-B, 현재 공백) 또는 **coach-run LLM 휴식 인지** 착수. 상세 [[rest-and-return-coaching]]·이슈 #473 코멘트.
+1. **#473 마무리 판단 + 후속 택1** — Phase 1·2 코어 완료·검증(인증 E2E)·배포 끝, 라이브 스모크는 E2E로 커버됨. 남은 후속: (a) **부상 복귀 walk-run 점진 처방**(현재 reason-blind 거리램프=공백, injury KB §3-B), (b) **coach-run LLM 휴식 인지**(채팅 닦달 구멍), (c) #473 이슈를 Phase 1·2 완료로 정리하고 (a)(b)는 별도 후속 이슈로 분리. 상세 [[rest-and-return-coaching]]·이슈 #473 코멘트.
 2. **실기기 시각 스팟체크** — #462 강한 확인 오버레이(셀프레이스로 같은 날 둘째 시작 시) + #455 더블 카드 + 동적 gap 바(자연 발생 시, 위험 낮음).
 3. **#454 나머지 플로우 실렌더 스팟체크** — 주 페이징·다른날로/스왑·포기 잔존·주말 트리아지. 통과면 에픽 #362 마무리.
 4. **#359**(롱런 네거티브 스플릿) 토 LSD 스모크 · **#307** 인터뷰 스모크 · **#374** 주기화·개러지 실기기.
