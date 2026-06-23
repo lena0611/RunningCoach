@@ -16,12 +16,15 @@ import { buildPeriodizedSchedule, trainingWeekRange } from '@/shared/lib/coachin
 export const REALIGN_MISSED_THRESHOLD = 3
 export const REALIGN_MISSED_KEY_THRESHOLD = 2
 /**
- * 앵커 드리프트 임계(2026-06-19). 실제 최근 체력(currentWeeklyKm=최근 30일 평균)이 **플랜이 처방한
- * 주간 볼륨과 ±25% 이상** 벌어지면 재앵커한다. 세션 누락이 없어도(잘 소화 중에도) 체력 성장/저하를
- * 플랜에 반영하기 위함 — 기존 누락-only 트리거는 "꾸준히 잘 뛰는데 플랜 앵커가 낮게 굳은" 경우를
- * 영원히 못 고쳤다(주 32km 뛰는데 18km/주 처방 고착). 25%는 ACWR 유지밴드(0.8~1.3 ≈ ±20~30%,
- * Gabbett)의 바깥 = "의미 있는 이탈". 실제 볼륨에 '맞추는' 것이라 부하 증가가 아니며, 재앵커 후엔
- * 플랜 볼륨≈실제라 ratio≈1로 수렴해 재트리거되지 않는다(자가안정). SSOT §시작점 앵커링/§점진부하.
+ * 앵커 드리프트 임계(2026-06-19, 멱등화 2026-06-23). 실제 최근 체력(currentWeeklyKm=최근 30일 평균)이
+ * **플랜을 마지막으로 (재)빌드한 시점의 앵커 볼륨(anchorWeeklyKm, 영속)과 ±25% 이상** 벌어지면 재앵커한다.
+ * 세션 누락이 없어도(잘 소화 중에도) 체력 성장/저하를 플랜에 반영하기 위함 — 기존 누락-only 트리거는
+ * "꾸준히 잘 뛰는데 플랜 앵커가 낮게 굳은" 경우를 영원히 못 고쳤다(주 32km 뛰는데 18km/주 처방 고착).
+ * 25%는 ACWR 유지밴드(0.8~1.3 ≈ ±20~30%, Gabbett)의 바깥 = "의미 있는 이탈". 실제 볼륨에 '맞추는'
+ * 것이라 부하 증가가 아니며, 재앵커 시 앵커를 현재 체력으로 갱신하므로 ratio≈1로 수렴해 재트리거되지
+ * 않는다(자가안정·멱등). **주의: 앵커는 "이번 주 처방 볼륨"이 아니라 영속 기준선이다** — 주기화 플랜은
+ * 특정 주의 볼륨이 30일 평균과 정당히 ±25% 벗어날 수 있어, 처방 볼륨을 기준으로 삼으면 매 부팅 재정렬·
+ * 토스트가 영구히 발동한다(버그). SSOT §시작점 앵커링/§점진부하.
  */
 export const REALIGN_ANCHOR_DRIFT_PCT = 0.25
 
@@ -30,7 +33,7 @@ export type ScheduleDeviation = {
   missedCount: number
   /** 그중 키세션(롱런/quality) 수. */
   missedKeyCount: number
-  /** 실제 체력이 플랜 처방 볼륨과 임계 이상 벌어졌는가(성장/저하). */
+  /** 실제 체력이 마지막 재앵커 기준선(anchorWeeklyKm)과 임계 이상 벌어졌는가(성장/저하). */
   anchorDrift: boolean
   /** 드리프트 방향: 'up'=체력 성장, 'down'=저하/감량. 없으면 null. */
   anchorDriftDir: 'up' | 'down' | null
@@ -43,8 +46,11 @@ export type ScheduleDeviation = {
 export type DeviationContext = {
   /** 실제 최근 주간 주행량(최근 30일 평균, km). */
   currentWeeklyKm?: number | null
-  /** 플랜이 처방한 이번 주(오늘부터 7일) 볼륨(km). */
-  plannedWeeklyKm?: number | null
+  /**
+   * 플랜을 마지막으로 (재)빌드·재앵커한 시점의 주간 볼륨(영속 기준선, km). 드리프트는 currentWeeklyKm 와
+   * **이 값**의 비율로 본다(처방 볼륨이 아님 — 그건 매 부팅 오발동의 원인). null/≤0 이면 미초기화 → 드리프트 없음.
+   */
+  anchorWeeklyKm?: number | null
   /** 이번 주 단계 — Taper/Recovery 면 상향 드리프트는 무시(의도된 저볼륨이므로). */
   upcomingPhase?: string | null
 }
@@ -108,17 +114,18 @@ export function detectScheduleDeviation(
   const missedTrigger =
     missedCount >= REALIGN_MISSED_THRESHOLD || missedKeyCount >= REALIGN_MISSED_KEY_THRESHOLD
 
-  // 앵커 드리프트: 실제 최근 체력 vs 플랜 처방 볼륨. 누락이 없어도 체력 변화를 반영한다.
+  // 앵커 드리프트: 실제 최근 체력 vs 마지막 재앵커 기준선(영속). 누락이 없어도 체력 변화를 반영한다.
+  // anchorWeeklyKm 가 null/≤0 이면 미초기화 → 드리프트 없음(첫 부팅 무발동, caller 가 조용히 초기화).
   let anchorDrift = false
   let anchorDriftDir: 'up' | 'down' | null = null
-  const { currentWeeklyKm, plannedWeeklyKm, upcomingPhase } = ctx
+  const { currentWeeklyKm, anchorWeeklyKm, upcomingPhase } = ctx
   if (
     currentWeeklyKm != null &&
     currentWeeklyKm > 0 &&
-    plannedWeeklyKm != null &&
-    plannedWeeklyKm > 0
+    anchorWeeklyKm != null &&
+    anchorWeeklyKm > 0
   ) {
-    const ratio = currentWeeklyKm / plannedWeeklyKm
+    const ratio = currentWeeklyKm / anchorWeeklyKm
     // Taper/Recovery 의 의도된 저볼륨을 "체력 성장"으로 오인해 상향 재앵커하지 않는다.
     const lowPhase = upcomingPhase === 'Taper' || upcomingPhase === 'Recovery'
     if (ratio > 1 + REALIGN_ANCHOR_DRIFT_PCT && !lowPhase) {
@@ -168,15 +175,21 @@ export function buildRealignedSchedule(
   today: Date,
   /** 현재 주간 주행량(최근 30일 평균) — 재정렬 시에도 현재 체력에 재앵커링한다(#395). */
   currentWeeklyKm: number | null = null,
+  /**
+   * 마지막 재앵커 기준선(영속 anchorWeeklyKm) — 드리프트는 currentWeeklyKm 와 이 값의 비율로 본다.
+   * null/≤0 이면 미초기화 → 앵커 드리프트 비발동(caller 가 첫 부팅에 조용히 초기화한다).
+   */
+  anchorWeeklyKm: number | null = null,
   /** 관측 Easy 페이스(#405) — 재정렬 시에도 관측 보정 페이스로 처방. */
   observedEasyPace: { easyPaceSec: number; easyPaceRangeSec: [number, number] } | null = null,
   /** 복귀 램프(#473 Phase 2) — 휴식 복귀 재정렬이면 초반 세션들을 Easy·캡으로. caller 가 capKm·windowSessions 계산해 전달. */
   returnRamp: { capKm: number; windowSessions: number } | null = null
 ): RealignPlan {
-  const { plannedWeeklyKm, upcomingPhase } = summarizeUpcomingWeek(sessions, today)
+  // summarizeUpcomingWeek 는 이제 대표 단계(upcomingPhase)만 쓴다 — plannedWeeklyKm 는 앵커 비율에서 빠졌다.
+  const { upcomingPhase } = summarizeUpcomingWeek(sessions, today)
   const deviation = detectScheduleDeviation(sessions, today, {
     currentWeeklyKm,
-    plannedWeeklyKm,
+    anchorWeeklyKm,
     upcomingPhase
   })
   const fromDate = toDateOnly(today)
