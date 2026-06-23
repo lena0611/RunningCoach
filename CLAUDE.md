@@ -78,6 +78,7 @@
 - **실데이터 파괴 변경(예: 사용자의 실제 휴식/스케줄을 되돌리기 어렵게 바꾸는 액션)은 실행 전 확인**한다 — 자율 QA는 비파괴 케이스를 우선하고, 파괴적 라이브 동작만 승인받는다.
 - **보고는 목록으로.** "이런이런 사용자 시나리오로 해당 기능을 테스트 완료했고, 각 테스트케이스별로 이렇게 나왔다(케이스 → 기대 → 결과 ✅/❌)" 형태의 케이스 목록으로 보고한다.
 - **사용자와의 대화는 항상 쉽게(평이하게) 설명한다.** (작업 진행 trace는 별개. 메모리 [[explain-simply-by-default]])
+- **인증 필요한 기능의 E2E**는 테스트 계정 저장 세션으로 자동화한다: `playwright.rest.config.ts` + `e2e/*.spec.ts`, 세션은 `e2e/.auth/qa-storage.json`(gitignore·테스트 계정 lena0611+qa). 실행: dev 서버(`npm run dev`) 뜬 상태에서 `npx playwright test --config playwright.rest.config.ts`. 세션 만료 시 테스트 계정 재로그인 후 storageState 재생성. 대시보드 일부 버튼은 하단 네비 오버레이로 좌표 클릭이 안 먹어 DOM click(`el.click()`) 사용.
 
 ## 작업별로 골라 읽는 추가 기준 (프로젝트 전용 — 위 managed 블록의 "작업별로 골라 읽는 기준"에 더한다)
 - `.harness/project/running-coaching-standards.md` (코칭 동작·처방·브리핑·피드백 작업 시 **구현 전 필수 선행**)

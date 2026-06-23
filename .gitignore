@@ -40,3 +40,6 @@ native/.githooks/
 /.agents/skills/grill-with-docs/
 /.claude/skills/
 /skills-lock.json
+
+# Playwright 인증 세션(테스트 계정 토큰 — 비밀)
+e2e/.auth/
