@@ -1,5 +1,10 @@
 import { defineStore } from 'pinia'
-import { createBlankTrainingMemory, normalizeTrainingMemory, type TrainingMemory } from '@/entities/training-memory/model'
+import {
+  createBlankTrainingMemory,
+  normalizeTrainingMemory,
+  type ActiveRest,
+  type TrainingMemory
+} from '@/entities/training-memory/model'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { fetchTrainingMemory, saveTrainingMemory } from '@/shared/api/memoryRepository'
 
@@ -87,6 +92,13 @@ export const useMemoryStore = defineStore('memoryStore', {
       }
       this.persist()
       localStorage.setItem(storageKey, JSON.stringify(user.memory))
+    },
+    /**
+     * 휴식 선언 메타(#473)를 설정/해제한다. null 이면 휴식 종료(복귀). 세션 status 전환은
+     * trainingScheduleStore.declareRest 가 따로 담당한다 — 이 액션은 복귀 D-N 배너·복귀 감지용 메타만 둔다.
+     */
+    async setActiveRest(activeRest: ActiveRest | null) {
+      await this.update({ ...this.memory, activeRest })
     },
     persist() {
       localStorage.setItem(usersStorageKey, JSON.stringify(this.users))

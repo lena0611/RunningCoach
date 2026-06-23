@@ -146,6 +146,22 @@ export async function markSessionsRested(
   return (data ?? []).length
 }
 
+/**
+ * 휴식 복귀/단축(#473): fromDate(포함) 이후의 'rested' 세션을 'planned' 로 되돌린다("지금 복귀"·복귀일 앞당김).
+ * 과거(이미 쉰 날)는 건드리지 않는다. goalId scoping 은 형제 함수와 동일. 영향 행 수를 반환.
+ */
+export async function unmarkRestedFrom(goalId: string | null, fromDate: string): Promise<number> {
+  let query = requireSupabase()
+    .from('training_schedule')
+    .update({ status: 'planned', run_id: null, updated_at: new Date().toISOString() })
+    .gte('session_date', fromDate)
+    .eq('status', 'rested')
+  query = goalId ? query.eq('goal_id', goalId) : query.is('goal_id', null)
+  const { data, error } = await query.select('id')
+  if (error) throw error
+  return (data ?? []).length
+}
+
 function toInsertRow(draft: ScheduledSessionDraft) {
   return {
     goal_id: draft.goalId,
