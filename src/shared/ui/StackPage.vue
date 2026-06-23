@@ -22,9 +22,10 @@ const props = withDefaults(
     /** 헤더 h2 타이틀. 커스텀 헤더가 필요하면 #title 슬롯 사용. */
     title?: string
     /**
-     * 진입 트랜지션:
-     *  - 'push' = 우→좌 슬라이드(stack-page, 2단계+ 푸시)  ← 기본
-     *  - 'rise' = 아래→위(stack-page-up, 1단계 바텀시트)
+     * 진입 트랜지션. 미지정 시 `back`으로 자동 결정한다(스택 등장 규칙):
+     *  - 진입(첫 스택, back=false, 우상단 닫기 X) → 'rise' = 아래→위(stack-page-up)
+     *  - 전진(상세→상세, back=true, 좌측 뒤로 ←) → 'push' = 우→좌(stack-page)
+     * 명시하면 그 값을 강제한다.
      */
     transition?: 'push' | 'rise'
     /** true면 헤더 좌측 뒤로(chevron) 버튼, false면 우측 닫기(X) 버튼. */
@@ -53,7 +54,6 @@ const props = withDefaults(
   }>(),
   {
     title: '',
-    transition: 'push',
     back: false,
     dismissible: true,
     dismissLabel: '',
@@ -69,7 +69,9 @@ const props = withDefaults(
 
 const emit = defineEmits<{ close: [] }>()
 
-const transitionName = computed(() => (props.transition === 'rise' ? 'stack-page-up' : 'stack-page'))
+// 스택 등장 규칙: 명시값 우선, 없으면 back으로 결정 — 진입(back=false)=rise(밑→위), 전진(back=true)=push(우→좌).
+const effectiveTransition = computed(() => props.transition ?? (props.back ? 'push' : 'rise'))
+const transitionName = computed(() => (effectiveTransition.value === 'rise' ? 'stack-page-up' : 'stack-page'))
 const leftButton = computed(() => props.dismissible && props.back)
 const rightButton = computed(() => props.dismissible && !props.back)
 const dismissAria = computed(() => props.dismissLabel || (props.back ? '뒤로' : '닫기'))

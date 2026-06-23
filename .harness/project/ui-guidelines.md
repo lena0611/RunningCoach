@@ -52,9 +52,10 @@ PaceLAB is a personal running coach app, not an admin dashboard.
 
 Use a screen stack when the user is drilling into a deeper flow without changing the main tab.
 
-- A tab remains the root surface. Deeper screens slide over it instead of replacing the bottom tab context.
-- First-level stack screens open from right to left and show only a close action in the top right.
-- Second-level stack screens continue right-to-left inside the same stack container.
+- A tab remains the root surface. Deeper screens slide over it instead of replacing the bottom tab context. Anything that is NOT a bottom-nav tab root (요약/기록/추세/기억) is a stack detail.
+- First-level stack screens (entry: opened from a tab via tap) animate **bottom-to-top** (rise / `stack-page-up`) and show only a **close (X) action in the top right**.
+- Going forward from a first-level stack into a deeper detail/edit screen animates **right-to-left** (push / `stack-page`) and shows a **back (←) action on the left of the title** (no close X). This is the router's forward direction.
+- The shared `StackPage` enforces this automatically: `back=false` → rise + top-right close; `back=true` → push + left back. Only override `transition` for special cases.
 - Focused management flows such as Memory goal/injury list, create, and edit use a full-screen stack page, not an inner card section. Second-level or deeper stack headers show only Back on the left; Close is hidden because Back is the expected navigation affordance.
 - Stack navigation must push pages onto an in-tab stack instead of replacing the root route. Back pops one stack page and restores that page's prior scroll/data state; Close exits the stack to the tab root.
 - Nested stack transitions must be visible. When a stack page opens another detail/create/edit page, wrap the keyed page body in a right-to-left `Transition` instead of swapping conditional content in place.
@@ -143,7 +144,7 @@ Charts should use `TrendChart` and ECharts unless there is a specific reason to 
 - `Skeleton`: Metric cards, stat grids, coach threads, and repeated card/list surfaces must keep their final layout dimensions while loading. Do not replace the whole card or thread with a loading text or remove surfaces during fetch; keep labels/actions/current context visible and skeleton only the data/message area that is not available yet.
 - `FixedBottomCTA`: Edit/create stack pages use a fixed full-width save CTA. Disable it until dirty state is true.
 - `CoachMessage`: Assistant answers should feel like ChatGPT-style conversation, not a report card inside a large bordered box. Keep user input as a compact bubble, but render coach answers as open text with markdown structure, spacing, lists, and dividers.
-- `StackPage`: Full-screen stack pages enter from right to left and leave with the exact reverse motion when back/close is pressed. Do not remove stack layers immediately without a leave transition. This is now a real shared component at `src/shared/ui/StackPage.vue` (#275) — use it instead of hand-rolling `memory-stack-layer/page/header/content` markup. It owns the Teleport + Transition (`transition="push"`/`"rise"`), the header Back/Close icon button (`back` prop), `data-no-swipe`, and the optional `#footer` action bar. The legacy class names are preserved verbatim so global CSS, App swipe-blocking, and RunDetailContent sticky offsets keep working.
+- `StackPage`: Full-screen stack pages enter from right to left and leave with the exact reverse motion when back/close is pressed. Do not remove stack layers immediately without a leave transition. This is now a real shared component at `src/shared/ui/StackPage.vue` (#275) — use it instead of hand-rolling `memory-stack-layer/page/header/content` markup. It owns the Teleport + Transition, the header Back/Close icon button, `data-no-swipe`, and the optional `#footer` action bar. Transition is derived from `back` by default — entry (`back=false`) rises bottom-to-top with a top-right close X; forward drill-in (`back=true`) slides right-to-left with a left back arrow. The legacy class names are preserved verbatim so global CSS, App swipe-blocking, and RunDetailContent sticky offsets keep working.
 
 ## Prohibited Patterns
 
