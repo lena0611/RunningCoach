@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ActiveRest } from '@/entities/training-memory/model'
-import { deriveRestState, isLoadOrInjuryRest } from '@/entities/training-memory/restWindow'
+import { deriveRestState, shouldOfferRecoveryRun } from '@/entities/training-memory/restWindow'
 
 const rest = (o: Partial<ActiveRest> = {}): ActiveRest => ({
   startDate: o.startDate ?? '2026-06-22',
@@ -24,6 +24,7 @@ describe('deriveRestState (#473 휴식 상태 파생)', () => {
     expect(s.daysUntilReturn).toBe(6)
     expect(s.isReturnDay).toBe(false)
     expect(s.isOver).toBe(false)
+    expect(s.durationDays).toBe(7) // 06-22..06-28 포함 7일
   })
 
   it('마지막 휴식일이면 D-1', () => {
@@ -46,10 +47,22 @@ describe('deriveRestState (#473 휴식 상태 파생)', () => {
     expect(s.isOver).toBe(false)
   })
 
-  it('부상성 휴식만 "가벼운 회복주" 대안 조건', () => {
-    expect(isLoadOrInjuryRest('injury')).toBe(true)
-    expect(isLoadOrInjuryRest('weather')).toBe(false)
-    expect(isLoadOrInjuryRest('personal')).toBe(false)
-    expect(isLoadOrInjuryRest(null)).toBe(false)
+  it('"가벼운 회복주" 대안 게이트(SSOT §휴식과 복귀)', () => {
+    // 통제 가능한 비의료 휴식 → 제시(공존 중증 부상 없을 때)
+    expect(shouldOfferRecoveryRun('weather', null)).toBe(true)
+    expect(shouldOfferRecoveryRun('personal', null)).toBe(true)
+    expect(shouldOfferRecoveryRun('weather', 2)).toBe(true)
+    // 안전 오버라이드: 공존 활성 부상 severity ≥ 3 이면 이유 불문 미제시(부상 KB 게이트 우선)
+    expect(shouldOfferRecoveryRun('weather', 4)).toBe(false)
+    expect(shouldOfferRecoveryRun('personal', 3)).toBe(false)
+    // 부상 휴식: 부하성 경증(1~2)만 제시, 중증(≥3)·불명은 완전 휴식 존중
+    expect(shouldOfferRecoveryRun('injury', 2)).toBe(true)
+    expect(shouldOfferRecoveryRun('injury', 1)).toBe(true)
+    expect(shouldOfferRecoveryRun('injury', 3)).toBe(false)
+    expect(shouldOfferRecoveryRun('injury', 5)).toBe(false)
+    expect(shouldOfferRecoveryRun('injury', null)).toBe(false)
+    // 불명(other)·미지정은 보수적으로 제시 안 함
+    expect(shouldOfferRecoveryRun('other', 1)).toBe(false)
+    expect(shouldOfferRecoveryRun(null, 1)).toBe(false)
   })
 })

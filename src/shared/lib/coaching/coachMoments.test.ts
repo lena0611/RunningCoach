@@ -124,4 +124,103 @@ describe('collectCoachMoments', () => {
   it('더블 제안 신호가 없으면 double-suggest 비노출', () => {
     expect(collectCoachMoments(ctx({})).some((m) => m.kind === 'double-suggest')).toBe(false)
   })
+
+  // === 휴식/복귀 코치 보이스(#473 PR3) ===
+  const restActive = (over: Partial<NonNullable<CoachMomentContext['rest']>> = {}) => ({
+    active: true,
+    reason: 'weather' as const,
+    daysUntilReturn: 5,
+    justDeclared: false,
+    offerRecoveryRun: false,
+    showReturn: false,
+    longLayoff: false,
+    ...over
+  })
+
+  it('휴식 중이면 닦달성 모먼트(이탈·트리아지·부하·추가런) 전면 억제 + rest-support만 노출', () => {
+    const moments = collectCoachMoments(
+      ctx({
+        runs: extraRuns,
+        chronic: spike,
+        deviation: { shouldRealign: true, reason: '놓침', missedCount: 3 },
+        weekendTriage: { saveLabel: 'Long Run', releaseCount: 2 },
+        rest: restActive()
+      })
+    )
+    expect(moments.map((m) => m.kind)).toEqual(['rest-support'])
+    expect(moments[0].message).not.toContain('놓')
+  })
+
+  it('휴식 중에도 중증 부상(≥3) 안전 경고는 억제하지 않는다(안전 신호 ≠ 닦달)', () => {
+    // 날씨로 쉬어도 강한 부상이 공존하면 안전 모먼트는 살아있다. 회복주 게이트(offerRecoveryRun)는 caller 가 차단.
+    const moments = collectCoachMoments(
+      ctx({ injury: injury({ severity: 4 }), rest: restActive({ reason: 'weather', justDeclared: true, offerRecoveryRun: false }) })
+    )
+    expect(moments.some((m) => m.kind === 'injury')).toBe(true)
+    const support = moments.find((m) => m.kind === 'rest-support')
+    expect(support).toBeTruthy()
+    expect(support!.options).toBeUndefined() // 회복주 미제시
+  })
+
+  it('rest-support: 선언 직후 + 회복주 제시 적격이면 "가벼운 회복주" 1회 제시(옵션)', () => {
+    const m = collectCoachMoments(ctx({ rest: restActive({ reason: 'weather', justDeclared: true, offerRecoveryRun: true }) }))[0]
+    expect(m.kind).toBe('rest-support')
+    expect(m.options?.length).toBe(2)
+    expect(m.options!.some((o) => o.label.includes('회복주'))).toBe(true)
+    expect(m.options!.some((o) => o.sentiment === 'neutral')).toBe(true) // "완전히 쉴래요" 존중
+  })
+
+  it('rest-support: offerRecoveryRun=false 면 선언 직후라도 옵션 없이 응원만', () => {
+    const m = collectCoachMoments(ctx({ rest: restActive({ justDeclared: true, offerRecoveryRun: false }) }))[0]
+    expect(m.kind).toBe('rest-support')
+    expect(m.options).toBeUndefined()
+  })
+
+  it('rest-support: 부상 회복주 응답은 walk-run(걷기-뛰기) 톤(SSOT §3-B)', () => {
+    const m = collectCoachMoments(
+      ctx({ injury: injury({ severity: 2 }), rest: restActive({ reason: 'injury', justDeclared: true, offerRecoveryRun: true }) })
+    ).find((x) => x.kind === 'rest-support')
+    expect(m!.options?.length).toBe(2)
+    const accept = m!.options!.find((o) => o.sentiment === 'positive')
+    expect(accept!.response).toContain('걷기')
+  })
+
+  it('rest-support: 통제 휴식(날씨/개인) 회복주 응답은 연속 회복주(걷기-뛰기 아님)', () => {
+    const m = collectCoachMoments(ctx({ rest: restActive({ reason: 'weather', justDeclared: true, offerRecoveryRun: true }) })).find(
+      (x) => x.kind === 'rest-support'
+    )
+    const accept = m!.options!.find((o) => o.sentiment === 'positive')
+    expect(accept!.response).toContain('20~30분')
+    expect(accept!.response).not.toContain('걷기-뛰기')
+  })
+
+  it('rest-support: 선언 직후가 아니면 옵션 없이 응원만', () => {
+    const m = collectCoachMoments(ctx({ rest: restActive({ justDeclared: false }) }))[0]
+    expect(m.kind).toBe('rest-support')
+    expect(m.options).toBeUndefined()
+  })
+
+  it('복귀 전후면 rest-return("회복 후 정리", 놓침 프레이밍 금지)', () => {
+    const m = collectCoachMoments(ctx({ rest: restActive({ active: false, showReturn: true }) })).find(
+      (x) => x.kind === 'rest-return'
+    )
+    expect(m).toBeTruthy()
+    expect(m!.message).toContain('돌아온 걸 환영')
+    expect(m!.message).not.toContain('놓')
+  })
+
+  it('긴 휴식(>4주) 복귀면 목표 재점검 안내 추가', () => {
+    const m = collectCoachMoments(ctx({ rest: restActive({ active: false, showReturn: true, longLayoff: true }) })).find(
+      (x) => x.kind === 'rest-return'
+    )
+    expect(m!.message).toContain('목표')
+  })
+
+  it('복귀 모먼트는 휴식 active 억제 필터에 안 걸린다(active=false라 다른 모먼트도 공존 가능)', () => {
+    const moments = collectCoachMoments(
+      ctx({ deviation: { shouldRealign: true, reason: 'x', missedCount: 3 }, rest: restActive({ active: false, showReturn: true }) })
+    )
+    expect(moments.some((m) => m.kind === 'rest-return')).toBe(true)
+    expect(moments.some((m) => m.kind === 'deviation')).toBe(true)
+  })
 })

@@ -36,7 +36,10 @@ export type TrainingMemory = {
   activeRest: ActiveRest | null
 }
 
-/** 휴식 이유 태그(#473) — 부하/부상성(injury) 여부가 "가벼운 회복주" 대안 제시 조건을 가른다. */
+/**
+ * 휴식 이유 태그(#473) — "가벼운 회복주" 대안 제시 조건을 가른다(restWindow.shouldOfferRecoveryRun).
+ * 통제 가능한 비의료 휴식(weather·personal)은 제시, injury 는 경증일 때만, other 는 보수적으로 제외.
+ */
 export type RestReason = 'injury' | 'weather' | 'personal' | 'other'
 
 /** 선언한 휴식 기간(#473). untilDate(포함)까지 쉬고 그 다음날 복귀. 날짜는 YYYY-MM-DD. */

@@ -18,6 +18,8 @@ const emit = defineEmits<{
   close: []
   openSession: []
   askCoach: []
+  /** 통증이 계속될 때 "한동안 쉴게요" — 휴식 선언 시트로 보낸다(#473, 이유=부상 프리셋). */
+  declareRest: []
   submit: [
     value: {
       painLevel: number | null
@@ -232,6 +234,7 @@ function deriveMaxPainLevel(areas: InjuryAreaSelection[]) {
         <button v-if="resolvedCandidate" class="ghost" type="button" :disabled="saving" @click="submit(true)">해소로 저장</button>
         <button type="button" :disabled="saving || !canSubmit" @click="submit(false)">{{ saving ? '저장 중' : '상태 저장' }}</button>
       </div>
+      <button type="button" class="rest-from-injury" :disabled="saving" @click="emit('declareRest')">💤 통증이 계속되면, 한동안 쉴게요</button>
     </section>
   </div>
 </template>

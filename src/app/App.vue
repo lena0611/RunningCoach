@@ -472,6 +472,13 @@ function askInjuryCheckInCoach() {
   if (run) void router.push({ path: '/runs', query: { runId: run.id, coach: '1' } })
 }
 
+// "한동안 쉴게요"(#473): 체크인 닫고 대시보드 휴식 선언 시트를 이유=부상 프리셋으로 연다(저장/dismiss 안 함).
+function declareRestFromInjuryCheckIn() {
+  injuryCheckInItemId.value = ''
+  injuryFlowStore.requestRestDeclaration('injury')
+  if (route.path !== '/') void router.push('/')
+}
+
 async function submitInjuryCheckIn(payload: {
   painLevel: number | null
   worsenedDuringOrAfterRun: boolean | null
@@ -818,6 +825,7 @@ function animateTabRelease(targetOffset: number, targetRoute: string | null) {
       @close="dismissCurrentInjuryCheckIn"
       @open-session="openInjuryCheckInSession"
       @ask-coach="askInjuryCheckInCoach"
+      @declare-rest="declareRestFromInjuryCheckIn"
       @submit="submitInjuryCheckIn"
     />
     <PostRunInterviewSheet

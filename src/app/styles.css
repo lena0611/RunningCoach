@@ -5802,6 +5802,23 @@ button.run-session-row {
   line-height: 1.5;
 }
 
+/* 휴식 선언 진입(#473) — 차분한 텍스트 버튼, 경고색 없음(닦달 아님). */
+.rest-from-injury {
+  margin-top: 10px;
+  width: 100%;
+  padding: 11px 10px;
+  border: none;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rest-from-injury:disabled {
+  opacity: 0.5;
+}
+
 .injury-checkin-shortcuts {
   display: grid;
   grid-template-columns: 1fr 1fr;

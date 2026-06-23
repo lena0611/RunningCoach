@@ -9,12 +9,12 @@
  */
 
 import type { RunLog } from '@/entities/run/model'
-import type { TrainingInjuryItem } from '@/entities/training-memory/model'
+import type { RestReason, TrainingInjuryItem } from '@/entities/training-memory/model'
 import type { ChronicLoadTrend } from '@/shared/lib/runStats'
 import { analyzeExtraRunTrend, buildExtraRunInquiry } from '@/shared/lib/coaching/extraRunTrend'
 import { isRunningLoadGroup, PAIN_GROUP_LABEL, type PainGroup } from '@/features/post-run-interview/buildInterviewRunPatch'
 
-export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'extra-run' | 'goal-progress' | 'goal-feasibility' | 'time-trial' | 'weekend-triage' | 'double-suggest'
+export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'extra-run' | 'goal-progress' | 'goal-feasibility' | 'time-trial' | 'weekend-triage' | 'double-suggest' | 'rest-support' | 'rest-return'
 
 /** 모먼트가 제안하는 행동(전용 시트 열기 등). 트레이니 확인 후 실행. */
 export type CoachMomentAction = {
@@ -80,6 +80,28 @@ export type CoachMomentContext = {
    * 적격 미달·트리아지 오버플로 구간이면 caller 가 null 로 둔다(더블 비제안). 주말 트리아지의 자매 갈래.
    */
   doubleSuggestion?: { backlogLabel: string; amDayLabel: string } | null
+  /**
+   * 휴식 선언(#473, SSOT §휴식과 복귀) — deriveRestState 파생을 주입. 있으면:
+   *  - active 중엔 닦달성 모먼트를 전면 억제하고 "푹 쉬세요" 지원 모먼트만 노출(능동 휴식 ≠ missed).
+   *  - 복귀 전후(showReturn)엔 "회복 후 정리" 모먼트(놓침 프레이밍 금지), 긴 휴식이면 목표 재점검 안내.
+   * reason+injury.severity 로 "가벼운 회복주" 대안(1회) 제시 여부를 가른다.
+   */
+  rest?: {
+    active: boolean
+    reason: RestReason | null
+    daysUntilReturn: number | null
+    /** 선언 직후(~1일) — "가벼운 회복주" 대안을 1회 제시하는 창. */
+    justDeclared: boolean
+    /**
+     * "가벼운 회복주" 대안을 제시해도 되는가(restWindow.shouldOfferRecoveryRun 결과를 caller 가 주입).
+     * 도메인 게이트(이유·공존 부상 severity)는 entities 에 두고, shared 인 여기선 플래그만 받는다(#397 경계).
+     */
+    offerRecoveryRun: boolean
+    /** 복귀일 전후(0~2일) — "회복 후 정리" 모먼트 노출. */
+    showReturn: boolean
+    /** >4주(28일) 휴식 — 복귀 시 목표 실현가능성 정직 재점검(SSOT 디트레이닝 4주 경계). */
+    longLayoff: boolean
+  } | null
 }
 
 type Detector = (ctx: CoachMomentContext) => CoachMoment | null
@@ -256,6 +278,59 @@ function detectDoubleSuggestion(ctx: CoachMomentContext): CoachMoment | null {
   }
 }
 
+/**
+ * 휴식 중(#473) "푹 쉬세요" 지원 모먼트 — 닦달 대신 응원. 부하성 경증 부상·통제 가능 휴식이고
+ * 선언 직후면 "가벼운 회복주" 대안을 1회 제시하되 완전 휴식 선택을 존중한다(SSOT §휴식과 복귀).
+ */
+function detectRestSupport(ctx: CoachMomentContext): CoachMoment | null {
+  const rest = ctx.rest
+  if (!rest?.active) return null
+  const dLeft = rest.daysUntilReturn && rest.daysUntilReturn > 0 ? ` 복귀까지 D-${rest.daysUntilReturn}.` : ''
+  const base = `지금은 회복 시간이에요. 일정은 정리해뒀으니 마음 편히 푹 쉬어요.${dLeft}`
+  if (rest.justDeclared && rest.offerRecoveryRun) {
+    // 부상성 휴식 복귀의 정본은 연속주가 아니라 walk-run 점진+통증 정지(SSOT §3-B). 통제 휴식(날씨·일정)은 가벼운 연속 회복주.
+    const acceptResponse =
+      rest.reason === 'injury'
+        ? '좋아요. 뛰기 전 걷기로 천천히 풀고, 통증 없이 편하면 걷기-뛰기를 짧게 번갈아 봐요. 통증이 날카롭거나 다음날 더 아프면 그날은 거기서 멈춰요. 나머지 기간은 그대로 쉬어도 괜찮아요.'
+        : '좋아요. 20~30분 천천히, 대화 가능한 페이스로만 — 통증이나 무리가 느껴지면 바로 멈춰요. 나머지 기간은 그대로 쉬어도 괜찮아요.'
+    return {
+      key: 'rest-support',
+      kind: 'rest-support',
+      priority: 75,
+      icon: '💤',
+      message: `${base} 완전히 멈추기보다 가벼운 회복주가 체력 유지엔 더 나아요 — 어떻게 할까요?`,
+      options: [
+        { label: '가벼운 회복주 해볼게요', sentiment: 'positive', response: acceptResponse },
+        {
+          label: '완전히 쉴래요',
+          sentiment: 'neutral',
+          response: '그럼요, 완전한 휴식도 충분히 좋은 선택이에요. 돌아오면 가볍게 다시 시작해요.'
+        }
+      ]
+    }
+  }
+  return { key: 'rest-support', kind: 'rest-support', priority: 75, icon: '💤', message: base }
+}
+
+/**
+ * 복귀 전후(#473) "회복 후 정리" 모먼트 — "놓침"이 아니라 회복 마무리로 프레이밍한다.
+ * 긴 휴식(>4주)이면 디트레이닝으로 목표 실현가능성을 정직하게 재점검하자고 덧붙인다(SSOT §휴식과 복귀·§시작점 앵커링).
+ */
+function detectReturnDay(ctx: CoachMomentContext): CoachMoment | null {
+  const rest = ctx.rest
+  if (!rest?.showReturn) return null
+  const base = '돌아온 걸 환영해요! 쉬는 동안 일정은 정리해뒀어요. 오늘은 가볍게(Easy) 다시 시작해요 — 첫 세션은 짧게, 몸 상태를 보면서요.'
+  return {
+    key: 'rest-return',
+    kind: 'rest-return',
+    priority: 72,
+    icon: '🌱',
+    message: rest.longLayoff
+      ? `${base} 4주 넘게 쉬어서 체력이 조금 빠졌을 수 있어요 — 목표일까지 무리 없는지 같이 점검해봐요.`
+      : base
+  }
+}
+
 const DETECTORS: Detector[] = [
   detectInjury,
   detectLoadSpike,
@@ -266,7 +341,9 @@ const DETECTORS: Detector[] = [
   detectTimeTrialResult,
   detectGoalFeasibility,
   detectExtraRun,
-  detectGoalProgress
+  detectGoalProgress,
+  detectRestSupport,
+  detectReturnDay
 ]
 
 /**
@@ -274,7 +351,16 @@ const DETECTORS: Detector[] = [
  * dismissedKeys 에 있는 키는 제외(이미 응답/닫음).
  */
 export function collectCoachMoments(ctx: CoachMomentContext, dismissedKeys: Set<string> = new Set()): CoachMoment[] {
-  return DETECTORS.map((d) => d(ctx))
-    .filter((m): m is CoachMoment => Boolean(m) && !dismissedKeys.has((m as CoachMoment).key))
-    .sort((a, b) => b.priority - a.priority)
+  let moments = DETECTORS.map((d) => d(ctx)).filter(
+    (m): m is CoachMoment => Boolean(m) && !dismissedKeys.has((m as CoachMoment).key)
+  )
+  // 휴식 중(#473)엔 닦달성 모먼트(이탈·트리아지·추가런·더블·부하·목표경고 등)를 억제한다(SSOT §휴식과 복귀 —
+  // 능동 휴식은 missed가 아니다). 단, 부상 안전 모먼트(injury·pain-followup)는 닦달이 아니라 안전 신호이므로
+  // 억제하지 않는다(SSOT는 missed/triage/realign 발동만 금지; 통증·redFlag 부상은 KB 게이트 우선).
+  if (ctx.rest?.active) {
+    moments = moments.filter(
+      (m) => m.kind === 'rest-support' || m.kind === 'injury' || m.kind === 'pain-followup'
+    )
+  }
+  return moments.sort((a, b) => b.priority - a.priority)
 }
