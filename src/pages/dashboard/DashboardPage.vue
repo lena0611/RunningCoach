@@ -211,6 +211,25 @@ function ensureSchedule(): Promise<void> {
   })
   return ensureInFlight
 }
+/**
+ * 스케줄 앵커(scheduleAnchorWeeklyKm)를 현재 체력으로 영속한다 — 매 (재)빌드·재앵커·최초 초기화 시.
+ * tempoCeiling 채택 영속과 동일 메커니즘(memoryStore.update + adaptiveTrainingProfile 머지)을 쓴다.
+ * 같은 값이면 no-op(불필요한 메모리 write·정규화 방지). null/≤0 은 저장하지 않는다.
+ */
+async function persistScheduleAnchor(weeklyKm: number | null) {
+  if (weeklyKm == null || weeklyKm <= 0) return
+  const memory = memoryStore.memory
+  if (memory.adaptiveTrainingProfile.scheduleAnchorWeeklyKm === weeklyKm) return
+  await memoryStore.update({
+    ...memory,
+    adaptiveTrainingProfile: {
+      ...memory.adaptiveTrainingProfile,
+      scheduleAnchorWeeklyKm: weeklyKm,
+      updatedAt: new Date().toISOString()
+    }
+  })
+}
+
 async function doEnsureSchedule() {
   if (!isSupabaseConfigured) return
   const goal = activeGoal.value
@@ -229,6 +248,8 @@ async function doEnsureSchedule() {
     await scheduleStore.repointReinferredRuns(runs.value)
     const mine = scheduleStore.sessions.filter((s) => s.goalId === goal.id)
     const hasActive = mine.some(isActiveSession)
+    // 앵커 드리프트 기준선(영속). 빌드/재앵커 때마다 currentWeeklyKm 로 갱신해 ratio≈1 로 수렴(멱등).
+    const anchor = memoryStore.memory.adaptiveTrainingProfile.scheduleAnchorWeeklyKm
     if (archetype !== 'performance') {
       // 비성과: 비주기화 상시 주간 리듬. 롤링 소진(활성 없음) 시 재생성. 재정렬 없음.
       if (!hasActive) {
@@ -240,7 +261,10 @@ async function doEnsureSchedule() {
           observedEasyPace: observedEasyPace.value,
           goalId: goal.id
         })
-        if (drafts.length) await scheduleStore.insertMany(drafts)
+        if (drafts.length) {
+          await scheduleStore.insertMany(drafts)
+          await persistScheduleAnchor(currentWeeklyKm.value)
+        }
       }
     } else if (!hasActive) {
       // 성과·콜드스타트: 주기화 골격 생성(currentWeeklyKm 앵커, #395).
@@ -251,7 +275,10 @@ async function doEnsureSchedule() {
         currentWeeklyKm: currentWeeklyKm.value,
         observedEasyPace: observedEasyPace.value
       })
-      if (drafts.length) await scheduleStore.insertMany(drafts)
+      if (drafts.length) {
+        await scheduleStore.insertMany(drafts)
+        await persistScheduleAnchor(currentWeeklyKm.value)
+      }
     } else {
       const rest = memoryStore.memory.activeRest
       const todayIso = dateOnly(today.value)
@@ -266,9 +293,18 @@ async function doEnsureSchedule() {
         // 성과·운영중: 누적 이탈/앵커 드리프트 시 forward 재정렬.
         // 복귀 윈도(메타 살아있는 isOver) 동안엔 returnRamp 를 재전달해 캡을 보존하고 generic 닦달 토스트를 억제한다.
         const returnRamp = rest && restState.value.isOver ? returnRampPayload(rest) : null
-        const plan = buildRealignedSchedule(mine, goal, memoryStore.memory.athleteProfile, today.value, currentWeeklyKm.value, observedEasyPace.value, returnRamp)
+        // 앵커 미초기화(기존 사용자 첫 부팅 등) → 현재 체력으로 조용히 초기화하고 그 값을 기준선으로 넘긴다.
+        // ratio≈1 이 되어 앵커 드리프트가 발동하지 않으므로 재정렬·토스트 없이 초기화만 일어난다.
+        let anchorForCheck = anchor
+        if (anchorForCheck == null) {
+          await persistScheduleAnchor(currentWeeklyKm.value)
+          anchorForCheck = currentWeeklyKm.value
+        }
+        const plan = buildRealignedSchedule(mine, goal, memoryStore.memory.athleteProfile, today.value, currentWeeklyKm.value, anchorForCheck, observedEasyPace.value, returnRamp)
         if (plan.drafts.length) {
           await scheduleStore.realign(goal.id, plan.fromDate, plan.drafts)
+          // 재앵커 발생 → 기준선을 현재 체력으로 갱신(다음 부팅부터 ratio≈1 로 수렴, 영구 재발동 방지).
+          await persistScheduleAnchor(currentWeeklyKm.value)
           if (plan.deviation.reason && !returnRamp) toastStore.success(plan.deviation.reason)
         }
       }

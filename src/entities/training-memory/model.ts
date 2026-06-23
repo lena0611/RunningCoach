@@ -181,6 +181,11 @@ export type AdaptiveTrainingProfile = {
   sessionGuides: AdaptiveSessionGuide[]
   /** Tempo 심박 상한 적응 영속 상태(#301). 검증으로 채택한 상한을 저장해 재앵커링·다단계 상향한다. */
   tempoCeiling: AdaptiveTempoCeiling
+  /**
+   * 스케줄을 마지막으로 (재)빌드·재앵커한 시점의 주간 볼륨(currentWeeklyKm, km). 앵커 드리프트 판정 기준선.
+   * 실제 최근 체력이 이 앵커와 ±25% 이상 벌어질 때만 재앵커 → 매 부팅 재정렬·토스트 방지(멱등). null=미초기화.
+   */
+  scheduleAnchorWeeklyKm: number | null
 }
 
 /**
@@ -538,7 +543,8 @@ export const initialTrainingMemory: TrainingMemory = {
     prescriptionTemplates: defaultPrescriptionTemplates,
     compliancePatterns: [],
     sessionGuides: [],
-    tempoCeiling: { adoptedBpm: null, baseBpm: null, adoptedAt: null }
+    tempoCeiling: { adoptedBpm: null, baseBpm: null, adoptedAt: null },
+    scheduleAnchorWeeklyKm: null
   },
   runnerIdentity: {
     strengths: [
@@ -934,7 +940,11 @@ function normalizeAdaptiveTrainingProfile(value: unknown): AdaptiveTrainingProfi
       ? raw.compliancePatterns.filter((item) => typeof item === 'string' && item.trim()).map((item) => stripStaleHeartRateCeilings(item.trim())).slice(0, 20)
       : [],
     sessionGuides,
-    tempoCeiling: normalizeAdaptiveTempoCeiling(raw.tempoCeiling)
+    tempoCeiling: normalizeAdaptiveTempoCeiling(raw.tempoCeiling),
+    scheduleAnchorWeeklyKm:
+      typeof raw.scheduleAnchorWeeklyKm === 'number' && raw.scheduleAnchorWeeklyKm > 0
+        ? raw.scheduleAnchorWeeklyKm
+        : null
   }
 }
 
