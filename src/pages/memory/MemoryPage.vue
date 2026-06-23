@@ -35,6 +35,7 @@ import AchievementsSection from '@/pages/memory/AchievementsSection.vue'
 import { computeAchievements } from '@/shared/lib/achievement/achievements'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
 import SchedulingHelpSheet from '@/shared/ui/SchedulingHelpSheet.vue'
+import StackPage from '@/shared/ui/StackPage.vue'
 
 type MemoryPanel = 'overview' | 'goals' | 'goal-edit' | 'goal-new' | 'injuries' | 'injury-edit' | 'injury-new' | 'achievements' | 'knowledge' | 'knowledge-request'
 
@@ -910,319 +911,309 @@ async function save() {
       </FormGrid>
     </SectionGroup>
 
-    <Teleport to="body">
-      <Transition name="stack-page">
-        <div v-if="isStackOpen" class="memory-stack-layer" data-no-swipe>
-          <section class="memory-stack-page" :class="{ 'memory-stack-detail': panel.includes('edit') || panel.includes('new') }">
-          <header class="memory-stack-header">
-            <button v-if="stack.length > 1" class="stack-icon-button" type="button" aria-label="뒤로" @click="goBack">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+    <StackPage
+      :open="isStackOpen"
+      :title="stackTitle"
+      :back="stack.length > 1"
+      :page-class="panel.includes('edit') || panel.includes('new') ? 'memory-stack-detail' : ''"
+      bare
+      @close="stack.length > 1 ? goBack() : closeStack()"
+    >
+      <main ref="stackContentRef" class="memory-stack-content">
+        <Transition :name="stackTransitionName" mode="out-in">
+          <div :key="stackKey()" class="memory-stack-screen">
+            <p v-if="error || memoryStore.error" class="error">{{ error || memoryStore.error }}</p>
+
+            <div v-if="panel === 'goals'" class="memory-stack">
+          <SectionHeader title="목표 목록" compact>
+            <button type="button" @click="openGoalNew">새 목표</button>
+          </SectionHeader>
+          <div class="memory-card-list">
+            <button v-for="goal in draft.goals" :key="goal.id" class="memory-list-card" type="button" @click="openGoalEdit(goal.id)">
+              <span>
+                <strong>{{ goal.title }}</strong>
+                <small>{{ goal.id === draft.activeGoalId ? '활성 목표 · ' : '' }}{{ goal.category }} · {{ goal.status }}{{ goalDateMeta(goal) }}</small>
+              </span>
+              <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
             </button>
-            <div>
-              <h2>{{ stackTitle }}</h2>
+          </div>
             </div>
-            <button v-if="stack.length <= 1" class="stack-icon-button" type="button" aria-label="닫기" @click="closeStack">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+
+            <FormGrid v-else-if="panel === 'goal-new'">
+          <div class="form-section-title full">새 목표 생성</div>
+          <label class="full">
+            목표명
+            <ClearableField v-model="newGoal.title" placeholder="예: 2026년 11월 10km 59:59" />
+          </label>
+          <BottomSheetSelect v-model="newGoal.category" label="목표 유형" :options="goalCategoryOptions" />
+          <DateField v-model="newGoal.startDate" label="시작일" />
+          <DateField v-model="newGoal.targetDate" label="목표 날짜" />
+          <label>
+            목표 거리(km)
+            <ClearableField v-model="newGoal.distanceKm" type="number" inputmode="decimal" placeholder="예: 10" number />
+          </label>
+          <label>
+            목표 기록(초)
+            <ClearableField v-model="newGoal.targetDurationSec" type="number" inputmode="numeric" placeholder="예: 3599" number />
+          </label>
+          <label>
+            우선순위
+            <ClearableField v-model="newGoal.priority" type="number" inputmode="numeric" min="1" number />
+          </label>
+          <label class="full">
+            성공 기준
+            <ClearableField v-model="newGoal.successCriteria" as="textarea" rows="3" placeholder="예: 10km를 59:59 이내로 완주" />
+          </label>
+          <label class="full">
+            목표 전략
+            <ClearableField v-model="newGoal.strategyNotes" as="textarea" rows="3" placeholder="예: Easy 기반 + 목요일 Tempo + 토요일 격주 롱런" />
+          </label>
+          <label class="full">
+            목표 메모
+            <ClearableField v-model="newGoal.notes" as="textarea" rows="3" />
+          </label>
+          <ActionGroup full>
+            <button type="button" @click="addGoal">생성</button>
+          </ActionGroup>
+            </FormGrid>
+
+            <FormGrid v-else-if="panel === 'goal-edit' && editingGoal">
+          <div class="form-section-title full">목표 편집</div>
+          <label class="full">
+            목표명
+            <ClearableField v-model="editingGoal.title" @update:model-value="updateGoal(editingGoal)" />
+          </label>
+          <BottomSheetSelect v-model="editingGoal.category" label="목표 유형" :options="goalCategoryOptions" @update:model-value="updateGoal(editingGoal)" />
+          <BottomSheetSelect v-model="editingGoal.status" label="상태" :options="goalStatusOptions" @update:model-value="updateGoal(editingGoal)" />
+          <DateField v-model="editingGoal.startDate" label="시작일" @update:model-value="updateGoal(editingGoal)" />
+          <DateField v-model="editingGoal.targetDate" label="목표 날짜" @update:model-value="updateGoal(editingGoal)" />
+          <label>
+            목표 거리(km)
+            <ClearableField v-model="editingGoal.distanceKm" type="number" inputmode="decimal" placeholder="예: 10" number @update:model-value="updateGoal(editingGoal)" />
+          </label>
+          <label>
+            목표 기록(초)
+            <ClearableField v-model="editingGoal.targetDurationSec" type="number" inputmode="numeric" placeholder="예: 3599" number @update:model-value="updateGoal(editingGoal)" />
+          </label>
+          <label>
+            우선순위
+            <ClearableField v-model="editingGoal.priority" type="number" inputmode="numeric" min="1" number @update:model-value="updateGoal(editingGoal)" />
+          </label>
+          <label class="full">
+            성공 기준
+            <ClearableField v-model="editingGoal.successCriteria" as="textarea" rows="3" placeholder="예: 10km를 59:59 이내로 완주" @update:model-value="updateGoal(editingGoal)" />
+          </label>
+          <label class="full">
+            목표 전략
+            <ClearableField v-model="editingGoal.strategyNotes" as="textarea" rows="3" placeholder="예: Easy 기반 + 목요일 Tempo + 토요일 격주 롱런" @update:model-value="updateGoal(editingGoal)" />
+          </label>
+          <label class="full">
+            목표 메모
+            <ClearableField v-model="editingGoal.notes" as="textarea" rows="3" @update:model-value="updateGoal(editingGoal)" />
+          </label>
+          <ActionGroup full>
+            <button class="ghost" type="button" @click="setActiveGoal(editingGoal.id)">활성 목표로 지정</button>
+            <button class="danger" type="button" :disabled="draft.goals.length <= 1" @click="askRemoveGoal(editingGoal)">삭제</button>
+          </ActionGroup>
+            </FormGrid>
+
+            <div v-else-if="panel === 'injuries'" class="memory-stack">
+          <SectionHeader title="부상 관리 목록" compact>
+            <button type="button" @click="openInjuryNew">새 항목</button>
+          </SectionHeader>
+          <div class="memory-card-list">
+            <button v-for="item in draft.injuryItems" :key="item.id" class="memory-list-card" type="button" @click="openInjuryEdit(item.id)">
+              <span>
+                <strong>{{ item.title }}</strong>
+                <small>{{ item.id === draft.activeInjuryItemId ? '현재 기준 · ' : '' }}{{ item.status }}{{ item.severity !== null ? ` · ${item.severity}/5` : '' }}{{ injuryDateMeta(item) }}</small>
+                <small>{{ injuryAreaMeta(item) }}</small>
+              </span>
+              <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
             </button>
-          </header>
+          </div>
+            </div>
 
-          <main ref="stackContentRef" class="memory-stack-content">
-            <Transition :name="stackTransitionName" mode="out-in">
-              <div :key="stackKey()" class="memory-stack-screen">
-                <p v-if="error || memoryStore.error" class="error">{{ error || memoryStore.error }}</p>
+            <FormGrid v-else-if="panel === 'injury-new'">
+          <div class="form-section-title full">새 부상/주의사항 생성</div>
+          <label class="full">
+            항목명
+            <ClearableField v-model="newInjury.title" placeholder="예: 오른쪽 무릎 바깥쪽 불편감" />
+          </label>
+          <InjuryBodySelector :model-value="newInjury.normalizedAreas" @update:model-value="applyNewInjuryAreas" />
+          <BottomSheetSelect v-model="newInjury.status" label="상태" :options="injuryStatusOptions" />
+          <DateField v-model="newInjury.onsetDate" label="시작일" />
+          <DateField v-model="newInjury.lastFlareDate" label="최근 신호일" />
+          <div v-if="newInjury.strengthPlan.length" class="strength-plan-card full">
+            <strong>보강운동 처방</strong>
+            <small>러닝 부하 조절을 돕는 참고용 기본값입니다. 의료 진단이나 치료 처방이 아닙니다.</small>
+            <div class="strength-plan-detail-list">
+              <article v-for="plan in newInjury.strengthPlanDetails" :key="plan.id">
+                <strong>{{ plan.title }}</strong>
+                <p>{{ plan.instruction }}</p>
+                <small>{{ plan.useWhen }} · 중단: {{ plan.stopWhen }}</small>
+              </article>
+            </div>
+          </div>
+          <label class="full">
+            악화 트리거
+            <ClearableField :model-value="join(newInjury.triggers)" as="textarea" rows="3" placeholder="예: 템포 다음날 뻣뻣함&#10;볼륨 급증" @update:model-value="newInjury.triggers = split(String($event ?? ''))" />
+          </label>
+          <label class="full">
+            훈련 제한
+            <ClearableField :model-value="join(newInjury.restrictions)" as="textarea" rows="3" placeholder="예: 통증이 있으면 스트라이드 생략&#10;롱런 후 하루 회복 우선" @update:model-value="newInjury.restrictions = split(String($event ?? ''))" />
+          </label>
+          <label class="full">
+            복귀 기준
+            <ClearableField v-model="newInjury.returnToRunCriteria" as="textarea" rows="3" placeholder="예: 다음날 뻣뻣함 없이 Easy가 편할 때 강도 복귀" />
+          </label>
+          <label class="full">
+            메모
+            <ClearableField v-model="newInjury.notes" as="textarea" rows="3" placeholder="예: 템포 다음날 뻣뻣함 확인 필요" />
+          </label>
+          <label class="full">
+            관리 계획
+            <ClearableField v-model="newInjury.managementPlan" as="textarea" rows="3" placeholder="예: 통증 단정 없이 강훈련 후 반응 확인" />
+          </label>
+          <ActionGroup full>
+            <button type="button" @click="addInjury">생성</button>
+          </ActionGroup>
+            </FormGrid>
 
-                <div v-if="panel === 'goals'" class="memory-stack">
-              <SectionHeader title="목표 목록" compact>
-                <button type="button" @click="openGoalNew">새 목표</button>
+            <FormGrid v-else-if="panel === 'injury-edit' && editingInjury">
+          <div class="form-section-title full">부상/주의사항 편집</div>
+          <label class="full">
+            항목명
+            <ClearableField v-model="editingInjury.title" placeholder="예: 좌측 햄스트링" @update:model-value="updateInjury(editingInjury)" />
+          </label>
+          <InjuryBodySelector :model-value="editingInjury.normalizedAreas" @update:model-value="updateInjuryAreas(editingInjury, $event)" />
+          <BottomSheetSelect v-model="editingInjury.status" label="상태" :options="injuryStatusOptions" @update:model-value="updateInjury(editingInjury)" />
+          <DateField v-model="editingInjury.onsetDate" label="시작일" @update:model-value="updateInjury(editingInjury)" />
+          <DateField v-model="editingInjury.lastFlareDate" label="최근 신호일" @update:model-value="updateInjury(editingInjury)" />
+          <div v-if="editingInjury.strengthPlan.length" class="strength-plan-card full">
+            <strong>보강운동 처방</strong>
+            <small>부위와 통증 레벨을 기준으로 만든 참고용 처방입니다. 통증이 커지거나 보행 통증이 있으면 축소/중단을 우선합니다.</small>
+            <div class="strength-plan-detail-list">
+              <article v-for="plan in editingInjury.strengthPlanDetails" :key="plan.id">
+                <strong>{{ plan.title }}</strong>
+                <p>{{ plan.instruction }}</p>
+                <small>{{ plan.useWhen }} · 출처: {{ plan.sources[0]?.title || 'PaceLAB 내부 기준' }}</small>
+              </article>
+            </div>
+          </div>
+          <label class="full">
+            악화 트리거
+            <ClearableField :model-value="join(editingInjury.triggers)" as="textarea" rows="3" placeholder="예: 템포 다음날 뻣뻣함&#10;볼륨 급증" @update:model-value="editingInjury.triggers = split(String($event ?? '')); updateInjury(editingInjury)" />
+          </label>
+          <label class="full">
+            훈련 제한
+            <ClearableField :model-value="join(editingInjury.restrictions)" as="textarea" rows="3" placeholder="예: 통증이 있으면 스트라이드 생략&#10;롱런 후 하루 회복 우선" @update:model-value="editingInjury.restrictions = split(String($event ?? '')); updateInjury(editingInjury)" />
+          </label>
+          <label class="full">
+            복귀 기준
+            <ClearableField v-model="editingInjury.returnToRunCriteria" as="textarea" rows="3" placeholder="예: 다음날 뻣뻣함 없이 Easy가 편할 때 강도 복귀" @update:model-value="updateInjury(editingInjury)" />
+          </label>
+          <label class="full">
+            메모
+            <ClearableField v-model="editingInjury.notes" as="textarea" rows="3" placeholder="예: 템포 다음날 뻣뻣함 확인 필요" @update:model-value="updateInjury(editingInjury)" />
+          </label>
+          <label class="full">
+            관리 계획
+            <ClearableField v-model="editingInjury.managementPlan" as="textarea" rows="3" placeholder="예: 통증 단정 없이 강훈련 후 반응 확인" @update:model-value="updateInjury(editingInjury)" />
+          </label>
+          <ActionGroup full>
+            <button class="ghost" type="button" @click="setActiveInjury(editingInjury.id)">현재 기준으로 지정</button>
+            <button class="danger" type="button" @click="askRemoveInjury(editingInjury)">삭제</button>
+          </ActionGroup>
+            </FormGrid>
+
+            <div v-else-if="panel === 'achievements'" class="memory-stack">
+              <AchievementsSection :runs="runStore.sortedRuns" />
+            </div>
+
+            <div v-else-if="panel === 'knowledge'" class="memory-stack">
+              <SectionHeader title="지식 보관소" compact>
+                <button type="button" @click="openKnowledgeRequest">검토 요청</button>
               </SectionHeader>
-              <div class="memory-card-list">
-                <button v-for="goal in draft.goals" :key="goal.id" class="memory-list-card" type="button" @click="openGoalEdit(goal.id)">
-                  <span>
-                    <strong>{{ goal.title }}</strong>
-                    <small>{{ goal.id === draft.activeGoalId ? '활성 목표 · ' : '' }}{{ goal.category }} · {{ goal.status }}{{ goalDateMeta(goal) }}</small>
-                  </span>
-                  <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
+              <p class="helper">
+                승인된 훈련법과 처방 규칙만 AI 코칭에 들어갑니다. 원문 전체가 아니라 출처, 적용 조건, 처방 규칙만 저장합니다.
+              </p>
+              <p class="helper">
+                검토 요청은 OpenAI API를 호출하지 않고 Supabase 대기 목록에만 저장됩니다.
+              </p>
+              <p v-if="knowledgeRequestSaved" class="success">지식화 검토 요청을 저장했습니다. 비용이 발생하는 AI 조사는 자동 실행하지 않습니다.</p>
+              <p v-if="knowledgeError" class="error">{{ knowledgeError }}</p>
+              <p v-if="knowledgeLoading" class="helper">훈련 지식을 불러오는 중입니다.</p>
+
+              <article v-for="method in knowledge.methods" :key="method.id" class="knowledge-card">
+                <div class="knowledge-card-header">
+                  <span class="context-chip">{{ method.family }}</span>
+                  <strong>{{ method.name }}</strong>
+                  <small>{{ methodMeta(method) }}</small>
+                </div>
+                <p>{{ method.summary }}</p>
+                <p v-if="method.cautionNotes" class="helper">{{ method.cautionNotes }}</p>
+                <div v-if="rulesByMethod.get(method.id)?.length" class="knowledge-rule-list">
+                  <strong>처방 규칙</strong>
+                  <ul>
+                    <li v-for="rule in rulesByMethod.get(method.id)?.slice(0, 3)" :key="rule.id">
+                      <span>{{ rule.sessionType }} · {{ rule.metric }}</span>
+                      <small>{{ rule.prescription }}</small>
+                    </li>
+                  </ul>
+                </div>
+              </article>
+
+              <div v-if="knowledge.requests.length" class="sub-panel">
+                <strong>내 검토 요청</strong>
+                <ul class="memory-list">
+                  <li v-for="request in knowledge.requests" :key="request.id">
+                    {{ request.title }} · {{ requestStatusLabel(request.status) }}
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <FormGrid v-else-if="panel === 'knowledge-request'">
+              <div class="form-section-title full">지식화 검토 요청</div>
+              <p class="helper full">
+                예: MAF 훈련법, Daniels 10K 템포 기준, Hanson Marathon Method. 이 화면은 요청만 저장하며 OpenAI API를 호출하지 않습니다.
+              </p>
+              <p class="helper full">
+                출처 URL이나 네가 참고한 내용을 넣으면 이후 코덱스 검토를 거쳐 구조화 지식으로 승인합니다.
+              </p>
+              <p v-if="knowledgeError" class="error full">{{ knowledgeError }}</p>
+              <label class="full">
+                훈련법 이름
+                <ClearableField v-model="newKnowledgeRequest.title" placeholder="예: MAF 훈련법" />
+              </label>
+              <label class="full">
+                출처 URL
+                <ClearableField v-model="newKnowledgeRequest.sourceUrl" type="url" inputmode="url" placeholder="예: https://philmaffetone.com/180-formula/" />
+              </label>
+              <label class="full">
+                참고 내용
+                <ClearableField
+                  v-model="newKnowledgeRequest.inputText"
+                  as="textarea"
+                  rows="8"
+                  placeholder="훈련법 이름, 궁금한 적용 방식, 네가 알고 있는 내용, 목표 거리 등을 적어주세요."
+                />
+              </label>
+              <ActionGroup full>
+                <button type="button" :disabled="knowledgeLoading || !newKnowledgeRequest.title.trim()" @click="submitKnowledgeRequest">
+                  {{ knowledgeLoading ? '저장 중' : '검토 요청 저장' }}
                 </button>
-              </div>
-                </div>
-
-                <FormGrid v-else-if="panel === 'goal-new'">
-              <div class="form-section-title full">새 목표 생성</div>
-              <label class="full">
-                목표명
-                <ClearableField v-model="newGoal.title" placeholder="예: 2026년 11월 10km 59:59" />
-              </label>
-              <BottomSheetSelect v-model="newGoal.category" label="목표 유형" :options="goalCategoryOptions" />
-              <DateField v-model="newGoal.startDate" label="시작일" />
-              <DateField v-model="newGoal.targetDate" label="목표 날짜" />
-              <label>
-                목표 거리(km)
-                <ClearableField v-model="newGoal.distanceKm" type="number" inputmode="decimal" placeholder="예: 10" number />
-              </label>
-              <label>
-                목표 기록(초)
-                <ClearableField v-model="newGoal.targetDurationSec" type="number" inputmode="numeric" placeholder="예: 3599" number />
-              </label>
-              <label>
-                우선순위
-                <ClearableField v-model="newGoal.priority" type="number" inputmode="numeric" min="1" number />
-              </label>
-              <label class="full">
-                성공 기준
-                <ClearableField v-model="newGoal.successCriteria" as="textarea" rows="3" placeholder="예: 10km를 59:59 이내로 완주" />
-              </label>
-              <label class="full">
-                목표 전략
-                <ClearableField v-model="newGoal.strategyNotes" as="textarea" rows="3" placeholder="예: Easy 기반 + 목요일 Tempo + 토요일 격주 롱런" />
-              </label>
-              <label class="full">
-                목표 메모
-                <ClearableField v-model="newGoal.notes" as="textarea" rows="3" />
-              </label>
-              <ActionGroup full>
-                <button type="button" @click="addGoal">생성</button>
               </ActionGroup>
-                </FormGrid>
+            </FormGrid>
+          </div>
+        </Transition>
+      </main>
+      <template #footer>
+        <button type="button" :disabled="saving || !isDirty" @click="save">{{ saving ? '저장 중' : isDirty ? '변경사항 저장' : '저장됨' }}</button>
+      </template>
+    </StackPage>
 
-                <FormGrid v-else-if="panel === 'goal-edit' && editingGoal">
-              <div class="form-section-title full">목표 편집</div>
-              <label class="full">
-                목표명
-                <ClearableField v-model="editingGoal.title" @update:model-value="updateGoal(editingGoal)" />
-              </label>
-              <BottomSheetSelect v-model="editingGoal.category" label="목표 유형" :options="goalCategoryOptions" @update:model-value="updateGoal(editingGoal)" />
-              <BottomSheetSelect v-model="editingGoal.status" label="상태" :options="goalStatusOptions" @update:model-value="updateGoal(editingGoal)" />
-              <DateField v-model="editingGoal.startDate" label="시작일" @update:model-value="updateGoal(editingGoal)" />
-              <DateField v-model="editingGoal.targetDate" label="목표 날짜" @update:model-value="updateGoal(editingGoal)" />
-              <label>
-                목표 거리(km)
-                <ClearableField v-model="editingGoal.distanceKm" type="number" inputmode="decimal" placeholder="예: 10" number @update:model-value="updateGoal(editingGoal)" />
-              </label>
-              <label>
-                목표 기록(초)
-                <ClearableField v-model="editingGoal.targetDurationSec" type="number" inputmode="numeric" placeholder="예: 3599" number @update:model-value="updateGoal(editingGoal)" />
-              </label>
-              <label>
-                우선순위
-                <ClearableField v-model="editingGoal.priority" type="number" inputmode="numeric" min="1" number @update:model-value="updateGoal(editingGoal)" />
-              </label>
-              <label class="full">
-                성공 기준
-                <ClearableField v-model="editingGoal.successCriteria" as="textarea" rows="3" placeholder="예: 10km를 59:59 이내로 완주" @update:model-value="updateGoal(editingGoal)" />
-              </label>
-              <label class="full">
-                목표 전략
-                <ClearableField v-model="editingGoal.strategyNotes" as="textarea" rows="3" placeholder="예: Easy 기반 + 목요일 Tempo + 토요일 격주 롱런" @update:model-value="updateGoal(editingGoal)" />
-              </label>
-              <label class="full">
-                목표 메모
-                <ClearableField v-model="editingGoal.notes" as="textarea" rows="3" @update:model-value="updateGoal(editingGoal)" />
-              </label>
-              <ActionGroup full>
-                <button class="ghost" type="button" @click="setActiveGoal(editingGoal.id)">활성 목표로 지정</button>
-                <button class="danger" type="button" :disabled="draft.goals.length <= 1" @click="askRemoveGoal(editingGoal)">삭제</button>
-              </ActionGroup>
-                </FormGrid>
-
-                <div v-else-if="panel === 'injuries'" class="memory-stack">
-              <SectionHeader title="부상 관리 목록" compact>
-                <button type="button" @click="openInjuryNew">새 항목</button>
-              </SectionHeader>
-              <div class="memory-card-list">
-                <button v-for="item in draft.injuryItems" :key="item.id" class="memory-list-card" type="button" @click="openInjuryEdit(item.id)">
-                  <span>
-                    <strong>{{ item.title }}</strong>
-                    <small>{{ item.id === draft.activeInjuryItemId ? '현재 기준 · ' : '' }}{{ item.status }}{{ item.severity !== null ? ` · ${item.severity}/5` : '' }}{{ injuryDateMeta(item) }}</small>
-                    <small>{{ injuryAreaMeta(item) }}</small>
-                  </span>
-                  <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
-                </button>
-              </div>
-                </div>
-
-                <FormGrid v-else-if="panel === 'injury-new'">
-              <div class="form-section-title full">새 부상/주의사항 생성</div>
-              <label class="full">
-                항목명
-                <ClearableField v-model="newInjury.title" placeholder="예: 오른쪽 무릎 바깥쪽 불편감" />
-              </label>
-              <InjuryBodySelector :model-value="newInjury.normalizedAreas" @update:model-value="applyNewInjuryAreas" />
-              <BottomSheetSelect v-model="newInjury.status" label="상태" :options="injuryStatusOptions" />
-              <DateField v-model="newInjury.onsetDate" label="시작일" />
-              <DateField v-model="newInjury.lastFlareDate" label="최근 신호일" />
-              <div v-if="newInjury.strengthPlan.length" class="strength-plan-card full">
-                <strong>보강운동 처방</strong>
-                <small>러닝 부하 조절을 돕는 참고용 기본값입니다. 의료 진단이나 치료 처방이 아닙니다.</small>
-                <div class="strength-plan-detail-list">
-                  <article v-for="plan in newInjury.strengthPlanDetails" :key="plan.id">
-                    <strong>{{ plan.title }}</strong>
-                    <p>{{ plan.instruction }}</p>
-                    <small>{{ plan.useWhen }} · 중단: {{ plan.stopWhen }}</small>
-                  </article>
-                </div>
-              </div>
-              <label class="full">
-                악화 트리거
-                <ClearableField :model-value="join(newInjury.triggers)" as="textarea" rows="3" placeholder="예: 템포 다음날 뻣뻣함&#10;볼륨 급증" @update:model-value="newInjury.triggers = split(String($event ?? ''))" />
-              </label>
-              <label class="full">
-                훈련 제한
-                <ClearableField :model-value="join(newInjury.restrictions)" as="textarea" rows="3" placeholder="예: 통증이 있으면 스트라이드 생략&#10;롱런 후 하루 회복 우선" @update:model-value="newInjury.restrictions = split(String($event ?? ''))" />
-              </label>
-              <label class="full">
-                복귀 기준
-                <ClearableField v-model="newInjury.returnToRunCriteria" as="textarea" rows="3" placeholder="예: 다음날 뻣뻣함 없이 Easy가 편할 때 강도 복귀" />
-              </label>
-              <label class="full">
-                메모
-                <ClearableField v-model="newInjury.notes" as="textarea" rows="3" placeholder="예: 템포 다음날 뻣뻣함 확인 필요" />
-              </label>
-              <label class="full">
-                관리 계획
-                <ClearableField v-model="newInjury.managementPlan" as="textarea" rows="3" placeholder="예: 통증 단정 없이 강훈련 후 반응 확인" />
-              </label>
-              <ActionGroup full>
-                <button type="button" @click="addInjury">생성</button>
-              </ActionGroup>
-                </FormGrid>
-
-                <FormGrid v-else-if="panel === 'injury-edit' && editingInjury">
-              <div class="form-section-title full">부상/주의사항 편집</div>
-              <label class="full">
-                항목명
-                <ClearableField v-model="editingInjury.title" placeholder="예: 좌측 햄스트링" @update:model-value="updateInjury(editingInjury)" />
-              </label>
-              <InjuryBodySelector :model-value="editingInjury.normalizedAreas" @update:model-value="updateInjuryAreas(editingInjury, $event)" />
-              <BottomSheetSelect v-model="editingInjury.status" label="상태" :options="injuryStatusOptions" @update:model-value="updateInjury(editingInjury)" />
-              <DateField v-model="editingInjury.onsetDate" label="시작일" @update:model-value="updateInjury(editingInjury)" />
-              <DateField v-model="editingInjury.lastFlareDate" label="최근 신호일" @update:model-value="updateInjury(editingInjury)" />
-              <div v-if="editingInjury.strengthPlan.length" class="strength-plan-card full">
-                <strong>보강운동 처방</strong>
-                <small>부위와 통증 레벨을 기준으로 만든 참고용 처방입니다. 통증이 커지거나 보행 통증이 있으면 축소/중단을 우선합니다.</small>
-                <div class="strength-plan-detail-list">
-                  <article v-for="plan in editingInjury.strengthPlanDetails" :key="plan.id">
-                    <strong>{{ plan.title }}</strong>
-                    <p>{{ plan.instruction }}</p>
-                    <small>{{ plan.useWhen }} · 출처: {{ plan.sources[0]?.title || 'PaceLAB 내부 기준' }}</small>
-                  </article>
-                </div>
-              </div>
-              <label class="full">
-                악화 트리거
-                <ClearableField :model-value="join(editingInjury.triggers)" as="textarea" rows="3" placeholder="예: 템포 다음날 뻣뻣함&#10;볼륨 급증" @update:model-value="editingInjury.triggers = split(String($event ?? '')); updateInjury(editingInjury)" />
-              </label>
-              <label class="full">
-                훈련 제한
-                <ClearableField :model-value="join(editingInjury.restrictions)" as="textarea" rows="3" placeholder="예: 통증이 있으면 스트라이드 생략&#10;롱런 후 하루 회복 우선" @update:model-value="editingInjury.restrictions = split(String($event ?? '')); updateInjury(editingInjury)" />
-              </label>
-              <label class="full">
-                복귀 기준
-                <ClearableField v-model="editingInjury.returnToRunCriteria" as="textarea" rows="3" placeholder="예: 다음날 뻣뻣함 없이 Easy가 편할 때 강도 복귀" @update:model-value="updateInjury(editingInjury)" />
-              </label>
-              <label class="full">
-                메모
-                <ClearableField v-model="editingInjury.notes" as="textarea" rows="3" placeholder="예: 템포 다음날 뻣뻣함 확인 필요" @update:model-value="updateInjury(editingInjury)" />
-              </label>
-              <label class="full">
-                관리 계획
-                <ClearableField v-model="editingInjury.managementPlan" as="textarea" rows="3" placeholder="예: 통증 단정 없이 강훈련 후 반응 확인" @update:model-value="updateInjury(editingInjury)" />
-              </label>
-              <ActionGroup full>
-                <button class="ghost" type="button" @click="setActiveInjury(editingInjury.id)">현재 기준으로 지정</button>
-                <button class="danger" type="button" @click="askRemoveInjury(editingInjury)">삭제</button>
-              </ActionGroup>
-                </FormGrid>
-
-                <div v-else-if="panel === 'achievements'" class="memory-stack">
-                  <AchievementsSection :runs="runStore.sortedRuns" />
-                </div>
-
-                <div v-else-if="panel === 'knowledge'" class="memory-stack">
-                  <SectionHeader title="지식 보관소" compact>
-                    <button type="button" @click="openKnowledgeRequest">검토 요청</button>
-                  </SectionHeader>
-                  <p class="helper">
-                    승인된 훈련법과 처방 규칙만 AI 코칭에 들어갑니다. 원문 전체가 아니라 출처, 적용 조건, 처방 규칙만 저장합니다.
-                  </p>
-                  <p class="helper">
-                    검토 요청은 OpenAI API를 호출하지 않고 Supabase 대기 목록에만 저장됩니다.
-                  </p>
-                  <p v-if="knowledgeRequestSaved" class="success">지식화 검토 요청을 저장했습니다. 비용이 발생하는 AI 조사는 자동 실행하지 않습니다.</p>
-                  <p v-if="knowledgeError" class="error">{{ knowledgeError }}</p>
-                  <p v-if="knowledgeLoading" class="helper">훈련 지식을 불러오는 중입니다.</p>
-
-                  <article v-for="method in knowledge.methods" :key="method.id" class="knowledge-card">
-                    <div class="knowledge-card-header">
-                      <span class="context-chip">{{ method.family }}</span>
-                      <strong>{{ method.name }}</strong>
-                      <small>{{ methodMeta(method) }}</small>
-                    </div>
-                    <p>{{ method.summary }}</p>
-                    <p v-if="method.cautionNotes" class="helper">{{ method.cautionNotes }}</p>
-                    <div v-if="rulesByMethod.get(method.id)?.length" class="knowledge-rule-list">
-                      <strong>처방 규칙</strong>
-                      <ul>
-                        <li v-for="rule in rulesByMethod.get(method.id)?.slice(0, 3)" :key="rule.id">
-                          <span>{{ rule.sessionType }} · {{ rule.metric }}</span>
-                          <small>{{ rule.prescription }}</small>
-                        </li>
-                      </ul>
-                    </div>
-                  </article>
-
-                  <div v-if="knowledge.requests.length" class="sub-panel">
-                    <strong>내 검토 요청</strong>
-                    <ul class="memory-list">
-                      <li v-for="request in knowledge.requests" :key="request.id">
-                        {{ request.title }} · {{ requestStatusLabel(request.status) }}
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-
-                <FormGrid v-else-if="panel === 'knowledge-request'">
-                  <div class="form-section-title full">지식화 검토 요청</div>
-                  <p class="helper full">
-                    예: MAF 훈련법, Daniels 10K 템포 기준, Hanson Marathon Method. 이 화면은 요청만 저장하며 OpenAI API를 호출하지 않습니다.
-                  </p>
-                  <p class="helper full">
-                    출처 URL이나 네가 참고한 내용을 넣으면 이후 코덱스 검토를 거쳐 구조화 지식으로 승인합니다.
-                  </p>
-                  <p v-if="knowledgeError" class="error full">{{ knowledgeError }}</p>
-                  <label class="full">
-                    훈련법 이름
-                    <ClearableField v-model="newKnowledgeRequest.title" placeholder="예: MAF 훈련법" />
-                  </label>
-                  <label class="full">
-                    출처 URL
-                    <ClearableField v-model="newKnowledgeRequest.sourceUrl" type="url" inputmode="url" placeholder="예: https://philmaffetone.com/180-formula/" />
-                  </label>
-                  <label class="full">
-                    참고 내용
-                    <ClearableField
-                      v-model="newKnowledgeRequest.inputText"
-                      as="textarea"
-                      rows="8"
-                      placeholder="훈련법 이름, 궁금한 적용 방식, 네가 알고 있는 내용, 목표 거리 등을 적어주세요."
-                    />
-                  </label>
-                  <ActionGroup full>
-                    <button type="button" :disabled="knowledgeLoading || !newKnowledgeRequest.title.trim()" @click="submitKnowledgeRequest">
-                      {{ knowledgeLoading ? '저장 중' : '검토 요청 저장' }}
-                    </button>
-                  </ActionGroup>
-                </FormGrid>
-              </div>
-            </Transition>
-          </main>
-
-          <footer class="stack-action-bar">
-            <button type="button" :disabled="saving || !isDirty" @click="save">{{ saving ? '저장 중' : isDirty ? '변경사항 저장' : '저장됨' }}</button>
-          </footer>
-        </section>
-        </div>
-      </Transition>
-
+    <Teleport to="body">
       <div v-if="pendingDelete" class="bottom-sheet-layer confirm-layer" role="presentation" @click.self="pendingDelete = null">
         <section class="bottom-sheet confirm-sheet" :class="{ 'bottom-sheet-dragging': deleteSheetDrag.dragging.value }" :style="deleteSheetDrag.sheetStyle.value" role="dialog" aria-modal="true" aria-label="삭제 확인">
           <div class="bottom-sheet-handle bottom-sheet-drag-zone" @pointerdown="deleteSheetDrag.startDrag" />
