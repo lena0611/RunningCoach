@@ -779,8 +779,16 @@ async function onOpenSkip() {
 // === 휴식 선언/복귀 (#473, SSOT §휴식과 복귀) ===
 const restSheetOpen = ref(false)
 const restPresetReason = ref<RestReason | null>(null)
+const restPresetUntil = ref<string | null>(null)
 function openRestSheet() {
   restPresetReason.value = null
+  restPresetUntil.value = null
+  restSheetOpen.value = true
+}
+// 복귀일 조정: 현재 휴식의 이유·복귀일을 미리 채워 연다 — 날짜만 바꿔도 저장 활성(이유 재선택 불필요·버그 수정).
+function openRestAdjust() {
+  restPresetReason.value = restState.value.reason
+  restPresetUntil.value = restState.value.untilDate
   restSheetOpen.value = true
 }
 // 부상 체크인 시트(App.vue) "한동안 쉴게요" 진입(#473 PR3): 이유=부상 프리셋으로 휴식 시트를 연다.
@@ -1497,7 +1505,7 @@ async function applyPhaseTransition() {
           <div class="open-card-actions">
             <button type="button" class="open-card-primary" :disabled="intentBusy" @click="returnFromRestNow">▶ 지금 복귀</button>
             <div class="open-card-row">
-              <button type="button" class="open-card-secondary" :disabled="intentBusy" @click="openRestSheet">📅 복귀일 조정</button>
+              <button type="button" class="open-card-secondary" :disabled="intentBusy" @click="openRestAdjust">📅 복귀일 조정</button>
             </div>
           </div>
         </article>
@@ -1640,7 +1648,7 @@ async function applyPhaseTransition() {
     />
 
     <!-- 휴식 선언(#473): 기간·이유 선택 → declareRest. 부상·날씨·개인 일정 등 범용. -->
-    <RestDeclarationSheet :open="restSheetOpen" :today="todayDate" :busy="intentBusy" :preset-reason="restPresetReason" @declare="onDeclareRest" @close="restSheetOpen = false" />
+    <RestDeclarationSheet :open="restSheetOpen" :today="todayDate" :busy="intentBusy" :preset-reason="restPresetReason" :preset-until="restPresetUntil" @declare="onDeclareRest" @close="restSheetOpen = false" />
 
     <SectionGroup v-if="runStore.loading || runStore.error" title="데이터 상태">
       <template #actions>
