@@ -677,11 +677,16 @@ struct RunContextWebView: UIViewRepresentable {
         }
 
         private func handleBackgroundHealthKitChange() {
-            if UIApplication.shared.applicationState == .active {
-                requestWebHealthKitSync(reason: "background-delivery")
+            // "새 러닝 감지" 알림은 앱이 진짜 백그라운드일 때만 띄운다.
+            // 사용자가 앱을 새로 런치하면 HKObserverQuery 등록 직후 초기 콜백이 한 번 발생하는데,
+            // 그 시점 applicationState 는 .inactive(.active 아님)다. 과거엔 `!= .active` 라는 이유로
+            // 이 초기 콜백을 "새 러닝"으로 오인해, 새 러닝이 0개여도 런치마다 배너가 떴다.
+            // → .background 일 때만 알림으로 보내고, active/inactive(런치·전환 중)는 웹 동기화로 처리한다.
+            if UIApplication.shared.applicationState == .background {
+                notificationManager.showHealthKitDetectedNotificationIfEnabled()
                 return
             }
-            notificationManager.showHealthKitDetectedNotificationIfEnabled()
+            requestWebHealthKitSync(reason: "background-delivery")
         }
 
         private func requestWebHealthKitSync(reason: String) {
@@ -697,7 +702,9 @@ struct RunContextWebView: UIViewRepresentable {
             willPresent notification: UNNotification,
             withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
         ) {
-            if notification.request.identifier.hasPrefix("pacelab-healthkit-detected-") {
+            // 고정 id 는 "pacelab-healthkit-detected"(접미사 없음). 과거엔 끝에 하이픈을 붙여 검사해
+            // 매칭이 안 됐고, 포그라운드 발화 때 숨겨야 할 배너가 그대로 노출됐다.
+            if notification.request.identifier.hasPrefix("pacelab-healthkit-detected") {
                 completionHandler([])
                 return
             }
