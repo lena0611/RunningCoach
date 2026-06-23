@@ -1802,7 +1802,14 @@ async function applyPhaseTransition() {
       </template>
     </StackPage>
 
-    <StackPage :open="!!detailRun" title="세션 상세" bare footer-class="run-detail-cta" @close="closeRunDetail">
+    <StackPage
+      :open="!!detailRun"
+      title="세션 상세"
+      :back="Boolean(trendMetric || projectionDetailOpen || nextSessionDetailOpen)"
+      bare
+      footer-class="run-detail-cta"
+      @close="closeRunDetail"
+    >
       <RunDetailContent v-if="detailRun" :run="detailRun" :weekly-pattern="memoryStore.memory.weeklyPattern">
         <template #actions>
           <div class="run-detail-actions" aria-label="세션 관리">
