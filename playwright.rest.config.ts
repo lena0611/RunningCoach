@@ -13,7 +13,7 @@ const BASE_URL = process.env.REST_E2E_BASE_URL || 'http://localhost:5175'
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: /rest-return\.spec\.ts/,
+  testMatch: /(rest-return|stackpage-275)\.spec\.ts/,
   timeout: 45_000,
   expect: { timeout: 8_000 },
   retries: 0,

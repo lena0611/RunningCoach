@@ -24,6 +24,7 @@ import PageLayout from '@/shared/ui/PageLayout.vue'
 import RunDetailContent from '@/shared/ui/RunDetailContent.vue'
 import RunSessionList from '@/shared/ui/RunSessionList.vue'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
+import StackPage from '@/shared/ui/StackPage.vue'
 import StatCard from '@/shared/ui/StatCard.vue'
 import LevelCard from './LevelCard.vue'
 import TrainingPhaseCard from './TrainingPhaseCard.vue'
@@ -1714,134 +1715,94 @@ async function applyPhaseTransition() {
 
     <RecentRuns :runs="runs.slice(0, 5)" :weekly-pattern="memoryStore.memory.weeklyPattern" @show-all="router.push('/runs')" @select="openRunDetail" />
 
+    <StackPage :open="nextSessionDetailOpen" title="다음 훈련" @close="closeNextSessionDetail">
+      <SectionGroup title="추천 세션">
+        <div class="recommendation-card">
+          <strong>{{ nextSession.title }}</strong>
+          <span>{{ formatDateWithWeekday(nextSession.plannedDate) }} · {{ nextSession.dayName }}</span>
+        </div>
+        <div v-if="nextSession.injuryAdjusted" class="next-session-injury-note">
+          <strong>부상 조정</strong>
+          <p>{{ nextSession.injuryNote }}</p>
+        </div>
+        <div v-if="nextSession.loadCaution" class="next-session-injury-note next-session-load-note">
+          <strong>부하 주의</strong>
+          <p>{{ nextSession.loadNote }}</p>
+        </div>
+        <p>{{ nextSession.reason }}</p>
+        <p class="helper">{{ nextSession.intensity }}</p>
+        <WeatherCard
+          :snapshot="weatherStore.snapshot"
+          :loading="weatherStore.loading"
+          :error="weatherStore.error"
+          :target-date="nextSession.plannedDate"
+          :session-title="nextSession.title"
+          @refresh="weatherStore.requestForecast()"
+        />
+      </SectionGroup>
+    </StackPage>
+
+    <StackPage :open="!!trendMetric" :title="trendTitle" @close="closeTrend">
+      <SectionGroup title="추이">
+        <template #actions>
+          <small class="helper">{{ trendRuns.length }}개 세션</small>
+        </template>
+        <TrendChart v-if="trendChartPoints.length" :points="trendChartPoints" unit="km" />
+        <EmptyState v-else title="표시할 기록이 없습니다." description="해당 기간의 러닝 기록이 아직 부족합니다." />
+      </SectionGroup>
+      <SectionGroup v-if="trendRuns.length" title="세션" :surface="false">
+        <RunSessionList :runs="trendRuns" :weekly-pattern="memoryStore.memory.weeklyPattern" interactive @select="openRunDetail" />
+      </SectionGroup>
+    </StackPage>
+
+    <StackPage :open="projectionDetailOpen && Boolean(raceProjection)" title="목표 예상" @close="closeProjectionDetail">
+      <template v-if="raceProjection">
+        <SectionGroup title="현재 예상">
+          <div class="projection-detail-metric">
+            <strong>{{ formatDuration(raceProjection.current.projectedSec) }}</strong>
+            <span>{{ raceProjection.targetDistanceKm }}km 기준</span>
+          </div>
+          <p class="helper">
+            {{ formatDateWithWeekday(raceProjection.current.date) }} {{ raceProjection.current.type }}
+            {{ raceProjection.current.distanceKm.toFixed(2) }}km 기록을 목표 거리로 환산한 값입니다.
+          </p>
+        </SectionGroup>
+        <SectionGroup title="목표 준비도">
+          <div class="projection-score">
+            <strong>{{ raceProjection.readinessScore }}</strong>
+            <span>/100 · {{ raceProjection.readinessLevel }}</span>
+          </div>
+          <p class="helper">{{ raceProjection.readinessSummary }}</p>
+        </SectionGroup>
+        <SectionGroup title="판단 근거">
+          <div class="projection-factor-list">
+            <article
+              v-for="factor in raceProjection.factors"
+              :key="factor.key"
+              class="projection-factor"
+              :class="`projection-factor-${factor.status}`"
+            >
+              <div>
+                <strong>{{ factor.label }}</strong>
+                <small>{{ factor.summary }}</small>
+              </div>
+              <span>{{ factor.score }}</span>
+              <p>{{ factor.detail }}</p>
+            </article>
+          </div>
+        </SectionGroup>
+        <SectionGroup title="변화">
+          <p v-if="raceProjection.deltaSec === null" class="helper">
+            아직 비교할 이전 품질 세션이 부족합니다. Tempo, Race, Steady Long 기록이 쌓이면 변화 방향을 보여줍니다.
+          </p>
+          <p v-else class="helper">
+            {{ raceProjectionHint }}입니다. 이 값은 루틴 상향/유지 판단의 보조 근거로만 사용합니다.
+          </p>
+        </SectionGroup>
+      </template>
+    </StackPage>
+
     <Teleport to="body">
-      <Transition name="stack-page">
-        <div v-if="nextSessionDetailOpen" class="memory-stack-layer" data-no-swipe>
-          <section class="memory-stack-page">
-            <header class="memory-stack-header">
-              <div>
-                <h2>다음 훈련</h2>
-              </div>
-              <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeNextSessionDetail">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
-              </button>
-            </header>
-            <main class="memory-stack-content">
-              <SectionGroup title="추천 세션">
-                <div class="recommendation-card">
-                  <strong>{{ nextSession.title }}</strong>
-                  <span>{{ formatDateWithWeekday(nextSession.plannedDate) }} · {{ nextSession.dayName }}</span>
-                </div>
-                <div v-if="nextSession.injuryAdjusted" class="next-session-injury-note">
-                  <strong>부상 조정</strong>
-                  <p>{{ nextSession.injuryNote }}</p>
-                </div>
-                <div v-if="nextSession.loadCaution" class="next-session-injury-note next-session-load-note">
-                  <strong>부하 주의</strong>
-                  <p>{{ nextSession.loadNote }}</p>
-                </div>
-                <p>{{ nextSession.reason }}</p>
-                <p class="helper">{{ nextSession.intensity }}</p>
-                <WeatherCard
-                  :snapshot="weatherStore.snapshot"
-                  :loading="weatherStore.loading"
-                  :error="weatherStore.error"
-                  :target-date="nextSession.plannedDate"
-                  :session-title="nextSession.title"
-                  @refresh="weatherStore.requestForecast()"
-                />
-              </SectionGroup>
-            </main>
-          </section>
-        </div>
-      </Transition>
-
-      <Transition name="stack-page">
-        <div v-if="trendMetric" class="memory-stack-layer" data-no-swipe>
-          <section class="memory-stack-page">
-            <header class="memory-stack-header">
-              <div>
-                <h2>{{ trendTitle }}</h2>
-              </div>
-              <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeTrend">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
-              </button>
-            </header>
-            <main class="memory-stack-content">
-              <SectionGroup title="추이">
-                <template #actions>
-                  <small class="helper">{{ trendRuns.length }}개 세션</small>
-                </template>
-                <TrendChart v-if="trendChartPoints.length" :points="trendChartPoints" unit="km" />
-                <EmptyState v-else title="표시할 기록이 없습니다." description="해당 기간의 러닝 기록이 아직 부족합니다." />
-              </SectionGroup>
-              <SectionGroup v-if="trendRuns.length" title="세션" :surface="false">
-                <RunSessionList :runs="trendRuns" :weekly-pattern="memoryStore.memory.weeklyPattern" interactive @select="openRunDetail" />
-              </SectionGroup>
-            </main>
-          </section>
-        </div>
-      </Transition>
-
-      <Transition name="stack-page">
-        <div v-if="projectionDetailOpen && raceProjection" class="memory-stack-layer" data-no-swipe>
-          <section class="memory-stack-page">
-            <header class="memory-stack-header">
-              <div>
-                <h2>목표 예상</h2>
-              </div>
-              <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeProjectionDetail">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
-              </button>
-            </header>
-            <main class="memory-stack-content">
-              <SectionGroup title="현재 예상">
-                <div class="projection-detail-metric">
-                  <strong>{{ formatDuration(raceProjection.current.projectedSec) }}</strong>
-                  <span>{{ raceProjection.targetDistanceKm }}km 기준</span>
-                </div>
-                <p class="helper">
-                  {{ formatDateWithWeekday(raceProjection.current.date) }} {{ raceProjection.current.type }}
-                  {{ raceProjection.current.distanceKm.toFixed(2) }}km 기록을 목표 거리로 환산한 값입니다.
-                </p>
-              </SectionGroup>
-              <SectionGroup title="목표 준비도">
-                <div class="projection-score">
-                  <strong>{{ raceProjection.readinessScore }}</strong>
-                  <span>/100 · {{ raceProjection.readinessLevel }}</span>
-                </div>
-                <p class="helper">{{ raceProjection.readinessSummary }}</p>
-              </SectionGroup>
-              <SectionGroup title="판단 근거">
-                <div class="projection-factor-list">
-                  <article
-                    v-for="factor in raceProjection.factors"
-                    :key="factor.key"
-                    class="projection-factor"
-                    :class="`projection-factor-${factor.status}`"
-                  >
-                    <div>
-                      <strong>{{ factor.label }}</strong>
-                      <small>{{ factor.summary }}</small>
-                    </div>
-                    <span>{{ factor.score }}</span>
-                    <p>{{ factor.detail }}</p>
-                  </article>
-                </div>
-              </SectionGroup>
-              <SectionGroup title="변화">
-                <p v-if="raceProjection.deltaSec === null" class="helper">
-                  아직 비교할 이전 품질 세션이 부족합니다. Tempo, Race, Steady Long 기록이 쌓이면 변화 방향을 보여줍니다.
-                </p>
-                <p v-else class="helper">
-                  {{ raceProjectionHint }}입니다. 이 값은 루틴 상향/유지 판단의 보조 근거로만 사용합니다.
-                </p>
-              </SectionGroup>
-            </main>
-          </section>
-        </div>
-      </Transition>
-
       <Transition name="stack-page">
         <div v-if="detailRun" class="memory-stack-layer" data-no-swipe>
           <section class="memory-stack-page">
