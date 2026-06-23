@@ -40,7 +40,7 @@ import WeekendTriageSheet from './WeekendTriageSheet.vue'
 import SessionDoublePanel from './SessionDoublePanel.vue'
 import DoublesAddSheet from './DoublesAddSheet.vue'
 import RestDeclarationSheet from './RestDeclarationSheet.vue'
-import { deriveRestState } from '@/entities/training-memory/restWindow'
+import { deriveRestState, shouldOfferRecoveryRun } from '@/entities/training-memory/restWindow'
 import { buildRestGuidance, evaluateExtraRun } from '@/shared/lib/coaching/restGuidance'
 import { collectCoachMoments } from '@/shared/lib/coaching/coachMoments'
 import { detectScheduleDeviation } from '@/shared/lib/coaching/scheduleRealign'
@@ -163,6 +163,32 @@ const goalFeasibility = computed(() =>
 // 휴식 선언 상태(#473): activeRest + 오늘 기준 파생(active·복귀 D-N·복귀일 등). 차분 배너·복귀 컨트롤이 쓴다.
 const restState = computed(() => deriveRestState(memoryStore.memory.activeRest, todayDate.value))
 
+function diffDaysIso(a: string, b: string): number {
+  return Math.round((new Date(`${a}T00:00:00`).getTime() - new Date(`${b}T00:00:00`).getTime()) / 86400000)
+}
+
+// 코치 보이스(#473 PR3)용 휴식 컨텍스트: active 중 닦달 억제 + "푹 쉬세요"(선언 직후 회복주 1회) /
+// 복귀 전후(0~2일) "회복 후 정리" / 긴 휴식(>4주) 목표 재점검. coachMoments 가 톤·억제를 담당한다.
+const restMomentCtx = computed(() => {
+  const meta = memoryStore.memory.activeRest
+  if (!meta) return null
+  const s = restState.value
+  const todayIso = todayDate.value
+  // declaredAt 은 UTC ISO 타임스탬프 → 로컬 캘린더 날짜로 환산해 todayIso(로컬)와 같은 기준으로 비교(TZ 어긋남 방지).
+  const daysSinceDeclared = diffDaysIso(todayIso, formatDateOnly(new Date(meta.declaredAt)))
+  const daysSinceReturn = s.returnDate ? diffDaysIso(todayIso, s.returnDate) : null
+  return {
+    active: s.active,
+    reason: s.reason,
+    daysUntilReturn: s.daysUntilReturn,
+    justDeclared: daysSinceDeclared >= 0 && daysSinceDeclared <= 1,
+    // 회복주 게이트(이유·공존 부상 severity)는 엔티티 도메인 함수에서 판정해 플래그로 넘긴다(#397 — shared 에 도메인 안 쌓기).
+    offerRecoveryRun: shouldOfferRecoveryRun(s.reason, activeInjury.value?.severity ?? null),
+    showReturn: s.isOver && daysSinceReturn !== null && daysSinceReturn >= 0 && daysSinceReturn <= 2,
+    longLayoff: s.durationDays !== null && s.durationDays > 28
+  }
+})
+
 function dateOnly(d: Date): string {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -234,7 +260,8 @@ async function doEnsureSchedule() {
     // 닫힌 주 누락이 재정렬 트리거로 먼저 평가되게 한다. 현재 주의 지난 날은 'open'(따라잡기 가능)으로 유지.
     await scheduleStore.settleClosedWeeks(goal.id, trainingWeekRange(today.value).start)
     // 휴식 선언(#473) 보존: realign/콜드스타트가 휴식 구간에 planned 를 새로 깔았으면 다시 rested 로 되돌린다
-    // (builder 를 건드리지 않고 멱등 재적용 — 휴식 중 닦달 재발/중복카드 방지). 복귀일이 지났으면 건너뛴다.
+    // (builder 를 건드리지 않고 멱등 재적용 — 휴식 중 닦달 재발/중복카드 방지). 복귀일이 지나면 건너뛴다.
+    // (만료 메타 해제는 expireRestMetaIfOver 가 스케줄 게이트와 무관하게 항상 처리한다.)
     const rest = memoryStore.memory.activeRest
     if (rest && rest.untilDate >= dateOnly(today.value)) {
       await scheduleStore.declareRest(goal.id, rest.startDate, rest.untilDate)
@@ -566,7 +593,8 @@ const coachMoments = computed(() =>
       timeTrialResult: timeTrialResult.value,
       doubleSuggestion: doubleSuggestionData.value
         ? { backlogLabel: doubleSuggestionData.value.backlogLabel, amDayLabel: doubleSuggestionData.value.amDayLabel }
-        : null
+        : null,
+      rest: restMomentCtx.value
     },
     dismissedMomentKeys.value
   )
@@ -706,9 +734,23 @@ async function onOpenSkip() {
 
 // === 휴식 선언/복귀 (#473, SSOT §휴식과 복귀) ===
 const restSheetOpen = ref(false)
+const restPresetReason = ref<RestReason | null>(null)
 function openRestSheet() {
+  restPresetReason.value = null
   restSheetOpen.value = true
 }
+// 부상 체크인 시트(App.vue) "한동안 쉴게요" 진입(#473 PR3): 이유=부상 프리셋으로 휴식 시트를 연다.
+// immediate — 대시보드 마운트 전에 요청이 설정됐어도(부상 시트→라우팅) 마운트 시 한 번 집어낸다.
+watch(
+  () => useInjuryFlowStore().restRequest,
+  (reason) => {
+    if (!reason) return
+    restPresetReason.value = reason
+    restSheetOpen.value = true
+    useInjuryFlowStore().clearRest()
+  },
+  { immediate: true }
+)
 function dayAfterIso(iso: string): string {
   const d = new Date(`${iso}T00:00:00`)
   d.setDate(d.getDate() + 1)
@@ -1046,6 +1088,7 @@ watch(
 
 function refreshDashboardContext() {
   today.value = new Date()
+  expireRestMetaIfOver()
   if (!runStore.loaded && !runStore.loading) {
     void runStore.load()
   }
@@ -1054,6 +1097,16 @@ function refreshDashboardContext() {
   }
   weatherStore.init()
   void weatherStore.refreshAfterActivation()
+}
+
+// 복귀 정리(#473 PR3): 복귀 모먼트 창(복귀일+2일)이 지나면 휴식 메타 해제 → 정상 흐름 복귀.
+// doEnsureSchedule(스케줄 빌드 게이트, 일부 목표서 조기 return)과 분리해 목표 종류·targetDate 유무와 무관하게 항상 정리.
+// 과거 rested 세션은 의도된 휴식 기록이라 보존(missed 로 닦달하지 않는다). 멱등 — 한 번 해제되면 재발동 안 함.
+function expireRestMetaIfOver() {
+  const rest = memoryStore.memory.activeRest
+  if (rest && diffDaysIso(dateOnly(today.value), dayAfterIso(rest.untilDate)) > 2) {
+    void memoryStore.setActiveRest(null)
+  }
 }
 
 function refreshDashboardContextWhenVisible() {
@@ -1524,7 +1577,7 @@ async function applyPhaseTransition() {
     />
 
     <!-- 휴식 선언(#473): 기간·이유 선택 → declareRest. 부상·날씨·개인 일정 등 범용. -->
-    <RestDeclarationSheet :open="restSheetOpen" :today="todayDate" :busy="intentBusy" @declare="onDeclareRest" @close="restSheetOpen = false" />
+    <RestDeclarationSheet :open="restSheetOpen" :today="todayDate" :busy="intentBusy" :preset-reason="restPresetReason" @declare="onDeclareRest" @close="restSheetOpen = false" />
 
     <SectionGroup v-if="runStore.loading || runStore.error" title="데이터 상태">
       <template #actions>

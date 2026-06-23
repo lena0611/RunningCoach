@@ -13,6 +13,8 @@ const props = defineProps<{
   /** 오늘(YYYY-MM-DD) — 프리셋 기간 계산 기준. */
   today: string
   busy?: boolean
+  /** 진입점에서 이유를 미리 정해 열 때(#473 — 부상 체크인 "한동안 쉴게요"=injury). null=사용자 선택. */
+  presetReason?: RestReason | null
 }>()
 
 const emit = defineEmits<{ declare: [{ untilDate: string; reason: RestReason }]; close: [] }>()
@@ -66,7 +68,10 @@ watch(
   () => props.open,
   (open) => {
     document.body.classList.toggle('sheet-open', open)
-    if (open) reset()
+    if (open) {
+      reset()
+      if (props.presetReason) reason.value = props.presetReason
+    }
   }
 )
 onBeforeUnmount(() => document.body.classList.remove('sheet-open'))

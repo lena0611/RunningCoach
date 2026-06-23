@@ -21,6 +21,8 @@ export type RestState = {
   daysUntilReturn: number | null
   isReturnDay: boolean
   isOver: boolean
+  /** 휴식 기간 일수([startDate..untilDate] 포함). >28(4주)이면 복귀 시 목표 재점검(SSOT 디트레이닝 4주 경계). */
+  durationDays: number | null
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000
@@ -47,7 +49,8 @@ const INACTIVE: RestState = {
   returnDate: null,
   daysUntilReturn: null,
   isReturnDay: false,
-  isOver: false
+  isOver: false,
+  durationDays: null
 }
 
 export function deriveRestState(activeRest: ActiveRest | null | undefined, today: string): RestState {
@@ -62,11 +65,30 @@ export function deriveRestState(activeRest: ActiveRest | null | undefined, today
     returnDate,
     daysUntilReturn: diffDaysIso(returnDate, today),
     isReturnDay: today === returnDate,
-    isOver: today > untilDate
+    isOver: today > untilDate,
+    durationDays: diffDaysIso(untilDate, startDate) + 1
   }
 }
 
-/** 부하/부상성 휴식인가 — "완전 휴식 대신 가벼운 회복주" 대안을 1회 제시할 조건(SSOT §휴식과 복귀). */
-export function isLoadOrInjuryRest(reason: RestReason | null | undefined): boolean {
-  return reason === 'injury'
+/**
+ * "완전 휴식 대신 가벼운 회복주" 대안을 1회 제시해도 되는가 (SSOT §휴식과 복귀).
+ * 부하 경감(회복주)이 완전 중단보다 디트레이닝 회피에 우월(Mujika & Padilla):
+ * - 통제 가능한 비의료 휴식(weather·personal)은 안전하게 제시 가능.
+ * - injury 휴식은 부하성 경증(severity 1~2)일 때만.
+ * - 'other'(불명·의료 가능성)는 보수적으로 제시하지 않는다.
+ *
+ * 안전 오버라이드(이유 불문): 공존하는 활성 부상의 severity ≥ 3(통증·redFlag로 멈춰야 하는 수준)이면
+ * 부상 KB 게이트가 완전 휴식을 우선하므로 제시하지 않는다 — 날씨·일정으로 쉬더라도 강한 부상이 있으면
+ * 달리라고 권하지 않는다. injurySeverity 는 "휴식 시점에 공존하는 활성 부상의 강도"다(없으면 0/불명).
+ * ⚠ injury 휴식인데 등록된 활성 부상이 없어 severity 가 불명(0/null)이면 보수적으로 미제시한다.
+ */
+export function shouldOfferRecoveryRun(
+  reason: RestReason | null | undefined,
+  injurySeverity: number | null | undefined
+): boolean {
+  const sev = injurySeverity ?? 0
+  if (sev >= 3) return false
+  if (reason === 'weather' || reason === 'personal') return true
+  if (reason === 'injury') return sev >= 1 && sev <= 2
+  return false
 }
