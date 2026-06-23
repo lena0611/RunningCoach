@@ -6,6 +6,7 @@ import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import { useLevelStore } from '@/app/stores/levelStore'
+import { useCoachStore } from '@/app/stores/coachStore'
 import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
 import type { RunLog } from '@/entities/run/model'
 import RunSummaryCard from '@/widgets/run-summary-card/RunSummaryCard.vue'
@@ -81,6 +82,7 @@ const memoryStore = useMemoryStore()
 const healthKitSyncStore = useHealthKitSyncStore()
 const weatherStore = useWeatherStore()
 const levelStore = useLevelStore()
+const coachStore = useCoachStore()
 const router = useRouter()
 const route = useRoute()
 const trendMetric = ref<'month' | 'last7' | 'easy' | 'hard' | null>(null)
@@ -1329,7 +1331,7 @@ function openGoalCard() {
 }
 
 function openCoachForRun(run: RunLog) {
-  router.push({ path: '/runs', query: { runId: run.id, coach: '1' } })
+  coachStore.open(run)
 }
 
 function openRunAction(run: RunLog, action: 'edit' | 'delete') {

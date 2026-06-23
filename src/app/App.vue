@@ -15,6 +15,7 @@ import {
 } from '@/features/injury-check-in/injuryCheckInPrompt'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import AppShell from '@/shared/ui/AppShell.vue'
+import CoachSessionOverlay from '@/features/coach-session/CoachSessionOverlay.vue'
 import InjuryCheckInSheet from '@/shared/ui/InjuryCheckInSheet.vue'
 import InjuryScreeningSheet from '@/shared/ui/InjuryScreeningSheet.vue'
 import PostRunInterviewSheet from '@/shared/ui/PostRunInterviewSheet.vue'
@@ -810,6 +811,7 @@ function animateTabRelease(targetOffset: number, targetRoute: string | null) {
 <template>
   <AppShell :nav-items="navItems" :is-authenticated="authStore.isAuthenticated" @sign-out="authStore.signOut()">
     <ToastHost />
+    <CoachSessionOverlay />
     <OnboardingFlow v-if="showOnboarding" />
     <CelebrationModal
       v-if="levelStore.pendingCelebration"

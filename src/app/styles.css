@@ -89,6 +89,7 @@
   --z-toast: 1200;
   --z-bottom-sheet: 1000;
   --z-stack: 860;
+  --z-coach: 900;
   --z-confirm-sheet: 1100;
   --run-calendar-count-bg: #000000;
   --run-calendar-count-text: #ffffff;
@@ -5440,6 +5441,12 @@ button.run-session-row {
   inset: 0;
   z-index: var(--z-stack);
   background: var(--color-bg);
+}
+
+/* 앱 레벨 코치 오버레이는 App.vue에서 탭 페이저보다 먼저 teleport되므로, 같은 z(860)면
+   나중에 그려지는 상세 스택(대시보드/기록)에 가려진다. 상세(860) 위·자체 시트(1100) 아래로 올린다. */
+.memory-stack-layer.coach-overlay-layer {
+  z-index: var(--z-coach);
 }
 
 .memory-stack-page {
