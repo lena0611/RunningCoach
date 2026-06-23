@@ -735,7 +735,12 @@ async function onDeclareRest(payload: { untilDate: string; reason: RestReason })
     toastStore.success('푹 쉬세요. 일정은 정리해둘게요 — 돌아오면 가볍게 시작해요.')
   })
 }
-/** 지금 복귀: 오늘 이후 rested 를 planned 로 되돌리고 휴식 메타 해제. 이후 파이프라인이 "회복 후 정리" forward 정렬. */
+/**
+ * 지금 복귀: 오늘 이후 rested 를 planned 로 되돌리고(즉시 in-memory 반영) 휴식 메타 해제.
+ * 복귀 시 목표일 고정 forward 재정렬의 "회복 후 정리" 톤은 PR3 — 여기서 ensureSchedule 을 강제 호출하면
+ * 다음 정산이 generic "놓쳐서 다시 짰어요" 토스트를 띄울 수 있어(복귀에 부적절) 일부러 호출하지 않는다.
+ * 자연스러운 다음 ensure 사이클이 정산을 처리하고, PR3 가 복귀 전용 톤을 입힌다.
+ */
 async function returnFromRestNow() {
   const goal = activeGoal.value
   await runScheduleOp(async () => {

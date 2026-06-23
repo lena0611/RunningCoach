@@ -149,6 +149,8 @@ export async function markSessionsRested(
 /**
  * 휴식 복귀/단축(#473): fromDate(포함) 이후의 'rested' 세션을 'planned' 로 되돌린다("지금 복귀"·복귀일 앞당김).
  * 과거(이미 쉰 날)는 건드리지 않는다. goalId scoping 은 형제 함수와 동일. 영향 행 수를 반환.
+ * ⚠ 상한 없음(fromDate 이후 전부) — Phase 1 "활성 휴식 1개" 불변식 전제. Phase 3 에서 다중 휴식이 생기면
+ *   더 늦은 별도 휴식 구간까지 되돌릴 수 있으니 그땐 [from, to] 범위로 좁혀야 한다.
  */
 export async function unmarkRestedFrom(goalId: string | null, fromDate: string): Promise<number> {
   let query = requireSupabase()
