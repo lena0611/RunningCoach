@@ -5,7 +5,14 @@
 `project-memory.md`, `.harness/project/workflow-rules.md`, `decision-log.md`를 우선합니다.
 > 상세 인수인계가 있으면 프로젝트 루트 `HANDOFF.md`를 먼저 본다.
 
-## ⭐ 현재 위치 (2026-06-24 종료) — 렌더 E2E 커버리지 확장 + 인증 E2E 견고화/시드 안전화 (PR #510·#511 머지)
+## ⭐ 현재 위치 (2026-06-24 추가) — 보류 (나) Trends E2E 마무리 + #473 클로즈 확인 (PR #513 머지)
+- **이번 턴 완료(머지·트리검증):**
+  - **(나) Trends 렌즈 stackpage E2E 수정 (PR #513)**: `goto('/trends')`→`goto('/#/trends')`(해시) **+ lens 행 `.click()`→`domClick`**(좌표 클릭 간섭, 다른 stackpage 테스트와 동일 패턴). goto 이슈에 가려 lens 클릭이 검증된 적 없어 두 번째 버그가 안 드러났던 것 — 라이브 QA로 포착. **안전 비파괴 배치 7개(stackpage 3 + session-detail 4) green**, harness:check 통과. 상세 [[auth-e2e-account-state-and-seed-safety]].
+  - **#473 클로즈 확인 = task 정리 완료**: 이미 CLOSED(오늘 01:29), 후속 #501·#502 둘 다 CLOSED, PR #503·#504·#505 전부 MERGED. 열린 Phase 3(풀 휴식모드) 추적 이슈 없음(연기). 잔여 없음.
+  - **세션 재생성 OTP 불요 교훈**: qa-storage 만료 시 **라이브 chrome 브라우저(:5175)부터 확인** — 살아 있으면(리프레시 토큰 회전으로 갱신 중, 그게 qa-storage 만료의 근본 원인) 그 localStorage 추출로 OTP 없이 재생성. 이번에도 OTP 불요였음.
+- **여전히 보류((가) 나머지 = 6/29 이후):** `rest-return` ×2 + stackpage '다음 훈련' — 부상 휴식(**6/29까지**) 자연 해소 후 **비-휴식 계정에서 조작 0**으로 검증(rest-return은 휴식 변경=파괴적, 휴식 중 금지).
+
+## (이전) ⭐ 현재 위치 (2026-06-24 종료) — 렌더 E2E 커버리지 확장 + 인증 E2E 견고화/시드 안전화 (PR #510·#511 머지)
 - **이번 세션 완료(머지·트리검증):**
   - **walk-run 렌더 E2E #501 후속 (PR #510)**: `seedWalkRunReturn`(in-memory·persist 안 함·**인증 불필요**) + `e2e/walk-run-return.spec.ts`. 라우트 스모크 config(`playwright.config.ts`, Supabase OFF·`VITE_E2E_ROUTE_SMOKE`)에서 작전 카드의 걷기-뛰기 5단계 사다리·통증정지·redFlag·severity3 의뢰 렌더 DOM 단언. #501은 그동안 buildSessionBriefing 직접호출로만 검증됐던 렌더 공백을 메움. 인증 불요 스펙(app-smoke·walk-run-return)=기본 config, 인증 필요 스펙=rest config로 testMatch 분리.
   - **인증 E2E 견고화 + 시드 안전화 (PR #511)**: ① 활성 부상 시 뜨는 App 레벨 '부상 상태 체크인' 모달이 클릭을 가로채던 것 → `addInitScript`로 dismiss 플래그(`pacelab.injuryCheckIn.dismissed.*`) 항상-dismissed 억제(비파괴). ② **🚨 `seedReturnRamp`가 `goals:[raceGoal]`로 실 목표를 통째 덮어쓰는 파괴적 시드 → 인증된 실계정에서 돌자 사용자 실 목표 소실 → localStorage 원본 스냅샷으로 복구 완료(손실 0)**. 비파괴화(실 목표 보존)+복구 유틸 `restoreMemoryFromLocalSnapshot` 추가. 상세 [[auth-e2e-account-state-and-seed-safety]].
@@ -37,9 +44,9 @@
 - ⚠ **머지 규칙**: squash 후 `git diff <tip> origin/main` 빈결과 트리 검증 필수(#463 24→11 누락 사고), 의심 시 `--merge`. [[pr-squash-merge-race-verify-tree]].
 
 ## 다음 1순위
-0. ✅ **walk-run UI 렌더 E2E 완료(PR #510)** + 인증 E2E 견고화·시드 안전화(PR #511). **보류**: (가) `rest-return`+stackpage 2건 = 계정 비-휴식(6/29 이후)일 때 검증, (나) stackpage Trends `goto('/trends')`→`/#/trends` 수정. 인증 세션 만료 시 OTP 재로그인 필요. [[auth-e2e-account-state-and-seed-safety]]
+0. ✅ **(나) Trends E2E 수정 완료(PR #513, 해시+domClick)** · 안전 배치 7개 green · #473 클로즈 확인. **남은 (가) = 6/29 이후**: 부상 휴식 자연 해소 후 비-휴식 계정에서 `rest-return` ×2 + stackpage '다음 훈련'을 **조작 0**으로 검증. 세션 만료면 라이브 chrome(:5175) localStorage 추출(OTP 불요) 우선, 죽었으면 OTP. [[auth-e2e-account-state-and-seed-safety]]
 1. **iOS '새 러닝 감지' 실주행 확인** — 가짜 배너는 제거됨(PR#488). 다음 = 워치 차고 실제 1회 뛰어 집 동기화 시 '제때 1번' 알림 오나 확인(워치 실주행 필요). 미수신/잔존 오탐이면 "진짜 새 워크아웃 endDate 게이트". [[healthkit-detected-notify-gate]].
-2. **#473 마무리 판단 + 후속 택1** — Phase 1·2 코어 완료·검증·배포 끝. 후속: (a) 부상 복귀 walk-run 점진 처방, (b) coach-run LLM 휴식 인지, (c) #473 이슈 클로즈+(a)(b) 별도 후속 분리. [[rest-and-return-coaching]].
+2. ✅ **#473 완전 종료** — 이슈 CLOSED, 후속 #501·#502 CLOSED, PR #503·#504·#505 MERGED. Phase 3(풀 휴식모드)는 추적 이슈 없이 연기됨(필요 시 신규 이슈로). [[rest-and-return-coaching]].
 3. **스택 후속(같은 패턴 적용 대상)** — 세션상세 자체를 App 레벨 단일화(대시보드/기록 중복) + 편집/삭제 라우팅 제거(코치 오버레이와 동일 패턴). 코치 detail footer 라벨은 정적 "AI 코칭"으로 단순화됨 → 필요 시 store에 hasThread 노출로 "이어가기/받기" 복원. [[stacks-app-level-independence]].
 4. **실기기 시각 스팟체크** — #462 강한 확인 오버레이 + #455 더블 카드 + 동적 gap 바(자연 발생 시, 위험 낮음).
 5. **#454 나머지 플로우 실렌더 스팟체크** — 주 페이징·다른날로/스왑·포기 잔존·주말 트리아지. 통과면 에픽 #362 마무리.
