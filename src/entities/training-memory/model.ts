@@ -662,6 +662,64 @@ export function getActiveInjuryItem(memory: TrainingMemory): TrainingInjuryItem 
   return memory.injuryItems.find((item) => item.id === memory.activeInjuryItemId) ?? null
 }
 
+/** 부위 무관 전역 재부상 위험창(최근 12개월 부상 이력) 요약. */
+export type RecentInjuryHistory = {
+  /** 활성/관리 중이거나, resolved여도 가장 최근 관련일이 12개월 이내인 부상이 하나라도 있으면 true. */
+  hasRecentInjury: boolean
+  /** 가장 최근 부상 관련일로부터 경과 일수(활성/관리=0). 없으면 null. */
+  mostRecentDaysAgo: number | null
+  /** 최근 부상들의 부위 목록(부위 무관 위험이지만 메시지/모니터링 보조용). */
+  areas: string[]
+}
+
+const RECENT_INJURY_WINDOW_DAYS = 365
+
+function parseInjuryTimestamp(value: string | null): number | null {
+  if (!value) return null
+  // 날짜만(YYYY-MM-DD)인 onset/flare/resolved는 로컬 자정으로 파싱한다(코드베이스 관행).
+  // UTC로 파싱하면 타임존 오프셋만큼 하루 밀려 12개월 경계에서 off-by-one이 난다.
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value
+  const t = new Date(normalized).getTime()
+  return Number.isFinite(t) ? t : null
+}
+
+/**
+ * 최근 부상 이력 요약 — 부위 무관 전역 재부상 위험창(3.1).
+ * 근거: 이전 부상(최근 12개월)은 RRI 최강·최일관 예측인자이며, 재부상의 ~80%는 같은 부위가 아니라 다른 부위에서 온다
+ * (Saragiotto 2014, Fokkema 2023 — .harness/project/research/rri-risk-factors-evidence.md §1·§3.1).
+ * 활성/관리 부상은 항상 포함, resolved 부상은 가장 최근 관련일(onset/flare/resolved/checked 중 최댓값)이 12개월 이내면 포함.
+ * archived(사용자가 의도적으로 보관 처리)는 제외해 과도한 플래깅을 막는다.
+ */
+export function getRecentInjuryHistory(memory: TrainingMemory, today: Date = new Date()): RecentInjuryHistory {
+  const dayMs = 24 * 60 * 60 * 1000
+  const areas = new Set<string>()
+  let mostRecentDaysAgo: number | null = null
+  for (const item of memory.injuryItems) {
+    if (item.status === 'archived') continue
+    const active = item.status === 'active' || item.status === 'monitoring'
+    const times = [item.lastFlareDate, item.resolvedAt, item.lastCheckedAt, item.onsetDate]
+      .map(parseInjuryTimestamp)
+      .filter((t): t is number => t !== null)
+    const daysAgo = times.length ? Math.floor((today.getTime() - Math.max(...times)) / dayMs) : null
+    const within = active || (daysAgo !== null && daysAgo >= 0 && daysAgo <= RECENT_INJURY_WINDOW_DAYS)
+    if (!within) continue
+    if (item.area) areas.add(item.area)
+    const effective = active ? 0 : daysAgo ?? 0
+    if (mostRecentDaysAgo === null || effective < mostRecentDaysAgo) mostRecentDaysAgo = effective
+  }
+  return { hasRecentInjury: mostRecentDaysAgo !== null, mostRecentDaysAgo, areas: [...areas] }
+}
+
+/**
+ * 풀마라톤(42.195km) 레이스 목표 여부 — 마라톤 목표 위험 플래그(3.2).
+ * 근거: 마라톤 목표는 10km 대비 신규 RRI 위험을 독립적으로 높인다(조정 OR 1.73). 하프는 비유의 → 제외
+ * (Fokkema 2023 — rri-risk-factors-evidence.md §3.2). 차단이 아니라 보수화 신호.
+ */
+export function isFullMarathonGoal(goal: TrainingGoal | null | undefined): boolean {
+  if (!goal || goal.category !== 'race' || typeof goal.distanceKm !== 'number') return false
+  return goal.distanceKm >= 40
+}
+
 export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null | undefined): TrainingMemory {
   const base = cloneMemory(initialTrainingMemory)
   const merged = {

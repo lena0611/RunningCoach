@@ -1,6 +1,6 @@
 import type { Lap, RunLog, RunType } from '@/entities/run/model'
-import type { TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
-import { getActiveInjuryItem } from '@/entities/training-memory/model'
+import type { RecentInjuryHistory, TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
+import { getActiveGoal, getActiveInjuryItem, getRecentInjuryHistory, isFullMarathonGoal } from '@/entities/training-memory/model'
 import { formatDateWithWeekday } from '@/shared/lib/format'
 
 const dayMs = 24 * 60 * 60 * 1000
@@ -226,9 +226,17 @@ export function getNextSessionRecommendation(memory: TrainingMemory, runs: RunLo
   }
 
   const injury = getActiveInjuryItem(memory)
+  const hasActiveInjury = !!injury && (injury.status === 'active' || injury.status === 'monitoring')
   const ageWeight = getAgeLoadWeight(memory.athleteProfile.birthYear, today)
   const chronic = getChronicLoadTrend(runs, today, ageWeight)
-  return applyChronicLoad(applyInjuryGate(base, injury), chronic, injury, ageWeight)
+  const history = getRecentInjuryHistory(memory, today)
+  const isMarathonGoal = isFullMarathonGoal(getActiveGoal(memory))
+  return applyPreviousInjuryRisk(
+    applyChronicLoad(applyInjuryGate(base, injury), chronic, injury, ageWeight),
+    history,
+    isMarathonGoal,
+    hasActiveInjury
+  )
 }
 
 export type TrainingDayView = {
@@ -315,6 +323,27 @@ function applyChronicLoad(
     : `${agePrefix}${trendText} 부상 예측은 아니지만 회복주를 넣거나 다음 주기 거리 증가를 멈추는 편이 안전합니다.`
 
   return { ...rec, loadCaution: true, loadNote: note }
+}
+
+/**
+ * 부위 무관 전역 재부상 위험창(3.1) + 저볼륨≠안전 겸손 가드(3.3) + 마라톤 가중(3.2).
+ * 근거: .harness/project/research/rri-risk-factors-evidence.md. 통증이 없고 주행거리가 낮아도 "안전" 단정을 막고
+ * 강도 상향을 한 단계씩 보수화한다. 현재 통증 게이트(applyInjuryGate)가 이미 작동 중이면(hasActiveInjury) 중복 메시지를 피해 생략.
+ * 통증 기반 강도 하향과 별개의 보조 카우션이므로 기존 loadNote 표시 경로에 합쳐 노출한다.
+ */
+function applyPreviousInjuryRisk(
+  rec: NextSessionRecommendation,
+  history: RecentInjuryHistory,
+  isMarathonGoal: boolean,
+  hasActiveInjury: boolean
+): NextSessionRecommendation {
+  if (hasActiveInjury || !history.hasRecentInjury) return rec
+  const months = Math.max(1, Math.round((history.mostRecentDaysAgo ?? 0) / 30))
+  const marathonText = isMarathonGoal
+    ? ' 특히 풀마라톤 목표와 겹치면 위험이 더 커지니 주기화를 더 천천히 가져가고 이상 신호를 빨리 점검하세요.'
+    : ''
+  const note = `최근 ${months}개월 내 부상 이력이 있어, 통증이 없고 주행거리가 낮아도 '안전'으로 단정하지 마세요. 재부상은 같은 부위만이 아니라 다른 부위로도 잘 오니, 강도 상향은 한 단계씩 보수적으로 가져가세요.${marathonText}`
+  return { ...rec, loadCaution: true, loadNote: rec.loadNote ? `${rec.loadNote} ${note}` : note }
 }
 
 function applyInjuryGate(base: NextSessionRecommendation, injury: TrainingInjuryItem | null): NextSessionRecommendation {
