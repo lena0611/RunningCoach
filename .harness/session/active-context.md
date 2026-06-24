@@ -6,10 +6,11 @@
 > 하네스 본체의 개발 기록이 아닙니다. 설치된 프로젝트의 현재 작업 맥락만 기록합니다.
 > 상세 인수인계는 (있으면) 프로젝트 루트 `HANDOFF.md`. 장기 지식은 에이전트 메모리.
 
-## ⭐ 현재 작업 — 감별진단 KB §5(KB→코칭) 출하 + Phase C/E 설계 (2026-06-25, PR #516 머지)
-- **출하 완료(트리검증·coach-run 엣지 배포·라이브 스모크):** Phase A `injuryKnowledge.ts`(8부위 가설·`rankInjuryHypotheses`·`evaluateRedFlags`·do-not 가드) + Phase B `getCadenceTrend`(runStats)·`injurySignals.ts` 어댑터 + Phase D coach-run `injurySignals` 주입(웹 게이팅·edge 소비, "가능성"으로만·redFlag tripped 시 의뢰 우선 escape hatch).
-- **핵심 결정:** ① 어댑터는 entities/training-memory(shared 아님 — 경계 래칫 #397) ② 모델 확장(`hypotheses?`/`probeAnswers?`/…)은 Phase C 연기(dead field 회피) ③ redFlag 진행성=최근 2회 연속 체크인 트렌드(#전문코치리뷰 should-fix). 검증 763 unit+build+deno+코치리뷰 2렌즈.
-- **진행 중: Phase C(grill 1문항)·E(대시보드 가설/레버 표시) — UI라 와이어프레임 합의 게이트**([[design-before-implementation]]). 지면/페이스 데이터 신호도 베이스라인 확보 시 추가. [[injury-focus-week-2026-06-24]] [[rri-risk-factor-evidence-2026-06]].
+## ⭐ 현재 작업 — 감별진단 KB §5 Phase C(능동 코치 모먼트 grill) 출하 = §5 전부 완료 (2026-06-25, PR #520 머지, Issue #519)
+- **출하 완료(트리검증·787 unit+vue-tsc+harness:check·#전문코치리뷰 4렌즈 PASS(must-fix 0)·라이브 스모크):** 앱 열 때 세션당 **1문항**(`injuryProbes[8]`, §1 결정적 지문 1:1) → `probeAnswers` 누적 → 아형 해소(`subtypeResolved`→가능성 라벨 "…(부착부)") + red-flag 자가검사(`redFlagSelfTest` 배열→`evaluateRedFlags` 게이트). 신규 RedFlagSignals `weightBearingFailureOrInstability`(파열·잠김·근위파열 전용).
+- **핵심 결정:** ① 경계 래칫 #397 — `coachMoments`(shared) entities import 안 함, 페이지가 `selectNextProbe` precompute→`ctx.painProbe` plain 주입 ② **한 세션 1문항** = 부상 id 변경 시만 스냅샷(probeAnswers 비반응→자동전진 X) ③ 모델은 `probeAnswers?`/`subtypeResolved?`만 적재(나머지 dead 미적재) ④ should-fix 5건 반영(정강이 구획증후군·햄스트링 골+신경 이중·'영상검사'→'전문가 평가'·ACWR 평이화·동시쓰기 가드).
+- 라이브 스모크(실계정 비파괴·원복): 휴식 중 프로브 렌더·실클릭 누적/응답/자동전진無·redFlag→의뢰힌트 플립.
+- **§5 = A+B(#516)+C(#520)+D(#516)+E(#518) 전부 출하.** 후속(증분2, 별도·미착수): 다축 누적·답변 rank 재가중·monitoring/재발 게이트·지면/페이스 신호. [[injury-focus-week-2026-06-24]] [[rri-risk-factor-evidence-2026-06]].
 
 ## (이전) ⭐ 현재 작업 — 보류 (나) Trends E2E 마무리 + #473 클로즈 확인 (2026-06-24 추가, PR #513 머지)
 - **(나) Trends 렌즈 stackpage E2E 수정 (PR #513)**: `goto('/trends')`→`goto('/#/trends')`(해시) **+ lens 행 `.click()`→`domClick`**(좌표 클릭 간섭). goto 이슈에 가려 lens 클릭이 검증된 적 없어 안 드러났던 두 번째 버그 — 라이브 QA로 포착. 안전 비파괴 배치 7개(stackpage 3 + session-detail 4) green, harness:check 통과.
