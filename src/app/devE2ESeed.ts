@@ -8,7 +8,7 @@
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { buildPeriodizedSchedule } from '@/shared/lib/coaching/periodizedSchedule'
-import type { TrainingGoal, TrainingInjuryItem } from '@/entities/training-memory/model'
+import type { TrainingGoal, TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
 import type { ScheduledSession } from '@/entities/training-schedule/model'
 
 function isoOffset(days: number): string {
@@ -51,8 +51,15 @@ export async function seedReturnRamp(): Promise<{ ok: true }> {
     updatedAt: new Date().toISOString()
   }
 
-  // 1) 레이스 목표로 교체 + 기존 휴식 제거.
-  await memory.update({ ...memory.memory, goal: raceGoal.title, activeGoalId: RACE_GOAL_ID, goals: [raceGoal], activeRest: null })
+  // 1) 레이스 목표를 활성화 + 기존 휴식 제거. 비파괴: 실 목표를 교체하지 않고 e2e 목표만 더한다(공유 실계정 보호).
+  //    (이전엔 goals:[raceGoal] 로 실 목표를 통째로 덮어써, 인증된 실계정에서 돌면 사용자 목표가 사라졌다.)
+  await memory.update({
+    ...memory.memory,
+    goal: raceGoal.title,
+    activeGoalId: RACE_GOAL_ID,
+    goals: [raceGoal, ...memory.memory.goals.filter((g) => g.id !== RACE_GOAL_ID)],
+    activeRest: null
+  })
 
   // 2) 2주 전부터의 주기화 스케줄을 깐다(현재 시점 기준 미래 세션 = 복귀 후 대상).
   await sched.load(RACE_GOAL_ID)
@@ -198,4 +205,17 @@ export function firstUpcomingSession(): { date: string; sessionType: string; dis
     .filter((s) => s.goalId === memory.memory.activeGoalId && s.status === 'planned' && s.date >= today)
     .sort((a, b) => a.date.localeCompare(b.date))[0]
   return upcoming ? { date: upcoming.date, sessionType: upcoming.sessionType, distanceKm: upcoming.prescription.distanceKm } : null
+}
+
+/**
+ * 복구 유틸: localStorage 의 원본 trainingMemory 스냅샷을 Supabase 로 되돌린다.
+ * memoryStore.load() 는 localStorage 를 덮어쓰지 않으므로(update 만 기록), 파괴적 시드(목표 교체 등) 후
+ * 원본이 localStorage 에 남아 있을 때 계정을 원복하는 데 쓴다.
+ */
+export async function restoreMemoryFromLocalSnapshot(): Promise<{ ok: boolean; goals?: string[]; activeGoalId?: string }> {
+  const raw = localStorage.getItem('runcontext.trainingMemory')
+  if (!raw) return { ok: false }
+  const mem = JSON.parse(raw) as TrainingMemory
+  await useMemoryStore().update(mem)
+  return { ok: true, goals: (mem.goals || []).map((g) => g.title), activeGoalId: mem.activeGoalId }
 }
