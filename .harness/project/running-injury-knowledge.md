@@ -71,6 +71,7 @@ KB=웹 SSOT 단일 모듈, 가설가중·redFlag·레버=결정론 후처리(프
 
 - **이전 부상(최근 12개월) = 압도적 1순위 예측인자**(1.7–2.7배, 거리별 OR 3.3–4.3). 메커니즘=불완전 회복+보상 과부하 → **복귀는 달력이 아니라 회복 확인으로 게이트.** 재부상의 ~80%는 다른 부위 → 전역 위험창(§2-A) 필수.
 - **마라톤 목표 OR 1.73(하프 비유의)**, **이전부상군 저볼륨≠안전(OR≈1.00)** — §2-A 반영(구현).
-- **RRI 운영 정의(체크인·rest-return 트리거 임계로 사용):** 통증이 달리기를 **≥1주(또는 ≥7일/3연속세션) 제한**, 또는 의사/물리치료 방문, 또는 진통제 사용 = "진짜 부상"(단순 1회 통증과 구별). *구현 예정(App.vue 체크인/coachMoments).*
-- **RTR 기간 앵커·escalation:** 부상 중앙값 ~8주, **자가보고 통증 >10주 지속 = 장기부상 → 전문가 평가 권유(escalation).** redFlag 게이트 종속. *구현 예정(coachMoments 디텍터).* ⚠ walk-run %·세션 cap 같은 dosing은 본 코퍼스에 없음 → 기존 §3-B·#473/#480 유지(이 근거로 새 dosing 만들지 말 것).
+- **RRI 운영 정의(체크인·rest-return 트리거 임계로 사용):** 통증이 달리기를 **≥1주(또는 ≥7일/3연속세션) 제한**, 또는 의사/물리치료 방문, 또는 진통제 사용 = "진짜 부상"(단순 1회 통증과 구별). *구현: `coachMoments.detectPainFollowup`가 `assessRecentPain`(≥3연속세션 또는 ≥7일 지속)으로 단발 통증과 관리형 부상 패턴을 구별해 escalate.*
+- **RTR 기간 앵커·escalation:** 부상 중앙값 ~8주, **자가보고 통증 >10주 지속 = 장기부상 → 전문가 평가 권유(escalation).** redFlag 게이트 종속. *구현: `coachMoments.detectInjuryEscalation`(onsetDate/createdAt 기준 ≥70일 → 의뢰 넛지, 휴식 중에도 노출). "연속 지속"이 핵심이라 resolved 이력이 있는데 재활성(재발)된 부상은 옛 최초 발병이 아니라 resolvedAt를 에피소드 시작 하한으로 써 과대 의뢰를 막는다.* ⚠ walk-run %·세션 cap 같은 dosing은 본 코퍼스에 없음 → 기존 §3-B·#473/#480 유지(이 근거로 새 dosing 만들지 말 것).
+- **채팅 코치 부상 이력·마라톤 인지(client-summary):** 웹이 `getRecentInjuryHistory`(전역 위험창)·`isFullMarathonGoal`을 `recentInjuryWindow`+`marathonFlag`로 coach-run에 주입 → 채팅 코치가 이전 부상 보유 시 보수화·"저볼륨=안전" 안심 금지, 풀마라톤 목표면 점진 빌드업 강조. *구현: CoachSessionOverlay → coachRepository → coach-run `instructionForInjuryHistory`/`instructionForMarathonGoal`(웹 SSOT, edge 소비만).*
 - **do-not 가드(위험점수에 넣지 말 것):** ①성별(가중 금지, 단 "어떤 예측인자가 적용되나"의 **효과수정자**로만) ②정적 생체역학/해부 스크리닝(Q각·주상골 하강·다리길이차·발 구조 — 23/25 메타분석 무의미) ③BMI(방향 불일치) ④strike pattern(부상저감 근거 없음·부하 재분배일 뿐 → 무증상자 교정 금지, 무릎/PFP/경골응력 부상 한정 offload 레버로만). ⑤"근력=RRI 감소" 단정 금지(일반 회복탄력성 레버로만). ⑥수면=데이터 공백.
