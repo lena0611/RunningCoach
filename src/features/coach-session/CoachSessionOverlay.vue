@@ -18,6 +18,7 @@ import { summarizeTempoCoaching } from '@/shared/lib/coaching/tempoAdaptation'
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { buildCoachSessionEvidence } from '@/shared/lib/coaching/sessionQuality'
 import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
+import { deriveRestState } from '@/entities/training-memory/restWindow'
 import { getAgeLoadWeight } from '@/shared/lib/runStats'
 import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
 import { getRaceProjection, summarizeGoalProjectionForCoach } from '@/shared/lib/performanceProjection'
@@ -409,6 +410,21 @@ async function sendCoachRequest(note: string) {
           distanceKm: s.prescription.distanceKm ?? null,
           keySession: s.keySession
         }))
+      })(),
+      // 활성 휴식(#502) — 휴식 중엔 코치가 "다음 훈련" 처방을 닦달하지 않게. 휴식과 무관하면 null.
+      restState: (() => {
+        const today = new Date()
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+        const rs = deriveRestState(memoryStore.memory.activeRest, todayStr)
+        if (!rs.active && !rs.isReturnDay && !rs.isOver) return null
+        return {
+          active: rs.active,
+          reason: rs.reason,
+          daysUntilReturn: rs.daysUntilReturn,
+          returnDate: rs.returnDate,
+          isReturnDay: rs.isReturnDay,
+          longLayoff: (rs.durationDays ?? 0) > 28
+        }
       })(),
       sessionEvidence: (() => {
         const now = new Date()
