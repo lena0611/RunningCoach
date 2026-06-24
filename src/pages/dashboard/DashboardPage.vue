@@ -1609,7 +1609,7 @@ async function applyPhaseTransition() {
     </SectionGroup>
 
     <PhaseTransitionModal
-      v-if="phaseModalOpen"
+      :open="phaseModalOpen"
       :summary="adaptiveProgress"
       :saving="phaseSaving"
       @confirm="applyPhaseTransition"
