@@ -33,11 +33,12 @@ describe('collectCoachMoments', () => {
     expect(extra!.options!.some((o) => o.sentiment === 'positive')).toBe(true)
   })
 
-  it('부상>부하>추가런 우선순위로 정렬', () => {
+  it('부하>추가런 우선순위로 정렬 — 정적 부상 고지는 카드와 중복이라 모먼트 제외', () => {
     const moments = collectCoachMoments(
       ctx({ runs: extraRuns, chronic: spike, injury: injury({ severity: 4 }) })
     )
-    expect(moments.map((m) => m.kind)).toEqual(['injury', 'load-spike', 'extra-run'])
+    expect(moments.map((m) => m.kind)).toEqual(['load-spike', 'extra-run'])
+    expect(moments.some((m) => m.kind === 'injury')).toBe(false)
   })
 
   it('이탈(놓침)이면 deviation 모먼트', () => {
@@ -77,7 +78,7 @@ describe('collectCoachMoments', () => {
     expect(moments.some((m) => m.kind === 'extra-run')).toBe(false)
   })
 
-  it('전체 우선순위: 부상>부하>이탈>추가런>목표진척', () => {
+  it('전체 우선순위: 부하>이탈>추가런>목표진척 (정적 부상 고지 모먼트 제외)', () => {
     const moments = collectCoachMoments(
       ctx({
         runs: extraRuns,
@@ -87,7 +88,7 @@ describe('collectCoachMoments', () => {
         goalProgress: { readinessScore: 80, readinessLevel: '충분', dDayText: '' }
       })
     )
-    expect(moments.map((m) => m.kind)).toEqual(['injury', 'load-spike', 'deviation', 'extra-run', 'goal-progress'])
+    expect(moments.map((m) => m.kind)).toEqual(['load-spike', 'deviation', 'extra-run', 'goal-progress'])
   })
 
   it('러닝부하 부위(발/다리) 통증이 최근 런에 있고 활성부상 없으면 부상 체크인 제안', () => {
@@ -137,7 +138,7 @@ describe('collectCoachMoments', () => {
     ...over
   })
 
-  it('휴식 중이면 닦달성 모먼트(이탈·트리아지·부하·추가런) 전면 억제 + rest-support만 노출', () => {
+  it('휴식 중이면 닦달성 모먼트(이탈·트리아지·부하·추가런) 전면 억제 — 지속 휴식 응원은 "쉬는 중" 배너가 담당하므로 상단 모먼트는 없음', () => {
     const moments = collectCoachMoments(
       ctx({
         runs: extraRuns,
@@ -147,19 +148,15 @@ describe('collectCoachMoments', () => {
         rest: restActive()
       })
     )
-    expect(moments.map((m) => m.kind)).toEqual(['rest-support'])
-    expect(moments[0].message).not.toContain('놓')
+    expect(moments).toEqual([])
   })
 
-  it('휴식 중에도 중증 부상(≥3) 안전 경고는 억제하지 않는다(안전 신호 ≠ 닦달)', () => {
-    // 날씨로 쉬어도 강한 부상이 공존하면 안전 모먼트는 살아있다. 회복주 게이트(offerRecoveryRun)는 caller 가 차단.
+  it('휴식 중(선언 직후·회복주 미제시) 중증 부상이어도 상단 모먼트는 안 띄운다 — 부상 안전은 "부상 기준" 카드, 휴식 응원은 배너가 담당(중복 제거)', () => {
     const moments = collectCoachMoments(
       ctx({ injury: injury({ severity: 4 }), rest: restActive({ reason: 'weather', justDeclared: true, offerRecoveryRun: false }) })
     )
-    expect(moments.some((m) => m.kind === 'injury')).toBe(true)
-    const support = moments.find((m) => m.kind === 'rest-support')
-    expect(support).toBeTruthy()
-    expect(support!.options).toBeUndefined() // 회복주 미제시
+    // 정적 부상 고지·지속 휴식 응원은 전용 카드/배너가 담당 → 모먼트로 중복 노출하지 않는다(안전 정보는 카드에 그대로).
+    expect(moments).toEqual([])
   })
 
   it('rest-support: 선언 직후 + 회복주 제시 적격이면 "가벼운 회복주" 1회 제시(옵션)', () => {
@@ -170,10 +167,9 @@ describe('collectCoachMoments', () => {
     expect(m.options!.some((o) => o.sentiment === 'neutral')).toBe(true) // "완전히 쉴래요" 존중
   })
 
-  it('rest-support: offerRecoveryRun=false 면 선언 직후라도 옵션 없이 응원만', () => {
-    const m = collectCoachMoments(ctx({ rest: restActive({ justDeclared: true, offerRecoveryRun: false }) }))[0]
-    expect(m.kind).toBe('rest-support')
-    expect(m.options).toBeUndefined()
+  it('rest-support: 회복주 미제시면 선언 직후라도 모먼트 없음 — 지속 응원은 "쉬는 중" 배너가 담당', () => {
+    const moments = collectCoachMoments(ctx({ rest: restActive({ justDeclared: true, offerRecoveryRun: false }) }))
+    expect(moments.some((m) => m.kind === 'rest-support')).toBe(false)
   })
 
   it('rest-support: 부상 회복주 응답은 walk-run(걷기-뛰기) 톤(SSOT §3-B)', () => {
@@ -194,10 +190,9 @@ describe('collectCoachMoments', () => {
     expect(accept!.response).not.toContain('걷기-뛰기')
   })
 
-  it('rest-support: 선언 직후가 아니면 옵션 없이 응원만', () => {
-    const m = collectCoachMoments(ctx({ rest: restActive({ justDeclared: false }) }))[0]
-    expect(m.kind).toBe('rest-support')
-    expect(m.options).toBeUndefined()
+  it('rest-support: 선언 직후가 아니면(지속 휴식) 상단 모먼트 없음 — 배너가 담당', () => {
+    const moments = collectCoachMoments(ctx({ rest: restActive({ justDeclared: false }) }))
+    expect(moments.some((m) => m.kind === 'rest-support')).toBe(false)
   })
 
   it('복귀 전후면 rest-return("회복 후 정리", 놓침 프레이밍 금지)', () => {
