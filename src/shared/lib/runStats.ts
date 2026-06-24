@@ -2,6 +2,7 @@ import type { Lap, RunLog, RunType } from '@/entities/run/model'
 import type { RecentInjuryHistory, TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
 import { getActiveGoal, getActiveInjuryItem, getRecentInjuryHistory, isFullMarathonGoal } from '@/entities/training-memory/model'
 import { formatDateWithWeekday } from '@/shared/lib/format'
+import { sanitizeCadence } from '@/shared/lib/cadence'
 
 const dayMs = 24 * 60 * 60 * 1000
 const easyPaceThresholdSec = 390
@@ -146,6 +147,45 @@ export function getAcwr(runs: RunLog[], today = new Date()): number | null {
   const chronicWeekly = sumDistance(getRunsWithinDays(runs, 28, today)) / 4
   if (chronicWeekly < chronicLoadMinBaselineKm / 4) return null
   return Math.round((acute7 / chronicWeekly) * 100) / 100
+}
+
+export type CadenceTrendStatus = 'low' | 'dropping' | 'stable' | 'unknown'
+
+export type CadenceTrend = {
+  status: CadenceTrendStatus
+  recentAvgSpm: number | null
+  baselineAvgSpm: number | null
+  changePct: number | null
+  lowThreshold: number
+}
+
+// §3 공통 케이던스 가드: "절대 180 신화 금지", ≤165~170 확인 시에만 보조 레버. 임계는 보수적으로 170spm.
+const cadenceLowThresholdSpm = 170
+
+function averageCadence(runs: RunLog[]): number | null {
+  const values = runs.map((run) => sanitizeCadence(run.cadence)).filter((value): value is number => value !== null)
+  if (!values.length) return null
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
+}
+
+/**
+ * 최근 30일 평균 케이던스(spm)와 직전 30일(31~60일) 대비 추세 — 오버스트라이드 보조 신호(§2-A·§3).
+ * low = 최근 평균 ≤170spm(낮은 케이던스), dropping = 직전 30일 대비 뚜렷한 하락(≥3%). 둘 다 cadenceLow 보조 레버를 켠다.
+ * ⚠ 보조 신호다 — 단독 원인 단정 금지(증거 혼재). 케이던스 데이터가 없으면 unknown(보수적, 없는 신호를 켜지 않음).
+ * getChronicLoadTrend/getAcwr 와 같은 30일/60일 윈도우·null-safe 패턴을 따른다.
+ */
+export function getCadenceTrend(runs: RunLog[], today = new Date()): CadenceTrend {
+  const last30Runs = getRunsWithinDays(runs, 30, today)
+  const prev30Runs = getRunsWithinDays(runs, 60, today).filter((run) => !last30Runs.some((recent) => recent.id === run.id))
+  const recentAvgSpm = averageCadence(last30Runs)
+  const baselineAvgSpm = averageCadence(prev30Runs)
+  if (recentAvgSpm === null) {
+    return { status: 'unknown', recentAvgSpm: null, baselineAvgSpm, changePct: null, lowThreshold: cadenceLowThresholdSpm }
+  }
+  const changePct = baselineAvgSpm ? Math.round(((recentAvgSpm - baselineAvgSpm) / baselineAvgSpm) * 100) : null
+  const status: CadenceTrendStatus =
+    recentAvgSpm <= cadenceLowThresholdSpm ? 'low' : changePct !== null && changePct <= -3 ? 'dropping' : 'stable'
+  return { status, recentAvgSpm, baselineAvgSpm, changePct, lowThreshold: cadenceLowThresholdSpm }
 }
 
 // 7일 급성 경고와 30일 중장기 경고를 합쳐 요약 피로 카드용 한 줄을 만든다.

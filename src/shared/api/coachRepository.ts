@@ -100,6 +100,16 @@ export async function requestCoachRunStream(
     recentInjuryWindow?: { hasRecentInjury: boolean; mostRecentDaysAgo: number | null; areas: string[] } | null
     /** 현재 목표가 풀마라톤인가(isFullMarathonGoal) — 풀마라톤 목표는 독립적으로 위험↑(하프 제외). */
     marathonFlag?: boolean | null
+    /**
+     * 활성 부상 감별 신호(§5 부상 KB) — 통증 부위 + 데이터로 좁힌 상위 1~2 "가능성" 가설 + 레버 + 안전 redFlag.
+     * 의료 진단 아님("가능성"으로만). redFlag.tripped면 코치가 처방을 멈추고 의뢰를 우선한다. 활성 부상/신호 없으면 null.
+     */
+    injurySignals?: {
+      areaLabel: string
+      severity: number | null
+      hypotheses: { possibility: string; levers: string[]; why: string }[]
+      redFlag: { tripped: boolean; reasons: string[] }
+    } | null
   }
 ): Promise<CoachReport> {
   const client = requireSupabase()
@@ -129,6 +139,7 @@ export async function requestCoachRunStream(
       restState: options.restState ?? null,
       recentInjuryWindow: options.recentInjuryWindow ?? null,
       marathonFlag: options.marathonFlag ?? null,
+      injurySignals: options.injurySignals ?? null,
       stream: true,
       commandId: options.commandId ?? null,
       runnerLevel: options.runnerLevel ?? 'beginner',

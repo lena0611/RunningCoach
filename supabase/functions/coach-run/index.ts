@@ -206,6 +206,7 @@ Deno.serve(async (req) => {
     const restState = normalizeRestState(body.restState)
     const recentInjuryWindow = normalizeRecentInjuryWindow(body.recentInjuryWindow)
     const marathonFlag = body.marathonFlag === true
+    const injurySignals = normalizeInjurySignals(body.injurySignals)
     const runnerLevel = normalizeRunnerLevel(body.runnerLevel)
     const responseStyle = normalizeResponseStyle(body.responseStyle, runnerLevel)
     const shouldStream = body.stream === true
@@ -216,7 +217,7 @@ Deno.serve(async (req) => {
     const rateLimit = await consumeRateLimit(admin, userId, 'coach-run')
     if (!rateLimit.ok) return json({ error: rateLimit.error, retryAfterSec: rateLimit.retryAfterSec }, 429)
 
-    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress, sessionEvidence, upcomingSchedule, restState, recentInjuryWindow, marathonFlag)
+    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress, sessionEvidence, upcomingSchedule, restState, recentInjuryWindow, marathonFlag, injurySignals)
     const ownedSelectedRunId = context.selectedRun?.id ?? null
     if (shouldStream) {
       return streamCoachRun(admin, userId, ownedSelectedRunId, userNote, openaiKey, model, context)
@@ -438,6 +439,47 @@ function normalizeRecentInjuryWindow(value: unknown): CoachRecentInjuryWindow | 
     hasRecentInjury: true,
     mostRecentDaysAgo: typeof v.mostRecentDaysAgo === 'number' ? v.mostRecentDaysAgo : null,
     areas: Array.isArray(v.areas) ? v.areas.filter((a): a is string => typeof a === 'string').slice(0, 4) : []
+  }
+}
+
+/**
+ * 활성 부상 감별 신호(§5 부상 KB). 웹이 통증 부위 + 데이터로 rank 한 상위 1~2 "가능성" 가설 + 레버 + 안전 redFlag 를
+ * client-summary 로 보낸다(KB 전문 미전송, 프롬프트 크기 절약 — coach-context-client-summary 패턴).
+ * 의료 진단 아님: 가설은 "가능성"으로만, redFlag.tripped 면 처방 멈추고 의뢰 우선(소비측 instruction 강제).
+ * 활성 부상/신호가 없으면 웹이 null 로 보낸다 — 여기선 형태만 방어 검증한다.
+ */
+type CoachInjurySignals = {
+  areaLabel: string
+  severity: number | null
+  hypotheses: { possibility: string; levers: string[]; why: string }[]
+  redFlag: { tripped: boolean; reasons: string[] }
+}
+function normalizeInjurySignals(value: unknown): CoachInjurySignals | null {
+  if (!value || typeof value !== 'object') return null
+  const v = value as Record<string, unknown>
+  const hypotheses = Array.isArray(v.hypotheses)
+    ? v.hypotheses
+        .filter((h): h is Record<string, unknown> => Boolean(h) && typeof h === 'object')
+        .map((h) => ({
+          possibility: typeof h.possibility === 'string' ? h.possibility.slice(0, 60) : '',
+          levers: Array.isArray(h.levers) ? h.levers.filter((l): l is string => typeof l === 'string').slice(0, 5) : [],
+          why: typeof h.why === 'string' ? h.why.slice(0, 120) : ''
+        }))
+        .filter((h) => h.possibility)
+        .slice(0, 2)
+    : []
+  const rf = v.redFlag && typeof v.redFlag === 'object' ? (v.redFlag as Record<string, unknown>) : null
+  const redFlag = {
+    tripped: rf?.tripped === true,
+    reasons: rf && Array.isArray(rf.reasons) ? (rf.reasons as unknown[]).filter((r): r is string => typeof r === 'string').slice(0, 4) : []
+  }
+  // 보낼 게 전혀 없으면(가설·redFlag 모두 없음) null — 빈 부상 블록으로 프롬프트를 늘리지 않는다.
+  if (!hypotheses.length && !redFlag.tripped) return null
+  return {
+    areaLabel: typeof v.areaLabel === 'string' ? v.areaLabel.slice(0, 40) : '',
+    severity: typeof v.severity === 'number' ? v.severity : null,
+    hypotheses,
+    redFlag
   }
 }
 
@@ -845,7 +887,7 @@ function unifyPerformanceProjection(
   }
 }
 
-async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null, sessionEvidence: CoachSessionEvidence | null = null, upcomingSchedule: { date: string; type: string; distanceKm: number | null; keySession: boolean }[] | null = null, restState: CoachRestContext | null = null, recentInjuryWindow: CoachRecentInjuryWindow | null = null, marathonFlag = false) {
+async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null, sessionEvidence: CoachSessionEvidence | null = null, upcomingSchedule: { date: string; type: string; distanceKm: number | null; keySession: boolean }[] | null = null, restState: CoachRestContext | null = null, recentInjuryWindow: CoachRecentInjuryWindow | null = null, marathonFlag = false, injurySignals: CoachInjurySignals | null = null) {
   const memorySelect = 'id, content, created_at, importance, last_referenced_at, reference_count'
   const [
     { data: memoryRow },
@@ -1187,6 +1229,12 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     marathonFlag,
     instructionForMarathonGoal:
       'context.marathonFlag가 true면 사용자의 현재 목표가 풀마라톤이다 — 풀마라톤 목표는 10km 대비 신규 부상 위험을 독립적으로 높인다(하프마라톤은 해당 없으니 하프엔 적용하지 마라). 점진적 빌드업·충분한 회복·롱런 관리를 강조하고, recentInjuryWindow가 함께 있으면 특히 보수적으로 안내한다. 이는 목표를 막거나 겁주려는 게 아니라 "조금 더 보수적으로, 무리하지 말고 길게 보자"는 신호다. marathonFlag가 false면 이 지침을 적용하지 않는다.',
+    injurySignals,
+    instructionForInjurySignals:
+      'context.injurySignals는 활성 부상이 있을 때 웹이 통증 부위 + 보유 데이터(부하·케이던스·재발 등)로 좁힌 상위 1~2개의 "가능성 있는 원인 가설"(hypotheses)과 안전 적신호(redFlag)다(없으면 null — 이 지침을 적용하지 않는다). 이건 의료 진단이 아니라 러닝 부하 조절 코칭 보조다. ' +
+      '① hypotheses는 확정 진단이 아니라 "가능성"으로만 말한다(예: "~일 가능성이 있어요", "~쪽일 수도 있어요"). 확률(%)·단정·의학적 진단명 나열 금지. possibility=가설명, why=감별 단서, levers=조절 레버(볼륨 동결/강도 하향/케이던스 큐(보조)/스트라이드 보류/회복 전환)다. 다음 훈련·루틴 조정에 이 levers를 자연스럽게 한두 가지만 녹이되, 처방을 들이밀듯 나열하지 말고 핵심 하나를 부드럽게 권한다. 케이던스 큐는 보조이니 단독 해법처럼 강조하지 않는다. ' +
+      '② redFlag.tripped=true면 가설·레버 제안을 미루고 "이런 신호(reasons)는 단순 부하 문제가 아닐 수 있으니, 우선 무리한 훈련을 멈추고 전문가(병원/물리치료) 평가를 받아보자"는 의뢰를 최우선으로 안내한다(escape hatch). 이때 의뢰가 처방·일정보다 우선이다. ' +
+      '③ severity가 높거나 통증이 또렷하면 강도/볼륨을 낮추는 쪽으로 기운다. 어느 경우든 의사 흉내(진단 확정·확률·치료 처방) 금지, 겁주지 말고 안심·동행 톤으로. redFlag와 통증 안전 신호는 항상 처방·목표보다 우선이다.',
     sessionEvidence,
     sessionEvidencePolicy:
       'context.sessionEvidence는 웹이 선택 세션 타입별로 산출한 다단계 품질 증거다(#354). 규칙이 pass/fail 최종 판정을 내린 게 아니라 "증거"이며, 최종 해석은 네가 목표·부상·날씨·성향을 얹어서 한다. ' +
@@ -1600,6 +1648,7 @@ function buildCoachInstructions(context: unknown) {
     'Easy/Recovery/Easy + Strides 강도 판정은 평균심박(+RPE·드리프트)을 1차로 본다. 최고심박(maxHeartRate) 단발 스파이크는 언덕·신호 대기·스트라이드 가속처럼 자연스러운 것이므로 그것만으로 "이지 상한을 넘겼다/강도 초과"라고 처벌하지 마라. 평균심박이 이지 상한 + 약간의 여유까지 안정적이면 본런 강도를 잘 지킨 것이다. 진짜 과강 Easy(평균심박 자체가 상한을 뚜렷이 초과)일 때만 "다음엔 초반을 더 눌러보자"처럼 부드럽게 짚는다.',
     'context.upcomingSchedule가 있으면 "## 다음 훈련"은 그 실제 주기화 스케줄의 다음 세션(날짜·유형·거리)을 기준으로 말한다 — weeklyPattern/prescriptionTemplates보다 우선이고 요약 화면(캐러셀)과 반드시 일치시킨다. 예: 다음이 토요일 LSD면 "화요일 Easy"라고 지어내지 말고 "토요일 LSD(약 N km)"를 기준으로 처방·조정한다. 부상/회복으로 낮춰야 하면 그 스케줄 세션을 어떻게 조정/대체할지로 말한다. 다음 훈련을 제안할 때는 세션명만 말하지 말고 사용자가 Workoutdoors에 바로 세팅할 수 있는 세부 지침을 준다. 심박 숫자는 heartRateModel의 개인 상한 값만 쓰고(예: Easy는 easyCeilingBpm 넘기지 말기, Tempo는 max tempoCeilingBpm 넘기지 말기), 상한이 null이면 심박 숫자 대신 페이스/RPE로 안내한다. Easy + Strides는 "이지 본런 + 본런 끝 스트라이드 몇 회(짧고 빠르게, 속도 기준, 사이 완전 회복)".',
     'context.restState.active가 true면 사용자가 선언한 휴식 기간이다 — "## 다음 훈련"에서 훈련 처방·재촉을 하지 말고 휴식을 존중한다("푹 쉬세요, 돌아오면 가볍게"). 이때 휴식 존중이 upcomingSchedule 처방보다 우선이다. 복귀일이거나 복귀가 임박했으면 "놓침"이 아니라 "회복 후 정리" 톤으로 안내한다. 자세한 분기는 context.instructionForRest를 따른다.',
+    'context.injurySignals가 있으면 활성 부상의 "가능성 있는 원인 가설"과 조절 레버다 — 의료 진단이 아니라 "가능성"으로만 말하고(확률% 금지, 의사 흉내 금지), redFlag.tripped=true면 가설·처방을 멈추고 전문가 평가 의뢰를 최우선으로 안내한다(escape hatch). 레버는 다음 훈련 조정에 핵심 하나만 부드럽게 녹인다. 자세한 분기는 context.instructionForInjurySignals를 따른다.',
     '세션 유형별 구간당 페이스/심박 경계 가이드가 현재 사용자에게 맞지 않아 보이면 "## 루틴 업데이트"에서 유지/조정 여부를 말한다. 조정이 필요할 때는 trainingMemoryPatch.activeGoalStrategyNotes 또는 aiNotes에 새 기준을 저장한다.',
     'recentPrescriptionComplianceSignals를 보고 최근 여러 세션에서 처방 준수율 패턴이 있는지 활용한다. 반복적으로 잘 지키는 기준은 다음 처방 상향 근거가 되고, 반복적으로 넘는 기준은 처방 하향/보류 근거가 된다.',
     'context.trainingMethodology는 외부 러닝/지구력 훈련 문헌을 앱 기준선으로 압축한 것이다. 이 기준선을 무시하지 말고, Easy 기반, 제한된 강훈련, 점진적 과부하, 목표 특이성, 회복 게이트를 기본 알고리즘으로 삼는다.',

@@ -17,6 +17,7 @@ import { summarizeAchievementsForCoach } from '@/shared/lib/achievement/achievem
 import { summarizeTempoCoaching } from '@/shared/lib/coaching/tempoAdaptation'
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { buildCoachSessionEvidence } from '@/shared/lib/coaching/sessionQuality'
+import { buildInjuryCoachSignals } from '@/entities/training-memory/injurySignals'
 import { getActiveGoal, getActiveInjuryItem, getRecentInjuryHistory, isFullMarathonGoal } from '@/entities/training-memory/model'
 import { deriveRestState } from '@/entities/training-memory/restWindow'
 import { getAgeLoadWeight } from '@/shared/lib/runStats'
@@ -433,6 +434,9 @@ async function sendCoachRequest(note: string) {
       })(),
       // 풀마라톤 목표 위험 플래그(하프 제외) — 풀만 독립 위험↑.
       marathonFlag: isFullMarathonGoal(getActiveGoal(memoryStore.memory)),
+      // 활성 부상 감별 신호(§5 부상 KB) — 통증 부위+데이터로 좁힌 상위 1~2 "가능성" 가설+레버+안전 redFlag.
+      // 활성 부상/신호 없으면 null(게이팅은 buildInjuryCoachSignals 내부). 진단 아님 — 코치가 "가능성"으로만 전달.
+      injurySignals: buildInjuryCoachSignals(memoryStore.memory, runStore.sortedRuns, new Date()),
       sessionEvidence: (() => {
         const now = new Date()
         const observed = deriveObservedMaxHr(runStore.sortedRuns.map((r) => ({ maxHeartRate: r.maxHeartRate, date: r.date })), now)

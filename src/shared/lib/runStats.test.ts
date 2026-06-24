@@ -3,7 +3,7 @@ import type { RunLog } from '@/entities/run/model'
 import type { TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
 import { getRecentInjuryHistory, isFullMarathonGoal, normalizeTrainingMemory } from '@/entities/training-memory/model'
 import type { TrainingGoal } from '@/entities/training-memory/model'
-import { getAgeLoadWeight, getChronicLoadTrend, getLongestRunKmWithinDays, getNextSessionRecommendation } from './runStats'
+import { getAgeLoadWeight, getCadenceTrend, getChronicLoadTrend, getLongestRunKmWithinDays, getNextSessionRecommendation } from './runStats'
 
 const today = new Date('2026-06-02T00:00:00')
 const dayNames = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
@@ -217,5 +217,40 @@ describe('getNextSessionRecommendation 이전부상 보수화(3.1/3.3)', () => {
     })
     const rec = getNextSessionRecommendation(memory, [run(daysAgo(3), 6)], today)
     expect(rec.loadCaution).toBe(false)
+  })
+})
+
+// cadence를 실은 런(run() 기본은 cadence null) — sanitizeCadence 범위(120~230) 안 값으로.
+function runCad(date: string, cadence: number | null): RunLog {
+  return { ...run(date, 6), id: `cad-${date}-${cadence}`, cadence }
+}
+
+describe('getCadenceTrend (§2-A 보조 신호 — 오버스트라이드)', () => {
+  it('케이던스 데이터가 없으면 unknown(보수적, 없는 신호를 켜지 않음)', () => {
+    const trend = getCadenceTrend([run(daysAgo(3), 6), run(daysAgo(10), 8)], today)
+    expect(trend.status).toBe('unknown')
+    expect(trend.recentAvgSpm).toBeNull()
+  })
+
+  it('최근 평균이 ≤170spm면 low(낮은 케이던스)', () => {
+    const trend = getCadenceTrend([runCad(daysAgo(3), 166), runCad(daysAgo(10), 168)], today)
+    expect(trend.status).toBe('low')
+    expect(trend.recentAvgSpm).toBe(167)
+  })
+
+  it('최근 평균이 높아도 직전 30일 대비 뚜렷이 떨어지면 dropping', () => {
+    const trend = getCadenceTrend([runCad(daysAgo(3), 178), runCad(daysAgo(40), 190)], today)
+    expect(trend.status).toBe('dropping')
+    expect(trend.changePct).toBeLessThanOrEqual(-3)
+  })
+
+  it('충분히 높고 안정적이면 stable', () => {
+    const trend = getCadenceTrend([runCad(daysAgo(3), 182), runCad(daysAgo(40), 183)], today)
+    expect(trend.status).toBe('stable')
+  })
+
+  it('이상치(자릿수 다른 per-lap 같은 값)는 sanitizeCadence가 제외 → 유효 케이던스 없으면 unknown', () => {
+    const trend = getCadenceTrend([runCad(daysAgo(3), 1500), runCad(daysAgo(10), 12)], today)
+    expect(trend.status).toBe('unknown')
   })
 })
