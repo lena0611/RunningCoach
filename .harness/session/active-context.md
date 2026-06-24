@@ -6,18 +6,21 @@
 > 하네스 본체의 개발 기록이 아닙니다. 설치된 프로젝트의 현재 작업 맥락만 기록합니다.
 > 상세 인수인계는 (있으면) 프로젝트 루트 `HANDOFF.md`. 장기 지식은 에이전트 메모리.
 
-## ⭐ 현재 작업 — iOS '새 러닝 감지' 런치 오탐 수정 완료·머지 / 휴식·복귀(#473) Phase 1·2 코어 완료 (2026-06-23)
-- **이번 세션: iOS '새 러닝 감지' 배너 런치 오탐 수정·기기검증·머지(PR#488).** 새 빌드 후 첫 기동 시 새 러닝 0개여도 배너가 뜨던 버그 = HKObserverQuery 등록 초기 콜백을 새 러닝으로 오인. 수정: `handleBackgroundHealthKitChange`를 `== .background` 일 때만 알림(런치 `.inactive`는 웹 동기화) + `willPresent` id prefix 오타 수정. **기기 검증 통과**(앱 삭제·클린 재설치→기동 시 배너 안 뜸). 상세 메모리 [[healthkit-detected-notify-gate]].
-  - iOS '새 러닝 감지' 알림 스택: 연발 디바운스(PR#486) + 런치 오탐 차단(PR#488). **남은 iOS 후속**: (1) **원래 #473 목표 = 워치 실주행→집 동기화 시 제때 1번 알림 오는지**(iOS 백그라운드 깨움 의존, 워치 실주행 테스트 필요), (2) (선택) `.background` 팬텀 콜백까지 막는 "진짜 새 워크아웃 endDate 게이트". 순서=(1) 확인 후 (2).
-- **#473 Phase 1(PR#476·477·478) + Phase 2 복귀 램프 코어(PR#480) 완료·라이브**: Phase 1=rested 닦달 차단·💤 배너·코치 보이스. Phase 2=복귀 시 현재 체력 재앵커+초반 N개 세션 Easy·거리캡(≤직전30일 최장+10% BJSM)·drift 무관 강제·4주 차등·복귀윈도 캡 보존. **라이브 검증 완료**(인증 E2E + MCP 브라우저). + 복귀일 조정 저장 버그(PR#482) + session_intents goal_id uuid→text 400 버그(PR#485·배포·201 검증). **#473 후속 택1**: 부상 walk-run 처방(공백)·coach-run LLM 휴식 인지·#473 클로즈. 상세 [[rest-and-return-coaching]]·이슈 #473 코멘트.
-- **🧪 자율 QA 인프라(이번 세션 신설)**: 테스트 계정(lena0611+qa) 저장 세션 + `playwright.rest.config.ts` + DEV 시드 훅(`window.__pacelabE2E`, `src/app/devE2ESeed.ts`). `npx playwright test --config playwright.rest.config.ts`. 규칙 [[agent-verifies-via-local-qa]]·CLAUDE.md "검증·보고 방식".
-- **직전 세션 라이브**: #462 더블 minGap 웹 강한 확인(PR#469)→**#455 에픽 클로즈** / 공통 하네스 0.2.70(PR#471)+루트 CLAUDE.md 마커(PR#472).
-- **직전·라이브**: #454 제안훈련 응답+주간정산+주 고정 뷰, #402 코칭 인간화. `#전문코치리뷰`+코칭 SSOT 선독 의무+commit-msg `Coach-Review` 게이트. 메모리 [[coach-not-data-referee]], [[professional-coach-review-trigger]], [[schedule-response-and-weekly-settlement]].
-  - ⚠ **머지 규칙**: squash 후 `git diff <tip> origin/main` 빈결과 트리 검증 필수(#463 24→11 누락 사고), 의심 시 `--merge`. 메모리 [[pr-squash-merge-race-verify-tree]].
-- **그 다음**: 실기기 스팟체크(#462 강한 확인 오버레이·#455 더블 카드) → #454 나머지 플로우 → #359/#307/#374 스모크 → grill 설계 백로그.
+## ⭐ 현재 작업 — UI 스택 시스템 정리(#275 공통화·코치 App레벨 오버레이·바텀시트) 10개 PR 머지·라이브 (2026-06-24)
+- **이번 세션(PR#490~#499, 전부 머지·배포·트리검증):**
+  - **#275 스택 공통화**: 중복 스택 마크업을 공유 `src/shared/ui/StackPage.vue`로 추출, 전 화면 마이그레이션(#490·#491). 함정=자동 import 없음→누락 시 build 통과·런타임 무음실패. [[stackpage-commonization-275]].
+  - **애니메이션 규칙 정렬**(#492~#494): 진입/첫 스택=밑→위(rise)+우상단 X, 전진 드릴인=우→좌(push)+좌측 뒤로(`transition ?? (back ? 'push' : 'rise')`), 1차 등장 240→360ms.
+  - **AI 코칭 App 레벨 독립 오버레이**(#496): `CoachSessionOverlay.vue`+`coachStore`로 추출, App.vue 탭 페이저 밖 상시 렌더 → 어느 탭에서 열든 그 탭 위에 뜨고 닫으면 스크롤 보존 복귀. **사용자 결정=비-탭 스택 전부 App 레벨 독립**. z `--z-coach:900`. [[stacks-app-level-independence]].
+  - **부수**: 스플래시 무한 고착 방지 캐시정리 2초 가드(#495)·재앵커 토스트 스팸→멱등화(#497)·상단 코치 모먼트 중복 제거(#498)·진행평가 팝업 표준 바텀시트화(#499). #499 CTA는 `v-if="shouldTransition"`(전환 제안 시만 노출) — 사용자 "그대로 둬", DEV 훅으로 라이브 재현 확인 후 원복(코드 무변).
+  - ⚠ **연속 배포 금지**: 단시간 다중 배포 → WKWebView 청크 캐시 stale → 스플래시 고착. 배포 간격 둘 것.
+- **남은 iOS 후속(직전 세션)**: 가짜 '새 러닝 감지' 배너 제거됨(PR#488). 다음=워치 실주행→집 동기화 시 '제때 1번' 알림 오나(워치 필요). [[healthkit-detected-notify-gate]].
+- **#473 휴식·복귀(직전) Phase 1·2 코어 완료·라이브**: 닦달 차단·💤 배너·코치 보이스·복귀 램프(체력 재앵커+초반 Easy·거리캡). 인증 E2E 검증. **후속(미착수)**: (a) 부상 walk-run 처방(공백), (b) coach-run LLM 휴식 인지, (c) #473 클로즈. [[rest-and-return-coaching]].
+- **🧪 자율 QA 인프라**: 테스트 계정(lena0611+qa) 저장 세션 + `playwright.rest.config.ts` + DEV 시드 훅(`window.__pacelabE2E`, `src/app/devE2ESeed.ts`). 규칙 [[agent-verifies-via-local-qa]].
+- ⚠ **머지 규칙**: squash 후 `git diff <tip> origin/main` 빈결과 트리 검증 필수(#463 사고), 의심 시 `--merge`. [[pr-squash-merge-race-verify-tree]].
+- **그 다음**: iOS 실주행 확인 → #473 후속 택1 → 스택 후속(세션상세 App 레벨 단일화) → 실기기 스팟체크 → #359/#307/#374 스모크 → grill 백로그.
 
 ## 현재 상태
-- updatedAt: 2026-06-23
+- updatedAt: 2026-06-24
 - baseHarness / activeStack / harnessMode: `.harness/policy/profile.json` 참고
 - 코칭 작업 시 `.harness/project/professional-coach-review-trigger.md` 강제(SSOT 선독→배치 시 그릴→커밋 게이트).
 
