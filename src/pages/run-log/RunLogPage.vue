@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type ComponentPublicInstance } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { useCoachStore } from '@/app/stores/coachStore'
-import { useToastStore } from '@/app/stores/toastStore'
+import { useSessionDetailStore } from '@/app/stores/sessionDetailStore'
 import { runTypes, type RunLog, type RunType } from '@/entities/run/model'
 import UploadRunPage from '@/pages/upload-run/UploadRunPage.vue'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
@@ -16,21 +15,16 @@ import { buildVisibleRunGroups, groupRunsByMonth, type RunMonthGroup, type RunMo
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
-import RunForm from '@/shared/ui/RunForm.vue'
-import RunDetailContent from '@/shared/ui/RunDetailContent.vue'
 import RunSessionList from '@/shared/ui/RunSessionList.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import StackPage from '@/shared/ui/StackPage.vue'
-import { hasNativeBridge } from '@/shared/lib/runtime'
-import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 
 const runStore = useRunStore()
 const memoryStore = useMemoryStore()
 const scheduleStore = useTrainingScheduleStore()
-const healthKitSyncStore = useHealthKitSyncStore()
 const coachStore = useCoachStore()
-const toastStore = useToastStore()
+const sessionDetailStore = useSessionDetailStore()
 const route = useRoute()
 const router = useRouter()
 const isRunLogRoute = computed(() => route.path === '/runs')
@@ -43,18 +37,9 @@ const loadMoreRef = ref<HTMLElement | null>(null)
 const observer = ref<IntersectionObserver | null>(null)
 const runMonthGroupRefs = new Map<string, HTMLElement>()
 const activeStickyMonth = ref<RunMonthGroup | null>(null)
-const detailRun = ref<RunLog | null>(null)
 const addingRun = ref(false)
-const editing = ref<RunLog | null>(null)
-const editSnapshot = ref('')
-const saving = ref(false)
-const deletingId = ref<string | null>(null)
-const pendingDeleteRun = ref<RunLog | null>(null)
 const error = ref('')
 const calendarMonth = ref(toMonthKey(new Date()))
-const deleteSheetDrag = useBottomSheetDrag(() => {
-  pendingDeleteRun.value = null
-})
 
 type CalendarCell = {
   key: string
@@ -125,8 +110,7 @@ const visibleRuns = computed(() => filteredRuns.value.slice(0, visibleCount.valu
 const runMonthGroups = computed(() => groupRunsByMonth(filteredRuns.value))
 const visibleRunGroups = computed(() => buildVisibleRunGroups(runMonthGroups.value, visibleCount.value))
 const hasMoreRuns = computed(() => visibleCount.value < filteredRuns.value.length)
-const isEditDirty = computed(() => Boolean(editing.value) && JSON.stringify(editing.value) !== editSnapshot.value)
-const openStack = computed(() => Boolean(detailRun.value || addingRun.value || editing.value))
+const openStack = computed(() => addingRun.value)
 const runsByDate = computed(() => {
   const map = new Map<string, RunLog[]>()
   for (const run of runStore.sortedRuns) {
@@ -187,14 +171,8 @@ watch(metaFilterValues, (values) => {
 
 watch(
   () => runStore.runs,
-  (runs) => {
-    if (detailRun.value) {
-      detailRun.value = runs.find((run) => run.id === detailRun.value?.id) ?? detailRun.value
-    }
-    if (editing.value && !isEditDirty.value) {
-      editing.value = runs.find((run) => run.id === editing.value?.id) ?? editing.value
-      editSnapshot.value = JSON.stringify(editing.value)
-    }
+  () => {
+    // 딥링크(?runId)가 runs 로드 전에 도착했으면 로드 후 재시도해 App 레벨 상세 오버레이를 연다.
     openRouteRunIfNeeded()
   },
   { deep: true }
@@ -371,42 +349,18 @@ function toggleDate(date: string, hasRun: boolean) {
   selectedDate.value = selectedDate.value === date ? null : date
 }
 
-function openDetail(run: RunLog) {
-  error.value = ''
-  detailRun.value = run
-}
-
+// 세션 상세·편집·삭제는 App 레벨 SessionDetailOverlay 가 담당한다(#275 후속). 여기선 목록에서 열기만 위임한다.
 function openRouteRunIfNeeded() {
+  // 딥링크(?runId, ?coach=1)로 /runs 에 진입하면 App 레벨 상세/코치 오버레이를 열고 URL 쿼리를 정리한다
+  // (상세는 더 이상 라우트 상태가 아니라 스토어 상태 — 새로고침/뒤로에서 재오픈/꼬임 방지). action=edit/delete 딥링크는 폐기(상세 오버레이 버튼으로 대체).
   const runId = typeof route.query.runId === 'string' ? route.query.runId : ''
-  const shouldOpenCoach = route.query.coach === '1'
-  const action = typeof route.query.action === 'string' ? route.query.action : ''
   if (!runId) return
   const run = runStore.runs.find((item) => item.id === runId)
-  if (!run) return
-  if (detailRun.value?.id !== runId) openDetail(run)
-  if (shouldOpenCoach && coachStore.activeRun?.id !== runId) {
-    coachStore.open(run)
-    clearCoachRouteQuery(runId)
-  }
-  if (action === 'edit' && editing.value?.id !== runId) {
-    startEdit(run)
-  }
-  if (action === 'delete' && pendingDeleteRun.value?.id !== runId) {
-    askRemove(run)
-  }
-  if (action) {
-    void router.replace({
-      path: '/runs',
-      query: {
-        runId,
-        ...(shouldOpenCoach ? { coach: '1' } : {})
-      }
-    })
-  }
-}
-
-function closeDetail() {
-  detailRun.value = null
+  if (!run) return // 아직 runs 로드 전 — runs 워치가 재시도한다.
+  const shouldOpenCoach = route.query.coach === '1'
+  if (sessionDetailStore.activeRun?.id !== runId) sessionDetailStore.open(run)
+  if (shouldOpenCoach && coachStore.activeRun?.id !== runId) coachStore.open(run)
+  void router.replace({ path: '/runs' })
 }
 
 function openAddRun() {
@@ -419,86 +373,6 @@ async function closeAddRun(saved = false) {
   if (saved) {
     await runStore.load()
   }
-}
-
-function startEdit(run: RunLog) {
-  error.value = ''
-  editing.value = JSON.parse(JSON.stringify(run))
-  editSnapshot.value = JSON.stringify(editing.value)
-}
-
-async function saveEdit() {
-  if (!editing.value || !isEditDirty.value) return
-  saving.value = true
-  error.value = ''
-  try {
-    const original = parseRunSnapshot(editSnapshot.value)
-    if (original && original.type !== editing.value.type) {
-      editing.value.tags = Array.from(new Set([...(editing.value.tags ?? []).filter((tag) => tag !== 'type:auto'), 'type:user']))
-    }
-    const updated = await runStore.updateRun(editing.value)
-    if (updated) {
-      detailRun.value = updated
-    }
-    editing.value = null
-    editSnapshot.value = ''
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : '수정 실패'
-  } finally {
-    saving.value = false
-  }
-}
-
-function parseRunSnapshot(value: string): RunLog | null {
-  try {
-    return value ? JSON.parse(value) : null
-  } catch {
-    return null
-  }
-}
-
-function closeEdit() {
-  editing.value = null
-  editSnapshot.value = ''
-}
-
-function askRemove(run: RunLog) {
-  pendingDeleteRun.value = run
-}
-
-async function confirmRemove() {
-  if (!pendingDeleteRun.value) return
-  const run = pendingDeleteRun.value
-  deletingId.value = run.id
-  error.value = ''
-  try {
-    await runStore.deleteRun(run.id)
-    // 삭제한 세션을 보던 패널을 모두 닫는다(상세/편집/코치). 어차피 기록 탭 목록으로 퇴장하므로 무조건 닫아 잔류를 막는다.
-    detailRun.value = null
-    editing.value = null
-    if (coachStore.activeRun?.id === run.id) coachStore.close()
-    pendingDeleteRun.value = null
-    // 세션 상세를 이끌었던 기록 탭(목록)으로 자연 복귀하고 딥링크(?runId) 쿼리만 정리한다.
-    toastStore.success('삭제되었습니다.')
-    await router.replace({ path: '/runs' })
-  } catch (err) {
-    error.value = err instanceof Error ? err.message : '삭제 실패'
-    toastStore.error(error.value)
-  } finally {
-    deletingId.value = null
-  }
-}
-
-function canRefreshFromHealthKit(_run: RunLog) {
-  return hasNativeBridge()
-}
-
-function clearCoachRouteQuery(runId = typeof route.query.runId === 'string' ? route.query.runId : '') {
-  if (route.path !== '/runs' || route.query.coach !== '1') return
-  void router.replace({
-    path: '/runs',
-    query: runId ? { runId } : {}
-  })
 }
 
 function toMonthKey(date: Date) {
@@ -652,7 +526,7 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
           :runs="visibleRuns"
           :weekly-pattern="memoryStore.memory.weeklyPattern"
           interactive
-          @select="openDetail"
+          @select="sessionDetailStore.open"
         />
         <div v-else class="run-month-groups">
           <section v-for="group in visibleRunGroups" :key="group.key" :ref="(element) => setRunMonthGroupRef(group.key, element)" class="run-month-group">
@@ -679,7 +553,7 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
                 </dd>
               </div>
             </dl>
-            <RunSessionList :runs="group.runs" :weekly-pattern="memoryStore.memory.weeklyPattern" interactive @select="openDetail" />
+            <RunSessionList :runs="group.runs" :weekly-pattern="memoryStore.memory.weeklyPattern" interactive @select="sessionDetailStore.open" />
           </section>
         </div>
       </template>
@@ -690,79 +564,9 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
       <p v-if="error" class="error">{{ error }}</p>
     </SectionGroup>
 
-    <StackPage :open="!!detailRun" title="세션 상세" bare footer-class="run-detail-cta" @close="closeDetail">
-      <RunDetailContent v-if="detailRun" :run="detailRun" :weekly-pattern="memoryStore.memory.weeklyPattern">
-        <template #actions>
-            <div class="run-detail-actions" aria-label="세션 관리">
-              <button
-                v-if="canRefreshFromHealthKit(detailRun)"
-                class="icon-only-button"
-                :class="{ spinning: healthKitSyncStore.refreshingRunId === detailRun.id }"
-                type="button"
-                :disabled="healthKitSyncStore.refreshingRunId === detailRun.id"
-                aria-label="HealthKit 세션 다시 갱신"
-                @click.stop="healthKitSyncStore.requestRunRefresh(detailRun)"
-              >
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M20 11a8 8 0 0 0-14.8-4.2" />
-                  <path d="M5 3v4h4" />
-                  <path d="M4 13a8 8 0 0 0 14.8 4.2" />
-                  <path d="M19 21v-4h-4" />
-                </svg>
-              </button>
-              <button class="icon-only-button" type="button" aria-label="기록 수정" @click.stop="startEdit(detailRun)">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M4.5 19.5h4.2L18.8 9.4a2.1 2.1 0 0 0 0-3l-1.2-1.2a2.1 2.1 0 0 0-3 0L4.5 15.3z" />
-                  <path d="m13.6 6.2 4.2 4.2" />
-                </svg>
-              </button>
-              <button class="icon-only-button danger" type="button" :disabled="deletingId === detailRun.id" aria-label="기록 삭제" @click.stop="askRemove(detailRun)">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M5.5 7h13" />
-                  <path d="M9.5 7V5.5h5V7" />
-                  <path d="m8 9 .6 9.5h6.8L16 9" />
-                  <path d="M10.5 11.5v4" />
-                  <path d="M13.5 11.5v4" />
-                </svg>
-              </button>
-            </div>
-        </template>
-      </RunDetailContent>
-      <template #footer>
-        <button v-if="detailRun" type="button" :disabled="!isSupabaseConfigured" @click.stop="detailRun && coachStore.open(detailRun)">
-          AI 코칭
-        </button>
-      </template>
-    </StackPage>
-
+    <!-- 세션 상세·편집·삭제는 App 레벨 SessionDetailOverlay(App.vue)로 이동(#275 후속). 기록 추가만 이 페이지의 스택. -->
     <StackPage :open="addingRun" title="기록 추가" layer-class="stack-layer-top" @close="closeAddRun(false)">
       <UploadRunPage stack-mode @saved="closeAddRun(true)" />
     </StackPage>
-
-    <StackPage :open="!!editing" title="기록 수정" :back="Boolean(detailRun)" layer-class="stack-layer-top" @close="closeEdit">
-      <template v-if="editing">
-        <RunForm v-model="editing" />
-        <button class="danger full" type="button" @click="askRemove(editing)">이 기록 삭제</button>
-      </template>
-      <template #footer>
-        <button type="button" :disabled="saving || !isEditDirty" @click="saveEdit">{{ saving ? '저장 중' : isEditDirty ? '변경사항 저장' : '저장됨' }}</button>
-      </template>
-    </StackPage>
-
-    <Teleport to="body">
-      <div v-if="pendingDeleteRun" class="bottom-sheet-layer confirm-layer" role="presentation" @click.self="pendingDeleteRun = null">
-        <section class="bottom-sheet confirm-sheet" :class="{ 'bottom-sheet-dragging': deleteSheetDrag.dragging.value }" :style="deleteSheetDrag.sheetStyle.value" role="dialog" aria-modal="true" aria-label="삭제 확인">
-          <div class="bottom-sheet-handle bottom-sheet-drag-zone" @pointerdown="deleteSheetDrag.startDrag" />
-          <h2>러닝 기록을 삭제할까요?</h2>
-          <p>{{ formatDateWithWeekday(pendingDeleteRun.date) }} · {{ pendingDeleteRun.distanceKm }}km 기록이 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</p>
-          <div class="confirm-actions">
-            <button class="danger" type="button" :disabled="deletingId === pendingDeleteRun.id" @click="confirmRemove">
-              {{ deletingId === pendingDeleteRun.id ? '삭제 중' : '삭제' }}
-            </button>
-            <button class="ghost" type="button" :disabled="Boolean(deletingId)" @click="pendingDeleteRun = null">취소</button>
-          </div>
-        </section>
-      </div>
-    </Teleport>
   </PageLayout>
 </template>

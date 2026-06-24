@@ -89,6 +89,7 @@
   --z-toast: 1200;
   --z-bottom-sheet: 1000;
   --z-stack: 860;
+  --z-session: 880;
   --z-coach: 900;
   --z-confirm-sheet: 1100;
   --run-calendar-count-bg: #000000;
@@ -5447,6 +5448,16 @@ button.run-session-row {
    나중에 그려지는 상세 스택(대시보드/기록)에 가려진다. 상세(860) 위·자체 시트(1100) 아래로 올린다. */
 .memory-stack-layer.coach-overlay-layer {
   z-index: var(--z-coach);
+}
+
+/* 앱 레벨 세션 상세 오버레이(#275 후속). 탭/추세의 in-tab 스택(860)보다 위, 코치(900)보다 아래에 둔다
+   — 추세 탭의 스택 안에서 런을 열어도 가려지지 않고, 상세에서 연 코치는 상세 위로 뜬다. */
+.memory-stack-layer.session-overlay-layer {
+  z-index: var(--z-session);
+}
+/* 편집 스택은 같은 오버레이 안에서 상세 위로(세션 밴드 상단). */
+.memory-stack-layer.session-edit-layer {
+  z-index: calc(var(--z-session) + 2);
 }
 
 .memory-stack-page {

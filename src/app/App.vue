@@ -16,6 +16,9 @@ import {
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import AppShell from '@/shared/ui/AppShell.vue'
 import CoachSessionOverlay from '@/features/coach-session/CoachSessionOverlay.vue'
+import SessionDetailOverlay from '@/features/session-detail/SessionDetailOverlay.vue'
+import { useCoachStore } from '@/app/stores/coachStore'
+import { useSessionDetailStore } from '@/app/stores/sessionDetailStore'
 import InjuryCheckInSheet from '@/shared/ui/InjuryCheckInSheet.vue'
 import InjuryScreeningSheet from '@/shared/ui/InjuryScreeningSheet.vue'
 import PostRunInterviewSheet from '@/shared/ui/PostRunInterviewSheet.vue'
@@ -38,6 +41,8 @@ const weatherStore = useWeatherStore()
 const levelStore = useLevelStore()
 const toastStore = useToastStore()
 const injuryFlowStore = useInjuryFlowStore()
+const coachStore = useCoachStore()
+const sessionDetailStore = useSessionDetailStore()
 
 // 운동 직후 코치 인터뷰(#311): HealthKit 임포트 직후 표시, 결과는 run 주관 필드로 저장.
 const pendingInterviewRun = computed(() => runStore.runs.find((run) => run.id === runStore.pendingInterviewRunId) ?? null)
@@ -460,17 +465,17 @@ function dismissCurrentInjuryCheckIn() {
   injuryCheckInItemId.value = ''
 }
 
-// 숏컷 이동: 체크인을 저장/dismiss하지 않고 닫기만 한다(나중에 다시 뜸).
+// 숏컷 이동: 체크인을 저장/dismiss하지 않고 닫기만 한다(나중에 다시 뜸). 세션 상세는 App 레벨 오버레이라 라우팅 없이 연다.
 function openInjuryCheckInSession() {
   const run = injuryCheckInContextRun.value
   injuryCheckInItemId.value = ''
-  if (run) void router.push({ path: '/runs', query: { runId: run.id } })
+  if (run) sessionDetailStore.open(run)
 }
 
 function askInjuryCheckInCoach() {
   const run = injuryCheckInContextRun.value
   injuryCheckInItemId.value = ''
-  if (run) void router.push({ path: '/runs', query: { runId: run.id, coach: '1' } })
+  if (run) coachStore.open(run)
 }
 
 // "한동안 쉴게요"(#473): 체크인 닫고 대시보드 휴식 선언 시트를 이유=부상 프리셋으로 연다(저장/dismiss 안 함).
@@ -812,6 +817,7 @@ function animateTabRelease(targetOffset: number, targetRoute: string | null) {
   <AppShell :nav-items="navItems" :is-authenticated="authStore.isAuthenticated" @sign-out="authStore.signOut()">
     <ToastHost />
     <CoachSessionOverlay />
+    <SessionDetailOverlay />
     <OnboardingFlow v-if="showOnboarding" />
     <CelebrationModal
       v-if="levelStore.pendingCelebration"
