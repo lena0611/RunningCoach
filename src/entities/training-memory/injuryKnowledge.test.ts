@@ -3,9 +3,12 @@ import {
   evaluateRedFlags,
   injuryAreaBase,
   injuryKnowledgeBase,
+  injuryProbes,
   rankInjuryHypotheses,
   redFlagHypothesesForAreas,
-  type InjuryDataSignals
+  selectNextProbe,
+  type InjuryDataSignals,
+  type RedFlagSignals
 } from './injuryKnowledge'
 
 describe('injuryAreaBase', () => {
@@ -111,6 +114,113 @@ describe('evaluateRedFlags (§4 게이트)', () => {
   })
   it('RED-S 경계는 의뢰 경로(성별 위험가중 아님)', () => {
     expect(evaluateRedFlags({ redSConcern: true }).reasons.join(' ')).toContain('RED-S')
+  })
+  it('체중부하 곤란·관절 잠김/불안정은 단독으로 발동(아킬레스 파열·반월·근위파열 자가검사 경로)', () => {
+    const r = evaluateRedFlags({ weightBearingFailureOrInstability: true })
+    expect(r.tripped).toBe(true)
+    expect(r.reasons.join(' ')).toContain('체중부하 곤란')
+  })
+})
+
+describe('injuryProbes (§5 Phase C grill — §1 결정적 지문)', () => {
+  // overuse 가설들이 다루는 8개 부위 base. 모든 프로브는 이 중 하나에 속해야 한다(고아 프로브 금지).
+  const overuseBases = new Set(injuryKnowledgeBase.filter((h) => h.classification === 'overuse').flatMap((h) => h.areaBases))
+  // evaluateRedFlags 가 처리하는 RedFlagSignals 키만 redFlagSelfTest 로 허용(게이트 정합).
+  const RED_FLAG_KEYS = new Set<keyof RedFlagSignals>([
+    'dailyActivityPain', 'nightOrRestPain', 'worseningOverTime', 'pointTenderOrHopPositive',
+    'numbnessRadiatingWeakness', 'swellingRednessHeat', 'weightBearingFailureOrInstability',
+    'redSConcern', 'highRiskBoneSiteSuspected', 'noImprovementWeeks'
+  ])
+
+  it('부위당 정확히 1 프로브, 8개 부위 base를 모두 덮는다', () => {
+    expect(injuryProbes).toHaveLength(8)
+    const ids = injuryProbes.map((p) => p.id)
+    expect(new Set(ids).size).toBe(ids.length) // 부위당 1개(중복 없음)
+    for (const p of injuryProbes) expect(overuseBases.has(p.id)).toBe(true) // 고아 프로브 없음
+  })
+
+  it('모든 옵션은 label·value·response를 갖고, value는 프로브 안에서 유일', () => {
+    for (const p of injuryProbes) {
+      const values = p.options.map((o) => o.value)
+      expect(new Set(values).size).toBe(values.length)
+      for (const o of p.options) {
+        expect(o.label.length).toBeGreaterThan(0)
+        expect(o.value.length).toBeGreaterThan(0)
+        expect(o.response.length).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it('subtype 옵션은 그 부위 가설의 subtypeSplit에 존재하는 아형이다', () => {
+    for (const p of injuryProbes) {
+      const subtypeIds = new Set(
+        injuryKnowledgeBase
+          .filter((h) => h.areaBases.includes(p.id))
+          .flatMap((h) => h.subtypeSplit?.map((s) => s.id) ?? [])
+      )
+      for (const o of p.options) {
+        if (o.subtype) expect(subtypeIds.has(o.subtype)).toBe(true)
+      }
+    }
+  })
+
+  it('favors 옵션은 그 부위의 과사용 가설을 가리킨다(red-flag 가설 아님)', () => {
+    const overuseIds = new Set(injuryKnowledgeBase.filter((h) => h.classification === 'overuse').map((h) => h.id))
+    for (const p of injuryProbes) {
+      for (const o of p.options) {
+        if (o.favors) expect(overuseIds.has(o.favors)).toBe(true)
+      }
+    }
+  })
+
+  it('redFlagSelfTest 키는 모두 evaluateRedFlags가 아는 키이고, worseningOverTime 외엔 단독으로 게이트를 켠다', () => {
+    for (const p of injuryProbes) {
+      for (const o of p.options) {
+        for (const key of o.redFlagSelfTest ?? []) {
+          expect(RED_FLAG_KEYS.has(key)).toBe(true)
+          // worseningOverTime 은 의도적으로 단독 비발동(조합 신호) — 그 외 자가검사는 단독으로 의뢰 경로를 켜야 한다.
+          if (key !== 'worseningOverTime') {
+            expect(evaluateRedFlags({ [key]: true }).tripped).toBe(true)
+          }
+        }
+      }
+    }
+  })
+
+  it('정강이 프로브가 §1 4후보(MTSS·피로골절·고위험골·구획증후군)를 모두 가른다', () => {
+    const shin = injuryProbes.find((p) => p.id === 'shin')!
+    const values = shin.options.map((o) => o.value)
+    expect(values).toContain('medial-diffuse') // MTSS
+    expect(values).toContain('focal-hop-positive') // 피로골절
+    expect(values).toContain('anterior-tibia') // 고위험 골부위
+    expect(values).toContain('exertional-tightness-numbness') // 구획증후군(§1 ③)
+  })
+
+  it("햄스트링 야간·방사는 신경 + 골(야간통) 두 경로를 함께 escalate", () => {
+    const hs = injuryProbes.find((p) => p.id === 'hamstring')!
+    const night = hs.options.find((o) => o.value === 'night-radiating')!
+    expect(night.redFlagSelfTest).toEqual(expect.arrayContaining(['numbnessRadiatingWeakness', 'nightOrRestPain']))
+  })
+})
+
+describe('selectNextProbe (§5 한 세션 1문항)', () => {
+  it('선택 부위의 미답 프로브를 반환한다', () => {
+    expect(selectNextProbe(['left-knee'])?.id).toBe('knee')
+    expect(selectNextProbe(['right-plantar-fascia'])?.id).toBe('plantar-fascia')
+  })
+  it('이미 답한 프로브는 건너뛴다 → 모두 답했으면 null', () => {
+    expect(selectNextProbe(['left-knee'], ['knee'])).toBeNull()
+  })
+  it('여러 부위면 첫 미답 부위 프로브, 그걸 답하면 다음 부위로', () => {
+    // injuryProbes 순서상 shin 이 it-band 보다 앞 → 둘 다 미답이면 shin.
+    const first = selectNextProbe(['left-it-band', 'right-shin'])
+    expect(first?.id).toBe('shin')
+    const next = selectNextProbe(['left-it-band', 'right-shin'], ['shin'])
+    expect(next?.id).toBe('it-band')
+  })
+  it('스코프 밖 부위(ankle/lower-back)는 프로브 없음 → null', () => {
+    expect(selectNextProbe(['left-ankle'])).toBeNull()
+    expect(selectNextProbe(['lower-back'])).toBeNull()
   })
 })
 

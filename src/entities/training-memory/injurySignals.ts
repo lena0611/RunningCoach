@@ -20,6 +20,7 @@ import {
   INJURY_LEVER_LABEL,
   evaluateRedFlags,
   injuryAreaBase,
+  injuryProbes,
   rankInjuryHypotheses,
   type InjuryDataSignals,
   type InjuryHypothesis,
@@ -82,8 +83,27 @@ function hasSameAreaRecurrence(memory: TrainingMemory, active: TrainingInjuryIte
   )
 }
 
-/** 체크인에서 구조화된 redFlag 입력만 뽑는다(§4). 현재 체크인이 수집하는 신호: 체중부하 통증·활동성 악화. */
+/**
+ * grill 프로브 답변(§5 Phase C)에서 red-flag 자가검사 신호를 뽑는다. probeAnswers[probeId]=value 를
+ * KB(injuryProbes)에서 역조회해 그 옵션의 redFlagSelfTest 키를 켠다. KB가 SSOT — 저장은 value 만, redFlag 는 읽기 시 파생.
+ */
+function redFlagSignalsFromProbeAnswers(active: TrainingInjuryItem): RedFlagSignals {
+  const out: RedFlagSignals = {}
+  const answers = active.probeAnswers
+  if (!answers) return out
+  for (const [probeId, value] of Object.entries(answers)) {
+    const option = injuryProbes.find((probe) => probe.id === probeId)?.options.find((opt) => opt.value === value)
+    for (const key of option?.redFlagSelfTest ?? []) (out as Record<string, boolean>)[key] = true // 프로브 자가검사는 모두 boolean 키
+  }
+  return out
+}
+
+/**
+ * 체크인 + grill 프로브에서 구조화된 redFlag 입력을 모은다(§4). 체크인: 체중부하 통증·진행성 악화.
+ * 프로브: 화끈/저림·점통+hop·부종·고위험 골부위·체중부하 곤란/잠김 등 부위특이 자가검사(§5 Phase C).
+ */
 function redFlagSignalsFromInjury(active: TrainingInjuryItem): RedFlagSignals {
+  const probeSignals = redFlagSignalsFromProbeAnswers(active)
   const latest = active.checkInHistory[0] ?? null
   // ⚠ worseningOverTime 은 §4 "활동·시간이 갈수록 심해지고"(여러 날 진행성)다 — 단발 체크인의
   //   worsenedDuringOrAfterRun(지난 1회 러닝에서 더 신경 쓰임)을 그대로 넣으면 피로골절 경계가 과발동한다.
@@ -92,10 +112,10 @@ function redFlagSignalsFromInjury(active: TrainingInjuryItem): RedFlagSignals {
   const progressiveWorsening =
     active.checkInHistory.length >= 2 && !!first?.worsenedDuringOrAfterRun && !!second?.worsenedDuringOrAfterRun
   return {
-    // dailyActivityPain(현재 체중부하 통증) + worseningOverTime(진행성) 만 현재 체크인이 구조화 수집.
-    // 나머지 RF 신호(야간통·점통/hop·신경·부종·고위험골부위·RED-S)는 grill 후속 Phase 에서 수집.
-    dailyActivityPain: latest?.dailyActivityPain ?? undefined,
-    worseningOverTime: progressiveWorsening || undefined
+    // 프로브 자가검사 신호를 먼저 깔고, 체크인 신호는 OR 로 합친다(둘 중 하나라도 켜지면 켬).
+    ...probeSignals,
+    dailyActivityPain: (latest?.dailyActivityPain || probeSignals.dailyActivityPain) || undefined,
+    worseningOverTime: (progressiveWorsening || probeSignals.worseningOverTime) || undefined
   }
 }
 
@@ -132,11 +152,17 @@ export function buildInjuryCoachSignals(memory: TrainingMemory, runs: RunLog[], 
   // 부위가 KB 스코프 밖(ankle/quad/lower-back)이라 가설이 없고 redFlag 도 없으면 보낼 게 없다.
   if (!ranked.length && !redFlag.tripped) return null
 
-  const hypotheses = ranked.map((entry) => ({
-    possibility: entry.hypothesis.label,
-    levers: uniqueLeverLabels(entry.hypothesis),
-    why: entry.hypothesis.hallmark
-  }))
+  const hypotheses = ranked.map((entry) => {
+    // grill 로 아형이 해소됐고(§5 Phase C) 그게 이 가설의 아형이면 가능성 라벨을 정밀화한다(예 "아킬레스 건병증(부착부)").
+    const subtype = active.subtypeResolved
+      ? entry.hypothesis.subtypeSplit?.find((split) => split.id === active.subtypeResolved)
+      : undefined
+    return {
+      possibility: subtype ? `${entry.hypothesis.label}(${subtype.label})` : entry.hypothesis.label,
+      levers: uniqueLeverLabels(entry.hypothesis),
+      why: entry.hypothesis.hallmark
+    }
+  })
 
   return { areaLabel: active.area, severity: active.severity, hypotheses, redFlag }
 }

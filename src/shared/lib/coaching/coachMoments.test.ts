@@ -302,4 +302,47 @@ describe('collectCoachMoments', () => {
     expect(moments.some((m) => m.kind === 'rest-return')).toBe(true)
     expect(moments.some((m) => m.kind === 'deviation')).toBe(true)
   })
+
+  // === 부상 감별 grill 프로브(§5 Phase C) ===
+  const painProbe = (): NonNullable<CoachMomentContext['painProbe']> => ({
+    injuryItemId: 'i',
+    probeId: 'achilles',
+    question: '아킬레스 통증, 어디에 가장 가까워요?',
+    options: [
+      { label: '힘줄 가운데', response: '중간부 패턴 가능성', sentiment: 'neutral', value: 'mid-portion', subtype: 'mid-portion' },
+      { label: "'뚝' 뒤로 못 섬", response: '응급 — 평가 권유', sentiment: 'caution', value: 'pop-cannot-stand' }
+    ]
+  })
+
+  it('활성 부상 + 미답 프로브면 pain-probe 모먼트(의도 질문)를 띄운다', () => {
+    const m = collectCoachMoments(ctx({ injury: injury({ status: 'active' }), painProbe: painProbe() })).find((x) => x.kind === 'pain-probe')
+    expect(m).toBeTruthy()
+    expect(m!.message).toContain('아킬레스')
+    expect(m!.options?.length).toBe(2)
+  })
+
+  it('프로브 옵션은 영속 페이로드(injuryItemId·probeId·value·subtype)를 싣는다', () => {
+    const m = collectCoachMoments(ctx({ injury: injury({ status: 'active' }), painProbe: painProbe() })).find((x) => x.kind === 'pain-probe')!
+    const mid = m.options!.find((o) => o.probe?.value === 'mid-portion')!
+    expect(mid.probe).toEqual({ injuryItemId: 'i', probeId: 'achilles', value: 'mid-portion', subtype: 'mid-portion' })
+    const pop = m.options!.find((o) => o.probe?.value === 'pop-cannot-stand')!
+    expect(pop.probe!.subtype).toBeUndefined() // 아형 없는 red-flag 옵션
+  })
+
+  it('painProbe가 없으면 pain-probe 모먼트 없음', () => {
+    expect(collectCoachMoments(ctx({ injury: injury({ status: 'active' }) })).some((x) => x.kind === 'pain-probe')).toBe(false)
+  })
+
+  it('부하 경고(load-spike 70)가 pain-probe(68)보다 우선 정렬', () => {
+    const moments = collectCoachMoments(ctx({ injury: injury({ status: 'active' }), chronic: spike, painProbe: painProbe() }))
+    const kinds = moments.map((m) => m.kind)
+    expect(kinds.indexOf('load-spike')).toBeLessThan(kinds.indexOf('pain-probe'))
+  })
+
+  it('휴식 중에도 pain-probe는 억제되지 않는다(닦달 아니라 "왜 아픈지" 이해)', () => {
+    const moments = collectCoachMoments(
+      ctx({ injury: injury({ status: 'active' }), painProbe: painProbe(), rest: restActive() })
+    )
+    expect(moments.some((m) => m.kind === 'pain-probe')).toBe(true)
+  })
 })

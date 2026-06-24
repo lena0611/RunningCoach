@@ -31,3 +31,34 @@ describe('normalizeTrainingMemory injuryItems (#303)', () => {
     expect(result.injuryItems.length).toBeGreaterThan(0)
   })
 })
+
+// §5 Phase C: grill 프로브 답변 누적 필드(probeAnswers/subtypeResolved) carry-through(비파괴).
+describe('normalizeTrainingMemory injuryItems probeAnswers/subtypeResolved (§5 Phase C)', () => {
+  it('probeAnswers·subtypeResolved가 없으면 안전 기본값(미설정/null)', () => {
+    const item = normalizeTrainingMemory({ injuryItems: [{ title: '우측 아킬레스', status: 'active' }] as never }).injuryItems[0]
+    expect(item.probeAnswers).toBeUndefined()
+    expect(item.subtypeResolved).toBeNull()
+  })
+
+  it('유효한 probeAnswers·subtypeResolved는 보존한다', () => {
+    const item = normalizeTrainingMemory({
+      injuryItems: [{
+        title: '우측 아킬레스', status: 'active',
+        probeAnswers: { achilles: 'insertional' }, subtypeResolved: 'insertional'
+      }] as never
+    }).injuryItems[0]
+    expect(item.probeAnswers).toEqual({ achilles: 'insertional' })
+    expect(item.subtypeResolved).toBe('insertional')
+  })
+
+  it('깨진 probeAnswers(비문자 값·빈 객체)·공백 subtypeResolved는 정리한다', () => {
+    const item = normalizeTrainingMemory({
+      injuryItems: [{
+        title: '정강이', status: 'active',
+        probeAnswers: { shin: 123, '': 'x', knee: '  ' } as never, subtypeResolved: '   '
+      }] as never
+    }).injuryItems[0]
+    expect(item.probeAnswers).toBeUndefined() // 유효 항목 0개 → 미설정
+    expect(item.subtypeResolved).toBeNull()
+  })
+})

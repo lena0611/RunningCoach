@@ -29,7 +29,7 @@ import TrainingPhaseCard from './TrainingPhaseCard.vue'
 import PhaseTransitionModal from './PhaseTransitionModal.vue'
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { appendPhaseTransition } from '@/shared/api/adaptiveTrainingRepository'
-import type { ActiveRest, RestReason, TrainingGoal, TrainingPhaseName } from '@/entities/training-memory/model'
+import type { ActiveRest, RestReason, TrainingGoal, TrainingMemory, TrainingPhaseName } from '@/entities/training-memory/model'
 import PreRunIntentCard from './PreRunIntentCard.vue'
 import QuestPanel from './QuestPanel.vue'
 import WeekTrainingCarousel, { type CarouselDay } from './WeekTrainingCarousel.vue'
@@ -42,8 +42,9 @@ import DoublesAddSheet from './DoublesAddSheet.vue'
 import RestDeclarationSheet from './RestDeclarationSheet.vue'
 import { deriveRestState, shouldOfferRecoveryRun } from '@/entities/training-memory/restWindow'
 import { buildInjuryCoachSignals } from '@/entities/training-memory/injurySignals'
+import { selectNextProbe, type InjuryProbeDef } from '@/entities/training-memory/injuryKnowledge'
 import { buildRestGuidance, evaluateExtraRun } from '@/shared/lib/coaching/restGuidance'
-import { collectCoachMoments } from '@/shared/lib/coaching/coachMoments'
+import { collectCoachMoments, type CoachMomentOption } from '@/shared/lib/coaching/coachMoments'
 import { detectScheduleDeviation } from '@/shared/lib/coaching/scheduleRealign'
 import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
 import CoachMomentCard from './CoachMomentCard.vue'
@@ -118,6 +119,32 @@ const injuryHypothesisHint = computed(() => {
   const top = signals.hypotheses[0]
   if (!top) return null
   return { referral: false, possibility: top.possibility, lever: top.levers[0] ?? '', text: '' }
+})
+// §5 Phase C — 부상 감별 grill "1문항" 능동 코치 모먼트. 활성 부상의 미답 프로브를 부상 id 변경 시 1회 스냅샷한다.
+// "한 세션 1문항(피로 방지)": 답해도 같은 포커스 동안 다음 문항으로 자동 전진하지 않게 probeAnswers 변화엔 재계산하지 않는다
+// (스냅샷이 고정 → 답을 골라도 그 프로브 모먼트가 응답을 계속 보여주고, 다음 프로브는 다음 앱 열림/부상 변경 때).
+const injuryProbeSnapshot = ref<InjuryProbeDef | null>(null)
+watch(
+  () => activeInjury.value?.id ?? null,
+  () => {
+    const inj = activeInjury.value
+    injuryProbeSnapshot.value =
+      inj && (inj.status === 'active' || inj.status === 'monitoring')
+        ? selectNextProbe(inj.normalizedAreas.map((a) => a.areaId), Object.keys(inj.probeAnswers ?? {}))
+        : null
+  },
+  { immediate: true }
+)
+const painProbeCtx = computed(() => {
+  const probe = injuryProbeSnapshot.value
+  const inj = activeInjury.value
+  if (!probe || !inj) return null
+  return {
+    injuryItemId: inj.id,
+    probeId: probe.id,
+    question: probe.question,
+    options: probe.options.map((o) => ({ label: o.label, response: o.response, sentiment: o.sentiment, value: o.value, subtype: o.subtype }))
+  }
 })
 const ageLoadWeight = computed(() => getAgeLoadWeight(memoryStore.memory.athleteProfile.birthYear, today.value))
 const observedMaxHr = computed(() => deriveObservedMaxHr(runs.value.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })), today.value))
@@ -664,6 +691,7 @@ const coachMoments = computed(() =>
       chronic: chronicLoad.value,
       injury: activeInjury.value,
       today: today.value,
+      painProbe: painProbeCtx.value,
       scheduleExists: hasSchedule.value,
       scheduleStartDate: scheduleStartDate.value,
       deviation: detectScheduleDeviation(scheduleStore.sessions, today.value),
@@ -699,6 +727,32 @@ function onMomentAction(moment: { key: string; action?: { kind: string } }) {
   else if (moment.action?.kind === 'open-weekend-triage') triageOpen.value = true
   else if (moment.action?.kind === 'open-doubles-add') openDoublesAdd(doubleSuggestionData.value?.amSession ?? null)
   dismissMoment(moment.key)
+}
+const probeSaving = ref(false)
+/**
+ * 부상 감별 grill 프로브 답(§5 Phase C)을 부상 항목에 영속한다 — probeAnswers[probeId]=value + (있으면) subtypeResolved.
+ * App.vue submitInjuryCheckIn 패턴 미러(clone → 항목 갱신 → memoryStore.update). 모먼트는 닫지 않아 코치 응답이 계속 보인다.
+ * ⚠ 비파괴 add 전용(probeAnswers 1키 추가 + subtypeResolved 1개). 다른 메모리 라이터와 겹친 덮어쓰기를 막으려 in-flight 가드를 둔다 —
+ *    이 액션을 destructive(기존 항목 삭제/덮어쓰기)하게 확장하지 말 것.
+ */
+async function onMomentSelect(option: CoachMomentOption) {
+  const probe = option.probe
+  if (!probe || probeSaving.value) return
+  probeSaving.value = true
+  try {
+    const memory = cloneMemory(memoryStore.memory)
+    const item = memory.injuryItems.find((entry) => entry.id === probe.injuryItemId)
+    if (!item) return
+    item.probeAnswers = { ...(item.probeAnswers ?? {}), [probe.probeId]: probe.value }
+    if (probe.subtype) item.subtypeResolved = probe.subtype
+    item.updatedAt = new Date().toISOString()
+    await memoryStore.update(memory)
+  } finally {
+    probeSaving.value = false
+  }
+}
+function cloneMemory(memory: TrainingMemory): TrainingMemory {
+  return JSON.parse(JSON.stringify(memory))
 }
 
 // 스케줄 변경 액션 공통 래퍼(중복 쓰기 방지 busy + 실패 토스트).
@@ -1421,7 +1475,7 @@ async function applyPhaseTransition() {
 <template>
   <PageLayout variant="dashboard">
     <!-- 코치 모먼트(#382): 유의미한 순간에 코치가 먼저 말 건다(우선순위 최상위 1건) -->
-    <CoachMomentCard v-if="topCoachMoment" :moment="topCoachMoment" @dismiss="dismissMoment" @action="onMomentAction" />
+    <CoachMomentCard v-if="topCoachMoment" :key="topCoachMoment.key" :moment="topCoachMoment" @dismiss="dismissMoment" @action="onMomentAction" @select="onMomentSelect" />
 
     <!-- 위크 요약(#362): 이번 주가 뭘 위한 주인지 — 단계·포커스·핵심·볼륨·D-day -->
     <div v-if="hasSchedule && weekSummary" class="week-summary-bar">
