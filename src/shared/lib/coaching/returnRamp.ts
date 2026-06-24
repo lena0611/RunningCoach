@@ -9,9 +9,11 @@
  *
  * 디트레이닝 4주 경계 차등(SSOT 라인 84): 휴식이 길수록 더 많은 초반 세션을 낮춘다(windowSessions).
  *
- * ⚠ 범위: 부상 복귀의 walk-run 점진 처방(걷기-뛰기 5단계, injury KB §3-B·SSOT 라인 89)은 이 코어 램프 밖이다(후속 PR).
- * 현재는 reason(injury/weather/personal) 무관하게 동일한 "Easy + 거리 캡" 거리 램프를 적용한다 — injury 복귀자도
- * walk-run 게이트가 들어오기 전까지는 run-only 거리 캡만 받는 공백이 있다(통증·redFlag 시 부상 KB 우선은 별도, SSOT 라인 87).
+ * 범위 분담: 이 모듈은 거리/볼륨 상한(직전30일 최장+10%)과 디트레이닝 경계만 reason 무관하게 적용한다.
+ * 부상 복귀의 "어떻게 뛰나"(연속주 대신 걷기-뛰기 5단계 + 통증 정지, injury KB §3-B·SSOT 라인 89)는
+ * 세션 브리핑 레이어(sessionBriefing.ts → walkRunReturn.ts)가 담당한다 — 급성 통증성 부상(status active +
+ * severity ≥ 2)이면 저강도 세션의 본세트를 walk-run 으로 교체하고, 거리 캡은 이 램프가 그대로 얹는다(상보적, #501).
+ * 통증·redFlag 시 부상 KB 우선은 별도(SSOT 라인 87).
  * 순수 함수(엔티티 의존 없음). 최장 런 집계(getLongestRunKmWithinDays)는 runStats 에 둔다(#397 경계).
  */
 
