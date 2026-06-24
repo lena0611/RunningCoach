@@ -635,6 +635,23 @@ function getInjuryProposalSafetyNotes(proposal: CoachInjuryUpdateProposal) {
   return Array.isArray(proposal.safetyNotes) ? proposal.safetyNotes.filter(Boolean) : []
 }
 
+/**
+ * 이 리포트가 코칭받던 그 시점의 부상 컨텍스트 라벨(스냅샷 기준, 현재값 아님).
+ * 과거 리포트를 다시 봐도 그때 부상 상태(상태·심각도)를 충실히 보여준다. 스냅샷이 없거나(구버전) 부상이 없으면 ''.
+ */
+function reportInjuryContextLabel(report: CoachReport): string {
+  const snap = report.injuryContextSnapshot
+  if (!snap || !snap.items.length) return ''
+  const active =
+    snap.items.find((it) => it.id === snap.activeInjuryItemId) ??
+    snap.items.find((it) => it.status === 'active' || it.status === 'monitoring')
+  if (!active) return ''
+  const name = active.title || active.area || '부상'
+  const sev = active.severity != null ? ` ${active.severity}/5` : ''
+  const st = active.status === 'active' ? '관리 중' : active.status === 'monitoring' ? '관찰 중' : active.status === 'resolved' ? '해소' : ''
+  return `🩹 당시 부상: ${name}${sev}${st ? ` · ${st}` : ''}`
+}
+
 function statusLabel(status: 'active' | 'monitoring' | 'resolved') {
   if (status === 'active') return '현재 관리 중'
   if (status === 'monitoring') return '관찰 중'
@@ -813,6 +830,7 @@ function stopCoachThinkingTimer() {
               <div v-for="report in selectedReports" :key="report.id" class="coach-turn">
                 <CoachMessage v-if="report.userNote" role="user" :text="report.userNote" :meta="formatDateTimeWithWeekday(report.createdAt)" />
                 <CoachMessage role="coach" :text="report.report" :meta="formatDateTimeWithWeekday(report.updatedAt || report.createdAt)" />
+                <small v-if="reportInjuryContextLabel(report)" class="coach-injury-snapshot">{{ reportInjuryContextLabel(report) }}</small>
                 <article v-if="report.injuryUpdateProposal && shouldShowInjuryProposal(report)" class="coach-injury-proposal-card">
                   <span class="context-chip">사용자 승인 필요</span>
                   <strong>{{ getInjuryProposalTitle(report.injuryUpdateProposal) }}</strong>

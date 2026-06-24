@@ -17,6 +17,16 @@ export type CoachReport = {
   updatedAt?: string
   trainingMemoryUpdated?: boolean
   injuryUpdateProposal?: CoachInjuryUpdateProposal | null
+  /** 코칭 생성 시점의 부상 컨텍스트 스냅샷(그때 알던 부상 상태). 과거 리포트가 그때 상태를 충실히 표시·참조하게. */
+  injuryContextSnapshot?: CoachInjuryContextSnapshot | null
+}
+
+/** 코칭 시점에 얼린 부상 컨텍스트(coach_reports.injury_context_snapshot). 없으면 null(이 기능 이전 리포트). */
+export type CoachInjuryContextSnapshot = {
+  /** 시점필터 기준이 된 선택 세션 날짜(YYYY-MM-DD). null이면 현재 흐름 코칭(특정 과거 런 아님). */
+  capturedForRunDate: string | null
+  activeInjuryItemId: string | null
+  items: { id: string; title: string; area: string; status: string; severity: number | null; onsetDate: string | null }[]
 }
 
 export type CoachInjuryUpdateProposal = {
@@ -36,6 +46,7 @@ type CoachReportRow = {
   report: string
   created_at: string
   updated_at?: string
+  injury_context_snapshot?: CoachInjuryContextSnapshot | null
 }
 
 export async function requestCoachRun(selectedRunId: string | null, userNote: string, currentWeather: WeatherSnapshot | null = null, runnerLevel: RunnerLevel = 'beginner', achievements: CoachAchievementSummary | null = null, tempoCoaching: TempoCoachingSummary | null = null): Promise<CoachReport> {
@@ -243,6 +254,32 @@ function fromRow(row: CoachReportRow): CoachReport {
     report: row.report,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    trainingMemoryUpdated: false
+    trainingMemoryUpdated: false,
+    injuryContextSnapshot: normalizeInjurySnapshot(row.injury_context_snapshot)
+  }
+}
+
+/** DB jsonb → CoachInjuryContextSnapshot. 형태가 맞지 않으면 null. */
+function normalizeInjurySnapshot(value: unknown): CoachInjuryContextSnapshot | null {
+  if (!value || typeof value !== 'object') return null
+  const v = value as Record<string, unknown>
+  if (!Array.isArray(v.items)) return null
+  const items = v.items
+    .map((raw) => {
+      const it = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+      return {
+        id: typeof it.id === 'string' ? it.id : '',
+        title: typeof it.title === 'string' ? it.title : '',
+        area: typeof it.area === 'string' ? it.area : '',
+        status: typeof it.status === 'string' ? it.status : '',
+        severity: typeof it.severity === 'number' ? it.severity : null,
+        onsetDate: typeof it.onsetDate === 'string' ? it.onsetDate : null
+      }
+    })
+    .filter((it) => it.id)
+  return {
+    capturedForRunDate: typeof v.capturedForRunDate === 'string' ? v.capturedForRunDate : null,
+    activeInjuryItemId: typeof v.activeInjuryItemId === 'string' ? v.activeInjuryItemId : null,
+    items
   }
 }
