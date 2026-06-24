@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { onBeforeRouteLeave, useRouter } from 'vue-router'
+import { onBeforeRouteLeave } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { useSessionDetailStore } from '@/app/stores/sessionDetailStore'
 import {
   buildTrendAnalysis,
   type TrendBaseline,
@@ -27,7 +28,7 @@ import TrendLensChart from '@/shared/ui/TrendLensChart.vue'
 
 const runStore = useRunStore()
 const memoryStore = useMemoryStore()
-const router = useRouter()
+const sessionDetailStore = useSessionDetailStore()
 const openLens = ref<TrendLensKey | null>(null)
 const selectedCompare = ref('recent-90')
 
@@ -147,7 +148,9 @@ function selectOverallItem(item: TrendOverallItem) {
 }
 
 function openRun(runId: string) {
-  router.push({ path: '/runs', query: { runId } })
+  // 세션 상세는 App 레벨 오버레이 — 기록 탭으로 점프하지 않고 추세 위에 바로 띄운다(#275 후속).
+  const run = runStore.runs.find((item) => item.id === runId)
+  if (run) sessionDetailStore.open(run)
 }
 
 function isMetricValue(value: string) {

@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
-import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import { useLevelStore } from '@/app/stores/levelStore'
-import { useCoachStore } from '@/app/stores/coachStore'
+import { useSessionDetailStore } from '@/app/stores/sessionDetailStore'
 import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
-import type { RunLog } from '@/entities/run/model'
 import RunSummaryCard from '@/widgets/run-summary-card/RunSummaryCard.vue'
 import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
 import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
@@ -22,7 +20,6 @@ import { formatWeatherNumber, weatherSymbolToEmoji } from '@/shared/lib/weather'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import MetricGrid from '@/shared/ui/MetricGrid.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
-import RunDetailContent from '@/shared/ui/RunDetailContent.vue'
 import RunSessionList from '@/shared/ui/RunSessionList.vue'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import StackPage from '@/shared/ui/StackPage.vue'
@@ -72,21 +69,18 @@ import { getChronicLoadTrend } from '@/shared/lib/runStats'
 import { isActiveSession, type ScheduledSession } from '@/entities/training-schedule/model'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import RacePage from '@/pages/race/RacePage.vue'
-import { hasNativeBridge } from '@/shared/lib/runtime'
 import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
 
 const TrendChart = defineAsyncComponent(() => import('@/shared/ui/TrendChart.vue'))
 
 const runStore = useRunStore()
 const memoryStore = useMemoryStore()
-const healthKitSyncStore = useHealthKitSyncStore()
 const weatherStore = useWeatherStore()
 const levelStore = useLevelStore()
-const coachStore = useCoachStore()
+const sessionDetailStore = useSessionDetailStore()
 const router = useRouter()
 const route = useRoute()
 const trendMetric = ref<'month' | 'last7' | 'easy' | 'hard' | null>(null)
-const detailRun = ref<RunLog | null>(null)
 const projectionDetailOpen = ref(false)
 const nextSessionDetailOpen = ref(false)
 const raceOpen = ref(false)
@@ -1310,7 +1304,7 @@ const trendChartPoints = computed<TrendChartPoint[]>(() => {
 })
 
 watch(
-  () => Boolean(trendMetric.value || detailRun.value || projectionDetailOpen.value || nextSessionDetailOpen.value),
+  () => Boolean(trendMetric.value || projectionDetailOpen.value || nextSessionDetailOpen.value),
   (open) => {
     document.body.classList.toggle('memory-stack-open', open)
   }
@@ -1325,21 +1319,12 @@ onBeforeUnmount(() => {
 
 onBeforeRouteLeave(() => {
   closeTrend()
-  closeRunDetail()
   closeProjectionDetail()
   closeNextSessionDetail()
 })
 
 function closeTrend() {
   trendMetric.value = null
-}
-
-function openRunDetail(run: RunLog) {
-  detailRun.value = run
-}
-
-function closeRunDetail() {
-  detailRun.value = null
 }
 
 function openProjectionDetail() {
@@ -1364,18 +1349,6 @@ function openGoalCard() {
     return
   }
   openMemoryPanel('goals')
-}
-
-function openCoachForRun(run: RunLog) {
-  coachStore.open(run)
-}
-
-function openRunAction(run: RunLog, action: 'edit' | 'delete') {
-  router.push({ path: '/runs', query: { runId: run.id, action } })
-}
-
-function canRefreshFromHealthKit(_run: RunLog) {
-  return hasNativeBridge()
 }
 
 function openMemoryPanel(panel: 'goals' | 'injuries') {
@@ -1751,7 +1724,7 @@ async function applyPhaseTransition() {
       </MetricGrid>
     </SectionGroup>
 
-    <RecentRuns :runs="runs.slice(0, 5)" :weekly-pattern="memoryStore.memory.weeklyPattern" @show-all="router.push('/runs')" @select="openRunDetail" />
+    <RecentRuns :runs="runs.slice(0, 5)" :weekly-pattern="memoryStore.memory.weeklyPattern" @show-all="router.push('/runs')" @select="sessionDetailStore.open" />
 
     <StackPage :open="nextSessionDetailOpen" title="다음 훈련" @close="closeNextSessionDetail">
       <SectionGroup title="추천 세션">
@@ -1789,7 +1762,7 @@ async function applyPhaseTransition() {
         <EmptyState v-else title="표시할 기록이 없습니다." description="해당 기간의 러닝 기록이 아직 부족합니다." />
       </SectionGroup>
       <SectionGroup v-if="trendRuns.length" title="세션" :surface="false">
-        <RunSessionList :runs="trendRuns" :weekly-pattern="memoryStore.memory.weeklyPattern" interactive @select="openRunDetail" />
+        <RunSessionList :runs="trendRuns" :weekly-pattern="memoryStore.memory.weeklyPattern" interactive @select="sessionDetailStore.open" />
       </SectionGroup>
     </StackPage>
 
@@ -1840,57 +1813,6 @@ async function applyPhaseTransition() {
       </template>
     </StackPage>
 
-    <StackPage
-      :open="!!detailRun"
-      title="세션 상세"
-      :back="Boolean(trendMetric || projectionDetailOpen || nextSessionDetailOpen)"
-      bare
-      footer-class="run-detail-cta"
-      @close="closeRunDetail"
-    >
-      <RunDetailContent v-if="detailRun" :run="detailRun" :weekly-pattern="memoryStore.memory.weeklyPattern">
-        <template #actions>
-          <div class="run-detail-actions" aria-label="세션 관리">
-            <button
-              v-if="canRefreshFromHealthKit(detailRun)"
-              class="icon-only-button"
-              :class="{ spinning: healthKitSyncStore.refreshingRunId === detailRun.id }"
-              type="button"
-              :disabled="healthKitSyncStore.refreshingRunId === detailRun.id"
-              aria-label="HealthKit 세션 다시 갱신"
-              @click.stop="healthKitSyncStore.requestRunRefresh(detailRun)"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M20 11a8 8 0 0 0-14.8-4.2" />
-                <path d="M5 3v4h4" />
-                <path d="M4 13a8 8 0 0 0 14.8 4.2" />
-                <path d="M19 21v-4h-4" />
-              </svg>
-            </button>
-            <button class="icon-only-button" type="button" aria-label="기록 수정" @click.stop="openRunAction(detailRun, 'edit')">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M4.5 19.5h4.2L18.8 9.4a2.1 2.1 0 0 0 0-3l-1.2-1.2a2.1 2.1 0 0 0-3 0L4.5 15.3z" />
-                <path d="m13.6 6.2 4.2 4.2" />
-              </svg>
-            </button>
-            <button class="icon-only-button danger" type="button" aria-label="기록 삭제" @click.stop="openRunAction(detailRun, 'delete')">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M5.5 7h13" />
-                <path d="M9.5 7V5.5h5V7" />
-                <path d="m8 9 .6 9.5h6.8L16 9" />
-                <path d="M10.5 11.5v4" />
-                <path d="M13.5 11.5v4" />
-              </svg>
-            </button>
-          </div>
-        </template>
-      </RunDetailContent>
-      <template #footer>
-        <button type="button" @click.stop="detailRun && openCoachForRun(detailRun)">
-          AI 코칭 받기
-        </button>
-      </template>
-    </StackPage>
   </PageLayout>
 </template>
 
