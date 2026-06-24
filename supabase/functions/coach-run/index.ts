@@ -229,6 +229,36 @@ Deno.serve(async (req) => {
   }
 })
 
+/**
+ * 코칭 생성 시점의 부상 컨텍스트 스냅샷을 만든다(coach_reports.injury_context_snapshot).
+ * injuryItems 는 이미 selectedRun 날짜로 시점필터된 목록이라, 그때 알고 있던 부상 상태(상태/심각도)를 그대로 얼린다.
+ * 부상이 전혀 없으면 null(스냅샷 없음).
+ */
+function buildInjuryContextSnapshot(
+  injuryItems: unknown[] | undefined,
+  activeInjuryItem: unknown,
+  capturedForRunDate: string | null
+): { capturedForRunDate: string | null; activeInjuryItemId: string | null; items: { id: string; title: string; area: string; status: string; severity: number | null; onsetDate: string | null }[] } | null {
+  const items = (Array.isArray(injuryItems) ? injuryItems : [])
+    .map((raw) => {
+      const it = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+      return {
+        id: typeof it.id === 'string' ? it.id : '',
+        title: typeof it.title === 'string' ? it.title : '',
+        area: typeof it.area === 'string' ? it.area : '',
+        status: typeof it.status === 'string' ? it.status : '',
+        severity: typeof it.severity === 'number' ? it.severity : null,
+        onsetDate: typeof it.onsetDate === 'string' ? it.onsetDate : null
+      }
+    })
+    .filter((it) => it.id)
+  const activeId = activeInjuryItem && typeof activeInjuryItem === 'object' && typeof (activeInjuryItem as { id?: unknown }).id === 'string'
+    ? (activeInjuryItem as { id: string }).id
+    : null
+  if (!items.length && !activeId) return null
+  return { capturedForRunDate, activeInjuryItemId: activeId, items }
+}
+
 async function persistCoachResult(
   admin: SupabaseAdminClient,
   userId: string,
@@ -250,6 +280,9 @@ async function persistCoachResult(
       if (error) throw error
     }
 
+    // 코칭 생성 시점의 (시점필터된) 부상 컨텍스트를 얼려 저장한다 — 과거 리포트가 그때 부상 상태를 충실히 재현하도록.
+    const injuryContextSnapshot = buildInjuryContextSnapshot(context.injuryItems, context.activeInjuryItem, context.selectedRunDate ?? null)
+
     const { data: reportRow, error: reportError } = await admin
       .from('coach_reports')
       .insert({
@@ -257,9 +290,10 @@ async function persistCoachResult(
         selected_run_id: selectedRunId,
         user_note: userNote,
         report: applyTrustLayer(ai.report, context.trustLayerNote),
+        injury_context_snapshot: injuryContextSnapshot,
         updated_at: new Date().toISOString()
       })
-      .select('id, selected_run_id, user_note, report, created_at, updated_at')
+      .select('id, selected_run_id, user_note, report, created_at, updated_at, injury_context_snapshot')
       .single()
     if (reportError) throw reportError
 
@@ -283,7 +317,8 @@ async function persistCoachResult(
         createdAt: reportRow.created_at,
         updatedAt: reportRow.updated_at,
         trainingMemoryUpdated: Boolean(updatedMemory),
-        injuryUpdateProposal
+        injuryUpdateProposal,
+        injuryContextSnapshot: reportRow.injury_context_snapshot ?? null
       },
       trainingMemoryUpdated: Boolean(updatedMemory),
       trainingMemoryPatch: memoryPatch,
@@ -1180,6 +1215,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       'coachingDecisionBoard는 이번 답변의 판단 보드다. 답변 전에 selectedRunEvidence, lapProcess, prescriptionCompliance, goalProjectionCheck, routineUpdateCheck를 먼저 확인하고, 핵심 지표/해석 섹션/루틴 업데이트에 그 근거를 반영한다. 이 보드와 원본 RunLog가 충돌하면 원본 RunLog를 우선하되, 보드는 설명 구조를 잡는 데 사용한다.',
     injuryItems,
     activeInjuryItem,
+    selectedRunDate: selectedRunDateForTemporalContext,
     injuryCheckInPolicy,
     recoveryOutlook,
     trustLayerNote,

@@ -3653,6 +3653,15 @@ button.run-session-row {
   background: var(--color-surface);
 }
 
+/* 코칭 시점 부상 컨텍스트 캡션(#코치 부상 스냅샷) — 코치 답변 아래 차분한 한 줄. */
+.coach-injury-snapshot {
+  display: block;
+  width: min(520px, 100%);
+  margin: -2px 0 10px;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
 .coach-injury-proposal-card > strong {
   color: var(--color-text);
   font-size: 15px;
