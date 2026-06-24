@@ -46,11 +46,11 @@ test.describe('#275 StackPage 공통화 마이그레이션', () => {
   })
 
   test('Trends 렌즈 상세 — close-X StackPage 열림·헤더·닫힘', async ({ page }) => {
-    await page.goto('/trends')
+    await page.goto('/#/trends')
     await page.waitForLoadState('networkidle')
     await dismissStartupModals(page)
 
-    await page.locator('.trend-lens-row', { hasText: '목표까지' }).first().click()
+    await domClick(page.locator('.trend-lens-row', { hasText: '목표까지' }).first())
     const stack = stackByTitle(page, '목표까지')
     await expect(stack).toBeVisible()
     await expect(stack.locator('.memory-stack-content')).toBeVisible()
