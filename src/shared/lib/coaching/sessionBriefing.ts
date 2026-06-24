@@ -14,6 +14,7 @@ import type { ScheduledSession } from '@/entities/training-schedule/model'
 import type { AdaptiveTrainingProfile, TrainingGoal, TrainingInjuryItem } from '@/entities/training-memory/model'
 import type { SessionIntentTargets } from '@/entities/session-intent/model'
 import type { ChronicLoadTrend } from '@/shared/lib/runStats'
+import { shouldPrescribeWalkRun, walkRunExecutionSteps, walkRunCautions, WALK_RUN_KEY_POINT } from './walkRunReturn'
 
 /** SessionIntent(의도)에서 가져오는 결정 지원 정보. 브리핑이 흡수해 단일 카드로 보여준다. */
 export type BriefingIntent = {
@@ -125,6 +126,11 @@ const EVIDENCE = {
   rpePriority: {
     method: '강도 판정 RPE 우선 (#354)',
     summary: 'Easy/Recovery는 심박·페이스보다 RPE·호흡을 우선해 강도를 판정한다. 상한 소폭 초과도 RPE 낮으면 인정.'
+  },
+  walkRunReturn: {
+    method: '부상 후 복귀 walk-run (OSU Wexner RTR)',
+    summary: '급성 통증성 부상 복귀는 연속주가 아니라 걷기-뛰기 5단계로 점진 재적응한다. 단계 진행은 달력이 아니라 통증으로 게이트한다(통증 없이 안정 시에만 다음 단계).',
+    url: undefined
   }
 } as const
 
@@ -226,10 +232,22 @@ function executionFor(
   injury: TrainingInjuryItem | null,
   progression: ProgressionStatus,
   progressionEvidence: string,
-  tempoCeilingBpm: number | null
+  tempoCeilingBpm: number | null,
+  walkRun: boolean
 ): BriefingStep[] {
   const { sessionType, prescription, phase } = session
   const steps: BriefingStep[] = []
+
+  // 급성 통증성 부상 복귀(#501): 저강도 세션의 "어떻게 뛰나"를 연속주 대신 걷기-뛰기 5단계로 교체(SSOT §3-B).
+  // 거리/볼륨 상한은 returnRamp 가 따로 적용하므로 여기선 인터벌·통증 정지만 다룬다.
+  if (walkRun) {
+    steps.push(...walkRunExecutionSteps(injury, prescription.durationMin))
+    if ((progression === 'ready' || progression === 'blocked') && progressionEvidence) {
+      steps.push({ label: '최근 수행', detail: progressionEvidence })
+    }
+    return steps
+  }
+
   const dist = prescription.distanceKm ? `${prescription.distanceKm}km` : ''
   const dur = prescription.durationMin ? `${prescription.durationMin}분` : ''
   const amount = [dist, dur].filter(Boolean).join(' · ')
@@ -323,10 +341,17 @@ function executionFor(
 function cautionsFor(
   session: ScheduledSession,
   injury: TrainingInjuryItem | null,
-  chronic: ChronicLoadTrend | null
+  chronic: ChronicLoadTrend | null,
+  walkRun: boolean
 ): { lines: string[]; evidence: EvidenceRef | null } {
   const lines: string[] = []
   let evidence: EvidenceRef | null = null
+
+  // walk-run 복귀(#501): 통증 정지·의뢰 안내를 가장 앞에 둔다(SSOT §3-B·§4 우선).
+  if (walkRun) {
+    lines.push(...walkRunCautions())
+    evidence = EVIDENCE.progressiveLoad
+  }
 
   if (injury && (injury.status === 'active' || injury.status === 'monitoring')) {
     const severity = injury.severity ?? 0
@@ -375,7 +400,8 @@ const EASY_PACE_FAMILY: ReadonlySet<RunType> = new Set(['Easy', 'Easy + Strides'
  * 🎯 오늘의 핵심 — 세션 타입별 "딱 하나만 지키면 되는 것"(결정론). 포스트런 채점 기준(sessionQuality)과 정렬.
  * 상세 이행은 execution(라이프사이클)에, 여기엔 "오늘의 합격선" 한 줄만.
  */
-function keyPointFor(type: RunType): string {
+function keyPointFor(type: RunType, walkRun: boolean): string {
+  if (walkRun) return WALK_RUN_KEY_POINT
   switch (type) {
     case 'Easy':
       return '심박 상한 이하로 대화가 가능한 강도 유지 — 페이스보다 심박 안정(RPE·호흡 우선). 살짝 넘어도 편하면 OK.'
@@ -406,11 +432,14 @@ export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBrie
   const prog = resolveProgression(session.sessionType, ctx.progression, ctx.adaptiveProfile)
   const tempoCeilingBpm = ctx.adaptiveProfile?.tempoCeiling?.adoptedBpm ?? null
   const effect = effectFor(session.sessionType)
-  const execution = executionFor(session, ctx.vdot ?? null, ctx.injury, prog.status, prog.evidence, tempoCeilingBpm)
-  const caution = cautionsFor(session, ctx.injury, ctx.chronic)
+  // 급성 통증성 부상 복귀면 저강도 세션의 "어떻게 뛰나"를 걷기-뛰기로 교체(#501, SSOT §3-B).
+  const walkRun = shouldPrescribeWalkRun(ctx.injury, session.sessionType)
+  const execution = executionFor(session, ctx.vdot ?? null, ctx.injury, prog.status, prog.evidence, tempoCeilingBpm, walkRun)
+  const caution = cautionsFor(session, ctx.injury, ctx.chronic, walkRun)
 
   const easyFamily = session.sessionType === 'Easy' || session.sessionType === 'Recovery' || session.sessionType === 'Easy + Strides'
   const evidence: EvidenceRef[] = dedupeEvidence([
+    walkRun ? EVIDENCE.walkRunReturn : null,
     effect.evidence,
     session.sessionType === 'Tempo' || session.sessionType === 'Race' ? EVIDENCE.daniels : null,
     easyFamily ? EVIDENCE.rpePriority : null,
@@ -418,7 +447,7 @@ export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBrie
   ])
 
   return {
-    keyPoint: keyPointFor(session.sessionType),
+    keyPoint: keyPointFor(session.sessionType, walkRun),
     goalLine,
     why: ctx.intent?.why ?? '',
     effect: effect.text,
