@@ -72,7 +72,9 @@ if (import.meta.env.DEV) {
   void import('@/app/devE2ESeed').then((m) => {
     ;(window as unknown as { __pacelabE2E?: Record<string, unknown> }).__pacelabE2E = {
       seedReturnRamp: m.seedReturnRamp,
-      firstUpcomingSession: m.firstUpcomingSession
+      firstUpcomingSession: m.firstUpcomingSession,
+      seedWalkRunReturn: m.seedWalkRunReturn,
+      walkRunActiveState: m.walkRunActiveState
     }
   })
 }
