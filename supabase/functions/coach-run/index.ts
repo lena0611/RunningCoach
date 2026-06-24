@@ -204,6 +204,8 @@ Deno.serve(async (req) => {
           }))
       : null
     const restState = normalizeRestState(body.restState)
+    const recentInjuryWindow = normalizeRecentInjuryWindow(body.recentInjuryWindow)
+    const marathonFlag = body.marathonFlag === true
     const runnerLevel = normalizeRunnerLevel(body.runnerLevel)
     const responseStyle = normalizeResponseStyle(body.responseStyle, runnerLevel)
     const shouldStream = body.stream === true
@@ -214,7 +216,7 @@ Deno.serve(async (req) => {
     const rateLimit = await consumeRateLimit(admin, userId, 'coach-run')
     if (!rateLimit.ok) return json({ error: rateLimit.error, retryAfterSec: rateLimit.retryAfterSec }, 429)
 
-    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress, sessionEvidence, upcomingSchedule, restState)
+    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress, sessionEvidence, upcomingSchedule, restState, recentInjuryWindow, marathonFlag)
     const ownedSelectedRunId = context.selectedRun?.id ?? null
     if (shouldStream) {
       return streamCoachRun(admin, userId, ownedSelectedRunId, userNote, openaiKey, model, context)
@@ -420,6 +422,22 @@ function normalizeRestState(value: unknown): CoachRestContext | null {
     returnDate: typeof v.returnDate === 'string' ? v.returnDate.slice(0, 10) : null,
     isReturnDay: v.isReturnDay === true,
     longLayoff: v.longLayoff === true
+  }
+}
+
+/**
+ * 최근 12개월 부상 이력 요약(전역 재부상 위험창, 3.1). 웹이 getRecentInjuryHistory 로 산출해
+ * client-summary 로 보낸다(currentWeather 패턴). 이력 없으면 웹이 null 로 보낸다.
+ */
+type CoachRecentInjuryWindow = { hasRecentInjury: boolean; mostRecentDaysAgo: number | null; areas: string[] }
+function normalizeRecentInjuryWindow(value: unknown): CoachRecentInjuryWindow | null {
+  if (!value || typeof value !== 'object') return null
+  const v = value as Record<string, unknown>
+  if (v.hasRecentInjury !== true) return null
+  return {
+    hasRecentInjury: true,
+    mostRecentDaysAgo: typeof v.mostRecentDaysAgo === 'number' ? v.mostRecentDaysAgo : null,
+    areas: Array.isArray(v.areas) ? v.areas.filter((a): a is string => typeof a === 'string').slice(0, 4) : []
   }
 }
 
@@ -827,7 +845,7 @@ function unifyPerformanceProjection(
   }
 }
 
-async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null, sessionEvidence: CoachSessionEvidence | null = null, upcomingSchedule: { date: string; type: string; distanceKm: number | null; keySession: boolean }[] | null = null, restState: CoachRestContext | null = null) {
+async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null, sessionEvidence: CoachSessionEvidence | null = null, upcomingSchedule: { date: string; type: string; distanceKm: number | null; keySession: boolean }[] | null = null, restState: CoachRestContext | null = null, recentInjuryWindow: CoachRecentInjuryWindow | null = null, marathonFlag = false) {
   const memorySelect = 'id, content, created_at, importance, last_referenced_at, reference_count'
   const [
     { data: memoryRow },
@@ -1163,6 +1181,12 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     restState,
     instructionForRest:
       'context.restState는 사용자가 스스로 선언한 휴식(#473) 상태다(없으면 평소처럼 답한다). active=true면 지금 쉬는 중이다 — "## 다음 훈련"에서 훈련을 재촉하거나 처방을 들이밀지 말고 "푹 쉬세요, 일정은 정리해둘게요. 돌아오면 가볍게 시작해요"처럼 휴식을 존중한다(능동 휴식은 missed가 아니다). 사용자가 먼저 "그래도 뭘 하면 좋을지"를 물을 때만 가벼운 대안(스트레칭·산책, 통제 가능한 휴식이면 가벼운 회복주)을 1회 제안하되 강권하지 않는다. reason이 injury면 통증을 우선하고 무리한 대안을 권하지 않는다. isReturnDay=true이거나 daysUntilReturn이 0~1이면 "놓쳤다"가 아니라 "회복 후 정리" 톤으로 복귀 일정을 안내한다. longLayoff=true(4주 초과)면 복귀를 더 가볍게 시작해야 함과 목표(레이스) 실현가능성 재점검을 정직하게 덧붙인다. active=true면 휴식 존중이 upcomingSchedule 처방보다 우선이다.',
+    recentInjuryWindow,
+    instructionForInjuryHistory:
+      'context.recentInjuryWindow는 사용자의 최근 12개월 부상 이력 요약이다(부위 무관 전역 재부상 위험창). 이전 부상은 러닝 부상의 가장 강하고 일관된 예측인자이고, 재부상의 상당수는 같은 부위가 아니라 다른 부위에서 온다. 있으면(hasRecentInjury=true): ① 지금 통증이 없거나 주행거리가 적어도 "이전 부상 이력이 있으니 조금 더 보수적으로, 점진적으로 가자"는 톤을 유지한다. ② 특히 "마일리지가 낮으니 안전하다/괜찮다"는 안심을 주지 마라 — 이전부상군에서는 저볼륨·낮은 ACWR이 신규 부상을 막아주지 못한다(근거 기반). ③ areas는 과거 부위라 모니터링 보조로만 쓰고 "그 부위만 조심하면 된다"고 단정하지 마라(재부상은 다른 부위로도 온다). mostRecentDaysAgo가 작을수록(최근일수록) 더 보수적으로. 단 이는 집단 통계적 연관이지 개인 부상 확정이 아니므로 부상 확률(%)을 단정하지 말고, 겁주거나 닦달하지 말고 안심시키는 코칭으로 전달한다. recentInjuryWindow가 null이면 이 보수화를 적용하지 않는다(과도한 부상 프레이밍 금지). redFlag·통증 안전 신호가 항상 우선이다.',
+    marathonFlag,
+    instructionForMarathonGoal:
+      'context.marathonFlag가 true면 사용자의 현재 목표가 풀마라톤이다 — 풀마라톤 목표는 10km 대비 신규 부상 위험을 독립적으로 높인다(하프마라톤은 해당 없으니 하프엔 적용하지 마라). 점진적 빌드업·충분한 회복·롱런 관리를 강조하고, recentInjuryWindow가 함께 있으면 특히 보수적으로 안내한다. 이는 목표를 막거나 겁주려는 게 아니라 "조금 더 보수적으로, 무리하지 말고 길게 보자"는 신호다. marathonFlag가 false면 이 지침을 적용하지 않는다.',
     sessionEvidence,
     sessionEvidencePolicy:
       'context.sessionEvidence는 웹이 선택 세션 타입별로 산출한 다단계 품질 증거다(#354). 규칙이 pass/fail 최종 판정을 내린 게 아니라 "증거"이며, 최종 해석은 네가 목표·부상·날씨·성향을 얹어서 한다. ' +

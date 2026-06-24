@@ -14,7 +14,7 @@ import type { ChronicLoadTrend } from '@/shared/lib/runStats'
 import { analyzeExtraRunTrend, buildExtraRunInquiry } from '@/shared/lib/coaching/extraRunTrend'
 import { isRunningLoadGroup, PAIN_GROUP_LABEL, type PainGroup } from '@/features/post-run-interview/buildInterviewRunPatch'
 
-export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'extra-run' | 'goal-progress' | 'goal-feasibility' | 'time-trial' | 'weekend-triage' | 'double-suggest' | 'rest-support' | 'rest-return'
+export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'injury-escalation' | 'extra-run' | 'goal-progress' | 'goal-feasibility' | 'time-trial' | 'weekend-triage' | 'double-suggest' | 'rest-support' | 'rest-return'
 
 /** 모먼트가 제안하는 행동(전용 시트 열기 등). 트레이니 확인 후 실행. */
 export type CoachMomentAction = {
@@ -53,7 +53,76 @@ function painGroupFromNote(painNote: string | null | undefined): PainGroup | nul
   return null
 }
 
+/** 모먼트 발동 트리거 — 가장 최근 통증 런이 이 일수 안이어야 신선한 신호로 본다. */
 const PAIN_FOLLOWUP_WINDOW_DAYS = 3
+/**
+ * RRI 운영 정의(달리기를 ≥1주 또는 ≥3연속 세션 제한 = "진짜 부상", 단순 1회 통증과 구별).
+ * 근거: 합의 정의 [Fokkema 2019·Peterson 2022·Buist] — rri-risk-factors-evidence.md §3.4, injury-knowledge §6.
+ */
+const PERSISTENT_PAIN_MIN_SESSIONS = 3
+const PERSISTENT_PAIN_MIN_SPAN_DAYS = 7
+/** 통증 스트릭 평가 상한 — 이보다 오래된 통증 런은 현재 상태가 아니므로 스트릭에서 끊는다(스테일 차단). */
+const PAIN_STREAK_LOOKBACK_DAYS = 30
+/**
+ * 장기 부상 escalation 임계 — 통증/부상 지속 >10주(70일)면 자가관리보다 전문가 평가 권유(3.5).
+ * 근거: 부상 회복 중앙값 ~8주, >10주=poor 예후 ◐ — rri-risk-factors-evidence.md §3.5. redFlag 게이트 우선.
+ */
+const LONG_INJURY_ESCALATION_DAYS = 70
+
+/** 날짜만(YYYY-MM-DD)은 로컬 자정으로, ISO 타임스탬프는 그대로 파싱(12개월/주차 경계 off-by-one 방지, model.ts 관행). */
+function parseLocalDateMs(value: string | null | undefined): number | null {
+  if (!value) return null
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value
+  const t = new Date(normalized).getTime()
+  return Number.isFinite(t) ? t : null
+}
+
+/**
+ * 최근 러닝-부하 통증의 "지속성"을 평가한다 — 단순 1회 통증(single) vs RRI 운영 정의를 충족하는
+ * 관리형 부상 패턴(persistent)을 구별한다(3.4). 가장 최근 통증 런부터 통증 없는 런을 만날 때까지
+ * 연속 통증 세션을 세고(회복 신호면 끊김), ≥3연속 세션 또는 ≥7일 지속이면 persistent로 본다.
+ */
+type RecentPainAssessment = {
+  /** 트리거 창 안의 가장 최근 러닝-부하 통증 런. 없으면 모먼트 미발동. */
+  triggerRun: RunLog | null
+  /** 가장 최근 통증 런부터 이어진 연속 통증 세션 수. */
+  streakSessions: number
+  /** 연속 통증 스트릭 첫 통증 런부터 가장 최근 통증 런까지 일수(지속 기간). */
+  spanDays: number
+  /** RRI 운영 정의(≥3연속세션 또는 ≥7일 지속) 충족 = 관리가 필요한 "진짜 부상" 패턴. */
+  persistent: boolean
+  /** 가장 최근 통증 부위 그룹(메시지 라벨용). */
+  group: PainGroup | null
+}
+
+function assessRecentPain(runs: RunLog[], today: Date): RecentPainAssessment {
+  const empty: RecentPainAssessment = { triggerRun: null, streakSessions: 0, spanDays: 0, persistent: false, group: null }
+  const todayMs = new Date(today).setHours(0, 0, 0, 0)
+  const dayMs = 24 * 60 * 60 * 1000
+  const sorted = runs
+    .map((r) => ({ r, ms: parseLocalDateMs(r.date) }))
+    .filter((x): x is { r: RunLog; ms: number } => x.ms !== null && x.ms <= todayMs)
+    .sort((a, b) => b.ms - a.ms)
+  if (!sorted.length) return empty
+  const newest = sorted[0]
+  const newestGroup = painGroupFromNote(newest.r.painNote)
+  // 트리거: 가장 최근 런이 트리거 창(3일) 안이고 러닝-부하 통증이어야 한다.
+  if ((todayMs - newest.ms) / dayMs > PAIN_FOLLOWUP_WINDOW_DAYS || !isRunningLoadGroup(newestGroup)) return empty
+  let streak = 0
+  let oldestPainMs = newest.ms
+  for (const { r, ms } of sorted) {
+    if ((todayMs - ms) / dayMs > PAIN_STREAK_LOOKBACK_DAYS) break // 스테일 통증 데이터는 현재 스트릭에서 제외
+    if (isRunningLoadGroup(painGroupFromNote(r.painNote))) {
+      streak += 1
+      oldestPainMs = ms
+    } else {
+      break // 통증 없는 러닝 세션 = 회복 신호 → 스트릭 종료
+    }
+  }
+  const spanDays = Math.round((newest.ms - oldestPainMs) / dayMs)
+  const persistent = streak >= PERSISTENT_PAIN_MIN_SESSIONS || spanDays >= PERSISTENT_PAIN_MIN_SPAN_DAYS
+  return { triggerRun: newest.r, streakSessions: streak, spanDays, persistent, group: newestGroup }
+}
 
 export type CoachMomentContext = {
   runs: RunLog[]
@@ -184,17 +253,27 @@ function detectGoalProgress(ctx: CoachMomentContext): CoachMoment | null {
 }
 
 function detectPainFollowup(ctx: CoachMomentContext): CoachMoment | null {
-  // 이미 관리 중인 활성 부상이 있으면 그쪽(부상 감지기/전용 체크인)이 담당.
+  // 이미 관리 중인 활성 부상이 있으면 그쪽(부상 감지기/전용 체크인·장기부상 escalation)이 담당.
   if (ctx.injury && (ctx.injury.status === 'active' || ctx.injury.status === 'monitoring')) return null
-  const todayMs = new Date(ctx.today).setHours(0, 0, 0, 0)
-  const recent = ctx.runs.filter((r) => {
-    const d = new Date(`${r.date}T00:00:00`).getTime()
-    return (todayMs - d) / (24 * 60 * 60 * 1000) <= PAIN_FOLLOWUP_WINDOW_DAYS && (todayMs - d) >= 0
-  })
-  const loadPain = recent.find((r) => isRunningLoadGroup(painGroupFromNote(r.painNote)))
-  if (!loadPain) return null
-  const group = painGroupFromNote(loadPain.painNote)
-  const label = group ? PAIN_GROUP_LABEL[group] : ''
+  const pain = assessRecentPain(ctx.runs, ctx.today)
+  if (!pain.triggerRun) return null
+  const label = pain.group ? PAIN_GROUP_LABEL[pain.group] : ''
+  if (pain.persistent) {
+    // RRI 운영 정의(달리기를 ≥1주 또는 ≥3연속 세션 제한) 충족 → 단순 뻐근함이 아니라 관리가 필요한 신호(3.4).
+    // 부상확률(%) 단정 금지·진단 아님([[coach-not-data-referee]]) — 등록+보수화를 권유하되 강권하지 않는다.
+    const persistDesc =
+      pain.streakSessions >= PERSISTENT_PAIN_MIN_SESSIONS
+        ? `연속 ${pain.streakSessions}회 러닝에서`
+        : `${pain.spanDays}일째`
+    return {
+      key: 'pain-followup',
+      kind: 'pain-followup',
+      priority: 78,
+      icon: '🩹',
+      message: `${persistDesc} ${label} 통증이 이어지고 있어요. 일시적인 뻐근함을 넘어 관리가 필요한 신호일 수 있어요. 부상으로 등록하고, 가라앉을 때까지 강도를 낮추거나 잠깐 회복 기간을 갖는 걸 권해요. (이 안내는 진단이 아니라 러닝 코칭 보조예요.) 지금 짧게 체크인할까요?`,
+      action: { label: '부상 체크인', kind: 'open-injury-screening' }
+    }
+  }
   return {
     key: 'pain-followup',
     kind: 'pain-followup',
@@ -321,8 +400,39 @@ function detectReturnDay(ctx: CoachMomentContext): CoachMoment | null {
   }
 }
 
+/**
+ * 장기 부상 escalation(#473 후속, 3.5) — 활성/관리 부상이 >10주(70일) 이어지면
+ * 자가관리보다 전문가(의사·물리치료사) 평가를 권유한다. onsetDate(임상 발병일) 우선,
+ * 없으면 등록일(createdAt)로 관리 지속 기간을 보수적으로 추정한다.
+ * redFlag 게이트가 항상 우선이며, 이 모먼트 자체가 "전문가로 연결" 톤이라 redFlag 철학과 정합한다.
+ * 진단 아님·부상확률 단정 금지([[coach-not-data-referee]]). 사용자가 닫으면(dismiss) 더 닦달하지 않는다.
+ */
+function detectInjuryEscalation(ctx: CoachMomentContext): CoachMoment | null {
+  const inj = ctx.injury
+  if (!inj || (inj.status !== 'active' && inj.status !== 'monitoring')) return null
+  let anchor = parseLocalDateMs(inj.onsetDate) ?? parseLocalDateMs(inj.createdAt)
+  if (anchor === null) return null
+  // §3.5 정의는 "연속(continuous) 지속 >10주"다. resolved 이력이 있는데 다시 active/monitoring이면 = 재발(re-flare)이고,
+  // 현재 에피소드는 옛 최초 발병이 아니라 마지막 해소(resolvedAt) 이후에 다시 시작한 것이다. 그 경우 옛 onsetDate로
+  // "20주째"처럼 과대평가하지 않도록 resolvedAt를 에피소드 시작 하한으로 쓴다(연속 부상은 resolvedAt가 없어 그대로 onset 유지 — 약화 없음).
+  const resolvedMs = parseLocalDateMs(inj.resolvedAt)
+  if (resolvedMs !== null && resolvedMs > anchor) anchor = resolvedMs
+  const todayMs = new Date(ctx.today).setHours(0, 0, 0, 0)
+  const days = Math.floor((todayMs - anchor) / (24 * 60 * 60 * 1000))
+  if (days < LONG_INJURY_ESCALATION_DAYS) return null
+  const weeks = Math.floor(days / 7)
+  return {
+    key: 'injury-escalation',
+    kind: 'injury-escalation',
+    priority: 80,
+    icon: '🩺',
+    message: `이 부상이 ${weeks}주째 이어지고 있어요. 보통 이쯤 길어지면 혼자 관리하기보다 전문가(의사·물리치료사) 평가를 받는 게 회복에 더 빨라요 — 한 번 진료를 받아보시길 권해요. (이 안내는 진단이 아니라 러닝 코칭 보조예요.)`
+  }
+}
+
 const DETECTORS: Detector[] = [
   detectLoadSpike,
+  detectInjuryEscalation,
   detectPainFollowup,
   detectDeviation,
   detectWeekendTriage,
@@ -348,7 +458,11 @@ export function collectCoachMoments(ctx: CoachMomentContext, dismissedKeys: Set<
   // 억제하지 않는다(SSOT는 missed/triage/realign 발동만 금지; 통증·redFlag 부상은 KB 게이트 우선).
   if (ctx.rest?.active) {
     moments = moments.filter(
-      (m) => m.kind === 'rest-support' || m.kind === 'injury' || m.kind === 'pain-followup'
+      (m) =>
+        m.kind === 'rest-support' ||
+        m.kind === 'injury' ||
+        m.kind === 'pain-followup' ||
+        m.kind === 'injury-escalation' // 장기 미해결 부상 전문가 의뢰는 휴식 중에도 떠야 할 안전 신호
     )
   }
   return moments.sort((a, b) => b.priority - a.priority)

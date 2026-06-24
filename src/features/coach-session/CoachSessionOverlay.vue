@@ -17,7 +17,7 @@ import { summarizeAchievementsForCoach } from '@/shared/lib/achievement/achievem
 import { summarizeTempoCoaching } from '@/shared/lib/coaching/tempoAdaptation'
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { buildCoachSessionEvidence } from '@/shared/lib/coaching/sessionQuality'
-import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
+import { getActiveGoal, getActiveInjuryItem, getRecentInjuryHistory, isFullMarathonGoal } from '@/entities/training-memory/model'
 import { deriveRestState } from '@/entities/training-memory/restWindow'
 import { getAgeLoadWeight } from '@/shared/lib/runStats'
 import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
@@ -426,6 +426,13 @@ async function sendCoachRequest(note: string) {
           longLayoff: (rs.durationDays ?? 0) > 28
         }
       })(),
+      // 최근 12개월 부상 이력(전역 재부상 위험창) — 채팅 코치가 이전 부상 보유자에게 보수화·"저볼륨=안전" 안심 금지. 이력 없으면 null.
+      recentInjuryWindow: (() => {
+        const h = getRecentInjuryHistory(memoryStore.memory, new Date())
+        return h.hasRecentInjury ? { hasRecentInjury: true, mostRecentDaysAgo: h.mostRecentDaysAgo, areas: h.areas.slice(0, 4) } : null
+      })(),
+      // 풀마라톤 목표 위험 플래그(하프 제외) — 풀만 독립 위험↑.
+      marathonFlag: isFullMarathonGoal(getActiveGoal(memoryStore.memory)),
       sessionEvidence: (() => {
         const now = new Date()
         const observed = deriveObservedMaxHr(runStore.sortedRuns.map((r) => ({ maxHeartRate: r.maxHeartRate, date: r.date })), now)

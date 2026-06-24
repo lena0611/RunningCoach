@@ -96,6 +96,10 @@ export async function requestCoachRunStream(
     upcomingSchedule?: { date: string; type: string; distanceKm: number | null; keySession: boolean }[] | null
     /** 활성 휴식 요약(#502) — 휴식 중 코치가 "다음 훈련" 처방을 닦달하지 않고 휴식을 존중하게(currentWeather 패턴). */
     restState?: { active: boolean; reason: string | null; daysUntilReturn: number | null; returnDate: string | null; isReturnDay: boolean; longLayoff: boolean } | null
+    /** 최근 12개월 부상 이력 요약(전역 재부상 위험창) — 채팅 코치가 이전 부상 보유자에게 보수화·"저볼륨=안전" 안심 금지(getRecentInjuryHistory). */
+    recentInjuryWindow?: { hasRecentInjury: boolean; mostRecentDaysAgo: number | null; areas: string[] } | null
+    /** 현재 목표가 풀마라톤인가(isFullMarathonGoal) — 풀마라톤 목표는 독립적으로 위험↑(하프 제외). */
+    marathonFlag?: boolean | null
   }
 ): Promise<CoachReport> {
   const client = requireSupabase()
@@ -123,6 +127,8 @@ export async function requestCoachRunStream(
       sessionEvidence: options.sessionEvidence ?? null,
       upcomingSchedule: options.upcomingSchedule ?? null,
       restState: options.restState ?? null,
+      recentInjuryWindow: options.recentInjuryWindow ?? null,
+      marathonFlag: options.marathonFlag ?? null,
       stream: true,
       commandId: options.commandId ?? null,
       runnerLevel: options.runnerLevel ?? 'beginner',

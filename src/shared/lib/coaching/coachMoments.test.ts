@@ -12,7 +12,7 @@ function run(id: string, date: string, km: number): RunLog {
   return { id, date, distanceKm: km } as unknown as RunLog
 }
 function injury(o: Partial<TrainingInjuryItem>): TrainingInjuryItem {
-  return { id: 'i', area: o.area ?? '무릎', status: o.status ?? 'active', severity: o.severity ?? 3 } as unknown as TrainingInjuryItem
+  return { id: 'i', ...o, area: o.area ?? '무릎', status: o.status ?? 'active', severity: o.severity ?? 3 } as unknown as TrainingInjuryItem
 }
 function ctx(over: Partial<CoachMomentContext>): CoachMomentContext {
   return { runs: [], attributedRunIds: new Set(), chronic: stable, injury: null, today, scheduleExists: true, ...over }
@@ -106,6 +106,90 @@ describe('collectCoachMoments', () => {
   it('이미 활성 부상이 있으면 pain-followup 안 함(전용 체크인이 담당)', () => {
     const runs = [{ id: 'p', date: '2026-06-16', distanceKm: 6, painNote: '통증 보통 · 발' } as unknown as RunLog]
     expect(collectCoachMoments(ctx({ runs, injury: injury({ severity: 2 }) })).some((x) => x.kind === 'pain-followup')).toBe(false)
+  })
+
+  // === RRI 운영 정의: 지속 통증 = "진짜 부상" 패턴(3.4) ===
+  const painRun = (id: string, date: string) =>
+    ({ id, date, distanceKm: 6, painNote: '통증 보통 · 발' }) as unknown as RunLog
+
+  it('단발 통증은 "뻐근함" 톤(priority 65, 진단 문구 없음)', () => {
+    const m = collectCoachMoments(ctx({ runs: [painRun('p', '2026-06-16')] })).find((x) => x.kind === 'pain-followup')
+    expect(m).toBeTruthy()
+    expect(m!.priority).toBe(65)
+    expect(m!.message).not.toContain('진단이 아니라')
+  })
+
+  it('≥3연속 세션 통증이면 "진짜 부상" 패턴으로 escalate(priority 78·등록+보수화·진단 아님 단서)', () => {
+    const runs = [painRun('p1', '2026-06-16'), painRun('p2', '2026-06-14'), painRun('p3', '2026-06-12')]
+    const m = collectCoachMoments(ctx({ runs })).find((x) => x.kind === 'pain-followup')
+    expect(m).toBeTruthy()
+    expect(m!.priority).toBe(78)
+    expect(m!.message).toContain('연속 3회')
+    expect(m!.message).toContain('진단이 아니라')
+    expect(m!.action?.kind).toBe('open-injury-screening')
+  })
+
+  it('≥7일 지속(2세션, 8일 간격)도 persistent로 escalate', () => {
+    const runs = [painRun('p1', '2026-06-16'), painRun('p2', '2026-06-08')]
+    const m = collectCoachMoments(ctx({ runs })).find((x) => x.kind === 'pain-followup')
+    expect(m!.priority).toBe(78)
+    expect(m!.message).toContain('8일째')
+  })
+
+  it('중간에 통증 없는 러닝이 끼면 스트릭이 끊겨 단발로 본다(회복 신호)', () => {
+    const runs = [
+      painRun('p1', '2026-06-16'),
+      { id: 'ok', date: '2026-06-14', distanceKm: 6, painNote: null } as unknown as RunLog,
+      painRun('p3', '2026-06-10')
+    ]
+    const m = collectCoachMoments(ctx({ runs })).find((x) => x.kind === 'pain-followup')
+    expect(m!.priority).toBe(65)
+  })
+
+  it('통증 런이 트리거 창(3일) 밖이면 모먼트 미발동(스테일)', () => {
+    const runs = [painRun('p1', '2026-06-10'), painRun('p2', '2026-06-08')]
+    expect(collectCoachMoments(ctx({ runs })).some((x) => x.kind === 'pain-followup')).toBe(false)
+  })
+
+  // === 장기 부상 escalation(3.5) ===
+  it('활성 부상이 >10주(70일) 이어지면 전문가 평가 권유(injury-escalation)', () => {
+    const m = collectCoachMoments(ctx({ injury: injury({ status: 'active', onsetDate: '2026-03-01' }) })).find(
+      (x) => x.kind === 'injury-escalation'
+    )
+    expect(m).toBeTruthy()
+    expect(m!.message).toContain('전문가')
+    expect(m!.message).toContain('진단이 아니라')
+  })
+
+  it('부상 지속이 10주 미만이면 escalation 안 함', () => {
+    expect(
+      collectCoachMoments(ctx({ injury: injury({ status: 'active', onsetDate: '2026-06-01' }) })).some(
+        (x) => x.kind === 'injury-escalation'
+      )
+    ).toBe(false)
+  })
+
+  it('onsetDate 없으면 createdAt(등록일)로 지속 기간을 보수 추정', () => {
+    const m = collectCoachMoments(
+      ctx({ injury: injury({ status: 'monitoring', onsetDate: null, createdAt: '2026-03-01T09:00:00.000Z' }) })
+    ).find((x) => x.kind === 'injury-escalation')
+    expect(m).toBeTruthy()
+  })
+
+  it('재발(resolved 이력+재활성)이면 옛 onset이 아니라 resolvedAt 기준 — 과대 의뢰 방지(§3.5 연속 지속)', () => {
+    // 최초 발병은 ~7개월 전이지만 한 번 해소(2주 전)됐다가 최근 재발 → 현재 에피소드는 짧다 → escalation 미발동.
+    const reflare = injury({ status: 'active', onsetDate: '2025-11-20', resolvedAt: '2026-06-03' })
+    expect(collectCoachMoments(ctx({ injury: reflare })).some((x) => x.kind === 'injury-escalation')).toBe(false)
+    // resolvedAt 자체가 70일을 넘으면(=재발 후에도 오래 지속) escalation 발동.
+    const longReflare = injury({ status: 'active', onsetDate: '2025-11-20', resolvedAt: '2026-02-01' })
+    expect(collectCoachMoments(ctx({ injury: longReflare })).some((x) => x.kind === 'injury-escalation')).toBe(true)
+  })
+
+  it('escalation은 휴식 중에도 억제되지 않는다(안전 신호)', () => {
+    const moments = collectCoachMoments(
+      ctx({ injury: injury({ status: 'active', onsetDate: '2026-03-01' }), rest: restActive({ reason: 'injury' }) })
+    )
+    expect(moments.some((m) => m.kind === 'injury-escalation')).toBe(true)
   })
 
   it('dismissed 키는 제외', () => {

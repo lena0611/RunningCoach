@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { RunLog } from '@/entities/run/model'
 import type { TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
-import { normalizeTrainingMemory } from '@/entities/training-memory/model'
+import { getRecentInjuryHistory, isFullMarathonGoal, normalizeTrainingMemory } from '@/entities/training-memory/model'
+import type { TrainingGoal } from '@/entities/training-memory/model'
 import { getAgeLoadWeight, getChronicLoadTrend, getLongestRunKmWithinDays, getNextSessionRecommendation } from './runStats'
 
 const today = new Date('2026-06-02T00:00:00')
@@ -15,6 +16,11 @@ function buildMemory(injury?: Partial<TrainingInjuryItem>, birthYear: number | n
     athleteProfile: { preferredLongRunDay: longRunDay, birthYear } as TrainingMemory['athleteProfile'],
     injuryItems: injury ? [{ title: '테스트 부상', status: 'active', normalizedAreas: [], ...injury } as TrainingInjuryItem] : []
   })
+}
+
+// 부분 픽스처를 TrainingInjuryItem으로 — Partial 스프레드라야 tsc가 통과(normalizeTrainingMemory가 나머지 필드 보강).
+function injuryFixture(partial: Partial<TrainingInjuryItem>): TrainingInjuryItem {
+  return { title: '테스트 부상', status: 'active', normalizedAreas: [], ...partial } as TrainingInjuryItem
 }
 
 function run(date: string, distanceKm: number): RunLog {
@@ -139,6 +145,77 @@ describe('getNextSessionRecommendation chronic load', () => {
   it('has no load caution when load is stable', () => {
     const stable = [run(daysAgo(3), 20), run(daysAgo(40), 20)]
     const rec = getNextSessionRecommendation(buildMemory(), stable, today)
+    expect(rec.loadCaution).toBe(false)
+  })
+})
+
+describe('getRecentInjuryHistory (3.1 전역 재부상 위험창)', () => {
+  it('12개월 이내 resolved 부상도 hasRecentInjury로 잡는다(부위 무관)', () => {
+    const memory = normalizeTrainingMemory({
+      injuryItems: [
+        injuryFixture({ title: 'PF', status: 'resolved', area: '오른발', onsetDate: daysAgo(120), resolvedAt: daysAgo(90) })
+      ]
+    })
+    const history = getRecentInjuryHistory(memory, today)
+    expect(history.hasRecentInjury).toBe(true)
+    expect(history.mostRecentDaysAgo).toBe(90)
+    expect(history.areas).toContain('오른발')
+  })
+
+  it('12개월을 넘은 resolved 부상은 제외', () => {
+    const memory = normalizeTrainingMemory({
+      injuryItems: [
+        injuryFixture({ title: 'old', status: 'resolved', onsetDate: daysAgo(500), resolvedAt: daysAgo(450) })
+      ]
+    })
+    expect(getRecentInjuryHistory(memory, today).hasRecentInjury).toBe(false)
+  })
+
+  it('활성 부상은 날짜와 무관하게 항상 포함(daysAgo 0)', () => {
+    const memory = normalizeTrainingMemory({
+      injuryItems: [injuryFixture({ title: 'x', status: 'active' })]
+    })
+    const history = getRecentInjuryHistory(memory, today)
+    expect(history.hasRecentInjury).toBe(true)
+    expect(history.mostRecentDaysAgo).toBe(0)
+  })
+})
+
+describe('isFullMarathonGoal (3.2 풀마라톤만, 하프 제외)', () => {
+  const goal = (category: TrainingGoal['category'], distanceKm: number | null): TrainingGoal =>
+    ({ category, distanceKm } as TrainingGoal)
+  it('풀마라톤 race 목표는 true', () => expect(isFullMarathonGoal(goal('race', 42.195))).toBe(true))
+  it('하프마라톤은 false(근거상 비유의)', () => expect(isFullMarathonGoal(goal('race', 21.1))).toBe(false))
+  it('레이스가 아닌 목표는 false', () => expect(isFullMarathonGoal(goal('fitness', 42.195))).toBe(false))
+  it('거리 미입력은 false', () => expect(isFullMarathonGoal(goal('race', null))).toBe(false))
+})
+
+describe('getNextSessionRecommendation 이전부상 보수화(3.1/3.3)', () => {
+  function buildResolvedInjuryMemory(): TrainingMemory {
+    return normalizeTrainingMemory({
+      weeklyPattern: [`${todayDayName}: Tempo`],
+      athleteProfile: { preferredLongRunDay: longRunDay } as TrainingMemory['athleteProfile'],
+      injuryItems: [
+        injuryFixture({ title: 'PF', status: 'resolved', area: '오른발', onsetDate: daysAgo(120), resolvedAt: daysAgo(90) })
+      ]
+    })
+  }
+
+  it('통증 없고 부하가 안정이어도 12개월 내 부상 이력이면 보수화 카우션을 단다(저볼륨≠안전)', () => {
+    const rec = getNextSessionRecommendation(buildResolvedInjuryMemory(), [run(daysAgo(3), 6)], today)
+    expect(rec.loadCaution).toBe(true)
+    expect(rec.loadNote).toContain('다른 부위')
+    expect(rec.injuryAdjusted).toBe(false) // resolved라 통증 게이트는 작동하지 않음
+    expect(rec.title).toBe('Tempo') // 세션 자체는 강등하지 않음
+  })
+
+  it('부상 이력이 없으면 안정 부하에서 보수화 카우션 없음', () => {
+    const memory = normalizeTrainingMemory({
+      weeklyPattern: [`${todayDayName}: Tempo`],
+      athleteProfile: { preferredLongRunDay: longRunDay } as TrainingMemory['athleteProfile'],
+      injuryItems: []
+    })
+    const rec = getNextSessionRecommendation(memory, [run(daysAgo(3), 6)], today)
     expect(rec.loadCaution).toBe(false)
   })
 })
