@@ -14,7 +14,7 @@ import type { ChronicLoadTrend } from '@/shared/lib/runStats'
 import { analyzeExtraRunTrend, buildExtraRunInquiry } from '@/shared/lib/coaching/extraRunTrend'
 import { isRunningLoadGroup, PAIN_GROUP_LABEL, type PainGroup } from '@/features/post-run-interview/buildInterviewRunPatch'
 
-export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'injury-escalation' | 'extra-run' | 'goal-progress' | 'goal-feasibility' | 'time-trial' | 'weekend-triage' | 'double-suggest' | 'rest-support' | 'rest-return'
+export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'pain-probe' | 'injury-escalation' | 'extra-run' | 'goal-progress' | 'goal-feasibility' | 'time-trial' | 'weekend-triage' | 'double-suggest' | 'rest-support' | 'rest-return'
 
 /** 모먼트가 제안하는 행동(전용 시트 열기 등). 트레이니 확인 후 실행. */
 export type CoachMomentAction = {
@@ -23,11 +23,28 @@ export type CoachMomentAction = {
 }
 export type CoachMomentSentiment = 'positive' | 'neutral' | 'caution'
 
-/** 의도 질문의 선택지 — 고르면 분기 피드백(response)을 보여준다. */
+/**
+ * 부상 감별 grill 프로브 답변(§5 Phase C)의 영속 페이로드(plain). 페이지가 고른 답을
+ * injuryItem.probeAnswers[probeId]=value 로 저장하고, subtype 가 있으면 subtypeResolved 에 적재한다.
+ * ⚠ shared 레이어라 entities(injuryKnowledge) 타입을 import 하지 않는다(경계 래칫 #397) — 페이지가 plain 으로 채운다.
+ */
+export type CoachMomentProbeSelection = {
+  injuryItemId: string
+  /** 프로브 id(부위 base) — probeAnswers 키. */
+  probeId: string
+  /** 고른 옵션의 안정 슬러그 — probeAnswers 값. */
+  value: string
+  /** 해소된 아형 id(있으면 subtypeResolved 에 적재). */
+  subtype?: string
+}
+
+/** 의도 질문의 선택지 — 고르면 분기 피드백(response)을 보여준다. probe 가 있으면 고른 답을 영속(grill). */
 export type CoachMomentOption = {
   label: string
   sentiment: CoachMomentSentiment
   response: string
+  /** 있으면 이 옵션 선택을 부상 항목에 영속한다(§5 Phase C grill). 카드가 select 이벤트로 올린다. */
+  probe?: CoachMomentProbeSelection
 }
 
 export type CoachMoment = {
@@ -130,6 +147,17 @@ export type CoachMomentContext = {
   chronic: ChronicLoadTrend | null
   injury: TrainingInjuryItem | null
   today: Date
+  /**
+   * 부상 감별 grill 프로브(§5 Phase C) — "왜 아픈지"를 좁히는 1문항. 페이지(DashboardPage)가
+   * entities(selectNextProbe)로 미리 계산해 plain 으로 주입한다(shared 가 entities 를 import 하지 않게 — #397).
+   * 활성 부상 + 미답 프로브가 있을 때만 채워지고, "한 세션 1문항"은 페이지가 스냅샷으로 가둔다.
+   */
+  painProbe?: {
+    injuryItemId: string
+    probeId: string
+    question: string
+    options: Array<{ label: string; response: string; sentiment: CoachMomentSentiment; value: string; subtype?: string }>
+  } | null
   /** 실제 주기화 스케줄이 존재하는가. 없으면 "추가 런" 개념이 성립 안 함(비교할 계획 없음). */
   scheduleExists?: boolean
   /** 플랜 시작일(YYYY-MM-DD). 이전 런은 플랜 없던 시절이라 추가런으로 안 셈. */
@@ -284,6 +312,30 @@ function detectPainFollowup(ctx: CoachMomentContext): CoachMoment | null {
   }
 }
 
+/**
+ * 부상 감별 grill 프로브(§5 Phase C) — 활성 부상의 "왜 아픈지"를 좁히는 능동 1문항.
+ * 페이지가 selectNextProbe 로 고른 미답 프로브를 ctx.painProbe 로 주입하면, 이를 의도 질문 모먼트로 띄운다.
+ * 고른 답은 option.probe 로 영속(카드 select). 진단 아님·"가능성"으로만(문구는 KB §1 결정적 지문 기반).
+ * priority 68 — 급성 안전(injury-escalation 80·persistent pain-followup 78)·부하 경고(load-spike 70) 아래, 그 외 위.
+ */
+function detectPainProbe(ctx: CoachMomentContext): CoachMoment | null {
+  const p = ctx.painProbe
+  if (!p || !p.options.length) return null
+  return {
+    key: `pain-probe:${p.probeId}`,
+    kind: 'pain-probe',
+    priority: 68,
+    icon: '🔎',
+    message: p.question,
+    options: p.options.map((o) => ({
+      label: o.label,
+      sentiment: o.sentiment,
+      response: o.response,
+      probe: { injuryItemId: p.injuryItemId, probeId: p.probeId, value: o.value, subtype: o.subtype }
+    }))
+  }
+}
+
 function detectGoalFeasibility(ctx: CoachMomentContext): CoachMoment | null {
   const f = ctx.goalFeasibility
   if (!f || f.feasible || !f.message) return null
@@ -434,6 +486,7 @@ const DETECTORS: Detector[] = [
   detectLoadSpike,
   detectInjuryEscalation,
   detectPainFollowup,
+  detectPainProbe,
   detectDeviation,
   detectWeekendTriage,
   detectDoubleSuggestion,
@@ -462,6 +515,7 @@ export function collectCoachMoments(ctx: CoachMomentContext, dismissedKeys: Set<
         m.kind === 'rest-support' ||
         m.kind === 'injury' ||
         m.kind === 'pain-followup' ||
+        m.kind === 'pain-probe' || // 부상 감별 1문항은 닦달이 아니라 "왜 아픈지" 이해 — 휴식 중에도 허용
         m.kind === 'injury-escalation' // 장기 미해결 부상 전문가 의뢰는 휴식 중에도 떠야 할 안전 신호
     )
   }

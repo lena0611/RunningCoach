@@ -121,6 +121,14 @@ export type TrainingInjuryItem = {
   returnToRunCriteria: string
   strengthPlan: string[]
   strengthPlanDetails: TrainingStrengthPlanDetail[]
+  /**
+   * grill 프로브 답변 누적(§5 Phase C). 키 = 프로브 id(부위 base), 값 = 선택 옵션 value 슬러그.
+   * 감별을 좁히는 데 쓴다: selectNextProbe 가 미답 프로브를 고르고, injurySignals 가 redFlag 자가검사·아형으로 매핑한다.
+   * 비파괴 — 없으면 미설정(undefined).
+   */
+  probeAnswers?: Record<string, string>
+  /** grill 로 해소된 아형 id(InjuryHypothesis.subtypeSplit[].id, 예 'insertional'). 가능성 라벨 정밀화에 쓴다. 없으면 null. */
+  subtypeResolved?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -1272,9 +1280,21 @@ function normalizeInjuryItem(item: Partial<TrainingInjuryItem>, index: number, n
     returnToRunCriteria: typeof item.returnToRunCriteria === 'string' && item.returnToRunCriteria.trim() ? item.returnToRunCriteria : createReturnToRunCriteria(normalizedAreas),
     strengthPlan: strengthPlan.length ? strengthPlan : createConservativeStrengthPlan(normalizedAreas),
     strengthPlanDetails,
+    probeAnswers: normalizeProbeAnswers((item as { probeAnswers?: unknown }).probeAnswers),
+    subtypeResolved: typeof item.subtypeResolved === 'string' && item.subtypeResolved.trim() ? item.subtypeResolved : null,
     createdAt: typeof item.createdAt === 'string' ? item.createdAt : now,
     updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : now
   }
+}
+
+/** grill 프로브 답변(§5 Phase C)을 안전한 string→string 맵으로 강제한다. 비문자 키/값은 버린다. 없으면 undefined(비파괴). */
+function normalizeProbeAnswers(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const out: Record<string, string> = {}
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof key === 'string' && key.trim() && typeof raw === 'string' && raw.trim()) out[key] = raw
+  }
+  return Object.keys(out).length ? out : undefined
 }
 
 function normalizeInjuryStatus(value: unknown): TrainingInjuryItem['status'] {

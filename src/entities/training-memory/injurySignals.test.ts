@@ -130,4 +130,42 @@ describe('buildInjuryCoachSignals (§5 coach-run 주입 묶음)', () => {
     const memory = buildMemory({ title: '발목', normalizedAreas: [{ areaId: 'left-ankle', painLevel: 2 }] })
     expect(buildInjuryCoachSignals(memory, [run(daysAgo(2), 6)], today)).toBeNull()
   })
+
+  it('grill 프로브 redFlag 자가검사 답변(발바닥 화끈·저림)이 redFlag 게이트를 켠다(§5 Phase C)', () => {
+    const memory = buildMemory({
+      title: '발바닥', normalizedAreas: [{ areaId: 'right-plantar-fascia', painLevel: 3 }],
+      probeAnswers: { 'plantar-fascia': 'burning-numbness' }
+    } as Partial<TrainingInjuryItem>)
+    const result = buildInjuryCoachSignals(memory, [run(daysAgo(2), 6)], today)
+    expect(result).not.toBeNull()
+    expect(result!.redFlag.tripped).toBe(true)
+    expect(result!.redFlag.reasons.join(' ')).toContain('저림')
+  })
+
+  it("아킬레스 '뚝'+발끝 못 섬 자가검사는 체중부하 곤란 게이트를 켠다", () => {
+    const memory = buildMemory({
+      title: '아킬레스', normalizedAreas: [{ areaId: 'left-achilles', painLevel: 3 }],
+      probeAnswers: { achilles: 'pop-cannot-stand' }
+    } as Partial<TrainingInjuryItem>)
+    const result = buildInjuryCoachSignals(memory, [run(daysAgo(2), 6)], today)
+    expect(result!.redFlag.tripped).toBe(true)
+    expect(result!.redFlag.reasons.join(' ')).toContain('체중부하 곤란')
+  })
+
+  it('subtypeResolved가 상위 가설의 아형이면 가능성 라벨을 정밀화한다(부착부)', () => {
+    const memory = buildMemory({
+      title: '아킬레스', normalizedAreas: [{ areaId: 'left-achilles', painLevel: 3 }],
+      probeAnswers: { achilles: 'insertional' }, subtypeResolved: 'insertional'
+    } as Partial<TrainingInjuryItem>)
+    const result = buildInjuryCoachSignals(memory, [run(daysAgo(2), 6)], today)
+    expect(result!.hypotheses[0].possibility).toBe('아킬레스 건병증(부착부)')
+  })
+
+  it('아형을 안 가르는 답변(중간부 미해소)이면 라벨은 그대로', () => {
+    const memory = buildMemory({
+      title: '아킬레스', normalizedAreas: [{ areaId: 'left-achilles', painLevel: 3 }]
+    } as Partial<TrainingInjuryItem>)
+    const result = buildInjuryCoachSignals(memory, [run(daysAgo(2), 6)], today)
+    expect(result!.hypotheses[0].possibility).toBe('아킬레스 건병증')
+  })
 })
