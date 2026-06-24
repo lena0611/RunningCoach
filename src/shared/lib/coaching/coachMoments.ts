@@ -106,20 +106,8 @@ export type CoachMomentContext = {
 
 type Detector = (ctx: CoachMomentContext) => CoachMoment | null
 
-function detectInjury(ctx: CoachMomentContext): CoachMoment | null {
-  const injury = ctx.injury
-  if (!injury || (injury.status !== 'active' && injury.status !== 'monitoring')) return null
-  const sev = injury.severity ?? 0
-  if (sev < 3) return null
-  const area = injury.area || '관리 부위'
-  return {
-    key: 'injury',
-    kind: 'injury',
-    priority: 90,
-    icon: '🩹',
-    message: `${area} 통증 ${sev}/5 신호가 커요. 강한 세션은 미루고 회복·재활을 먼저 챙겨요. 통증이 가라앉으면 알려주세요.`
-  }
-}
+// (detectInjury 제거) 정적 부상 고지는 대시보드 '부상 기준' 카드·'전략적 휴식' 카드·목표 보호 노트와
+// 항상 중복이라 상단 모먼트로 다시 띄우지 않는다. 실행형 신호는 detectPainFollowup(부상 등록 체크인)이 담당.
 
 function detectLoadSpike(ctx: CoachMomentContext): CoachMoment | null {
   const c = ctx.chronic
@@ -309,7 +297,9 @@ function detectRestSupport(ctx: CoachMomentContext): CoachMoment | null {
       ]
     }
   }
-  return { key: 'rest-support', kind: 'rest-support', priority: 75, icon: '💤', message: base }
+  // 진행 중 휴식의 단순 "회복 시간 · 복귀 D-N" 고지는 '💤 쉬는 중 · 복귀 D-N' 배너와 중복이라 모먼트로 안 띄운다.
+  // (선언 시점의 가벼운 회복주 제안 1회만 위 분기에서 노출.)
+  return null
 }
 
 /**
@@ -332,7 +322,6 @@ function detectReturnDay(ctx: CoachMomentContext): CoachMoment | null {
 }
 
 const DETECTORS: Detector[] = [
-  detectInjury,
   detectLoadSpike,
   detectPainFollowup,
   detectDeviation,
