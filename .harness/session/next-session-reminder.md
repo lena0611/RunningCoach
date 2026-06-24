@@ -5,7 +5,15 @@
 `project-memory.md`, `.harness/project/workflow-rules.md`, `decision-log.md`를 우선합니다.
 > 상세 인수인계가 있으면 프로젝트 루트 `HANDOFF.md`를 먼저 본다.
 
-## ⭐ 현재 위치 (2026-06-24) — UI 스택 시스템 정리(#275 공통화·코치 App레벨 오버레이·바텀시트) 10개 PR 머지·라이브
+## ⭐ 현재 위치 (2026-06-24 후반) — #473 후속 2건(walk-run·coach-run 휴식) + 세션상세 App레벨 출하, #275·#473 클로즈
+- **이번 턴 완료(전부 머지·트리검증, 코드 출하):**
+  - **#275 CLOSE, #473 CLOSE.** (a)(b)를 #473에서 후속 분리 → 새 이슈 #501·#502 생성·구현·머지.
+  - **(a) 부상 복귀 walk-run #501 (PR #503)**: `walkRunReturn.ts` — 게이트 active+sev≥2(급성 통증성만), 저강도 연속 세션을 P1~P5 사다리+통증정지로(제시형, 자동진행 아님), redFlag escape hatch 상시. 적대 코치검증 반영. [[rest-and-return-coaching]].
+  - **(b) coach-run 휴식 인지 #502 (PR #504 + Edge 배포)**: restState client-summary 주입→채팅 코치가 휴식 중 처방 닦달 안 함. 후방호환.
+  - **(d) 세션상세 App 레벨 오버레이 (PR #505, #275 후속)**: `sessionDetailStore`+`SessionDetailOverlay`(상세+편집+삭제), 대시보드/기록 중복·편집삭제 라우팅 제거, 딥링크 store화, z 880. 코치 패턴 미러. [[stacks-app-level-independence]].
+  - ⏳ **3건 공통 미검증=라이브 인증 스모크**: Playwright 저장 세션 **만료(로그인 월)** → **사용자 OTP 재로그인 필요**. spec `e2e/session-detail-overlay.spec.ts` 준비됨(미커밋). (a)는 부상 시드 훅 추가 필요, (b)는 실제 코칭 1회.
+
+## (이전) ⭐ 현재 위치 (2026-06-24) — UI 스택 시스템 정리(#275 공통화·코치 App레벨 오버레이·바텀시트) 10개 PR 머지·라이브
 - **이번 세션 완료(PR#490~#499, 전부 머지·배포·트리검증):**
   - **#275 스택 공통화**: 중복 스택 마크업을 공유 `src/shared/ui/StackPage.vue`로 추출, 전 화면 마이그레이션(#490·#491). 함정=자동 import 없음→컴포넌트 import 누락 시 build 통과·런타임 무음실패(리뷰로만 포착). 상세 [[stackpage-commonization-275]].
   - **스택 등장 애니메이션 규칙 정렬**(#492·#493·#494): 진입/첫 스택=밑→위(rise)+우상단 X, 전진 드릴인=우→좌(push)+좌측 뒤로. `transition ?? (back ? 'push' : 'rise')`. 1차 등장 240→360ms 완화. 추세→세션은 드릴인(push).
@@ -19,6 +27,7 @@
 - ⚠ **머지 규칙**: squash 후 `git diff <tip> origin/main` 빈결과 트리 검증 필수(#463 24→11 누락 사고), 의심 시 `--merge`. [[pr-squash-merge-race-verify-tree]].
 
 ## 다음 1순위
+0. **(NEW, 최우선) #501·#502·#505 라이브 인증 스모크** — 코드는 머지·출하됨, 인증 렌더/행동만 미검증. **사용자가 테스트 계정(lena0611+qa) OTP로 1회 로그인**하면: ① `e2e/session-detail-overlay.spec.ts` 실행(각 탭 상세 열기·편집 위로·코치 z·닫기), ② (a) walk-run = devE2ESeed에 급성 부상 시드 훅 추가 후 대시보드 브리프에 walk-run/통증정지 렌더 확인, ③ (b) 휴식 선언 후 채팅 코치가 "다음 훈련" 닦달 안 하는지 1회 호출. 통과 시 spec 커밋 + session 파일 docs 커밋. (세션 재로그인=storageState 재생성, CLAUDE.md "검증·보고 방식".)
 1. **iOS '새 러닝 감지' 실주행 확인** — 가짜 배너는 제거됨(PR#488). 다음 = 워치 차고 실제 1회 뛰어 집 동기화 시 '제때 1번' 알림 오나 확인(워치 실주행 필요). 미수신/잔존 오탐이면 "진짜 새 워크아웃 endDate 게이트". [[healthkit-detected-notify-gate]].
 2. **#473 마무리 판단 + 후속 택1** — Phase 1·2 코어 완료·검증·배포 끝. 후속: (a) 부상 복귀 walk-run 점진 처방, (b) coach-run LLM 휴식 인지, (c) #473 이슈 클로즈+(a)(b) 별도 후속 분리. [[rest-and-return-coaching]].
 3. **스택 후속(같은 패턴 적용 대상)** — 세션상세 자체를 App 레벨 단일화(대시보드/기록 중복) + 편집/삭제 라우팅 제거(코치 오버레이와 동일 패턴). 코치 detail footer 라벨은 정적 "AI 코칭"으로 단순화됨 → 필요 시 store에 hasThread 노출로 "이어가기/받기" 복원. [[stacks-app-level-independence]].
