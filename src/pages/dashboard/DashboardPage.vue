@@ -41,6 +41,7 @@ import SessionDoublePanel from './SessionDoublePanel.vue'
 import DoublesAddSheet from './DoublesAddSheet.vue'
 import RestDeclarationSheet from './RestDeclarationSheet.vue'
 import { deriveRestState, shouldOfferRecoveryRun } from '@/entities/training-memory/restWindow'
+import { buildInjuryCoachSignals } from '@/entities/training-memory/injurySignals'
 import { buildRestGuidance, evaluateExtraRun } from '@/shared/lib/coaching/restGuidance'
 import { collectCoachMoments } from '@/shared/lib/coaching/coachMoments'
 import { detectScheduleDeviation } from '@/shared/lib/coaching/scheduleRealign'
@@ -105,6 +106,19 @@ const easyRatio = computed(() => getEasyRatio(getRunsWithinDays(runs.value, 30, 
 const nextSession = computed(() => getNextSessionRecommendation(memoryStore.memory, runs.value, today.value))
 const activeGoal = computed(() => getActiveGoal(memoryStore.memory))
 const activeInjury = computed(() => getActiveInjuryItem(memoryStore.memory))
+// 부상 감별 한 줄 힌트(§5 Phase E) — 활성 부상의 상위 "가능성" + 첫 조절 레버. redFlag면 의뢰 우선(처방 미표시).
+// 진단 아님 — "가능성"으로만. 자세한 why·레버 전체는 부상 상세(메모리 패널)에서.
+const injuryCoachSignals = computed(() => buildInjuryCoachSignals(memoryStore.memory, runs.value, today.value))
+const injuryHypothesisHint = computed(() => {
+  const signals = injuryCoachSignals.value
+  if (!signals) return null
+  if (signals.redFlag.tripped) {
+    return { referral: true, possibility: '', lever: '', text: '통증 신호가 보여요 — 무리하지 말고 전문가 평가를 권해요' }
+  }
+  const top = signals.hypotheses[0]
+  if (!top) return null
+  return { referral: false, possibility: top.possibility, lever: top.levers[0] ?? '', text: '' }
+})
 const ageLoadWeight = computed(() => getAgeLoadWeight(memoryStore.memory.athleteProfile.birthYear, today.value))
 const observedMaxHr = computed(() => deriveObservedMaxHr(runs.value.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })), today.value))
 const heartRateModel = computed(() => deriveHeartRateModel(memoryStore.memory.athleteProfile, today.value.getFullYear(), observedMaxHr.value))
@@ -1713,6 +1727,15 @@ async function applyPhaseTransition() {
           @click="trendMetric = 'last7'"
         />
       </MetricGrid>
+      <p
+        v-if="injuryHypothesisHint"
+        class="injury-hypothesis-hint"
+        :class="{ 'injury-hypothesis-hint-referral': injuryHypothesisHint.referral }"
+      >
+        <span class="injury-hypothesis-hint-icon" aria-hidden="true">{{ injuryHypothesisHint.referral ? '⚠' : '🔎' }}</span>
+        <span v-if="injuryHypothesisHint.referral">{{ injuryHypothesisHint.text }}</span>
+        <span v-else>가능성 <strong>{{ injuryHypothesisHint.possibility }}</strong><template v-if="injuryHypothesisHint.lever"> · 조절 {{ injuryHypothesisHint.lever }}</template></span>
+      </p>
     </SectionGroup>
 
     <SectionGroup title="최근 훈련 흐름" :surface="false">
@@ -1817,6 +1840,32 @@ async function applyPhaseTransition() {
 </template>
 
 <style scoped>
+/* §5 Phase E: 부상 감별 한 줄 힌트(몸 상태 신호 카드 아래). 진단 아님 — "가능성"만. */
+.injury-hypothesis-hint {
+  margin: var(--space-2, 8px) 0 0;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: var(--text-info-size, 0.8rem);
+  line-height: var(--text-info-line, 1.4);
+  color: var(--color-muted);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-button, 10px);
+}
+.injury-hypothesis-hint strong {
+  color: var(--color-text);
+  font-weight: 600;
+}
+.injury-hypothesis-hint-icon {
+  flex: none;
+}
+.injury-hypothesis-hint-referral {
+  color: var(--color-warning-text);
+  border-color: var(--color-warning-text);
+}
+
 /* #362: 주간 캐러셀 슬라이드(디브리핑/휴식) */
 .carousel-date {
   margin-bottom: var(--space-2, 8px);
