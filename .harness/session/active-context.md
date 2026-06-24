@@ -6,7 +6,13 @@
 > 하네스 본체의 개발 기록이 아닙니다. 설치된 프로젝트의 현재 작업 맥락만 기록합니다.
 > 상세 인수인계는 (있으면) 프로젝트 루트 `HANDOFF.md`. 장기 지식은 에이전트 메모리.
 
-## ⭐ 현재 작업 — #473 후속(walk-run·coach 휴식인지) + 세션상세 App레벨 + 코치 부상 스냅샷, 전부 출하·라이브검증 (2026-06-24 후반)
+## ⭐ 현재 작업 — 렌더 E2E 커버리지 확장 + 인증 E2E 견고화·시드 안전화 (2026-06-24 종료, PR #510·#511 머지)
+- **walk-run 렌더 E2E #501 후속 (PR #510)**: `seedWalkRunReturn`(in-memory·인증 불필요) + `e2e/walk-run-return.spec.ts` — 라우트 스모크 config(Supabase OFF)에서 작전 카드 걷기-뛰기 사다리 렌더 단언. 인증 불요/필요 스펙 testMatch 분리.
+- **인증 E2E 견고화·시드 안전화 (PR #511)**: 부상 체크인 모달 addInitScript 억제(비파괴) + **seedReturnRamp 비파괴화**(실 목표 보존). 🚨 검증 중 seedReturnRamp가 실계정 목표를 덮어쓴 사고 발생 → localStorage 원본으로 복구 완료(손실 0), `restoreMemoryFromLocalSnapshot` 유틸 추가. 검증=session-detail 4/4·stackpage 2/4. 상세 [[auth-e2e-account-state-and-seed-safety]].
+- **인증 복구**: QA 계정 세션 만료→앱 OTP 재로그인→qa-storage 재생성. 토큰 회전으로 재만료 가능(다음 인증 E2E 전 재로그인 필요할 수 있음).
+- **보류(새 세션)**: (가) rest-return+stackpage 2건 = 계정 비-휴식(부상 휴식 6/29까지)일 때 검증, (나) stackpage Trends `goto('/trends')`→`/#/trends` 수정.
+
+## (이전) ⭐ 현재 작업 — #473 후속(walk-run·coach 휴식인지) + 세션상세 App레벨 + 코치 부상 스냅샷, 전부 출하·라이브검증 (2026-06-24 후반)
 - **이번 세션(PR #503·#504·#505·#506·#508 머지, #275·#473·#501·#502·#507 클로즈, 전부 라이브 검증):**
   - **#275·#473 CLOSE.** (a)(b)를 #473에서 후속 분리 → #501·#502 신설·구현.
   - **(a) 부상 복귀 walk-run #501 (PR#503)**: `walkRunReturn.ts` — 게이트 active+sev≥2(급성 통증성만), 저강도 연속 세션을 P1~P5 사다리+통증정지로(제시형, 자동진행 아님), redFlag escape hatch 상시. 실행 번들 직접호출로 검증. [[rest-and-return-coaching]].
