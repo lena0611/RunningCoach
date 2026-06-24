@@ -203,6 +203,7 @@ Deno.serve(async (req) => {
             keySession: s.keySession === true
           }))
       : null
+    const restState = normalizeRestState(body.restState)
     const runnerLevel = normalizeRunnerLevel(body.runnerLevel)
     const responseStyle = normalizeResponseStyle(body.responseStyle, runnerLevel)
     const shouldStream = body.stream === true
@@ -213,7 +214,7 @@ Deno.serve(async (req) => {
     const rateLimit = await consumeRateLimit(admin, userId, 'coach-run')
     if (!rateLimit.ok) return json({ error: rateLimit.error, retryAfterSec: rateLimit.retryAfterSec }, 429)
 
-    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress, sessionEvidence, upcomingSchedule)
+    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress, sessionEvidence, upcomingSchedule, restState)
     const ownedSelectedRunId = context.selectedRun?.id ?? null
     if (shouldStream) {
       return streamCoachRun(admin, userId, ownedSelectedRunId, userNote, openaiKey, model, context)
@@ -360,6 +361,30 @@ function normalizeCurrentWeather(value: unknown): CurrentWeatherContext | null {
         ? next12Hours.rainHours.filter((entry): entry is string => typeof entry === 'string').slice(0, 12)
         : []
     }
+  }
+}
+
+/** 활성 휴식 컨텍스트(#502). 웹이 deriveRestState 로 산출한 요약을 client-summary 로 받는다(currentWeather 패턴). */
+type CoachRestContext = {
+  active: boolean
+  reason: string | null
+  daysUntilReturn: number | null
+  returnDate: string | null
+  isReturnDay: boolean
+  longLayoff: boolean
+}
+
+function normalizeRestState(value: unknown): CoachRestContext | null {
+  if (!value || typeof value !== 'object') return null
+  const v = value as Record<string, unknown>
+  // 웹이 휴식과 무관한 경우 null 로 보낸다 — 여기선 형태만 검증한다.
+  return {
+    active: v.active === true,
+    reason: typeof v.reason === 'string' ? v.reason.slice(0, 40) : null,
+    daysUntilReturn: typeof v.daysUntilReturn === 'number' ? v.daysUntilReturn : null,
+    returnDate: typeof v.returnDate === 'string' ? v.returnDate.slice(0, 10) : null,
+    isReturnDay: v.isReturnDay === true,
+    longLayoff: v.longLayoff === true
   }
 }
 
@@ -767,7 +792,7 @@ function unifyPerformanceProjection(
   }
 }
 
-async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null, sessionEvidence: CoachSessionEvidence | null = null, upcomingSchedule: { date: string; type: string; distanceKm: number | null; keySession: boolean }[] | null = null) {
+async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null, sessionEvidence: CoachSessionEvidence | null = null, upcomingSchedule: { date: string; type: string; distanceKm: number | null; keySession: boolean }[] | null = null, restState: CoachRestContext | null = null) {
   const memorySelect = 'id, content, created_at, importance, last_referenced_at, reference_count'
   const [
     { data: memoryRow },
@@ -1100,6 +1125,9 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     upcomingSchedule,
     upcomingSchedulePolicy:
       'context.upcomingSchedule는 실제 주기화 스케줄의 다음 세션들(날짜·유형·거리)이다. "## 다음 훈련"은 반드시 이 실제 세션을 기준으로 말하고, weeklyPattern/prescriptionTemplates로 다른 세션(예: 다음이 토요일 LSD인데 화요일 Easy)을 지어내지 마라. 요약 화면(캐러셀)과 어긋나면 안 된다. 부상·회복으로 하향이 필요하면 "그 스케줄 세션(예: 토요일 LSD)을 이렇게 조정/대체하자"처럼 실제 세션을 기준으로 조정한다. upcomingSchedule이 비어있거나 null일 때만 일반 가이드로 답한다.',
+    restState,
+    instructionForRest:
+      'context.restState는 사용자가 스스로 선언한 휴식(#473) 상태다(없으면 평소처럼 답한다). active=true면 지금 쉬는 중이다 — "## 다음 훈련"에서 훈련을 재촉하거나 처방을 들이밀지 말고 "푹 쉬세요, 일정은 정리해둘게요. 돌아오면 가볍게 시작해요"처럼 휴식을 존중한다(능동 휴식은 missed가 아니다). 사용자가 먼저 "그래도 뭘 하면 좋을지"를 물을 때만 가벼운 대안(스트레칭·산책, 통제 가능한 휴식이면 가벼운 회복주)을 1회 제안하되 강권하지 않는다. reason이 injury면 통증을 우선하고 무리한 대안을 권하지 않는다. isReturnDay=true이거나 daysUntilReturn이 0~1이면 "놓쳤다"가 아니라 "회복 후 정리" 톤으로 복귀 일정을 안내한다. longLayoff=true(4주 초과)면 복귀를 더 가볍게 시작해야 함과 목표(레이스) 실현가능성 재점검을 정직하게 덧붙인다. active=true면 휴식 존중이 upcomingSchedule 처방보다 우선이다.',
     sessionEvidence,
     sessionEvidencePolicy:
       'context.sessionEvidence는 웹이 선택 세션 타입별로 산출한 다단계 품질 증거다(#354). 규칙이 pass/fail 최종 판정을 내린 게 아니라 "증거"이며, 최종 해석은 네가 목표·부상·날씨·성향을 얹어서 한다. ' +
@@ -1511,6 +1539,7 @@ function buildCoachInstructions(context: unknown) {
     'Tempo에서는 selectedRunExecutionGuide.boundaries.heartRateCeilingBpm(=heartRateModel.tempoCeilingBpm)을 상한으로 쓴다. maxHeartRate가 그 상한을 넘으면 몇 번째 구간부터 넘었는지 짧게 말하고, 없으면 "상한을 넘기지 않았다"처럼 품질 근거로 쓴다. 본문 숫자는 그 상한 값을 쓴다(165 고정 아님). 단 Race/Time Trial/한계시험은 심박 상한이 없다 — 전력 측정이 목적이므로 높은 심박·페이스를 "상한 초과"로 처벌하지 말고, 균등 페이스(초반 절제·후반 유지)와 결과(현재 체력 갱신)로 평가한다.',
     'Easy/Recovery/Easy + Strides 강도 판정은 평균심박(+RPE·드리프트)을 1차로 본다. 최고심박(maxHeartRate) 단발 스파이크는 언덕·신호 대기·스트라이드 가속처럼 자연스러운 것이므로 그것만으로 "이지 상한을 넘겼다/강도 초과"라고 처벌하지 마라. 평균심박이 이지 상한 + 약간의 여유까지 안정적이면 본런 강도를 잘 지킨 것이다. 진짜 과강 Easy(평균심박 자체가 상한을 뚜렷이 초과)일 때만 "다음엔 초반을 더 눌러보자"처럼 부드럽게 짚는다.',
     'context.upcomingSchedule가 있으면 "## 다음 훈련"은 그 실제 주기화 스케줄의 다음 세션(날짜·유형·거리)을 기준으로 말한다 — weeklyPattern/prescriptionTemplates보다 우선이고 요약 화면(캐러셀)과 반드시 일치시킨다. 예: 다음이 토요일 LSD면 "화요일 Easy"라고 지어내지 말고 "토요일 LSD(약 N km)"를 기준으로 처방·조정한다. 부상/회복으로 낮춰야 하면 그 스케줄 세션을 어떻게 조정/대체할지로 말한다. 다음 훈련을 제안할 때는 세션명만 말하지 말고 사용자가 Workoutdoors에 바로 세팅할 수 있는 세부 지침을 준다. 심박 숫자는 heartRateModel의 개인 상한 값만 쓰고(예: Easy는 easyCeilingBpm 넘기지 말기, Tempo는 max tempoCeilingBpm 넘기지 말기), 상한이 null이면 심박 숫자 대신 페이스/RPE로 안내한다. Easy + Strides는 "이지 본런 + 본런 끝 스트라이드 몇 회(짧고 빠르게, 속도 기준, 사이 완전 회복)".',
+    'context.restState.active가 true면 사용자가 선언한 휴식 기간이다 — "## 다음 훈련"에서 훈련 처방·재촉을 하지 말고 휴식을 존중한다("푹 쉬세요, 돌아오면 가볍게"). 이때 휴식 존중이 upcomingSchedule 처방보다 우선이다. 복귀일이거나 복귀가 임박했으면 "놓침"이 아니라 "회복 후 정리" 톤으로 안내한다. 자세한 분기는 context.instructionForRest를 따른다.',
     '세션 유형별 구간당 페이스/심박 경계 가이드가 현재 사용자에게 맞지 않아 보이면 "## 루틴 업데이트"에서 유지/조정 여부를 말한다. 조정이 필요할 때는 trainingMemoryPatch.activeGoalStrategyNotes 또는 aiNotes에 새 기준을 저장한다.',
     'recentPrescriptionComplianceSignals를 보고 최근 여러 세션에서 처방 준수율 패턴이 있는지 활용한다. 반복적으로 잘 지키는 기준은 다음 처방 상향 근거가 되고, 반복적으로 넘는 기준은 처방 하향/보류 근거가 된다.',
     'context.trainingMethodology는 외부 러닝/지구력 훈련 문헌을 앱 기준선으로 압축한 것이다. 이 기준선을 무시하지 말고, Easy 기반, 제한된 강훈련, 점진적 과부하, 목표 특이성, 회복 게이트를 기본 알고리즘으로 삼는다.',

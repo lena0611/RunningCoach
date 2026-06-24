@@ -83,6 +83,8 @@ export async function requestCoachRunStream(
     sessionEvidence?: CoachSessionEvidence | null
     /** 실제 주기화 스케줄의 다음 세션들(코치 "다음 훈련"이 weeklyPattern으로 지어내지 않게). */
     upcomingSchedule?: { date: string; type: string; distanceKm: number | null; keySession: boolean }[] | null
+    /** 활성 휴식 요약(#502) — 휴식 중 코치가 "다음 훈련" 처방을 닦달하지 않고 휴식을 존중하게(currentWeather 패턴). */
+    restState?: { active: boolean; reason: string | null; daysUntilReturn: number | null; returnDate: string | null; isReturnDay: boolean; longLayoff: boolean } | null
   }
 ): Promise<CoachReport> {
   const client = requireSupabase()
@@ -109,6 +111,7 @@ export async function requestCoachRunStream(
       adaptiveProgress: options.adaptiveProgress ?? null,
       sessionEvidence: options.sessionEvidence ?? null,
       upcomingSchedule: options.upcomingSchedule ?? null,
+      restState: options.restState ?? null,
       stream: true,
       commandId: options.commandId ?? null,
       runnerLevel: options.runnerLevel ?? 'beginner',
