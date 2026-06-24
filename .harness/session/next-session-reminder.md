@@ -5,15 +5,15 @@
 `project-memory.md`, `.harness/project/workflow-rules.md`, `decision-log.md`를 우선합니다.
 > 상세 인수인계가 있으면 프로젝트 루트 `HANDOFF.md`를 먼저 본다.
 
-## ⭐ 현재 위치 (2026-06-25) — 감별진단 KB §5(KB→코칭) 출하 + Phase C/E 설계 착수
-- **이번 세션 완료(PR #516 머지·트리검증·coach-run 엣지 배포·라이브 스모크):** 부상 "왜 아픈지" 감별 KB → 채팅 코치 주입.
-  - Phase A `injuryKnowledge.ts`(8부위 가설·`rankInjuryHypotheses`·`evaluateRedFlags`·do-not 가드, 22 테스트) + Phase B `getCadenceTrend`(runStats)·`injurySignals.ts` 어댑터(`buildInjuryDataSignals`/`buildInjuryCoachSignals`) + Phase D coach-run `injurySignals` 주입(웹 게이팅·edge 소비, "가능성"으로만·redFlag tripped 시 처방 멈추고 의뢰 우선 escape hatch).
-  - **어댑터는 entities/training-memory 에 둔다(shared 아님)** — 경계 래칫 #397(shared/lib/coaching 에 두면 shared→entities 86→90 초과로 차단). FSD 정방향 entities→shared.
-  - **모델 확장(`hypotheses?`/`probeAnswers?`/`redFlagTripped?`/`subtypeResolved?`)은 Phase C로 연기** — Phase D가 가설 요청시점 fresh 계산·redFlag는 체크인 파생 → 살아있는 writer 없음(dead field 회피).
-  - **redFlag 진행성은 최근 2회 연속 체크인 트렌드**(단발 `worsenedDuringOrAfterRun`을 §4 "갈수록 심해지고"로 직접 매핑 금지 — 피로골절 경계 과의뢰, #전문코치리뷰 should-fix).
-  - 라이브 스모크: 우측 족저근막 활성 → injurySignals=족저근막염+볼륨동결/회복전환/케이던스 레버, 코치 응답이 레버 자연 반영+의뢰 escape hatch+진단/확률 단정 없음. 검증 763 unit+build+deno+#전문코치리뷰(2렌즈). [[rri-risk-factor-evidence-2026-06]] [[injury-focus-week-2026-06-24]].
-- **진행 중: Phase C(grill 1문항)·E(대시보드 가설 표시) 설계** — UI라 **와이어프레임 합의 게이트**([[design-before-implementation]]). 코드 전 설계안 합의.
-- 엣지 배포=`--use-api`(Docker 불필요). 머지=squash 후 `git diff <tip> origin/main` 트리검증.
+## ⭐ 현재 위치 (2026-06-25) — 감별진단 KB §5 Phase C·E 출하 = §5 전부(A+B+C+D+E) 완료
+- **이번 세션 완료(PR #520 머지·트리검증, Issue #519):** 감별진단 KB Phase C — 부상 "왜 아픈지" 좁히는 **능동 코치 모먼트 grill(1문항)**.
+  - 앱 열 때 세션당 1문항(`injuryProbes[8]`, §1 결정적 지문 1:1) → `probeAnswers` 누적 → 아형 해소(`subtypeResolved`→가능성 라벨 "…(부착부)") + red-flag 자가검사(`redFlagSelfTest` **배열** → `evaluateRedFlags` 게이트).
+  - 모델은 `probeAnswers?`/`subtypeResolved?`만 적재(나머지 dead field 여전히 미적재). 신규 RedFlagSignals `weightBearingFailureOrInstability`(파열·잠김·근위파열 전용, 억지매핑 회피).
+  - **경계 래칫 #397**: `coachMoments`(shared) entities import 안 함 → 페이지가 `selectNextProbe` precompute → `ctx.painProbe` plain 주입. **한 세션 1문항** = 부상 id 변경 시만 스냅샷(probeAnswers 변화 비반응, 자동전진 X).
+  - **#전문코치리뷰 4렌즈 적대검증 PASS(must-fix 0)**. should-fix 5건 반영(정강이 구획증후군 변별·햄스트링 골+신경 이중·'영상검사'→'전문가 평가'·ACWR 평이화·동시쓰기 가드). 787 unit+vue-tsc+harness:check. 라이브 스모크(실계정 비파괴·원복): 휴식 중 렌더·실클릭 누적/응답/자동전진無·redFlag→의뢰힌트 플립.
+  - **(직전) Phase E 한 줄 힌트(PR #518)**: 대시보드 "🔎 가능성 {가설}·조절 {레버}"(redFlag면 "⚠ 전문가 평가").
+  - **§5 감별진단 KB = A+B+C+D+E 전부 출하 완료.** 후속(증분2, 별도): 다축 누적·답변 rank 재가중, monitoring severity/recency 게이트, 재발 에피소드 스코프화, 지면/페이스 신호. [[injury-focus-week-2026-06-24]] [[rri-risk-factor-evidence-2026-06]].
+- 머지=squash 후 `git diff --quiet origin/main <tip>` 트리검증(--quiet=exit-code 의미있음). 훅 미설치 클론이면 커밋 전 `npm run harness:check` 직접.
 
 ## (이전) ⭐ 현재 위치 (2026-06-24 추가) — 보류 (나) Trends E2E 마무리 + #473 클로즈 확인 (PR #513 머지)
 - **이번 턴 완료(머지·트리검증):**
@@ -54,7 +54,7 @@
 - ⚠ **머지 규칙**: squash 후 `git diff <tip> origin/main` 빈결과 트리 검증 필수(#463 24→11 누락 사고), 의심 시 `--merge`. [[pr-squash-merge-race-verify-tree]].
 
 ## 다음 1순위
-0. **감별진단 KB Phase C·E (다음 우선, 설계 게이트)** — Phase A+B+D 출하 완료(#516, 라이브 스모크). 남은 Phase C(grill 1문항 `selectNextProbe`·pain-followup 통합·모델 확장 `probeAnswers`/`subtypeResolved` 적재)·Phase E(대시보드 가설/레버 표시)는 **와이어프레임 합의 후 코드**([[design-before-implementation]]). 지면/페이스 데이터 신호도 신뢰 베이스라인 확보 시 추가. [[injury-focus-week-2026-06-24]]
+0. ✅ **감별진단 KB §5 = A+B+C+D+E 전부 출하 완료** — Phase A+B+D(#516)·E(#518)·**C grill 능동 모먼트(#520, 이번 세션)**. 남은 건 **증분2(별도, 미착수)**: 다축 누적·답변 기반 rank 재가중, monitoring severity/recency 게이트, 재발 에피소드 스코프화, 지면/페이스 데이터 신호(신뢰 베이스라인 확보 시). [[injury-focus-week-2026-06-24]]
 0b. **(가) 인증 E2E 나머지 = 6/29 이후**: 부상 휴식 자연 해소 후 비-휴식 계정에서 `rest-return` ×2 + stackpage '다음 훈련'을 **조작 0**으로 검증. 세션 만료면 라이브 chrome(:5175) localStorage 추출(OTP 불요) 우선, 죽었으면 OTP. [[auth-e2e-account-state-and-seed-safety]]
 1. **iOS '새 러닝 감지' 실주행 확인** — 가짜 배너는 제거됨(PR#488). 다음 = 워치 차고 실제 1회 뛰어 집 동기화 시 '제때 1번' 알림 오나 확인(워치 실주행 필요). 미수신/잔존 오탐이면 "진짜 새 워크아웃 endDate 게이트". [[healthkit-detected-notify-gate]].
 2. ✅ **#473 완전 종료** — 이슈 CLOSED, 후속 #501·#502 CLOSED, PR #503·#504·#505 MERGED. Phase 3(풀 휴식모드)는 추적 이슈 없이 연기됨(필요 시 신규 이슈로). [[rest-and-return-coaching]].
