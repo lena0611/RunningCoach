@@ -6,7 +6,12 @@
 > 하네스 본체의 개발 기록이 아닙니다. 설치된 프로젝트의 현재 작업 맥락만 기록합니다.
 > 상세 인수인계는 (있으면) 프로젝트 루트 `HANDOFF.md`. 장기 지식은 에이전트 메모리.
 
-## ⭐ 현재 작업 — 보류 (나) Trends E2E 마무리 + #473 클로즈 확인 (2026-06-24 추가, PR #513 머지)
+## ⭐ 현재 작업 — 감별진단 KB §5(KB→코칭) 출하 + Phase C/E 설계 (2026-06-25, PR #516 머지)
+- **출하 완료(트리검증·coach-run 엣지 배포·라이브 스모크):** Phase A `injuryKnowledge.ts`(8부위 가설·`rankInjuryHypotheses`·`evaluateRedFlags`·do-not 가드) + Phase B `getCadenceTrend`(runStats)·`injurySignals.ts` 어댑터 + Phase D coach-run `injurySignals` 주입(웹 게이팅·edge 소비, "가능성"으로만·redFlag tripped 시 의뢰 우선 escape hatch).
+- **핵심 결정:** ① 어댑터는 entities/training-memory(shared 아님 — 경계 래칫 #397) ② 모델 확장(`hypotheses?`/`probeAnswers?`/…)은 Phase C 연기(dead field 회피) ③ redFlag 진행성=최근 2회 연속 체크인 트렌드(#전문코치리뷰 should-fix). 검증 763 unit+build+deno+코치리뷰 2렌즈.
+- **진행 중: Phase C(grill 1문항)·E(대시보드 가설/레버 표시) — UI라 와이어프레임 합의 게이트**([[design-before-implementation]]). 지면/페이스 데이터 신호도 베이스라인 확보 시 추가. [[injury-focus-week-2026-06-24]] [[rri-risk-factor-evidence-2026-06]].
+
+## (이전) ⭐ 현재 작업 — 보류 (나) Trends E2E 마무리 + #473 클로즈 확인 (2026-06-24 추가, PR #513 머지)
 - **(나) Trends 렌즈 stackpage E2E 수정 (PR #513)**: `goto('/trends')`→`goto('/#/trends')`(해시) **+ lens 행 `.click()`→`domClick`**(좌표 클릭 간섭). goto 이슈에 가려 lens 클릭이 검증된 적 없어 안 드러났던 두 번째 버그 — 라이브 QA로 포착. 안전 비파괴 배치 7개(stackpage 3 + session-detail 4) green, harness:check 통과.
 - **세션 재생성 OTP 불요**: 라이브 chrome 브라우저(:5175)가 살아 있으면 그 localStorage 추출로 OTP 없이 qa-storage 재생성(리프레시 토큰 회전이 qa-storage 만료의 근본 원인). 이번 OTP 불요.
 - **#473 완전 종료**: 이슈·후속(#501·#502) CLOSED, PR #503·#504·#505 MERGED. Phase 3만 추적 이슈 없이 연기.
@@ -39,7 +44,7 @@
 - **그 다음**: iOS '새 러닝 감지' 워치 실주행 확인(1순위) → 실기기 시각 스팟체크 → #359/#307/#374 스모크 → grill 설계 백로그(#260·#397·#398·#408·#411·#375·#279) → 코치 detail footer 동적 라벨 복원·walk-run UI 렌더 E2E(부상 시드 훅).
 
 ## 현재 상태
-- updatedAt: 2026-06-24
+- updatedAt: 2026-06-25
 - baseHarness / activeStack / harnessMode: `.harness/policy/profile.json` 참고
 - 코칭 작업 시 `.harness/project/professional-coach-review-trigger.md` 강제(SSOT 선독→배치 시 그릴→커밋 게이트).
 
