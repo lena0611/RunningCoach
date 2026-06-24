@@ -6,7 +6,13 @@
 > 하네스 본체의 개발 기록이 아닙니다. 설치된 프로젝트의 현재 작업 맥락만 기록합니다.
 > 상세 인수인계는 (있으면) 프로젝트 루트 `HANDOFF.md`. 장기 지식은 에이전트 메모리.
 
-## ⭐ 현재 작업 — 렌더 E2E 커버리지 확장 + 인증 E2E 견고화·시드 안전화 (2026-06-24 종료, PR #510·#511 머지)
+## ⭐ 현재 작업 — 보류 (나) Trends E2E 마무리 + #473 클로즈 확인 (2026-06-24 추가, PR #513 머지)
+- **(나) Trends 렌즈 stackpage E2E 수정 (PR #513)**: `goto('/trends')`→`goto('/#/trends')`(해시) **+ lens 행 `.click()`→`domClick`**(좌표 클릭 간섭). goto 이슈에 가려 lens 클릭이 검증된 적 없어 안 드러났던 두 번째 버그 — 라이브 QA로 포착. 안전 비파괴 배치 7개(stackpage 3 + session-detail 4) green, harness:check 통과.
+- **세션 재생성 OTP 불요**: 라이브 chrome 브라우저(:5175)가 살아 있으면 그 localStorage 추출로 OTP 없이 qa-storage 재생성(리프레시 토큰 회전이 qa-storage 만료의 근본 원인). 이번 OTP 불요.
+- **#473 완전 종료**: 이슈·후속(#501·#502) CLOSED, PR #503·#504·#505 MERGED. Phase 3만 추적 이슈 없이 연기.
+- **남은 (가) = 6/29 이후**: 부상 휴식 자연 해소 후 비-휴식 계정에서 `rest-return` ×2 + stackpage '다음 훈련'을 조작 0으로 검증. [[auth-e2e-account-state-and-seed-safety]]
+
+## (이전) ⭐ 현재 작업 — 렌더 E2E 커버리지 확장 + 인증 E2E 견고화·시드 안전화 (2026-06-24 종료, PR #510·#511 머지)
 - **walk-run 렌더 E2E #501 후속 (PR #510)**: `seedWalkRunReturn`(in-memory·인증 불필요) + `e2e/walk-run-return.spec.ts` — 라우트 스모크 config(Supabase OFF)에서 작전 카드 걷기-뛰기 사다리 렌더 단언. 인증 불요/필요 스펙 testMatch 분리.
 - **인증 E2E 견고화·시드 안전화 (PR #511)**: 부상 체크인 모달 addInitScript 억제(비파괴) + **seedReturnRamp 비파괴화**(실 목표 보존). 🚨 검증 중 seedReturnRamp가 실계정 목표를 덮어쓴 사고 발생 → localStorage 원본으로 복구 완료(손실 0), `restoreMemoryFromLocalSnapshot` 유틸 추가. 검증=session-detail 4/4·stackpage 2/4. 상세 [[auth-e2e-account-state-and-seed-safety]].
 - **인증 복구**: QA 계정 세션 만료→앱 OTP 재로그인→qa-storage 재생성. 토큰 회전으로 재만료 가능(다음 인증 E2E 전 재로그인 필요할 수 있음).
