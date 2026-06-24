@@ -5,7 +5,17 @@
 `project-memory.md`, `.harness/project/workflow-rules.md`, `decision-log.md`를 우선합니다.
 > 상세 인수인계가 있으면 프로젝트 루트 `HANDOFF.md`를 먼저 본다.
 
-## ⭐ 현재 위치 (2026-06-24 추가) — 보류 (나) Trends E2E 마무리 + #473 클로즈 확인 (PR #513 머지)
+## ⭐ 현재 위치 (2026-06-25) — 감별진단 KB §5(KB→코칭) 출하 + Phase C/E 설계 착수
+- **이번 세션 완료(PR #516 머지·트리검증·coach-run 엣지 배포·라이브 스모크):** 부상 "왜 아픈지" 감별 KB → 채팅 코치 주입.
+  - Phase A `injuryKnowledge.ts`(8부위 가설·`rankInjuryHypotheses`·`evaluateRedFlags`·do-not 가드, 22 테스트) + Phase B `getCadenceTrend`(runStats)·`injurySignals.ts` 어댑터(`buildInjuryDataSignals`/`buildInjuryCoachSignals`) + Phase D coach-run `injurySignals` 주입(웹 게이팅·edge 소비, "가능성"으로만·redFlag tripped 시 처방 멈추고 의뢰 우선 escape hatch).
+  - **어댑터는 entities/training-memory 에 둔다(shared 아님)** — 경계 래칫 #397(shared/lib/coaching 에 두면 shared→entities 86→90 초과로 차단). FSD 정방향 entities→shared.
+  - **모델 확장(`hypotheses?`/`probeAnswers?`/`redFlagTripped?`/`subtypeResolved?`)은 Phase C로 연기** — Phase D가 가설 요청시점 fresh 계산·redFlag는 체크인 파생 → 살아있는 writer 없음(dead field 회피).
+  - **redFlag 진행성은 최근 2회 연속 체크인 트렌드**(단발 `worsenedDuringOrAfterRun`을 §4 "갈수록 심해지고"로 직접 매핑 금지 — 피로골절 경계 과의뢰, #전문코치리뷰 should-fix).
+  - 라이브 스모크: 우측 족저근막 활성 → injurySignals=족저근막염+볼륨동결/회복전환/케이던스 레버, 코치 응답이 레버 자연 반영+의뢰 escape hatch+진단/확률 단정 없음. 검증 763 unit+build+deno+#전문코치리뷰(2렌즈). [[rri-risk-factor-evidence-2026-06]] [[injury-focus-week-2026-06-24]].
+- **진행 중: Phase C(grill 1문항)·E(대시보드 가설 표시) 설계** — UI라 **와이어프레임 합의 게이트**([[design-before-implementation]]). 코드 전 설계안 합의.
+- 엣지 배포=`--use-api`(Docker 불필요). 머지=squash 후 `git diff <tip> origin/main` 트리검증.
+
+## (이전) ⭐ 현재 위치 (2026-06-24 추가) — 보류 (나) Trends E2E 마무리 + #473 클로즈 확인 (PR #513 머지)
 - **이번 턴 완료(머지·트리검증):**
   - **(나) Trends 렌즈 stackpage E2E 수정 (PR #513)**: `goto('/trends')`→`goto('/#/trends')`(해시) **+ lens 행 `.click()`→`domClick`**(좌표 클릭 간섭, 다른 stackpage 테스트와 동일 패턴). goto 이슈에 가려 lens 클릭이 검증된 적 없어 두 번째 버그가 안 드러났던 것 — 라이브 QA로 포착. **안전 비파괴 배치 7개(stackpage 3 + session-detail 4) green**, harness:check 통과. 상세 [[auth-e2e-account-state-and-seed-safety]].
   - **#473 클로즈 확인 = task 정리 완료**: 이미 CLOSED(오늘 01:29), 후속 #501·#502 둘 다 CLOSED, PR #503·#504·#505 전부 MERGED. 열린 Phase 3(풀 휴식모드) 추적 이슈 없음(연기). 잔여 없음.
@@ -44,7 +54,8 @@
 - ⚠ **머지 규칙**: squash 후 `git diff <tip> origin/main` 빈결과 트리 검증 필수(#463 24→11 누락 사고), 의심 시 `--merge`. [[pr-squash-merge-race-verify-tree]].
 
 ## 다음 1순위
-0. ✅ **(나) Trends E2E 수정 완료(PR #513, 해시+domClick)** · 안전 배치 7개 green · #473 클로즈 확인. **남은 (가) = 6/29 이후**: 부상 휴식 자연 해소 후 비-휴식 계정에서 `rest-return` ×2 + stackpage '다음 훈련'을 **조작 0**으로 검증. 세션 만료면 라이브 chrome(:5175) localStorage 추출(OTP 불요) 우선, 죽었으면 OTP. [[auth-e2e-account-state-and-seed-safety]]
+0. **감별진단 KB Phase C·E (다음 우선, 설계 게이트)** — Phase A+B+D 출하 완료(#516, 라이브 스모크). 남은 Phase C(grill 1문항 `selectNextProbe`·pain-followup 통합·모델 확장 `probeAnswers`/`subtypeResolved` 적재)·Phase E(대시보드 가설/레버 표시)는 **와이어프레임 합의 후 코드**([[design-before-implementation]]). 지면/페이스 데이터 신호도 신뢰 베이스라인 확보 시 추가. [[injury-focus-week-2026-06-24]]
+0b. **(가) 인증 E2E 나머지 = 6/29 이후**: 부상 휴식 자연 해소 후 비-휴식 계정에서 `rest-return` ×2 + stackpage '다음 훈련'을 **조작 0**으로 검증. 세션 만료면 라이브 chrome(:5175) localStorage 추출(OTP 불요) 우선, 죽었으면 OTP. [[auth-e2e-account-state-and-seed-safety]]
 1. **iOS '새 러닝 감지' 실주행 확인** — 가짜 배너는 제거됨(PR#488). 다음 = 워치 차고 실제 1회 뛰어 집 동기화 시 '제때 1번' 알림 오나 확인(워치 실주행 필요). 미수신/잔존 오탐이면 "진짜 새 워크아웃 endDate 게이트". [[healthkit-detected-notify-gate]].
 2. ✅ **#473 완전 종료** — 이슈 CLOSED, 후속 #501·#502 CLOSED, PR #503·#504·#505 MERGED. Phase 3(풀 휴식모드)는 추적 이슈 없이 연기됨(필요 시 신규 이슈로). [[rest-and-return-coaching]].
 3. **스택 후속(같은 패턴 적용 대상)** — 세션상세 자체를 App 레벨 단일화(대시보드/기록 중복) + 편집/삭제 라우팅 제거(코치 오버레이와 동일 패턴). 코치 detail footer 라벨은 정적 "AI 코칭"으로 단순화됨 → 필요 시 store에 hasThread 노출로 "이어가기/받기" 복원. [[stacks-app-level-independence]].
