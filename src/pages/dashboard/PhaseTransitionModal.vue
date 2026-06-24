@@ -1,109 +1,97 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, watch } from 'vue'
 import type { CoachAdaptiveProgressSummary } from '@/shared/lib/coaching/coachAdaptiveProgress'
+import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 
-const props = defineProps<{ summary: CoachAdaptiveProgressSummary; saving?: boolean }>()
+const props = defineProps<{ open: boolean; summary: CoachAdaptiveProgressSummary; saving?: boolean }>()
 const emit = defineEmits<{ (e: 'confirm'): void; (e: 'close'): void }>()
 
 const STATUS_ICON: Record<string, string> = { ready: '✅', watch: '⏳', blocked: '❌' }
 const proposal = computed(() => props.summary.phaseProposal)
+
+const drag = useBottomSheetDrag(() => emit('close'))
+
+watch(
+  () => props.open,
+  (open) => {
+    document.body.classList.toggle('sheet-open', open)
+  }
+)
+
+onBeforeUnmount(() => {
+  document.body.classList.remove('sheet-open')
+})
 </script>
 
 <template>
-  <div class="modal-scrim" role="dialog" aria-modal="true" aria-label="훈련 단계 진행 평가" @click.self="emit('close')">
-    <div class="modal-card">
-      <header class="modal-head">
-        <span class="modal-eyebrow">진행 평가</span>
-        <button type="button" class="modal-x" aria-label="닫기" @click="emit('close')">✕</button>
-      </header>
+  <Teleport to="body">
+    <div v-if="open" class="bottom-sheet-layer" role="presentation" @click.self="emit('close')">
+      <section
+        class="bottom-sheet phase-eval-sheet"
+        :class="{ 'bottom-sheet-dragging': drag.dragging.value }"
+        :style="drag.sheetStyle.value"
+        role="dialog"
+        aria-modal="true"
+        aria-label="훈련 단계 진행 평가"
+      >
+        <div class="bottom-sheet-handle bottom-sheet-drag-zone" @pointerdown="drag.startDrag" />
+        <div class="bottom-sheet-heading bottom-sheet-drag-zone" @pointerdown="drag.startDrag">
+          <h2>진행 평가</h2>
+          <button class="stack-icon-button sheet-close" type="button" aria-label="닫기" @pointerdown.stop @click="emit('close')">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12" /><path d="M18 6 6 18" /></svg>
+          </button>
+        </div>
 
-      <div class="modal-phase">
-        <strong>{{ summary.currentPhase }}</strong>
-        <template v-if="proposal.shouldTransition && proposal.toPhase">
-          <span class="modal-arrow">→</span>
-          <strong class="modal-next">{{ proposal.toPhase }}</strong>
-        </template>
-      </div>
+        <div class="phase-eval-content">
+          <div class="phase-eval-phase">
+            <strong>{{ summary.currentPhase }}</strong>
+            <template v-if="proposal.shouldTransition && proposal.toPhase">
+              <span class="phase-eval-arrow">→</span>
+              <strong class="phase-eval-next">{{ proposal.toPhase }}</strong>
+            </template>
+          </div>
 
-      <p class="modal-reason">{{ proposal.reason }}</p>
+          <p class="phase-eval-reason">{{ proposal.reason }}</p>
 
-      <ul class="modal-criteria">
-        <li v-for="criterion in summary.criteria" :key="criterion.id">
-          <span>{{ STATUS_ICON[criterion.status] ?? '·' }}</span>
-          <span class="modal-criterion-label">{{ criterion.label }}</span>
-          <small class="modal-criterion-evidence">{{ criterion.evidence }}</small>
-        </li>
-      </ul>
+          <ul class="phase-eval-criteria">
+            <li v-for="criterion in summary.criteria" :key="criterion.id">
+              <span>{{ STATUS_ICON[criterion.status] ?? '·' }}</span>
+              <span class="phase-eval-criterion-label">{{ criterion.label }}</span>
+              <small class="phase-eval-criterion-evidence">{{ criterion.evidence }}</small>
+            </li>
+          </ul>
 
-      <div v-if="proposal.blockers.length" class="modal-blockers">
-        <span class="modal-blockers-title">남은 조건</span>
-        <ul>
-          <li v-for="(blocker, index) in proposal.blockers" :key="index">{{ blocker }}</li>
-        </ul>
-      </div>
+          <div v-if="proposal.blockers.length" class="phase-eval-blockers">
+            <span class="phase-eval-blockers-title">남은 조건</span>
+            <ul>
+              <li v-for="(blocker, index) in proposal.blockers" :key="index">{{ blocker }}</li>
+            </ul>
+          </div>
+        </div>
 
-      <footer class="modal-foot">
-        <button type="button" class="ghost" :disabled="saving" @click="emit('close')">닫기</button>
-        <button
-          v-if="proposal.shouldTransition"
-          type="button"
-          class="primary"
-          :disabled="saving"
-          @click="emit('confirm')"
-        >
-          {{ saving ? '적용 중…' : `${proposal.toPhase}(으)로 전환` }}
-        </button>
-      </footer>
+        <div v-if="proposal.shouldTransition" class="phase-eval-actions">
+          <button type="button" class="ghost" :disabled="saving" @click="emit('close')">닫기</button>
+          <button type="button" class="primary" :disabled="saving" @click="emit('confirm')">
+            {{ saving ? '적용 중…' : `${proposal.toPhase}(으)로 전환` }}
+          </button>
+        </div>
+      </section>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <style scoped>
-.modal-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 2100;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding: 16px;
-  background: rgba(0, 0, 0, 0.5);
-}
-
-.modal-card {
-  width: 100%;
-  max-width: 420px;
+.phase-eval-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 20px;
-  background: var(--color-surface-card);
-  border-radius: var(--radius-card, 20px);
-  box-shadow: var(--shadow-card);
-  max-height: 80vh;
-  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
-.modal-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.modal-eyebrow {
-  font-size: 12px;
-  color: var(--color-muted);
-}
-
-.modal-x {
-  background: none;
-  border: none;
-  color: var(--color-muted);
-  font-size: 16px;
-  cursor: pointer;
-}
-
-.modal-phase {
+.phase-eval-phase {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -111,21 +99,21 @@ const proposal = computed(() => props.summary.phaseProposal)
   color: var(--color-text);
 }
 
-.modal-arrow {
+.phase-eval-arrow {
   color: var(--color-muted);
 }
 
-.modal-next {
+.phase-eval-next {
   color: var(--color-primary);
 }
 
-.modal-reason {
+.phase-eval-reason {
   font-size: 14px;
   color: var(--color-text);
   margin: 0;
 }
 
-.modal-criteria {
+.phase-eval-criteria {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -134,52 +122,52 @@ const proposal = computed(() => props.summary.phaseProposal)
   list-style: none;
 }
 
-.modal-criteria li {
+.phase-eval-criteria li {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 4px 8px;
   align-items: baseline;
 }
 
-.modal-criterion-label {
+.phase-eval-criterion-label {
   font-size: 14px;
   color: var(--color-text);
 }
 
-.modal-criterion-evidence {
+.phase-eval-criterion-evidence {
   grid-column: 2;
   font-size: 12px;
   color: var(--color-muted);
 }
 
-.modal-blockers {
+.phase-eval-blockers {
   padding: 12px;
   border-radius: 12px;
-  background: rgba(120, 120, 120, 0.12);
+  background: var(--color-subtle);
 }
 
-.modal-blockers-title {
+.phase-eval-blockers-title {
   font-size: 12px;
   color: var(--color-muted);
 }
 
-.modal-blockers ul {
+.phase-eval-blockers ul {
   margin: 6px 0 0;
   padding-left: 18px;
 }
 
-.modal-blockers li {
+.phase-eval-blockers li {
   font-size: 13px;
   color: var(--color-text);
 }
 
-.modal-foot {
+.phase-eval-actions {
   display: flex;
   gap: 10px;
-  margin-top: 4px;
+  margin-top: 14px;
 }
 
-.modal-foot button {
+.phase-eval-actions button {
   flex: 1;
   padding: 14px;
   border-radius: 14px;
@@ -189,16 +177,16 @@ const proposal = computed(() => props.summary.phaseProposal)
   border: none;
 }
 
-.modal-foot .ghost {
+.phase-eval-actions .ghost {
   flex: 0 0 auto;
   padding: 14px 18px;
   background: transparent;
-  border: 1px solid rgba(120, 120, 120, 0.3);
+  border: 1px solid var(--color-border);
   color: var(--color-text);
 }
 
-.modal-foot .primary {
+.phase-eval-actions .primary {
   background: var(--color-primary);
-  color: #08130d;
+  color: var(--color-on-primary, #08130d);
 }
 </style>
