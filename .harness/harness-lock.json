@@ -1,52 +1,67 @@
 {
   "version": 1,
-  "updatedAt": "2026-06-25T03:27:14.032Z",
+  "updatedAt": "2026-06-25T06:22:41.741Z",
   "baseHarness": {
     "id": "harness-seed",
-    "version": "0.2.71",
+    "version": "0.2.74",
     "repo": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git",
-    "ref": "v0.2.71",
+    "ref": "v0.2.74",
     "commit": null,
     "source": {
       "type": "git",
       "repo": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git",
-      "ref": "v0.2.71",
+      "ref": "v0.2.74",
       "commit": null,
-      "packageVersion": "0.2.71",
-      "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.71"
+      "packageVersion": "0.2.74",
+      "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.74"
     }
   },
   "stackHarness": {
     "id": "vue3-vite-pinia-router",
     "title": "Vue 3 + Vite + Pinia + Vue Router Stack Harness",
-    "version": "0.1.32",
+    "version": "0.1.34",
     "repo": "https://git.smartscore.kr/ai-standard/harnesses/vue3-vite-pinia-router.git",
-    "ref": "v0.1.32",
+    "ref": "v0.1.34",
     "range": null,
     "commit": null,
     "manifestVersion": 1,
     "manifestPath": ".harness/stacks/.applied/vue3-vite-pinia-router/manifest.json",
     "requiredBaseHarness": {
       "repo": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git",
-      "ref": "v0.2.48",
-      "minVersion": "0.2.48"
+      "ref": "v0.2.74",
+      "minVersion": "0.2.74"
     }
   },
   "lastUpdate": {
-    "from": "0.2.70",
-    "to": "0.2.71",
-    "at": "2026-06-25T03:27:14.032Z",
+    "from": "0.2.71",
+    "to": "0.2.74",
+    "at": "2026-06-25T06:22:41.230Z",
     "entries": [
       {
-        "version": "0.2.71",
+        "version": "0.2.74",
         "date": "2026-06-25",
         "lines": [
-          "- 소비자(clubadm) P0 개선요청 중 P0-1만 축소 수용했습니다. 프로젝트가 기준/룰 문서를 `.harness/project/*` 밖(별도 가이드 폴더, 루트 표준 문서 등)에 두면 본체의 자동 발견·주입 경로(`build-context`의 하드코딩 `alwaysRead`, `scan-project`의 고정 화이트리스트)에서 보이지 않던 구조적 갭을 해소합니다. 나머지(P0-2 hook 자동배선, P0-5 Codex 정합)는 거부, P0-3/P0-4는 후속 후보로 남깁니다.",
-          "- `profile.json`에 프로젝트 소유 `sources[]` 배열을 추가했습니다(`{ path, kind, owner, inject }`). 본체는 이 배열을 **읽기만** 하고 자동으로 채우지 않습니다(자동 변경 금지 원칙). `profile.json`은 PROJECT_OWNED라 업데이트 시 보존되고, 신규 설치에는 빈 배열로 배포됩니다.",
-          "- `build-context`가 `profile.json`을 읽어 `inject:'always'`이고 실제 존재하는 소스를 Always Read에 병합합니다(병합 항목은 `(project source: profile.json sources[])`로 표시). 이전에는 profile.json을 전혀 읽지 않았으므로 순수 가산 변경입니다.",
-          "- `harness:scan`은 선언된 `sources[]` 경로가 실제 존재하는지만 검증합니다(zero false positive). 없는 경로는 Open Questions로 표면화하고, 룰 성격(`kind`) 소스가 선언돼 있으면 \"로컬 방법론 없음\" 오탐 질문을 대체합니다. 넓은 휴리스틱 자동 탐지는 도입하지 않습니다(최근 0.2.68~70 과매칭 제거 방향 유지).",
-          "- `bootstrap.md`에 \"비표준 위치 룰 등록\" 인터뷰 단계를 추가하고, 짝 문서로 `context-protocol.md`(계층/주입 거동)와 `portability-guide.md`(프로젝트 소유 등록 절차)를 갱신했습니다.",
-          "- init smoke test에 회귀 2종을 추가했습니다(build-context의 inject:always 병합 + 비-always 미병합, scan의 선언 경로 존재 검증 + 누락 경로 Open Question). 총 70종."
+          "- 소비자 프로젝트가 `.harness/policy/profile.json`의 `harnessMode`나 `sources[]`를 직접 편집하면 `common.install.preserve-project-owned-files`가 blocking SYNC GAP을 내던 과매칭을 수정했습니다. `profile.json`은 PROJECT_OWNED 보존 대상이지만 install/update 구현 변경을 뜻하는 source trigger는 아니므로, preserve 정책의 `triggerPaths`에서 제외했습니다.",
+          "- install/update 보존 동작 변경은 계속 `scripts/init.mjs`, `update-harness.mjs`, `apply-stack.mjs`, waiver 변경으로 감지합니다. 소비자 profile의 스택 상태와 선언 소스는 stack/profile 관련 검사에서 다룹니다.",
+          "- init smoke test에 소비자 profile 편집(`harnessMode=active`, `sources[]`)이 install preserve SYNC GAP을 만들지 않는 회귀를 추가했습니다."
+        ]
+      },
+      {
+        "version": "0.2.73",
+        "date": "2026-06-25",
+        "lines": [
+          "- 스택 하네스 업데이트 경로에서 `stack:reset`이 최초 적용 시점의 `profileBackup` 전체를 복원해, 소비자가 직접 바꾼 `.harness/policy/profile.json`의 `harnessMode`가 `active`에서 `bootstrap`으로 되돌아가던 문제를 수정했습니다. 이제 reset은 스택 소유 필드(`activeStack`, `available`, `stackManifest`)만 되돌리고 `harnessMode`, `sources[]` 등 프로젝트 소유 필드는 현재 값을 보존합니다.",
+          "- 같은 경로에서 `stack:apply`가 `.harness/harness-lock.json`을 새 객체로 다시 쓰며 base 업데이트의 `lastUpdate` 변경 이력을 삭제하던 문제를 수정했습니다. stack lock 갱신은 기존 lock metadata를 보존한 뒤 `stackHarness`만 갱신합니다.",
+          "- init smoke test에 stack apply/reset 이후 `harnessMode`, `sources[]`, `lastUpdate`가 보존되는 회귀를 추가했습니다. clubadm의 실제 `.stack-applied.json` marker를 복사한 temp clone에서 업데이트 경로를 재검증했습니다."
+        ]
+      },
+      {
+        "version": "0.2.72",
+        "date": "2026-06-25",
+        "lines": [
+          "- `harness:outdated`가 bundled base의 업데이트 후보를 안내할 때 실행 불가능한 `npm run harness:update -- --base-only`를 권하던 문제를 수정했습니다. base repo가 lock/install manifest에 직접 없고 스택의 `requiredBaseHarness.repo`에서만 복구된 상태에서는 `--base-only`가 실패하므로, 최신 스택 하네스 `npx ... init` 재실행을 안내합니다.",
+          "- 기존 git source base는 그대로 `npm run harness:update -- --base-only` 경로를 유지합니다. 이번 변경은 read-only outdated 안내 정정이며 소비자 파일을 자동 수정하지 않습니다.",
+          "- init smoke test에 bundled base가 outdated일 때 stack init command와 note가 출력되는 회귀를 추가했습니다."
         ]
       }
     ]

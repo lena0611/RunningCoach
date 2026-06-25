@@ -1,14 +1,14 @@
 {
   "tool": "harness-seed",
-  "version": "0.2.71",
-  "installedAt": "2026-06-25T03:27:14.030Z",
+  "version": "0.2.74",
+  "installedAt": "2026-06-25T06:22:41.228Z",
   "source": {
     "type": "git",
     "repo": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git",
-    "ref": "v0.2.71",
+    "ref": "v0.2.74",
     "commit": null,
-    "packageVersion": "0.2.71",
-    "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.71"
+    "packageVersion": "0.2.74",
+    "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.74"
   },
   "manifestVersion": 3,
   "managedFiles": {
@@ -16,7 +16,7 @@
       "sha256": "2e9419da76ce234c4311be57b58911ae2f93fe54fc98bc850718a598c7dcf110"
     },
     ".harness/bin/apply-stack.mjs": {
-      "sha256": "459771859b5d72a80191d100d0dc1503bc3463d07e12dff8dda6627465a3b3d9"
+      "sha256": "e0f09adf6ff799dba024ba22d7590564b6c487fd5dd4ce20f09431a826b4855f"
     },
     ".harness/bin/build-context.mjs": {
       "sha256": "a4e6fd36b8ab43c7d29cdf291b22a38bf51cac5aea2ffdb5ff4f1d86e966fa6c"
@@ -67,7 +67,7 @@
       "sha256": "0cf08d43c56237c06dd111c7f6d83feaa09ee275c734d3c51e4414aece92afff"
     },
     ".harness/bin/outdated-harness.mjs": {
-      "sha256": "0e641ff8fe5fe49acfa20896360c009b54f224fb2db13871dd122e7526b8e56f"
+      "sha256": "7afe2c84b7782bec1e43e88a458a5c6b1737bfc714116d5d735a8f2ecfb0a342"
     },
     ".harness/bin/policy-harness.mjs": {
       "sha256": "2f311748ad04b19f24705fde296faaef104f38fcbcb7d8ee9ee81977f8c88b34"
@@ -145,7 +145,7 @@
       "sha256": "21f0ccf5058366f89dc4e62fb71a8f2a763b625211245db3f5c76c5dcd129941"
     },
     ".harness/policy/policy-registry.json": {
-      "sha256": "4e1f4d7d74aa10194a4c6afdd2263704218b163a3c5bbe70925bf4446ee24fda"
+      "sha256": "630caacf32654c6f87f4dc7b0ba5ec18b493501624fa8835041ef2cc25b5cfe8"
     },
     ".harness/policy/policy-steward.md": {
       "sha256": "76cfefbae09233294b7848f2d0667e970355cf6838d9c63cb685aaa259e9cd71"

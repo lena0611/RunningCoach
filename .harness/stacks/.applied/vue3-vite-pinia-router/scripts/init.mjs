@@ -162,7 +162,7 @@ function runRecommendedStack(command, args, title) {
 }
 
 function buildSeedArgs(opts) {
-  const args = ['init', '--no-scan', '--no-handoff', '--no-check', '--embedded']
+  const args = ['init', '--no-scan', '--no-handoff', '--no-check', '--embedded', '--with-package-json']
 
   if (opts.dryRun) args.push('--dry-run')
   if (opts.force) args.push('--force')
