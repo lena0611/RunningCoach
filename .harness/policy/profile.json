@@ -1,7 +1,7 @@
 {
   "version": 2,
   "activeStack": "vue3-vite-pinia-router",
-  "harnessMode": "bootstrap",
+  "harnessMode": "active",
   "available": [
     "none",
     "vue3-vite-pinia-router"
