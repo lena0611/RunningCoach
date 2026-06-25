@@ -168,4 +168,14 @@ describe('buildInjuryCoachSignals (§5 coach-run 주입 묶음)', () => {
     const result = buildInjuryCoachSignals(memory, [run(daysAgo(2), 6)], today)
     expect(result!.hypotheses[0].possibility).toBe('아킬레스 건병증')
   })
+
+  it('grill 답변이 상위 "가능성"을 좁힌다(§2-B) — 햄스트링 sprint-pop이면 코치 가능성이 좌상으로', () => {
+    const memory = buildMemory({
+      title: '햄스트링', normalizedAreas: [{ areaId: 'left-hamstring', painLevel: 3 }],
+      probeAnswers: { hamstring: 'sprint-pop' }
+    } as Partial<TrainingInjuryItem>)
+    const result = buildInjuryCoachSignals(memory, [run(daysAgo(2), 6)], today)
+    // 답 없으면 사전순위 PHT가 top이지만, sprint-pop(좌상) 답이 좌상을 상위 가능성으로 올린다.
+    expect(result!.hypotheses[0].possibility).toBe('햄스트링 좌상')
+  })
 })

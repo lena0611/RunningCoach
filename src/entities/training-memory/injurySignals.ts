@@ -146,7 +146,8 @@ export function buildInjuryCoachSignals(memory: TrainingMemory, runs: RunLog[], 
 
   const areaIds = active.normalizedAreas.map((selection) => selection.areaId)
   const signals = buildInjuryDataSignals(memory, runs, active, today)
-  const ranked = rankInjuryHypotheses(areaIds, signals).slice(0, 2)
+  // grill 답변(§2-B)을 랭킹에 반영 — 사용자가 고른 결정적 지문이 상위 "가능성"을 좁힌다(물어본 답을 무시하지 않음).
+  const ranked = rankInjuryHypotheses(areaIds, signals, active.probeAnswers ?? {}).slice(0, 2)
   const redFlag = evaluateRedFlags(redFlagSignalsFromInjury(active))
 
   // 부위가 KB 스코프 밖(ankle/quad/lower-back)이라 가설이 없고 redFlag 도 없으면 보낼 게 없다.

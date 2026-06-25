@@ -351,25 +351,59 @@ export type RankedHypothesis = {
   score: number
   /** 점수에 기여한 데이터 신호(설명·디버깅용). */
   contributingSignals: (keyof InjuryDataSignals)[]
+  /** grill 답변(§2-B)이 이 가설을 지지했는가(favors 일치) — 점수에 PROBE_FAVOR_BOOST 가산됨. */
+  probeFavored: boolean
 }
 
 /**
- * 선택 부위 + 데이터 신호로 1차 과사용 가설을 결정론으로 가중·정렬한다(§2-A). red-flag 후보는 rank 제외
- * (evaluateRedFlags 가 별도 담당). 점수 = priorScore(1/순위) + Σ(존재 신호 × dataWeights). 동점이면 priorRank 우선.
- * grill probe 통합(probeAnswers 가중)·아형 분기는 후속 Phase. coach-run 은 이 결과 상위 1~2 만 받는다.
+ * grill 답변 가중(§2-B). 사용자가 고른 §1 결정적 지문은 강한 감별 신호라, 사전순위 + 데이터를 넘어 그 가설을
+ * 상위 "가능성"으로 올린다(예 햄스트링 'sprint-pop'→좌상이 사전순위 1위 PHT를 역전). **가산식**(× 아님)을 택한 이유는
+ * 비지지 가설 점수를 보존해 상위 1~2 동반 표시로 comorbid(동반 가능성)를 유지하기 위함이다.
+ * 안전 경계(#전문코치리뷰 2렌즈 검증): ① 부위당 overuse 가설이 ≤2개(햄스트링만 2개)라 favored 가 1위여도 나머지
+ *   overuse 는 항상 top-2 동반표시 → 단정 아님 ② favors 는 overuse 옵션에만 있어 redFlag 후보를 못 올림(§4 우선 보존)
+ *   ③ 라벨은 "가능성"으로만. ⚠ 후속(추적 이슈): flat 1.5라 pathognomonic 답과 약한 답이 동일 가중 — 옵션별 likelihood
+ *   그라데이션은 프로브 axis↔가설 probeWeights 불일치로 모델 확장이 필요해 별도 증분으로 연기.
+ */
+const PROBE_FAVOR_BOOST = 1.5
+
+/**
+ * probeAnswers(§2-B grill 답변)에서 favors 가 가리키는 가설 id 집합을 모은다. redFlag 자가검사 옵션은 favors 가 없어
+ * 여기 안 들어온다(가중 대신 evaluateRedFlags 게이트로 처리 — SSOT "redFlag 켜지면 가중 무시").
+ */
+function favoredHypothesisIds(probeAnswers: Record<string, string>): Set<string> {
+  const favored = new Set<string>()
+  for (const [probeId, value] of Object.entries(probeAnswers)) {
+    const fav = injuryProbes.find((probe) => probe.id === probeId)?.options.find((opt) => opt.value === value)?.favors
+    if (fav) favored.add(fav)
+  }
+  return favored
+}
+
+/**
+ * 선택 부위 + 데이터 신호(§2-A) + grill 답변(§2-B)으로 1차 과사용 가설을 결정론으로 가중·정렬한다. red-flag 후보는
+ * rank 제외(evaluateRedFlags 가 별도 담당). 점수 = priorScore(1/순위) + Σ(존재 신호 × dataWeights) + (답변 지지 시 BOOST).
+ * 동점이면 priorRank 우선. coach-run 은 이 결과 상위 1~2 만 받는다(아형 분기는 subtypeResolved 가 라벨에서 담당).
  */
 export function rankInjuryHypotheses(
   selectedAreaIds: string[],
-  signals: InjuryDataSignals = {}
+  signals: InjuryDataSignals = {},
+  probeAnswers: Record<string, string> = {}
 ): RankedHypothesis[] {
   const bases = new Set(selectedAreaIds.map(injuryAreaBase))
   const present = (Object.keys(signals) as (keyof InjuryDataSignals)[]).filter((k) => signals[k])
+  const favored = favoredHypothesisIds(probeAnswers)
   return injuryKnowledgeBase
     .filter((h) => h.classification === 'overuse' && h.areaBases.some((b) => bases.has(b)))
     .map((hypothesis) => {
       const contributingSignals = present.filter((s) => typeof hypothesis.dataWeights[s] === 'number')
       const dataScore = contributingSignals.reduce((sum, s) => sum + (hypothesis.dataWeights[s] ?? 0), 0)
-      return { hypothesis, score: 1 / hypothesis.priorRank + dataScore, contributingSignals }
+      const probeFavored = favored.has(hypothesis.id)
+      return {
+        hypothesis,
+        score: 1 / hypothesis.priorRank + dataScore + (probeFavored ? PROBE_FAVOR_BOOST : 0),
+        contributingSignals,
+        probeFavored
+      }
     })
     .sort((a, b) => b.score - a.score || a.hypothesis.priorRank - b.hypothesis.priorRank)
 }
