@@ -359,22 +359,29 @@ export type RankedHypothesis = {
  * grill 답변 가중(§2-B). 사용자가 고른 §1 결정적 지문은 강한 감별 신호라, 사전순위 + 데이터를 넘어 그 가설을
  * 상위 "가능성"으로 올린다(예 햄스트링 'sprint-pop'→좌상이 사전순위 1위 PHT를 역전). **가산식**(× 아님)을 택한 이유는
  * 비지지 가설 점수를 보존해 상위 1~2 동반 표시로 comorbid(동반 가능성)를 유지하기 위함이다.
- * 안전 경계(#전문코치리뷰 2렌즈 검증): ① 부위당 overuse 가설이 ≤2개(햄스트링만 2개)라 favored 가 1위여도 나머지
+ * 부스트 크기는 PROBE_FAVOR_BOOST(최대) × 옵션 favorWeight(진단적 강도 0~1, 증분2.1 #522)로 그라데이션한다 —
+ * pathognomonic 답은 최대치에 가깝게, 덜 특이적인 답은 작게 올려 단발 자가응답이 부하 데이터를 과도하게 압도하지 않게 한다.
+ * 안전 경계(#전문코치리뷰 검증): ① 부위당 overuse 가설이 ≤2개(햄스트링만 2개)라 favored 가 1위여도 나머지
  *   overuse 는 항상 top-2 동반표시 → 단정 아님 ② favors 는 overuse 옵션에만 있어 redFlag 후보를 못 올림(§4 우선 보존)
- *   ③ 라벨은 "가능성"으로만. ⚠ 후속(추적 이슈): flat 1.5라 pathognomonic 답과 약한 답이 동일 가중 — 옵션별 likelihood
- *   그라데이션은 프로브 axis↔가설 probeWeights 불일치로 모델 확장이 필요해 별도 증분으로 연기.
+ *   ③ 라벨은 "가능성"으로만.
  */
 const PROBE_FAVOR_BOOST = 1.5
 
 /**
- * probeAnswers(§2-B grill 답변)에서 favors 가 가리키는 가설 id 집합을 모은다. redFlag 자가검사 옵션은 favors 가 없어
- * 여기 안 들어온다(가중 대신 evaluateRedFlags 게이트로 처리 — SSOT "redFlag 켜지면 가중 무시").
+ * probeAnswers(§2-B grill 답변)에서 favors 가 가리키는 가설 id → 진단적 강도(favorWeight) 맵을 모은다. 같은 가설을
+ * 여러 답이 지지하면 최댓값을 쓴다(가장 강한 단서 채택). redFlag 자가검사 옵션은 favors 가 없어 여기 안 들어온다
+ * (가중 대신 evaluateRedFlags 게이트로 처리 — SSOT "redFlag 켜지면 가중 무시"). favorWeight 미설정이면 0.5(보수적 fail-safe).
  */
-function favoredHypothesisIds(probeAnswers: Record<string, string>): Set<string> {
-  const favored = new Set<string>()
+function favoredHypothesisWeights(probeAnswers: Record<string, string>): Map<string, number> {
+  const favored = new Map<string, number>()
   for (const [probeId, value] of Object.entries(probeAnswers)) {
-    const fav = injuryProbes.find((probe) => probe.id === probeId)?.options.find((opt) => opt.value === value)?.favors
-    if (fav) favored.add(fav)
+    const opt = injuryProbes.find((probe) => probe.id === probeId)?.options.find((o) => o.value === value)
+    if (opt?.favors) {
+      // 미설정 fallback = 0.5(보수적·fail-safe — evaluateRedFlags '신호 없으면 보수적' 철학과 정렬).
+      // 단 모든 favors 옵션은 favorWeight 저작 필수(injuryKnowledge.test.ts 완전성 테스트가 빌드 단계에서 강제) → 실 도달 불가.
+      const weight = typeof opt.favorWeight === 'number' ? opt.favorWeight : 0.5
+      favored.set(opt.favors, Math.max(favored.get(opt.favors) ?? 0, weight))
+    }
   }
   return favored
 }
@@ -391,16 +398,17 @@ export function rankInjuryHypotheses(
 ): RankedHypothesis[] {
   const bases = new Set(selectedAreaIds.map(injuryAreaBase))
   const present = (Object.keys(signals) as (keyof InjuryDataSignals)[]).filter((k) => signals[k])
-  const favored = favoredHypothesisIds(probeAnswers)
+  const favored = favoredHypothesisWeights(probeAnswers)
   return injuryKnowledgeBase
     .filter((h) => h.classification === 'overuse' && h.areaBases.some((b) => bases.has(b)))
     .map((hypothesis) => {
       const contributingSignals = present.filter((s) => typeof hypothesis.dataWeights[s] === 'number')
       const dataScore = contributingSignals.reduce((sum, s) => sum + (hypothesis.dataWeights[s] ?? 0), 0)
-      const probeFavored = favored.has(hypothesis.id)
+      const favorWeight = favored.get(hypothesis.id)
+      const probeFavored = favorWeight !== undefined
       return {
         hypothesis,
-        score: 1 / hypothesis.priorRank + dataScore + (probeFavored ? PROBE_FAVOR_BOOST : 0),
+        score: 1 / hypothesis.priorRank + dataScore + (probeFavored ? PROBE_FAVOR_BOOST * favorWeight : 0),
         contributingSignals,
         probeFavored
       }
@@ -418,7 +426,7 @@ export function redFlagHypothesesForAreas(selectedAreaIds: string[]): InjuryHypo
 // grill 프로브(§5 Phase C — 능동 코치 모먼트로 "1문항" 감별). 부위당 1 프로브(증분1).
 //   목적: 같은 부위 안의 아형(subtype)을 가르고, red-flag 자가검사를 escalation 으로 연결한다.
 //   ⚠ 의사 흉내 금지·"가능성"으로만·진단 단정 금지. 문구는 §1 결정적 지문에서 도출.
-//   ⚠ 다축 누적·답변 기반 rank 재가중은 증분2(여기선 subtype 해소 + redFlag 자가검사만).
+//   답변 기반 rank 재가중(증분2)은 favors 로, 그 강도는 옵션 favorWeight(증분2.1 #522)로 그라데이션한다.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** 프로브 옵션의 코치 톤(CoachMomentSentiment 와 동일 값 — shared 와의 결합을 피해 entities 에 로컬 정의). */
@@ -429,7 +437,7 @@ export type InjuryProbeSentiment = 'positive' | 'neutral' | 'caution'
  *  - value 를 probeAnswers[probeId] 에 저장(누적·재방문 시 미답 판정).
  *  - subtype 가 있으면 injuryItem.subtypeResolved 에 저장(가능성 라벨 정밀화).
  *  - redFlagSelfTest 가 있으면 읽기 시점에 RedFlagSignals 로 매핑(injurySignals.redFlagSignalsFromInjury). 저장은 value 만.
- *  - favors 는 증분2 rank 재가중용(현재 소비 안 함 — dead 가 아니라 예약 필드, 읽는 코드 생기기 전까지 KB 정의에만 존재).
+ *  - favors 는 rank 재가중에 소비된다(증분2 rankInjuryHypotheses) — 그 강도는 favorWeight 로 그라데이션(증분2.1 #522).
  */
 export type InjuryProbeOptionDef = {
   /** 버튼 라벨(짧게). */
@@ -439,8 +447,15 @@ export type InjuryProbeOptionDef = {
   /** 고른 뒤 코치가 답하는 피드백("가능성"으로만, 진단 아님). */
   response: string
   sentiment: InjuryProbeSentiment
-  /** 이 답이 지지하는 과사용 가설 id(증분2 재가중 예약). */
+  /** 이 답이 지지하는 과사용 가설 id(증분2 재가중). */
   favors?: string
+  /**
+   * 이 답의 진단적 강도(per-option likelihood, 0~1, 증분2.1 #522). favors 가 있을 때만 의미 있다.
+   * rank 재가중을 PROBE_FAVOR_BOOST × favorWeight 로 그라데이션한다 — pathognomonic 답(예 ITBS '늘 같은 거리에서 켜짐',
+   * 족저 '아침 첫발+걸으면 풀림')은 1.0 가까이, 특징적이지만 덜 특이적인 답은 낮게. 미설정이면 0.5(보수적 fail-safe; 단 모든 favors 옵션은 저작 필수 — 완전성 테스트가 강제).
+   * ⚠ favors 없는 옵션(redFlag 자가검사)엔 무의미 — 게이트가 가중 대신 처리(§4 우선).
+   */
+  favorWeight?: number
   /** 해소되는 아형 id(InjuryHypothesis.subtypeSplit[].id 와 일치). */
   subtype?: string
   /**
@@ -471,7 +486,7 @@ export const injuryProbes: InjuryProbeDef[] = [
     axis: 'timing',
     question: '발바닥(뒤꿈치) 통증, 어떤 양상에 가장 가까워요?',
     options: [
-      { label: '아침 첫걸음이 가장 아프고 걸으면 풀려요', value: 'morning-first-step-eases', sentiment: 'neutral', favors: 'plantar-fasciitis', response: '전형적인 족저근막염 패턴에 가까워요(걸으면 풀리는 게 특징). 부하를 잠시 동결하고 종아리 강화를 곁들이면 도움돼요 — 단정은 아니고 가능성이에요.' },
+      { label: '아침 첫걸음이 가장 아프고 걸으면 풀려요', value: 'morning-first-step-eases', sentiment: 'neutral', favors: 'plantar-fasciitis', favorWeight: 0.9, response: '전형적인 족저근막염 패턴에 가까워요(걸으면 풀리는 게 특징). 부하를 잠시 동결하고 종아리 강화를 곁들이면 도움돼요 — 단정은 아니고 가능성이에요.' },
       // worseningOverTime 단독은 evaluateRedFlags 가 일부러 트립하지 않는다(단발 '활동성 악화'만으로 피로골절 과의뢰 방지 — §4).
       // 대신 response 가 hop 자가검사로 승격을 유도하고, hop 답(focal-hop-positive=pointTenderOrHopPositive)은 단독 트립한다 → 위양성↓·안전망 유지.
       { label: '첫발에도 안 풀리고 활동할수록 더 아파요', value: 'no-ease-worsens-with-activity', sentiment: 'caution', redFlagSelfTest: ['worseningOverTime'], response: '걸어도 안 풀리고 갈수록 심해지는 건 단순 족저근막염과 다른 패턴이에요. 한 발로 살짝 뛰었을 때(hop) 뒤꿈치 한 점이 콕 아프면 피로골절일 수 있으니, 무리하지 말고 통증이 이어지면 전문가 평가를 받아보세요.' },
@@ -484,8 +499,8 @@ export const injuryProbes: InjuryProbeDef[] = [
     axis: 'location',
     question: '아킬레스 통증, 어디에 가장 가까워요?',
     options: [
-      { label: '복사뼈 위 2~6cm, 힘줄 가운데가 아파요', value: 'mid-portion', sentiment: 'neutral', favors: 'achilles-tendinopathy', subtype: 'mid-portion', response: '힘줄 중간부 패턴이에요. 중간부형은 편심/HSR 강화가 잘 들어요 — 갑작스러운 거리·강도 증가를 막으면서요. 가능성 안내예요.' },
-      { label: '더 아래 뼈에 붙는 곳이 아프고, 발등 당기기·오르막에서 심해져요', value: 'insertional', sentiment: 'neutral', favors: 'achilles-tendinopathy', subtype: 'insertional', response: '부착부형에 가까워요. 부착부는 풀 ROM 편심·오르막을 피하고 중립 범위·힐리프트로 관리해요(중간부와 처방이 달라요).' },
+      { label: '복사뼈 위 2~6cm, 힘줄 가운데가 아파요', value: 'mid-portion', sentiment: 'neutral', favors: 'achilles-tendinopathy', favorWeight: 0.8, subtype: 'mid-portion', response: '힘줄 중간부 패턴이에요. 중간부형은 편심/HSR 강화가 잘 들어요 — 갑작스러운 거리·강도 증가를 막으면서요. 가능성 안내예요.' },
+      { label: '더 아래 뼈에 붙는 곳이 아프고, 발등 당기기·오르막에서 심해져요', value: 'insertional', sentiment: 'neutral', favors: 'achilles-tendinopathy', favorWeight: 0.8, subtype: 'insertional', response: '부착부형에 가까워요. 부착부는 풀 ROM 편심·오르막을 피하고 중립 범위·힐리프트로 관리해요(중간부와 처방이 달라요).' },
       { label: "'뚝' 소리/느낌 뒤로 발끝으로 못 서요", value: 'pop-cannot-stand', sentiment: 'caution', redFlagSelfTest: ['weightBearingFailureOrInstability'], response: "'뚝' 하는 느낌과 발끝으로 못 서는 건 힘줄 파열을 의심해야 하는 응급 신호예요. 달리기 처방을 멈추고 바로 전문가 평가를 받으세요." }
     ]
   },
@@ -495,7 +510,7 @@ export const injuryProbes: InjuryProbeDef[] = [
     axis: 'self-test',
     question: '정강이 통증, 짚어보면 어떤가요?',
     options: [
-      { label: '안쪽을 따라 손바닥 너비(5cm 이상)로 욱신거려요', value: 'medial-diffuse', sentiment: 'neutral', favors: 'mtss', response: '안쪽으로 넓게 퍼지는 건 MTSS(정강이 스트레스 증후군) 패턴에 가까워요. 부하 동결 + 회복주, 케이던스 살짝 올리기가 도움돼요 — 가능성 안내예요.' },
+      { label: '안쪽을 따라 손바닥 너비(5cm 이상)로 욱신거려요', value: 'medial-diffuse', sentiment: 'neutral', favors: 'mtss', favorWeight: 0.85, response: '안쪽으로 넓게 퍼지는 건 MTSS(정강이 스트레스 증후군) 패턴에 가까워요. 부하 동결 + 회복주, 케이던스 살짝 올리기가 도움돼요 — 가능성 안내예요.' },
       { label: '한 손가락으로 짚이는 한 점이 콕 아프고, 한 발로 뛰면(hop) 그 점이 아파요', value: 'focal-hop-positive', sentiment: 'caution', redFlagSelfTest: ['pointTenderOrHopPositive'], response: '한 점 압통 + hop 통증 재현은 피로골절 경계 신호예요. 달리기를 멈추고 전문가 평가를 받아보시길 권해요.' },
       { label: '정강이 앞쪽 뼈 위가 아파요', value: 'anterior-tibia', sentiment: 'caution', redFlagSelfTest: ['highRiskBoneSiteSuspected'], response: '정강이 앞쪽 뼈(전방 경골)는 잘 낫지 않는 고위험 부위라, 미루지 말고 전문가 평가를 받아보시길 권해요.' },
       // §1 *-shin ③구획증후군. 운동성(달리면 조임·저림, 쉬면 가라앉음) 변별 + 5P(창백·감각마비) 동반 시 응급. 저림 → numbnessRadiatingWeakness 트립(신경 경계 의뢰).
@@ -508,7 +523,7 @@ export const injuryProbes: InjuryProbeDef[] = [
     axis: 'aggravating-motion',
     question: '무릎, 어떤 동작에서 가장 아파요?',
     options: [
-      { label: '계단 내려갈 때·쪼그릴 때·오래 앉았다 일어날 때 아파요', value: 'stairs-squat-sitting', sentiment: 'neutral', favors: 'pfps', response: '앞쪽 분산통 + 계단·스쿼트 악화는 슬개대퇴 통증(PFPS) 패턴에 가까워요. 볼륨 동결 + 케이던스 살짝 올리기, 다운힐 점진이 도움돼요 — 가능성 안내예요.' },
+      { label: '계단 내려갈 때·쪼그릴 때·오래 앉았다 일어날 때 아파요', value: 'stairs-squat-sitting', sentiment: 'neutral', favors: 'pfps', favorWeight: 0.8, response: '앞쪽 분산통 + 계단·스쿼트 악화는 슬개대퇴 통증(PFPS) 패턴에 가까워요. 볼륨 동결 + 케이던스 살짝 올리기, 다운힐 점진이 도움돼요 — 가능성 안내예요.' },
       { label: '무릎이 잠기거나(locking) 갑자기 풀리는(giving way) 느낌이 있어요', value: 'locking-giving-way', sentiment: 'caution', redFlagSelfTest: ['weightBearingFailureOrInstability'], response: '잠김·갑자기 풀림은 반월·인대 같은 구조 손상을 의심하게 해요. 무리한 달리기를 멈추고 전문가 평가를 받아보세요.' },
       { label: '뼈 위 한 점이 콕 아프고 디디면 바로 아파요', value: 'bone-point-tender', sentiment: 'caution', redFlagSelfTest: ['pointTenderOrHopPositive'], response: '뼈 위 한 점 압통 + 디딜 때 즉시 통증은 피로골절 경계 신호예요. 달리기를 멈추고 전문가 평가를 권해요.' }
     ]
@@ -519,7 +534,7 @@ export const injuryProbes: InjuryProbeDef[] = [
     axis: 'location',
     question: '무릎 바깥쪽 통증, 어떤가요?',
     options: [
-      { label: '바깥쪽이 늘 비슷한 거리쯤에서 켜지듯 아파요(무릎 살짝 굽힐 때)', value: 'lateral-same-distance', sentiment: 'neutral', favors: 'itbs', response: '바깥쪽 대퇴과에서 늘 같은 거리쯤 켜지는 건 장경인대 증후군(ITBS) 패턴에 가까워요. 주간 거리 급증을 막고 볼륨 동결 + 내리막·캠버 회피가 핵심이에요 — 가능성 안내예요.' },
+      { label: '바깥쪽이 늘 비슷한 거리쯤에서 켜지듯 아파요(무릎 살짝 굽힐 때)', value: 'lateral-same-distance', sentiment: 'neutral', favors: 'itbs', favorWeight: 0.9, response: '바깥쪽 대퇴과에서 늘 같은 거리쯤 켜지는 건 장경인대 증후군(ITBS) 패턴에 가까워요. 주간 거리 급증을 막고 볼륨 동결 + 내리막·캠버 회피가 핵심이에요 — 가능성 안내예요.' },
       { label: '바깥쪽 무릎이 잠기거나 붓고 불안정해요', value: 'lateral-locking-swelling', sentiment: 'caution', redFlagSelfTest: ['weightBearingFailureOrInstability'], response: '잠김·붓기·불안정은 외측 무릎 구조 병리(외측 반월·측부인대)를 의심하게 해요. 무리하지 말고 전문가 평가를 받아보세요.' }
     ]
   },
@@ -529,8 +544,8 @@ export const injuryProbes: InjuryProbeDef[] = [
     axis: 'location',
     question: '종아리 통증, 어떤 양상에 가까워요?',
     options: [
-      { label: "무릎을 편 채 갑자기 '팍' 터지듯 아팠어요", value: 'gastrocnemius-pop', sentiment: 'neutral', favors: 'calf-strain', subtype: 'gastrocnemius', response: '무릎 편 상태에서 폭발하는 통증은 비복근 좌상 패턴이에요. 인터벌·언덕은 점진적으로, 스트라이드는 잠시 보류하는 게 좋아요 — 가능성 안내예요.' },
-      { label: '무릎을 굽혀도 깊이 뻐근하고, 장거리 후반에 심해져요', value: 'soleus-deep', sentiment: 'neutral', favors: 'calf-strain', subtype: 'soleus', response: '무릎 굽혀도 남는 깊은 뻐근함 + 장거리 후반 악화는 가자미근 누적 패턴이에요. 연속 훈련을 줄이고 회복으로 전환하는 게 도움돼요.' },
+      { label: "무릎을 편 채 갑자기 '팍' 터지듯 아팠어요", value: 'gastrocnemius-pop', sentiment: 'neutral', favors: 'calf-strain', favorWeight: 0.85, subtype: 'gastrocnemius', response: '무릎 편 상태에서 폭발하는 통증은 비복근 좌상 패턴이에요. 인터벌·언덕은 점진적으로, 스트라이드는 잠시 보류하는 게 좋아요 — 가능성 안내예요.' },
+      { label: '무릎을 굽혀도 깊이 뻐근하고, 장거리 후반에 심해져요', value: 'soleus-deep', sentiment: 'neutral', favors: 'calf-strain', favorWeight: 0.75, subtype: 'soleus', response: '무릎 굽혀도 남는 깊은 뻐근함 + 장거리 후반 악화는 가자미근 누적 패턴이에요. 연속 훈련을 줄이고 회복으로 전환하는 게 도움돼요.' },
       { label: '종아리가 붓고 빨갛고, 쉴 때도 아파요', value: 'swelling-redness-rest-pain', sentiment: 'caution', redFlagSelfTest: ['swellingRednessHeat'], response: '부종·발적·안정 시 통증은 심부정맥혈전(DVT) 같은 응급을 의심해야 해요. 달리기를 멈추고 즉시 의료기관 평가를 받으세요.' }
     ]
   },
@@ -541,7 +556,7 @@ export const injuryProbes: InjuryProbeDef[] = [
     axis: 'location',
     question: '고관절 통증, 어디에 가까워요?',
     options: [
-      { label: '옆 엉덩이 큰 뼈(대전자) 위가 아프고, 그쪽으로 누우면·다리 꼬면 아파요', value: 'greater-trochanter', sentiment: 'neutral', favors: 'gtps', response: '대전자 위 압통 + 측와위·다리꼬기 통증은 둔근건병증(GTPS) 패턴에 가까워요. 볼륨 동결 + 압박 자세 교정(다리꼬기·짝다리 피하기)이 핵심이에요 — 가능성 안내예요.' },
+      { label: '옆 엉덩이 큰 뼈(대전자) 위가 아프고, 그쪽으로 누우면·다리 꼬면 아파요', value: 'greater-trochanter', sentiment: 'neutral', favors: 'gtps', favorWeight: 0.8, response: '대전자 위 압통 + 측와위·다리꼬기 통증은 둔근건병증(GTPS) 패턴에 가까워요. 볼륨 동결 + 압박 자세 교정(다리꼬기·짝다리 피하기)이 핵심이에요 — 가능성 안내예요.' },
       { label: '사타구니 깊은 곳이 아프고, 걸을 때 매 발짝·밤에 아파요', value: 'deep-groin-night', sentiment: 'caution', redFlagSelfTest: ['highRiskBoneSiteSuspected', 'nightOrRestPain'], response: '사타구니 심부 + 매 발짝·야간통은 대퇴경부 피로골절(고위험, 자주 놓치는 부위) 경계 신호예요. 미루지 말고 전문가 평가를 받아보시길 권해요.' }
     ]
   },
@@ -552,8 +567,8 @@ export const injuryProbes: InjuryProbeDef[] = [
     axis: 'location',
     question: '햄스트링 통증, 어떤 양상에 가까워요?',
     options: [
-      { label: '좌골(앉는 뼈) 위가 아프고, 앉기·오르막·보폭 크게 뛸 때 심해져요', value: 'ischial-sitting-uphill', sentiment: 'neutral', favors: 'pht', response: '좌골결절 위 압통 + 앉기·오르막 악화는 근위 햄스트링 건병증(PHT) 패턴이에요. 오르막·스피드는 강도를 낮추고 단계적 부하로 관리해요 — 가능성 안내예요.' },
-      { label: "스프린트·가속 중 갑자기 '팍' 하고 아팠어요", value: 'sprint-pop', sentiment: 'neutral', favors: 'hamstring-strain', response: '스프린트 중 급성 통증은 햄스트링 좌상 패턴이에요. 복귀 전까지 스프린트·급가속은 보류하고 강도를 낮춰 관리해요.' },
+      { label: '좌골(앉는 뼈) 위가 아프고, 앉기·오르막·보폭 크게 뛸 때 심해져요', value: 'ischial-sitting-uphill', sentiment: 'neutral', favors: 'pht', favorWeight: 0.8, response: '좌골결절 위 압통 + 앉기·오르막 악화는 근위 햄스트링 건병증(PHT) 패턴이에요. 오르막·스피드는 강도를 낮추고 단계적 부하로 관리해요 — 가능성 안내예요.' },
+      { label: "스프린트·가속 중 갑자기 '팍' 하고 아팠어요", value: 'sprint-pop', sentiment: 'neutral', favors: 'hamstring-strain', favorWeight: 0.9, response: '스프린트 중 급성 통증은 햄스트링 좌상 패턴이에요. 복귀 전까지 스프린트·급가속은 보류하고 강도를 낮춰 관리해요.' },
       { label: '밤에 아프고 다리로 저리거나 방사돼요', value: 'night-radiating', sentiment: 'caution', redFlagSelfTest: ['numbnessRadiatingWeakness', 'nightOrRestPain'], response: '야간통 + 저림·방사는 좌골 응력골절이나 신경 자극 가능성을 시사해요. 부하 조절로만 두지 말고 전문가 평가를 권해요.' }
     ]
   }

@@ -31,8 +31,8 @@
 
 **2-B grill 5축(순서대로, 분기 때만 추가):** ①위치 정밀화(한 손가락 점 vs 넓게, 뼈 vs 살) ②타이밍(아침 첫발/뛰는중/후·다음날) ③아픈 동작(계단·스쿼트·발끝밀기·발등당김·한발서기·앉기) ④신발/지면/부하 변화 ⑤자가검사(한발 hop·타진 점통 재현=피로골절 RF).
 가중은 **결정론 후처리**(프롬프트 지침 아님): 데이터 사전가중 **+ 답변 가중**(가산) → 상위 1~2 가설을 코치에 주입. **redFlag 하나라도 켜지면 가중 무시하고 RF 경로 강제.**
-- 구현(증분2, `rankInjuryHypotheses`): 답변이 지지하는 가설(옵션 `favors`)에 고정 가중을 **가산**한다 — 곱셈이 아니라 가산을 택한 이유는 **비지지 가설 점수를 보존**해 상위 1~2 동반표시로 comorbid(동반 가능성)를 유지하기 위함이다. 부위당 overuse 가설이 ≤2개(햄스트링 PHT·좌상만 2개, 나머지는 1개)라, 답변이 한 가설을 1위로 올려도 나머지 overuse 가설은 항상 top-2에 함께 뜬다(단정 아님·"가능성"으로만). favors 는 overuse 옵션에만 있어 redFlag 후보는 부스트 대상이 아니다(§4 우선 불변식 보존).
-- **후속(추적): 답변별 likelihood 그라데이션** — 현재는 favored 가설에 flat 가중이라 pathognomonic 답과 약한 감별 답이 동일 취급된다. 옵션별 likelihood 가중(per-option, 프로브 axis↔가설 probeWeights 불일치 때문에 모델 확장 필요)으로 정밀화하는 것은 별도 증분.
+- 구현(증분2, `rankInjuryHypotheses`): 답변이 지지하는 가설(옵션 `favors`)에 가중을 **가산**한다 — 곱셈이 아니라 가산을 택한 이유는 **비지지 가설 점수를 보존**해 상위 1~2 동반표시로 comorbid(동반 가능성)를 유지하기 위함이다. 부위당 overuse 가설이 ≤2개(햄스트링 PHT·좌상만 2개, 나머지는 1개)라, 답변이 한 가설을 1위로 올려도 나머지 overuse 가설은 항상 top-2에 함께 뜬다(단정 아님·"가능성"으로만). favors 는 overuse 옵션에만 있어 redFlag 후보는 부스트 대상이 아니다(§4 우선 불변식 보존).
+- **답변별 likelihood 그라데이션(증분2.1, #522 구현됨)** — 가산 부스트 크기 = `PROBE_FAVOR_BOOST(최대) × 옵션 favorWeight(0~1)`. pathognomonic 답(ITBS '늘 같은 거리에서 켜짐'·족저 '아침 첫발+걸으면 풀림'·sprint-pop 0.9)은 최대치에 가깝게, 특징적이지만 덜 특이적인 답(가자미근 깊은 뻐근 0.75 등)은 작게 올린다 → 단발 자가응답이 부하 데이터(~0.5~1.0)를 과도하게 압도하지 않는다. `InjuryProbeOptionDef.favorWeight?`(미설정=0.5 보수적 fail-safe — `evaluateRedFlags` '신호 없으면 보수적' 철학과 정렬; 단 모든 favors 옵션은 저작 필수, 완전성 테스트가 강제)를 §1 결정적 지문 특이도로 옵션별 저작(11개). 리뷰어가 제안했던 `probeWeights[axis]` 공식은 프로브 axis↔가설 probeWeights 키 불일치로 오작동하므로 per-option 모델로 확장했다. **후속(별도, #522 코멘트): 현재 favorWeight 는 직접 저작값 — 1차 vs 2차 후보 차등(예 pathognomonic 답이 동시에 다른 가설을 *낮춤*)은 미반영, 가산-only 보존.**
 
 ## 3. 부상별 타깃 예방 (원인→레버) — 레버: 강도하향/스트라이드보류/회복전환/케이던스큐/볼륨동결
 - **족저근막염**: ≥41km주/ACWR스파이크→볼륨동결+회복주(-20~30%); 종아리약화→고부하 카프(Rathleff: 수건받쳐 발가락 배측굴곡, 격일 3-2-3초, 12→8RM 3개월, FFI 29점 우월); 오버스트라이드→케이던스큐(보조); 신발 급전환 점진복귀.
@@ -63,6 +63,7 @@
 - **처방 반영**: 심각도비례 하이브리드 — severity≤2 자동 하향 권고(되돌리기), severity≥3 또는 redFlag→강제 회복전환/중단. 레버는 KB `prevention.levers`에서 결정론 주입. `injuryAreas.ts` 처방함수를 hypothesis-aware로 오버로드(없으면 기존 fallback).
 - **coach-run**: KB 전문 전송 금지(프롬프트 크기). 웹에서 rank 후 **상위 1~2 가설+레버+redFlag 결과만 client-summary 주입**(coach-context-client-summary 패턴), narrative만 생성. redFlag tripped면 처방지침 미전송·의뢰 카피만. 웹 SSOT, coach-run 소비만(이중구현 금지).
 - **grill 1문항씩**: `coachMoments.ts` `pain-followup`(다음 앱 열 때)에서 가장 불확실한 1축만 출력→`probeAnswers` 누적→재가중→다음 1문항. 한 세션 1문항(피로 방지).
+- **monitoring 노출 게이트(#3, `isInjuryProbeEligible` model.ts)**: 감별은 본래 *급성기(active) 도구*다. `active`=항상 띄우고, `monitoring`(좋아지는 중)=**재발 신호 있을 때만**(`isInjuryReflaring`: 최근 14일 flare·악화 체크인·통증 반등) 재개, `resolved/archived`=안 띄움. 거의 나은 부상에 "어디 아파요?"를 반복하지 않기 위함(노이즈 방지). ⚠ 이 게이트는 *프로브*에만 — redFlag 게이트·장기부상 escalation(`detectInjuryEscalation`)은 무관하게 항상 작동(안전은 줄이지 않는다). 제품 결정(노출 빈도): "monitoring이면 중단, 재발 시 재개"(사용자 합의 2026-06-25).
 - **sessionQuality 정합**: 통증 동반 세션 quality 하향·회복 권고는 KB 아니라 sessionQuality에 정렬(타입별 SSOT, 중복분기 방지).
 
 ## 핵심 원칙 (메모리 교훈 반영)

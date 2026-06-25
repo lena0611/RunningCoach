@@ -670,6 +670,44 @@ export function getActiveInjuryItem(memory: TrainingMemory): TrainingInjuryItem 
   return memory.injuryItems.find((item) => item.id === memory.activeInjuryItemId) ?? null
 }
 
+/** monitoring(좋아지는 중) 부상이 재발 신호 윈도(최근 flare). */
+const INJURY_REFLARE_WINDOW_DAYS = 14
+
+/**
+ * monitoring(좋아지는 중) 부상이 다시 나빠지는가 — 최근 flare·악화 체크인·통증 반등 중 하나라도.
+ * checkInHistory 는 최신순([0]=가장 최근)이라 "최근 vs 직전" 반등을 본다.
+ * ⚠ 단발 신호(악화 체크인 1건·통증 +1 반등)로 즉시 켜는 건 **의도**다 — 이건 의료 의뢰가 아니라 "감별 프로브 안전망 재개"라
+ *   둔감보다 과민이 안전하고(잘못 떠도 비용은 1문항/세션, §5), redFlag 진행성(injurySignals.ts worseningOverTime
+ *   =2회 연속 요구, 피로골절 과의뢰 방지)과 **다른 일을 하는 다른 신호**다. "일관성 맞춰 2회로 막아라"식 회귀 금지.
+ *   탈출구: 악화 체크인이면 App.vue 가 lastFlareDate 를 갱신 → 14일 윈도로도 재개(체크인 1건뿐이어도 영구 갇힘 없음).
+ */
+export function isInjuryReflaring(injury: TrainingInjuryItem, today: Date = new Date()): boolean {
+  const dayMs = 24 * 60 * 60 * 1000
+  const flareT = parseInjuryTimestamp(injury.lastFlareDate)
+  if (flareT !== null) {
+    const daysAgo = Math.floor((today.getTime() - flareT) / dayMs)
+    if (daysAgo >= 0 && daysAgo <= INJURY_REFLARE_WINDOW_DAYS) return true
+  }
+  const [latest, prev] = injury.checkInHistory.slice(0, 2)
+  if (latest?.worsenedDuringOrAfterRun) return true
+  if (typeof latest?.painLevel === 'number' && typeof prev?.painLevel === 'number' && latest.painLevel > prev.painLevel) return true
+  return false
+}
+
+/**
+ * 부상 감별 grill 프로브(§5 Phase C, "왜 아픈지" 1문항)를 띄울 자격 게이트(#3, monitoring 노출 정책).
+ * 감별은 본래 급성기(active) 도구다 — 좋아지는 중(monitoring)엔 노이즈라 새 프로브를 멈춘다.
+ *  - active   = 항상(급성기, 원인 좁히기 가치 높음).
+ *  - monitoring = 재발 신호(isInjuryReflaring) 있을 때만 — 다시 나빠지면 재개, 안전망 유지.
+ *  - resolved/archived = 안 띄움.
+ * (redFlag·장기부상 escalation 은 이 게이트와 무관하게 별도 경로로 항상 작동 — 안전은 안 줄인다.)
+ */
+export function isInjuryProbeEligible(injury: TrainingInjuryItem, today: Date = new Date()): boolean {
+  if (injury.status === 'active') return true
+  if (injury.status === 'monitoring') return isInjuryReflaring(injury, today)
+  return false
+}
+
 /** 부위 무관 전역 재부상 위험창(최근 12개월 부상 이력) 요약. */
 export type RecentInjuryHistory = {
   /** 활성/관리 중이거나, resolved여도 가장 최근 관련일이 12개월 이내인 부상이 하나라도 있으면 true. */

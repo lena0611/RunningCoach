@@ -6,7 +6,7 @@ import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import { useLevelStore } from '@/app/stores/levelStore'
 import { useSessionDetailStore } from '@/app/stores/sessionDetailStore'
-import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
+import { getActiveGoal, getActiveInjuryItem, isInjuryProbeEligible } from '@/entities/training-memory/model'
 import RunSummaryCard from '@/widgets/run-summary-card/RunSummaryCard.vue'
 import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
 import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
@@ -128,8 +128,9 @@ watch(
   () => activeInjury.value?.id ?? null,
   () => {
     const inj = activeInjury.value
+    // #3 monitoring 게이트: active=항상, monitoring=재발 시만, resolved/archived=안 띄움(감별은 급성기 도구).
     injuryProbeSnapshot.value =
-      inj && (inj.status === 'active' || inj.status === 'monitoring')
+      inj && isInjuryProbeEligible(inj, today.value)
         ? selectNextProbe(inj.normalizedAreas.map((a) => a.areaId), Object.keys(inj.probeAnswers ?? {}))
         : null
   },
