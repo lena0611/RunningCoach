@@ -84,6 +84,35 @@ describe('rankInjuryHypotheses', () => {
     const b = rankInjuryHypotheses(['left-calf'], { weeklyIncreaseHigh: true }).map((r) => r.hypothesis.id)
     expect(a).toEqual(b)
   })
+
+  it('grill 답변(§2-B)이 사전순위를 역전한다 — 햄스트링 sprint-pop(좌상)이 PHT를 제침', () => {
+    const noAnswer = rankInjuryHypotheses(['left-hamstring'])
+    expect(noAnswer[0].hypothesis.id).toBe('pht') // 답 없으면 사전순위 1위 PHT
+    const answered = rankInjuryHypotheses(['left-hamstring'], {}, { hamstring: 'sprint-pop' })
+    expect(answered[0].hypothesis.id).toBe('hamstring-strain') // 답이 좌상을 상위로
+    expect(answered[0].probeFavored).toBe(true)
+  })
+
+  it('이미 사전순위 1위를 지지하는 답은 그대로 top + probeFavored 표시', () => {
+    const answered = rankInjuryHypotheses(['left-hamstring'], {}, { hamstring: 'ischial-sitting-uphill' })
+    expect(answered[0].hypothesis.id).toBe('pht')
+    expect(answered[0].probeFavored).toBe(true)
+  })
+
+  it('redFlag 자가검사 답(favors 없음)은 가중하지 않는다 — 순위 불변', () => {
+    const base = rankInjuryHypotheses(['left-hamstring']).map((r) => r.hypothesis.id)
+    const withRf = rankInjuryHypotheses(['left-hamstring'], {}, { hamstring: 'night-radiating' })
+    expect(withRf.map((r) => r.hypothesis.id)).toEqual(base) // night-radiating 은 favors 없음 → 부스트 없음
+    expect(withRf.every((r) => r.probeFavored === false)).toBe(true)
+  })
+
+  it('답변은 사전순위 1위를 지지하는 데이터가 있어도 상위로 올린다(답을 무시하지 않음)', () => {
+    // groundUphill 은 PHT 전용 신호(좌상엔 없음): PHT = prior 1.0 + 0.6 = 1.6. 그래도 sprint-pop 좌상(0.5+1.5=2.0)이 상위.
+    const ranked = rankInjuryHypotheses(['left-hamstring'], { groundUphill: true }, { hamstring: 'sprint-pop' })
+    expect(ranked[0].hypothesis.id).toBe('hamstring-strain')
+    // 비지지 PHT도 상위 1~2 동반 표시엔 남는다(점수 보존 — 동반 가능성).
+    expect(ranked.map((r) => r.hypothesis.id)).toContain('pht')
+  })
 })
 
 describe('evaluateRedFlags (§4 게이트)', () => {
