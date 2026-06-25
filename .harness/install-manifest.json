@@ -1,14 +1,14 @@
 {
   "tool": "harness-seed",
-  "version": "0.2.70",
-  "installedAt": "2026-06-22T09:34:01.999Z",
+  "version": "0.2.71",
+  "installedAt": "2026-06-25T03:27:14.030Z",
   "source": {
     "type": "git",
     "repo": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git",
-    "ref": "v0.2.70",
+    "ref": "v0.2.71",
     "commit": null,
-    "packageVersion": "0.2.70",
-    "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.70"
+    "packageVersion": "0.2.71",
+    "spec": "https://git.smartscore.kr/ai-standard/harnesses/harness-seed.git#v0.2.71"
   },
   "manifestVersion": 3,
   "managedFiles": {
@@ -19,7 +19,7 @@
       "sha256": "459771859b5d72a80191d100d0dc1503bc3463d07e12dff8dda6627465a3b3d9"
     },
     ".harness/bin/build-context.mjs": {
-      "sha256": "39a8b9664577b788baeb607eb3c86657a6e11f0d2aa326e1a2cf5e9a0a6573a4"
+      "sha256": "a4e6fd36b8ab43c7d29cdf291b22a38bf51cac5aea2ffdb5ff4f1d86e966fa6c"
     },
     ".harness/bin/changelog-delta.mjs": {
       "sha256": "96bc5b3204f70d99a57a75a0ff845817ee2c506408917e77213c6576d733637e"
@@ -76,7 +76,7 @@
       "sha256": "ae53b5194b77ab250b1e6c756d795da3b0b99a3d29b52787a3fc87cb5cacaebf"
     },
     ".harness/bin/scan-project.mjs": {
-      "sha256": "096638e9e5785fb3b884c8ddbb8c22206c02ef4d48a8faab06860a6cafcaea9e"
+      "sha256": "c741713a3eed93ec42d627a91b032bde30d192d1125e396ebd1b4d96c3d76f55"
     },
     ".harness/bin/sync-context.mjs": {
       "sha256": "a8e2097e77695dced9272679519ed0a7a183e1a243f82a091489bcec6fe68c17"
@@ -97,7 +97,7 @@
       "sha256": "06977b047a4f833dbe5cca4907e56f251da25906a111e56f987b87a8dfa2cbb5"
     },
     ".harness/documentation/context-registry.json": {
-      "sha256": "db7771c826da96d2440161434cc6708fae782e4974aea03002ea0571411d76d9"
+      "sha256": "5961db259a3bdc12fd390d46a573d7b55928b1dbb1ae22262cafba2491dfeae7"
     },
     ".harness/documentation/decision-flow.md": {
       "sha256": "8c0cae84bb382aca5c8202bfed549022bcb4cedbbc1a26cc1c5849607e4dfdf2"
@@ -160,7 +160,7 @@
       "sha256": "724a9845eceb08c64b7266f3d707934e9452fb0d434ec11124a93d2a4c41ab3f"
     },
     ".harness/project/bootstrap.md": {
-      "sha256": "b702fcc7d9e3a4264fcc7beb516996651c7e6032ee66cc27feaa0e2aaa54da16"
+      "sha256": "a01c308ab6c33fc47835beba20e1bd7e7eed733c38398bd96383bf533391377a"
     },
     ".harness/project/personal-methodology.example.md": {
       "sha256": "46a3565c19674fdeff1061bc846452c50c9adee8af135a1a9352909c46ffa913"
@@ -187,7 +187,7 @@
       "sha256": "a4fabebbe638b5b396175b6fc39be6fd7f51fdf431c19c533538cbe7275e7038"
     },
     ".harness/skills/README.md": {
-      "sha256": "672991810adfa80774687a7ceb707bfe8881655bc53300368df831d23b684a35"
+      "sha256": "2c5bf3a5e0761a5c9d2bbefcee9fd47ed9fd3290dccc536b7ff169c89a68229e"
     },
     ".harness/skills/registry.json": {
       "sha256": "6bf8e7d6e81634d79e3d7d52f5d1b11af69b476c49e1a1f49a64cba3b4b52a14"
