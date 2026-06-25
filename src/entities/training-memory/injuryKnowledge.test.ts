@@ -107,10 +107,49 @@ describe('rankInjuryHypotheses', () => {
   })
 
   it('답변은 사전순위 1위를 지지하는 데이터가 있어도 상위로 올린다(답을 무시하지 않음)', () => {
-    // groundUphill 은 PHT 전용 신호(좌상엔 없음): PHT = prior 1.0 + 0.6 = 1.6. 그래도 sprint-pop 좌상(0.5+1.5=2.0)이 상위.
+    // groundUphill 은 PHT 전용 신호(좌상엔 없음): PHT = prior 1.0 + 0.6 = 1.6. 그래도 sprint-pop 좌상(0.5 + 1.5×0.9 = 1.85)이 상위.
     const ranked = rankInjuryHypotheses(['left-hamstring'], { groundUphill: true }, { hamstring: 'sprint-pop' })
     expect(ranked[0].hypothesis.id).toBe('hamstring-strain')
     // 비지지 PHT도 상위 1~2 동반 표시엔 남는다(점수 보존 — 동반 가능성).
+    expect(ranked.map((r) => r.hypothesis.id)).toContain('pht')
+  })
+})
+
+describe('rankInjuryHypotheses — 답변 likelihood 그라데이션(#522)', () => {
+  // 답 부스트만 분리: 같은 부위면 priorScore·dataScore 가 동일하므로 (답변 점수 − 무답 점수) = PROBE_FAVOR_BOOST × favorWeight.
+  const boost = (areaId: string, probeId: string, value: string, hypId: string) => {
+    const base = rankInjuryHypotheses([areaId]).find((r) => r.hypothesis.id === hypId)!.score
+    const answered = rankInjuryHypotheses([areaId], {}, { [probeId]: value }).find((r) => r.hypothesis.id === hypId)!.score
+    return answered - base
+  }
+
+  it('favors 옵션은 모두 favorWeight 를 (0,1] 로 저작했다(완전성 — flat 가중 회귀 방지)', () => {
+    for (const p of injuryProbes) {
+      for (const o of p.options) {
+        if (o.favors) {
+          expect(typeof o.favorWeight).toBe('number')
+          expect(o.favorWeight as number).toBeGreaterThan(0)
+          expect(o.favorWeight as number).toBeLessThanOrEqual(1)
+        }
+      }
+    }
+  })
+
+  it('부스트 크기 = 최대부스트 × favorWeight — pathognomonic 답일수록 가설을 더 크게 올린다', () => {
+    // ITBS '늘 같은 거리에서 켜짐'(favorWeight 0.9, pathognomonic) > 가자미근 '깊은 뻐근'(0.75, 덜 특이적).
+    const itbs = boost('right-it-band', 'it-band', 'lateral-same-distance', 'itbs')
+    const soleus = boost('left-calf', 'calf', 'soleus-deep', 'calf-strain')
+    expect(itbs).toBeGreaterThan(0)
+    expect(soleus).toBeGreaterThan(0)
+    expect(itbs).toBeGreaterThan(soleus)
+    // PROBE_FAVOR_BOOST 상수에 안 묶이게 favorWeight 비율로 검증(0.9 : 0.75).
+    expect(itbs / soleus).toBeCloseTo(0.9 / 0.75, 5)
+  })
+
+  it('강한 답이라도 비지지 overuse 가설은 점수 보존으로 top-2 동반(단정 아님)', () => {
+    // 햄스트링 sprint-pop(좌상, 0.9)을 골라도 PHT(비지지)는 사라지지 않고 동반된다.
+    const ranked = rankInjuryHypotheses(['left-hamstring'], {}, { hamstring: 'sprint-pop' })
+    expect(ranked[0].hypothesis.id).toBe('hamstring-strain')
     expect(ranked.map((r) => r.hypothesis.id)).toContain('pht')
   })
 })
