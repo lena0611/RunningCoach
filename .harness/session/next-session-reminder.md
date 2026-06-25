@@ -12,7 +12,7 @@
   - **경계 래칫 #397**: `coachMoments`(shared) entities import 안 함 → 페이지가 `selectNextProbe` precompute → `ctx.painProbe` plain 주입. **한 세션 1문항** = 부상 id 변경 시만 스냅샷(probeAnswers 변화 비반응, 자동전진 X).
   - **#전문코치리뷰 4렌즈 적대검증 PASS(must-fix 0)**. should-fix 5건 반영(정강이 구획증후군 변별·햄스트링 골+신경 이중·'영상검사'→'전문가 평가'·ACWR 평이화·동시쓰기 가드). 787 unit+vue-tsc+harness:check. 라이브 스모크(실계정 비파괴·원복): 휴식 중 렌더·실클릭 누적/응답/자동전진無·redFlag→의뢰힌트 플립.
   - **(직전) Phase E 한 줄 힌트(PR #518)**: 대시보드 "🔎 가능성 {가설}·조절 {레버}"(redFlag면 "⚠ 전문가 평가").
-  - **§5 감별진단 KB = A+B+C+D+E 전부 출하 완료.** 후속(증분2, 별도): 다축 누적·답변 rank 재가중, monitoring severity/recency 게이트, 재발 에피소드 스코프화, 지면/페이스 신호. [[injury-focus-week-2026-06-24]] [[rri-risk-factor-evidence-2026-06]].
+  - **§5 = A+B+C+D+E + 증분2 답변 랭킹 재가중(#523) 출하 완료.** `rankInjuryHypotheses`가 probeAnswers favors에 +1.5 가산(comorbid 보존)→물어본 답이 상위 가능성 좁힘, redFlag 우선 보존. 후속(별도): **#522 옵션별 likelihood 그라데이션**, monitoring/재발 게이트, 지면/페이스 신호. [[injury-focus-week-2026-06-24]] [[rri-risk-factor-evidence-2026-06]].
 - 머지=squash 후 `git diff --quiet origin/main <tip>` 트리검증(--quiet=exit-code 의미있음). 훅 미설치 클론이면 커밋 전 `npm run harness:check` 직접.
 
 ## (이전) ⭐ 현재 위치 (2026-06-24 추가) — 보류 (나) Trends E2E 마무리 + #473 클로즈 확인 (PR #513 머지)
@@ -54,7 +54,7 @@
 - ⚠ **머지 규칙**: squash 후 `git diff <tip> origin/main` 빈결과 트리 검증 필수(#463 24→11 누락 사고), 의심 시 `--merge`. [[pr-squash-merge-race-verify-tree]].
 
 ## 다음 1순위
-0. ✅ **감별진단 KB §5 = A+B+C+D+E 전부 출하 완료** — Phase A+B+D(#516)·E(#518)·**C grill 능동 모먼트(#520, 이번 세션)**. 남은 건 **증분2(별도, 미착수)**: 다축 누적·답변 기반 rank 재가중, monitoring severity/recency 게이트, 재발 에피소드 스코프화, 지면/페이스 데이터 신호(신뢰 베이스라인 확보 시). [[injury-focus-week-2026-06-24]]
+0. ✅ **감별진단 KB §5 = A+B+C+D+E + 증분2 재가중 출하 완료** — Phase A+B+D(#516)·E(#518)·C grill 능동 모먼트(#520)·**증분2 답변 랭킹 재가중(#523, 이번 세션)**. 남은 후속(별도·미착수): **#522 옵션별 likelihood 그라데이션**(flat 1.5→per-option, 모델 확장 필요), monitoring severity/recency 게이트, 재발 에피소드 스코프화, 지면/페이스 데이터 신호(신뢰 베이스라인 확보 시). [[injury-focus-week-2026-06-24]]
 0b. **(가) 인증 E2E 나머지 = 6/29 이후**: 부상 휴식 자연 해소 후 비-휴식 계정에서 `rest-return` ×2 + stackpage '다음 훈련'을 **조작 0**으로 검증. 세션 만료면 라이브 chrome(:5175) localStorage 추출(OTP 불요) 우선, 죽었으면 OTP. [[auth-e2e-account-state-and-seed-safety]]
 1. **iOS '새 러닝 감지' 실주행 확인** — 가짜 배너는 제거됨(PR#488). 다음 = 워치 차고 실제 1회 뛰어 집 동기화 시 '제때 1번' 알림 오나 확인(워치 실주행 필요). 미수신/잔존 오탐이면 "진짜 새 워크아웃 endDate 게이트". [[healthkit-detected-notify-gate]].
 2. ✅ **#473 완전 종료** — 이슈 CLOSED, 후속 #501·#502 CLOSED, PR #503·#504·#505 MERGED. Phase 3(풀 휴식모드)는 추적 이슈 없이 연기됨(필요 시 신규 이슈로). [[rest-and-return-coaching]].
