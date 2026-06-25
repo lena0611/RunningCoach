@@ -6,12 +6,11 @@
 > 하네스 본체의 개발 기록이 아닙니다. 설치된 프로젝트의 현재 작업 맥락만 기록합니다.
 > 상세 인수인계는 (있으면) 프로젝트 루트 `HANDOFF.md`. 장기 지식은 에이전트 메모리.
 
-## ⭐ 현재 작업 — 감별진단 KB §5 Phase C(능동 코치 모먼트 grill) 출하 = §5 전부 완료 (2026-06-25, PR #520 머지, Issue #519)
-- **출하 완료(트리검증·787 unit+vue-tsc+harness:check·#전문코치리뷰 4렌즈 PASS(must-fix 0)·라이브 스모크):** 앱 열 때 세션당 **1문항**(`injuryProbes[8]`, §1 결정적 지문 1:1) → `probeAnswers` 누적 → 아형 해소(`subtypeResolved`→가능성 라벨 "…(부착부)") + red-flag 자가검사(`redFlagSelfTest` 배열→`evaluateRedFlags` 게이트). 신규 RedFlagSignals `weightBearingFailureOrInstability`(파열·잠김·근위파열 전용).
-- **핵심 결정:** ① 경계 래칫 #397 — `coachMoments`(shared) entities import 안 함, 페이지가 `selectNextProbe` precompute→`ctx.painProbe` plain 주입 ② **한 세션 1문항** = 부상 id 변경 시만 스냅샷(probeAnswers 비반응→자동전진 X) ③ 모델은 `probeAnswers?`/`subtypeResolved?`만 적재(나머지 dead 미적재) ④ should-fix 5건 반영(정강이 구획증후군·햄스트링 골+신경 이중·'영상검사'→'전문가 평가'·ACWR 평이화·동시쓰기 가드).
-- 라이브 스모크(실계정 비파괴·원복): 휴식 중 프로브 렌더·실클릭 누적/응답/자동전진無·redFlag→의뢰힌트 플립.
-- **증분2 part1 — 답변 기반 랭킹 재가중 출하(PR #523, 트리검증·#전문코치리뷰 2렌즈 SHIP·라이브):** `rankInjuryHypotheses`가 `probeAnswers`의 `favors`에 `PROBE_FAVOR_BOOST`(1.5) **가산**(× 아닌 +, comorbid 점수 보존→top-2 동반표시) → 물어본 답이 상위 "가능성"을 좁힘(햄스트링 sprint-pop→PHT에서 좌상으로). favors=overuse 한정이라 redFlag 우선(§4) 보존. SSOT §2-B 문구를 실제 가산 모델로 정정. **남은 should-fix(비차단)=옵션별 likelihood 그라데이션 → #522**(flat 1.5라 pathognomonic↔약한 답 동일가중; per-option 모델 확장 필요).
-- **§5 = A+B(#516)+C(#520)+D(#516)+E(#518)+증분2재가중(#523) 출하.** 남은 후속: #522(likelihood 그라데이션)·monitoring/재발 게이트·지면/페이스 신호. [[injury-focus-week-2026-06-24]] [[rri-risk-factor-evidence-2026-06]].
+## ⭐ 현재 작업 — 감별 §5 정밀화 2건 출하: 답변 likelihood 그라데이션(#522) + monitoring 노출 게이트(#525) (2026-06-25 후반, PR #526 머지·트리검증 IDENTICAL)
+- **증분2.1 #522 — 답변 likelihood 그라데이션:** flat +1.5 → **옵션별 `favorWeight`(0~1)** 그라데이션. 부스트 = `PROBE_FAVOR_BOOST × favorWeight`. 11개 `favors` 옵션 저작(§1 특이도: pathognomonic 0.9=ITBS '늘 같은 거리'·족저 '아침 첫발'·sprint-pop / 특징적 0.8 / 미특이 0.75=가자미근). `favoredHypothesisWeights`(같은 가설 다수답=max). 미설정 fallback **0.5(보수적 fail-safe**, evaluateRedFlags 철학 정렬 — should-fix 반영). comorbid top-2·§4 redFlag 우선 보존. 리뷰어 제안 `probeWeights[axis]`는 axis↔키 불일치로 오작동 → per-option 확장.
+- **#3 #525 — monitoring 프로브 노출 게이트:** 감별=급성기(active) 도구 → **"monitoring이면 중단, 재발 시 재개"(사용자 합의).** `isInjuryProbeEligible`(model.ts): active=항상 / monitoring=`isInjuryReflaring`(최근14일 flare·악화 체크인·통증 반등)일 때만 / resolved·archived=안함. DashboardPage 스냅샷 게이트 교체. **안전 미감소** — 게이트는 *프로브*에만, redFlag/escalation/이미 모은 자가검사 전송은 독립(코치리뷰 코드 근거). 단발 재발신호=의도(안전망 재개; redFlag 진행성 2회연속과 별개, 주석 명시). 탈출구=악화 체크인 시 App.vue `lastFlareDate` 갱신.
+- **검증:** 805 unit(신규 13) + vue-tsc + harness:check. #전문코치리뷰 **PASS×2 must-fix 0**(#522 4렌즈/#3 3렌즈). **라이브(비파괴·실 계정·실 출하 함수)**: monitoring 게이트 전 분기(active→띄움/monitoring±재발/resolved→억제) + #522 부스트 비율 1.2(=0.9/0.75) + 힌트·프로브 카드 실렌더.
+- **§5 = A+B(#516)+C(#520)+D(#516)+E(#518)+증분2(#523)+증분2.1(#522)+monitoring 게이트(#525) 출하 완료.** 남은 후속(별도·미착수): #522 코멘트(1차/2차 후보 차등=favored가 타가설 낮추는 모델, 현재 가산-only)·monitoring severity/recency 추가 게이트·재발 에피소드 스코프화·지면/페이스 신호. [[injury-focus-week-2026-06-24]] [[rri-risk-factor-evidence-2026-06]].
 
 ## (이전) ⭐ 현재 작업 — 보류 (나) Trends E2E 마무리 + #473 클로즈 확인 (2026-06-24 추가, PR #513 머지)
 - **(나) Trends 렌즈 stackpage E2E 수정 (PR #513)**: `goto('/trends')`→`goto('/#/trends')`(해시) **+ lens 행 `.click()`→`domClick`**(좌표 클릭 간섭). goto 이슈에 가려 lens 클릭이 검증된 적 없어 안 드러났던 두 번째 버그 — 라이브 QA로 포착. 안전 비파괴 배치 7개(stackpage 3 + session-detail 4) green, harness:check 통과.
