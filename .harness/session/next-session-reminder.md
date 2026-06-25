@@ -5,15 +5,16 @@
 `project-memory.md`, `.harness/project/workflow-rules.md`, `decision-log.md`를 우선합니다.
 > 상세 인수인계가 있으면 프로젝트 루트 `HANDOFF.md`를 먼저 본다.
 
-## ⭐ 현재 위치 (2026-06-25) — 감별진단 KB §5 Phase C·E 출하 = §5 전부(A+B+C+D+E) 완료
-- **이번 세션 완료(PR #520 머지·트리검증, Issue #519):** 감별진단 KB Phase C — 부상 "왜 아픈지" 좁히는 **능동 코치 모먼트 grill(1문항)**.
-  - 앱 열 때 세션당 1문항(`injuryProbes[8]`, §1 결정적 지문 1:1) → `probeAnswers` 누적 → 아형 해소(`subtypeResolved`→가능성 라벨 "…(부착부)") + red-flag 자가검사(`redFlagSelfTest` **배열** → `evaluateRedFlags` 게이트).
-  - 모델은 `probeAnswers?`/`subtypeResolved?`만 적재(나머지 dead field 여전히 미적재). 신규 RedFlagSignals `weightBearingFailureOrInstability`(파열·잠김·근위파열 전용, 억지매핑 회피).
-  - **경계 래칫 #397**: `coachMoments`(shared) entities import 안 함 → 페이지가 `selectNextProbe` precompute → `ctx.painProbe` plain 주입. **한 세션 1문항** = 부상 id 변경 시만 스냅샷(probeAnswers 변화 비반응, 자동전진 X).
-  - **#전문코치리뷰 4렌즈 적대검증 PASS(must-fix 0)**. should-fix 5건 반영(정강이 구획증후군 변별·햄스트링 골+신경 이중·'영상검사'→'전문가 평가'·ACWR 평이화·동시쓰기 가드). 787 unit+vue-tsc+harness:check. 라이브 스모크(실계정 비파괴·원복): 휴식 중 렌더·실클릭 누적/응답/자동전진無·redFlag→의뢰힌트 플립.
-  - **(직전) Phase E 한 줄 힌트(PR #518)**: 대시보드 "🔎 가능성 {가설}·조절 {레버}"(redFlag면 "⚠ 전문가 평가").
-  - **§5 = A+B+C+D+E + 증분2 답변 랭킹 재가중(#523) 출하 완료.** `rankInjuryHypotheses`가 probeAnswers favors에 +1.5 가산(comorbid 보존)→물어본 답이 상위 가능성 좁힘, redFlag 우선 보존. 후속(별도): **#522 옵션별 likelihood 그라데이션**, monitoring/재발 게이트, 지면/페이스 신호. [[injury-focus-week-2026-06-24]] [[rri-risk-factor-evidence-2026-06]].
-- 머지=squash 후 `git diff --quiet origin/main <tip>` 트리검증(--quiet=exit-code 의미있음). 훅 미설치 클론이면 커밋 전 `npm run harness:check` 직접.
+## ⭐ 현재 위치 (2026-06-25 후반) — 감별 §5 정밀화 2건 출하: 답변 likelihood 그라데이션(#522) + monitoring 노출 게이트(#525)
+- **이번 세션 완료(PR #526 머지·트리검증 IDENTICAL, Issue #522·#525 CLOSED):** 부상 감별(§5) 두 증분, 한 PR(squash) — 둘 다 #전문코치리뷰 PASS(must-fix 0).
+  - **증분2.1 #522 — 답변 likelihood 그라데이션**: flat +1.5 부스트를 **옵션별 `favorWeight`(0~1)**로 그라데이션. 부스트 = `PROBE_FAVOR_BOOST × favorWeight`. 11개 `favors` 옵션 저작(§1 특이도: pathognomonic 0.9=ITBS '늘 같은 거리'·족저 '아침 첫발'·sprint-pop / 특징적 0.8 / 미특이 0.75=가자미근). `favoredHypothesisWeights`(같은 가설 다수답=max). 미설정 fallback **0.5(보수적 fail-safe**, evaluateRedFlags 철학 정렬 — should-fix 반영). comorbid top-2·§4 redFlag 우선 불변식 보존. 리뷰어 제안 `probeWeights[axis]`는 axis↔키 불일치로 오작동 → per-option 모델로 확장.
+  - **#3 #525 — monitoring 프로브 노출 게이트**: 감별=급성기(active) 도구 → **"monitoring이면 중단, 재발 시 재개"(사용자 합의)**. `isInjuryProbeEligible`(model.ts): active=항상 / monitoring=`isInjuryReflaring`(최근14일 flare·악화 체크인·통증 반등)일 때만 / resolved·archived=안함. DashboardPage 스냅샷 게이트 교체. **안전 미감소**: 게이트는 *프로브*에만 — redFlag 게이트·escalation·이미 모은 자가검사 전송은 독립(코치리뷰 코드 근거 확정). 단발 재발신호=의도(안전망 재개; redFlag 진행성 2회연속과 별개, 주석 명시). 탈출구=악화 체크인 시 App.vue `lastFlareDate` 갱신(영구 갇힘 없음).
+  - **검증**: 805 unit(신규 13) + vue-tsc + harness:check(test/build). #전문코치리뷰 PASS×2(#522 4렌즈/#3 3렌즈). **라이브(비파괴·실 계정·실 출하 함수)**: monitoring 게이트 전 분기 + #522 부스트 비율 1.2(=0.9/0.75) + 힌트("🔎가능성 족저근막염·조절 볼륨 동결")·프로브 카드 실렌더.
+- **§5 = A+B+C+D+E + 증분2 + 증분2.1(#522) + monitoring 게이트(#525) 출하 완료.** 후속(별도·미착수): **#522 코멘트** 1차/2차 후보 차등(favored가 타가설을 *낮추는* 모델, 현재는 가산-only) · monitoring severity/recency 추가 게이트 · 재발 에피소드 스코프화 · 지면/페이스 데이터 신호(신뢰 베이스라인 확보 시). [[injury-focus-week-2026-06-24]] [[rri-risk-factor-evidence-2026-06]].
+- 머지=squash 후 `git diff --quiet <tip> origin/main` 트리검증(--quiet=exit-code 의미있음). 훅 미설치 클론이면 커밋 전 `npm run harness:check` 직접.
+
+## (이전) ⭐ 현재 위치 (2026-06-25) — 감별진단 KB §5 Phase C·E 출하 = §5 전부(A+B+C+D+E) 완료
+- **PR #520(Phase C), #518(Phase E), #523(증분2 재가중) 머지:** 능동 코치 모먼트 grill(1문항, `injuryProbes[8]`·§1 결정적 지문 1:1) → `probeAnswers` 누적·아형 해소(`subtypeResolved`)·red-flag 자가검사(`redFlagSelfTest` 배열→evaluateRedFlags). 경계 래칫 #397: 페이지가 `selectNextProbe` precompute→`ctx.painProbe` plain 주입. 증분2(#523): favors에 +1.5 가산(이번 #522가 그라데이션화). [[injury-focus-week-2026-06-24]]
 
 ## (이전) ⭐ 현재 위치 (2026-06-24 추가) — 보류 (나) Trends E2E 마무리 + #473 클로즈 확인 (PR #513 머지)
 - **이번 턴 완료(머지·트리검증):**
@@ -54,7 +55,7 @@
 - ⚠ **머지 규칙**: squash 후 `git diff <tip> origin/main` 빈결과 트리 검증 필수(#463 24→11 누락 사고), 의심 시 `--merge`. [[pr-squash-merge-race-verify-tree]].
 
 ## 다음 1순위
-0. ✅ **감별진단 KB §5 = A+B+C+D+E + 증분2 재가중 출하 완료** — Phase A+B+D(#516)·E(#518)·C grill 능동 모먼트(#520)·**증분2 답변 랭킹 재가중(#523, 이번 세션)**. 남은 후속(별도·미착수): **#522 옵션별 likelihood 그라데이션**(flat 1.5→per-option, 모델 확장 필요), monitoring severity/recency 게이트, 재발 에피소드 스코프화, 지면/페이스 데이터 신호(신뢰 베이스라인 확보 시). [[injury-focus-week-2026-06-24]]
+0. ✅ **감별진단 KB §5 = A+B+C+D+E + 증분2 + 증분2.1(#522) + monitoring 게이트(#525) 출하 완료** — 이번 세션 PR #526(#522 likelihood 그라데이션 + #3 monitoring 노출 게이트). 남은 후속(별도·미착수): **#522 코멘트** 1차/2차 후보 차등(favored가 타가설을 *낮추는* 모델, 현재 가산-only) · monitoring severity/recency 추가 게이트 · 재발 에피소드 스코프화 · 지면/페이스 데이터 신호(신뢰 베이스라인 확보 시). [[injury-focus-week-2026-06-24]]
 0b. **(가) 인증 E2E 나머지 = 6/29 이후**: 부상 휴식 자연 해소 후 비-휴식 계정에서 `rest-return` ×2 + stackpage '다음 훈련'을 **조작 0**으로 검증. 세션 만료면 라이브 chrome(:5175) localStorage 추출(OTP 불요) 우선, 죽었으면 OTP. [[auth-e2e-account-state-and-seed-safety]]
 1. **iOS '새 러닝 감지' 실주행 확인** — 가짜 배너는 제거됨(PR#488). 다음 = 워치 차고 실제 1회 뛰어 집 동기화 시 '제때 1번' 알림 오나 확인(워치 실주행 필요). 미수신/잔존 오탐이면 "진짜 새 워크아웃 endDate 게이트". [[healthkit-detected-notify-gate]].
 2. ✅ **#473 완전 종료** — 이슈 CLOSED, 후속 #501·#502 CLOSED, PR #503·#504·#505 MERGED. Phase 3(풀 휴식모드)는 추적 이슈 없이 연기됨(필요 시 신규 이슈로). [[rest-and-return-coaching]].
