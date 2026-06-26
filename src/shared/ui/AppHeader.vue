@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/app/stores/authStore'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
-import { useSettingsStore, type ManualThemeMode, type NotificationSettings } from '@/app/stores/settingsStore'
+import { notificationSettingRows, useSettingsStore, type ManualThemeMode, type NotificationSettingKey, type NotificationSettings, type SettingsPanelFocus } from '@/app/stores/settingsStore'
 import { useGlossaryStore } from '@/app/stores/glossaryStore'
 import { getActiveGoal, getActiveInjuryItem, type PersonalBest, type TrainingMemory } from '@/entities/training-memory/model'
 import { isHealthKitBridgeAvailable } from '@/features/import-healthkit-run/healthKitBridge'
@@ -50,6 +50,13 @@ watch(
   }
 )
 const drawerPanel = ref<'account' | 'profile' | 'settings'>('account')
+watch(
+  () => settingsStore.settingsPanelRequestId,
+  (requestId) => {
+    if (!requestId) return
+    openSettingsPanel(settingsStore.settingsPanelFocus)
+  }
+)
 const saving = ref(false)
 const error = ref('')
 const draftName = ref(memoryStore.selectedUser.name)
@@ -93,23 +100,7 @@ const runnerLevelOptions = [
   { value: 'intermediate', label: '중급' },
   { value: 'advanced', label: '고급' }
 ]
-const notificationRows = [
-  {
-    key: 'workoutMorning',
-    title: '훈련 당일 아침',
-    detail: '예정 훈련이 있는 날 오전 7시에 알려줍니다.'
-  },
-  {
-    key: 'scheduledWorkout',
-    title: '스케줄 훈련 준비',
-    detail: '예정 세션 당일 저녁에 한 번 더 알려줍니다.'
-  },
-  {
-    key: 'healthKitNewRun',
-    title: 'HealthKit 새 러닝',
-    detail: '앱이 새 러닝을 저장하면 알림을 보냅니다.'
-  }
-] as const
+const notificationRows = notificationSettingRows
 
 const accountLabel = computed(() => {
   return memoryStore.selectedUser.name || authStore.user?.email || '계정'
@@ -394,7 +385,7 @@ function setAllNotifications(enabled: boolean) {
   })
 }
 
-function setNotification(key: typeof notificationRows[number]['key'], enabled: boolean) {
+function setNotification(key: NotificationSettingKey, enabled: boolean) {
   settingsStore.setNotificationSetting(key, enabled)
   syncNotifications({
     ...settingsStore.notificationSettings,
@@ -414,6 +405,15 @@ function goGlossary() {
   // 계정 정보 드로어를 닫지 않고 그 위에 스택을 띄운다(--z-stack > 드로어).
   // 파생 스택의 뒤로(←)가 계정 정보로 복귀하도록 부모 surface를 유지한다.
   glossaryOpen.value = true
+}
+
+function openSettingsPanel(focus: SettingsPanelFocus | null = null) {
+  drawerOpen.value = true
+  drawerPanel.value = 'settings'
+  if (focus !== 'notifications') return
+  void nextTick(() => {
+    document.querySelector('[data-settings-section="notifications"]')?.scrollIntoView({ block: 'start' })
+  })
 }
 </script>
 
@@ -450,7 +450,7 @@ function goGlossary() {
   <StackPage :open="drawerOpen" title="계정 정보" wide-actions>
     <template #actions>
       <div class="stack-header-actions">
-        <button class="stack-icon-button" type="button" aria-label="설정 열기" @click="drawerPanel = 'settings'">
+        <button class="stack-icon-button" type="button" aria-label="설정 열기" @click="openSettingsPanel()">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" /><path d="M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1 1.6V21a2 2 0 0 1-4 0v-.1a1.8 1.8 0 0 0-1-1.6 1.8 1.8 0 0 0-2 .4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.8 1.8 0 0 0 .4-2 1.8 1.8 0 0 0-1.6-1H3a2 2 0 0 1 0-4h.1a1.8 1.8 0 0 0 1.6-1 1.8 1.8 0 0 0-.4-2l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.8 1.8 0 0 0 2 .4 1.8 1.8 0 0 0 1-1.6V3a2 2 0 0 1 4 0v.1a1.8 1.8 0 0 0 1 1.6 1.8 1.8 0 0 0 2-.4l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.8 1.8 0 0 0-.4 2 1.8 1.8 0 0 0 1.6 1H21a2 2 0 0 1 0 4h-.1a1.8 1.8 0 0 0-1.5 1Z" /></svg>
         </button>
         <button class="stack-icon-button" type="button" aria-label="닫기" @click="closeDrawer">
@@ -644,7 +644,7 @@ function goGlossary() {
       <p class="helper">현재 적용: {{ settingsStore.effectiveTheme === 'light' ? '라이트' : '다크' }}</p>
     </section>
 
-    <section class="settings-section">
+    <section class="settings-section" data-settings-section="notifications">
       <div class="settings-section-heading">
         <p class="eyebrow">Notifications</p>
         <h3>알림</h3>

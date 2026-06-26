@@ -6,6 +6,7 @@ import { useLevelStore } from '@/app/stores/levelStore'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { getDisabledNotificationItems, useSettingsStore } from '@/app/stores/settingsStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import type { TrainingInjuryCheckIn, TrainingMemory } from '@/entities/training-memory/model'
 import {
@@ -21,6 +22,7 @@ import { useCoachStore } from '@/app/stores/coachStore'
 import { useSessionDetailStore } from '@/app/stores/sessionDetailStore'
 import InjuryCheckInSheet from '@/shared/ui/InjuryCheckInSheet.vue'
 import InjuryScreeningSheet from '@/shared/ui/InjuryScreeningSheet.vue'
+import NotificationSettingsPromptSheet from '@/shared/ui/NotificationSettingsPromptSheet.vue'
 import PostRunInterviewSheet from '@/shared/ui/PostRunInterviewSheet.vue'
 import ToastHost from '@/shared/ui/ToastHost.vue'
 import { useToastStore } from '@/app/stores/toastStore'
@@ -37,6 +39,7 @@ const authStore = useAuthStore()
 const healthKitSyncStore = useHealthKitSyncStore()
 const memoryStore = useMemoryStore()
 const runStore = useRunStore()
+const settingsStore = useSettingsStore()
 const weatherStore = useWeatherStore()
 const levelStore = useLevelStore()
 const toastStore = useToastStore()
@@ -152,6 +155,8 @@ const suppressNextTabClick = ref(false)
 const injuryCheckInItemId = ref('')
 const injuryCheckInSaving = ref(false)
 const injuryScreeningOpen = ref(false)
+const notificationPromptReady = ref(false)
+const dismissedNotificationPromptSignature = ref(readDismissedNotificationPromptSignature())
 // 코치 모먼트(대시보드)가 부상 스크리닝 시트를 요청하면 연다(#386).
 watch(
   () => injuryFlowStore.request,
@@ -215,6 +220,26 @@ function getNavIndex(path: string) {
 const currentTabIndex = computed(() => mainTabRoutes.indexOf(route.path))
 const isMainTabRoute = computed(() => currentTabIndex.value !== -1)
 const injuryCheckInItem = computed(() => memoryStore.memory.injuryItems.find((item) => item.id === injuryCheckInItemId.value) ?? null)
+const disabledNotificationItems = computed(() => getDisabledNotificationItems(settingsStore.notificationSettings))
+const notificationPromptSignature = computed(() => disabledNotificationItems.value.map((item) => item.key).join('|'))
+const notificationSettingsPromptOpen = computed(() =>
+  notificationPromptReady.value &&
+  authStore.isAuthenticated &&
+  route.path !== '/auth' &&
+  route.path !== '/access' &&
+  !showOnboarding.value &&
+  disabledNotificationItems.value.length > 0 &&
+  dismissedNotificationPromptSignature.value !== notificationPromptSignature.value &&
+  !injuryCheckInItem.value &&
+  !pendingInterviewRun.value &&
+  !injuryScreeningOpen.value
+)
+watch(
+  () => authStore.user?.id ?? 'anonymous',
+  () => {
+    dismissedNotificationPromptSignature.value = readDismissedNotificationPromptSignature()
+  }
+)
 // 이 체크인을 띄운 "방금 들어온" 세션(최근 2일 이내일 때만 브리지 문장/숏컷 노출).
 const injuryCheckInContextRun = computed(() => {
   if (!injuryCheckInItem.value) return null
@@ -291,6 +316,9 @@ onMounted(() => {
   void healthKitSyncStore.syncAfterActivation()
   void weatherStore.refreshAfterActivation()
   requestInjuryCheckInPrompt()
+  window.setTimeout(() => {
+    notificationPromptReady.value = true
+  }, 450)
   document.addEventListener('touchmove', preventNativeScrollDuringSwipe, { passive: false })
 })
 
@@ -457,6 +485,17 @@ function openInjuryRegistration() {
   void router.push({ path: '/memory', query: { panel: 'injuries', new: '1' } })
 }
 
+function dismissNotificationSettingsPrompt() {
+  const signature = notificationPromptSignature.value
+  dismissedNotificationPromptSignature.value = signature
+  if (signature) sessionStorage.setItem(notificationPromptDismissedKey(), signature)
+}
+
+function openNotificationSettings() {
+  dismissNotificationSettingsPrompt()
+  settingsStore.requestSettingsPanel('notifications')
+}
+
 const injuryScreeningShowGuide = computed(() => localStorage.getItem(createInjuryScreeningGuideSeenKey(memoryStore.selectedUserId)) !== '1')
 
 function dismissCurrentInjuryCheckIn() {
@@ -602,6 +641,15 @@ function compareDateKeys(a: string, b: string) {
 
 function localDateKey(date: Date) {
   return date.toLocaleDateString('sv-SE')
+}
+
+function notificationPromptDismissedKey() {
+  return `pacelab.notificationPrompt.dismissed.${authStore.user?.id ?? 'anonymous'}`
+}
+
+function readDismissedNotificationPromptSignature() {
+  if (typeof sessionStorage === 'undefined') return ''
+  return sessionStorage.getItem(notificationPromptDismissedKey()) ?? ''
 }
 
 function cloneTrainingMemory(memory: TrainingMemory): TrainingMemory {
@@ -849,6 +897,12 @@ function animateTabRelease(targetOffset: number, targetRoute: string | null) {
       @close="injuryScreeningOpen = false"
       @register="openInjuryRegistration"
       @acknowledge="dismissInjuryScreening"
+    />
+    <NotificationSettingsPromptSheet
+      :open="notificationSettingsPromptOpen"
+      :disabled-items="disabledNotificationItems"
+      @close="dismissNotificationSettingsPrompt"
+      @open-settings="openNotificationSettings"
     />
     <div
       v-if="isMainTabRoute"
