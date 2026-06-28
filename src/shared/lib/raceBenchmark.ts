@@ -1,6 +1,7 @@
 import type { RaceProjection } from './performanceProjection'
 
 export type RaceBenchmarkRegion = 'domestic' | 'international'
+export type RaceBenchmarkDistanceCategory = '10k' | 'half' | 'marathon'
 export type RaceBenchmarkFreshnessStatus =
   | 'latest-confirmed'
   | 'latest-unverified'
@@ -44,6 +45,14 @@ export type RaceBenchmarkCatalogSummary = {
   distributionReady: number
   matchingDistance: number
   pendingDistribution: number
+  distanceCoverage: Record<RaceBenchmarkDistanceCategory, RaceBenchmarkDistanceCoverage>
+}
+
+export type RaceBenchmarkDistanceCoverage = {
+  total: number
+  domestic: number
+  international: number
+  latestConfirmed: number
 }
 
 export type RaceBenchmarkComparison = {
@@ -55,6 +64,12 @@ export type RaceBenchmarkComparison = {
 }
 
 const retrievedAt = '2026-06-29'
+
+export const raceBenchmarkDistanceCategories: Array<{ id: RaceBenchmarkDistanceCategory; label: string; distanceKm: number }> = [
+  { id: '10k', label: '10K', distanceKm: 10 },
+  { id: 'half', label: '하프', distanceKm: 21.0975 },
+  { id: 'marathon', label: '풀', distanceKm: 42.195 }
+]
 
 /**
  * #531 recent-source catalog. This is intentionally metadata + non-identifying
@@ -97,6 +112,42 @@ export const raceBenchmarkSnapshots: RaceBenchmarkSnapshot[] = [
     distributionStatus: 'needs-permission',
     percentileCutsSec: [],
     note: '국내 대표 대회 최신 결과 후보. 원본 참가자 기록 저장 없이 분포 컷만 별도 확보해야 한다.'
+  },
+  {
+    id: 'jtbc-seoul-marathon-2025-10k',
+    eventName: 'JTBC 서울마라톤 10K',
+    region: 'domestic',
+    country: 'KR',
+    city: 'Seoul',
+    distanceKm: 10,
+    year: 2025,
+    sourceName: 'JTBC 서울마라톤 공식 사이트',
+    sourceUrl: 'https://marathon.jtbc.com/1884697087',
+    retrievedAt,
+    publishedAt: '2025 results',
+    freshnessStatus: 'latest-confirmed',
+    resultStatus: 'final',
+    distributionStatus: 'needs-permission',
+    percentileCutsSec: [],
+    note: '국내 10K 최근 결과 후보. 공식 기록조회 경로의 비식별 분포 컷만 제품 비교에 사용한다.'
+  },
+  {
+    id: 'seoul-half-marathon-2026-half',
+    eventName: '서울하프마라톤',
+    region: 'domestic',
+    country: 'KR',
+    city: 'Seoul',
+    distanceKm: 21.0975,
+    year: 2026,
+    sourceName: 'Runarchive 기록조회',
+    sourceUrl: 'https://record.runarchive.com/',
+    retrievedAt,
+    publishedAt: '2026 results',
+    freshnessStatus: 'latest-confirmed',
+    resultStatus: 'final',
+    distributionStatus: 'needs-permission',
+    percentileCutsSec: [],
+    note: '국내 하프 거리 최근 결과 후보. 원본 참가자 row 대신 하프 거리 비식별 분포 컷만 확보한다.'
   },
   {
     id: 'daegu-marathon-2026-marathon',
@@ -169,6 +220,60 @@ export const raceBenchmarkSnapshots: RaceBenchmarkSnapshot[] = [
     distributionStatus: 'needs-permission',
     percentileCutsSec: [],
     note: '해외 메이저 최신 공개 결과 후보. 원본 결과 rows 대신 허용된 집계 컷만 사용한다.'
+  },
+  {
+    id: 'baa-10k-2026-10k',
+    eventName: 'B.A.A. 10K',
+    region: 'international',
+    country: 'US',
+    city: 'Boston',
+    distanceKm: 10,
+    year: 2026,
+    sourceName: 'B.A.A. official results',
+    sourceUrl: 'https://www.baa.org/races/baa-10k/results',
+    retrievedAt,
+    publishedAt: '2026 results',
+    freshnessStatus: 'latest-confirmed',
+    resultStatus: 'final',
+    distributionStatus: 'needs-permission',
+    percentileCutsSec: [],
+    note: '해외 10K 최근 결과 후보. B.A.A. 공식 결과 기준이며 비식별 분포 컷 확보 전까지 비교는 잠근다.'
+  },
+  {
+    id: 'nyc-half-2026-half',
+    eventName: 'United Airlines NYC Half',
+    region: 'international',
+    country: 'US',
+    city: 'New York',
+    distanceKm: 21.0975,
+    year: 2026,
+    sourceName: 'NYRR official results',
+    sourceUrl: 'https://www.nyrr.org/races/2026unitedairlinesnychalf/results',
+    retrievedAt,
+    publishedAt: '2026 results',
+    freshnessStatus: 'latest-confirmed',
+    resultStatus: 'final',
+    distributionStatus: 'needs-permission',
+    percentileCutsSec: [],
+    note: '해외 하프 최근 결과 후보. NYRR 공식 결과 기준이며 원본 row 저장 없이 하프 분포 컷만 사용한다.'
+  },
+  {
+    id: 'berlin-half-2026-half',
+    eventName: 'Berlin Half Marathon',
+    region: 'international',
+    country: 'DE',
+    city: 'Berlin',
+    distanceKm: 21.0975,
+    year: 2026,
+    sourceName: 'Berlin Half Marathon official results',
+    sourceUrl: 'https://www.generali-berliner-halbmarathon.de/en/your-race/results',
+    retrievedAt,
+    publishedAt: '2026 results',
+    freshnessStatus: 'latest-confirmed',
+    resultStatus: 'final',
+    distributionStatus: 'needs-permission',
+    percentileCutsSec: [],
+    note: '해외 하프 최근 결과 후보. 공식 결과 조회 경로의 비식별 분포 컷만 비교에 사용한다.'
   },
   {
     id: 'boston-marathon-2026-marathon',
@@ -272,6 +377,7 @@ export function getRecentRaceBenchmarkSnapshots(): RaceBenchmarkSnapshot[] {
 
 export function getRaceBenchmarkCatalogSummary(targetDistanceKm: number | null | undefined): RaceBenchmarkCatalogSummary {
   const snapshots = getRecentRaceBenchmarkSnapshots()
+  const distanceCoverage = getDistanceCoverage(snapshots)
   const matchingDistance = typeof targetDistanceKm === 'number'
     ? snapshots.filter((snapshot) => isDistanceMatch(snapshot.distanceKm, targetDistanceKm)).length
     : 0
@@ -282,7 +388,8 @@ export function getRaceBenchmarkCatalogSummary(targetDistanceKm: number | null |
     latestConfirmed: snapshots.filter((snapshot) => snapshot.freshnessStatus === 'latest-confirmed').length,
     distributionReady: snapshots.filter((snapshot) => snapshot.distributionStatus === 'ready').length,
     matchingDistance,
-    pendingDistribution: snapshots.filter((snapshot) => snapshot.distributionStatus !== 'ready').length
+    pendingDistribution: snapshots.filter((snapshot) => snapshot.distributionStatus !== 'ready').length,
+    distanceCoverage
   }
 }
 
@@ -312,6 +419,14 @@ export function compareProjectionToRaceBenchmarks(
 
 export function isDistanceMatch(a: number, b: number): boolean {
   return Math.abs(a - b) <= Math.max(0.2, Math.min(a, b) * 0.01)
+}
+
+export function getRaceBenchmarkDistanceCategory(distanceKm: number): RaceBenchmarkDistanceCategory | null {
+  return raceBenchmarkDistanceCategories.find((category) => isDistanceMatch(distanceKm, category.distanceKm))?.id ?? null
+}
+
+export function raceBenchmarkDistanceCategoryLabel(category: RaceBenchmarkDistanceCategory): string {
+  return raceBenchmarkDistanceCategories.find((item) => item.id === category)?.label ?? category
 }
 
 export function raceBenchmarkFreshnessLabel(status: RaceBenchmarkFreshnessStatus): string {
@@ -353,4 +468,25 @@ function getNextFasterCut(durationSec: number, cuts: RaceBenchmarkCut[]): RaceBe
     .filter((cut) => cut.durationSec < durationSec)
     .sort((a, b) => b.percentile - a.percentile)
   return faster[0] ?? null
+}
+
+function getDistanceCoverage(snapshots: RaceBenchmarkSnapshot[]): Record<RaceBenchmarkDistanceCategory, RaceBenchmarkDistanceCoverage> {
+  const coverage = emptyDistanceCoverage()
+  snapshots.forEach((snapshot) => {
+    const category = getRaceBenchmarkDistanceCategory(snapshot.distanceKm)
+    if (!category) return
+    coverage[category].total += 1
+    if (snapshot.region === 'domestic') coverage[category].domestic += 1
+    if (snapshot.region === 'international') coverage[category].international += 1
+    if (snapshot.freshnessStatus === 'latest-confirmed') coverage[category].latestConfirmed += 1
+  })
+  return coverage
+}
+
+function emptyDistanceCoverage(): Record<RaceBenchmarkDistanceCategory, RaceBenchmarkDistanceCoverage> {
+  return {
+    '10k': { total: 0, domestic: 0, international: 0, latestConfirmed: 0 },
+    half: { total: 0, domestic: 0, international: 0, latestConfirmed: 0 },
+    marathon: { total: 0, domestic: 0, international: 0, latestConfirmed: 0 }
+  }
 }

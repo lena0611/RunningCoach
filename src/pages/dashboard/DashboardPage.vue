@@ -17,6 +17,8 @@ import { getRaceProjection } from '@/shared/lib/performanceProjection'
 import {
   compareProjectionToRaceBenchmarks,
   getRaceBenchmarkCatalogSummary,
+  raceBenchmarkDistanceCategories,
+  raceBenchmarkDistanceCategoryLabel,
   raceBenchmarkDistributionLabel,
   raceBenchmarkFreshnessLabel
 } from '@/shared/lib/raceBenchmark'
@@ -181,11 +183,14 @@ const raceBenchmarkComparisons = computed(() =>
     return b.snapshot.year - a.snapshot.year
   })
 )
-const raceBenchmarkPreview = computed(() => raceBenchmarkComparisons.value.slice(0, 8))
+const raceBenchmarkPreview = computed(() => raceBenchmarkComparisons.value)
 const raceBenchmarkCoverageText = computed(() => {
   const summary = raceBenchmarkSummary.value
   if (!summary.total) return ''
-  const parts = [`국내 ${summary.domestic}개`, `해외 ${summary.international}개`, `최신 확인 ${summary.latestConfirmed}개`]
+  const distanceParts = raceBenchmarkDistanceCategories.map((category) => (
+    `${raceBenchmarkDistanceCategoryLabel(category.id)} ${summary.distanceCoverage[category.id].total}개`
+  ))
+  const parts = [`국내 ${summary.domestic}개`, `해외 ${summary.international}개`, ...distanceParts, `최신 확인 ${summary.latestConfirmed}개`]
   if (summary.matchingDistance > 0) parts.push(`거리 일치 ${summary.matchingDistance}개`)
   return `대회 데이터 ${parts.join(' · ')}`
 })

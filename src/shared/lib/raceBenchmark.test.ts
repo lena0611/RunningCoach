@@ -3,7 +3,9 @@ import type { RaceProjection } from './performanceProjection'
 import {
   compareProjectionToRaceBenchmarks,
   getRaceBenchmarkCatalogSummary,
+  getRaceBenchmarkDistanceCategory,
   isDistanceMatch,
+  raceBenchmarkDistanceCategories,
   type RaceBenchmarkSnapshot
 } from './raceBenchmark'
 
@@ -61,6 +63,18 @@ describe('raceBenchmark', () => {
     expect(summary.matchingDistance).toBeGreaterThanOrEqual(1)
   })
 
+  it('covers 10K, half, and marathon sources across domestic and international catalogs', () => {
+    const summary = getRaceBenchmarkCatalogSummary(10)
+
+    raceBenchmarkDistanceCategories.forEach((category) => {
+      const coverage = summary.distanceCoverage[category.id]
+      expect(coverage.total, category.label).toBeGreaterThanOrEqual(2)
+      expect(coverage.domestic, category.label).toBeGreaterThanOrEqual(1)
+      expect(coverage.international, category.label).toBeGreaterThanOrEqual(1)
+      expect(coverage.latestConfirmed, category.label).toBe(coverage.total)
+    })
+  })
+
   it('does not compare when distribution cuts are still pending', () => {
     const [comparison] = compareProjectionToRaceBenchmarks(projection, [
       { ...readySnapshot, distributionStatus: 'needs-permission', percentileCutsSec: [] }
@@ -81,6 +95,10 @@ describe('raceBenchmark', () => {
 
   it('uses a small tolerance for distance matching', () => {
     expect(isDistanceMatch(42.195, 42.2)).toBe(true)
+    expect(isDistanceMatch(21.0975, 21.1)).toBe(true)
     expect(isDistanceMatch(10, 42.195)).toBe(false)
+    expect(getRaceBenchmarkDistanceCategory(10)).toBe('10k')
+    expect(getRaceBenchmarkDistanceCategory(21.0975)).toBe('half')
+    expect(getRaceBenchmarkDistanceCategory(42.195)).toBe('marathon')
   })
 })
