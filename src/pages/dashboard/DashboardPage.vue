@@ -14,6 +14,12 @@ import { getAgeLoadWeight, getEasyRatio, getFatigueWarning, getLongestRunKmWithi
 import { returnRampWindowSessions, returnSessionCapKm } from '@/shared/lib/coaching/returnRamp'
 import { formatDateWithWeekday, formatDuration } from '@/shared/lib/format'
 import { getRaceProjection } from '@/shared/lib/performanceProjection'
+import {
+  compareProjectionToRaceBenchmarks,
+  getRaceBenchmarkCatalogSummary,
+  raceBenchmarkDistributionLabel,
+  raceBenchmarkFreshnessLabel
+} from '@/shared/lib/raceBenchmark'
 import { resolveRunnerProgress } from '@/shared/lib/level/levelModel'
 import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
 import { formatWeatherNumber, weatherSymbolToEmoji } from '@/shared/lib/weather'
@@ -163,6 +169,26 @@ const raceProjection = computed(() =>
     tempoCeilingBpm: heartRateModel.value.tempoCeilingBpm
   })
 )
+const raceBenchmarkSummary = computed(() =>
+  getRaceBenchmarkCatalogSummary(raceProjection.value?.targetDistanceKm ?? activeGoal.value?.distanceKm ?? null)
+)
+const raceBenchmarkComparisons = computed(() =>
+  compareProjectionToRaceBenchmarks(raceProjection.value).sort((a, b) => {
+    const statusRank = (status: typeof a.status) => (status === 'ready' ? 0 : status === 'pending-distribution' ? 1 : 2)
+    const rankDelta = statusRank(a.status) - statusRank(b.status)
+    if (rankDelta !== 0) return rankDelta
+    if (a.snapshot.region !== b.snapshot.region) return a.snapshot.region === 'domestic' ? -1 : 1
+    return b.snapshot.year - a.snapshot.year
+  })
+)
+const raceBenchmarkPreview = computed(() => raceBenchmarkComparisons.value.slice(0, 8))
+const raceBenchmarkCoverageText = computed(() => {
+  const summary = raceBenchmarkSummary.value
+  if (!summary.total) return ''
+  const parts = [`국내 ${summary.domestic}개`, `해외 ${summary.international}개`, `최신 확인 ${summary.latestConfirmed}개`]
+  if (summary.matchingDistance > 0) parts.push(`거리 일치 ${summary.matchingDistance}개`)
+  return `대회 데이터 ${parts.join(' · ')}`
+})
 const runnerProgress = computed(() =>
   resolveRunnerProgress(memoryStore.memory.athleteProfile, runs.value, today.value, {
     maxDistanceM: levelStore.selfReportedMaxDistanceM
@@ -1340,6 +1366,13 @@ const goalProjectionText = computed(() => {
   if (!projection) return '목표 예상 산출에 필요한 품질 세션이 아직 부족합니다.'
   return `예상 ${formatDuration(projection.current.projectedSec)} · ${raceProjectionHint.value}`
 })
+const goalBenchmarkText = computed(() => {
+  if (!isPerformanceGoal.value || !raceBenchmarkCoverageText.value) return ''
+  const readyCount = raceBenchmarkSummary.value.distributionReady
+  return readyCount > 0
+    ? `${raceBenchmarkCoverageText.value} · 비교 가능 ${readyCount}개`
+    : `${raceBenchmarkCoverageText.value} · 분포 집계 대기`
+})
 
 const fatigueWarning = computed(() => getFatigueWarning(runs.value, today.value, ageLoadWeight.value))
 const volumeWarning = computed(() => fatigueWarning.value.message)
@@ -1752,6 +1785,7 @@ async function applyPhaseTransition() {
           <small v-if="goalMetaText">{{ goalMetaText }}</small>
           <!-- 레이스 예측은 성과 목표에만(비성과는 진행지표가 '이번 주 미션'으로 대체, #398) -->
           <small v-if="isPerformanceGoal" class="dashboard-goal-projection">{{ goalProjectionText }}</small>
+          <small v-if="goalBenchmarkText" class="dashboard-goal-projection">{{ goalBenchmarkText }}</small>
           <small v-if="isPerformanceGoal && goalProtectionText" class="dashboard-goal-projection">{{ goalProtectionText }}</small>
         </div>
         <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
@@ -1862,6 +1896,39 @@ async function applyPhaseTransition() {
             <span>/100 · {{ raceProjection.readinessLevel }}</span>
           </div>
           <p class="helper">{{ raceProjection.readinessSummary }}</p>
+        </SectionGroup>
+        <SectionGroup title="대회 기준 현주소">
+          <div class="race-benchmark-overview">
+            <strong>{{ raceBenchmarkCoverageText }}</strong>
+            <span>원본 참가자 기록은 저장하지 않고, 최근 공개 결과 출처와 비식별 분포 컷만 비교에 씁니다.</span>
+          </div>
+          <div v-if="raceBenchmarkPreview.length" class="race-benchmark-list">
+            <article v-for="item in raceBenchmarkPreview" :key="item.snapshot.id" class="race-benchmark-row">
+              <div>
+                <strong>{{ item.snapshot.eventName }}</strong>
+                <small>
+                  {{ item.snapshot.year }} · {{ item.snapshot.distanceKm }}km ·
+                  {{ raceBenchmarkFreshnessLabel(item.snapshot.freshnessStatus) }} ·
+                  {{ raceBenchmarkDistributionLabel(item.snapshot.distributionStatus) }}
+                </small>
+              </div>
+              <span v-if="item.status === 'ready' && item.percentile !== null" class="race-benchmark-status race-benchmark-status-ready">
+                상위 {{ item.percentile }}%
+              </span>
+              <span v-else-if="item.status === 'pending-distribution'" class="race-benchmark-status">집계 대기</span>
+              <span v-else class="race-benchmark-status">다른 거리</span>
+              <p>
+                {{ item.status === 'ready' && item.nextCut && item.nextCutGapSec !== null
+                  ? `상위 ${item.nextCut.percentile}% 컷까지 ${formatDuration(item.nextCutGapSec)} 단축 필요`
+                  : item.status === 'distance-mismatch'
+                    ? `${item.snapshot.distanceKm}km 기준 최근 데이터입니다. 현재 목표 거리 분포 컷이 확보되면 비교에 사용합니다.`
+                    : item.snapshot.note }}
+              </p>
+            </article>
+          </div>
+          <p v-else class="helper">
+            현재 목표 거리와 바로 맞는 최근 대회 데이터가 아직 없습니다. 국내·해외 주요대회 최신 결과 카탈로그는 유지하고, 거리별 분포 컷이 확보되면 자동으로 비교를 엽니다.
+          </p>
         </SectionGroup>
         <SectionGroup title="판단 근거">
           <div class="projection-factor-list">
@@ -2082,6 +2149,93 @@ async function applyPhaseTransition() {
   color: var(--color-text);
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.race-benchmark-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-3, 12px);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card, 16px);
+}
+
+.race-benchmark-overview strong {
+  color: var(--color-text);
+  font-size: 15px;
+}
+
+.race-benchmark-overview span {
+  color: var(--color-muted);
+  font-size: var(--text-info-size, 14px);
+  line-height: var(--text-info-line, 1.5);
+}
+
+.race-benchmark-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--space-2, 8px);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card, 16px);
+  overflow: hidden;
+}
+
+.race-benchmark-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 10px;
+  padding: var(--space-3, 12px);
+  min-width: 0;
+}
+
+.race-benchmark-row + .race-benchmark-row {
+  border-top: 1px solid var(--color-border);
+}
+
+.race-benchmark-row strong,
+.race-benchmark-row small,
+.race-benchmark-row p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.race-benchmark-row strong {
+  display: block;
+  color: var(--color-text);
+  font-size: 14px;
+}
+
+.race-benchmark-row small {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.race-benchmark-row p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--text-info-size, 14px);
+  line-height: var(--text-info-line, 1.5);
+}
+
+.race-benchmark-status {
+  align-self: start;
+  padding: 4px 8px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--color-surface-panel);
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.race-benchmark-status-ready {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 
 /* #352: 오늘/다음 훈련 2섹션 카드 */

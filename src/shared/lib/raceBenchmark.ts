@@ -1,0 +1,356 @@
+import type { RaceProjection } from './performanceProjection'
+
+export type RaceBenchmarkRegion = 'domestic' | 'international'
+export type RaceBenchmarkFreshnessStatus =
+  | 'latest-confirmed'
+  | 'latest-unverified'
+  | 'recent'
+  | 'historical'
+  | 'stale'
+  | 'unavailable'
+export type RaceBenchmarkResultStatus = 'provisional' | 'final' | 'corrected' | 'unknown'
+export type RaceBenchmarkDistributionStatus = 'ready' | 'source-confirmed' | 'needs-permission' | 'unavailable'
+
+export type RaceBenchmarkCut = {
+  /** 완주자 중 빠른 쪽 누적 비율. 예: 10 = 상위 10% 컷. */
+  percentile: number
+  durationSec: number
+}
+
+export type RaceBenchmarkSnapshot = {
+  id: string
+  eventName: string
+  region: RaceBenchmarkRegion
+  country: string
+  city: string
+  distanceKm: number
+  year: number
+  sourceName: string
+  sourceUrl: string
+  retrievedAt: string
+  publishedAt: string
+  freshnessStatus: RaceBenchmarkFreshnessStatus
+  resultStatus: RaceBenchmarkResultStatus
+  distributionStatus: RaceBenchmarkDistributionStatus
+  percentileCutsSec: RaceBenchmarkCut[]
+  note: string
+}
+
+export type RaceBenchmarkCatalogSummary = {
+  total: number
+  domestic: number
+  international: number
+  latestConfirmed: number
+  distributionReady: number
+  matchingDistance: number
+  pendingDistribution: number
+}
+
+export type RaceBenchmarkComparison = {
+  snapshot: RaceBenchmarkSnapshot
+  percentile: number | null
+  nextCut: RaceBenchmarkCut | null
+  nextCutGapSec: number | null
+  status: 'ready' | 'pending-distribution' | 'distance-mismatch'
+}
+
+const retrievedAt = '2026-06-29'
+
+/**
+ * #531 recent-source catalog. This is intentionally metadata + non-identifying
+ * percentile buckets only. Do not add participant names, bib numbers, birth dates,
+ * or scraped raw rows here.
+ */
+export const raceBenchmarkSnapshots: RaceBenchmarkSnapshot[] = [
+  {
+    id: 'seoul-marathon-2026-10k',
+    eventName: '서울마라톤 10K',
+    region: 'domestic',
+    country: 'KR',
+    city: 'Seoul',
+    distanceKm: 10,
+    year: 2026,
+    sourceName: 'Runarchive 기록조회',
+    sourceUrl: 'https://record.runarchive.com/',
+    retrievedAt,
+    publishedAt: '2026 results',
+    freshnessStatus: 'latest-confirmed',
+    resultStatus: 'final',
+    distributionStatus: 'needs-permission',
+    percentileCutsSec: [],
+    note: '최근 기록 조회 경로는 확인됐지만, 제품 내 퍼센타일 컷 저장은 비식별 집계 허용 범위 확인 뒤 활성화한다.'
+  },
+  {
+    id: 'seoul-marathon-2026-marathon',
+    eventName: '서울마라톤',
+    region: 'domestic',
+    country: 'KR',
+    city: 'Seoul',
+    distanceKm: 42.195,
+    year: 2026,
+    sourceName: 'Runarchive 기록조회',
+    sourceUrl: 'https://record.runarchive.com/',
+    retrievedAt,
+    publishedAt: '2026 results',
+    freshnessStatus: 'latest-confirmed',
+    resultStatus: 'final',
+    distributionStatus: 'needs-permission',
+    percentileCutsSec: [],
+    note: '국내 대표 대회 최신 결과 후보. 원본 참가자 기록 저장 없이 분포 컷만 별도 확보해야 한다.'
+  },
+  {
+    id: 'daegu-marathon-2026-marathon',
+    eventName: '대구마라톤',
+    region: 'domestic',
+    country: 'KR',
+    city: 'Daegu',
+    distanceKm: 42.195,
+    year: 2026,
+    sourceName: '대구마라톤 공식 사이트',
+    sourceUrl: 'https://daegumarathon.daegu.go.kr/board_detail.php?idx=7344',
+    retrievedAt,
+    publishedAt: '2026 results',
+    freshnessStatus: 'latest-confirmed',
+    resultStatus: 'final',
+    distributionStatus: 'needs-permission',
+    percentileCutsSec: [],
+    note: '공식 결과/기록증 경로 확인 대상. 비식별 구간 집계로만 제품 데이터화한다.'
+  },
+  {
+    id: 'jtbc-seoul-marathon-2025-marathon',
+    eventName: 'JTBC 서울마라톤',
+    region: 'domestic',
+    country: 'KR',
+    city: 'Seoul',
+    distanceKm: 42.195,
+    year: 2025,
+    sourceName: 'JTBC 서울마라톤 공식 사이트',
+    sourceUrl: 'https://marathon.jtbc.com/1884697087',
+    retrievedAt,
+    publishedAt: '2025 results',
+    freshnessStatus: 'latest-confirmed',
+    resultStatus: 'final',
+    distributionStatus: 'needs-permission',
+    percentileCutsSec: [],
+    note: '2026 대회 전까지 최신 공개 결과 후보로 취급한다. 최신 연도 갱신 시 메타데이터를 교체한다.'
+  },
+  {
+    id: 'chuncheon-marathon-2025-marathon',
+    eventName: '춘천마라톤',
+    region: 'domestic',
+    country: 'KR',
+    city: 'Chuncheon',
+    distanceKm: 42.195,
+    year: 2025,
+    sourceName: '춘천마라톤 공식 기록조회 안내',
+    sourceUrl: 'https://www.chuncheonmarathon.com/community/faq.html',
+    retrievedAt,
+    publishedAt: '2025 results',
+    freshnessStatus: 'latest-confirmed',
+    resultStatus: 'final',
+    distributionStatus: 'needs-permission',
+    percentileCutsSec: [],
+    note: '이름/생년월일 조회형 결과는 재식별 위험이 있어 원본 저장 대상이 아니다.'
+  },
+  {
+    id: 'tokyo-marathon-2026-marathon',
+    eventName: 'Tokyo Marathon',
+    region: 'international',
+    country: 'JP',
+    city: 'Tokyo',
+    distanceKm: 42.195,
+    year: 2026,
+    sourceName: 'Tokyo Marathon official results',
+    sourceUrl: 'https://www.marathon.tokyo/en/news/detail/news_20260301170000.html',
+    retrievedAt,
+    publishedAt: '2026 results',
+    freshnessStatus: 'latest-confirmed',
+    resultStatus: 'final',
+    distributionStatus: 'needs-permission',
+    percentileCutsSec: [],
+    note: '해외 메이저 최신 공개 결과 후보. 원본 결과 rows 대신 허용된 집계 컷만 사용한다.'
+  },
+  {
+    id: 'boston-marathon-2026-marathon',
+    eventName: 'Boston Marathon',
+    region: 'international',
+    country: 'US',
+    city: 'Boston',
+    distanceKm: 42.195,
+    year: 2026,
+    sourceName: 'B.A.A. official results',
+    sourceUrl: 'https://www.baa.org/races/boston-marathon/results/',
+    retrievedAt,
+    publishedAt: '2026 results',
+    freshnessStatus: 'latest-confirmed',
+    resultStatus: 'final',
+    distributionStatus: 'needs-permission',
+    percentileCutsSec: [],
+    note: '공식 결과 아카이브 기준. 상업적 재사용/대량 처리 허용 범위 확인 전까지 집계 대기.'
+  },
+  {
+    id: 'london-marathon-2026-marathon',
+    eventName: 'London Marathon',
+    region: 'international',
+    country: 'GB',
+    city: 'London',
+    distanceKm: 42.195,
+    year: 2026,
+    sourceName: 'London Marathon official results',
+    sourceUrl: 'https://www.londonmarathonevents.co.uk/london-marathon/results',
+    retrievedAt,
+    publishedAt: '2026 results',
+    freshnessStatus: 'latest-confirmed',
+    resultStatus: 'final',
+    distributionStatus: 'needs-permission',
+    percentileCutsSec: [],
+    note: '공식 검색형 결과 기준. 분포 스냅샷은 별도 허용/제휴 또는 공개 집계만 사용한다.'
+  },
+  {
+    id: 'berlin-marathon-2025-marathon',
+    eventName: 'Berlin Marathon',
+    region: 'international',
+    country: 'DE',
+    city: 'Berlin',
+    distanceKm: 42.195,
+    year: 2025,
+    sourceName: 'BMW Berlin Marathon official results',
+    sourceUrl: 'https://www.bmw-berlin-marathon.com/en/your-race/results',
+    retrievedAt,
+    publishedAt: '2025 results',
+    freshnessStatus: 'latest-confirmed',
+    resultStatus: 'final',
+    distributionStatus: 'needs-permission',
+    percentileCutsSec: [],
+    note: '2026 결과 공개 전까지 최신 final 결과로 관리한다.'
+  },
+  {
+    id: 'chicago-marathon-2025-marathon',
+    eventName: 'Chicago Marathon',
+    region: 'international',
+    country: 'US',
+    city: 'Chicago',
+    distanceKm: 42.195,
+    year: 2025,
+    sourceName: 'Chicago Marathon official race results',
+    sourceUrl: 'https://www.chicagomarathon.com/runners/race-results/',
+    retrievedAt,
+    publishedAt: '2025 results',
+    freshnessStatus: 'latest-confirmed',
+    resultStatus: 'final',
+    distributionStatus: 'needs-permission',
+    percentileCutsSec: [],
+    note: '2026 대회 전까지 최신 final 결과로 관리한다.'
+  },
+  {
+    id: 'nyc-marathon-2025-marathon',
+    eventName: 'New York City Marathon',
+    region: 'international',
+    country: 'US',
+    city: 'New York',
+    distanceKm: 42.195,
+    year: 2025,
+    sourceName: 'NYRR official results',
+    sourceUrl: 'https://www.nyrr.org/tcsnycmarathon/results',
+    retrievedAt,
+    publishedAt: '2025 results',
+    freshnessStatus: 'latest-confirmed',
+    resultStatus: 'final',
+    distributionStatus: 'needs-permission',
+    percentileCutsSec: [],
+    note: '공식 검색형 결과 기준. 비식별 퍼센타일 컷 확보 전까지 실제 순위 표현을 막는다.'
+  }
+]
+
+export function getRecentRaceBenchmarkSnapshots(): RaceBenchmarkSnapshot[] {
+  return [...raceBenchmarkSnapshots].sort((a, b) => {
+    if (a.region !== b.region) return a.region === 'domestic' ? -1 : 1
+    if (a.year !== b.year) return b.year - a.year
+    return a.eventName.localeCompare(b.eventName)
+  })
+}
+
+export function getRaceBenchmarkCatalogSummary(targetDistanceKm: number | null | undefined): RaceBenchmarkCatalogSummary {
+  const snapshots = getRecentRaceBenchmarkSnapshots()
+  const matchingDistance = typeof targetDistanceKm === 'number'
+    ? snapshots.filter((snapshot) => isDistanceMatch(snapshot.distanceKm, targetDistanceKm)).length
+    : 0
+  return {
+    total: snapshots.length,
+    domestic: snapshots.filter((snapshot) => snapshot.region === 'domestic').length,
+    international: snapshots.filter((snapshot) => snapshot.region === 'international').length,
+    latestConfirmed: snapshots.filter((snapshot) => snapshot.freshnessStatus === 'latest-confirmed').length,
+    distributionReady: snapshots.filter((snapshot) => snapshot.distributionStatus === 'ready').length,
+    matchingDistance,
+    pendingDistribution: snapshots.filter((snapshot) => snapshot.distributionStatus !== 'ready').length
+  }
+}
+
+export function compareProjectionToRaceBenchmarks(
+  projection: RaceProjection | null,
+  snapshots: RaceBenchmarkSnapshot[] = getRecentRaceBenchmarkSnapshots()
+): RaceBenchmarkComparison[] {
+  if (!projection) return []
+  return snapshots.map((snapshot) => {
+    if (!isDistanceMatch(snapshot.distanceKm, projection.targetDistanceKm)) {
+      return { snapshot, percentile: null, nextCut: null, nextCutGapSec: null, status: 'distance-mismatch' }
+    }
+    if (snapshot.distributionStatus !== 'ready' || snapshot.percentileCutsSec.length < 2) {
+      return { snapshot, percentile: null, nextCut: null, nextCutGapSec: null, status: 'pending-distribution' }
+    }
+    const percentile = interpolatePercentile(projection.current.projectedSec, snapshot.percentileCutsSec)
+    const nextCut = getNextFasterCut(projection.current.projectedSec, snapshot.percentileCutsSec)
+    return {
+      snapshot,
+      percentile,
+      nextCut,
+      nextCutGapSec: nextCut ? Math.max(0, projection.current.projectedSec - nextCut.durationSec) : null,
+      status: 'ready'
+    }
+  })
+}
+
+export function isDistanceMatch(a: number, b: number): boolean {
+  return Math.abs(a - b) <= Math.max(0.2, Math.min(a, b) * 0.01)
+}
+
+export function raceBenchmarkFreshnessLabel(status: RaceBenchmarkFreshnessStatus): string {
+  if (status === 'latest-confirmed') return '최신 확인'
+  if (status === 'latest-unverified') return '최신 미확정'
+  if (status === 'recent') return '최근 참고'
+  if (status === 'historical') return '과거 기록'
+  if (status === 'stale') return '갱신 필요'
+  return '사용 불가'
+}
+
+export function raceBenchmarkDistributionLabel(status: RaceBenchmarkDistributionStatus): string {
+  if (status === 'ready') return '비교 가능'
+  if (status === 'source-confirmed') return '출처 확인'
+  if (status === 'needs-permission') return '분포 집계 필요'
+  return '분포 없음'
+}
+
+function interpolatePercentile(durationSec: number, cuts: RaceBenchmarkCut[]): number {
+  const sorted = [...cuts].sort((a, b) => a.durationSec - b.durationSec)
+  if (durationSec <= sorted[0].durationSec) return sorted[0].percentile
+  const last = sorted[sorted.length - 1]
+  if (durationSec >= last.durationSec) return last.percentile
+
+  for (let i = 1; i < sorted.length; i += 1) {
+    const prev = sorted[i - 1]
+    const next = sorted[i]
+    if (durationSec <= next.durationSec) {
+      const span = next.durationSec - prev.durationSec
+      const ratio = span > 0 ? (durationSec - prev.durationSec) / span : 0
+      return Math.round((prev.percentile + (next.percentile - prev.percentile) * ratio) * 10) / 10
+    }
+  }
+  return last.percentile
+}
+
+function getNextFasterCut(durationSec: number, cuts: RaceBenchmarkCut[]): RaceBenchmarkCut | null {
+  const faster = cuts
+    .filter((cut) => cut.durationSec < durationSec)
+    .sort((a, b) => b.percentile - a.percentile)
+  return faster[0] ?? null
+}
