@@ -8,12 +8,14 @@ type BottomSheetDragOptions = {
 export function useBottomSheetDrag(onClose: () => void, options: BottomSheetDragOptions = {}) {
   const thresholdPx = options.thresholdPx ?? 88
   const velocityThreshold = options.velocityThreshold ?? 0.6
+  const settleMs = 180
   const dragOffset = ref(0)
   const dragging = ref(false)
   const styleActive = ref(false)
   let startY = 0
   let startAt = 0
   let pointerId: number | null = null
+  let closeOffsetPx = 0
   let settleTimer = 0
 
   const sheetStyle = computed(() => (
@@ -28,6 +30,7 @@ export function useBottomSheetDrag(onClose: () => void, options: BottomSheetDrag
     pointerId = event.pointerId
     startY = event.clientY
     startAt = performance.now()
+    closeOffsetPx = resolveCloseOffset(event.currentTarget)
     dragOffset.value = 0
     dragging.value = true
     styleActive.value = true
@@ -52,13 +55,17 @@ export function useBottomSheetDrag(onClose: () => void, options: BottomSheetDrag
     const shouldClose = dragOffset.value >= thresholdPx || velocity >= velocityThreshold
     cleanup()
     if (shouldClose) {
-      onClose()
+      dragOffset.value = Math.max(dragOffset.value, closeOffsetPx, thresholdPx)
+      settleTimer = window.setTimeout(() => {
+        onClose()
+        reset()
+      }, settleMs)
       return
     }
     dragOffset.value = 0
     settleTimer = window.setTimeout(() => {
       styleActive.value = false
-    }, 180)
+    }, settleMs)
   }
 
   function cancelDrag() {
@@ -66,7 +73,7 @@ export function useBottomSheetDrag(onClose: () => void, options: BottomSheetDrag
     dragOffset.value = 0
     settleTimer = window.setTimeout(() => {
       styleActive.value = false
-    }, 180)
+    }, settleMs)
   }
 
   function cleanup() {
@@ -75,6 +82,19 @@ export function useBottomSheetDrag(onClose: () => void, options: BottomSheetDrag
     window.removeEventListener('pointermove', moveDrag)
     window.removeEventListener('pointerup', endDrag)
     window.removeEventListener('pointercancel', cancelDrag)
+  }
+
+  function reset() {
+    dragOffset.value = 0
+    styleActive.value = false
+    closeOffsetPx = 0
+  }
+
+  function resolveCloseOffset(target: EventTarget | null) {
+    const element = target instanceof HTMLElement ? target : null
+    const sheet = element?.closest<HTMLElement>('.bottom-sheet')
+    const sheetHeight = sheet?.getBoundingClientRect().height ?? 0
+    return sheetHeight > 0 ? sheetHeight : window.innerHeight
   }
 
   return {
