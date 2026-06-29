@@ -6,6 +6,7 @@ import {
   getRaceBenchmarkDistanceCategory,
   isDistanceMatch,
   raceBenchmarkDistanceCategories,
+  splitRaceBenchmarkComparisons,
   type RaceBenchmarkSnapshot
 } from './raceBenchmark'
 
@@ -61,6 +62,8 @@ describe('raceBenchmark', () => {
     expect(summary.international).toBeGreaterThanOrEqual(5)
     expect(summary.latestConfirmed).toBe(summary.total)
     expect(summary.matchingDistance).toBeGreaterThanOrEqual(1)
+    expect(summary.matchingDistributionReady).toBe(0)
+    expect(summary.matchingPendingDistribution).toBe(summary.matchingDistance)
   })
 
   it('covers 10K, half, and marathon sources across domestic and international catalogs', () => {
@@ -100,5 +103,19 @@ describe('raceBenchmark', () => {
     expect(getRaceBenchmarkDistanceCategory(10)).toBe('10k')
     expect(getRaceBenchmarkDistanceCategory(21.0975)).toBe('half')
     expect(getRaceBenchmarkDistanceCategory(42.195)).toBe('marathon')
+  })
+
+  it('separates current-distance status from other-distance catalog entries', () => {
+    const comparisons = compareProjectionToRaceBenchmarks(projection, [
+      readySnapshot,
+      { ...readySnapshot, id: 'pending-10k', distributionStatus: 'needs-permission', percentileCutsSec: [] },
+      { ...readySnapshot, id: 'sample-marathon', distanceKm: 42.195, eventName: 'Sample Marathon' }
+    ])
+    const groups = splitRaceBenchmarkComparisons(comparisons)
+
+    expect(groups.currentDistance).toHaveLength(2)
+    expect(groups.currentDistance.some((item) => item.status === 'distance-mismatch')).toBe(false)
+    expect(groups.otherDistances).toHaveLength(1)
+    expect(groups.otherDistances[0].snapshot.eventName).toBe('Sample Marathon')
   })
 })

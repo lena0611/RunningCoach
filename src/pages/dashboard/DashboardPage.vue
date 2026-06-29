@@ -17,10 +17,12 @@ import { getRaceProjection } from '@/shared/lib/performanceProjection'
 import {
   compareProjectionToRaceBenchmarks,
   getRaceBenchmarkCatalogSummary,
+  getRaceBenchmarkDistanceCategory,
   raceBenchmarkDistanceCategories,
   raceBenchmarkDistanceCategoryLabel,
   raceBenchmarkDistributionLabel,
-  raceBenchmarkFreshnessLabel
+  raceBenchmarkFreshnessLabel,
+  splitRaceBenchmarkComparisons
 } from '@/shared/lib/raceBenchmark'
 import { resolveRunnerProgress } from '@/shared/lib/level/levelModel'
 import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
@@ -183,7 +185,15 @@ const raceBenchmarkComparisons = computed(() =>
     return b.snapshot.year - a.snapshot.year
   })
 )
-const raceBenchmarkPreview = computed(() => raceBenchmarkComparisons.value)
+const raceBenchmarkGroups = computed(() => splitRaceBenchmarkComparisons(raceBenchmarkComparisons.value))
+const raceBenchmarkCurrentDistanceItems = computed(() => raceBenchmarkGroups.value.currentDistance)
+const raceBenchmarkOtherDistanceItems = computed(() => raceBenchmarkGroups.value.otherDistances)
+const raceBenchmarkCurrentDistanceLabel = computed(() => {
+  const distanceKm = raceProjection.value?.targetDistanceKm ?? activeGoal.value?.distanceKm ?? null
+  if (typeof distanceKm !== 'number') return '현재 목표 거리'
+  const category = getRaceBenchmarkDistanceCategory(distanceKm)
+  return category ? raceBenchmarkDistanceCategoryLabel(category) : `${distanceKm}km`
+})
 const raceBenchmarkCoverageText = computed(() => {
   const summary = raceBenchmarkSummary.value
   if (!summary.total) return ''
@@ -1373,10 +1383,14 @@ const goalProjectionText = computed(() => {
 })
 const goalBenchmarkText = computed(() => {
   if (!isPerformanceGoal.value || !raceBenchmarkCoverageText.value) return ''
-  const readyCount = raceBenchmarkSummary.value.distributionReady
-  return readyCount > 0
-    ? `${raceBenchmarkCoverageText.value} · 비교 가능 ${readyCount}개`
-    : `${raceBenchmarkCoverageText.value} · 분포 집계 대기`
+  const summary = raceBenchmarkSummary.value
+  if (summary.matchingDistributionReady > 0) {
+    return `${raceBenchmarkCoverageText.value} · 현재 거리 비교 가능 ${summary.matchingDistributionReady}개`
+  }
+  if (summary.matchingDistance > 0) {
+    return `${raceBenchmarkCoverageText.value} · 현재 거리 분포 컷 준비 중`
+  }
+  return `${raceBenchmarkCoverageText.value} · 현재 거리 데이터 없음`
 })
 
 const fatigueWarning = computed(() => getFatigueWarning(runs.value, today.value, ageLoadWeight.value))
@@ -1904,11 +1918,11 @@ async function applyPhaseTransition() {
         </SectionGroup>
         <SectionGroup title="대회 기준 현주소">
           <div class="race-benchmark-overview">
-            <strong>{{ raceBenchmarkCoverageText }}</strong>
-            <span>원본 참가자 기록은 저장하지 않고, 최근 공개 결과 출처와 비식별 분포 컷만 비교에 씁니다.</span>
+            <strong>{{ raceBenchmarkCurrentDistanceLabel }} 기준 {{ raceBenchmarkSummary.matchingDistance }}개 · {{ raceBenchmarkSummary.matchingDistributionReady > 0 ? `비교 가능 ${raceBenchmarkSummary.matchingDistributionReady}개` : '분포 컷 준비 중' }}</strong>
+            <span>현주소 계산은 현재 목표 거리와 일치하는 대회 스냅샷만 사용합니다. 원본 참가자 기록은 저장하지 않고, 비식별 분포 컷이 확보된 항목만 퍼센타일 비교를 엽니다.</span>
           </div>
-          <div v-if="raceBenchmarkPreview.length" class="race-benchmark-list">
-            <article v-for="item in raceBenchmarkPreview" :key="item.snapshot.id" class="race-benchmark-row">
+          <div v-if="raceBenchmarkCurrentDistanceItems.length" class="race-benchmark-list">
+            <article v-for="item in raceBenchmarkCurrentDistanceItems" :key="item.snapshot.id" class="race-benchmark-row">
               <div>
                 <strong>{{ item.snapshot.eventName }}</strong>
                 <small>
@@ -1920,20 +1934,37 @@ async function applyPhaseTransition() {
               <span v-if="item.status === 'ready' && item.percentile !== null" class="race-benchmark-status race-benchmark-status-ready">
                 상위 {{ item.percentile }}%
               </span>
-              <span v-else-if="item.status === 'pending-distribution'" class="race-benchmark-status">집계 대기</span>
-              <span v-else class="race-benchmark-status">다른 거리</span>
+              <span v-else class="race-benchmark-status">컷 준비 중</span>
               <p>
                 {{ item.status === 'ready' && item.nextCut && item.nextCutGapSec !== null
                   ? `상위 ${item.nextCut.percentile}% 컷까지 ${formatDuration(item.nextCutGapSec)} 단축 필요`
-                  : item.status === 'distance-mismatch'
-                    ? `${item.snapshot.distanceKm}km 기준 최근 데이터입니다. 현재 목표 거리 분포 컷이 확보되면 비교에 사용합니다.`
-                    : item.snapshot.note }}
+                  : '최근 결과 출처는 확보됐고, 비식별 percentile cut이 준비되면 현재 목표 현주소 계산에 사용합니다.' }}
               </p>
             </article>
           </div>
           <p v-else class="helper">
             현재 목표 거리와 바로 맞는 최근 대회 데이터가 아직 없습니다. 국내·해외 주요대회 최신 결과 카탈로그는 유지하고, 거리별 분포 컷이 확보되면 자동으로 비교를 엽니다.
           </p>
+        </SectionGroup>
+        <SectionGroup v-if="raceBenchmarkOtherDistanceItems.length" title="거리별 카탈로그">
+          <div class="race-benchmark-overview">
+            <strong>{{ raceBenchmarkCoverageText }}</strong>
+            <span>{{ raceBenchmarkCurrentDistanceLabel }} 현주소 계산에는 쓰지 않는 거리입니다. 거리별 데이터 확보 현황만 별도로 보여줍니다.</span>
+          </div>
+          <div class="race-benchmark-list">
+            <article v-for="item in raceBenchmarkOtherDistanceItems" :key="item.snapshot.id" class="race-benchmark-row race-benchmark-row-muted">
+              <div>
+                <strong>{{ item.snapshot.eventName }}</strong>
+                <small>
+                  {{ item.snapshot.year }} · {{ item.snapshot.distanceKm }}km ·
+                  {{ raceBenchmarkFreshnessLabel(item.snapshot.freshnessStatus) }} ·
+                  {{ raceBenchmarkDistributionLabel(item.snapshot.distributionStatus) }}
+                </small>
+              </div>
+              <span class="race-benchmark-status">카탈로그</span>
+              <p>현재 목표 거리와 달라 현주소 퍼센타일 계산에서 제외합니다.</p>
+            </article>
+          </div>
         </SectionGroup>
         <SectionGroup title="판단 근거">
           <div class="projection-factor-list">
@@ -2197,6 +2228,11 @@ async function applyPhaseTransition() {
 
 .race-benchmark-row + .race-benchmark-row {
   border-top: 1px solid var(--color-border);
+}
+
+.race-benchmark-row-muted strong,
+.race-benchmark-row-muted p {
+  color: var(--color-muted);
 }
 
 .race-benchmark-row strong,
