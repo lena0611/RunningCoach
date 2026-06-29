@@ -623,7 +623,7 @@ export function getRaceBenchmarkEvidenceLevel(readyComparisonCount: number): Rac
 }
 
 export function formatRaceBenchmarkPercentilePoint(percentile: number): string {
-  return `빠른 순서 ${percentile}퍼센타일`
+  return `상위 ${percentile}%`
 }
 
 export function formatRaceBenchmarkPercentileRange(range: [number, number] | null): string {
@@ -631,7 +631,7 @@ export function formatRaceBenchmarkPercentileRange(range: [number, number] | nul
   const [low, high] = range
   return low === high
     ? formatRaceBenchmarkPercentilePoint(low)
-    : `빠른 순서 ${low}~${high}퍼센타일`
+    : `상위 ${low}~${high}%`
 }
 
 export function isDistanceMatch(a: number, b: number): boolean {

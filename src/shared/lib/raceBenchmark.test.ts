@@ -151,10 +151,10 @@ describe('raceBenchmark', () => {
     expect(getRaceBenchmarkEvidenceLevel(2)).toBe('multi-benchmark')
   })
 
-  it('formats percentile copy as a fast-order position instead of a top-rank claim', () => {
-    expect(formatRaceBenchmarkPercentilePoint(76)).toBe('빠른 순서 76퍼센타일')
-    expect(formatRaceBenchmarkPercentileRange([70, 80])).toBe('빠른 순서 70~80퍼센타일')
-    expect(formatRaceBenchmarkPercentileRange([75, 75])).toBe('빠른 순서 75퍼센타일')
+  it('formats percentile copy as a top-percent position where a smaller number is faster', () => {
+    expect(formatRaceBenchmarkPercentilePoint(76)).toBe('상위 76%')
+    expect(formatRaceBenchmarkPercentileRange([70, 80])).toBe('상위 70~80%')
+    expect(formatRaceBenchmarkPercentileRange([75, 75])).toBe('상위 75%')
   })
 
   it('uses a small tolerance for distance matching', () => {
