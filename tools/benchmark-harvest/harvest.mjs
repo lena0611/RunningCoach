@@ -50,7 +50,7 @@ async function main() {
   if (provider === 'myresult') {
     const opts = {}
     if (process.env.BENCH_TARGET) opts.targetPerCourse = Number(process.env.BENCH_TARGET)
-    if (process.env.BENCH_BUDGET) opts.requestBudget = Number(process.env.BENCH_BUDGET)
+    if (process.env.BENCH_BUDGET) opts.perCourseBudget = Number(process.env.BENCH_BUDGET)
     if (process.env.BENCH_CONCURRENCY) opts.concurrency = Number(process.env.BENCH_CONCURRENCY)
     if (process.env.BENCH_MINSEG) opts.minSegment = Number(process.env.BENCH_MINSEG)
     const data = await harvestMyResult(opts)

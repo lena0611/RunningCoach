@@ -884,7 +884,11 @@ export function formatRaceBenchmarkPercentileRange(
   if (!range) return ''
   const [low, high] = range
   const [lowBound, highBound] = bounds
-  if (low === high) return formatRaceBenchmarkPercentilePoint(low, lowBound)
+  if (low === high) {
+    // 동률이면 더 정직한(극단) bound 우선: 한쪽 끝이라도 꼬리 너머면 그 표시("+"/"이내")를 살린다.
+    const tieBound = highBound === 'beyond-slow' ? 'beyond-slow' : lowBound === 'beyond-fast' ? 'beyond-fast' : lowBound
+    return formatRaceBenchmarkPercentilePoint(low, tieBound)
+  }
   // low=빠른 끝(낙관), high=느린 끝(보수). 느린 끝이 꼬리 너머면 "+"로 정직하게 표시.
   const lowText = lowBound === 'beyond-fast' ? `${low}% 이내` : `${low}`
   const highSuffix = highBound === 'beyond-slow' ? '%+' : '%'

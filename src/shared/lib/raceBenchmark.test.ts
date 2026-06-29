@@ -249,6 +249,9 @@ describe('raceBenchmark', () => {
     expect(formatRaceBenchmarkPercentilePoint(1, 'beyond-fast')).toBe('상위 1% 이내')
     expect(formatRaceBenchmarkPercentileRange([75, 90], ['exact', 'beyond-slow'])).toBe('상위 75~90%+')
     expect(formatRaceBenchmarkPercentileRange([20, 30])).toBe('상위 20~30%')
+    // 동률이라도 한쪽 끝이 꼬리 너머면 정직 표시를 유지(클램핑 회귀 방지).
+    expect(formatRaceBenchmarkPercentileRange([90, 90], ['exact', 'beyond-slow'])).toBe('상위 90%+')
+    expect(formatRaceBenchmarkPercentileRange([1, 1], ['beyond-fast', 'exact'])).toBe('상위 1% 이내')
   })
 
   it('exposes overall + gender segments when a snapshot carries gender distributions', () => {
