@@ -294,6 +294,59 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         this.refreshingRunId = ''
       }
     },
+    // #235: 레이싱 종료 후 네이티브가 HealthKit에 저장한 운동을 '단건'으로 RunLog에 유입한다.
+    // requestSync(전체)는 isAfterLatestSaved의 `date > latestDate` strict 필터 때문에 '오늘 이미
+    // 기록이 있으면' 같은 날 레이싱을 누락한다(Codex 리뷰 #1). 그래서 그 externalId 1건만 날짜
+    // 필터 없이 직접 추가하고, 중복은 isAlreadySaved(externalId 우선)로 막아 정기 sync와 멱등하게 둔다.
+    async importCompetitionRun(payload: { externalId: string; distanceM: number; durationSec: number; startMs: number; endMs: number }) {
+      this.init()
+      const authStore = useAuthStore()
+      if (!authStore.isAuthenticated || !hasNativeBridge()) return
+      try {
+        await ensureRunStoreLoaded()
+        const start = new Date(payload.startMs)
+        const end = new Date(payload.endMs)
+        const date = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`
+        const candidate: HealthKitRunCandidate = {
+          externalId: payload.externalId,
+          sourceName: 'PaceLAB',
+          date,
+          startAt: start.toISOString(),
+          endAt: end.toISOString(),
+          durationSec: payload.durationSec > 0 ? payload.durationSec : null,
+          distanceKm: payload.distanceM > 0 ? payload.distanceM / 1000 : null,
+          avgPaceSec: null,
+          avgHeartRate: null,
+          maxHeartRate: null,
+          cadence: null,
+          activeEnergyKcal: null,
+          temperature: null,
+          humidity: null,
+          windMps: null,
+          elevationGainM: null,
+          elevationLossM: null,
+          rpe: null,
+          routeAvailable: false,
+          laps: [],
+          fastSegments: [],
+          metricSamples: [],
+          routePoints: [],
+          rawAvailability: { workout: true, heartRate: false, route: false, cadence: false, runningDynamics: false }
+        }
+        if (!isAlreadySaved(candidate)) {
+          const memoryStore = useMemoryStore()
+          await useRunStore().addRuns(
+            [toExtractedRunData(candidate, memoryStore.memory.weeklyPattern, buildInferenceHeartRateModel())],
+            'healthkit'
+          )
+          this.lastChangedAt = Date.now()
+        }
+        await linkSelfRaceResults() // 방금 유입된 RunLog ↔ competition_result 근접 매칭(#233)
+      } catch (err) {
+        // 비치명적: 결과 요약은 PendingSelfRace로 이미 표시됨. 실패 시 다음 정기 sync가 재시도.
+        this.error = err instanceof Error ? err.message : '레이싱 결과 HealthKit 유입 실패'
+      }
+    },
     handleRunUpdateError(externalId: string | null, message: string) {
       const runStore = useRunStore()
       const target = externalId ? runStore.runs.find((run) => run.externalId === externalId) : null

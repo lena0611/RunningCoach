@@ -74,6 +74,20 @@ export type LiveErrorPayload = {
   message: string
 }
 
+/**
+ * #235: 네이티브가 레이싱 종료 결과를 HealthKit 운동으로 저장 완료했음을 알린다.
+ * externalId(workout uuid)는 기존 import dedupe 키와 동일하므로, 이걸 받으면 웹은
+ * 단건 HealthKit 동기화를 트리거해 RunLog 유입·중복차단·결과연결을 즉시 마무리한다.
+ */
+export type WorkoutSavedPayload = {
+  externalId: string
+  distanceM: number
+  durationSec: number
+  /** 운동 시작/종료 시각(epoch ms). 웹이 같은 날에도 단건 RunLog를 직접 유입할 때 날짜·ISO로 변환(Codex 리뷰 #1). */
+  startMs: number
+  endMs: number
+}
+
 type LiveRunBridgeHandlers = {
   onTick: (tick: LiveTickPayload) => void
   onGap: (gap: LiveGapPayload) => void
@@ -82,6 +96,8 @@ type LiveRunBridgeHandlers = {
   onRecoverable: (snapshot: LiveRecoverablePayload | null) => void
   onError: (error: LiveErrorPayload) => void
   onDiagnostic?: (text: string) => void
+  /** HealthKit 저장 완료 통보(레이싱 종료 후). */
+  onWorkoutSaved?: (payload: WorkoutSavedPayload) => void
 }
 
 declare global {
@@ -94,6 +110,7 @@ declare global {
       receiveRecoverable: (snapshot: LiveRecoverablePayload | null) => void
       receiveError: (error: LiveErrorPayload) => void
       receiveDiagnostic: (text: string) => void
+      receiveWorkoutSaved: (payload: WorkoutSavedPayload) => void
     }
   }
 }
@@ -125,6 +142,9 @@ export function registerLiveRunBridge(handlers: LiveRunBridgeHandlers) {
     },
     receiveDiagnostic(text) {
       handlers.onDiagnostic?.(text)
+    },
+    receiveWorkoutSaved(payload) {
+      handlers.onWorkoutSaved?.(normalizeWorkoutSaved(payload))
     }
   }
 }
@@ -192,4 +212,14 @@ function normalizeGap(gap: LiveGapPayload): LiveGapPayload {
 
 function numberOr(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function normalizeWorkoutSaved(payload: WorkoutSavedPayload): WorkoutSavedPayload {
+  return {
+    externalId: typeof payload?.externalId === 'string' ? payload.externalId : '',
+    distanceM: numberOr(payload?.distanceM, 0),
+    durationSec: numberOr(payload?.durationSec, 0),
+    startMs: numberOr(payload?.startMs, 0),
+    endMs: numberOr(payload?.endMs, 0)
+  }
 }

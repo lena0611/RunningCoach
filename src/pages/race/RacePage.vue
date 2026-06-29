@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useRunStore } from '@/app/stores/runStore'
 import { useCompetitionStore } from '@/app/stores/competitionStore'
+import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useLiveRun } from '@/features/live-run/useLiveRun'
 import { ghostCurveForRun, listDistanceOptions, listOpponents, type OpponentOption } from '@/features/live-run/raceTargets'
 import type { CompetitionTargetPb } from '@/entities/competition/model'
@@ -36,6 +37,7 @@ const LS_KEY = 'race_last_settings_v1'
 
 const runStore = useRunStore()
 const competitionStore = useCompetitionStore()
+const healthKitSync = useHealthKitSyncStore()
 const live = useLiveRun()
 const route = useRoute()
 
@@ -121,6 +123,16 @@ watch(
       recordRaceResult()
       step.value = 'summary'
     }
+  }
+)
+
+// #235: 네이티브가 레이싱 결과를 HealthKit에 저장 완료하면(externalId 통보), 단건 동기화를
+// 트리거해 RunLog 유입·중복차단·결과연결(linkPendingResults)을 즉시 마무리한다.
+// 결과 요약 자체는 위 recordRaceResult(PendingSelfRace)로 이미 표시되므로 sync는 비치명적 후처리.
+watch(
+  () => live.workoutSaved.value,
+  (saved) => {
+    if (saved) void healthKitSync.importCompetitionRun(saved)
   }
 )
 

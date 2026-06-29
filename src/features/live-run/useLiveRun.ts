@@ -15,7 +15,8 @@ import {
   type LiveRecoverablePayload,
   type LiveRunState,
   type LiveTickPayload,
-  type StartLiveRunParams
+  type StartLiveRunParams,
+  type WorkoutSavedPayload
 } from './liveRunBridge'
 
 /**
@@ -32,6 +33,8 @@ export function useLiveRun() {
   const error = ref<LiveErrorPayload | null>(null)
   const recoverable = shallowRef<LiveRecoverablePayload | null>(null)
   const diagnostic = ref<string | null>(null)
+  /** #235: 네이티브가 레이싱 결과를 HealthKit에 저장 완료한 통보(externalId 포함). 페이지가 watch해 sync 트리거. */
+  const workoutSaved = shallowRef<WorkoutSavedPayload | null>(null)
 
   registerLiveRunBridge({
     onTick(payload) {
@@ -55,6 +58,9 @@ export function useLiveRun() {
     },
     onDiagnostic(text) {
       diagnostic.value = text
+    },
+    onWorkoutSaved(payload) {
+      workoutSaved.value = payload
     }
   })
 
@@ -78,6 +84,7 @@ export function useLiveRun() {
     error,
     recoverable,
     diagnostic,
+    workoutSaved,
     start,
     begin: beginLiveRun,
     pause: pauseLiveRun,

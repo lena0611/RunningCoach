@@ -225,7 +225,7 @@ MVP 비목표(후속):
 - **웹 = 선택·포그라운드·요약**: 타겟 선택, 설정, **고스트 곡선 생성(시작 시 네이티브로 1회 주입)**, 포그라운드 보조 화면(틱 수신해 표시), 종료 요약. 포그라운드에선 웹도 같은 비교를 표시할 수 있으나 **백그라운드 권위는 네이티브**.
 - 고스트 곡선은 정적이라 시작 시 한 번 넘기면 이후 비교는 단순 보간 → 네이티브 계산이 가볍다.
 - **단일 사양, 2-surface 구현**: gap/역전/포맷 알고리즘은 #230 순수 함수로 **정의·테스트**(canonical spec)하고, 백그라운드 실행용으로 네이티브가 **같은 알고리즘을 포팅**한다. 둘이 어긋나지 않게 #230이 기준.
-- 정본 저장은 기존 HealthKit import 유지(이중 트래킹 금지). 라이브는 경쟁 계산 전용.
+- 정본 저장은 HealthKit→RunLog 단일 경로 유지. **단 #235(아이폰 1차)부터 라이브런 종료 시 네이티브가 그 거리·시간으로 HealthKit에 운동을 write한다 — 우리가 측정 '기록자'를 겸할 뿐 정본 경로(HealthKit→RunLog)는 불변.** write한 워크아웃의 `uuid`=import dedupe 키(`externalId`)라 같은 런이 RunLog에 이중 유입되지 않는다(`healthKitSyncStore.isAlreadySaved`). 워치 단독 기록과의 동시착용 중복 방지는 #235 워치 단계 — **1차는 폰 사용자 중심(폰+이어폰)**. 여전히 웹·네이티브가 거리를 동시 적분하는 **측정 이중화는 금지**(거리·시간 진실의 출처는 네이티브 트래커 하나).
 
 ### 9.2 타겟 모델 — 거리별 PB 고스트
 - 타겟은 "과거 RunLog 1건"이 아니라 **거리별 PB**(개인 최고). PB 산출·업적 등록은 **#181 업적 도메인이 소유**(#228), `나와의 대결`은 **소비만** 한다.
@@ -239,7 +239,7 @@ MVP 비목표(후속):
 - 데이터 흐름: 타겟='없음'이면 고스트 비교 생략(측정만); 타겟='내 베스트'이면 그 베스트 `RunLog` → `buildGhostCurve` → 라이브 비교. 구현: `src/features/live-run/raceTargets.ts`(`listOpponents` = 없음/내 베스트 통합 최속).
 
 ### 9.3 신규 브리지 계약 2종 (기존 패턴 확장)
-**`runContextLiveRun`** (#229) — web→native: `startLiveRun{sessionId, mode, ghostCurve?, announceConfig, targetDistanceM?, tickIntervalMs?}` (`targetDistanceM`=목표 거리 m; 누적거리가 이를 넘으면 **네이티브가 백그라운드에서 자동 완주**(stop+완주 멘트). 0/미지정이면 수동 종료.) (ghostCurve=정적 `{distanceM,elapsedSec}[]`, 시작 시 1회 주입해 백그라운드 비교 가능; 타겟 '없음'이면 ghostCurve 생략). `announceConfig = {periodic:{kind:'distance'|'time'|'silent', stepM?:100|500|1000, stepSec?:60|...}, reversalAlert:boolean}` — 혼자하기는 러너 선택, 여러명이서 하기는 방장 선택(후속). 네이티브 엔진이 이 설정으로 발화 주기를 판정 / `pauseLiveRun` / `resumeLiveRun` / `stopLiveRun` / `requestRecoverableLiveRun`. native→web(`window.RunContextLiveRun.*`): `receiveTick{seq,elapsedSec,cumulativeDistanceM,instantPaceSec,signalState,source}`(~1Hz, 좌표 없음, 포그라운드 표시용) / `receiveGap{timeGapSec,leadState}`(포그라운드 UI용) / `receiveStateChange{state}` / `receivePermission{status}` / `receiveRecoverable{...}|null` / `receiveError{code,message}`. 거리 점프 방어(속도 상한)·gap/역전 비교·발화 트리거는 **네이티브에서**(백그라운드 동작). 포그라운드에선 틱/gap을 웹으로 올려 화면 갱신.
+**`runContextLiveRun`** (#229) — web→native: `startLiveRun{sessionId, mode, ghostCurve?, announceConfig, targetDistanceM?, tickIntervalMs?}` (`targetDistanceM`=목표 거리 m; 누적거리가 이를 넘으면 **네이티브가 백그라운드에서 자동 완주**(stop+완주 멘트). 0/미지정이면 수동 종료.) (ghostCurve=정적 `{distanceM,elapsedSec}[]`, 시작 시 1회 주입해 백그라운드 비교 가능; 타겟 '없음'이면 ghostCurve 생략). `announceConfig = {periodic:{kind:'distance'|'time'|'silent', stepM?:100|500|1000, stepSec?:60|...}, reversalAlert:boolean}` — 혼자하기는 러너 선택, 여러명이서 하기는 방장 선택(후속). 네이티브 엔진이 이 설정으로 발화 주기를 판정 / `pauseLiveRun` / `resumeLiveRun` / `stopLiveRun` / `requestRecoverableLiveRun`. native→web(`window.RunContextLiveRun.*`): `receiveTick{seq,elapsedSec,cumulativeDistanceM,instantPaceSec,signalState,source}`(~1Hz, 좌표 없음, 포그라운드 표시용) / `receiveGap{timeGapSec,leadState}`(포그라운드 UI용) / `receiveStateChange{state}` / `receivePermission{status}` / `receiveRecoverable{...}|null` / `receiveError{code,message}` / `receiveWorkoutSaved{externalId,distanceM,durationSec}`(#235: 종료 후 HealthKit 운동 저장 완료 통보 — 웹은 이걸 받아 단건 sync로 RunLog 유입·결과연결을 마무리). 거리 점프 방어(속도 상한)·gap/역전 비교·발화 트리거는 **네이티브에서**(백그라운드 동작). 포그라운드에선 틱/gap을 웹으로 올려 화면 갱신.
 
 **`runContextSpeech`** (#231) — web→native: `configureAudioSession{duckOthers:true}` / `speak{text,priority,dedupeKey?}` / `cancelSpeech`. 네이티브 `AVSpeechSynthesizer`(ko-KR) + `AVAudioSession .playback[.duckOthers,.mixWithOthers]`. high=interrupt, normal=큐잉.
 
@@ -249,7 +249,7 @@ MVP 비목표(후속):
 `buildGhostCurve(run,opts)` → `GhostCurve{source,points}`(metricSamples→laps→even 3-fallback) / `timeAtDistance` / `distanceAtTime` / `computeGap`(음수=앞섬) / `detectReversal`(역전 1회성) / `formatAnnouncement`(한국어 한 문장, dedupeKey). 거리별 PB 선정기 `computeDistancePbs(runs,5000): DistancePb[]`는 #228(`shared/lib/achievement/distancePb.ts`); `DistancePb = {context:'training'|'race', distanceM, elapsedSec, runId, achievedAt}`, 컨텍스트 분리는 `run.tags`의 'self-race' partition 후 각각 min.
 
 ### 9.5 iOS 네이티브 (#229·#231)
-`LiveRunTracker.swift`(CLLocationManager 백그라운드·속도필터·일시정지·CMPedometer fallback·영속화), `GhostRaceEngine.swift`(#230 알고리즘 포팅 — 주입된 고스트 곡선으로 gap/역전 계산·안내 주기 판정, **백그라운드에서 동작**), `SpeechManager.swift`(AVSpeechSynthesizer·duck·priority 큐, 백그라운드에서 엔진이 직접 호출), `RunContextWebView.swift` 핸들러 등록. Info.plist: 위치 사용 설명 2종 + `UIBackgroundModes=[location,audio]`.
+`LiveRunTracker.swift`(CLLocationManager 백그라운드·속도필터·일시정지·CMPedometer fallback·영속화), `GhostRaceEngine.swift`(#230 알고리즘 포팅 — 주입된 고스트 곡선으로 gap/역전 계산·안내 주기 판정, **백그라운드에서 동작**), `SpeechManager.swift`(AVSpeechSynthesizer·duck·priority 큐, 백그라운드에서 엔진이 직접 호출), `RunContextWebView.swift` 핸들러 등록. **#235(아이폰 1차): 라이브런 종료 시 `LiveRunTracker.onFinished` → `RunContextWebView`가 `HealthKitRunImporter.saveCompetitionRunningWorkout`(HKWorkoutBuilder, 거리·시간만·HR/route 미포함)로 운동을 write하고 uuid를 `receiveWorkoutSaved`로 통보.** Info.plist: 위치 사용 설명 2종 + HealthKit 사용 설명 2종(읽기 `NSHealthShareUsageDescription`·쓰기 `NSHealthUpdateUsageDescription`) + `UIBackgroundModes=[location,audio]`.
 
 ### 9.6 child Issue 매핑
 

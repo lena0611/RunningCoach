@@ -4,6 +4,18 @@
 
 > 하네스 본체의 변경 이력이나 릴리스 노트가 아닙니다. 하네스 본체 변경 기록은 하네스 저장소의 `CHANGELOG.md` 또는 릴리스 태그를 확인합니다.
 
+## 2026-06-29 - 레이싱 라이브런 종료 시 HealthKit write 도입 (#235 아이폰 1차, competition-domain §9.1 경계 전환)
+
+self-race 라이브런을 건강앱/피트니스·RunLog에 남기기 위해, 종료 시 **네이티브가 HKWorkout을 직접 write**하도록 §9.1 경계를 전환. 기존 §9.1은 "이중 트래킹 금지·라이브는 경쟁 계산 전용"으로 write를 막고 있었음 → **"정본 경로(HealthKit→RunLog) 불변, 우리가 측정 '기록자'를 겸함"**으로 명확화(측정 이중화만 금지, write는 허용).
+
+- **흐름**: `LiveRunTracker.onFinished`(거리·시간·구간, ≥100m·≥30s 가드) → `RunContextWebView`가 `HealthKitRunImporter.saveCompetitionRunningWorkout`(HKWorkoutBuilder) → `workout.uuid`를 `receiveWorkoutSaved`로 웹 통보 → `RacePage`가 `healthKitSyncStore.requestSync('changes-only')` → 기존 import+`linkPendingResults`로 RunLog 유입·dedupe·`competition_result` 연결. **신규 단건 import 함수 없이 기존 sync 재사용.**
+- **iPhone 제약**: `HKWorkoutSession`은 watchOS 전용 → `HKWorkoutBuilder`로 write. HR 센서 없음 → 거리·시간·페이스만(HR 비움).
+- **중복 차단**: write한 `workout.uuid` = import dedupe 키(`externalId`, `healthKitSyncStore.isAlreadySaved`) → 같은 런 이중 유입 없음.
+- **사용자 제품 결정 2건**: (1) 지도 경로(route) 1차 미포함 — 라이브 트래커 좌표수집 미수정으로 빠른 출시(route는 워치 단계). (2) 워치+폰 동시착용 중복방지는 워치 단계(#235 2차)로 — **1차는 폰 사용자(폰+이어폰) 중심**. 동시착용 시 워치 workout과 uuid 달라 이중 가능성은 알려진 1차 한계.
+- **권한**: `NSHealthUpdateUsageDescription`(쓰기) Debug/Release 신설 — 없으면 첫 `save` 크래시([[native-privacy-usage-description-gate]]). 기존 `NSHealthShareUsageDescription`처럼 `INFOPLIST_KEY_*`로 추가(읽기 키가 작동 중이므로 동일 방식 유효; capability류인 `UIBackgroundModes`와 달리 먹음). ⚠️ 2026-06-09 교훈: **Xcode 열린 채 외부에서 pbxproj 수정하면 안 먹을 수 있음** → 빌드 전 Xcode에서 권한 반영 확인.
+- **검증**: 웹 `harness:check`(승인 후), 네이티브 Xcode 수동 빌드 + 실기기 레이싱 종료→건강앱 운동 1건·RunLog 유입·중복 없음 스모크(**워치 불요, 폰만**).
+- → 권위: 이슈 #235, `competition-domain.md` §9.1·§9.3·§9.5. 변경: native(`pbxproj`·`HealthKitRunImporter`·`LiveRunTracker`·`RunContextWebView`), 웹(`liveRunBridge`·`useLiveRun`·`RacePage`).
+
 ## 2026-06-18 - 목표 타입 3종 아키타입으로 코칭 일반화 (#398, /grill-me 합의)
 
 performance 전용 코칭을 **3종 아키타입**(성과·체중·체형·건강·습관)으로 확장. 기존 5 category 정규화 매핑(race→성과, fitness→체중·체형, health·habit·maintenance→건강·습관).
