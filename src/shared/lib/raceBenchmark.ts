@@ -138,15 +138,28 @@ export const raceBenchmarkSnapshots: RaceBenchmarkSnapshot[] = [
     city: 'Seoul',
     distanceKm: 10,
     year: 2025,
-    sourceName: 'JTBC 서울마라톤 공식 사이트',
-    sourceUrl: 'https://marathon.jtbc.com/1884697087',
+    sourceName: 'MyResult 기록조회',
+    sourceUrl: 'https://www.myresult.co.kr/133',
     retrievedAt,
     publishedAt: '2025 results',
     freshnessStatus: 'latest-confirmed',
     resultStatus: 'final',
-    distributionStatus: 'needs-permission',
-    percentileCutsSec: [],
-    note: '국내 10K 최근 결과 후보. 공식 기록조회 경로의 비식별 분포 컷만 제품 비교에 사용한다.'
+    distributionStatus: 'ready',
+    distributionBasis: {
+      label: 'MyResult public event/player API',
+      sampleSize: 14439,
+      method: '공개 event/player API를 일회성 순회하고 10K 완료 기록의 net time만 집계해 1/5/10/25/50/75/90% 컷을 산출했다.'
+    },
+    percentileCutsSec: [
+      { percentile: 1, durationSec: 2476 },
+      { percentile: 5, durationSec: 2728 },
+      { percentile: 10, durationSec: 2880 },
+      { percentile: 25, durationSec: 3145 },
+      { percentile: 50, durationSec: 3466 },
+      { percentile: 75, durationSec: 3866 },
+      { percentile: 90, durationSec: 4322 }
+    ],
+    note: 'MyResult 공개 API에서 비식별 분포 컷과 표본 수만 제품 데이터에 저장한다. 참가자 이름, 배번, 개별 기록 row는 저장하지 않는다.'
   },
   {
     id: 'seoul-half-marathon-2026-half',
@@ -192,15 +205,59 @@ export const raceBenchmarkSnapshots: RaceBenchmarkSnapshot[] = [
     city: 'Seoul',
     distanceKm: 42.195,
     year: 2025,
-    sourceName: 'JTBC 서울마라톤 공식 사이트',
-    sourceUrl: 'https://marathon.jtbc.com/1884697087',
+    sourceName: 'MyResult 기록조회',
+    sourceUrl: 'https://www.myresult.co.kr/133',
     retrievedAt,
     publishedAt: '2025 results',
     freshnessStatus: 'latest-confirmed',
     resultStatus: 'final',
-    distributionStatus: 'needs-permission',
-    percentileCutsSec: [],
-    note: '2026 대회 전까지 최신 공개 결과 후보로 취급한다. 최신 연도 갱신 시 메타데이터를 교체한다.'
+    distributionStatus: 'ready',
+    distributionBasis: {
+      label: 'MyResult public event/player API',
+      sampleSize: 16413,
+      method: '공개 event/player API를 일회성 순회하고 마스터즈 풀 완료 기록의 net time만 집계해 1/5/10/25/50/75/90% 컷을 산출했다.'
+    },
+    percentileCutsSec: [
+      { percentile: 1, durationSec: 10177 },
+      { percentile: 5, durationSec: 10982 },
+      { percentile: 10, durationSec: 11634 },
+      { percentile: 25, durationSec: 12819 },
+      { percentile: 50, durationSec: 14227 },
+      { percentile: 75, durationSec: 15999 },
+      { percentile: 90, durationSec: 17530 }
+    ],
+    note: '2026 대회 전까지 최신 공개 결과 후보로 취급한다. MyResult 공개 API에서 비식별 분포 컷과 표본 수만 저장하고, 개별 기록 row는 저장하지 않는다.'
+  },
+  {
+    id: 'chuncheon-marathon-2025-10k',
+    eventName: '춘천마라톤 10K',
+    region: 'domestic',
+    country: 'KR',
+    city: 'Chuncheon',
+    distanceKm: 10,
+    year: 2025,
+    sourceName: 'MyResult 기록조회',
+    sourceUrl: 'https://www.myresult.co.kr/132',
+    retrievedAt,
+    publishedAt: '2025 results',
+    freshnessStatus: 'latest-confirmed',
+    resultStatus: 'final',
+    distributionStatus: 'ready',
+    distributionBasis: {
+      label: 'MyResult public event/player API',
+      sampleSize: 8640,
+      method: '공개 event/player API를 일회성 순회하고 10K 완료 기록의 net time만 집계해 1/5/10/25/50/75/90% 컷을 산출했다.'
+    },
+    percentileCutsSec: [
+      { percentile: 1, durationSec: 2399 },
+      { percentile: 5, durationSec: 2657 },
+      { percentile: 10, durationSec: 2826 },
+      { percentile: 25, durationSec: 3109 },
+      { percentile: 50, durationSec: 3461 },
+      { percentile: 75, durationSec: 3896 },
+      { percentile: 90, durationSec: 4380 }
+    ],
+    note: 'MyResult 공개 API에서 비식별 분포 컷과 표본 수만 제품 데이터에 저장한다. 참가자 이름, 배번, 개별 기록 row는 저장하지 않는다.'
   },
   {
     id: 'chuncheon-marathon-2025-marathon',
@@ -210,15 +267,28 @@ export const raceBenchmarkSnapshots: RaceBenchmarkSnapshot[] = [
     city: 'Chuncheon',
     distanceKm: 42.195,
     year: 2025,
-    sourceName: '춘천마라톤 공식 기록조회 안내',
-    sourceUrl: 'https://www.chuncheonmarathon.com/community/faq.html',
+    sourceName: 'MyResult 기록조회',
+    sourceUrl: 'https://www.myresult.co.kr/132',
     retrievedAt,
     publishedAt: '2025 results',
     freshnessStatus: 'latest-confirmed',
     resultStatus: 'final',
-    distributionStatus: 'needs-permission',
-    percentileCutsSec: [],
-    note: '이름/생년월일 조회형 결과는 재식별 위험이 있어 원본 저장 대상이 아니다.'
+    distributionStatus: 'ready',
+    distributionBasis: {
+      label: 'MyResult public event/player API',
+      sampleSize: 9779,
+      method: '공개 event/player API를 일회성 순회하고 마스터즈 풀 완료 기록의 net time만 집계해 1/5/10/25/50/75/90% 컷을 산출했다.'
+    },
+    percentileCutsSec: [
+      { percentile: 1, durationSec: 10218 },
+      { percentile: 5, durationSec: 11206 },
+      { percentile: 10, durationSec: 11890 },
+      { percentile: 25, durationSec: 13084 },
+      { percentile: 50, durationSec: 14351 },
+      { percentile: 75, durationSec: 16298 },
+      { percentile: 90, durationSec: 17894 }
+    ],
+    note: 'MyResult 공개 API에서 비식별 분포 컷과 표본 수만 제품 데이터에 저장한다. 참가자 이름, 배번, 개별 기록 row는 저장하지 않는다.'
   },
   {
     id: 'tokyo-marathon-2026-marathon',
