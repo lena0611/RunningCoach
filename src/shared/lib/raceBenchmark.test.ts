@@ -106,6 +106,26 @@ describe('raceBenchmark', () => {
     expect(readyById.get('berlin-marathon-2025-marathon')?.distributionBasis?.sampleSize).toBe(48351)
   })
 
+  it('includes ready domestic MyResult aggregate cuts without raw participant rows', () => {
+    const readyById = new Map(raceBenchmarkSnapshots.map((snapshot) => [snapshot.id, snapshot]))
+    const expected = [
+      ['jtbc-seoul-marathon-2025-10k', 14439],
+      ['jtbc-seoul-marathon-2025-marathon', 16413],
+      ['chuncheon-marathon-2025-10k', 8640],
+      ['chuncheon-marathon-2025-marathon', 9779]
+    ] as const
+
+    expected.forEach(([id, sampleSize]) => {
+      const snapshot = readyById.get(id)
+
+      expect(snapshot?.distributionStatus, id).toBe('ready')
+      expect(snapshot?.distributionBasis?.label, id).toBe('MyResult public event/player API')
+      expect(snapshot?.distributionBasis?.sampleSize, id).toBe(sampleSize)
+      expect(snapshot?.percentileCutsSec.map((cut) => cut.percentile), id).toEqual([1, 5, 10, 25, 50, 75, 90])
+      expect(snapshot?.note, id).toContain('개별 기록 row는 저장하지 않는다')
+    })
+  })
+
   it('does not compare when distribution cuts are still pending', () => {
     const [comparison] = compareProjectionToRaceBenchmarks(projection, [
       { ...readySnapshot, distributionStatus: 'needs-permission', percentileCutsSec: [] }
