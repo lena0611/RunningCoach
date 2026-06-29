@@ -44,6 +44,8 @@ export type RaceBenchmarkCatalogSummary = {
   latestConfirmed: number
   distributionReady: number
   matchingDistance: number
+  matchingDistributionReady: number
+  matchingPendingDistribution: number
   pendingDistribution: number
   distanceCoverage: Record<RaceBenchmarkDistanceCategory, RaceBenchmarkDistanceCoverage>
 }
@@ -61,6 +63,11 @@ export type RaceBenchmarkComparison = {
   nextCut: RaceBenchmarkCut | null
   nextCutGapSec: number | null
   status: 'ready' | 'pending-distribution' | 'distance-mismatch'
+}
+
+export type RaceBenchmarkComparisonGroups = {
+  currentDistance: RaceBenchmarkComparison[]
+  otherDistances: RaceBenchmarkComparison[]
 }
 
 const retrievedAt = '2026-06-29'
@@ -378,16 +385,18 @@ export function getRecentRaceBenchmarkSnapshots(): RaceBenchmarkSnapshot[] {
 export function getRaceBenchmarkCatalogSummary(targetDistanceKm: number | null | undefined): RaceBenchmarkCatalogSummary {
   const snapshots = getRecentRaceBenchmarkSnapshots()
   const distanceCoverage = getDistanceCoverage(snapshots)
-  const matchingDistance = typeof targetDistanceKm === 'number'
-    ? snapshots.filter((snapshot) => isDistanceMatch(snapshot.distanceKm, targetDistanceKm)).length
-    : 0
+  const matchingSnapshots = typeof targetDistanceKm === 'number'
+    ? snapshots.filter((snapshot) => isDistanceMatch(snapshot.distanceKm, targetDistanceKm))
+    : []
   return {
     total: snapshots.length,
     domestic: snapshots.filter((snapshot) => snapshot.region === 'domestic').length,
     international: snapshots.filter((snapshot) => snapshot.region === 'international').length,
     latestConfirmed: snapshots.filter((snapshot) => snapshot.freshnessStatus === 'latest-confirmed').length,
     distributionReady: snapshots.filter((snapshot) => snapshot.distributionStatus === 'ready').length,
-    matchingDistance,
+    matchingDistance: matchingSnapshots.length,
+    matchingDistributionReady: matchingSnapshots.filter((snapshot) => snapshot.distributionStatus === 'ready').length,
+    matchingPendingDistribution: matchingSnapshots.filter((snapshot) => snapshot.distributionStatus !== 'ready').length,
     pendingDistribution: snapshots.filter((snapshot) => snapshot.distributionStatus !== 'ready').length,
     distanceCoverage
   }
@@ -415,6 +424,13 @@ export function compareProjectionToRaceBenchmarks(
       status: 'ready'
     }
   })
+}
+
+export function splitRaceBenchmarkComparisons(comparisons: RaceBenchmarkComparison[]): RaceBenchmarkComparisonGroups {
+  return {
+    currentDistance: comparisons.filter((comparison) => comparison.status !== 'distance-mismatch'),
+    otherDistances: comparisons.filter((comparison) => comparison.status === 'distance-mismatch')
+  }
 }
 
 export function isDistanceMatch(a: number, b: number): boolean {
