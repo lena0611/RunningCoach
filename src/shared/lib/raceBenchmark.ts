@@ -335,22 +335,35 @@ export const raceBenchmarkSnapshots: RaceBenchmarkSnapshot[] = [
     note: '해외 하프 최근 결과 후보. NYRR 공식 결과 기준이며 원본 row 저장 없이 하프 분포 컷만 사용한다.'
   },
   {
-    id: 'berlin-half-2026-half',
+    id: 'berlin-half-2025-half',
     eventName: 'Berlin Half Marathon',
     region: 'international',
     country: 'DE',
     city: 'Berlin',
     distanceKm: 21.0975,
-    year: 2026,
+    year: 2025,
     sourceName: 'Berlin Half Marathon official results',
     sourceUrl: 'https://www.generali-berliner-halbmarathon.de/en/your-race/results',
     retrievedAt,
-    publishedAt: '2026 results',
+    publishedAt: '2025 results',
     freshnessStatus: 'latest-confirmed',
     resultStatus: 'final',
-    distributionStatus: 'needs-permission',
-    percentileCutsSec: [],
-    note: '해외 하프 최근 결과 후보. 공식 결과 조회 경로의 비식별 분포 컷만 비교에 사용한다.'
+    distributionStatus: 'ready',
+    distributionBasis: {
+      label: 'SCC Events official result API',
+      sampleSize: 34731,
+      method: '공식 result API의 전체 순위 위치를 조회해 Runner netto 기준 1/5/10/25/50/75/90% 컷을 산출했다.'
+    },
+    percentileCutsSec: [
+      { percentile: 1, durationSec: 4604 },
+      { percentile: 5, durationSec: 5225 },
+      { percentile: 10, durationSec: 5597 },
+      { percentile: 25, durationSec: 6304 },
+      { percentile: 50, durationSec: 7122 },
+      { percentile: 75, durationSec: 8101 },
+      { percentile: 90, durationSec: 9044 }
+    ],
+    note: '공식 SCC Events API에서 비식별 컷과 표본 수만 저장한다. 참가자 원본 row는 제품 데이터에 저장하지 않는다.'
   },
   {
     id: 'boston-marathon-2026-marathon',
@@ -415,9 +428,22 @@ export const raceBenchmarkSnapshots: RaceBenchmarkSnapshot[] = [
     publishedAt: '2025 results',
     freshnessStatus: 'latest-confirmed',
     resultStatus: 'final',
-    distributionStatus: 'needs-permission',
-    percentileCutsSec: [],
-    note: '2026 결과 공개 전까지 최신 final 결과로 관리한다.'
+    distributionStatus: 'ready',
+    distributionBasis: {
+      label: 'SCC Events official result API',
+      sampleSize: 48351,
+      method: '공식 result API의 전체 순위 위치를 조회해 Runner netto 기준 1/5/10/25/50/75/90% 컷을 산출했다.'
+    },
+    percentileCutsSec: [
+      { percentile: 1, durationSec: 9642 },
+      { percentile: 5, durationSec: 10806 },
+      { percentile: 10, durationSec: 11806 },
+      { percentile: 25, durationSec: 13503 },
+      { percentile: 50, durationSec: 15614 },
+      { percentile: 75, durationSec: 18003 },
+      { percentile: 90, durationSec: 20387 }
+    ],
+    note: '공식 SCC Events API에서 비식별 컷과 표본 수만 저장한다. 참가자 원본 row는 제품 데이터에 저장하지 않는다.'
   },
   {
     id: 'chicago-marathon-2025-marathon',

@@ -60,6 +60,11 @@
 - 확장 도메인을 정식 기능으로 올릴 때는 제품/기획 창에서 목표와 완료 조건을 먼저 정하고, 구현 세부는 해당 workstream으로 넘긴다.
 - 데이터 구조, 코칭 프롬프트, UI가 동시에 필요한 확장은 완료 책임 창을 먼저 정한다. 기획/범위 판단이 중심이면 `02-product-planning`, 코칭 판단식이 중심이면 `05-ai-coaching`, 저장 구조가 중심이면 `07-data-supabase`로 책임을 이관한다.
 
+## 대회 벤치마크 데이터 기준
+- 대회 결과의 `출처 확인`과 제품 계산용 `분포 컷 확보`를 구분한다. 전체 결과 접근이 실제로 검증되고 비식별 aggregate percentile cuts가 산출된 항목만 `distributionStatus: 'ready'`로 둔다.
+- 배번 입력형, 개인 조회형, 제한 검색형 페이지는 전체 분포 API나 합법적 공개 집계가 확인되기 전까지 계산 가능 데이터처럼 표현하지 않고 `pending` 또는 `needs-permission` 후보로 유지한다.
+- 제품에는 참가자 원본 row, 이름, 배번 등 재식별 가능한 결과 데이터를 저장하지 않는다. 대회 현주소 계산에는 `sampleSize`와 `percentileCutsSec`처럼 재식별 불가능한 집계 컷만 저장한다.
+
 ## 성장형 레벨 시스템 (#260)
 
 PaceLAB를 성장형 RPG로 재구성하는 레벨 도메인. 거리 클래스 × VDOT 등급 2축이며, 클래스·등급·자격은 전부 프로필 + `run_logs` 파생·결정적 계산이다(업적과 동일 패턴). 소스: `src/shared/lib/level/levelModel.ts`의 `resolveRunnerProgress`.
