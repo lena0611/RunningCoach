@@ -18,6 +18,7 @@ import {
   compareProjectionToRaceBenchmarks,
   formatRaceBenchmarkPercentilePoint,
   formatRaceBenchmarkPercentileRange,
+  formatRaceBenchmarkSegmentLabel,
   getRaceBenchmarkEvidenceLevel,
   getRaceBenchmarkCatalogSummary,
   getRaceBenchmarkDistanceCategory,
@@ -26,7 +27,9 @@ import {
   raceBenchmarkDistributionLabel,
   raceBenchmarkFreshnessLabel,
   splitRaceBenchmarkComparisons,
-  type RaceBenchmarkComparison
+  type RaceBenchmarkComparison,
+  type RaceBenchmarkSegmentComparison,
+  type RaceBenchmarkSegmentKey
 } from '@/shared/lib/raceBenchmark'
 import { resolveRunnerProgress } from '@/shared/lib/level/levelModel'
 import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
@@ -206,6 +209,38 @@ const raceBenchmarkDisplayedCurrentDistanceItems = computed(() =>
     : raceBenchmarkCurrentDistanceItems.value
 )
 const raceBenchmarkOtherDistanceItems = computed(() => raceBenchmarkGroups.value.otherDistances)
+
+// 대회 벤치마크 세그먼트(전체/남/여) 선택. 기본은 사용자 성별 세그먼트(있으면), 없으면 전체.
+const raceBenchmarkSegmentSelection = ref<Record<string, RaceBenchmarkSegmentKey>>({})
+function raceBenchmarkUserSegment(): RaceBenchmarkSegmentKey {
+  const sex = memoryStore.memory.athleteProfile?.sex
+  return sex === 'male' || sex === 'female' ? sex : 'overall'
+}
+function raceBenchmarkSelectedSegment(item: RaceBenchmarkComparison): RaceBenchmarkSegmentComparison | null {
+  if (!item.segments.length) return null
+  const preferred = raceBenchmarkSegmentSelection.value[item.snapshot.id] ?? raceBenchmarkUserSegment()
+  return item.segments.find((segment) => segment.segment === preferred) ?? item.segments[0]
+}
+function isRaceBenchmarkSegmentActive(item: RaceBenchmarkComparison, segment: RaceBenchmarkSegmentKey): boolean {
+  return raceBenchmarkSelectedSegment(item)?.segment === segment
+}
+function setRaceBenchmarkSegment(id: string, segment: RaceBenchmarkSegmentKey) {
+  raceBenchmarkSegmentSelection.value = { ...raceBenchmarkSegmentSelection.value, [id]: segment }
+}
+function raceBenchmarkPointText(item: RaceBenchmarkComparison): string {
+  const segment = raceBenchmarkSelectedSegment(item)
+  return segment ? formatRaceBenchmarkPercentilePoint(segment.percentile, segment.percentileBound) : ''
+}
+function raceBenchmarkDetailText(item: RaceBenchmarkComparison): string {
+  const segment = raceBenchmarkSelectedSegment(item)
+  if (!segment) return ''
+  const who = segment.segment === 'overall' ? '' : `${formatRaceBenchmarkSegmentLabel(segment.segment)} ${formatInteger(segment.sampleSize)}명 중 `
+  const range = `${formatRaceBenchmarkPercentileRange(segment.percentileRange, segment.percentileRangeBounds)} 예상 범위`
+  const next = segment.nextCut && segment.nextCutGapSec !== null
+    ? ` · ${formatRaceBenchmarkPercentilePoint(segment.nextCut.percentile)} 컷까지 ${formatDuration(segment.nextCutGapSec)} 단축 필요`
+    : ''
+  return `${who}${range}${next}`
+}
 const raceBenchmarkCurrentDistanceLabel = computed(() => {
   const distanceKm = raceProjection.value?.targetDistanceKm ?? activeGoal.value?.distanceKm ?? null
   if (typeof distanceKm !== 'number') return '현재 목표 거리'
@@ -1992,12 +2027,25 @@ async function applyPhaseTransition() {
                 </small>
               </div>
               <span v-if="item.status === 'ready' && item.percentile !== null" class="race-benchmark-status race-benchmark-status-ready">
-                {{ formatRaceBenchmarkPercentilePoint(item.percentile) }}
+                {{ raceBenchmarkPointText(item) }}
               </span>
               <span v-else class="race-benchmark-status">컷 준비 중</span>
+              <div v-if="item.status === 'ready' && item.segments.length > 1" class="race-benchmark-segments" role="group" aria-label="성별 구간 선택">
+                <button
+                  v-for="segment in item.segments"
+                  :key="segment.segment"
+                  type="button"
+                  class="race-benchmark-segment"
+                  :class="{ 'is-active': isRaceBenchmarkSegmentActive(item, segment.segment) }"
+                  :aria-pressed="isRaceBenchmarkSegmentActive(item, segment.segment)"
+                  @click="setRaceBenchmarkSegment(item.snapshot.id, segment.segment)"
+                >
+                  {{ formatRaceBenchmarkSegmentLabel(segment.segment) }}
+                </button>
+              </div>
               <p>
-                {{ item.status === 'ready' && item.nextCut && item.nextCutGapSec !== null
-                  ? `${formatRaceBenchmarkPercentileRange(item.percentileRange)} 예상 범위 · ${formatRaceBenchmarkPercentilePoint(item.nextCut.percentile)} 컷까지 ${formatDuration(item.nextCutGapSec)} 단축 필요`
+                {{ item.status === 'ready'
+                  ? raceBenchmarkDetailText(item)
                   : '최근 결과 출처는 확보됐고, 비식별 퍼센타일 컷이 준비되면 현재 목표 참고 계산에 사용합니다.' }}
               </p>
               <p v-if="item.status === 'ready'" class="race-benchmark-basis">
@@ -2338,6 +2386,32 @@ async function applyPhaseTransition() {
 }
 
 .race-benchmark-status-ready {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.race-benchmark-segments {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.race-benchmark-segment {
+  appearance: none;
+  cursor: pointer;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill, 999px);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-panel);
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.race-benchmark-segment.is-active {
+  border-color: var(--color-primary);
   background: var(--color-primary-soft);
   color: var(--color-primary);
 }
