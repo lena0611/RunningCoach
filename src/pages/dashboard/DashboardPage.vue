@@ -188,6 +188,17 @@ const raceBenchmarkComparisons = computed(() =>
 )
 const raceBenchmarkGroups = computed(() => splitRaceBenchmarkComparisons(raceBenchmarkComparisons.value))
 const raceBenchmarkCurrentDistanceItems = computed(() => raceBenchmarkGroups.value.currentDistance)
+const raceBenchmarkReadyCurrentDistanceItems = computed(() =>
+  raceBenchmarkCurrentDistanceItems.value.filter((item) => item.status === 'ready')
+)
+const raceBenchmarkPendingCurrentDistanceItems = computed(() =>
+  raceBenchmarkCurrentDistanceItems.value.filter((item) => item.status === 'pending-distribution')
+)
+const raceBenchmarkDisplayedCurrentDistanceItems = computed(() =>
+  raceBenchmarkReadyCurrentDistanceItems.value.length
+    ? raceBenchmarkReadyCurrentDistanceItems.value
+    : raceBenchmarkCurrentDistanceItems.value
+)
 const raceBenchmarkOtherDistanceItems = computed(() => raceBenchmarkGroups.value.otherDistances)
 const raceBenchmarkCurrentDistanceLabel = computed(() => {
   const distanceKm = raceProjection.value?.targetDistanceKm ?? activeGoal.value?.distanceKm ?? null
@@ -1930,11 +1941,14 @@ async function applyPhaseTransition() {
         </SectionGroup>
         <SectionGroup title="대회 기준 현주소">
           <div class="race-benchmark-overview">
-            <strong>{{ raceBenchmarkCurrentDistanceLabel }} 기준 {{ raceBenchmarkSummary.matchingDistance }}개 · {{ raceBenchmarkSummary.matchingDistributionReady > 0 ? `비교 가능 ${raceBenchmarkSummary.matchingDistributionReady}개` : '분포 컷 준비 중' }}</strong>
-            <span>현주소 계산은 현재 목표 거리와 일치하는 대회 스냅샷만 사용합니다. 원본 참가자 기록은 저장하지 않고, 비식별 분포 컷이 확보된 항목만 퍼센타일 비교를 엽니다.</span>
+            <strong>{{ raceBenchmarkCurrentDistanceLabel }} 기준 {{ raceBenchmarkSummary.matchingDistributionReady > 0 ? `비교 가능 ${raceBenchmarkSummary.matchingDistributionReady}개` : `${raceBenchmarkSummary.matchingDistance}개 · 분포 컷 준비 중` }}</strong>
+            <span>
+              현주소 계산은 현재 목표 거리와 일치하고 비식별 분포 컷이 확보된 대회만 사용합니다.
+              <template v-if="raceBenchmarkPendingCurrentDistanceItems.length"> 추가 후보 {{ raceBenchmarkPendingCurrentDistanceItems.length }}개는 분포 확보 전까지 계산에서 제외합니다.</template>
+            </span>
           </div>
-          <div v-if="raceBenchmarkCurrentDistanceItems.length" class="race-benchmark-list">
-            <article v-for="item in raceBenchmarkCurrentDistanceItems" :key="item.snapshot.id" class="race-benchmark-row">
+          <div v-if="raceBenchmarkDisplayedCurrentDistanceItems.length" class="race-benchmark-list">
+            <article v-for="item in raceBenchmarkDisplayedCurrentDistanceItems" :key="item.snapshot.id" class="race-benchmark-row">
               <div>
                 <strong>{{ item.snapshot.eventName }}</strong>
                 <small>

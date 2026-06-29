@@ -94,6 +94,15 @@ describe('raceBenchmark', () => {
     })
   })
 
+  it('includes ready Berlin official API aggregate cuts for half and marathon', () => {
+    const readyById = new Map(raceBenchmarkSnapshots.map((snapshot) => [snapshot.id, snapshot]))
+
+    expect(readyById.get('berlin-half-2025-half')?.distributionStatus).toBe('ready')
+    expect(readyById.get('berlin-half-2025-half')?.distributionBasis?.sampleSize).toBe(34731)
+    expect(readyById.get('berlin-marathon-2025-marathon')?.distributionStatus).toBe('ready')
+    expect(readyById.get('berlin-marathon-2025-marathon')?.distributionBasis?.sampleSize).toBe(48351)
+  })
+
   it('does not compare when distribution cuts are still pending', () => {
     const [comparison] = compareProjectionToRaceBenchmarks(projection, [
       { ...readySnapshot, distributionStatus: 'needs-permission', percentileCutsSec: [] }
