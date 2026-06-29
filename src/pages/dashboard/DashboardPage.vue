@@ -16,6 +16,9 @@ import { formatDateWithWeekday, formatDuration, formatInteger } from '@/shared/l
 import { getRaceProjection } from '@/shared/lib/performanceProjection'
 import {
   compareProjectionToRaceBenchmarks,
+  formatRaceBenchmarkPercentilePoint,
+  formatRaceBenchmarkPercentileRange,
+  getRaceBenchmarkEvidenceLevel,
   getRaceBenchmarkCatalogSummary,
   getRaceBenchmarkDistanceCategory,
   raceBenchmarkDistanceCategories,
@@ -191,6 +194,9 @@ const raceBenchmarkCurrentDistanceItems = computed(() => raceBenchmarkGroups.val
 const raceBenchmarkReadyCurrentDistanceItems = computed(() =>
   raceBenchmarkCurrentDistanceItems.value.filter((item) => item.status === 'ready')
 )
+const raceBenchmarkEvidenceLevel = computed(() =>
+  getRaceBenchmarkEvidenceLevel(raceBenchmarkReadyCurrentDistanceItems.value.length)
+)
 const raceBenchmarkPendingCurrentDistanceItems = computed(() =>
   raceBenchmarkCurrentDistanceItems.value.filter((item) => item.status === 'pending-distribution')
 )
@@ -215,6 +221,39 @@ const raceBenchmarkCoverageText = computed(() => {
   const parts = [`국내 ${summary.domestic}개`, `해외 ${summary.international}개`, ...distanceParts, `최신 확인 ${summary.latestConfirmed}개`]
   if (summary.matchingDistance > 0) parts.push(`거리 일치 ${summary.matchingDistance}개`)
   return `대회 데이터 ${parts.join(' · ')}`
+})
+const raceBenchmarkSectionTitle = computed(() => {
+  if (raceBenchmarkEvidenceLevel.value === 'multi-benchmark') return '대회 기준 현주소'
+  if (raceBenchmarkEvidenceLevel.value === 'single-reference') return '공식 대회 1개 참고'
+  return '대회 기준 데이터 준비'
+})
+const raceBenchmarkOverviewTitle = computed(() => {
+  const summary = raceBenchmarkSummary.value
+  if (raceBenchmarkEvidenceLevel.value === 'multi-benchmark') {
+    return `${raceBenchmarkCurrentDistanceLabel.value} 기준 현주소 비교 가능 ${summary.matchingDistributionReady}개`
+  }
+  if (raceBenchmarkEvidenceLevel.value === 'single-reference') {
+    return `${raceBenchmarkCurrentDistanceLabel.value} 기준 공식 대회 1개 참고`
+  }
+  if (summary.matchingDistance > 0) {
+    return `${raceBenchmarkCurrentDistanceLabel.value} 기준 ${summary.matchingDistance}개 · 분포 컷 준비 중`
+  }
+  return `${raceBenchmarkCurrentDistanceLabel.value} 기준 데이터 없음`
+})
+const raceBenchmarkOverviewDescription = computed(() => {
+  const pendingText = raceBenchmarkPendingCurrentDistanceItems.value.length
+    ? ` 추가 후보 ${raceBenchmarkPendingCurrentDistanceItems.value.length}개는 분포 확보 전까지 계산에서 제외합니다.`
+    : ''
+  if (raceBenchmarkEvidenceLevel.value === 'multi-benchmark') {
+    return `현주소 계산은 현재 목표 거리와 일치하고 비식별 분포 컷이 확보된 대회만 사용합니다.${pendingText}`
+  }
+  if (raceBenchmarkEvidenceLevel.value === 'single-reference') {
+    return `현재 거리는 비교 가능한 대회가 1개뿐이라 현주소 단정이 아니라 공식 분포 참고값으로 보여줍니다.${pendingText}`
+  }
+  if (raceBenchmarkSummary.value.matchingDistance > 0) {
+    return `최근 결과 출처는 확인됐지만 비식별 분포 컷이 없어 현재 목표 현주소 계산에서는 제외합니다.${pendingText}`
+  }
+  return '현재 목표 거리와 일치하는 대회 분포 컷이 아직 없습니다.'
 })
 const runnerProgress = computed(() =>
   resolveRunnerProgress(memoryStore.memory.athleteProfile, runs.value, today.value, {
@@ -1396,23 +1435,21 @@ const goalProjectionText = computed(() => {
 const goalBenchmarkText = computed(() => {
   if (!isPerformanceGoal.value || !raceBenchmarkCoverageText.value) return ''
   const summary = raceBenchmarkSummary.value
-  if (summary.matchingDistributionReady > 0) {
-    return `${raceBenchmarkCoverageText.value} · 현재 거리 비교 가능 ${summary.matchingDistributionReady}개`
+  if (raceBenchmarkEvidenceLevel.value === 'multi-benchmark') {
+    return `${raceBenchmarkCoverageText.value} · 현재 거리 현주소 비교 가능 ${summary.matchingDistributionReady}개`
+  }
+  if (raceBenchmarkEvidenceLevel.value === 'single-reference') {
+    return `${raceBenchmarkCoverageText.value} · 현재 거리 공식 대회 1개 참고`
   }
   if (summary.matchingDistance > 0) {
     return `${raceBenchmarkCoverageText.value} · 현재 거리 분포 컷 준비 중`
   }
   return `${raceBenchmarkCoverageText.value} · 현재 거리 데이터 없음`
 })
-function formatRaceBenchmarkRange(range: [number, number] | null): string {
-  if (!range) return ''
-  const [low, high] = range
-  return low === high ? `상위 ${low}%` : `상위 ${low}~${high}%`
-}
 
 function raceBenchmarkBasisText(item: RaceBenchmarkComparison): string {
   const basis = item.snapshot.distributionBasis
-  if (!basis) return '원본 참가자 기록은 저장하지 않고 비식별 percentile cut만 사용합니다.'
+  if (!basis) return '원본 참가자 기록은 저장하지 않고 비식별 퍼센타일 컷만 사용합니다.'
   return `${formatInteger(basis.sampleSize)}명 비식별 분포 · ${basis.method}`
 }
 
@@ -1939,13 +1976,10 @@ async function applyPhaseTransition() {
           </div>
           <p class="helper">{{ raceProjection.readinessSummary }}</p>
         </SectionGroup>
-        <SectionGroup title="대회 기준 현주소">
+        <SectionGroup :title="raceBenchmarkSectionTitle">
           <div class="race-benchmark-overview">
-            <strong>{{ raceBenchmarkCurrentDistanceLabel }} 기준 {{ raceBenchmarkSummary.matchingDistributionReady > 0 ? `비교 가능 ${raceBenchmarkSummary.matchingDistributionReady}개` : `${raceBenchmarkSummary.matchingDistance}개 · 분포 컷 준비 중` }}</strong>
-            <span>
-              현주소 계산은 현재 목표 거리와 일치하고 비식별 분포 컷이 확보된 대회만 사용합니다.
-              <template v-if="raceBenchmarkPendingCurrentDistanceItems.length"> 추가 후보 {{ raceBenchmarkPendingCurrentDistanceItems.length }}개는 분포 확보 전까지 계산에서 제외합니다.</template>
-            </span>
+            <strong>{{ raceBenchmarkOverviewTitle }}</strong>
+            <span>{{ raceBenchmarkOverviewDescription }}</span>
           </div>
           <div v-if="raceBenchmarkDisplayedCurrentDistanceItems.length" class="race-benchmark-list">
             <article v-for="item in raceBenchmarkDisplayedCurrentDistanceItems" :key="item.snapshot.id" class="race-benchmark-row">
@@ -1958,13 +1992,13 @@ async function applyPhaseTransition() {
                 </small>
               </div>
               <span v-if="item.status === 'ready' && item.percentile !== null" class="race-benchmark-status race-benchmark-status-ready">
-                상위 {{ item.percentile }}%
+                {{ formatRaceBenchmarkPercentilePoint(item.percentile) }}
               </span>
               <span v-else class="race-benchmark-status">컷 준비 중</span>
               <p>
                 {{ item.status === 'ready' && item.nextCut && item.nextCutGapSec !== null
-                  ? `${formatRaceBenchmarkRange(item.percentileRange)} 예상 범위 · 상위 ${item.nextCut.percentile}% 컷까지 ${formatDuration(item.nextCutGapSec)} 단축 필요`
-                  : '최근 결과 출처는 확보됐고, 비식별 percentile cut이 준비되면 현재 목표 현주소 계산에 사용합니다.' }}
+                  ? `${formatRaceBenchmarkPercentileRange(item.percentileRange)} 예상 범위 · ${formatRaceBenchmarkPercentilePoint(item.nextCut.percentile)} 컷까지 ${formatDuration(item.nextCutGapSec)} 단축 필요`
+                  : '최근 결과 출처는 확보됐고, 비식별 퍼센타일 컷이 준비되면 현재 목표 참고 계산에 사용합니다.' }}
               </p>
               <p v-if="item.status === 'ready'" class="race-benchmark-basis">
                 {{ raceBenchmarkBasisText(item) }}

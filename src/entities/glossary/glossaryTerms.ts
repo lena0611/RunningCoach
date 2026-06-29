@@ -699,5 +699,17 @@ export const GLOSSARY_FALLBACK_TERMS: GlossaryTerm[] = [
     detail: '훈련·레이싱을 가리지 않고 그 거리의 전체 통합 최속 기록 1개를 고스트로 만들어 겨룹니다. “내 한계에 다시 도전”하는 타겟입니다.',
     relatedSlugs: ['ghost', 'solo-race', 'distance-pb'],
     orderIndex: 50
+  },
+  {
+    id: 'race-percentile',
+    slug: 'race-percentile',
+    term: '대회 퍼센타일',
+    aka: ['percentile', '퍼센타일', '빠른 순서', '대회 현주소'],
+    category: 'competition',
+    shortDef: '특정 대회 완주자 분포에서 내 예상 기록이 빠른 순서로 어느 지점인지 보는 참고값.',
+    detail:
+      '예를 들어 “빠른 순서 76퍼센타일”은 상위권 24%라는 뜻이 아니라, 전체 완주자 중 빠른 순서로 약 76% 지점이라는 뜻입니다. 실제 참가 순위가 아니라 해당 연도·거리의 비식별 분포 컷에 내 목표 예상을 대입한 참고 벤치마크입니다.',
+    relatedSlugs: ['racing', 'distance-pb'],
+    orderIndex: 60
   }
 ]
