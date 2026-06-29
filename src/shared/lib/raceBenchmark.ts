@@ -18,6 +18,28 @@ export type RaceBenchmarkCut = {
   durationSec: number
 }
 
+/**
+ * 입력 기록이 분포 컷 범위 안에 들어왔는지, 아니면 가장 빠른/느린 컷 너머인지.
+ * - `exact`: 컷 구간 안. 보간값을 그대로 신뢰.
+ * - `beyond-fast`: 가장 빠른 컷(예: p1)보다도 빠름 → "상위 N% 이내".
+ * - `beyond-slow`: 가장 느린 컷(예: p90/p99)보다도 느림 → "상위 N%+"(꼬리). 클램핑 표현 금지.
+ */
+export type RaceBenchmarkPercentileBound = 'exact' | 'beyond-fast' | 'beyond-slow'
+
+/** 비교 세그먼트. 전체와 성별(남/여)만 지원한다(나이대는 소스 데이터 부재로 보류). */
+export type RaceBenchmarkSegmentKey = 'overall' | 'male' | 'female'
+
+/** 비식별 세그먼트 분포: 퍼센타일 컷과 표본 수만. 원본 row는 저장하지 않는다. */
+export type RaceBenchmarkSegmentDistribution = {
+  cuts: RaceBenchmarkCut[]
+  sampleSize: number
+}
+
+export type RaceBenchmarkGenderDistribution = {
+  male?: RaceBenchmarkSegmentDistribution
+  female?: RaceBenchmarkSegmentDistribution
+}
+
 export type RaceBenchmarkDistributionBasis = {
   label: string
   sampleSize: number
@@ -40,7 +62,10 @@ export type RaceBenchmarkSnapshot = {
   resultStatus: RaceBenchmarkResultStatus
   distributionStatus: RaceBenchmarkDistributionStatus
   distributionBasis?: RaceBenchmarkDistributionBasis
+  /** 전체 완주자 분포 컷(비식별 aggregate). */
   percentileCutsSec: RaceBenchmarkCut[]
+  /** 성별 분포 컷(있을 때만). 같은 비식별 집계 원칙을 따른다. */
+  genderDistribution?: RaceBenchmarkGenderDistribution
   note: string
 }
 
@@ -64,12 +89,30 @@ export type RaceBenchmarkDistanceCoverage = {
   latestConfirmed: number
 }
 
-export type RaceBenchmarkComparison = {
-  snapshot: RaceBenchmarkSnapshot
-  percentile: number | null
-  percentileRange: [number, number] | null
+/** 한 세그먼트(전체/남/여)에 대한 현주소 계산 결과. */
+export type RaceBenchmarkSegmentComparison = {
+  segment: RaceBenchmarkSegmentKey
+  sampleSize: number
+  percentile: number
+  /** 입력이 컷 범위 안인지, 빠른/느린 꼬리 너머인지. 표시 라벨이 이 값에 따라 달라진다. */
+  percentileBound: RaceBenchmarkPercentileBound
+  percentileRange: [number, number]
+  percentileRangeBounds: [RaceBenchmarkPercentileBound, RaceBenchmarkPercentileBound]
   nextCut: RaceBenchmarkCut | null
   nextCutGapSec: number | null
+}
+
+export type RaceBenchmarkComparison = {
+  snapshot: RaceBenchmarkSnapshot
+  /** 전체 세그먼트 기준값(하위호환·기본 표시). `segments[0]`과 동일. */
+  percentile: number | null
+  percentileBound: RaceBenchmarkPercentileBound | null
+  percentileRange: [number, number] | null
+  percentileRangeBounds: [RaceBenchmarkPercentileBound, RaceBenchmarkPercentileBound] | null
+  nextCut: RaceBenchmarkCut | null
+  nextCutGapSec: number | null
+  /** 전체 + 데이터가 있는 성별 세그먼트. UI 토글이 여기서 고른다. */
+  segments: RaceBenchmarkSegmentComparison[]
   status: 'ready' | 'pending-distribution' | 'distance-mismatch'
 }
 
@@ -147,18 +190,53 @@ export const raceBenchmarkSnapshots: RaceBenchmarkSnapshot[] = [
     distributionStatus: 'ready',
     distributionBasis: {
       label: 'MyResult public event/player API',
-      sampleSize: 14439,
-      method: '공개 event/player API를 일회성 순회하고 10K 완료 기록의 net time만 집계해 1/5/10/25/50/75/90% 컷을 산출했다.'
+      sampleSize: 3081,
+      method: '공개 event/player API를 표본 순회(코스 배번 블록 탐색 후 블록 내 무작위 표본)해 10K 완주 기록의 net time만 집계하고, [1, 2.5, 5, 10, 25, 50, 75, 90, 95, 99]% 컷을 전체·성별로 산출했다. sampleSize는 컷 산출에 쓴 표본 수다.'
     },
     percentileCutsSec: [
-      { percentile: 1, durationSec: 2476 },
-      { percentile: 5, durationSec: 2728 },
-      { percentile: 10, durationSec: 2880 },
-      { percentile: 25, durationSec: 3145 },
-      { percentile: 50, durationSec: 3466 },
-      { percentile: 75, durationSec: 3866 },
-      { percentile: 90, durationSec: 4322 }
+      { percentile: 1, durationSec: 2464 },
+      { percentile: 2.5, durationSec: 2608 },
+      { percentile: 5, durationSec: 2731 },
+      { percentile: 10, durationSec: 2883 },
+      { percentile: 25, durationSec: 3164 },
+      { percentile: 50, durationSec: 3469 },
+      { percentile: 75, durationSec: 3867 },
+      { percentile: 90, durationSec: 4336 },
+      { percentile: 95, durationSec: 4666 },
+      { percentile: 99, durationSec: 5266 }
     ],
+    genderDistribution: {
+      male: {
+        sampleSize: 1641,
+        cuts: [
+          { percentile: 1, durationSec: 2411 },
+          { percentile: 2.5, durationSec: 2520 },
+          { percentile: 5, durationSec: 2652 },
+          { percentile: 10, durationSec: 2753 },
+          { percentile: 25, durationSec: 2982 },
+          { percentile: 50, durationSec: 3298 },
+          { percentile: 75, durationSec: 3617 },
+          { percentile: 90, durationSec: 4080 },
+          { percentile: 95, durationSec: 4377 },
+          { percentile: 99, durationSec: 5096 }
+        ]
+      },
+      female: {
+        sampleSize: 1440,
+        cuts: [
+          { percentile: 1, durationSec: 2774 },
+          { percentile: 2.5, durationSec: 2903 },
+          { percentile: 5, durationSec: 3005 },
+          { percentile: 10, durationSec: 3163 },
+          { percentile: 25, durationSec: 3367 },
+          { percentile: 50, durationSec: 3675 },
+          { percentile: 75, durationSec: 4050 },
+          { percentile: 90, durationSec: 4479 },
+          { percentile: 95, durationSec: 4835 },
+          { percentile: 99, durationSec: 5445 }
+        ]
+      }
+    },
     note: 'MyResult 공개 API에서 비식별 분포 컷과 표본 수만 제품 데이터에 저장한다. 참가자 이름, 배번, 개별 기록 row는 저장하지 않는다.'
   },
   {
@@ -214,18 +292,53 @@ export const raceBenchmarkSnapshots: RaceBenchmarkSnapshot[] = [
     distributionStatus: 'ready',
     distributionBasis: {
       label: 'MyResult public event/player API',
-      sampleSize: 16413,
-      method: '공개 event/player API를 일회성 순회하고 마스터즈 풀 완료 기록의 net time만 집계해 1/5/10/25/50/75/90% 컷을 산출했다.'
+      sampleSize: 3073,
+      method: '공개 event/player API를 표본 순회(코스 배번 블록 탐색 후 블록 내 무작위 표본)해 마스터즈 풀 완주 기록의 net time만 집계하고, [1, 2.5, 5, 10, 25, 50, 75, 90, 95, 99]% 컷을 전체·성별로 산출했다. 풀코스 느린쪽 꼬리(p95·p99)는 대회 제한시간으로 검열(censored)돼 finisher 기준임에 유의한다.'
     },
     percentileCutsSec: [
-      { percentile: 1, durationSec: 10177 },
-      { percentile: 5, durationSec: 10982 },
-      { percentile: 10, durationSec: 11634 },
-      { percentile: 25, durationSec: 12819 },
-      { percentile: 50, durationSec: 14227 },
-      { percentile: 75, durationSec: 15999 },
-      { percentile: 90, durationSec: 17530 }
+      { percentile: 1, durationSec: 10033 },
+      { percentile: 2.5, durationSec: 10601 },
+      { percentile: 5, durationSec: 10870 },
+      { percentile: 10, durationSec: 11573 },
+      { percentile: 25, durationSec: 12828 },
+      { percentile: 50, durationSec: 14219 },
+      { percentile: 75, durationSec: 16000 },
+      { percentile: 90, durationSec: 17562 },
+      { percentile: 95, durationSec: 18457 },
+      { percentile: 99, durationSec: 20359 }
     ],
+    genderDistribution: {
+      male: {
+        sampleSize: 2560,
+        cuts: [
+          { percentile: 1, durationSec: 9980 },
+          { percentile: 2.5, durationSec: 10530 },
+          { percentile: 5, durationSec: 10770 },
+          { percentile: 10, durationSec: 11404 },
+          { percentile: 25, durationSec: 12575 },
+          { percentile: 50, durationSec: 14102 },
+          { percentile: 75, durationSec: 15839 },
+          { percentile: 90, durationSec: 17472 },
+          { percentile: 95, durationSec: 18294 },
+          { percentile: 99, durationSec: 20363 }
+        ]
+      },
+      female: {
+        sampleSize: 513,
+        cuts: [
+          { percentile: 1, durationSec: 11405 },
+          { percentile: 2.5, durationSec: 11905 },
+          { percentile: 5, durationSec: 12257 },
+          { percentile: 10, durationSec: 12847 },
+          { percentile: 25, durationSec: 13910 },
+          { percentile: 50, durationSec: 15137 },
+          { percentile: 75, durationSec: 16647 },
+          { percentile: 90, durationSec: 17795 },
+          { percentile: 95, durationSec: 19052 },
+          { percentile: 99, durationSec: 20184 }
+        ]
+      }
+    },
     note: '2026 대회 전까지 최신 공개 결과 후보로 취급한다. MyResult 공개 API에서 비식별 분포 컷과 표본 수만 저장하고, 개별 기록 row는 저장하지 않는다.'
   },
   {
@@ -245,18 +358,53 @@ export const raceBenchmarkSnapshots: RaceBenchmarkSnapshot[] = [
     distributionStatus: 'ready',
     distributionBasis: {
       label: 'MyResult public event/player API',
-      sampleSize: 8640,
-      method: '공개 event/player API를 일회성 순회하고 10K 완료 기록의 net time만 집계해 1/5/10/25/50/75/90% 컷을 산출했다.'
+      sampleSize: 3070,
+      method: '공개 event/player API를 표본 순회(코스 배번 블록 탐색 후 블록 내 무작위 표본)해 10K 완주 기록의 net time만 집계하고, [1, 2.5, 5, 10, 25, 50, 75, 90, 95, 99]% 컷을 전체·성별로 산출했다. sampleSize는 컷 산출에 쓴 표본 수다.'
     },
     percentileCutsSec: [
-      { percentile: 1, durationSec: 2399 },
-      { percentile: 5, durationSec: 2657 },
-      { percentile: 10, durationSec: 2826 },
-      { percentile: 25, durationSec: 3109 },
-      { percentile: 50, durationSec: 3461 },
-      { percentile: 75, durationSec: 3896 },
-      { percentile: 90, durationSec: 4380 }
+      { percentile: 1, durationSec: 2397 },
+      { percentile: 2.5, durationSec: 2554 },
+      { percentile: 5, durationSec: 2675 },
+      { percentile: 10, durationSec: 2841 },
+      { percentile: 25, durationSec: 3114 },
+      { percentile: 50, durationSec: 3463 },
+      { percentile: 75, durationSec: 3905 },
+      { percentile: 90, durationSec: 4361 },
+      { percentile: 95, durationSec: 4689 },
+      { percentile: 99, durationSec: 5228 }
     ],
+    genderDistribution: {
+      male: {
+        sampleSize: 1567,
+        cuts: [
+          { percentile: 1, durationSec: 2336 },
+          { percentile: 2.5, durationSec: 2456 },
+          { percentile: 5, durationSec: 2580 },
+          { percentile: 10, durationSec: 2711 },
+          { percentile: 25, durationSec: 2918 },
+          { percentile: 50, durationSec: 3260 },
+          { percentile: 75, durationSec: 3641 },
+          { percentile: 90, durationSec: 4160 },
+          { percentile: 95, durationSec: 4505 },
+          { percentile: 99, durationSec: 5049 }
+        ]
+      },
+      female: {
+        sampleSize: 1503,
+        cuts: [
+          { percentile: 1, durationSec: 2658 },
+          { percentile: 2.5, durationSec: 2868 },
+          { percentile: 5, durationSec: 2977 },
+          { percentile: 10, durationSec: 3121 },
+          { percentile: 25, durationSec: 3356 },
+          { percentile: 50, durationSec: 3679 },
+          { percentile: 75, durationSec: 4099 },
+          { percentile: 90, durationSec: 4534 },
+          { percentile: 95, durationSec: 4830 },
+          { percentile: 99, durationSec: 5267 }
+        ]
+      }
+    },
     note: 'MyResult 공개 API에서 비식별 분포 컷과 표본 수만 제품 데이터에 저장한다. 참가자 이름, 배번, 개별 기록 row는 저장하지 않는다.'
   },
   {
@@ -276,18 +424,53 @@ export const raceBenchmarkSnapshots: RaceBenchmarkSnapshot[] = [
     distributionStatus: 'ready',
     distributionBasis: {
       label: 'MyResult public event/player API',
-      sampleSize: 9779,
-      method: '공개 event/player API를 일회성 순회하고 마스터즈 풀 완료 기록의 net time만 집계해 1/5/10/25/50/75/90% 컷을 산출했다.'
+      sampleSize: 3000,
+      method: '공개 event/player API를 표본 순회(코스 배번 블록 탐색 후 블록 내 무작위 표본)해 마스터즈 풀 완주 기록의 net time만 집계하고, [1, 2.5, 5, 10, 25, 50, 75, 90, 95, 99]% 컷을 전체·성별로 산출했다. 풀코스 느린쪽 꼬리(p95·p99)는 대회 제한시간으로 검열(censored)돼 finisher 기준임에 유의한다.'
     },
     percentileCutsSec: [
-      { percentile: 1, durationSec: 10218 },
-      { percentile: 5, durationSec: 11206 },
-      { percentile: 10, durationSec: 11890 },
-      { percentile: 25, durationSec: 13084 },
-      { percentile: 50, durationSec: 14351 },
-      { percentile: 75, durationSec: 16298 },
-      { percentile: 90, durationSec: 17894 }
+      { percentile: 1, durationSec: 9987 },
+      { percentile: 2.5, durationSec: 10501 },
+      { percentile: 5, durationSec: 10826 },
+      { percentile: 10, durationSec: 11675 },
+      { percentile: 25, durationSec: 12885 },
+      { percentile: 50, durationSec: 14273 },
+      { percentile: 75, durationSec: 16127 },
+      { percentile: 90, durationSec: 17674 },
+      { percentile: 95, durationSec: 18718 },
+      { percentile: 99, durationSec: 20308 }
     ],
+    genderDistribution: {
+      male: {
+        sampleSize: 2415,
+        cuts: [
+          { percentile: 1, durationSec: 9876 },
+          { percentile: 2.5, durationSec: 10360 },
+          { percentile: 5, durationSec: 10741 },
+          { percentile: 10, durationSec: 11417 },
+          { percentile: 25, durationSec: 12558 },
+          { percentile: 50, durationSec: 14079 },
+          { percentile: 75, durationSec: 15786 },
+          { percentile: 90, durationSec: 17426 },
+          { percentile: 95, durationSec: 18388 },
+          { percentile: 99, durationSec: 20024 }
+        ]
+      },
+      female: {
+        sampleSize: 585,
+        cuts: [
+          { percentile: 1, durationSec: 12045 },
+          { percentile: 2.5, durationSec: 12482 },
+          { percentile: 5, durationSec: 12781 },
+          { percentile: 10, durationSec: 13211 },
+          { percentile: 25, durationSec: 14150 },
+          { percentile: 50, durationSec: 15579 },
+          { percentile: 75, durationSec: 17087 },
+          { percentile: 90, durationSec: 18355 },
+          { percentile: 95, durationSec: 19485 },
+          { percentile: 99, durationSec: 20779 }
+        ]
+      }
+    },
     note: 'MyResult 공개 API에서 비식별 분포 컷과 표본 수만 제품 데이터에 저장한다. 참가자 이름, 배번, 개별 기록 row는 저장하지 않는다.'
   },
   {
@@ -590,23 +773,85 @@ export function compareProjectionToRaceBenchmarks(
   if (!projection) return []
   return snapshots.map((snapshot) => {
     if (!isDistanceMatch(snapshot.distanceKm, projection.targetDistanceKm)) {
-      return { snapshot, percentile: null, percentileRange: null, nextCut: null, nextCutGapSec: null, status: 'distance-mismatch' }
+      return emptyComparison(snapshot, 'distance-mismatch')
     }
     if (snapshot.distributionStatus !== 'ready' || snapshot.percentileCutsSec.length < 2) {
-      return { snapshot, percentile: null, percentileRange: null, nextCut: null, nextCutGapSec: null, status: 'pending-distribution' }
+      return emptyComparison(snapshot, 'pending-distribution')
     }
-    const percentile = interpolatePercentile(projection.current.projectedSec, snapshot.percentileCutsSec)
-    const percentileRange = interpolatePercentileRange(projection.projectedRangeSec, snapshot.percentileCutsSec)
-    const nextCut = getNextFasterCut(projection.current.projectedSec, snapshot.percentileCutsSec)
+
+    const segments = buildSegmentComparisons(projection, snapshot)
+    const overall = segments[0]
     return {
       snapshot,
-      percentile,
-      percentileRange,
-      nextCut,
-      nextCutGapSec: nextCut ? Math.max(0, projection.current.projectedSec - nextCut.durationSec) : null,
+      percentile: overall.percentile,
+      percentileBound: overall.percentileBound,
+      percentileRange: overall.percentileRange,
+      percentileRangeBounds: overall.percentileRangeBounds,
+      nextCut: overall.nextCut,
+      nextCutGapSec: overall.nextCutGapSec,
+      segments,
       status: 'ready'
     }
   })
+}
+
+function emptyComparison(
+  snapshot: RaceBenchmarkSnapshot,
+  status: 'pending-distribution' | 'distance-mismatch'
+): RaceBenchmarkComparison {
+  return {
+    snapshot,
+    percentile: null,
+    percentileBound: null,
+    percentileRange: null,
+    percentileRangeBounds: null,
+    nextCut: null,
+    nextCutGapSec: null,
+    segments: [],
+    status
+  }
+}
+
+/** 전체 + 데이터가 있는 성별 세그먼트 비교를 만든다. 항상 overall이 첫 번째. */
+function buildSegmentComparisons(
+  projection: RaceProjection,
+  snapshot: RaceBenchmarkSnapshot
+): RaceBenchmarkSegmentComparison[] {
+  const segments: RaceBenchmarkSegmentComparison[] = [
+    buildSegmentComparison('overall', snapshot.percentileCutsSec, snapshot.distributionBasis?.sampleSize ?? 0, projection)
+  ]
+  const male = snapshot.genderDistribution?.male
+  if (male && male.cuts.length >= 2) {
+    segments.push(buildSegmentComparison('male', male.cuts, male.sampleSize, projection))
+  }
+  const female = snapshot.genderDistribution?.female
+  if (female && female.cuts.length >= 2) {
+    segments.push(buildSegmentComparison('female', female.cuts, female.sampleSize, projection))
+  }
+  return segments
+}
+
+function buildSegmentComparison(
+  segment: RaceBenchmarkSegmentKey,
+  cuts: RaceBenchmarkCut[],
+  sampleSize: number,
+  projection: RaceProjection
+): RaceBenchmarkSegmentComparison {
+  const point = resolvePercentilePoint(projection.current.projectedSec, cuts)
+  // 범위가 없으면 점으로 축약(범위 밖이면 bound가 라벨에 살아 있도록).
+  const rangeResult = resolvePercentileRange(projection.projectedRangeSec, cuts)
+    ?? { range: [point.percentile, point.percentile] as [number, number], bounds: [point.bound, point.bound] as [RaceBenchmarkPercentileBound, RaceBenchmarkPercentileBound] }
+  const nextCut = getNextFasterCut(projection.current.projectedSec, cuts)
+  return {
+    segment,
+    sampleSize,
+    percentile: point.percentile,
+    percentileBound: point.bound,
+    percentileRange: rangeResult.range,
+    percentileRangeBounds: rangeResult.bounds,
+    nextCut,
+    nextCutGapSec: nextCut ? Math.max(0, projection.current.projectedSec - nextCut.durationSec) : null
+  }
 }
 
 export function splitRaceBenchmarkComparisons(comparisons: RaceBenchmarkComparison[]): RaceBenchmarkComparisonGroups {
@@ -622,16 +867,36 @@ export function getRaceBenchmarkEvidenceLevel(readyComparisonCount: number): Rac
   return 'none'
 }
 
-export function formatRaceBenchmarkPercentilePoint(percentile: number): string {
+export function formatRaceBenchmarkPercentilePoint(
+  percentile: number,
+  bound: RaceBenchmarkPercentileBound = 'exact'
+): string {
+  // 가장 빠른 컷보다 빠르면 "상위 N% 이내"(그 컷 안쪽), 가장 느린 컷보다 느리면 "상위 N%+"(꼬리).
+  if (bound === 'beyond-fast') return `상위 ${percentile}% 이내`
+  if (bound === 'beyond-slow') return `상위 ${percentile}%+`
   return `상위 ${percentile}%`
 }
 
-export function formatRaceBenchmarkPercentileRange(range: [number, number] | null): string {
+export function formatRaceBenchmarkPercentileRange(
+  range: [number, number] | null,
+  bounds: [RaceBenchmarkPercentileBound, RaceBenchmarkPercentileBound] = ['exact', 'exact']
+): string {
   if (!range) return ''
   const [low, high] = range
-  return low === high
-    ? formatRaceBenchmarkPercentilePoint(low)
-    : `상위 ${low}~${high}%`
+  const [lowBound, highBound] = bounds
+  if (low === high) return formatRaceBenchmarkPercentilePoint(low, lowBound)
+  // low=빠른 끝(낙관), high=느린 끝(보수). 느린 끝이 꼬리 너머면 "+"로 정직하게 표시.
+  const lowText = lowBound === 'beyond-fast' ? `${low}% 이내` : `${low}`
+  const highSuffix = highBound === 'beyond-slow' ? '%+' : '%'
+  return lowBound === 'beyond-fast'
+    ? `상위 ${lowText}~${high}${highSuffix}`
+    : `상위 ${low}~${high}${highSuffix}`
+}
+
+export function formatRaceBenchmarkSegmentLabel(segment: RaceBenchmarkSegmentKey): string {
+  if (segment === 'male') return '남자'
+  if (segment === 'female') return '여자'
+  return '전체'
 }
 
 export function isDistanceMatch(a: number, b: number): boolean {
@@ -662,11 +927,24 @@ export function raceBenchmarkDistributionLabel(status: RaceBenchmarkDistribution
   return '분포 없음'
 }
 
-function interpolatePercentile(durationSec: number, cuts: RaceBenchmarkCut[]): number {
+type RaceBenchmarkPercentilePoint = {
+  percentile: number
+  bound: RaceBenchmarkPercentileBound
+}
+
+/**
+ * 입력 기록의 퍼센타일 위치를 컷 사이 선형보간으로 구한다.
+ * 핵심: 가장 빠른/느린 컷 너머는 *클램핑하지 않고* bound로 표시해, p90/p99 너머가 전부
+ * 같은 숫자로 뭉개지는 버그를 막는다(표시 라벨이 bound를 반영).
+ */
+function resolvePercentilePoint(durationSec: number, cuts: RaceBenchmarkCut[]): RaceBenchmarkPercentilePoint {
   const sorted = [...cuts].sort((a, b) => a.durationSec - b.durationSec)
-  if (durationSec <= sorted[0].durationSec) return sorted[0].percentile
-  const last = sorted[sorted.length - 1]
-  if (durationSec >= last.durationSec) return last.percentile
+  const fastest = sorted[0]
+  const slowest = sorted[sorted.length - 1]
+  // 가장 빠른 컷보다 더 빠름 → 그 컷 안쪽(beyond-fast). 동률은 정확값으로 둔다.
+  if (durationSec < fastest.durationSec) return { percentile: fastest.percentile, bound: 'beyond-fast' }
+  // 가장 느린 컷보다 더 느림 → 꼬리(beyond-slow). 클램핑 대신 정직 표시.
+  if (durationSec > slowest.durationSec) return { percentile: slowest.percentile, bound: 'beyond-slow' }
 
   for (let i = 1; i < sorted.length; i += 1) {
     const prev = sorted[i - 1]
@@ -674,20 +952,33 @@ function interpolatePercentile(durationSec: number, cuts: RaceBenchmarkCut[]): n
     if (durationSec <= next.durationSec) {
       const span = next.durationSec - prev.durationSec
       const ratio = span > 0 ? (durationSec - prev.durationSec) / span : 0
-      return Math.round((prev.percentile + (next.percentile - prev.percentile) * ratio) * 10) / 10
+      const percentile = Math.round((prev.percentile + (next.percentile - prev.percentile) * ratio) * 10) / 10
+      return { percentile, bound: 'exact' }
     }
   }
-  return last.percentile
+  return { percentile: slowest.percentile, bound: 'exact' }
 }
 
-function interpolatePercentileRange(projectedRangeSec: [number, number] | null, cuts: RaceBenchmarkCut[]): [number, number] | null {
+type RaceBenchmarkRangeResult = {
+  range: [number, number]
+  bounds: [RaceBenchmarkPercentileBound, RaceBenchmarkPercentileBound]
+}
+
+/**
+ * 예상 범위(낙관~보수)를 퍼센타일 범위 + 각 끝의 bound로 변환.
+ * 범위가 없으면 null을 돌려, 호출부가 단일 점으로 축약하도록 둔다.
+ */
+function resolvePercentileRange(
+  projectedRangeSec: [number, number] | null,
+  cuts: RaceBenchmarkCut[]
+): RaceBenchmarkRangeResult | null {
   if (!projectedRangeSec) return null
   const [fastSec, slowSec] = [...projectedRangeSec].sort((a, b) => a - b)
-  const fastPercentile = interpolatePercentile(fastSec, cuts)
-  const slowPercentile = interpolatePercentile(slowSec, cuts)
-  return fastPercentile <= slowPercentile
-    ? [fastPercentile, slowPercentile]
-    : [slowPercentile, fastPercentile]
+  const fast = resolvePercentilePoint(fastSec, cuts)
+  const slow = resolvePercentilePoint(slowSec, cuts)
+  return fast.percentile <= slow.percentile
+    ? { range: [fast.percentile, slow.percentile], bounds: [fast.bound, slow.bound] }
+    : { range: [slow.percentile, fast.percentile], bounds: [slow.bound, fast.bound] }
 }
 
 function getNextFasterCut(durationSec: number, cuts: RaceBenchmarkCut[]): RaceBenchmarkCut | null {
