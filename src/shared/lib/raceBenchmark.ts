@@ -18,6 +18,12 @@ export type RaceBenchmarkCut = {
   durationSec: number
 }
 
+export type RaceBenchmarkDistributionBasis = {
+  label: string
+  sampleSize: number
+  method: string
+}
+
 export type RaceBenchmarkSnapshot = {
   id: string
   eventName: string
@@ -33,6 +39,7 @@ export type RaceBenchmarkSnapshot = {
   freshnessStatus: RaceBenchmarkFreshnessStatus
   resultStatus: RaceBenchmarkResultStatus
   distributionStatus: RaceBenchmarkDistributionStatus
+  distributionBasis?: RaceBenchmarkDistributionBasis
   percentileCutsSec: RaceBenchmarkCut[]
   note: string
 }
@@ -60,6 +67,7 @@ export type RaceBenchmarkDistanceCoverage = {
 export type RaceBenchmarkComparison = {
   snapshot: RaceBenchmarkSnapshot
   percentile: number | null
+  percentileRange: [number, number] | null
   nextCut: RaceBenchmarkCut | null
   nextCutGapSec: number | null
   status: 'ready' | 'pending-distribution' | 'distance-mismatch'
@@ -229,6 +237,37 @@ export const raceBenchmarkSnapshots: RaceBenchmarkSnapshot[] = [
     note: '해외 메이저 최신 공개 결과 후보. 원본 결과 rows 대신 허용된 집계 컷만 사용한다.'
   },
   {
+    id: 'baa-10k-2025-10k',
+    eventName: 'B.A.A. 10K',
+    region: 'international',
+    country: 'US',
+    city: 'Boston',
+    distanceKm: 10,
+    year: 2025,
+    sourceName: 'B.A.A. official results',
+    sourceUrl: 'https://www.baa.org/races/boston-10k/results/',
+    retrievedAt,
+    publishedAt: '2025 results',
+    freshnessStatus: 'latest-confirmed',
+    resultStatus: 'final',
+    distributionStatus: 'ready',
+    distributionBasis: {
+      label: 'B.A.A. official race_results public DB',
+      sampleSize: 7609,
+      method: '숫자 bib 완주자의 ChipFinish만 Range 페이지네이션으로 집계해 1/5/10/25/50/75/90% 컷을 산출했다.'
+    },
+    percentileCutsSec: [
+      { percentile: 1, durationSec: 2115 },
+      { percentile: 5, durationSec: 2561 },
+      { percentile: 10, durationSec: 2775 },
+      { percentile: 25, durationSec: 3202 },
+      { percentile: 50, durationSec: 3673 },
+      { percentile: 75, durationSec: 4221 },
+      { percentile: 90, durationSec: 4795 }
+    ],
+    note: '2026 전체 분포는 공식 DB에 아직 0건이라, 최신 final 전체 분포가 확보된 2025 결과를 비식별 컷으로 사용한다.'
+  },
+  {
     id: 'baa-10k-2026-10k',
     eventName: 'B.A.A. 10K',
     region: 'international',
@@ -244,7 +283,38 @@ export const raceBenchmarkSnapshots: RaceBenchmarkSnapshot[] = [
     resultStatus: 'final',
     distributionStatus: 'needs-permission',
     percentileCutsSec: [],
-    note: '해외 10K 최근 결과 후보. B.A.A. 공식 결과 기준이며 비식별 분포 컷 확보 전까지 비교는 잠근다.'
+    note: '2026 대회 페이지는 확인됐지만 공식 공개 DB의 전체 분포는 아직 0건이다. 비교 계산은 2025 final 스냅샷으로 연다.'
+  },
+  {
+    id: 'baa-half-2025-half',
+    eventName: 'B.A.A. Half Marathon',
+    region: 'international',
+    country: 'US',
+    city: 'Boston',
+    distanceKm: 21.0975,
+    year: 2025,
+    sourceName: 'B.A.A. official results',
+    sourceUrl: 'https://www.baa.org/races/boston-half/results/',
+    retrievedAt,
+    publishedAt: '2025 results',
+    freshnessStatus: 'latest-confirmed',
+    resultStatus: 'final',
+    distributionStatus: 'ready',
+    distributionBasis: {
+      label: 'B.A.A. official race_results public DB',
+      sampleSize: 7041,
+      method: '숫자 bib 완주자의 ChipFinish만 Range 페이지네이션으로 집계해 1/5/10/25/50/75/90% 컷을 산출했다.'
+    },
+    percentileCutsSec: [
+      { percentile: 1, durationSec: 4861 },
+      { percentile: 5, durationSec: 5640 },
+      { percentile: 10, durationSec: 6045 },
+      { percentile: 25, durationSec: 6802 },
+      { percentile: 50, durationSec: 7738 },
+      { percentile: 75, durationSec: 8801 },
+      { percentile: 90, durationSec: 9815 }
+    ],
+    note: '해외 하프 최신 final 전체 분포 후보. 원본 참가자 row는 저장하지 않고 비식별 컷과 표본 수만 저장한다.'
   },
   {
     id: 'nyc-half-2026-half',
@@ -296,9 +366,22 @@ export const raceBenchmarkSnapshots: RaceBenchmarkSnapshot[] = [
     publishedAt: '2026 results',
     freshnessStatus: 'latest-confirmed',
     resultStatus: 'final',
-    distributionStatus: 'needs-permission',
-    percentileCutsSec: [],
-    note: '공식 결과 아카이브 기준. 상업적 재사용/대량 처리 허용 범위 확인 전까지 집계 대기.'
+    distributionStatus: 'ready',
+    distributionBasis: {
+      label: 'B.A.A. official race_results public DB',
+      sampleSize: 28979,
+      method: '숫자 bib 완주자의 ChipFinish만 Range 페이지네이션으로 집계해 1/5/10/25/50/75/90% 컷을 산출했다.'
+    },
+    percentileCutsSec: [
+      { percentile: 1, durationSec: 8953 },
+      { percentile: 5, durationSec: 9716 },
+      { percentile: 10, durationSec: 10174 },
+      { percentile: 25, durationSec: 11128 },
+      { percentile: 50, durationSec: 12514 },
+      { percentile: 75, durationSec: 14484 },
+      { percentile: 90, durationSec: 17094 }
+    ],
+    note: '공식 공개 DB의 전체 분포에서 비식별 컷과 표본 수만 저장한다. 실제 순위나 참가자 원본 정보는 저장하지 않는다.'
   },
   {
     id: 'london-marathon-2026-marathon',
@@ -409,16 +492,18 @@ export function compareProjectionToRaceBenchmarks(
   if (!projection) return []
   return snapshots.map((snapshot) => {
     if (!isDistanceMatch(snapshot.distanceKm, projection.targetDistanceKm)) {
-      return { snapshot, percentile: null, nextCut: null, nextCutGapSec: null, status: 'distance-mismatch' }
+      return { snapshot, percentile: null, percentileRange: null, nextCut: null, nextCutGapSec: null, status: 'distance-mismatch' }
     }
     if (snapshot.distributionStatus !== 'ready' || snapshot.percentileCutsSec.length < 2) {
-      return { snapshot, percentile: null, nextCut: null, nextCutGapSec: null, status: 'pending-distribution' }
+      return { snapshot, percentile: null, percentileRange: null, nextCut: null, nextCutGapSec: null, status: 'pending-distribution' }
     }
     const percentile = interpolatePercentile(projection.current.projectedSec, snapshot.percentileCutsSec)
+    const percentileRange = interpolatePercentileRange(projection.projectedRangeSec, snapshot.percentileCutsSec)
     const nextCut = getNextFasterCut(projection.current.projectedSec, snapshot.percentileCutsSec)
     return {
       snapshot,
       percentile,
+      percentileRange,
       nextCut,
       nextCutGapSec: nextCut ? Math.max(0, projection.current.projectedSec - nextCut.durationSec) : null,
       status: 'ready'
@@ -477,6 +562,16 @@ function interpolatePercentile(durationSec: number, cuts: RaceBenchmarkCut[]): n
     }
   }
   return last.percentile
+}
+
+function interpolatePercentileRange(projectedRangeSec: [number, number] | null, cuts: RaceBenchmarkCut[]): [number, number] | null {
+  if (!projectedRangeSec) return null
+  const [fastSec, slowSec] = [...projectedRangeSec].sort((a, b) => a - b)
+  const fastPercentile = interpolatePercentile(fastSec, cuts)
+  const slowPercentile = interpolatePercentile(slowSec, cuts)
+  return fastPercentile <= slowPercentile
+    ? [fastPercentile, slowPercentile]
+    : [slowPercentile, fastPercentile]
 }
 
 function getNextFasterCut(durationSec: number, cuts: RaceBenchmarkCut[]): RaceBenchmarkCut | null {

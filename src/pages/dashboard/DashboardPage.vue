@@ -12,7 +12,7 @@ import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
 import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
 import { getAgeLoadWeight, getEasyRatio, getFatigueWarning, getLongestRunKmWithinDays, getNextSessionRecommendation, getRunsWithinDays, getThisMonthRuns, getTrainingDayView, sumDistance, type NextSessionRecommendation } from '@/shared/lib/runStats'
 import { returnRampWindowSessions, returnSessionCapKm } from '@/shared/lib/coaching/returnRamp'
-import { formatDateWithWeekday, formatDuration } from '@/shared/lib/format'
+import { formatDateWithWeekday, formatDuration, formatInteger } from '@/shared/lib/format'
 import { getRaceProjection } from '@/shared/lib/performanceProjection'
 import {
   compareProjectionToRaceBenchmarks,
@@ -22,7 +22,8 @@ import {
   raceBenchmarkDistanceCategoryLabel,
   raceBenchmarkDistributionLabel,
   raceBenchmarkFreshnessLabel,
-  splitRaceBenchmarkComparisons
+  splitRaceBenchmarkComparisons,
+  type RaceBenchmarkComparison
 } from '@/shared/lib/raceBenchmark'
 import { resolveRunnerProgress } from '@/shared/lib/level/levelModel'
 import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
@@ -1392,6 +1393,17 @@ const goalBenchmarkText = computed(() => {
   }
   return `${raceBenchmarkCoverageText.value} · 현재 거리 데이터 없음`
 })
+function formatRaceBenchmarkRange(range: [number, number] | null): string {
+  if (!range) return ''
+  const [low, high] = range
+  return low === high ? `상위 ${low}%` : `상위 ${low}~${high}%`
+}
+
+function raceBenchmarkBasisText(item: RaceBenchmarkComparison): string {
+  const basis = item.snapshot.distributionBasis
+  if (!basis) return '원본 참가자 기록은 저장하지 않고 비식별 percentile cut만 사용합니다.'
+  return `${formatInteger(basis.sampleSize)}명 비식별 분포 · ${basis.method}`
+}
 
 const fatigueWarning = computed(() => getFatigueWarning(runs.value, today.value, ageLoadWeight.value))
 const volumeWarning = computed(() => fatigueWarning.value.message)
@@ -1937,8 +1949,11 @@ async function applyPhaseTransition() {
               <span v-else class="race-benchmark-status">컷 준비 중</span>
               <p>
                 {{ item.status === 'ready' && item.nextCut && item.nextCutGapSec !== null
-                  ? `상위 ${item.nextCut.percentile}% 컷까지 ${formatDuration(item.nextCutGapSec)} 단축 필요`
+                  ? `${formatRaceBenchmarkRange(item.percentileRange)} 예상 범위 · 상위 ${item.nextCut.percentile}% 컷까지 ${formatDuration(item.nextCutGapSec)} 단축 필요`
                   : '최근 결과 출처는 확보됐고, 비식별 percentile cut이 준비되면 현재 목표 현주소 계산에 사용합니다.' }}
+              </p>
+              <p v-if="item.status === 'ready'" class="race-benchmark-basis">
+                {{ raceBenchmarkBasisText(item) }}
               </p>
             </article>
           </div>

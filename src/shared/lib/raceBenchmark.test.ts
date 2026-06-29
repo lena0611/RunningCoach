@@ -6,6 +6,7 @@ import {
   getRaceBenchmarkDistanceCategory,
   isDistanceMatch,
   raceBenchmarkDistanceCategories,
+  raceBenchmarkSnapshots,
   splitRaceBenchmarkComparisons,
   type RaceBenchmarkSnapshot
 } from './raceBenchmark'
@@ -62,8 +63,8 @@ describe('raceBenchmark', () => {
     expect(summary.international).toBeGreaterThanOrEqual(5)
     expect(summary.latestConfirmed).toBe(summary.total)
     expect(summary.matchingDistance).toBeGreaterThanOrEqual(1)
-    expect(summary.matchingDistributionReady).toBe(0)
-    expect(summary.matchingPendingDistribution).toBe(summary.matchingDistance)
+    expect(summary.matchingDistributionReady).toBeGreaterThanOrEqual(1)
+    expect(summary.matchingPendingDistribution).toBe(summary.matchingDistance - summary.matchingDistributionReady)
   })
 
   it('covers 10K, half, and marathon sources across domestic and international catalogs', () => {
@@ -78,6 +79,21 @@ describe('raceBenchmark', () => {
     })
   })
 
+  it('has ready non-identifying percentile cuts for 10K, half, and marathon calculations', () => {
+    raceBenchmarkDistanceCategories.forEach((category) => {
+      const ready = raceBenchmarkSnapshots.filter((snapshot) => (
+        snapshot.distributionStatus === 'ready' &&
+        isDistanceMatch(snapshot.distanceKm, category.distanceKm)
+      ))
+
+      expect(ready.length, category.label).toBeGreaterThanOrEqual(1)
+      ready.forEach((snapshot) => {
+        expect(snapshot.percentileCutsSec.length, snapshot.eventName).toBeGreaterThanOrEqual(7)
+        expect(snapshot.distributionBasis?.sampleSize, snapshot.eventName).toBeGreaterThan(1000)
+      })
+    })
+  })
+
   it('does not compare when distribution cuts are still pending', () => {
     const [comparison] = compareProjectionToRaceBenchmarks(projection, [
       { ...readySnapshot, distributionStatus: 'needs-permission', percentileCutsSec: [] }
@@ -87,11 +103,12 @@ describe('raceBenchmark', () => {
     expect(comparison.percentile).toBeNull()
   })
 
-  it('interpolates percentile from non-identifying cut buckets when ready', () => {
+  it('interpolates percentile and projected range from non-identifying cut buckets when ready', () => {
     const [comparison] = compareProjectionToRaceBenchmarks(projection, [readySnapshot])
 
     expect(comparison.status).toBe('ready')
     expect(comparison.percentile).toBe(24)
+    expect(comparison.percentileRange).toEqual([20, 30])
     expect(comparison.nextCut?.percentile).toBe(10)
     expect(comparison.nextCutGapSec).toBe(420)
   })
