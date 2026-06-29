@@ -78,6 +78,8 @@ export type RaceBenchmarkComparisonGroups = {
   otherDistances: RaceBenchmarkComparison[]
 }
 
+export type RaceBenchmarkEvidenceLevel = 'none' | 'single-reference' | 'multi-benchmark'
+
 const retrievedAt = '2026-06-29'
 
 export const raceBenchmarkDistanceCategories: Array<{ id: RaceBenchmarkDistanceCategory; label: string; distanceKm: number }> = [
@@ -542,6 +544,24 @@ export function splitRaceBenchmarkComparisons(comparisons: RaceBenchmarkComparis
     currentDistance: comparisons.filter((comparison) => comparison.status !== 'distance-mismatch'),
     otherDistances: comparisons.filter((comparison) => comparison.status === 'distance-mismatch')
   }
+}
+
+export function getRaceBenchmarkEvidenceLevel(readyComparisonCount: number): RaceBenchmarkEvidenceLevel {
+  if (readyComparisonCount >= 2) return 'multi-benchmark'
+  if (readyComparisonCount === 1) return 'single-reference'
+  return 'none'
+}
+
+export function formatRaceBenchmarkPercentilePoint(percentile: number): string {
+  return `빠른 순서 ${percentile}퍼센타일`
+}
+
+export function formatRaceBenchmarkPercentileRange(range: [number, number] | null): string {
+  if (!range) return ''
+  const [low, high] = range
+  return low === high
+    ? formatRaceBenchmarkPercentilePoint(low)
+    : `빠른 순서 ${low}~${high}퍼센타일`
 }
 
 export function isDistanceMatch(a: number, b: number): boolean {

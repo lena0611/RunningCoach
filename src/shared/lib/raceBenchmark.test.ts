@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { RaceProjection } from './performanceProjection'
 import {
   compareProjectionToRaceBenchmarks,
+  formatRaceBenchmarkPercentilePoint,
+  formatRaceBenchmarkPercentileRange,
+  getRaceBenchmarkEvidenceLevel,
   getRaceBenchmarkCatalogSummary,
   getRaceBenchmarkDistanceCategory,
   isDistanceMatch,
@@ -120,6 +123,18 @@ describe('raceBenchmark', () => {
     expect(comparison.percentileRange).toEqual([20, 30])
     expect(comparison.nextCut?.percentile).toBe(10)
     expect(comparison.nextCutGapSec).toBe(420)
+  })
+
+  it('labels benchmark evidence conservatively when only one ready race exists', () => {
+    expect(getRaceBenchmarkEvidenceLevel(0)).toBe('none')
+    expect(getRaceBenchmarkEvidenceLevel(1)).toBe('single-reference')
+    expect(getRaceBenchmarkEvidenceLevel(2)).toBe('multi-benchmark')
+  })
+
+  it('formats percentile copy as a fast-order position instead of a top-rank claim', () => {
+    expect(formatRaceBenchmarkPercentilePoint(76)).toBe('빠른 순서 76퍼센타일')
+    expect(formatRaceBenchmarkPercentileRange([70, 80])).toBe('빠른 순서 70~80퍼센타일')
+    expect(formatRaceBenchmarkPercentileRange([75, 75])).toBe('빠른 순서 75퍼센타일')
   })
 
   it('uses a small tolerance for distance matching', () => {
