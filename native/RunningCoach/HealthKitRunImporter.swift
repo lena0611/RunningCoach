@@ -249,6 +249,129 @@ final class HealthKitRunImporter {
         }
     }
 
+    // ── #235 레이싱 HealthKit write — self-race 결과를 운동으로 저장(아이폰 1차) ──────
+    // 라이브런(나와의 대결) 종료 시 LiveRunTracker가 들고 있던 거리·시간으로 HKWorkout을
+    // 저장한다. sourceName은 앱(PaceLAB)으로 자동 기록되고, 반환 uuid는 기존 import dedupe
+    // 키(externalId)와 같으므로 회신받아 RunLog 유입·중복차단·결과연결에 그대로 재사용한다.
+    // HR은 폰 단독이라 없음(거리·시간·페이스만). 경로(route)는 1차 미포함(사용자 결정).
+
+    // #235: write 권한은 레이싱 '시작'(포그라운드)에 미리 확보한다. 종료가 목표거리 자동완주라
+    // 백그라운드/잠금 상태이면 권한 시트를 띄울 수 없어, 그때 처음 요청하면 첫 레이싱이
+    // 영구 저장 실패한다(Codex 리뷰). 이미 결정된 권한이면 시트 없이 즉시 콜백된다.
+    func requestCompetitionWriteAuthorization(completion: @escaping (Bool) -> Void) {
+        guard HKHealthStore.isHealthDataAvailable(),
+              let distanceType = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning) else {
+            completion(false)
+            return
+        }
+        let workoutType = HKObjectType.workoutType()
+        // 레이싱 입장마다 권한 시트가 다시 뜨던 문제: 이미 '쓰기'가 허용돼 있으면 재요청하지 않는다.
+        // authorizationStatus는 share(쓰기)에 대해선 정확하다(읽기는 프라이버시상 항상 미상 보고).
+        // 로그로 매 호출 시 상태를 남겨, 팝업이 계속 뜨면 권한이 .notDetermined로 리셋되는지(환경 문제)
+        // 아니면 .sharingAuthorized인데 불필요 재요청이었는지 진단한다.
+        let workoutStatus = healthStore.authorizationStatus(for: workoutType)
+        let distanceStatus = healthStore.authorizationStatus(for: distanceType)
+        print("[RunContext HealthKit] competition write auth status workout=\(workoutStatus.rawValue) distance=\(distanceStatus.rawValue) (0=notDetermined,1=denied,2=authorized)")
+        if workoutStatus == .sharingAuthorized && distanceStatus == .sharingAuthorized {
+            print("[RunContext HealthKit] already authorized — skip prompt")
+            completion(true)
+            return
+        }
+        let shareTypes: Set<HKSampleType> = [workoutType, distanceType]
+        healthStore.requestAuthorization(toShare: shareTypes, read: []) { success, error in
+            if let error {
+                print("[RunContext HealthKit] competition write auth failed:", error.localizedDescription)
+            }
+            completion(success)
+        }
+    }
+
+    func saveCompetitionRunningWorkout(
+        distanceMeters: Double,
+        start: Date,
+        end: Date,
+        completion: @escaping (Result<String, Error>) -> Void
+    ) {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            completion(.failure(HealthKitImportError.healthDataUnavailable))
+            return
+        }
+        guard let distanceType = HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning) else {
+            completion(.failure(HealthKitImportError.healthDataUnavailable))
+            return
+        }
+        // write 전용 권한만 추가로 요청한다(read는 기존 흐름이 이미 받음). 이미 허용돼 있으면
+        // 다이얼로그 없이 통과하고, 미허용이면 이 시점에만 쓰기 권한 시트가 뜬다.
+        let shareTypes: Set<HKSampleType> = [HKObjectType.workoutType(), distanceType]
+        healthStore.requestAuthorization(toShare: shareTypes, read: []) { [weak self] success, error in
+            guard let self else { return }
+            if let error {
+                completion(.failure(error))
+            } else if success {
+                self.writeRunningWorkout(distanceType: distanceType, distanceMeters: distanceMeters, start: start, end: end, completion: completion)
+            } else {
+                completion(.failure(HealthKitImportError.authorizationDenied))
+            }
+        }
+    }
+
+    private func writeRunningWorkout(
+        distanceType: HKQuantityType,
+        distanceMeters: Double,
+        start: Date,
+        end: Date,
+        completion: @escaping (Result<String, Error>) -> Void
+    ) {
+        let configuration = HKWorkoutConfiguration()
+        configuration.activityType = .running
+        configuration.locationType = .outdoor
+        let builder = HKWorkoutBuilder(healthStore: healthStore, configuration: configuration, device: .local())
+
+        func fail(_ error: Error?) {
+            builder.discardWorkout()
+            completion(.failure(error ?? Self.writeError))
+        }
+
+        builder.beginCollection(withStart: start) { success, error in
+            guard success else { fail(error); return }
+
+            // self-race 표식 메타데이터(가져오기 시 일반 러닝과 구분 가능). 사용자 직접입력 아님.
+            let metadata: [String: Any] = [
+                HKMetadataKeyWasUserEntered: false,
+                "PaceLABCompetition": "self-race"
+            ]
+            builder.addMetadata(metadata) { _, _ in
+                let finalize = {
+                    builder.endCollection(withEnd: end) { success, error in
+                        guard success else { fail(error); return }
+                        builder.finishWorkout { workout, error in
+                            if let workout {
+                                completion(.success(workout.uuid.uuidString))
+                            } else {
+                                fail(error)
+                            }
+                        }
+                    }
+                }
+
+                // 거리 샘플(있으면). HR·route는 1차 미포함 — 거리만으로도 러닝 워크아웃 성립.
+                guard distanceMeters > 0 else { finalize(); return }
+                let quantity = HKQuantity(unit: .meter(), doubleValue: distanceMeters)
+                let sample = HKCumulativeQuantitySample(type: distanceType, quantity: quantity, start: start, end: end)
+                builder.add([sample]) { success, error in
+                    guard success else { fail(error); return }
+                    finalize()
+                }
+            }
+        }
+    }
+
+    private static let writeError = NSError(
+        domain: "RunContextHealthKitWrite",
+        code: -1,
+        userInfo: [NSLocalizedDescriptionKey: "HealthKit 운동 저장에 실패했습니다."]
+    )
+
     private func healthTypesToRead() -> [HKObjectType] {
         var types: [HKObjectType] = [HKObjectType.workoutType()]
 

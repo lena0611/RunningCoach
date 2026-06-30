@@ -72,6 +72,9 @@ final class LiveRunTracker: NSObject {
     var onError: ((_ code: String, _ message: String) -> Void)?
     /// 백그라운드 동작 진단(화면 표시용): 위치 백그라운드 모드/권한/bg업데이트 활성 여부.
     var onDiagnostic: ((_ text: String) -> Void)?
+    /// #235: 라이브런 정상 종료(수동/자동완주) 시 최종 거리·시작/종료 시각을 알린다.
+    /// Coordinator가 받아 HealthKit에 운동으로 저장한다(LiveRunTracker는 HealthKit 비의존).
+    var onFinished: ((_ distanceM: Double, _ start: Date, _ end: Date) -> Void)?
 
     private let manager = CLLocationManager()
     private let pedometer = CMPedometer()
@@ -309,6 +312,14 @@ final class LiveRunTracker: NSObject {
         clearSnapshot()           // 정상 종료 → 복원 후보 없음
         setState(.stopped)
         engine = nil
+
+        // #235: 유효한 런이면 종료 데이터를 콜백으로 넘긴다(Coordinator가 HealthKit에 기록).
+        // 거리·시간은 LiveRunTracker가 진실의 출처(§9.1). 레이싱은 사용자가 일부러 시작·종료한
+        // 활동이라 짧아도 기록한다 — 가드는 '시작 즉시 종료'(거의 0m·수 초) 노이즈만 거른다(≥10m·≥5s).
+        // end는 startDate+순수경과(일시정지 제외)로 둔다(일시정지 구간만큼 실제 시계보다 당겨짐).
+        if let start = startDate, cumulativeDistanceM >= 10, elapsedSec >= 5 {
+            onFinished?(cumulativeDistanceM, start, start.addingTimeInterval(elapsedSec))
+        }
     }
 
     /// 비정상 종료 스냅샷 조회. 자동복원은 안 한다(확정 결정) — 정보 표시용.

@@ -3,6 +3,7 @@ import { useAuthStore } from '@/app/stores/authStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useCompetitionStore } from '@/app/stores/competitionStore'
+import { SELF_RACE_TAG } from '@/entities/competition/model'
 import { useSettingsStore } from '@/app/stores/settingsStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import type { RunLog } from '@/entities/run/model'
@@ -292,6 +293,66 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         showSyncToast('error', this.error, 4200)
       } finally {
         this.refreshingRunId = ''
+      }
+    },
+    // #235: 레이싱 종료 후 네이티브가 HealthKit에 저장한 운동을 '단건'으로 RunLog에 유입한다.
+    // requestSync(전체)는 isAfterLatestSaved의 `date > latestDate` strict 필터 때문에 '오늘 이미
+    // 기록이 있으면' 같은 날 레이싱을 누락한다(Codex 리뷰 #1). 그래서 그 externalId 1건만 날짜
+    // 필터 없이 직접 추가하고, 중복은 isAlreadySaved(externalId 우선)로 막아 정기 sync와 멱등하게 둔다.
+    async importCompetitionRun(payload: { externalId: string; distanceM: number; durationSec: number; startMs: number; endMs: number }) {
+      this.init()
+      const authStore = useAuthStore()
+      if (!authStore.isAuthenticated || !hasNativeBridge()) return
+      try {
+        await ensureRunStoreLoaded()
+        const start = new Date(payload.startMs)
+        const end = new Date(payload.endMs)
+        const date = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`
+        const candidate: HealthKitRunCandidate = {
+          externalId: payload.externalId,
+          sourceName: 'PaceLAB',
+          date,
+          startAt: start.toISOString(),
+          endAt: end.toISOString(),
+          durationSec: payload.durationSec > 0 ? payload.durationSec : null,
+          distanceKm: payload.distanceM > 0 ? payload.distanceM / 1000 : null,
+          avgPaceSec: null,
+          avgHeartRate: null,
+          maxHeartRate: null,
+          cadence: null,
+          activeEnergyKcal: null,
+          temperature: null,
+          humidity: null,
+          windMps: null,
+          elevationGainM: null,
+          elevationLossM: null,
+          rpe: null,
+          routeAvailable: false,
+          laps: [],
+          fastSegments: [],
+          metricSamples: [],
+          routePoints: [],
+          rawAvailability: { workout: true, heartRate: false, route: false, cadence: false, runningDynamics: false }
+        }
+        // self-race는 workout uuid(externalId)가 유니크하므로 externalId로만 중복 판정한다.
+        // (isAlreadySaved의 날짜+거리+시간 폴백은 '같은 날 비슷한 레이싱 2개'를 중복 오판해 2회째를
+        //  누락시킨다 — 50m 레이싱을 반복하면 거리·시간이 비슷해 두 번째가 통째로 걸러지던 버그.)
+        const alreadyImported = useRunStore().runs.some((run) => run.externalId === candidate.externalId)
+        if (!alreadyImported) {
+          const memoryStore = useMemoryStore()
+          const extracted = toExtractedRunData(candidate, memoryStore.memory.weeklyPattern, buildInferenceHeartRateModel())
+          // #235/§10: 레이싱 런은 '생성 시점부터' self-race 태그를 달아, 저장 직후 matchSessionIntent의
+          // 세션·의도 매칭에서 제외되게 한다. (태그를 linkSelfRaceResults에서 뒤늦게 붙이면 이미 처방
+          // 세션을 '완료'로 소비한 뒤라 늦음 — 레이싱이 부상복귀 Easy 처방을 먹어버리던 버그.)
+          const existingTags = extracted.tags ?? []
+          extracted.tags = existingTags.includes(SELF_RACE_TAG) ? existingTags : [...existingTags, SELF_RACE_TAG]
+          await useRunStore().addRuns([extracted], 'healthkit')
+          this.lastChangedAt = Date.now()
+        }
+        await linkSelfRaceResults() // 방금 유입된 RunLog ↔ competition_result 근접 매칭(#233)
+      } catch (err) {
+        // 비치명적: 결과 요약은 PendingSelfRace로 이미 표시됨. 실패 시 다음 정기 sync가 재시도.
+        this.error = err instanceof Error ? err.message : '레이싱 결과 HealthKit 유입 실패'
       }
     },
     handleRunUpdateError(externalId: string | null, message: string) {
