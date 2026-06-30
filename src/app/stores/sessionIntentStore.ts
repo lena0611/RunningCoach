@@ -6,6 +6,7 @@ import {
   fetchSessionIntents,
   insertSessionIntent,
   matchSessionIntentToRun,
+  unmatchSessionIntentFromRun,
   updateSessionIntentStatus
 } from '@/shared/api/sessionIntentRepository'
 
@@ -74,6 +75,16 @@ export const useSessionIntentStore = defineStore('sessionIntentStore', {
       const matched = await matchSessionIntentToRun(candidate.id, run.id)
       this.replace(matched)
       return matched
+    },
+    /**
+     * 런 삭제/치유 시 호출(#235 후속 G2/G4). 그 런이 'completed' 로 점유한 의도를 planned 로 되돌린다.
+     * 사용자가 수동 전환한 skipped/superseded 는 건드리지 않는다(completed 만 자동 회수 — 의도된 동작).
+     */
+    async unmatchRun(runId: string): Promise<void> {
+      if (!isSupabaseConfigured) return
+      const target = this.intents.find((i) => i.runId === runId && i.status === 'completed')
+      if (!target) return
+      this.replace(await unmatchSessionIntentFromRun(target.id))
     },
     async setStatus(id: string, status: SessionIntentStatus): Promise<void> {
       if (!isSupabaseConfigured) return

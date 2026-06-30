@@ -10,6 +10,15 @@
 /** 레이싱 결과 단위 태그. RunLog.tags 에 붙어 (a) 레이싱 세션 식별 (b) 업적 PB 사다리 분리 키. */
 export const SELF_RACE_TAG = 'self-race'
 
+/**
+ * "이 런이 가상레이싱(self-race) 수행 세션인가" 단일 판정 헬퍼 (#235 후속 SSOT).
+ * G1 유입 태깅·G4 치유 대상 식별·DashboardPage 집계/디브리핑 필터가 모두 이걸 쓴다.
+ * `tags.includes('self-race')` 리터럴이 산재해 일관성이 깨지는 걸 막는다.
+ */
+export function isSelfRaceRun(run: { tags?: string[] | null }): boolean {
+  return Boolean(run.tags?.includes(SELF_RACE_TAG))
+}
+
 export type CompetitionMode = 'self-pb'
 
 /** ahead=win, behind=lose, even=tie. ghost.ts leadState 와 1:1 대응. */

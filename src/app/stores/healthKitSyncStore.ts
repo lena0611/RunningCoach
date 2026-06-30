@@ -239,6 +239,9 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
           .filter((candidate) => isWithinRange(candidate, range))
           .sort((a, b) => a.date.localeCompare(b.date) || a.startAt.localeCompare(b.startAt))
         const heartRateModel = buildInferenceHeartRateModel()
+        // (#235 후속 G3) 과거 마이그레이션은 "사용자가 기간을 직접 골라 다시 부른" 의사 → deny-list 를 무시·해제한다
+        // ("자동 재유입은 막되, 직접 다시 부르면 허용"). 범위 내 deny 된 externalId 를 풀어 재유입을 허용한다.
+        await releaseDeniedForCandidates(rangeRuns)
         const repaired = await repairExistingHealthKitRuns(rangeRuns, memoryStore.memory.weeklyPattern, heartRateModel)
         const newRuns = rangeRuns.filter((candidate) => !isAlreadySaved(candidate))
 
@@ -332,12 +335,17 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
           fastSegments: [],
           metricSamples: [],
           routePoints: [],
-          rawAvailability: { workout: true, heartRate: false, route: false, cadence: false, runningDynamics: false }
+          rawAvailability: { workout: true, heartRate: false, route: false, cadence: false, runningDynamics: false },
+          // 단건 레이싱 유입은 정의상 self-race. toExtractedRunData 가 이 플래그로 self-race 태그를 박는다.
+          isSelfRace: true
         }
         // self-race는 workout uuid(externalId)가 유니크하므로 externalId로만 중복 판정한다.
         // (isAlreadySaved의 날짜+거리+시간 폴백은 '같은 날 비슷한 레이싱 2개'를 중복 오판해 2회째를
         //  누락시킨다 — 50m 레이싱을 반복하면 거리·시간이 비슷해 두 번째가 통째로 걸러지던 버그.)
-        const alreadyImported = useRunStore().runs.some((run) => run.externalId === candidate.externalId)
+        // (#235 후속 G3) 삭제 후 deny 된 externalId 면 단건 유입도 막는다(자동 sync 와 동일 게이트).
+        const alreadyImported =
+          useRunStore().runs.some((run) => run.externalId === candidate.externalId) ||
+          useRunStore().deniedExternalIds.includes(candidate.externalId)
         if (!alreadyImported) {
           const memoryStore = useMemoryStore()
           const extracted = toExtractedRunData(candidate, memoryStore.memory.weeklyPattern, buildInferenceHeartRateModel())
@@ -483,8 +491,21 @@ function isWithinRange(candidate: HealthKitRunCandidate, range: HistoricalMigrat
   return candidate.date >= range.startDate && candidate.date <= range.endDate
 }
 
+// (#235 후속 G3) 과거 마이그레이션 전용: 범위 후보 중 deny 된 externalId 를 해제해 재유입을 허용한다.
+async function releaseDeniedForCandidates(candidates: HealthKitRunCandidate[]) {
+  const ids = candidates.map((c) => c.externalId).filter(Boolean)
+  if (!ids.length) return
+  try {
+    await useRunStore().releaseDenied(ids)
+  } catch {
+    // best-effort: 해제 실패는 마이그레이션을 막지 않는다(이번엔 일부가 deny 로 걸러질 뿐).
+  }
+}
+
 function isAlreadySaved(candidate: HealthKitRunCandidate) {
   const runStore = useRunStore()
+  // (#235 후속 G3) 사용자가 삭제한 워크아웃은 deny-list 로 재유입 차단(자동 sync·단건 유입 게이트).
+  if (candidate.externalId && runStore.deniedExternalIds.includes(candidate.externalId)) return true
   return runStore.runs.some((run) => {
     if (run.externalId && run.externalId === candidate.externalId) return true
     return (
@@ -531,7 +552,7 @@ async function repairExistingHealthKitRuns(candidates: HealthKitRunCandidate[], 
       fastSegments: extracted.fastSegments?.length ? extracted.fastSegments : target.fastSegments,
       metricSamples: extracted.metricSamples?.length ? extracted.metricSamples : target.metricSamples,
       routePoints: extracted.routePoints?.length ? extracted.routePoints : target.routePoints,
-      tags: mergeHealthKitRepairTags(target.tags ?? []),
+      tags: mergeHealthKitRepairTags(target.tags ?? [], candidate.isSelfRace),
       source: 'healthkit'
     })
     repaired.push(updated)
@@ -539,11 +560,15 @@ async function repairExistingHealthKitRuns(candidates: HealthKitRunCandidate[], 
   return repaired
 }
 
-function mergeHealthKitRepairTags(tags: string[]) {
-  if (tags.includes('type:user')) {
-    return Array.from(new Set([...tags.filter((tag) => tag !== 'type:auto'), 'healthkit', 'healthkit-repaired']))
-  }
-  return Array.from(new Set([...tags.filter((tag) => tag !== 'type:user'), 'healthkit', 'healthkit-repaired', 'type:auto']))
+// #235/§10 (M1): repair 는 기존 target 태그 기준으로 병합하므로, self-race 워크아웃이 무-externalId 기존
+// 런을 보강하면 candidate.isSelfRace 가 버려진다. 이걸 G4 치유로 미루면 태그가 없어 isSelfRaceRun 레이더에
+// 영영 안 잡히는 순환이 생긴다 → 유입 시점(여기)에서 self-race 태그를 주입해 닫는다(멱등).
+function mergeHealthKitRepairTags(tags: string[], isSelfRace = false) {
+  const base = tags.includes('type:user')
+    ? [...tags.filter((tag) => tag !== 'type:auto'), 'healthkit', 'healthkit-repaired']
+    : [...tags.filter((tag) => tag !== 'type:user'), 'healthkit', 'healthkit-repaired', 'type:auto']
+  if (isSelfRace) base.push(SELF_RACE_TAG)
+  return Array.from(new Set(base))
 }
 
 function findRepairableHealthKitRun(candidate: HealthKitRunCandidate) {

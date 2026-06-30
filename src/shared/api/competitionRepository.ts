@@ -45,6 +45,22 @@ export async function insertCompetitionResult(input: CompetitionResultInput): Pr
   return fromRow(data)
 }
 
+/**
+ * 링크된 RunLog 삭제 시 그 경쟁 결과를 회수한다(#235 후속 M2). DB FK 는 on delete set null 이라
+ * linked_run_id 만 끊긴 좀비가 남아 다음 sync 의 linkSelfRaceResults 가 엉뚱한 런에 재링크하거나
+ * 업적 사다리에 유령으로 남는다 → §10 "결과는 RunLog 에 링크" 불변식 유지를 위해 결과를 삭제한다.
+ * 영향받은 행 수를 반환.
+ */
+export async function deleteCompetitionResultsByRunId(runId: string): Promise<number> {
+  const { data, error } = await requireSupabase()
+    .from('competition_results')
+    .delete()
+    .eq('linked_run_id', runId)
+    .select('id')
+  if (error) throw error
+  return (data ?? []).length
+}
+
 function toInsertRow(input: CompetitionResultInput) {
   return {
     mode: input.mode,
