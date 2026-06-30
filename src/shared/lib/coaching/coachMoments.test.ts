@@ -295,6 +295,43 @@ describe('collectCoachMoments', () => {
     expect(m!.message).toContain('목표')
   })
 
+  // === 복귀 카드 ↔ 실제 스케줄 정렬(#473 후속 불일치 버그) ===
+  it('복귀 카드: 오늘이 run-day(오늘 세션 있음)면 "오늘은 가볍게({타입})" 단정 유지', () => {
+    const m = collectCoachMoments(
+      ctx({ rest: restActive({ active: false, showReturn: true, todaySessionLabel: 'Easy' }) })
+    ).find((x) => x.kind === 'rest-return')
+    expect(m!.message).toContain('오늘은 가볍게(Easy)')
+    expect(m!.message).not.toContain('쉬어가는 날')
+  })
+
+  it('복귀 카드: 오늘이 run-day 가 아니면(오늘 세션 없음) "오늘 Easy" 단정 금지·오늘 쉼 지지·다음 세션 명시', () => {
+    const m = collectCoachMoments(
+      ctx({
+        rest: restActive({
+          active: false,
+          showReturn: true,
+          todaySessionLabel: null,
+          nextReturnSession: { dateLabel: '2026-07-02(목)', typeLabel: 'Easy' }
+        })
+      })
+    ).find((x) => x.kind === 'rest-return')
+    // "오늘은 가볍게(Easy) 다시 시작"이라고 거짓 단정하지 않는다(데이-스트립 '🌙 휴식'과 정렬).
+    expect(m!.message).not.toContain('오늘은 가볍게')
+    expect(m!.message).toContain('오늘은 쉬어가는 날')
+    expect(m!.message).toContain('2026-07-02(목)')
+    expect(m!.message).toContain('첫 복귀 세션')
+    // "가볍게 풀거나" 같은 운동 권유는 빼서 전략적 휴식 톤과 충돌하지 않는다.
+    expect(m!.message).not.toContain('풀거나')
+  })
+
+  it('복귀 카드: 오늘 세션도 다음 세션 정보도 없으면 날짜 없이 일반 "가볍게(Easy)부터" 폴백(거짓 단정 없음)', () => {
+    const m = collectCoachMoments(
+      ctx({ rest: restActive({ active: false, showReturn: true, todaySessionLabel: null, nextReturnSession: null }) })
+    ).find((x) => x.kind === 'rest-return')
+    expect(m!.message).toContain('오늘은 쉬어가는 날')
+    expect(m!.message).not.toContain('오늘은 가볍게')
+  })
+
   it('복귀 모먼트는 휴식 active 억제 필터에 안 걸린다(active=false라 다른 모먼트도 공존 가능)', () => {
     const moments = collectCoachMoments(
       ctx({ deviation: { shouldRealign: true, reason: 'x', missedCount: 3 }, rest: restActive({ active: false, showReturn: true }) })
