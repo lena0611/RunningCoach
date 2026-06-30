@@ -3,6 +3,7 @@ import { useAuthStore } from '@/app/stores/authStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useCompetitionStore } from '@/app/stores/competitionStore'
+import { SELF_RACE_TAG } from '@/entities/competition/model'
 import { useSettingsStore } from '@/app/stores/settingsStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import type { RunLog } from '@/entities/run/model'
@@ -333,12 +334,19 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
           routePoints: [],
           rawAvailability: { workout: true, heartRate: false, route: false, cadence: false, runningDynamics: false }
         }
-        if (!isAlreadySaved(candidate)) {
+        // self-race는 workout uuid(externalId)가 유니크하므로 externalId로만 중복 판정한다.
+        // (isAlreadySaved의 날짜+거리+시간 폴백은 '같은 날 비슷한 레이싱 2개'를 중복 오판해 2회째를
+        //  누락시킨다 — 50m 레이싱을 반복하면 거리·시간이 비슷해 두 번째가 통째로 걸러지던 버그.)
+        const alreadyImported = useRunStore().runs.some((run) => run.externalId === candidate.externalId)
+        if (!alreadyImported) {
           const memoryStore = useMemoryStore()
-          await useRunStore().addRuns(
-            [toExtractedRunData(candidate, memoryStore.memory.weeklyPattern, buildInferenceHeartRateModel())],
-            'healthkit'
-          )
+          const extracted = toExtractedRunData(candidate, memoryStore.memory.weeklyPattern, buildInferenceHeartRateModel())
+          // #235/§10: 레이싱 런은 '생성 시점부터' self-race 태그를 달아, 저장 직후 matchSessionIntent의
+          // 세션·의도 매칭에서 제외되게 한다. (태그를 linkSelfRaceResults에서 뒤늦게 붙이면 이미 처방
+          // 세션을 '완료'로 소비한 뒤라 늦음 — 레이싱이 부상복귀 Easy 처방을 먹어버리던 버그.)
+          const existingTags = extracted.tags ?? []
+          extracted.tags = existingTags.includes(SELF_RACE_TAG) ? existingTags : [...existingTags, SELF_RACE_TAG]
+          await useRunStore().addRuns([extracted], 'healthkit')
           this.lastChangedAt = Date.now()
         }
         await linkSelfRaceResults() // 방금 유입된 RunLog ↔ competition_result 근접 매칭(#233)

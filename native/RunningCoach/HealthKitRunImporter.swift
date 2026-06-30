@@ -264,8 +264,24 @@ final class HealthKitRunImporter {
             completion(false)
             return
         }
-        let shareTypes: Set<HKSampleType> = [HKObjectType.workoutType(), distanceType]
-        healthStore.requestAuthorization(toShare: shareTypes, read: []) { success, _ in
+        let workoutType = HKObjectType.workoutType()
+        // 레이싱 입장마다 권한 시트가 다시 뜨던 문제: 이미 '쓰기'가 허용돼 있으면 재요청하지 않는다.
+        // authorizationStatus는 share(쓰기)에 대해선 정확하다(읽기는 프라이버시상 항상 미상 보고).
+        // 로그로 매 호출 시 상태를 남겨, 팝업이 계속 뜨면 권한이 .notDetermined로 리셋되는지(환경 문제)
+        // 아니면 .sharingAuthorized인데 불필요 재요청이었는지 진단한다.
+        let workoutStatus = healthStore.authorizationStatus(for: workoutType)
+        let distanceStatus = healthStore.authorizationStatus(for: distanceType)
+        print("[RunContext HealthKit] competition write auth status workout=\(workoutStatus.rawValue) distance=\(distanceStatus.rawValue) (0=notDetermined,1=denied,2=authorized)")
+        if workoutStatus == .sharingAuthorized && distanceStatus == .sharingAuthorized {
+            print("[RunContext HealthKit] already authorized — skip prompt")
+            completion(true)
+            return
+        }
+        let shareTypes: Set<HKSampleType> = [workoutType, distanceType]
+        healthStore.requestAuthorization(toShare: shareTypes, read: []) { success, error in
+            if let error {
+                print("[RunContext HealthKit] competition write auth failed:", error.localizedDescription)
+            }
             completion(success)
         }
     }

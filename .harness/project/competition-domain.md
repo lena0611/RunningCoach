@@ -277,5 +277,6 @@ MVP 비목표(후속):
 - 정본 활동 = HealthKit→RunLog (type 불변). `RunLog.tags += 'self-race'` 경량 태그가 **이중 목적**: (a) 레이싱 수행 세션 식별, (b) 업적 PB의 훈련간/레이싱간 사다리 분리 키(#228 §9.2).
 - 레이싱 결과 = `competition_result{mode:'self-pb',targetPb:{distanceM,elapsedSec,sourceRunId},racedDistanceM,resultGapSec,outcome,linkedRunId,racedAt}`. 종료 후 import된 RunLog와 시간·거리 근접 매칭(기존 `requestRunningWorkoutByExternalId` 패턴 재사용).
 - **이중계산 방지**: `competition_result`는 볼륨·부하·추세 집계에 미포함. 업적·동기부여·코칭 인용 전용. PB 갱신 시 #228이 전체 RunLog 재산출로 자동 반영.
+- **세션·의도 비소비(#235, 확정)**: `self-race` 런은 예정된 **처방 세션·`SessionIntent`를 '완료'로 소비하지 않는다**(`runStore.matchSessionIntent`가 self-race 태그면 의도·스케줄 매칭을 skip). 레이싱이 부상복귀 Easy 같은 처방 세션을 대체하면 안 된다(레이싱≠훈련). ⚠️ 태그는 `importCompetitionRun`이 **RunLog 생성 시점부터** 부착해야 한다(`linkSelfRaceResults`의 지연 부착은 저장 직후 즉시 도는 세션 매칭보다 늦어 무효). 또 self-race 단건 유입은 **externalId(uuid)로만 중복판정**한다(날짜+거리+시간 폴백은 같은 날 비슷한 레이싱 2개를 중복 오판).
 
 상세 결정 이력: `.harness/session/decision-log.md` (2026-06-07).

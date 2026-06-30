@@ -314,9 +314,10 @@ final class LiveRunTracker: NSObject {
         engine = nil
 
         // #235: 유효한 런이면 종료 데이터를 콜백으로 넘긴다(Coordinator가 HealthKit에 기록).
-        // 거리·시간은 LiveRunTracker가 진실의 출처(§9.1). 너무 짧은 런(≥100m·≥30s 미만)은 노이즈라 제외.
+        // 거리·시간은 LiveRunTracker가 진실의 출처(§9.1). 레이싱은 사용자가 일부러 시작·종료한
+        // 활동이라 짧아도 기록한다 — 가드는 '시작 즉시 종료'(거의 0m·수 초) 노이즈만 거른다(≥10m·≥5s).
         // end는 startDate+순수경과(일시정지 제외)로 둔다(일시정지 구간만큼 실제 시계보다 당겨짐).
-        if let start = startDate, cumulativeDistanceM >= 100, elapsedSec >= 30 {
+        if let start = startDate, cumulativeDistanceM >= 10, elapsedSec >= 5 {
             onFinished?(cumulativeDistanceM, start, start.addingTimeInterval(elapsedSec))
         }
     }

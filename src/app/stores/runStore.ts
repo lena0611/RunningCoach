@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { nanoid } from 'nanoid'
 import type { ExtractedRunData, RunLog } from '@/entities/run/model'
+import { SELF_RACE_TAG } from '@/entities/competition/model'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
@@ -181,6 +182,10 @@ export const useRunStore = defineStore('runStore', {
       if (!isSupabaseConfigured) this.persist()
     },
     async matchSessionIntent(run: RunLog) {
+      // #235/competition-domain §10: 레이싱(self-race) 런은 예정 처방 세션·의도를 소비하지 않는다.
+      // 레이싱은 기록(RunLog)·경쟁결과로만 남고, 오늘의 코칭 처방/디브리핑/의도평가·스케줄 완료는
+      // 건드리지 않는다(레이싱≠훈련). 부상복귀 Easy 처방을 50m 레이싱이 '완료'로 먹어버리던 버그 차단.
+      if (run.tags?.includes(SELF_RACE_TAG)) return
       try {
         await useSessionIntentStore().matchRun({ id: run.id, date: run.date })
       } catch {
