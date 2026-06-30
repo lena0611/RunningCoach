@@ -1398,9 +1398,14 @@ function reinferRunTypesOnce(): Promise<void> {
 watch(
   () => [runStore.loaded, memoryStore.loaded] as const,
   async () => {
-    void ensureTodayIntent()
+    // ⚠️ 순서 중요: 스케줄(복귀 램프·realign 등 그날 세션 타입 재작성 포함)을 먼저 정산한 **뒤**
+    // 오늘 의도를 만든다. 안 그러면 램프가 세션을 Easy 로 낮추기 전의 타입("Easy + Strides")으로
+    // 의도가 박제돼 디브리핑이 폐기된 처방으로 채점·표시된다(#473 후속 라벨 비일관 버그).
+    // ensureTodayIntent 의 ensureIntentFor 는 타입 불일치 시 옛 planned 의도를 재동기화하므로
+    // 옛 부팅에서 남은 화석도 함께 치유된다.
     await reinferRunTypesOnce()
-    void ensureSchedule()
+    await ensureSchedule()
+    void ensureTodayIntent()
   },
   { immediate: true }
 )

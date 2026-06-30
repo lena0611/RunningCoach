@@ -56,14 +56,27 @@ export const useSessionIntentStore = defineStore('sessionIntentStore', {
       this.intents.unshift(intent)
       return intent
     },
-    /** 해당 날짜에 미연결(planned) 의도가 있으면 그대로, 없으면 생성한다(하루 1건 idempotent). */
+    /**
+     * 해당 날짜에 미연결(planned) 의도가 있으면 그대로, 없으면 생성한다(하루 1건 idempotent).
+     *
+     * ⚠️ 단, 같은 날 planned 의도의 sessionType 이 새 draft 와 **다르면**(복귀 램프·realign·대안제안 등으로
+     * 그 날 세션 타입이 재작성된 경우) 옛 의도를 superseded 로 내리고 새 타입으로 재생성한다.
+     * 안 그러면 램프 전 박제된 "Easy + Strides" 의도가 화석으로 남아 디브리핑이 폐기된 처방으로
+     * 채점·표시된다(#473 후속, 라벨 비일관 버그). completed/skipped/superseded 는 절대 건드리지 않아
+     * 과거 디브리핑 기록의 소급 변조를 막는다(planned 만 자동 동기화).
+     */
     async ensureIntentFor(draft: SessionIntentDraft): Promise<SessionIntent | null> {
       if (!isSupabaseConfigured) return null
       if (!this.loaded) await this.load()
       const existing = this.intents.find(
         (item) => item.plannedDate === draft.plannedDate && item.status === 'planned'
       )
-      if (existing) return existing
+      if (existing) {
+        if (existing.sessionType === draft.sessionType) return existing
+        // 타입 불일치 → 옛 planned 의도를 superseded 로 내리고 새 타입으로 재생성(처방↔표시·채점 정합).
+        await this.setStatus(existing.id, 'superseded')
+        return this.plan(draft)
+      }
       return this.plan(draft)
     },
     /** 런 저장 직후 호출. 가장 가까운 미연결 의도를 매칭한다(best-effort). */
