@@ -27,6 +27,9 @@ struct HealthKitRunCandidate: Codable {
     let metricSamples: [HealthKitMetricSample]
     let routePoints: [HealthKitRoutePoint]
     let rawAvailability: HealthKitAvailability
+    /// #235/§10: HealthKit workout metadata 의 PaceLABCompetition == "self-race" 면 true.
+    /// 웹은 이 값으로 유입 시점에 RunLog.tags 에 'self-race' 를 박아 세션·의도 매칭에서 제외한다.
+    let isSelfRace: Bool
 }
 
 struct HealthKitLap: Codable {
@@ -712,6 +715,9 @@ final class HealthKitRunImporter {
             )
             let routePoints = self.buildRoutePoints(workout: workout, routeLocations: routeLocations)
             let avgCadence = self.averageCadence(stepPoints, from: workout.startDate, to: workout.endDate)
+            // #235/§10: 라이브 레이싱 종료 시 PaceLABCompetition="self-race" 메타데이터를 워크아웃에 박는다(line 341).
+            // 따라잡기 자동 sync 로 유입되는 같은 워크아웃을 웹이 self-race 로 인식하게 후보에 실어 보낸다.
+            let isSelfRace = (workout.metadata?["PaceLABCompetition"] as? String) == "self-race"
 
             completion(
                 HealthKitRunCandidate(
@@ -744,7 +750,8 @@ final class HealthKitRunImporter {
                         route: !routeLocations.isEmpty,
                         cadence: avgCadence != nil,
                         runningDynamics: avgCadence != nil || !speedPoints.isEmpty || !fastSegments.isEmpty
-                    )
+                    ),
+                    isSelfRace: isSelfRace
                 )
             )
         }

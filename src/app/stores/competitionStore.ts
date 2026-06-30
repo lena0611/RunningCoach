@@ -4,6 +4,7 @@ import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import {
+  deleteCompetitionResultsByRunId,
   fetchCompetitionResults,
   insertCompetitionResult,
   type CompetitionResultInput
@@ -131,6 +132,21 @@ export const useCompetitionStore = defineStore('competitionStore', {
 
       this.pending = survivors
       persistPending(this.pending)
+    },
+
+    /**
+     * RunLog 삭제 시 그 런에 링크된 경쟁 결과를 회수한다(#235 후속 M2). 좀비 결과가 다음 sync 에서
+     * 엉뚱한 런에 재링크되거나 업적 사다리에 유령으로 남는 걸 막는다. best-effort — 실패해도 삭제는 진행.
+     */
+    async reclaimResultsForRun(runId: string): Promise<void> {
+      if (isSupabaseConfigured) {
+        await deleteCompetitionResultsByRunId(runId)
+        this.results = this.results.filter((r) => r.linkedRunId !== runId)
+        return
+      }
+      const next = loadLocalResults().filter((r) => r.linkedRunId !== runId)
+      this.results = next
+      persistLocalResults(next)
     },
 
     async addResult(input: CompetitionResultInput) {

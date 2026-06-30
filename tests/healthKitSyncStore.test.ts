@@ -62,6 +62,43 @@ describe('healthKitSyncStore', () => {
       placement: 'top'
     }))
   })
+
+  it('deny-list 의 externalId 후보는 handleRuns 에서 재삽입되지 않는다 (#235 후속 G3)', async () => {
+    const syncStore = useHealthKitSyncStore()
+    const runStore = useRunStore()
+
+    runStore.loaded = true
+    runStore.deniedExternalIds = ['hk-denied']
+    syncStore.syncFeedbackMode = 'changes-only'
+
+    await syncStore.handleRuns([createCandidate({
+      externalId: 'hk-denied',
+      date: '2026-05-31',
+      startAt: '2026-05-31T06:00:00.000Z',
+      endAt: '2026-05-31T06:40:00.000Z'
+    })])
+
+    expect(runStore.runs).toHaveLength(0)
+  })
+
+  it('isSelfRace 후보는 handleRuns 유입 시 self-race 태그가 붙는다 (#235 후속 G1)', async () => {
+    const syncStore = useHealthKitSyncStore()
+    const runStore = useRunStore()
+
+    runStore.loaded = true
+    syncStore.syncFeedbackMode = 'changes-only'
+
+    await syncStore.handleRuns([createCandidate({
+      externalId: 'hk-race',
+      date: '2026-06-01',
+      startAt: '2026-06-01T06:00:00.000Z',
+      endAt: '2026-06-01T06:10:00.000Z',
+      isSelfRace: true
+    })])
+
+    expect(runStore.runs).toHaveLength(1)
+    expect(runStore.runs[0].tags).toContain('self-race')
+  })
 })
 
 function createCandidate(overrides: Partial<HealthKitRunCandidate> = {}): HealthKitRunCandidate {
@@ -96,6 +133,7 @@ function createCandidate(overrides: Partial<HealthKitRunCandidate> = {}): Health
       cadence: false,
       runningDynamics: false
     },
+    isSelfRace: false,
     ...overrides
   }
 }

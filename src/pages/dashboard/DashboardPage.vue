@@ -86,6 +86,7 @@ import { buildSessionBriefing, sessionTypeLabel, type SessionBriefing } from '@/
 import { resolvePaceModel } from '@/shared/lib/vdotPaces'
 import { getChronicLoadTrend } from '@/shared/lib/runStats'
 import { isActiveSession, type ScheduledSession } from '@/entities/training-schedule/model'
+import { isSelfRaceRun } from '@/entities/competition/model'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import RacePage from '@/pages/race/RacePage.vue'
 import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
@@ -114,8 +115,11 @@ onMounted(() => {
 })
 
 const runs = computed(() => runStore.sortedRuns)
-// 마지막 레이싱(self-race 태그) 기록 — 레이싱 카드 표시용. 없으면 null(독려 문구).
-const lastRace = computed(() => runs.value.find((run) => run.tags?.includes('self-race')) ?? null)
+// #235/§10: 레이싱(self-race)을 제외한 '훈련용' 런. 부하·추세·예측·세션상태·디브리핑·주간미션 등
+// "레이싱은 훈련을 소비하지 않는다" 소비처가 전부 이걸 쓴다(레이싱 카드·TT 승급만 runs.value 유지).
+const trainingRuns = computed(() => runs.value.filter((run) => !isSelfRaceRun(run)))
+// 마지막 레이싱(self-race 태그) 기록 — 레이싱 카드 표시용. 없으면 null(독려 문구). 의도적으로 runs.value 사용.
+const lastRace = computed(() => runs.value.find((run) => isSelfRaceRun(run)) ?? null)
 const runDataLoading = computed(() => runStore.loading || (!runStore.loaded && !runStore.error))
 const memoryDataLoading = computed(() => memoryStore.loading)
 const monthDistance = computed(() => sumDistance(getThisMonthRuns(runs.value, today.value)))
@@ -169,13 +173,13 @@ const observedMaxHr = computed(() => deriveObservedMaxHr(runs.value.map((run) =>
 const heartRateModel = computed(() => deriveHeartRateModel(memoryStore.memory.athleteProfile, today.value.getFullYear(), observedMaxHr.value))
 // 관측 Easy 페이스(#405, A안): 실제 Easy 심박 이하에서 뛴 페이스. 있으면 VDOT 추정 대신 이걸로 처방(심박과 충돌 방지).
 const observedEasyPace = computed(() =>
-  deriveObservedEasyPace(runs.value, heartRateModel.value.easyCeilingBpm, today.value, heartRateModel.value.recoveryCeilingBpm)
+  deriveObservedEasyPace(trainingRuns.value, heartRateModel.value.easyCeilingBpm, today.value, heartRateModel.value.recoveryCeilingBpm)
 )
 // 보정 PaceModel: Easy 계열 페이스를 관측값으로 덮은 모델(브리핑 표시 즉시 보정용).
 const calibratedPaceModel = computed(() => withObservedEasy(resolvePaceModel(memoryStore.memory.athleteProfile), observedEasyPace.value))
 const EASY_FAMILY_TYPES = new Set(['Easy', 'Easy + Strides', 'Recovery', 'LSD', 'Steady Long'])
 const raceProjection = computed(() =>
-  getRaceProjection(runs.value, activeGoal.value, today.value, activeInjury.value, ageLoadWeight.value, {
+  getRaceProjection(trainingRuns.value, activeGoal.value, today.value, activeInjury.value, ageLoadWeight.value, {
     easyCeilingBpm: heartRateModel.value.easyCeilingBpm,
     tempoCeilingBpm: heartRateModel.value.tempoCeilingBpm
   })
@@ -312,7 +316,8 @@ const timeTrialResult = computed(() => {
 
 // === 목표 기반 주기화 스케줄 + 주간 캐러셀 (에픽 #362) ===
 const scheduleStore = useTrainingScheduleStore()
-const chronicLoad = computed(() => getChronicLoadTrend(runs.value, today.value, ageLoadWeight.value))
+// #235/§10: 부하·추세는 레이싱을 소비하지 않는다(이중계산·오염 방지) → 훈련용 런만 투입.
+const chronicLoad = computed(() => getChronicLoadTrend(trainingRuns.value, today.value, ageLoadWeight.value))
 // #395 시작 볼륨 앵커: 최근 30일 총거리 → 주간 평균(데이터 없으면 null → 엔진이 보수적 기본값).
 const currentWeeklyKm = computed(() => (chronicLoad.value.last30Km > 0 ? (chronicLoad.value.last30Km * 7) / 30 : null))
 // #395 목표 실현가능성: 현재 체력 대비 목표가 무리면 코치가 솔직히 경고+대안(coach-moment로 노출).
@@ -403,12 +408,17 @@ async function doEnsureSchedule() {
   try {
     // 미로딩이거나 '다른 목표'가 로딩돼 있으면 활성 목표 세션으로 재로딩(#398 — 탭 복귀·목표 전환 stale 방지).
     if (!scheduleStore.loaded || scheduleStore.loadedGoalId !== goal.id) await scheduleStore.load(goal.id)
+    // #235 후속 G4: self-race 가 점유한 세션·의도를 먼저 비운다(무태그·늦은태깅 잔재 치유, 멱등).
+    // ⚠️ 순서 절대조건: heal → reconcile → settle. 또 reconcile/repoint 입력에서 self-race 를 빼야 멱등 수렴한다
+    //    (안 그러면 heal 이 떼도 reconcile 이 self-race 를 곧장 다시 붙이는 도돌이).
+    await runStore.healSelfRaceLinks()
+    const trainingRunsForSchedule = runs.value.filter((r) => !isSelfRaceRun(r))
     // 이미 들어온 런(특히 매칭이 안 돌던 시절의 HealthKit 인입)을 예정 세션에 정합(done 치유).
     // 정산 전에 돌려야 수행했는데 planned 로 남은 세션이 missed 로 오확정되지 않는다.
-    await scheduleStore.reconcileRuns(runs.value)
+    await scheduleStore.reconcileRuns(trainingRunsForSchedule)
     // 라벨 재추론(reinferRunTypesOnce)으로 타입이 바뀐 런이 같은 날 더 맞는 세션(예: LSD)에 잘못 연결돼 있으면
     // 그쪽으로 재연결(정산 전). "같은 날 Easy done·LSD missed" 더블 오매칭 치유.
-    await scheduleStore.repointReinferredRuns(runs.value)
+    await scheduleStore.repointReinferredRuns(trainingRunsForSchedule)
     const mine = scheduleStore.sessions.filter((s) => s.goalId === goal.id)
     const hasActive = mine.some(isActiveSession)
     // 앵커 드리프트 기준선(영속). 빌드/재앵커 때마다 currentWeeklyKm 로 갱신해 ratio≈1 로 수렴(멱등).
@@ -468,7 +478,12 @@ async function doEnsureSchedule() {
           await scheduleStore.realign(goal.id, plan.fromDate, plan.drafts)
           // 재앵커 발생 → 기준선을 현재 체력으로 갱신(다음 부팅부터 ratio≈1 로 수렴, 영구 재발동 방지).
           await persistScheduleAnchor(currentWeeklyKm.value)
-          if (plan.deviation.reason && !returnRamp) toastStore.success(plan.deviation.reason)
+          // (#235 후속 S3) self-race 를 부하에서 제외한 '첫 빌드'에선 weeklyKm 이 한 단계 낮아져 "체력 변화 감지"
+          // 토스트가 1회 오발할 수 있다. 사용자가 레이싱 기록을 가진 첫 수렴 빌드의 deviation 토스트만 1회 억제한다
+          // (앵커가 새 값으로 수렴한 뒤의 진짜 deviation 은 정상 노출). 세션 1회.
+          const suppressSelfRaceDrift = !selfRaceAnchorSettledOnce && runs.value.some((r) => isSelfRaceRun(r))
+          if (plan.deviation.reason && !returnRamp && !suppressSelfRaceDrift) toastStore.success(plan.deviation.reason)
+          selfRaceAnchorSettledOnce = true
         }
       }
     }
@@ -533,7 +548,9 @@ const scheduleDays = computed<CarouselDay[]>(() => {
     const d = new Date(monday)
     d.setDate(d.getDate() + i)
     const date = dateOnly(d)
-    const run = runs.value.find((r) => r.date === date) ?? null
+    // #235/§10 (M4): self-race 만 있는 날을 'done'(✅)으로 표시하지 않는다(레이싱≠훈련 완료). 세션 state/칩/더블
+    // 판정 모두 이 run 을 보므로 trainingRuns 기준으로 도출하면 일관 정합(레이싱한 날은 세션 유무에 따라 today/rest).
+    const run = trainingRuns.value.find((r) => r.date === date) ?? null
     // 그 날의 표시 세션(폐기 제외). 우선순위 planned(active) > missed > skipped.
     const onDay = scheduleStore.sessions.filter((s) => s.date === date && s.status !== 'superseded')
     const planned = onDay.find((s) => s.status === 'planned')
@@ -645,8 +662,10 @@ const activeDoneMethodSlug = computed(() =>
 function openDoneMethodGlossary() {
   if (activeDoneMethodSlug.value) glossaryStore.requestOpen(activeDoneMethodSlug.value)
 }
+// #235/§10: 디브리핑/완료 카드는 훈련 런만 대상(세션 unlink 만으론 date-keyed 디브리핑이 안 사라진다).
+// 레이싱한 날엔 디브리핑 대신 이지 브리핑 등 본래 처방이 그대로 보이도록 trainingRuns 로 도출.
 const activeDoneRun = computed(() =>
-  activeDay.value ? runs.value.find((r) => r.date === activeDay.value!.date) ?? null : null
+  activeDay.value ? trainingRuns.value.find((r) => r.date === activeDay.value!.date) ?? null : null
 )
 const activeBriefing = computed<SessionBriefing | null>(() => {
   const base = activeSession.value
@@ -780,7 +799,8 @@ const weekMission = computed(() => {
   if (!wk.length) return null
   // 완수 판정은 캐러셀(✓)과 동일하게 "그 날짜에 실제 런이 있으면 완료"로 본다.
   // 세션 runId 링크에만 의존하면 임포트된 런이 스케줄 세션에 연결되기 전까지 0으로 누락된다.
-  const runsInWeek = runs.value.filter((r) => r.date >= lo && r.date <= hi)
+  // #235/§10: 주간 완료/볼륨은 레이싱을 빼고 집계(레이싱이 주간 미션 달성을 부풀리지 않게).
+  const runsInWeek = trainingRuns.value.filter((r) => r.date >= lo && r.date <= hi)
   const runDates = new Set(runsInWeek.map((r) => r.date))
   const isDone = (s: ScheduledSession) => s.status === 'done' || Boolean(s.runId) || runDates.has(s.date)
   const keys = wk.filter((s) => s.keySession)
@@ -1338,6 +1358,8 @@ async function onRequestAlternative() {
 // 스케줄 reconcile 전에 끝내야 매칭이 교정된 타입을 보고 같은 날 LSD 등으로 올바로 연결된다.
 let reinferDone = false
 let reinferInFlight: Promise<void> | null = null
+// (#235 후속 S3) self-race 부하 제외로 인한 앵커 재수렴 deviation 토스트를 첫 빌드 1회만 억제하는 세션 플래그.
+let selfRaceAnchorSettledOnce = false
 function reinferRunTypesOnce(): Promise<void> {
   if (!isSupabaseConfigured || reinferDone) return Promise.resolve()
   if (reinferInFlight) return reinferInFlight

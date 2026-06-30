@@ -5,6 +5,7 @@ import { inferRunType } from '@/features/infer-run-type/inferRunType'
 import { sanitizeCadence } from '@/shared/lib/cadence'
 import { sanitizeAltitudeSeries } from '@/shared/lib/altitude'
 import type { HeartRateModel } from '@/shared/lib/heartRateZones'
+import { SELF_RACE_TAG } from '@/entities/competition/model'
 
 export type HealthKitRunCandidate = {
   externalId: string
@@ -37,6 +38,11 @@ export type HealthKitRunCandidate = {
     cadence: boolean
     runningDynamics: boolean
   }
+  /**
+   * #235/§10: 네이티브가 workout metadata(PaceLABCompetition=="self-race")로 채운 레이싱 플래그.
+   * 구버전 네이티브는 이 필드를 안 보내므로 normalize 가 Boolean(undefined)=false 로 안전 흡수한다.
+   */
+  isSelfRace: boolean
 }
 
 export type HealthKitRunUpdateRequest = {
@@ -262,7 +268,9 @@ export function toExtractedRunData(
     fastSegments: candidate.fastSegments ?? [],
     metricSamples: candidate.metricSamples ?? [],
     routePoints: candidate.routePoints ?? [],
-    tags: ['healthkit', 'type:auto']
+    // #235/§10: 레이싱 워크아웃은 '생성 시점부터' self-race 태그를 박아, 저장 직후 matchSessionIntent 의
+    // 세션·의도 매칭에서 제외되게 한다(linkSelfRaceResults 지연 부착은 이미 처방 세션을 소비한 뒤라 늦음).
+    tags: candidate.isSelfRace ? ['healthkit', 'type:auto', SELF_RACE_TAG] : ['healthkit', 'type:auto']
   }
 }
 
@@ -294,7 +302,9 @@ function normalizeCandidate(candidate: HealthKitRunCandidate): HealthKitRunCandi
       route: Boolean(candidate.rawAvailability?.route),
       cadence: Boolean(candidate.rawAvailability?.cadence),
       runningDynamics: Boolean(candidate.rawAvailability?.runningDynamics)
-    }
+    },
+    // 구버전 네이티브 하위호환: 필드 미전송 → Boolean(undefined)=false 로 흡수(레이싱 아님).
+    isSelfRace: Boolean(candidate.isSelfRace)
   }
 }
 

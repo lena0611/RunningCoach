@@ -61,6 +61,22 @@ export async function matchSessionIntentToRun(id: string, runId: string): Promis
   return fromRow(data)
 }
 
+/**
+ * 런 삭제/치유 시 역매칭: 연결을 끊고 planned 로 되돌린다(matchSessionIntentToRun 의 거울, #235 후속 G2).
+ * run_id·matched_at 을 비워 다음 로드에서 정상 미연결 의도로 취급되게 한다.
+ */
+export async function unmatchSessionIntentFromRun(id: string): Promise<SessionIntent> {
+  const now = new Date().toISOString()
+  const { data, error } = await requireSupabase()
+    .from('pacelab_session_intents')
+    .update({ run_id: null, status: 'planned', matched_at: null, updated_at: now })
+    .eq('id', id)
+    .select('*')
+    .single()
+  if (error) throw error
+  return fromRow(data)
+}
+
 /** 건너뛰기/대체 등 상태만 전환. */
 export async function updateSessionIntentStatus(
   id: string,

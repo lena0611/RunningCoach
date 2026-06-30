@@ -234,6 +234,16 @@ export const useTrainingScheduleStore = defineStore('trainingScheduleStore', {
         await this.setStatus(better.id, 'done', run.id) // 실제 수행한 타입의 세션에 크레딧
       }
     },
+    /**
+     * 런 삭제/치유 시 호출(#235 후속 G2/G4). 그 런에 done 으로 연결된 세션을 planned 로 되돌리고 runId 를 비운다.
+     * runId 직접 역참조(날짜 재매칭 금지 — 그새 다른 세션이 끼면 엉뚱한 걸 푼다). setStatus(.., 'planned', null) 가
+     * 이미 run_id 를 비우므로(repository) 신규 repo 함수 불필요. 멱등: 풀고 나면 runId===run.id 가 없어 no-op.
+     */
+    async unlinkRunSessions(runId: string): Promise<void> {
+      if (!isSupabaseConfigured) return
+      const linked = this.sessions.filter((s) => s.runId === runId && s.status === 'done')
+      for (const s of linked) await this.setStatus(s.id, 'planned', null)
+    },
     async setStatus(id: string, status: ScheduledSessionStatus, runId: string | null = null): Promise<void> {
       if (!isSupabaseConfigured) return
       const updated = await updateScheduledSessionStatus(id, status, runId)
