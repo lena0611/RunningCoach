@@ -122,6 +122,18 @@ describe('matchScore / pickBestMatch', () => {
     const run = makeRun({ id: 'r', distanceKm: 20, durationSec: 7000, startAt: '2026-06-12T07:00:00.000Z' })
     expect(pickBestMatch([run], makePending())).toBeNull()
   })
+
+  // 회귀(#235/§10/M2): 같은 워크아웃이라도 라이브 GPS 적산 거리와 HealthKit 자체 기록 거리는 어긋난다.
+  // 이 매칭이 깨지면 self-race 태그가 안 붙어 → 정규 sync 로 무태그 유입된 레이싱이 부상복귀 Easy 처방을
+  // 'done' 으로 먹은 채 영영 복원되지 않는다(M2 의 heal-on-tag 가 발동하지 못함). startAt 이 1차 키이고
+  // 거리(±5%)·시간(±180s) 게이트가 같은 워크아웃의 측정 차이를 흡수함을 못박는다.
+  it('matches the same workout despite GPS↔HealthKit distance/duration drift (M2 tagging guarantee)', () => {
+    const pending = makePending({ racedDistanceM: 5000, racedDurationSec: 1480, racedAt: '2026-06-11T07:00:00.000Z' })
+    // HealthKit 기록: 거리 4.83km(라이브 5000m 대비 -3.4%, 5% 게이트 내), 시간 +2분(180s 게이트 내), startAt 30초 차.
+    const healthKitRun = makeRun({ id: 'hk', distanceKm: 4.83, durationSec: 1600, startAt: '2026-06-11T07:00:30.000Z' })
+    expect(matchScore(healthKitRun, pending)).toBeLessThan(Infinity)
+    expect(pickBestMatch([healthKitRun], pending)?.id).toBe('hk')
+  })
 })
 
 describe('isPendingExpired', () => {

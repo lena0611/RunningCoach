@@ -106,6 +106,15 @@ export const useCompetitionStore = defineStore('competitionStore', {
             survivors.push(pending) // 태깅 실패 → 다음 동기화에 재시도
             continue
           }
+          // (a-2) §10/M2: 태깅이 '늦어' 그 사이 matchSessionIntent 가 처방 세션·의도를 이미 소비했을 수 있다
+          // (정규 sync 가 importCompetitionRun 보다 먼저 이겨 무태그로 유입된 경우 — 부상복귀 Easy 가 50m 레이싱에
+          //  'done' 으로 먹히던 버그). 태그가 막 붙은 '지금' 그 점유를 즉시 되돌려, 다음 doEnsureSchedule 의 G4 까지
+          // 기다리지 않고 오늘의 처방을 planned 로 복원한다. 태그가 붙은 뒤이므로 reconcileRuns 재소비도 차단됨(멱등).
+          try {
+            await runStore.healSelfRaceLink(match.id)
+          } catch {
+            /* best-effort: 복원 실패해도 태그는 남아 다음 로드의 G4 가 청소 */
+          }
         }
 
         // (b) 타겟이 있으면 CompetitionResult 생성. 없으면(자유 TT) 태깅만.
