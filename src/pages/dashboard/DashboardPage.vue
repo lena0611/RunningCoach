@@ -348,30 +348,13 @@ const restMomentCtx = computed(() => {
   const todayIso = todayDate.value
   // declaredAt 은 UTC ISO 타임스탬프 → 로컬 캘린더 날짜로 환산해 todayIso(로컬)와 같은 기준으로 비교(TZ 어긋남 방지).
   const daysSinceDeclared = diffDaysIso(todayIso, formatDateOnly(new Date(meta.declaredAt)))
-  const daysSinceReturn = s.returnDate ? diffDaysIso(todayIso, s.returnDate) : null
-  // 복귀 카드를 실제 스케줄에 종속시키기 위한 "오늘 세션 / 다음 복귀 세션"(#473 후속 불일치 버그).
-  // 복귀 처리는 설정된 run-day 에만 세션을 깔아서, 오늘이 run-day 가 아니면 오늘은 진짜 쉬는 날이다.
-  const todaySession = scheduleStore.sessionOnDate(todayIso)
-  // 오늘이 run-day 면 그날이 첫 복귀 세션이므로 nextReturnSession 은 안 채운다(카드가 todaySessionLabel 분기를 탄다).
-  // 오늘 세션이 없을 때만 오늘 이후(>오늘) 첫 활성 세션을 찾아 날짜/타입을 명시한다(off-by-one 회귀 방지).
-  const nextSession = todaySession
-    ? null
-    : scheduleStore.sessions
-        .filter((x) => isActiveSession(x) && x.date > todayIso)
-        .sort((a, b) => a.date.localeCompare(b.date))[0] ?? null
   return {
     active: s.active,
     reason: s.reason,
     daysUntilReturn: s.daysUntilReturn,
     justDeclared: daysSinceDeclared >= 0 && daysSinceDeclared <= 1,
     // 회복주 게이트(이유·공존 부상 severity)는 엔티티 도메인 함수에서 판정해 플래그로 넘긴다(#397 — shared 에 도메인 안 쌓기).
-    offerRecoveryRun: shouldOfferRecoveryRun(s.reason, activeInjury.value?.severity ?? null),
-    showReturn: s.isOver && daysSinceReturn !== null && daysSinceReturn >= 0 && daysSinceReturn <= 2,
-    longLayoff: s.durationDays !== null && s.durationDays > 28,
-    todaySessionLabel: todaySession ? sessionTypeLabel(todaySession.sessionType) : null,
-    nextReturnSession: nextSession
-      ? { dateLabel: formatDateWithWeekday(nextSession.date), typeLabel: sessionTypeLabel(nextSession.sessionType) }
-      : null
+    offerRecoveryRun: shouldOfferRecoveryRun(s.reason, activeInjury.value?.severity ?? null)
   }
 })
 
