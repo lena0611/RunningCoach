@@ -349,6 +349,16 @@ const restMomentCtx = computed(() => {
   // declaredAt 은 UTC ISO 타임스탬프 → 로컬 캘린더 날짜로 환산해 todayIso(로컬)와 같은 기준으로 비교(TZ 어긋남 방지).
   const daysSinceDeclared = diffDaysIso(todayIso, formatDateOnly(new Date(meta.declaredAt)))
   const daysSinceReturn = s.returnDate ? diffDaysIso(todayIso, s.returnDate) : null
+  // 복귀 카드를 실제 스케줄에 종속시키기 위한 "오늘 세션 / 다음 복귀 세션"(#473 후속 불일치 버그).
+  // 복귀 처리는 설정된 run-day 에만 세션을 깔아서, 오늘이 run-day 가 아니면 오늘은 진짜 쉬는 날이다.
+  const todaySession = scheduleStore.sessionOnDate(todayIso)
+  // 오늘이 run-day 면 그날이 첫 복귀 세션이므로 nextReturnSession 은 안 채운다(카드가 todaySessionLabel 분기를 탄다).
+  // 오늘 세션이 없을 때만 오늘 이후(>오늘) 첫 활성 세션을 찾아 날짜/타입을 명시한다(off-by-one 회귀 방지).
+  const nextSession = todaySession
+    ? null
+    : scheduleStore.sessions
+        .filter((x) => isActiveSession(x) && x.date > todayIso)
+        .sort((a, b) => a.date.localeCompare(b.date))[0] ?? null
   return {
     active: s.active,
     reason: s.reason,
@@ -357,7 +367,11 @@ const restMomentCtx = computed(() => {
     // 회복주 게이트(이유·공존 부상 severity)는 엔티티 도메인 함수에서 판정해 플래그로 넘긴다(#397 — shared 에 도메인 안 쌓기).
     offerRecoveryRun: shouldOfferRecoveryRun(s.reason, activeInjury.value?.severity ?? null),
     showReturn: s.isOver && daysSinceReturn !== null && daysSinceReturn >= 0 && daysSinceReturn <= 2,
-    longLayoff: s.durationDays !== null && s.durationDays > 28
+    longLayoff: s.durationDays !== null && s.durationDays > 28,
+    todaySessionLabel: todaySession ? sessionTypeLabel(todaySession.sessionType) : null,
+    nextReturnSession: nextSession
+      ? { dateLabel: formatDateWithWeekday(nextSession.date), typeLabel: sessionTypeLabel(nextSession.sessionType) }
+      : null
   }
 })
 
@@ -459,6 +473,11 @@ async function doEnsureSchedule() {
         // 복귀 램프(#473 Phase 2) 자연 만료 경로: 휴식이 끝났는데 아직 강제 적용 안 했으면, drift 유무와 무관하게
         // 현재 체력 재앵커 + 초반 세션 Easy·캡으로 "회복 후 정리"를 1회 강제(SSOT 라인 89는 무조건적 복귀 처방).
         // 짧은 휴식(<7일, returnRampPayload=null)은 무램프 — 원래 계획대로 이어간다(단기 손실 무시 수준).
+        // 자매 버그 가드(#473 후속): realign 의 supersedeSessionsFrom 은 planned/missed 만 비우고 rested 는 건드리지
+        // 않는다. 그래서 자연만료 경로에서 오늘 이후의 옛 rested 행이 살아남아 복귀 후에도 💤 가 잔존하거나 같은
+        // 날 rested+planned 가 공존할 수 있다. manual("지금 복귀") 경로(returnFromRestNow)는 unrestFrom 을 먼저
+        // 호출해 이를 피하므로, 자연만료 경로도 동일하게 오늘 이후 rested 를 먼저 풀어(planned 화) realign 이 정리하게 한다.
+        await scheduleStore.unrestFrom(goal.id, todayIso)
         const payload = returnRampPayload(rest)
         if (payload) await applyReturnRampDrafts(goal, payload)
         await memoryStore.setActiveRest({ ...rest, returnRampApplied: true })

@@ -198,6 +198,17 @@ export type CoachMomentContext = {
     showReturn: boolean
     /** >4주(28일) 휴식 — 복귀 시 목표 실현가능성 정직 재점검(SSOT 디트레이닝 4주 경계). */
     longLayoff: boolean
+    /**
+     * 오늘 실제로 배치된 활성 세션의 타입 라벨(없으면 null = 오늘은 휴식날). 복귀 카드가 "오늘 Easy"를
+     * 무조건 단정하지 않고 실제 스케줄에 종속되게 한다 — 복귀 처리는 설정된 run-day 에만 세션을 깔아서
+     * 오늘이 run-day 가 아니면 오늘은 진짜 쉬는 날이다(데이-스트립·브리핑과 단일 진실로 정렬, #473 후속 버그).
+     */
+    todaySessionLabel?: string | null
+    /**
+     * 오늘 세션이 없을 때, 복귀 후 첫 활성 세션의 날짜(요일 포함)·타입 라벨. 카드가 "첫 복귀 세션은 {날짜}
+     * 가볍게({타입})"처럼 정직하게 안내하도록 caller(스케줄 보유 페이지)가 주입한다. 없으면 날짜를 생략한다.
+     */
+    nextReturnSession?: { dateLabel: string; typeLabel: string } | null
   } | null
 }
 
@@ -440,7 +451,18 @@ function detectRestSupport(ctx: CoachMomentContext): CoachMoment | null {
 function detectReturnDay(ctx: CoachMomentContext): CoachMoment | null {
   const rest = ctx.rest
   if (!rest?.showReturn) return null
-  const base = '돌아온 걸 환영해요! 쉬는 동안 일정은 정리해뒀어요. 오늘은 가볍게(Easy) 다시 시작해요 — 첫 세션은 짧게, 몸 상태를 보면서요.'
+  // 복귀 카드 문구는 "오늘 실제 처방"에 종속된다. 복귀 처리는 설정된 run-day 에만 세션을 깔아서, 오늘이
+  // run-day 가 아니면 오늘은 진짜 쉬는 날이고 첫 복귀 세션은 다음 run-day(예: 목 Easy)다. 데이-스트립("🌙 휴식")·
+  // 브리핑(세션 없음)과 같은 진실(스케줄)에 정렬한다 — "오늘 Easy" 무조건 단정 금지(#473 후속 불일치 버그).
+  const hasToday = Boolean(rest.todaySessionLabel)
+  // 오늘 세션 있음(오늘이 run-day) → 종전처럼 "오늘은 가볍게 다시 시작". 세션 없음(휴식날) → 오늘 쉼을 지지하고
+  // 첫 복귀 세션 날짜/타입을 명시한다("가볍게 풀거나" 같은 권유는 빼서 데이-스트립의 '전략적 휴식'과 톤 충돌 방지).
+  const lead = hasToday
+    ? `오늘은 가볍게(${rest.todaySessionLabel}) 다시 시작해요 — 첫 세션은 짧게, 몸 상태를 보면서요.`
+    : rest.nextReturnSession
+      ? `오늘은 쉬어가는 날이에요. 첫 복귀 세션은 ${rest.nextReturnSession.dateLabel} 가볍게(${rest.nextReturnSession.typeLabel})예요 — 짧게, 몸 상태를 보면서 시작해요.`
+      : '오늘은 쉬어가는 날이에요. 첫 복귀 세션은 가볍게(Easy)부터 — 짧게, 몸 상태를 보면서 시작해요.'
+  const base = `돌아온 걸 환영해요! 쉬는 동안 일정은 정리해뒀어요. ${lead}`
   return {
     key: 'rest-return',
     kind: 'rest-return',
