@@ -272,19 +272,27 @@ export const useRunStore = defineStore('runStore', {
     },
     async healSelfRaceLinks(): Promise<void> {
       if (!isSupabaseConfigured) return
-      const sched = useTrainingScheduleStore()
-      const intent = useSessionIntentStore()
       for (const run of this.runs.filter(isSelfRaceRun)) {
-        try {
-          await sched.unlinkRunSessions(run.id)
-        } catch {
-          /* best-effort */
-        }
-        try {
-          await intent.unmatchRun(run.id)
-        } catch {
-          /* best-effort */
-        }
+        await this.healSelfRaceLink(run.id)
+      }
+    },
+    /**
+     * 단일 self-race 런이 점유한 세션·의도를 즉시 비운다(#235 후속 M2). healSelfRaceLinks 의 1건 버전.
+     * linkPendingResults 가 '늦게' self-race 태그를 붙인 직후 호출해, 그 사이 matchSessionIntent 가 처방
+     * 세션(부상복귀 Easy 등)을 'done'/'completed' 로 소비했던 걸 같은 틱에 되돌린다(§10 "지연 부착" 경합의
+     * 안전망 — G4 가 다음 doEnsureSchedule 까지 기다리지 않게 한다). unlink/unmatch 는 runId 직접 역참조라 멱등.
+     */
+    async healSelfRaceLink(runId: string): Promise<void> {
+      if (!isSupabaseConfigured) return
+      try {
+        await useTrainingScheduleStore().unlinkRunSessions(runId)
+      } catch {
+        /* best-effort */
+      }
+      try {
+        await useSessionIntentStore().unmatchRun(runId)
+      } catch {
+        /* best-effort */
       }
     },
     async matchSessionIntent(run: RunLog) {
