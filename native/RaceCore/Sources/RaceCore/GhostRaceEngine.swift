@@ -1,11 +1,13 @@
 //
 //  GhostRaceEngine.swift
-//  RunningCoach
+//  RaceCore
 //
 //  #229 가상레이싱 `나와의 대결` 백그라운드 비교 엔진.
 //  ⚠️ 이 파일은 웹 순수 로직 `src/shared/lib/selfRace/ghost.ts`(#230, canonical spec)의
 //     **네이티브 포팅**이다. 부호·보간·역전·dedupe·문구 규칙이 ghost.ts와 어긋나면 안 된다.
-//     ghost.ts 변경 시 이 파일을 함께 갱신한다(`ghost.test.ts`가 양측 회귀 기준).
+//     ghost.ts 변경 시 이 파일을 함께 갱신한다(`ghost.test.ts` ↔ RaceCoreTests 가 양측 회귀 기준).
+//     이 엔진은 웹·iOS 앱·watchOS 앱이 공유한다(3-소비자 미러). RaceCore 패키지로 분리되어
+//     iOS/watchOS 양 타겟이 링크한다. → `.harness/project/data-change-impact-map.md` self-race 항목도 함께 갱신.
 //
 //  곡선 좌표계: points 는 출발선부터의 누적거리(distanceM) ↔ 경과시간(elapsedSec) 쌍이며,
 //  둘 다 단조증가하고 {0,0} 에서 시작한다.
@@ -19,33 +21,49 @@ import Foundation
 
 // ── 타입 (ghost.ts 미러) ──────────────────────────────────────────────────────
 
-struct GhostCurvePoint {
-    let distanceM: Double
-    let elapsedSec: Double
+public struct GhostCurvePoint {
+    public let distanceM: Double
+    public let elapsedSec: Double
+    public init(distanceM: Double, elapsedSec: Double) {
+        self.distanceM = distanceM
+        self.elapsedSec = elapsedSec
+    }
 }
 
-struct GhostCurve {
-    let points: [GhostCurvePoint]
+public struct GhostCurve {
+    public let points: [GhostCurvePoint]
+    public init(points: [GhostCurvePoint]) {
+        self.points = points
+    }
 }
 
-struct LiveTick {
-    let cumulativeDistanceM: Double
-    let elapsedSec: Double
+public struct LiveTick {
+    public let cumulativeDistanceM: Double
+    public let elapsedSec: Double
+    public init(cumulativeDistanceM: Double, elapsedSec: Double) {
+        self.cumulativeDistanceM = cumulativeDistanceM
+        self.elapsedSec = elapsedSec
+    }
 }
 
-enum LeadState: String {
+public enum LeadState: String {
     case ahead
     case behind
     case even
 }
 
-struct GapState {
-    let timeGapSec: Double
-    let distanceGapM: Double
-    let leadState: LeadState
+public struct GapState {
+    public let timeGapSec: Double
+    public let distanceGapM: Double
+    public let leadState: LeadState
+    public init(timeGapSec: Double, distanceGapM: Double, leadState: LeadState) {
+        self.timeGapSec = timeGapSec
+        self.distanceGapM = distanceGapM
+        self.leadState = leadState
+    }
 }
 
-enum AnnouncementKind: String {
+public enum AnnouncementKind: String {
     case periodic
     case lap
     case reversal
@@ -54,36 +72,41 @@ enum AnnouncementKind: String {
     case progress
 }
 
-enum ReversalKind: String {
+public enum ReversalKind: String {
     case overtake
     case overtaken
 }
 
 /// 고스트 격차 표현 단위(ghost.ts GapDisplayMode 미러). 사용자가 음성 설정에서 고른다.
-enum GapDisplayMode: String {
+public enum GapDisplayMode: String {
     case distance
     case time
 }
 
-struct Announcement {
-    let text: String
-    let priority: Int
-    let dedupeKey: String
+public struct Announcement {
+    public let text: String
+    public let priority: Int
+    public let dedupeKey: String
+    public init(text: String, priority: Int, dedupeKey: String) {
+        self.text = text
+        self.priority = priority
+        self.dedupeKey = dedupeKey
+    }
 }
 
 // ── 비교/문구 순수 함수 (ghost.ts 미러) ───────────────────────────────────────
 
-enum GhostMath {
+public enum GhostMath {
     /// leadState 가 'even' 으로 판정되는 시간차 한계(초). (ghost.ts EVEN_EPSILON_SEC)
-    static let evenEpsilonSec: Double = 1
+    public static let evenEpsilonSec: Double = 1
 
     /// 고스트가 누적거리 distanceM 에 도달한 시각(초). 범위 밖이면 끝점 클램프.
-    static func timeAtDistance(_ curve: GhostCurve, _ distanceM: Double) -> Double {
+    public static func timeAtDistance(_ curve: GhostCurve, _ distanceM: Double) -> Double {
         interpolate(curve.points, key: distanceM, keyAxis: \.distanceM, valueAxis: \.elapsedSec)
     }
 
     /// 고스트가 elapsedSec 시점에 도달한 누적거리(m). 범위 밖이면 끝점 클램프.
-    static func distanceAtTime(_ curve: GhostCurve, _ elapsedSec: Double) -> Double {
+    public static func distanceAtTime(_ curve: GhostCurve, _ elapsedSec: Double) -> Double {
         interpolate(curve.points, key: elapsedSec, keyAxis: \.elapsedSec, valueAxis: \.distanceM)
     }
 
@@ -110,7 +133,7 @@ enum GhostMath {
     }
 
     /// 현재 라이브 틱과 고스트 곡선을 비교해 시간차/거리차/우열을 낸다.
-    static func computeGap(_ curve: GhostCurve, _ tick: LiveTick) -> GapState {
+    public static func computeGap(_ curve: GhostCurve, _ tick: LiveTick) -> GapState {
         let ghostTimeAtMyDistance = timeAtDistance(curve, tick.cumulativeDistanceM)
         let ghostDistanceAtMyTime = distanceAtTime(curve, tick.elapsedSec)
         let timeGapSec = tick.elapsedSec - ghostTimeAtMyDistance
@@ -122,7 +145,7 @@ enum GhostMath {
     }
 
     /// 역전을 1회성으로 감지한다. 추월(뒤지다 앞섬)=overtake, 역추월(앞서다 뒤짐)=overtaken.
-    static func detectReversal(prev: GapState?, next: GapState) -> ReversalKind? {
+    public static func detectReversal(prev: GapState?, next: GapState) -> ReversalKind? {
         guard let prev else { return nil }
         if prev.leadState != .ahead, next.leadState == .ahead { return .overtake }
         if prev.leadState != .behind, next.leadState == .behind { return .overtaken }
@@ -136,7 +159,7 @@ enum GhostMath {
     ]
 
     /// 절대 초를 한국어로. 60초 미만 'N초', 이상 'M분 S초'(S=0이면 'M분').
-    static func formatGapSeconds(_ seconds: Double) -> String {
+    public static func formatGapSeconds(_ seconds: Double) -> String {
         let s = Int(abs(seconds).rounded())
         if s < 60 { return "\(s)초" }
         let m = s / 60
@@ -144,21 +167,21 @@ enum GhostMath {
         return rest != 0 ? "\(m)분 \(rest)초" : "\(m)분"
     }
 
-    static func kmLabel(_ distanceM: Double) -> String {
+    public static func kmLabel(_ distanceM: Double) -> String {
         let km = distanceM / 1000
         if km == km.rounded() { return "\(Int(km))km" }
         return String(format: "%.1fkm", km)
     }
 
     /// 고스트와의 거리 격차를 한국어로. 1km 미만 'Nm', 이상 'X.Xkm'. (ghost.ts formatGapDistance 미러)
-    static func formatGapDistance(_ distanceGapM: Double) -> String {
+    public static func formatGapDistance(_ distanceGapM: Double) -> String {
         let m = Int(abs(distanceGapM).rounded())
         if m < 1000 { return "\(m)m" }
         return String(format: "%.1fkm", Double(m) / 1000)
     }
 
     /// 격차 표현 단위(거리/시간)에 맞춰 양을 한국어로. (ghost.ts formatGapAmount 미러)
-    static func formatGapAmount(_ gap: GapState, _ mode: GapDisplayMode) -> String {
+    public static func formatGapAmount(_ gap: GapState, _ mode: GapDisplayMode) -> String {
         mode == .time ? formatGapSeconds(gap.timeGapSec) : formatGapDistance(gap.distanceGapM)
     }
 
@@ -169,7 +192,7 @@ enum GhostMath {
     }
 
     /// 한국어 한 문장 안내 + 우선순위 + dedupeKey. (ghost.ts formatAnnouncement)
-    static func formatAnnouncement(
+    public static func formatAnnouncement(
         _ kind: AnnouncementKind,
         gap: GapState?,
         distanceM: Double = 0,
@@ -228,23 +251,31 @@ enum GhostMath {
 // ── 발화 주기 설정 ────────────────────────────────────────────────────────────
 
 /// announceConfig.periodic.kind (web→native runContextLiveRun)
-enum PeriodicKind: String {
+public enum PeriodicKind: String {
     case distance
     case time
     case silent
 }
 
-struct AnnounceConfig {
-    let periodicKind: PeriodicKind
-    let stepM: Double      // periodicKind == .distance 일 때 사용
-    let stepSec: Double    // periodicKind == .time 일 때 사용
-    let reversalAlert: Bool
-    let gapMode: GapDisplayMode
+public struct AnnounceConfig {
+    public let periodicKind: PeriodicKind
+    public let stepM: Double      // periodicKind == .distance 일 때 사용
+    public let stepSec: Double    // periodicKind == .time 일 때 사용
+    public let reversalAlert: Bool
+    public let gapMode: GapDisplayMode
 
-    static let `default` = AnnounceConfig(periodicKind: .distance, stepM: 1000, stepSec: 60, reversalAlert: true, gapMode: .distance)
+    public init(periodicKind: PeriodicKind, stepM: Double, stepSec: Double, reversalAlert: Bool, gapMode: GapDisplayMode) {
+        self.periodicKind = periodicKind
+        self.stepM = stepM
+        self.stepSec = stepSec
+        self.reversalAlert = reversalAlert
+        self.gapMode = gapMode
+    }
+
+    public static let `default` = AnnounceConfig(periodicKind: .distance, stepM: 1000, stepSec: 60, reversalAlert: true, gapMode: .distance)
 
     /// web payload(`{periodic:{kind,stepM?,stepSec?}, reversalAlert, gapMode}`)에서 파싱.
-    static func parse(_ raw: [String: Any]?) -> AnnounceConfig {
+    public static func parse(_ raw: [String: Any]?) -> AnnounceConfig {
         guard let raw else { return .default }
         let periodic = raw["periodic"] as? [String: Any] ?? [:]
         let kind = PeriodicKind(rawValue: periodic["kind"] as? String ?? "") ?? .distance
@@ -266,7 +297,7 @@ struct AnnounceConfig {
 
 /// 주입된 고스트 곡선과 설정으로 매 틱마다 gap·역전·주기 발화를 판정한다.
 /// 비교 계산은 순수(GhostMath). 엔진은 발화 트리거 상태(이전 gap, 마지막 주기 step)를 보유한다.
-final class GhostRaceEngine {
+public final class GhostRaceEngine {
     private let curve: GhostCurve?      // nil = 타겟 '없음'(측정만, gap 비교 생략)
     private let config: AnnounceConfig
     private var prevGap: GapState?
@@ -275,15 +306,15 @@ final class GhostRaceEngine {
     /// 시작 직후 grace(초): 이 시간 전엔 역전 안내를 억제한다(시작 멘트와 겹침·즉시 "추월당함" 방지).
     private let reversalGraceSec: Double = 8
 
-    init(curve: GhostCurve?, config: AnnounceConfig) {
+    public init(curve: GhostCurve?, config: AnnounceConfig) {
         self.curve = curve
         self.config = config
     }
 
-    var hasGhost: Bool { curve != nil }
+    public var hasGhost: Bool { curve != nil }
 
     /// 매 틱 처리. (gap, [발화]) 반환. gap 은 포그라운드 UI 전송용(고스트 없으면 nil).
-    func process(_ tick: LiveTick) -> (gap: GapState?, announcements: [Announcement]) {
+    public func process(_ tick: LiveTick) -> (gap: GapState?, announcements: [Announcement]) {
         if finished { return (nil, []) }
         var out: [Announcement] = []
 
@@ -321,7 +352,7 @@ final class GhostRaceEngine {
     }
 
     /// 완주 안내. stopLiveRun 시 1회 호출. 고스트 있으면 최종 gap 비교, 없으면 progress.
-    func finish(_ tick: LiveTick) -> Announcement? {
+    public func finish(_ tick: LiveTick) -> Announcement? {
         if finished { return nil }
         finished = true
         if let curve {

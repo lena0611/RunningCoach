@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		1E74BE8A2FF4F693003354DB /* RaceCore in Frameworks */ = {isa = PBXBuildFile; productRef = 1E74BE892FF4F693003354DB /* RaceCore */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		1E3F1BAA2FBED6B8003D8EA4 /* RunningCoach.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RunningCoach.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -36,6 +40,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1E74BE8A2FF4F693003354DB /* RaceCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -78,6 +83,7 @@
 			);
 			name = RunningCoach;
 			packageProductDependencies = (
+				1E74BE892FF4F693003354DB /* RaceCore */,
 			);
 			productName = RunningCoach;
 			productReference = 1E3F1BAA2FBED6B8003D8EA4 /* RunningCoach.app */;
@@ -112,6 +118,9 @@
 			);
 			mainGroup = 1E3F1BA12FBED6B8003D8EA4;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				1E74BE882FF4F693003354DB /* XCLocalSwiftPackageReference "RaceCore" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1E3F1BAB2FBED6B8003D8EA4 /* Products */;
 			projectDirPath = "";
@@ -389,6 +398,20 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		1E74BE882FF4F693003354DB /* XCLocalSwiftPackageReference "RaceCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = RaceCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		1E74BE892FF4F693003354DB /* RaceCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RaceCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 1E3F1BA22FBED6B8003D8EA4 /* Project object */;
 }

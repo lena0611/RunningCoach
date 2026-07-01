@@ -15,6 +15,7 @@
 import Foundation
 import CoreLocation
 import CoreMotion
+import RaceCore
 
 enum LiveRunState: String {
     case idle

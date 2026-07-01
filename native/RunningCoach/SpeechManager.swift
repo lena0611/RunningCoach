@@ -13,6 +13,7 @@
 
 import Foundation
 import AVFoundation
+import RaceCore
 
 final class SpeechManager: NSObject {
     private let synth = AVSpeechSynthesizer()
