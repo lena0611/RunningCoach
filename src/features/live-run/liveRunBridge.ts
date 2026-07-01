@@ -86,6 +86,8 @@ export type WorkoutSavedPayload = {
   /** 운동 시작/종료 시각(epoch ms). 웹이 같은 날에도 단건 RunLog를 직접 유입할 때 날짜·ISO로 변환(Codex 리뷰 #1). */
   startMs: number
   endMs: number
+  /** 평균 케이던스(분당 걸음, spm). 네이티브가 못 얻으면 null. */
+  cadence?: number | null
 }
 
 type LiveRunBridgeHandlers = {
@@ -220,6 +222,7 @@ function normalizeWorkoutSaved(payload: WorkoutSavedPayload): WorkoutSavedPayloa
     distanceM: numberOr(payload?.distanceM, 0),
     durationSec: numberOr(payload?.durationSec, 0),
     startMs: numberOr(payload?.startMs, 0),
-    endMs: numberOr(payload?.endMs, 0)
+    endMs: numberOr(payload?.endMs, 0),
+    cadence: Number.isFinite(payload?.cadence as number) ? (payload.cadence as number) : null
   }
 }

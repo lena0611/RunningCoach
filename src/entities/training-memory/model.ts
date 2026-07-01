@@ -157,6 +157,8 @@ export type AthleteProfile = {
   runningExperienceMonths: number | null
   weeklyRunDaysTarget: number | null
   preferredLongRunDay: string
+  // 체중(kg). 칼로리 추정(레이싱 단건 유입 등)의 보조 신호. 없으면 null → 칼로리 미산출.
+  weightKg: number | null
   personalBests: PersonalBest[]
   runnerLevel: RunnerLevelSetting
   // 개인 심박 기준. 심박존/템포 상한을 상수 대신 개인 anchor에서 파생한다.
@@ -533,6 +535,7 @@ export const initialTrainingMemory: TrainingMemory = {
     runningExperienceMonths: null,
     weeklyRunDaysTarget: 4,
     preferredLongRunDay: '토요일',
+    weightKg: null,
     personalBests: [],
     runnerLevel: 'auto',
     maxHeartRate: null,
@@ -775,6 +778,7 @@ export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null |
       ...base.athleteProfile,
       ...(memory?.athleteProfile ?? {}),
       runnerLevel: normalizeRunnerLevelSetting(memory?.athleteProfile?.runnerLevel),
+      weightKg: normalizeWeightKg(memory?.athleteProfile?.weightKg),
       maxHeartRate: normalizeHeartRateInput(memory?.athleteProfile?.maxHeartRate),
       restingHeartRate: normalizeHeartRateInput(memory?.athleteProfile?.restingHeartRate),
       lactateThresholdHr: normalizeHeartRateInput(memory?.athleteProfile?.lactateThresholdHr),
@@ -875,6 +879,13 @@ function normalizeVo2Max(value: unknown): number | null {
 
 function normalizeVo2MaxSource(value: unknown): 'healthkit' | 'manual' | null {
   return value === 'healthkit' || value === 'manual' ? value : null
+}
+
+// 체중(kg). 양수만 통과, 그 외/비정상은 미입력(null). 소수 한 자리 유지(예: 63.5kg).
+function normalizeWeightKg(value: unknown): number | null {
+  const num = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(num) || num <= 0) return null
+  return Math.round(num * 10) / 10
 }
 
 // ISO 날짜/시각 문자열만 통과시키고, 파싱 불가하면 null.

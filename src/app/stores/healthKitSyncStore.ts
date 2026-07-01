@@ -302,7 +302,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
     // requestSync(전체)는 isAfterLatestSaved의 `date > latestDate` strict 필터 때문에 '오늘 이미
     // 기록이 있으면' 같은 날 레이싱을 누락한다(Codex 리뷰 #1). 그래서 그 externalId 1건만 날짜
     // 필터 없이 직접 추가하고, 중복은 isAlreadySaved(externalId 우선)로 막아 정기 sync와 멱등하게 둔다.
-    async importCompetitionRun(payload: { externalId: string; distanceM: number; durationSec: number; startMs: number; endMs: number }) {
+    async importCompetitionRun(payload: { externalId: string; distanceM: number; durationSec: number; startMs: number; endMs: number; cadence?: number | null }) {
       this.init()
       const authStore = useAuthStore()
       if (!authStore.isAuthenticated || !hasNativeBridge()) return
@@ -311,6 +311,14 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         const start = new Date(payload.startMs)
         const end = new Date(payload.endMs)
         const date = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`
+        // 칼로리: 사용자 체중(kg)이 있으면 체중 × 거리(km) × 1.036 로 추정, 없으면 미산출(null).
+        const distanceKm = payload.distanceM > 0 ? payload.distanceM / 1000 : null
+        const weightKg = useMemoryStore().memory.athleteProfile.weightKg
+        const activeEnergyKcal =
+          weightKg !== null && weightKg > 0 && distanceKm !== null
+            ? Math.round(weightKg * distanceKm * 1.036)
+            : null
+        const cadence = Number.isFinite(payload.cadence as number) ? (payload.cadence as number) : null
         const candidate: HealthKitRunCandidate = {
           externalId: payload.externalId,
           sourceName: 'PaceLAB',
@@ -318,12 +326,12 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
           startAt: start.toISOString(),
           endAt: end.toISOString(),
           durationSec: payload.durationSec > 0 ? payload.durationSec : null,
-          distanceKm: payload.distanceM > 0 ? payload.distanceM / 1000 : null,
+          distanceKm,
           avgPaceSec: null,
           avgHeartRate: null,
           maxHeartRate: null,
-          cadence: null,
-          activeEnergyKcal: null,
+          cadence,
+          activeEnergyKcal,
           temperature: null,
           humidity: null,
           windMps: null,
@@ -335,7 +343,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
           fastSegments: [],
           metricSamples: [],
           routePoints: [],
-          rawAvailability: { workout: true, heartRate: false, route: false, cadence: false, runningDynamics: false },
+          rawAvailability: { workout: true, heartRate: false, route: false, cadence: cadence !== null, runningDynamics: false },
           // 단건 레이싱 유입은 정의상 self-race. toExtractedRunData 가 이 플래그로 self-race 태그를 박는다.
           isSelfRace: true
         }
