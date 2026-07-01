@@ -298,8 +298,8 @@ struct RunContextWebView: UIViewRepresentable {
             liveRunTracker.onDiagnostic = { [weak self] text in
                 self?.sendLiveDiagnostic(text)
             }
-            liveRunTracker.onFinished = { [weak self] distanceM, start, end in
-                self?.saveCompetitionWorkout(distanceM: distanceM, start: start, end: end)
+            liveRunTracker.onFinished = { [weak self] distanceM, start, end, cadence in
+                self?.saveCompetitionWorkout(distanceM: distanceM, start: start, end: end, cadence: cadence)
             }
         }
 
@@ -665,13 +665,13 @@ struct RunContextWebView: UIViewRepresentable {
         // #235: 라이브런 종료 데이터 → HealthKit 운동으로 저장. 성공 시 uuid(externalId)를 웹에
         // 통보해 단건 동기화·결과연결을 트리거한다. 실패는 로그만 — 결과 요약은 웹이
         // PendingSelfRace로 이미 표시하고, HealthKit 유입만 다음 정기 sync로 미뤄지므로 비치명적.
-        private func saveCompetitionWorkout(distanceM: Double, start: Date, end: Date) {
-            importer.saveCompetitionRunningWorkout(distanceMeters: distanceM, start: start, end: end) { [weak self] result in
+        private func saveCompetitionWorkout(distanceM: Double, start: Date, end: Date, cadence: Double?) {
+            importer.saveCompetitionRunningWorkout(distanceMeters: distanceM, start: start, end: end, cadence: cadence) { [weak self] result in
                 DispatchQueue.main.async {
                     switch result {
                     case .success(let externalId):
                         print("[RunContext LiveRun] competition workout saved externalId=\(externalId)")
-                        self?.sendWorkoutSaved(externalId: externalId, distanceM: distanceM, start: start, end: end)
+                        self?.sendWorkoutSaved(externalId: externalId, distanceM: distanceM, start: start, end: end, cadence: cadence)
                     case .failure(let error):
                         print("[RunContext LiveRun] competition workout save failed:", error.localizedDescription)
                     }
@@ -679,14 +679,16 @@ struct RunContextWebView: UIViewRepresentable {
             }
         }
 
-        private func sendWorkoutSaved(externalId: String, distanceM: Double, start: Date, end: Date) {
+        private func sendWorkoutSaved(externalId: String, distanceM: Double, start: Date, end: Date, cadence: Double?) {
             guard let webView else { return }
             let durationSec = max(end.timeIntervalSince(start), 0)
             // 웹이 같은 날에도 단건 RunLog를 직접 유입할 수 있도록 시각(epoch ms)을 넘긴다(Codex 리뷰 #1).
             // 포매터 없이 ms로 넘기고 웹에서 ISO·날짜로 변환한다.
             let startMs = start.timeIntervalSince1970 * 1000
             let endMs = end.timeIntervalSince1970 * 1000
-            let json = "{\"externalId\":\"\(jsString(externalId))\",\"distanceM\":\(distanceM),\"durationSec\":\(durationSec),\"startMs\":\(startMs),\"endMs\":\(endMs)}"
+            // cadence(분당 걸음 spm)는 값이 없으면 JSON null. 웹 WorkoutSavedPayload.cadence 계약과 일치.
+            let cadenceJson = cadence.map { String($0) } ?? "null"
+            let json = "{\"externalId\":\"\(jsString(externalId))\",\"distanceM\":\(distanceM),\"durationSec\":\(durationSec),\"startMs\":\(startMs),\"endMs\":\(endMs),\"cadence\":\(cadenceJson)}"
             webView.evaluateJavaScript("window.RunContextLiveRun?.receiveWorkoutSaved(\(json));")
         }
 

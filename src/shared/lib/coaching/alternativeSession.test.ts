@@ -25,7 +25,7 @@ function session(overrides: Partial<ScheduledSession>): ScheduledSession {
 function profile(): AthleteProfile {
   return {
     birthYear: 1990, sex: 'male', runningExperienceMonths: 24, weeklyRunDaysTarget: 4,
-    preferredLongRunDay: '토요일', personalBests: [], runnerLevel: 'auto',
+    preferredLongRunDay: '토요일', weightKg: null, personalBests: [], runnerLevel: 'auto',
     maxHeartRate: null, restingHeartRate: null, lactateThresholdHr: null, heartRateMode: 'auto',
     vo2Max: null, vo2MaxSampleDate: null, vo2MaxSource: null
   }

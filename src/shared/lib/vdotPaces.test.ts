@@ -18,6 +18,7 @@ function baseProfile(overrides: Partial<AthleteProfile> = {}): AthleteProfile {
     runningExperienceMonths: null,
     weeklyRunDaysTarget: 4,
     preferredLongRunDay: '토요일',
+    weightKg: null,
     personalBests: [],
     runnerLevel: 'auto',
     maxHeartRate: null,

@@ -72,9 +72,10 @@ final class LiveRunTracker: NSObject {
     var onError: ((_ code: String, _ message: String) -> Void)?
     /// 백그라운드 동작 진단(화면 표시용): 위치 백그라운드 모드/권한/bg업데이트 활성 여부.
     var onDiagnostic: ((_ text: String) -> Void)?
-    /// #235: 라이브런 정상 종료(수동/자동완주) 시 최종 거리·시작/종료 시각을 알린다.
+    /// #235: 라이브런 정상 종료(수동/자동완주) 시 최종 거리·시작/종료 시각·평균 케이던스를 알린다.
     /// Coordinator가 받아 HealthKit에 운동으로 저장한다(LiveRunTracker는 HealthKit 비의존).
-    var onFinished: ((_ distanceM: Double, _ start: Date, _ end: Date) -> Void)?
+    /// cadence(분당 걸음 spm)는 CMPedometer 누적 걸음÷경과분. 표본이 부족하면 nil.
+    var onFinished: ((_ distanceM: Double, _ start: Date, _ end: Date, _ cadence: Double?) -> Void)?
 
     private let manager = CLLocationManager()
     private let pedometer = CMPedometer()
@@ -115,6 +116,13 @@ final class LiveRunTracker: NSObject {
     private var distanceSource: LiveDistanceSource = .gps
     private var pedometerCumulativeAtSwitch: Double = 0  // pedometer fallback 진입 시점의 보행계 누적
     private var pedometerLatestCumulative: Double = 0
+
+    // 케이던스(분당 걸음)용 누적 걸음수. pedometer는 start(from:) 이후 누적을 보고하므로,
+    // 실제 측정 시작(begin, startDate)까지 쌓인 걸음을 baseline으로 빼고 종료 시 순 걸음을 얻는다.
+    private var pedometerLatestSteps: Double = 0
+    private var pedometerStepsAtBegin: Double?
+    /// 케이던스 계산에 필요한 최소 경과(분). 너무 짧으면 분모가 작아 값이 튀므로 nil.
+    private let cadenceMinElapsedMin: Double = 0.5
     /// GPS 무신호가 이 시간을 넘으면 pedometer fallback으로 전환(초).
     private let gpsStaleThresholdSec: Double = 15
     /// 속도 상한 필터(m/s). 약 43km/h 초과 점프 제거.
@@ -209,6 +217,9 @@ final class LiveRunTracker: NSObject {
         startDate = now
         lastGoodFixAt = now
         lastLocation = nil
+        // 케이던스 baseline: 측정 시작 시점까지 쌓인 걸음(ready/카운트다운 구간)을 기준으로 잡아,
+        // 종료 시 (누적 - baseline)이 순수 러닝 걸음이 되게 한다.
+        pedometerStepsAtBegin = pedometerLatestSteps
         setState(.running)
         speech.speak(text: "레이싱 시작.", priority: 0)
         startClock()
@@ -318,7 +329,7 @@ final class LiveRunTracker: NSObject {
         // 활동이라 짧아도 기록한다 — 가드는 '시작 즉시 종료'(거의 0m·수 초) 노이즈만 거른다(≥10m·≥5s).
         // end는 startDate+순수경과(일시정지 제외)로 둔다(일시정지 구간만큼 실제 시계보다 당겨짐).
         if let start = startDate, cumulativeDistanceM >= 10, elapsedSec >= 5 {
-            onFinished?(cumulativeDistanceM, start, start.addingTimeInterval(elapsedSec))
+            onFinished?(cumulativeDistanceM, start, start.addingTimeInterval(elapsedSec), averageCadenceSpm())
         }
     }
 
@@ -365,6 +376,8 @@ final class LiveRunTracker: NSObject {
         distanceSource = .gps
         pedometerLatestCumulative = 0
         pedometerCumulativeAtSwitch = 0
+        pedometerLatestSteps = 0
+        pedometerStepsAtBegin = nil
         engine = nil
     }
 
@@ -374,11 +387,16 @@ final class LiveRunTracker: NSObject {
     }
 
     private func startPedometer() {
-        guard CMPedometer.isDistanceAvailable() else { return }
+        // 거리(fallback) 또는 걸음(케이던스) 중 하나라도 가능하면 업데이트를 받는다.
+        guard CMPedometer.isDistanceAvailable() || CMPedometer.isStepCountingAvailable() else { return }
         pedometer.startUpdates(from: Date()) { [weak self] data, _ in
-            guard let self, let data, let dist = data.distance else { return }
+            guard let self, let data else { return }
             DispatchQueue.main.async {
-                self.pedometerLatestCumulative = dist.doubleValue
+                if let dist = data.distance {
+                    self.pedometerLatestCumulative = dist.doubleValue
+                }
+                // numberOfSteps는 start(from:) 이후 누적 걸음(비감소). begin baseline을 빼서 순 걸음을 얻는다.
+                self.pedometerLatestSteps = data.numberOfSteps.doubleValue
             }
         }
     }
@@ -387,6 +405,18 @@ final class LiveRunTracker: NSObject {
         guard let startDate else { return 0 }
         let raw = timestamp.timeIntervalSince(startDate) - pausedAccumulatedSec
         return max(0, raw)
+    }
+
+    /// 평균 케이던스(분당 걸음, spm). 측정 시작(begin) 이후 순 걸음(누적 - baseline)을 경과 분으로 나눈다.
+    /// pedometer 미가용·baseline 미설정·경과 부족(<cadenceMinElapsedMin)이면 nil.
+    /// 주의: pedometer 걸음은 일시정지 중에도 누적되지만 elapsedSec는 일시정지를 제외한다
+    /// (레이싱은 통상 일시정지 없이 진행되며, 있어도 평균 케이던스 근사에 큰 왜곡은 없다).
+    private func averageCadenceSpm() -> Double? {
+        guard CMPedometer.isStepCountingAvailable(), let baseline = pedometerStepsAtBegin else { return nil }
+        let netSteps = pedometerLatestSteps - baseline
+        let elapsedMin = elapsedSec / 60
+        guard netSteps > 0, elapsedMin >= cadenceMinElapsedMin else { return nil }
+        return (netSteps / elapsedMin * 100).rounded() / 100
     }
 
     /// GPS 무신호가 오래 지속되면 pedometer로 거리 진행을 이어받는다.

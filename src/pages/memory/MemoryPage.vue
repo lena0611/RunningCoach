@@ -215,6 +215,7 @@ const profileFacts = computed(() => [
   { label: '출생연도', value: draft.athleteProfile.birthYear ? `${draft.athleteProfile.birthYear}` : '미입력' },
   { label: '성별', value: sexLabel(draft.athleteProfile.sex) },
   { label: '러닝 경력', value: formatExperience(draft.athleteProfile.runningExperienceMonths) },
+  { label: '체중', value: draft.athleteProfile.weightKg ? `${draft.athleteProfile.weightKg}kg` : '미입력' },
   { label: '러너 레벨', value: runnerLevelFact.value },
   { label: '주간 목표', value: draft.athleteProfile.weeklyRunDaysTarget ? `${draft.athleteProfile.weeklyRunDaysTarget}회` : '미입력' },
   { label: '롱런 요일', value: draft.athleteProfile.preferredLongRunDay || '미입력' },

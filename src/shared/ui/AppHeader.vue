@@ -182,6 +182,13 @@ const weeklyRunDaysTargetValue = computed({
     draft.athleteProfile.weeklyRunDaysTarget = value === '' ? null : Number(value)
   }
 })
+const weightKgValue = computed({
+  get: () => draft.athleteProfile.weightKg === null ? '' : String(draft.athleteProfile.weightKg),
+  set: (value: string | string[]) => {
+    if (Array.isArray(value)) return
+    draft.athleteProfile.weightKg = value === '' ? null : Number(value)
+  }
+})
 const maxHeartRateValue = computed({
   get: () => draft.athleteProfile.maxHeartRate === null ? '' : String(draft.athleteProfile.maxHeartRate),
   set: (value: string | string[]) => {
@@ -527,6 +534,10 @@ function openSettingsPanel(focus: SettingsPanelFocus | null = null) {
     <BottomSheetSelect v-model="birthYearValue" label="출생연도" :options="birthYearOptions" />
     <BottomSheetSelect v-model="draft.athleteProfile.sex" label="성별" :options="sexOptions" />
     <BottomSheetSelect v-model="runningExperienceValue" label="러닝 경력" :options="runningExperienceOptions" />
+    <label>
+      체중(kg)
+      <ClearableField v-model="weightKgValue" type="number" number inputmode="decimal" placeholder="예: 63.5" />
+    </label>
     <BottomSheetSelect v-model="draft.athleteProfile.runnerLevel" label="러너 레벨" :options="runnerLevelOptions" />
     <BottomSheetSelect v-model="weeklyRunDaysTargetValue" label="목표 주간 러닝 횟수" :options="weeklyRunDaysTargetOptions" />
     <BottomSheetSelect v-model="draft.athleteProfile.preferredLongRunDay" label="선호 롱런 요일" :options="weekdayOptions" />

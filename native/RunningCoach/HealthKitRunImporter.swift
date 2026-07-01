@@ -293,6 +293,7 @@ final class HealthKitRunImporter {
         distanceMeters: Double,
         start: Date,
         end: Date,
+        cadence: Double?,
         completion: @escaping (Result<String, Error>) -> Void
     ) {
         guard HKHealthStore.isHealthDataAvailable() else {
@@ -303,15 +304,19 @@ final class HealthKitRunImporter {
             completion(.failure(HealthKitImportError.healthDataUnavailable))
             return
         }
+        // stepCount write 권한도 함께 요청한다(cadence를 걸음수로 저장). 타입 미가용이어도
+        // 거리만으로 워크아웃은 성립하므로 optional 로 둔다.
+        let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)
         // write 전용 권한만 추가로 요청한다(read는 기존 흐름이 이미 받음). 이미 허용돼 있으면
         // 다이얼로그 없이 통과하고, 미허용이면 이 시점에만 쓰기 권한 시트가 뜬다.
-        let shareTypes: Set<HKSampleType> = [HKObjectType.workoutType(), distanceType]
+        var shareTypes: Set<HKSampleType> = [HKObjectType.workoutType(), distanceType]
+        if let stepType { shareTypes.insert(stepType) }
         healthStore.requestAuthorization(toShare: shareTypes, read: []) { [weak self] success, error in
             guard let self else { return }
             if let error {
                 completion(.failure(error))
             } else if success {
-                self.writeRunningWorkout(distanceType: distanceType, distanceMeters: distanceMeters, start: start, end: end, completion: completion)
+                self.writeRunningWorkout(distanceType: distanceType, stepType: stepType, distanceMeters: distanceMeters, start: start, end: end, cadence: cadence, completion: completion)
             } else {
                 completion(.failure(HealthKitImportError.authorizationDenied))
             }
@@ -320,9 +325,11 @@ final class HealthKitRunImporter {
 
     private func writeRunningWorkout(
         distanceType: HKQuantityType,
+        stepType: HKQuantityType?,
         distanceMeters: Double,
         start: Date,
         end: Date,
+        cadence: Double?,
         completion: @escaping (Result<String, Error>) -> Void
     ) {
         let configuration = HKWorkoutConfiguration()
@@ -357,11 +364,25 @@ final class HealthKitRunImporter {
                     }
                 }
 
-                // 거리 샘플(있으면). HR·route는 1차 미포함 — 거리만으로도 러닝 워크아웃 성립.
-                guard distanceMeters > 0 else { finalize(); return }
-                let quantity = HKQuantity(unit: .meter(), doubleValue: distanceMeters)
-                let sample = HKCumulativeQuantitySample(type: distanceType, quantity: quantity, start: start, end: end)
-                builder.add([sample]) { success, error in
+                // 거리·걸음 샘플을 모아 한 번에 add 한다. HR·route는 1차 미포함 — 거리만으로도 러닝 워크아웃 성립.
+                var samples: [HKSample] = []
+                if distanceMeters > 0 {
+                    let quantity = HKQuantity(unit: .meter(), doubleValue: distanceMeters)
+                    samples.append(HKCumulativeQuantitySample(type: distanceType, quantity: quantity, start: start, end: end))
+                }
+                // 케이던스(분당 걸음)는 HealthKit에서 stepCount로 표현된다. 총 걸음 = cadence × 경과(분).
+                // Apple Fitness/워치와 동일하게 워크아웃 케이던스를 걸음 통계로 유도하게 한다.
+                let elapsedMin = max(end.timeIntervalSince(start), 0) / 60
+                if let stepType, let cadence, cadence > 0, elapsedMin > 0 {
+                    let totalSteps = (cadence * elapsedMin).rounded()
+                    if totalSteps > 0 {
+                        let stepQuantity = HKQuantity(unit: .count(), doubleValue: totalSteps)
+                        samples.append(HKCumulativeQuantitySample(type: stepType, quantity: stepQuantity, start: start, end: end))
+                    }
+                }
+
+                guard !samples.isEmpty else { finalize(); return }
+                builder.add(samples) { success, error in
                     guard success else { fail(error); return }
                     finalize()
                 }

@@ -53,6 +53,7 @@ function profile(): AthleteProfile {
     runningExperienceMonths: 24,
     weeklyRunDaysTarget: 4,
     preferredLongRunDay: '토요일',
+    weightKg: null,
     personalBests: [],
     runnerLevel: 'auto',
     maxHeartRate: null,
