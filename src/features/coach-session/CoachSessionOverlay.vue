@@ -26,6 +26,7 @@ import { getRaceProjection, summarizeGoalProjectionForCoach } from '@/shared/lib
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { resolveRunnerLevel } from '@/shared/lib/runnerLevel'
 import { formatDateTimeWithWeekday, formatDateWithWeekday } from '@/shared/lib/format'
+import { buildCoachStreamFailurePresentation } from './coachStreamFailure'
 import CoachMessage from '@/shared/ui/CoachMessage.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import SchedulingHelpSheet from '@/shared/ui/SchedulingHelpSheet.vue'
@@ -453,17 +454,21 @@ async function sendCoachRequest(note: string) {
     streamingCoachMeta.value = ''
     reportsLoaded.value = true
   } catch (err) {
+    const failure = buildCoachStreamFailurePresentation({
+      note,
+      currentInput: coachNote.value,
+      displayedText: streamingCoachText.value,
+      pendingText: coachRevealPending,
+      error: err,
+      aborted: err instanceof Error && err.name === 'AbortError'
+    })
     resetCoachReveal()
-    // 실패/중단 시 질문을 입력창으로 복원해 재시도할 수 있게 하고 낙관적 말풍선은 내린다.
-    pendingUserNote.value = ''
-    if (!coachNote.value) coachNote.value = note
-    if (err instanceof Error && err.name === 'AbortError') {
-      streamingCoachMeta.value = '생성 중단됨 · 저장되지 않음'
-    } else {
-      coachError.value = err instanceof Error ? err.message : 'AI 코칭 요청 실패'
-      streamingCoachText.value = ''
-      streamingCoachMeta.value = ''
-    }
+    // 실패/중단 시 질문을 입력창으로 복원한다. 이미 받은 답변 조각이 있으면 말풍선을 남겨 사라짐을 막는다.
+    pendingUserNote.value = failure.pendingUserNote
+    coachNote.value = failure.coachNote
+    streamingCoachText.value = failure.streamingCoachText
+    streamingCoachMeta.value = failure.streamingCoachMeta
+    coachError.value = failure.coachError
   } finally {
     stopCoachThinkingTimer()
     coachLoading.value = false
