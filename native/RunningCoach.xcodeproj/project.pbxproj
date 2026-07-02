@@ -49,6 +49,13 @@
 			);
 			target = 1E3F1BA92FBED6B8003D8EA4 /* RunningCoach */;
 		};
+		1EAA00012FF6000100335401 /* Exceptions for "PaceLabWatch Watch App" folder in "PaceLabWatch Watch App" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 1E74BE8E2FF507F9003354DB /* PaceLabWatch Watch App */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -62,6 +69,9 @@
 		};
 		1E74BE902FF507F9003354DB /* PaceLabWatch Watch App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				1EAA00012FF6000100335401 /* Exceptions for "PaceLabWatch Watch App" folder in "PaceLabWatch Watch App" target */,
+			);
 			path = "PaceLabWatch Watch App";
 			sourceTree = "<group>";
 		};
@@ -482,12 +492,16 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "PaceLabWatch Watch App/PaceLabWatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 3GCS2R55TJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "PaceLabWatch Watch App/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = PaceLabWatch;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "레이스 중 심박·거리·칼로리를 실시간으로 보여주기 위해 건강 데이터를 읽습니다.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "완료한 레이스를 운동 기록으로 건강 앱에 저장합니다.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.lena0611.RunningCoach;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -506,7 +520,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 10.6;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Debug;
 		};
@@ -515,12 +529,16 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "PaceLabWatch Watch App/PaceLabWatch Watch App.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 3GCS2R55TJ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "PaceLabWatch Watch App/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = PaceLabWatch;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "레이스 중 심박·거리·칼로리를 실시간으로 보여주기 위해 건강 데이터를 읽습니다.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "완료한 레이스를 운동 기록으로 건강 앱에 저장합니다.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.lena0611.RunningCoach;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -540,7 +558,7 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 4;
 				VALIDATE_PRODUCT = YES;
-				WATCHOS_DEPLOYMENT_TARGET = 10.6;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Release;
 		};
