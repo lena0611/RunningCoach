@@ -4,7 +4,9 @@ import {
   detectCoachAnswerIntent,
   detectUserNoteRunRelevance,
   resolveCoachResponseMode,
-  shouldApplyTrustLayer
+  shouldAttachInjurySnapshot,
+  shouldApplyTrustLayer,
+  shouldUseStructuredCoachContext
 } from '../supabase/functions/coach-run/responseMode'
 
 describe('coach response mode and user note relevance', () => {
@@ -25,8 +27,26 @@ describe('coach response mode and user note relevance', () => {
     expect(detectUserNoteRunRelevance('어떤 흐름으로 짜여져 있는데')).toBe('general')
   })
 
+  it('keeps method comparison and naming follow-ups as general concept questions', () => {
+    expect(detectCoachAnswerIntent('이지스트라이드랑 같아 보이네?')).toBe('explain')
+    expect(detectUserNoteRunRelevance('이지스트라이드랑 같아 보이네?')).toBe('general')
+    expect(shouldApplyTrustLayer('이지스트라이드랑 같아 보이네?', 'explain')).toBe(false)
+    expect(shouldAttachInjurySnapshot('이지스트라이드랑 같아 보이네?', 'explain')).toBe(false)
+    expect(shouldUseStructuredCoachContext('이지스트라이드랑 같아 보이네?', 'explain')).toBe(false)
+
+    expect(detectCoachAnswerIntent('Nsm은 뭐의 약자야?')).toBe('explain')
+    expect(detectUserNoteRunRelevance('Nsm은 뭐의 약자야?')).toBe('general')
+    expect(shouldAttachInjurySnapshot('Nsm은 뭐의 약자야?', 'explain')).toBe(false)
+    expect(shouldUseStructuredCoachContext('Nsm은 뭐의 약자야?', 'explain')).toBe(false)
+
+    expect(detectCoachAnswerIntent('노르웨이식 훈련법 아니야?')).toBe('explain')
+    expect(detectUserNoteRunRelevance('노르웨이식 훈련법 아니야?')).toBe('general')
+    expect(shouldUseStructuredCoachContext('노르웨이식 훈련법 아니야?', 'explain')).toBe(false)
+  })
+
   it('allows selected run context when the user asks about the session', () => {
     expect(detectUserNoteRunRelevance('이 세션은 왜 심박이 높게 나온 거야?')).toBe('selected_run')
+    expect(detectUserNoteRunRelevance('오늘 템포 어땠어?')).toBe('selected_run')
 
     const policy = buildUserNoteRelevancePolicy('이 세션은 왜 심박이 높게 나온 거야?', 'evidence')
     expect(policy).toContain('선택 세션')
@@ -46,5 +66,21 @@ describe('coach response mode and user note relevance', () => {
     expect(shouldApplyTrustLayer('Nsm훈련법이 뭐야', 'explain')).toBe(false)
     expect(shouldApplyTrustLayer('어떤 흐름으로 짜여져 있는데', 'explain')).toBe(false)
     expect(shouldApplyTrustLayer('이 세션은 왜 심박이 높게 나온 거야?', 'evidence')).toBe(true)
+  })
+
+  it('attaches injury snapshots only when the question can use personal or selected-run context', () => {
+    expect(shouldAttachInjurySnapshot('', 'report')).toBe(true)
+    expect(shouldAttachInjurySnapshot('Nsm훈련법이 뭐야', 'explain')).toBe(false)
+    expect(shouldAttachInjurySnapshot('이지스트라이드랑 같아 보이네?', 'explain')).toBe(false)
+    expect(shouldAttachInjurySnapshot('나한테 다음 훈련은 어떻게 가져가면 돼?', 'explain')).toBe(true)
+    expect(shouldAttachInjurySnapshot('이 세션은 왜 심박이 높게 나온 거야?', 'evidence')).toBe(true)
+  })
+
+  it('uses structured coach context only for report, selected-run, or personal coaching questions', () => {
+    expect(shouldUseStructuredCoachContext('', 'report')).toBe(true)
+    expect(shouldUseStructuredCoachContext('Nsm훈련법이 뭐야', 'explain')).toBe(false)
+    expect(shouldUseStructuredCoachContext('그냥 잡담인데 오늘 날씨 좋네', 'conversational')).toBe(false)
+    expect(shouldUseStructuredCoachContext('나한테 다음 훈련은 어떻게 가져가면 돼?', 'explain')).toBe(true)
+    expect(shouldUseStructuredCoachContext('오늘 템포 어땠어?', 'explain')).toBe(true)
   })
 })
