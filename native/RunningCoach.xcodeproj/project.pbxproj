@@ -42,19 +42,19 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		1EB6B4F52FD7BF8700355CC0 /* Exceptions for "RunningCoach" folder in "RunningCoach" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 1E3F1BA92FBED6B8003D8EA4 /* RunningCoach */;
-		};
 		1EAA00012FF6000100335401 /* Exceptions for "PaceLabWatch Watch App" folder in "PaceLabWatch Watch App" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
 			target = 1E74BE8E2FF507F9003354DB /* PaceLabWatch Watch App */;
+		};
+		1EB6B4F52FD7BF8700355CC0 /* Exceptions for "RunningCoach" folder in "RunningCoach" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 1E3F1BA92FBED6B8003D8EA4 /* RunningCoach */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 

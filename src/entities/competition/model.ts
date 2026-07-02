@@ -68,4 +68,9 @@ export type PendingSelfRace = {
   outcome: CompetitionOutcome | null
   resultGapSec: number | null
   createdAt: string
+  /**
+   * 워치 릴레이 결과의 원본 id (#552 Phase 3). WCSession 재전송(ACK 유실) 시
+   * 같은 결과가 이중 보류되는 걸 막는 멱등 키. 폰 라이브 레이스에는 없다.
+   */
+  watchResultId?: string
 }
