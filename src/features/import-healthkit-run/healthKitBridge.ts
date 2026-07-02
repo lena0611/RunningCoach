@@ -111,6 +111,9 @@ declare global {
         runContextLiveRun?: {
           postMessage: (message: unknown) => void
         }
+        runContextWatchRace?: {
+          postMessage: (message: unknown) => void
+        }
       }
     }
   }

@@ -51,6 +51,8 @@ export type RaceFinishInput = {
   targetPb: CompetitionTargetPb | null
   /** 종료 시 고스트 시간차(초, ghost.ts 부호) + 우열. 타겟 없으면 null. */
   finalGap: { timeGapSec: number; leadState: 'ahead' | 'behind' | 'even' } | null
+  /** 워치 릴레이 결과의 원본 id(#552 Phase 3). 재전송 중복 방지 멱등 키. 폰 레이스는 생략. */
+  watchResultId?: string
 }
 
 /**
@@ -65,7 +67,8 @@ export function deriveResultFields(input: RaceFinishInput): Omit<PendingSelfRace
     racedDurationSec: input.racedDurationSec != null ? Math.max(0, Math.round(input.racedDurationSec)) : null,
     targetPb: input.targetPb,
     outcome: hasTarget ? outcomeFromLeadState(input.finalGap!.leadState) : null,
-    resultGapSec: hasTarget ? Math.round(input.finalGap!.timeGapSec) : null
+    resultGapSec: hasTarget ? Math.round(input.finalGap!.timeGapSec) : null,
+    ...(input.watchResultId ? { watchResultId: input.watchResultId } : {})
   }
 }
 

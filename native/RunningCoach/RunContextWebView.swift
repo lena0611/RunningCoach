@@ -202,6 +202,7 @@ struct RunContextWebView: UIViewRepresentable {
         contentController.add(context.coordinator, name: "runContextNotifications")
         contentController.add(context.coordinator, name: "runContextAuth")
         contentController.add(context.coordinator, name: "runContextLiveRun")
+        contentController.add(context.coordinator, name: "runContextWatchRace")
         contentController.add(context.coordinator, name: "runContextLog")
         contentController.addUserScript(WKUserScript(
             source: """
@@ -261,6 +262,7 @@ struct RunContextWebView: UIViewRepresentable {
         private let weatherImporter = OpenMeteoWeatherImporter()
         private let notificationManager = RunContextNotificationManager()
         private let liveRunTracker = LiveRunTracker()
+        private let watchRelay = PhoneWatchRelay()
         private let onReady: () -> Void
         private let minimumSplashDuration: TimeInterval = 1.5
         private let startedAt = Date()
@@ -276,6 +278,42 @@ struct RunContextWebView: UIViewRepresentable {
                 }
             }
             wireLiveRunTracker()
+            // #552 Phase 3: 워치 릴레이 활성화 + 새 결과 도착 시 웹으로 즉시 드레인.
+            watchRelay.activate()
+            watchRelay.onQueueChanged = { [weak self] in
+                self?.drainWatchResults()
+            }
+        }
+
+        // MARK: - #552 Phase 3 워치 레이싱 릴레이 (웹 watchRaceBridge.ts 미러)
+
+        private func handleWatchRaceMessage(_ message: WKScriptMessage) {
+            guard let body = message.body as? [String: Any],
+                  let type = body["type"] as? String else { return }
+            switch type {
+            case "pushCatalog":
+                if let catalog = body["catalog"] as? [String: Any] {
+                    watchRelay.pushCatalog(catalog)
+                }
+            case "requestResults":
+                drainWatchResults()
+            case "ackResult":
+                if let id = body["id"] as? String {
+                    watchRelay.removeResult(id: id)
+                }
+            default:
+                break
+            }
+        }
+
+        /// 큐의 워치 결과를 웹으로 전송. 웹이 처리 후 ackResult 를 보내면 큐에서 제거된다.
+        private func drainWatchResults() {
+            guard let webView else { return }
+            for payload in watchRelay.pendingResults() {
+                guard let data = try? JSONSerialization.data(withJSONObject: payload),
+                      let json = String(data: data, encoding: .utf8) else { continue }
+                webView.evaluateJavaScript("window.RunContextWatchRace?.receiveResult(\(json));")
+            }
         }
 
         // #229 라이브 트래커 콜백 → 포그라운드 웹 표시용 JS 전송. 백그라운드 핵심 루프(gap/발화)는
@@ -332,6 +370,11 @@ struct RunContextWebView: UIViewRepresentable {
 
             if message.name == "runContextLiveRun" {
                 handleLiveRunMessage(message)
+                return
+            }
+
+            if message.name == "runContextWatchRace" {
+                handleWatchRaceMessage(message)
                 return
             }
 

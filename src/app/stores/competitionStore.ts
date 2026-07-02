@@ -30,6 +30,11 @@ const resultsKey = 'pacelab.competitionResults'
 const pendingKey = 'pacelab.pendingSelfRaces'
 const PENDING_MAX_AGE_MS = 3 * 86400000 // 3일 미매칭 시 만료
 
+// linkPendingResults 직렬화 체인(#552 Phase 3): HK sync 경로(linkSelfRaceResults)와 워치 결과 인입
+// (watchRaceStore.handleResult)이 같은 물리 이벤트(레이스 종료/앱 오픈)에서 동시에 부르므로,
+// 겹치면 나중 호출의 '전체 치환' 쓰기가 먼저 호출의 소비/신규 보류를 되살리거나 지운다 — 한 번에 하나만 돌린다.
+let linkChain: Promise<void> = Promise.resolve()
+
 export const useCompetitionStore = defineStore('competitionStore', {
   state: () => ({
     results: [] as CompetitionResult[],
@@ -64,31 +69,51 @@ export const useCompetitionStore = defineStore('competitionStore', {
      */
     recordFinish(input: RaceFinishInput) {
       if (!isMeaningfulFinish(input.racedDistanceM)) return
+      // localStorage 를 기준으로 병합해 (store 미로드 상태에서도) 기존 보류를 덮어쓰지 않는다.
+      const existing = loadPending()
+      // 워치 릴레이 재전송(ACK 유실) 멱등 가드(#552 Phase 3): 같은 워치 결과가 이중 보류되는 걸 막는다.
+      // 이미 소비(매칭)된 뒤의 재전송은 여기 안 걸리지만, 그 보류는 매칭될 런이 없어 3일 후 만료된다.
+      if (input.watchResultId && existing.some((p) => p.watchResultId === input.watchResultId)) {
+        this.pending = existing
+        return
+      }
       const pending: PendingSelfRace = {
         id: nanoid(),
         createdAt: new Date().toISOString(),
         ...deriveResultFields(input)
       }
-      // localStorage 를 기준으로 병합해 (store 미로드 상태에서도) 기존 보류를 덮어쓰지 않는다.
-      const next = [...loadPending(), pending]
+      const next = [...existing, pending]
       this.pending = next
       persistPending(next)
     },
 
     /**
-     * 보류 결과를 현재 import 된 RunLog 들과 매칭한다. HealthKit 동기화 직후 호출.
+     * 보류 결과를 현재 import 된 RunLog 들과 매칭한다. HealthKit 동기화 직후·워치 결과 인입 직후 호출.
      * 매칭 성공 → 'self-race' 태깅 + (타겟 있으면) CompetitionResult 생성, 보류 제거.
      * 만료된 보류는 버린다. 부분 실패(태깅 ok·결과 insert 실패)는 보류 유지로 다음 동기화에 재시도.
+     * 동시 호출은 직렬화된다(뒤 호출은 앞 호출 완료 후 실행).
      */
     async linkPendingResults() {
+      const run = linkChain.then(() => this.linkPendingResultsExclusive())
+      // 실패해도 체인은 계속 흐르게(다음 호출 차단 금지). 에러는 각 호출자에게 그대로 전파.
+      linkChain = run.catch(() => {})
+      return run
+    },
+
+    /** linkPendingResults 본체 — 반드시 직렬화 체인 안에서만 실행된다(직접 호출 금지). */
+    async linkPendingResultsExclusive() {
       if (!this.pending.length) return
       await this.ensureLoaded()
       const runStore = useRunStore()
       const now = Date.now()
       const linkedRunIds = new Set(this.results.map((r) => r.linkedRunId).filter((id): id is string => Boolean(id)))
       const survivors: PendingSelfRace[] = []
+      // 처리 시작 시점 스냅샷. 처리 중(await 사이) recordFinish 가 추가한 신규 보류는
+      // 마지막에 병합해 보존한다 — '전체 치환' 쓰기가 신규 보류를 지우는 사고 방지.
+      const snapshot = [...this.pending]
+      const snapshotIds = new Set(snapshot.map((p) => p.id))
 
-      for (const pending of this.pending) {
+      for (const pending of snapshot) {
         if (isPendingExpired(pending, now, PENDING_MAX_AGE_MS)) continue
         const candidates = runStore.runs.filter((run) => !linkedRunIds.has(run.id))
         const match = pickBestMatch(candidates, pending)
@@ -139,7 +164,9 @@ export const useCompetitionStore = defineStore('competitionStore', {
         // 매칭·처리 완료 → 보류 소비(survivors 에 넣지 않음)
       }
 
-      this.pending = survivors
+      // 처리 중 새로 들어온 보류(스냅샷에 없던 것)를 병합해 보존.
+      const newcomers = loadPending().filter((p) => !snapshotIds.has(p.id))
+      this.pending = [...survivors, ...newcomers]
       persistPending(this.pending)
     },
 
