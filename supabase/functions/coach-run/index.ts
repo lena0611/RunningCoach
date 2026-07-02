@@ -4,6 +4,7 @@ import {
   buildUserNoteRelevancePolicy,
   detectCoachAnswerIntent,
   resolveCoachResponseMode,
+  shouldApplyTrustLayer,
   type CoachResponseMode
 } from './responseMode.ts'
 
@@ -292,13 +293,16 @@ async function persistCoachResult(
     // 코칭 생성 시점의 (시점필터된) 부상 컨텍스트를 얼려 저장한다 — 과거 리포트가 그때 부상 상태를 충실히 재현하도록.
     const injuryContextSnapshot = buildInjuryContextSnapshot(context.injuryItems, context.activeInjuryItem, context.selectedRunDate ?? null)
 
+    const report = shouldApplyTrustLayer(userNote, context.coachResponseMode)
+      ? applyTrustLayer(ai.report, context.trustLayerNote)
+      : ai.report
     const { data: reportRow, error: reportError } = await admin
       .from('coach_reports')
       .insert({
         user_id: userId,
         selected_run_id: selectedRunId,
         user_note: userNote,
-        report: applyTrustLayer(ai.report, context.trustLayerNote),
+        report,
         injury_context_snapshot: injuryContextSnapshot,
         updated_at: new Date().toISOString()
       })
@@ -1080,7 +1084,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       '절대 금지: "## 핵심 지표", "## 오늘 해석", "## 조심할 점", "## 다음 훈련", "## 루틴 업데이트", "## 한 줄 요약" 같은 마크다운 섹션 헤더와 지표 나열 목록. ' +
       '대신 사용자가 한 말에 반응해서 2~6문장 정도로 자연스럽게 대화한다. 숫자가 필요하면 문장 속에 한두 개만 가볍게 녹이고, 세션 전체를 다시 분석하지 않는다. ' +
       '사용자 표현(예: "오랜만에 5km 30분 도전")을 그대로 받아 맥락에 맞게 사람처럼 답한다. ' +
-      '[explain] 사용자가 "자세히/분석/설명/비교/정리"처럼 더 깊은 설명을 요청한 경우다. 고정 섹션을 기계적으로 채우지 말고 질문에 맞춰 결론→설명→사용자 적용→추천 순으로 유연하게 답한다. ' +
+      '[explain] 사용자가 "뭐야/무엇/어떤 흐름/구조/자세히/분석/설명/비교/정리"처럼 개념·구조·깊은 설명을 요청한 경우다. 고정 섹션을 기계적으로 채우지 말고 질문에 맞춰 직접 정의→흐름/구조→주의할 오해→필요한 경우에만 사용자 적용 순으로 답한다. ' +
       '[evidence] 사용자가 "근거/출처/왜 그렇게 판단했는지/이 훈련법이 실제로 있는지"를 물은 경우다. 짧은 사담으로 끝내지 말고 결론→판단 근거→사용자 데이터 적용→참고한 훈련 원칙/출처 순으로 trainingKnowledge와 러닝 데이터를 근거로 답한다. 출처가 trainingKnowledge에 없으면 지어내지 말고 확인된 출처가 부족하다고 말한다. ' +
       '[report] userNote가 없으면(세션만 열림) 기존 selectedRun 리뷰 리포트 형식(responseTemplatePolicy)으로 답한다.',
     responseStyle,
@@ -1542,6 +1546,8 @@ function buildExplainInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnTy
     '너는 사용자를 오래 봐온 한국어 러닝 코치다.',
     `이 사용자의 runnerLevel은 ${runnerLevel}이다. ${levelGuide.termDepth} ${levelGuide.tone}`,
     '지금은 설명/분석 모드다. 리포트처럼 고정 6섹션을 기계적으로 채우지 말고, 사용자의 질문(context.userNote)에 맞춰 설명한다.',
+    '사용자가 "뭐야/무엇/어떤 흐름/어떻게 짜여/구조"를 물으면 첫 문단에서 바로 정의하거나 흐름을 요약한다. 현재 세션·목표·부상 이야기로 우회해서 시작하지 않는다.',
+    '일반 훈련법 질문의 기본 순서는 1) 한 줄 정의, 2) 구성 요소나 진행 흐름, 3) 인터벌/템포/Easy 같은 헷갈리는 개념과의 구분, 4) 주의점이다. 개인 적용은 사용자가 "나한테/내 경우"를 묻거나 userNoteRelevancePolicy가 허용할 때만 붙인다.',
     'context.userNoteRelevancePolicy를 반드시 따른다. 질문이 일반 개념/용어 설명이면 선택 세션은 언급하지 않는다. 질문이 개인 훈련 적용이면 activeGoal·부상·스케줄 같은 넓은 맥락을 쓰고, 선택 세션 지표는 그 세션을 직접 묻는 경우에만 쓴다.',
     '필요하면 마크다운 소제목을 사용할 수 있다. 다만 selectedRun 리뷰 리포트 템플릿(핵심 지표/오늘 해석/루틴 업데이트 등 고정 헤더 전체)을 그대로 찍어내지 않는다.',
     '사용자의 최근 러닝 데이터, context.activeGoal, context.activeInjuryItem, context.heartRateModel, context.paceModel, context.trainingKnowledge는 질문과 직접 관련된 만큼만 반영한다. "관련이 있으면 좋겠다"가 아니라 사용자의 질문을 이해하는 데 실제로 필요한 경우만 쓴다.',

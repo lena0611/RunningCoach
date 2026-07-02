@@ -3,19 +3,26 @@ import {
   buildUserNoteRelevancePolicy,
   detectCoachAnswerIntent,
   detectUserNoteRunRelevance,
-  resolveCoachResponseMode
+  resolveCoachResponseMode,
+  shouldApplyTrustLayer
 } from '../supabase/functions/coach-run/responseMode'
 
 describe('coach response mode and user note relevance', () => {
   it('keeps general training-method questions away from selected-run analysis', () => {
-    expect(detectCoachAnswerIntent('Nsm훈련법이 뭐야')).toBe('chat')
-    expect(resolveCoachResponseMode('Nsm훈련법이 뭐야', 'chat')).toBe('conversational')
+    expect(detectCoachAnswerIntent('Nsm훈련법이 뭐야')).toBe('explain')
+    expect(resolveCoachResponseMode('Nsm훈련법이 뭐야', 'explain')).toBe('explain')
     expect(detectUserNoteRunRelevance('Nsm훈련법이 뭐야')).toBe('general')
 
-    const policy = buildUserNoteRelevancePolicy('Nsm훈련법이 뭐야', 'conversational')
+    const policy = buildUserNoteRelevancePolicy('Nsm훈련법이 뭐야', 'explain')
     expect(policy).toContain('일반 개념 설명/잡담')
     expect(policy).toContain('selectedRun 지표')
     expect(policy).toContain('억지로 연결하지 말고')
+  })
+
+  it('treats structure and flow questions as explanation requests', () => {
+    expect(detectCoachAnswerIntent('어떤 흐름으로 짜여져 있는데')).toBe('explain')
+    expect(resolveCoachResponseMode('어떤 흐름으로 짜여져 있는데', 'explain')).toBe('explain')
+    expect(detectUserNoteRunRelevance('어떤 흐름으로 짜여져 있는데')).toBe('general')
   })
 
   it('allows selected run context when the user asks about the session', () => {
@@ -32,5 +39,12 @@ describe('coach response mode and user note relevance', () => {
     const policy = buildUserNoteRelevancePolicy('나한테 다음 훈련은 어떻게 가져가면 돼?', 'explain')
     expect(policy).toContain('개인 훈련/목표/컨디션')
     expect(policy).toContain('현재 화면에 열려 있다는 이유만으로 selectedRun')
+  })
+
+  it('only applies deterministic trust layer to report or selected-run questions', () => {
+    expect(shouldApplyTrustLayer('', 'report')).toBe(true)
+    expect(shouldApplyTrustLayer('Nsm훈련법이 뭐야', 'explain')).toBe(false)
+    expect(shouldApplyTrustLayer('어떤 흐름으로 짜여져 있는데', 'explain')).toBe(false)
+    expect(shouldApplyTrustLayer('이 세션은 왜 심박이 높게 나온 거야?', 'evidence')).toBe(true)
   })
 })
