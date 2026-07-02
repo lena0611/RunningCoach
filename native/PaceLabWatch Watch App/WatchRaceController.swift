@@ -56,9 +56,29 @@ final class WatchRaceController: NSObject, ObservableObject {
     /// (마지막 1Hz 틱의 `gap`은 종료 버튼 사이 HK 거리 갱신을 놓칠 수 있음 — 접전에서 표시 모순).
     @Published private(set) var finalGap: GapState?
 
-    /// 레이스 상대(고스트) 곡선. Phase 2에서는 주입식(시뮬 리허설) — 폰 동기화는 Phase 3.
+    // ── 레이스 설정 (Phase 3: 시작 화면이 카탈로그 선택으로 주입) ────────────
+    /// 타겟 PB 식별 정보. 결과 상승 페이로드(웹 CompetitionTargetPb 미러)에 실린다.
+    struct TargetPbInfo {
+        let distanceM: Double
+        let elapsedSec: Double
+        let sourceRunId: String
+    }
+
+    /// 레이스 상대(고스트) 곡선. nil = 자유 측정(태깅만).
     private(set) var ghostCurve: GhostCurve?
+    private(set) var targetPb: TargetPbInfo?
     private(set) var announceConfig: AnnounceConfig = .default
+
+    /// 완주 결과 페이로드(웹 WatchRaceResultPayload 미러) 방출 — ContentView 가 WCSession 전송에 연결.
+    var onRaceFinished: (([String: Any]) -> Void)?
+
+    /// 시작 전 레이스 구성. 시작 화면이 카탈로그 선택을 굳혀 넣는다(레이스마다 호출).
+    func configure(ghost: GhostCurve?, targetPb: TargetPbInfo?, config: AnnounceConfig) {
+        guard phase == .idle || isErrorPhase else { return }
+        ghostCurve = ghost
+        self.targetPb = targetPb
+        announceConfig = config
+    }
 
     /// 라이브 틱을 먹여 gap·역전·주기 발화를 계산할 공유 엔진(RaceCore).
     /// 엔진은 레이스 1회분 상태(이전 gap·주기 step·완주)를 갖므로 시작할 때마다 재생성한다.
@@ -70,6 +90,9 @@ final class WatchRaceController: NSObject, ObservableObject {
     private var ticker: Timer?
     /// 벽시계 기준 시작 시각. 자동일시정지 끔이라 벽시계 경과 == 운동 경과.
     private var workoutStart: Date?
+    /// 레이스 마감(완주 판정+결과 방출) 1회 보장. 종료 버튼 경로와 시스템 강제종료 폴백이
+    /// 둘 다 finishRace 를 부르므로, 이 가드 없이는 이중 방출(다른 UUID → 웹 멱등 무력화)된다.
+    private var raceFinalized = false
 
     override init() {
         engine = GhostRaceEngine(curve: nil, config: .default)
@@ -139,6 +162,15 @@ final class WatchRaceController: NSObject, ObservableObject {
             self.session = session
             self.builder = builder
 
+            // #552 Phase 3: self-race 표식 메타데이터 — 폰 HealthKit 유입 시 '생성 시점부터' 태깅돼(§10)
+            // 훈련 세션·의도를 오소비하지 않는다. 키는 폰 HealthKitRunImporter 와 미러(PaceLABCompetition).
+            builder.addMetadata([
+                HKMetadataKeyWasUserEntered: false,
+                "PaceLABCompetition": "self-race"
+            ]) { _, _ in
+                // best-effort: 실패해도 레이스는 진행(태깅은 웹 linkPendingResults 가 늦게라도 복원).
+            }
+
             let startDate = Date()
             workoutStart = startDate
             session.startActivity(with: startDate)
@@ -165,6 +197,7 @@ final class WatchRaceController: NSObject, ObservableObject {
         lastAnnouncementText = nil
         finishSummaryText = nil
         finalGap = nil
+        raceFinalized = false
         WKInterfaceDevice.current().play(.start)
         phase = .running
     }
@@ -185,8 +218,12 @@ final class WatchRaceController: NSObject, ObservableObject {
     }
 
     /// 엔진 완주 판정 1회 호출(고스트 있으면 최종 격차 문구 + success 햅틱).
-    /// 문구와 같은 틱으로 finalGap 도 굳혀 요약 색(승/패)이 문구와 항상 일치하게 한다.
+    /// 문구와 같은 틱으로 finalGap 도 굳혀 요약 색(승/패)이 문구와 항상 일치하게 하고,
+    /// 같은 스냅샷으로 결과 페이로드를 방출한다(#552 Phase 3 — WCSession 상승은 ContentView 연결).
+    /// 호출 경로 2곳(종료 버튼 / 시스템 강제종료 폴백) — raceFinalized 로 1회만 실행된다.
     private func finishRace() {
+        guard !raceFinalized else { return }
+        raceFinalized = true
         let tick = LiveTick(cumulativeDistanceM: distanceM, elapsedSec: elapsedSec)
         if let curve = ghostCurve {
             finalGap = GhostMath.computeGap(curve, tick)
@@ -195,7 +232,37 @@ final class WatchRaceController: NSObject, ObservableObject {
             finishSummaryText = fin.text
             WKInterfaceDevice.current().play(.success)
         }
+        emitResult(tick: tick)
     }
+
+    /// 완주 결과 페이로드(웹 WatchRaceResultPayload 미러). 0m 완주는 웹 isMeaningfulFinish 와 동일하게 버린다.
+    /// plist 제약상 null 대신 키 생략 — 웹 normalize 가 결측을 null 로 읽는다.
+    private func emitResult(tick: LiveTick) {
+        guard tick.cumulativeDistanceM > 0 else { return }
+        var payload: [String: Any] = [
+            "type": "watchRaceResult",
+            "id": UUID().uuidString,
+            "racedAt": Self.isoFormatter.string(from: workoutStart ?? Date()),
+            "racedDistanceM": tick.cumulativeDistanceM,
+            "racedDurationSec": tick.elapsedSec
+        ]
+        if let targetPb {
+            payload["targetPb"] = [
+                "distanceM": targetPb.distanceM,
+                "elapsedSec": targetPb.elapsedSec,
+                "sourceRunId": targetPb.sourceRunId
+            ]
+        }
+        if let finalGap {
+            payload["finalGap"] = [
+                "timeGapSec": finalGap.timeGapSec,
+                "leadState": finalGap.leadState.rawValue
+            ]
+        }
+        onRaceFinished?(payload)
+    }
+
+    private static let isoFormatter = ISO8601DateFormatter()
 
     /// 요약 화면에서 새 레이스 준비(지표 초기화 → idle).
     func reset() {
@@ -294,10 +361,14 @@ final class WatchRaceController: NSObject, ObservableObject {
         recomputePace()
     }
 
-    /// 세션 종료 → 수집 마감 + 운동 저장(실패해도 UI는 완료). 저장 견고화·결과 릴레이는 Phase 3.
+    /// 세션 종료 → 수집 마감 + 운동 저장(실패해도 UI는 완료).
     /// (이름 주의: NSObject.finalize() 와 충돌하므로 finalize 금지.)
     fileprivate func finishAndSave() {
         stopTicker()
+        // 시스템 강제종료 폴백(#552 Phase 3 리뷰): 종료 버튼 없이 세션이 .ended 로 전이한 경우
+        // (다른 운동앱 세션 경합 등) 결과 상승이 누락되지 않게 여기서도 마감을 보장한다.
+        // 종료 버튼 경로에서는 raceFinalized 가드로 no-op(이중 방출 방지).
+        finishRace()
         let builder = self.builder
         Task { @MainActor in
             if let builder {
@@ -331,6 +402,9 @@ final class WatchRaceController: NSObject, ObservableObject {
             GhostCurvePoint(distanceM: 0, elapsedSec: 0),
             GhostCurvePoint(distanceM: 2000, elapsedSec: 720),
         ])
+        // 결과 상승 파이프(WCSession→폰→웹)까지 리허설로 검증할 수 있게 타겟·시작시각도 채운다.
+        targetPb = TargetPbInfo(distanceM: 2000, elapsedSec: 720, sourceRunId: "sim-rehearsal-pb")
+        workoutStart = Date()
         simElapsedSec = 0
         simDistanceM = 0
         beginRace()

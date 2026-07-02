@@ -7,6 +7,7 @@ import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { getDisabledNotificationItems, useSettingsStore } from '@/app/stores/settingsStore'
+import { useWatchRaceStore } from '@/app/stores/watchRaceStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import type { TrainingInjuryCheckIn, TrainingMemory } from '@/entities/training-memory/model'
 import {
@@ -46,6 +47,21 @@ const toastStore = useToastStore()
 const injuryFlowStore = useInjuryFlowStore()
 const coachStore = useCoachStore()
 const sessionDetailStore = useSessionDetailStore()
+const watchRaceStore = useWatchRaceStore()
+
+// #552 Phase 3: runs 변동 → 워치 고스트 카탈로그 재하강(디바운스). PB 갱신·삭제가 워치 상대에 반영된다.
+let watchCatalogPushTimer: number | null = null
+watch(
+  () => runStore.runs,
+  () => {
+    if (watchCatalogPushTimer !== null) window.clearTimeout(watchCatalogPushTimer)
+    watchCatalogPushTimer = window.setTimeout(() => {
+      watchCatalogPushTimer = null
+      watchRaceStore.pushCatalog()
+    }, 2000)
+  },
+  { deep: false }
+)
 
 // 운동 직후 코치 인터뷰(#311): HealthKit 임포트 직후 표시, 결과는 run 주관 필드로 저장.
 const pendingInterviewRun = computed(() => runStore.runs.find((run) => run.id === runStore.pendingInterviewRunId) ?? null)
@@ -309,6 +325,7 @@ onMounted(() => {
   healthKitSyncStore.attachActivationListeners()
   weatherStore.init()
   weatherStore.attachActivationListeners()
+  watchRaceStore.init()
   attachInjuryCheckInActivationListeners()
   loadTab(currentTabIndex.value)
   void nextTick(observeActivePanel)
@@ -325,6 +342,11 @@ onMounted(() => {
 onBeforeUnmount(() => {
   healthKitSyncStore.dispose()
   weatherStore.dispose()
+  watchRaceStore.dispose()
+  if (watchCatalogPushTimer !== null) {
+    window.clearTimeout(watchCatalogPushTimer)
+    watchCatalogPushTimer = null
+  }
   keyboardInsetCleanup?.()
   keyboardInsetCleanup = null
   touchZoomCleanup?.()

@@ -369,11 +369,17 @@ CASCADE 사각지대: 코치 store/리포트 in-memory (갱신 안 됨)  coachRe
 
 레이싱(self-race) 데이터·이벤트 변경 시 함께 볼 노드. 핵심 규약: **레이싱은 훈련 세션을 점유하지 않고 부하·추세·예측·정산에 안 들어간다**(#235 §10).
 
-진입점: [[RacePage]].recordRaceResult · [[competitionStore]].recordFinish · 차단점: [[matchSessionIntent]] 가드
+진입점: [[RacePage]].recordRaceResult · [[competitionStore]].recordFinish · **워치 릴레이(#552)** · 차단점: [[matchSessionIntent]] 가드
 
 ```
 RacePage.recordRaceResult / endRace                        RacePage.vue:272-285 (targetPb 소싱 :265)
 └─ competitionStore.recordFinish (PendingSelfRace localStorage)  competitionStore.ts:65-76 (deriveResultFields)
+워치 릴레이(#552 Phase 3, 결과가 recordFinish 로 수렴):
+├─ 워치 완주 → WatchRaceController.emitResult → WCSession transferUserInfo (시스템 큐잉)
+├─ 폰 PhoneWatchRelay.didReceiveUserInfo → UserDefaults 큐 → 웹 pull/ACK   native/RunningCoach/PhoneWatchRelay.swift
+├─ 웹 watchRaceStore.handleResult → recordFinish(watchResultId 멱등) + 즉시 linkPendingResults  watchRaceStore.ts
+└─ 워치 워크아웃 태깅 = HK 메타 PaceLABCompetition (생성시점, healthKitBridge:273 소비와 미러)  WatchRaceController.beginWorkout
+카탈로그 하강(설정): runs 변경 → App.vue 디바운스 → buildWatchRaceCatalog(race_last_settings_v1 미러) → applicationContext
 유입경로(3+1):
 ├─ #1 importCompetitionRun (단건, 생성시점 태깅)            healthKitSyncStore.ts:305-365 (태그 :355)
 ├─ #2 handleRuns / handleHistoricalMigrationRuns (정규 sync) healthKitSyncStore.ts:171-272 (태그 :566)
@@ -410,6 +416,9 @@ RacePage.recordRaceResult / endRace                        RacePage.vue:272-285 
 - localStorage 모드 무력화: 세션·의도가 Supabase 전용이라 비로그인 모드에선 heal·unmatch·unlink·reconcile 전부 no-op. §10 정합은 집계 필터(isSelfRaceRun)로만.
 - 루프백(연쇄가 닫힘): self-race RunLog의 PB가 `raceTargets.listOpponents`에서 통합 최속으로 다음 레이싱의 best 상대(targetPb)가 됨 → RacePage.recordFinish 입력으로 되돌아와 연쇄 재시작.
 - 삭제≠원본삭제 + 회수 순서: deleteRun은 DB delete '전에' unlink/unmatch/reclaim. reclaim은 isSelfRaceRun 게이트라 태그 누락 레이싱은 좀비 위험. → #8.
+- 워치 릴레이 멱등(#552): WCSession ACK 유실 시 재전송 → recordFinish 의 `watchResultId` 가드가 이중 보류 차단. 이미 소비(매칭)된 뒤 재전송은 가드에 안 걸리지만 매칭될 런이 없어 3일 만료. 워치 결과 페이로드 모양 바꾸면 watchRaceBridge.ts ↔ PhoneWatchRelay.swift ↔ WatchRaceController.emitResult 3곳 동시 변경.
+- 워치 태깅은 WC 독립(#552): 승패(결과 릴레이)와 달리 태그는 워치가 박은 HK 메타로 정규 sync 가 붙인다 — WC 끊겨도 §10 부하 제외는 유지되고, 승패만 재연결 시 늦게 생성.
+- `race_last_settings_v1`(RacePage LS) 소비처 2곳: RacePage 복원 + **워치 카탈로그 announceConfig/lastSelection**(watchRaceCatalog.ts). 키/모양 바꾸면 둘 다.
 
 ---
 
