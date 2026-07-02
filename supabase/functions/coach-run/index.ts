@@ -1,5 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { filterInjuryItemsForRunDate, getActiveInjuryItemForRunDate } from './injuryTemporalFilter.ts'
+import {
+  buildUserNoteRelevancePolicy,
+  detectCoachAnswerIntent,
+  resolveCoachResponseMode,
+  type CoachResponseMode
+} from './responseMode.ts'
 
 type RunLogRow = {
   id: string
@@ -582,35 +588,6 @@ function normalizeAchievements(value: unknown): CoachAchievementContext | null {
   }
 }
 
-// 응답 형식 모드. report=세션만 열림, conversational=일반 사담,
-// explain=자세한 설명/분석 요청, evidence=근거/출처 요청.
-type CoachResponseMode = 'report' | 'conversational' | 'explain' | 'evidence'
-// userNote가 있을 때 사용자 의도 분류. chat=잡담, explain=설명/분석, evidence=근거/출처.
-type CoachAnswerIntent = 'chat' | 'explain' | 'evidence'
-
-// userNote 문구로 사용자 의도를 분류한다(서버 권위 분류).
-// 프론트가 보조 힌트를 보내더라도 서버는 항상 여기서 다시 분류한다.
-function detectCoachAnswerIntent(note: string): CoachAnswerIntent {
-  const text = note.trim().toLowerCase()
-  if (!text) return 'chat'
-  // 근거/출처를 먼저 본다("왜 그렇게 판단했어?"도 근거 요청으로 본다).
-  if (/근거|출처|왜|논문|자료|reference|source|evidence|실제로 있|진짜 있|검증|입증/.test(text)) {
-    return 'evidence'
-  }
-  if (/자세히|자세하게|상세|분석|평가|설명|비교|정리|풀어서|구체적/.test(text)) {
-    return 'explain'
-  }
-  return 'chat'
-}
-
-// 빈 입력이면 report, 그 외에는 의도에 따라 evidence/explain/conversational.
-function resolveCoachResponseMode(userNote: string, answerIntent: CoachAnswerIntent): CoachResponseMode {
-  if (userNote.trim().length === 0) return 'report'
-  if (answerIntent === 'evidence') return 'evidence'
-  if (answerIntent === 'explain') return 'explain'
-  return 'conversational'
-}
-
 // 프리셋 코칭 커맨드(/세션분석 등)별 맞춤 리포트 구조(#237).
 // 프론트가 보낸 commandId가 여기 있으면 키워드 분류를 무시하고 report 형식 + 이 섹션 구성을 강제한다.
 const COACH_COMMAND_FORMATS: Record<string, { label: string; sections: string[] }> = {
@@ -1083,11 +1060,13 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
   // 프리셋 커맨드는 키워드 분류 대신 커맨드 전용 리포트 형식을 강제한다(#237 우선순위 정상화).
   const coachCommandFormat = commandId ? COACH_COMMAND_FORMATS[commandId] ?? null : null
   const coachResponseMode: CoachResponseMode = coachCommandFormat ? 'report' : resolveCoachResponseMode(userNote, answerIntent)
+  const userNoteRelevancePolicy = buildUserNoteRelevancePolicy(userNote, coachResponseMode)
   return {
     userNote,
     hasUserNote: userNote.trim().length > 0,
     answerIntent,
     coachResponseMode,
+    userNoteRelevancePolicy,
     coachCommandId: commandId,
     coachCommandFormat,
     coachCommandPolicy: coachCommandFormat
@@ -1095,7 +1074,8 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       : null,
     coachResponseModePolicy:
       'coachResponseMode가 응답 형식을 결정한다. ' +
-      '[command] context.coachCommandFormat이 있으면(프리셋 커맨드) coachCommandPolicy의 섹션 구성을 따른 리포트로 답한다. 이것이 키워드 분류보다 우선한다. ' + +
+      '대화 턴에서는 context.userNoteRelevancePolicy가 선택 세션 데이터를 어디까지 쓸지 결정한다. ' +
+      '[command] context.coachCommandFormat이 있으면(프리셋 커맨드) coachCommandPolicy의 섹션 구성을 따른 리포트로 답한다. 이것이 키워드 분류보다 우선한다. ' +
       '[conversational] 사용자가 userNote로 가벼운 말/메모/잡담을 보낸 경우다. 리포트가 아니라 친구 같은 코치와의 "사담"으로 답한다. ' +
       '절대 금지: "## 핵심 지표", "## 오늘 해석", "## 조심할 점", "## 다음 훈련", "## 루틴 업데이트", "## 한 줄 요약" 같은 마크다운 섹션 헤더와 지표 나열 목록. ' +
       '대신 사용자가 한 말에 반응해서 2~6문장 정도로 자연스럽게 대화한다. 숫자가 필요하면 문장 속에 한두 개만 가볍게 녹이고, 세션 전체를 다시 분석하지 않는다. ' +
@@ -1519,6 +1499,7 @@ function buildConversationalInstructions(runnerLevel: RunnerLevel, levelGuide: R
   return [
     '너는 사용자를 오래 봐온 한국어 러닝 코치다. 지금은 분석 리포트가 아니라 친구 같은 코치와의 짧은 대화(사담) 중이다.',
     `이 사용자의 runnerLevel은 ${runnerLevel}이다. ${levelGuide.tone} ${levelGuide.termDepth}`,
+    'context.userNoteRelevancePolicy를 반드시 따른다. 선택 세션이 화면에 열려 있어도 사용자가 그 세션을 묻지 않았으면 세션 숫자·의도·목표 예상·부상 노트를 억지로 연결하지 않는다.',
     '절대 금지: 마크다운 섹션 헤더(##), "핵심 지표 / 오늘 해석 / 세션 해석 / 조심할 점 / 다음 훈련 / 루틴 업데이트 / 한 줄 요약" 같은 섹션, 지표 나열 목록(- 페이스: …, - 심박: …), 세션 전체 재분석. context.responseTemplatePolicy와 context.coachingDecisionBoard는 이 모드에서 완전히 무시한다.',
     '사용자가 방금 한 말(context.userNote)에 직접 반응해서 2~6문장으로 자연스럽게 답한다. 한국어 반말, 따뜻하고 담백하게. 첫 문장은 숫자가 아니라 반응으로 시작한다.',
     '숫자가 꼭 필요하면 문장 속에 한두 개만 가볍게 녹인다. 세션 데이터를 요약하거나 나열하지 않는다.',
@@ -1538,11 +1519,12 @@ function buildEvidenceInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnT
     `이 사용자의 runnerLevel은 ${runnerLevel}이다. ${levelGuide.termDepth} ${levelGuide.tone}`,
     '지금은 근거/출처 설명 모드다. 짧은 사담으로 끝내지 말고 판단 근거와 출처 설명을 우선한다.',
     '사용자의 질문(context.userNote)에 직접 답한다. 질문이 가리키는 판단이 무엇인지 먼저 잡고, 그 판단의 근거를 댄다.',
+    'context.userNoteRelevancePolicy를 반드시 따른다. 일반 훈련법/개념의 근거를 묻는 질문이면 선택 세션을 예시로 끌어오지 않는다. 사용자가 "내 경우/이 세션/방금 답"을 묻는 경우에만 사용자 데이터 적용 단락을 둔다.',
     'context.trainingKnowledge가 있으면 일반 모델 지식보다 이 승인된 지식을 우선 사용한다.',
     'trainingKnowledge.sources(title/author/summary), trainingKnowledge.methods(name/summary/sourceTitle), trainingKnowledge.prescriptionRules(prescription/evidenceSummary/sourceTitle)를 근거로 설명한다.',
     '출처가 context.trainingKnowledge에 없으면 출처를 지어내지 말고 "앱 지식 보관소에 확인된 출처가 부족하다"고 솔직히 말한 뒤, 일반 코칭 원칙 수준으로만 조심스럽게 설명한다.',
     'trainingKnowledge는 원문 전문이 아니라 저작권을 피한 구조화 요약이다. 출처명/저자는 짧게 언급하되 원문 문구를 길게 재현하지 않는다.',
-    '사용자의 최근 러닝 데이터, context.activeGoal, context.activeInjuryItem, context.heartRateModel, context.paceModel을 함께 반영한다. 심박 상한의 유일 출처는 heartRateModel이며, 규칙 텍스트에 적힌 절대 심박 숫자는 상한으로 쓰지 않는다.',
+    '사용자 데이터 적용은 질문이 개인 적용을 요구할 때만 한다. 적용하더라도 context.activeGoal, activeInjuryItem, heartRateModel, paceModel처럼 질문과 직접 관련된 정보만 짧게 쓰고, 선택 세션 지표는 userNoteRelevancePolicy가 허용할 때만 쓴다. 심박 상한의 유일 출처는 heartRateModel이며, 규칙 텍스트에 적힌 절대 심박 숫자는 상한으로 쓰지 않는다.',
     '의학적 진단처럼 말하지 않는다. 부상/통증 신호가 있으면 강도 상승보다 회복과 안전을 우선한다.',
     '출력 구성(마크다운 소제목 사용 가능):',
     '1. 결론',
@@ -1560,8 +1542,9 @@ function buildExplainInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnTy
     '너는 사용자를 오래 봐온 한국어 러닝 코치다.',
     `이 사용자의 runnerLevel은 ${runnerLevel}이다. ${levelGuide.termDepth} ${levelGuide.tone}`,
     '지금은 설명/분석 모드다. 리포트처럼 고정 6섹션을 기계적으로 채우지 말고, 사용자의 질문(context.userNote)에 맞춰 설명한다.',
+    'context.userNoteRelevancePolicy를 반드시 따른다. 질문이 일반 개념/용어 설명이면 선택 세션은 언급하지 않는다. 질문이 개인 훈련 적용이면 activeGoal·부상·스케줄 같은 넓은 맥락을 쓰고, 선택 세션 지표는 그 세션을 직접 묻는 경우에만 쓴다.',
     '필요하면 마크다운 소제목을 사용할 수 있다. 다만 selectedRun 리뷰 리포트 템플릿(핵심 지표/오늘 해석/루틴 업데이트 등 고정 헤더 전체)을 그대로 찍어내지 않는다.',
-    '사용자의 최근 러닝 데이터, context.activeGoal, context.activeInjuryItem, context.heartRateModel, context.paceModel, context.trainingKnowledge를 질문과 관련된 만큼 반영한다.',
+    '사용자의 최근 러닝 데이터, context.activeGoal, context.activeInjuryItem, context.heartRateModel, context.paceModel, context.trainingKnowledge는 질문과 직접 관련된 만큼만 반영한다. "관련이 있으면 좋겠다"가 아니라 사용자의 질문을 이해하는 데 실제로 필요한 경우만 쓴다.',
     '용어/개념 질문이면 먼저 용어를 구분해 설명한 뒤, 사용자 상황에 맞는 추천을 준다.',
     '강도 기준은 심박 상한(heartRateModel)이 우선이고 페이스(paceModel)는 보조다. 상한이 null이면 페이스/RPE로 설명한다.',
     '부상/통증 신호가 있으면 강도 상승보다 회복과 안전을 우선한다. 의학적 진단처럼 말하지 않는다.',
