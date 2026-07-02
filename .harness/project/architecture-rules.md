@@ -31,7 +31,7 @@
 - iOS 확장 방향은 하이브리드 앱이다. Vue 화면은 WebView 또는 로컬 번들로 유지하고, 네이티브 iOS 레이어는 HealthKit 조회, 날씨용 CoreLocation/Open-Meteo 조회, 웹-네이티브 브리지만 담당한다.
 - 알림은 FCM 같은 원격 푸시 인프라를 기본값으로 두지 않는다. 훈련 스케줄 알림과 앱 내부 HealthKit 신규 저장 알림은 iOS 네이티브 `runContextNotifications` 브리지를 통해 로컬 알림으로 예약/표시한다.
 - HealthKit 신규 러닝 감지는 네이티브 `HKObserverQuery` background delivery를 우선 사용한다. foreground에서는 웹 `RunContextHealthKit.receiveHealthKitChanged`로 즉시 동기화하고, background에서는 로컬 알림으로 앱 재진입을 유도한 뒤 기존 activation sync가 누락분을 저장한다. 사용자가 앱을 강제 종료한 상태까지 보장하는 요구는 원격 푸시/APNs 설계로 별도 분리한다.
-- 현재 로컬 iOS 네이티브 프로젝트 경로는 `/Users/smart-tn-083/practice/RunningCoach/RunningCoach/RunningCoach.xcodeproj`다. Swift 소스는 `/Users/smart-tn-083/practice/RunningCoach/RunningCoach/RunningCoach` 아래에 있다. 네이티브 Git 저장소는 `https://github.com/lena0611/RunningCoach-Native-Swift`이며, 웹 repo 밖에 있으므로 네이티브 변경 시 이 경로와 저장소를 함께 확인한다.
+- 현재 iOS/watchOS 네이티브는 **이 모노레포의 `native/` 하위**에 있다(#250). Xcode 프로젝트는 `native/RunningCoach.xcodeproj`, Swift 소스는 `native/RunningCoach/`(iOS·watchOS가 공유하는 순수 로직은 `native/RaceCore/`)에 있다. **단일 `.git`/단일 origin**이므로 웹+네이티브 변경은 같은 worktree에서 하나의 commit/PR로 원자적으로 한다. 과거 별도 저장소 `RunningCoach-Native-Swift`는 archive됨. (상세: CLAUDE.md "모노레포 구조 (#250)")
 - iOS Bundle Identifier는 계정 이메일에서 추론하지 않고 `com.lena0611.RunningCoach`로 고정한다. iPhone의 Apple ID가 `lenas0611@gmail.com`이고 Apple Developer 계정이 `lena0611@gmail.com`이어도 Bundle ID는 개발자 계정 문자열이 아니라 앱 식별자이므로 `lenas0611`로 바꾸지 않는다.
 - 현재 사용자는 Personal Team으로 iPhone 빌드한다. Personal Team은 WeatherKit capability를 지원하지 않으므로 네이티브 타깃에 WeatherKit entitlement/capability를 켜면 안 된다. WeatherKit을 다시 켜려면 유료 Apple Developer Program 전환 또는 다른 날씨 API/서버리스 대안을 먼저 결정한다.
 - iOS WebView는 상단/하단 safe area 안쪽에 갇히지 않고 화면 끝까지 확장한다. 네이티브는 `WKWebView`를 `.ignoresSafeArea()`와 `contentInsetAdjustmentBehavior = .never`로 배치하고, 실제 터치/가독성 여백은 웹 CSS의 `env(safe-area-inset-top/bottom)`에서 책임진다.
@@ -89,6 +89,13 @@
 - 새 코칭 규칙은 근거와 입력 데이터, 출력 영향을 함께 기록한다.
 - 외부 API 연동은 secret 보관이 필요한지 먼저 판단하고, 필요하면 정적 프론트가 아니라 서버리스 경계로 분리한다.
 - HealthKit 연동은 서버리스나 웹 브라우저 코드가 아니라 iOS 네이티브 타깃에서 구현한다. iOS 앱의 날씨도 안정성을 위해 네이티브 CoreLocation + 무료 Open-Meteo 호출을 기본값으로 사용한다.
+
+## 구현 단순성 (YAGNI · 현 개발 단계 보정)
+- 알려진 요구를 충분히 푸는 **가장 단순한 구현**을 기본으로 한다. 상상 속 미래를 위한 투기적 추상, 불필요한 유연성/설정 옵션, 일어날 수 없는 시나리오용 방어코드를 만들지 않는다(YAGNI). 자가 점검: "시니어 엔지니어가 과하다고 볼까?", "200줄이 50줄로 되면 다시 쓴다."
+- 반복 패턴은 실제로 3번 나타날 때 추상화한다(rule of three). 1회성 코드에 추상 레이어를 두지 않는다.
+- **예외 — 과설계가 아니라 과업이므로 이 규칙이 막지 않는다:** (a) 구조를 올바른 모양으로 다잡는 의도적 리팩터링, (b) 로드맵에 있는 '알려진' 근미래 요구를 위한 토대 구축. "단순성"을 필요한 리팩터링이나 계획된 토대를 억누르는 근거로 쓰지 않는다.
+- 근거: 젊은 코드베이스는 도메인 이해 전 조급한 추상으로 부채가 쌓이고, 현재 코딩 모델(Opus 4.8)은 과설계 경향이 있으며, 우리 도메인은 연쇄(`data-change-impact-map.md`)가 심해 불필요한 복잡도의 비용이 곱으로 커진다. 안드레 카파시 'Simplicity First' 원칙을 **현 개발 단계에 맞게 보정**해 채택한 것이다(원문의 strict-surgical/no-refactor 조항은 유지보수기 미덕이라 현 단계에선 완화).
+- 안정화/유지보수 단계로 넘어가면 side-effect 최소화를 위한 외과적 변경(원문 Surgical) 강조를 다시 강화할지 재검토한다.
 
 ## 변경 규칙
 - 아키텍처 경계 변경은 `decision-log.md`에 이유를 남깁니다.

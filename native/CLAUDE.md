@@ -1,34 +1,32 @@
-# CLAUDE — RunningCoach 네이티브(iOS) repo
+# CLAUDE — RunningCoach 네이티브(iOS/watchOS)
 
-이 파일은 네이티브 iOS 프로젝트에서 작업하는 모든 에이전트의 진입점입니다.
-웹(PaceLAB) 하네스와 별도지만, 같은 제품의 네이티브 래퍼이므로 디시플린을 맞춥니다.
+이 파일은 네이티브 작업 진입점입니다.
+**이 네이티브는 웹(PaceLAB)과 같은 모노레포의 일부입니다(#250).** 웹 하네스 기준(`.harness/`)을 따릅니다.
 
-## repo 정체 / 디렉터리 구조 (중요)
-- 이 repo 루트 = `/Users/smart-tn-083/practice/RunningCoach/RunningCoach/`
-- remote = `github.com/lena0611/RunningCoach-Native-Swift` (네이티브 전용)
-- 폴더가 2중첩(`RunningCoach/RunningCoach/`)이다. **바깥 `RunningCoach/`는 컨테이너일 뿐 `.git`이 없다.**
-- 과거 최상위 `practice/`에 커밋 0·remote 없는 쓰레기 catch-all `.git`이 있어, 바깥 레벨에서 git 명령을 돌리면 그 쓰레기 repo가 잡혀 "네이티브는 git 관리 안 됨"으로 오진되곤 했다. 이 catch-all은 `practice/.git.disabled-catchall`로 비활성화했다.
-- git 명령은 **반드시 이 repo 루트(또는 하위)에서** 실행하고, `git rev-parse --show-toplevel`로 올바른 repo인지 먼저 확인한다.
+## repo 정체 (중요 — 과거 별도-repo 아님)
+- **단일 `.git` / 단일 origin.** repo 루트 = `run-ai`(웹). 네이티브는 그 하위 `native/`.
+- 과거 별도 네이티브 repo(`RunningCoach-Native-Swift`, `practice/RunningCoach/RunningCoach/` 2중첩, catch-all `.git`)는 **archive됨.** 그 시절 기준(별도 remote·PR #1/#2·catch-all 비활성화)은 더 이상 유효하지 않다.
+- git 명령은 run-ai 워크트리(또는 그 워크트리) 기준. iOS/watchOS 작업도 같은 워크트리의 `native/` 하위에서 한다.
+- 상세: 웹 `CLAUDE.md`의 "모노레포 구조 (#250)" 섹션, 메모리 `native-repo-git-management`.
 
-## 커밋 / 브랜치 디시플린
-- `main`은 머지·배포 기준. 작업은 feature branch + PR(기존 관행: PR #1, #2)로 한다. main 직접 커밋 지양.
-- **세션 종료 시 working tree에 미커밋 변경(WIP)을 남기지 않는다.** 이게 과거 auth/VO2max/세로고정 작업이 추적 누락된 원인이다.
-- 한 PR/커밋에 무관한 기능을 섞지 않는다. 부득이 한 파일에 여러 기능이 섞이면 hunk 단위로 분리 커밋한다.
+## 커밋 / 원자성
+- 웹+네이티브 변경을 **하나의 commit/PR로 원자적**으로 한다. 특히 `runContext*` 브리지 계약은 웹 `src/features/*/*Bridge.ts`(및 store)와 네이티브 `RunContextWebView.swift`를 **동시 변경**한다.
+- 코드가 끝나면 (기기 검증 전이라도) **즉시 커밋해 유실을 막는다.** 단 앱이 빌드되는 coherent 상태로만 — 예: 새 타겟/패키지 링크 같은 Xcode(pbxproj) 변경이 필요한 작업은, 그 링크가 반영돼 빌드가 green인 상태로 함께 커밋한다(반쪽 커밋 금지).
+- `main` 직접 커밋/푸시 지양 — feature branch + PR. run-ai 하네스의 commit/push hook 검증을 신뢰한다.
 
-## iOS 전용 완료 흐름 (웹과 다름)
-- 웹은 main 머지 → GitHub Pages 자동배포가 "완료" 체크포인트를 만든다. **iOS는 자동배포가 없다** — Xcode 재빌드 + 기기 설치(사용자만 가능)가 검증 수단이다.
-- 따라서 **커밋과 기기 검증을 분리한다**: 코드 작성이 끝나면 (기기 검증 전이라도) feature branch에 **즉시 커밋해 유실을 막고**, 이후 사용자가 Xcode 재빌드·기기 설치로 검증한 뒤 머지한다.
+## iOS/watchOS 완료 흐름 (웹과 다름)
+- 웹은 main 머지 → GitHub Pages 자동배포가 "완료" 체크포인트를 만든다. **네이티브는 자동배포가 없다** — Xcode 재빌드 + 기기 설치(사용자만 가능)가 검증 수단이다. watchOS는 **실기기(Apple Watch)** 가 필요하다.
+- 네이티브 빌드는 `npm run harness:check` 대상이 아니다(수동). 단 **순수 로직 Swift 패키지는 CLI 검증 가능**하다 — 예: `cd native/RaceCore && DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test` (⚠️ `/usr/bin/swift` 커맨드라인툴은 XCTest가 없어 실패한다).
 - "기기 검증 대기"를 이유로 커밋을 무기한 보류하지 않는다.
 
-## 웹(PaceLAB)과의 계약
-- 웹 프론트는 별도 repo `lena0611/RunningCoach`(run-ai). 자체 `.harness`/git hook 보유.
-- HealthKit/세션상세/스플릿/케이던스/route/자동동기화 관련 네이티브 변경은 웹 쪽 데이터 계약(run-ai의 `.harness/project/healthkit-data-contract.md`)과 양방향으로 맞춘다.
-- WebView 브리지 식별자(`window.RunContextHealthKit`, `window.RunContextAuth` 등)는 웹과 네이티브 양쪽을 함께 수정한다.
+## 공유 코드 (RaceCore)
+- `native/RaceCore/` 스위프트 패키지 = 웹 순수 로직 `src/shared/lib/selfRace/ghost.ts`의 네이티브 포팅(`GhostRaceEngine`). **iOS 앱과 watchOS 앱이 함께 링크**한다.
+- ghost.ts는 이제 **3-소비자 계약**(web · iOS · watch). ghost.ts를 바꾸면 `RaceCore/Sources/RaceCore/GhostRaceEngine.swift` + `RaceCoreTests`를 함께 갱신하고, 웹 `.harness/project/data-change-impact-map.md`의 self-race 항목에도 워치 소비자를 반영한다.
 
-## git hook (경량 안전장치)
-- `.githooks/`에 `xcodebuild` 없는 경량 hook이 있다. clone 후 1회 `sh .githooks/install.sh`로 설치(`core.hooksPath=.githooks`).
-- `pre-commit`: `main` 직접 커밋 차단. `pre-push`: `main` 직접 push 차단. 예외는 `HARNESS_ALLOW_MAIN_COMMIT=1` / `HARNESS_ALLOW_MAIN_PUSH=1`.
-- 무거운 빌드 검증은 hook에 넣지 않는다. iOS 검증은 Xcode 재빌드/기기 설치로 분리한다(위 "iOS 전용 완료 흐름").
+## 웹과의 계약
+- 웹 프론트는 같은 repo `run-ai`(`src/`). 자체 `.harness`/git hook을 보유한다.
+- HealthKit/세션상세/스플릿/케이던스/route/자동동기화·레이싱 관련 네이티브 변경은 웹 데이터 계약과 **양방향**으로 맞춘다.
+- WebView 브리지 식별자(`window.RunContextHealthKit`, `window.RunContextLiveRun`, `window.RunContextAuth` 등)는 웹·네이티브 양쪽을 함께 수정한다. (워치 앱은 이 WebView 브리지 밖 — 네이티브 SwiftUI + WCSession으로 폰과 통신한다.)
 
 ## git 위생
-- `.gitignore`로 Xcode 산출물(`*.xcuserstate`, `DerivedData/`, `build/`, `xcuserdata/`)과 생성된 웹 번들(`RunningCoach/WebApp/`)을 제외한다. 추적된 산출물이 없도록 유지한다.
+- `.gitignore`로 Xcode 산출물(`DerivedData/`, `build/`, `*.xcuserstate`, `xcuserdata/`), SwiftPM `.build/`, 생성된 웹 번들(`RunningCoach/WebApp/`)을 제외한다. 추적된 산출물이 없도록 유지한다.

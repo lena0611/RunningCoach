@@ -3,6 +3,7 @@ import SwiftUI
 import UIKit
 import UserNotifications
 import WebKit
+import RaceCore
 
 final class RunContextWKWebView: WKWebView {
     override var inputAccessoryView: UIView? {

@@ -26,7 +26,7 @@
 - 위 서버 secret은 `VITE_` prefix를 붙이지 않고, GitHub Pages Actions variables 또는 프론트 `.env`에 넣지 않는다.
 - PaceLAB MVP 임시 운영 모드는 `APP_SECURITY_MODE=allowlist`다. 이 모드는 Apple DeviceCheck 키 없이 로그인 사용자 allowlist, 서버 발급 앱 세션, rate limit으로 비용성 기능을 통제하지만, "iOS 앱에서 실행된 기기"를 암호학적으로 증명하지는 않는다.
 - `APP_SECURITY_MODE=devicecheck`는 유료 Apple Developer 계정에서 DeviceCheck key id와 `.p8` private key를 준비한 뒤에만 사용한다.
-- **(보류 연결) DeviceCheck 강화는 의도적으로 MVP 보류 상태다.** 유료 Apple 계정 전환 시 이 내용으로 보안을 강화한다 → 추적 이슈 **#248 (Deferred)**. 서버 `verifyDeviceCheckToken`은 구현 완료, 네이티브 브리지는 `RunningCoach-Native-Swift` 브랜치 `issue-93/ios-app-server-security-native`(커밋 `f4486d6`)에 parked(현재 main 위에 재적용 필요). 상세: `.claude` memory `devicecheck-security-deferred`.
+- **(보류 연결) DeviceCheck 강화는 의도적으로 MVP 보류 상태다.** 유료 Apple 계정 전환 시 이 내용으로 보안을 강화한다 → 추적 이슈 **#248 (Deferred)**. 서버 `verifyDeviceCheckToken`은 구현 완료, 네이티브 브리지는 (archive된) `RunningCoach-Native-Swift` 브랜치 `issue-93/ios-app-server-security-native`(커밋 `f4486d6`)에 parked돼 있고, **재적용 대상은 이제 이 모노레포 `native/`**(#250). 상세: `.claude` memory `devicecheck-security-deferred`.
 - `APP_SECURITY_DEVELOPMENT_TOKEN`은 로컬 Edge Function 개발 전용이며 운영 secret으로 설정하지 않는다.
 - `PACELAB_ALLOWED_EMAILS`는 쉼표로 구분한 소문자 이메일 allowlist로 운영한다. 값이 비어 있으면 앱 세션 발급을 거부하는 것이 기본 동작이다.
 - AI 코칭처럼 비용과 민감 데이터 접근이 있는 Edge Function은 `x-pacelab-app-session` 서버 세션 검증과 rate limit을 통과해야 한다.

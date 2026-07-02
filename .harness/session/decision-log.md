@@ -4,6 +4,15 @@
 
 > 하네스 본체의 변경 이력이나 릴리스 노트가 아닙니다. 하네스 본체 변경 기록은 하네스 저장소의 `CHANGELOG.md` 또는 릴리스 태그를 확인합니다.
 
+## 2026-07-02 - config-contract 변경은 Node 버전 enforcement와 무관 (sync-gap 예외 기록)
+
+`docs(harness)` 커밋(구현 단순성 규칙 추가 + 옛 네이티브 경로 모노레포 정정, #250 후속)에서 `.harness/project/config-contract.md`를 수정하자 pre-commit이 `common.runtime.minimum-node` sync-gap을 blocking으로 띄웠다(config-contract 변경 → Node 최소버전 enforcement 코드 동기화 요구).
+
+- 이번 config-contract 변경은 **DeviceCheck(#248) 네이티브 브리지 재적용 대상 경로를 archive된 별도 repo → 모노레포 `native/`로 정정**한 것뿐이다. **Node 런타임/버전 enforcement와 전혀 무관**하다.
+- 따라서 `check-node-version.mjs`·`dual-node.sh`·`node-env.mjs`·`scripts/init.mjs` 등 반대편 런타임 코드는 **변경 불필요**. 규칙의 "문서만 변경됨 → 구현 변경이 필요 없고 그 사유가 decision-log에 있으면 무시 가능" 조건으로 해소한다.
+- 재발 시(순수 경로/문구 정정 목적의 config-contract 편집)에도 동일 판단을 적용한다.
+- → 권위: sync-gap 규칙 `common.runtime.minimum-node`, `config-contract.md`의 #248 DeviceCheck 항목.
+
 ## 2026-06-29 - 레이싱 라이브런 종료 시 HealthKit write 도입 (#235 아이폰 1차, competition-domain §9.1 경계 전환)
 
 self-race 라이브런을 건강앱/피트니스·RunLog에 남기기 위해, 종료 시 **네이티브가 HKWorkout을 직접 write**하도록 §9.1 경계를 전환. 기존 §9.1은 "이중 트래킹 금지·라이브는 경쟁 계산 전용"으로 write를 막고 있었음 → **"정본 경로(HealthKit→RunLog) 불변, 우리가 측정 '기록자'를 겸함"**으로 명확화(측정 이중화만 금지, write는 허용).

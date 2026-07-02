@@ -10,6 +10,7 @@
 
 import SwiftUI
 import Combine
+import RaceCore
 
 final class LiveRunDebugModel: ObservableObject {
     @Published var state = "idle"
