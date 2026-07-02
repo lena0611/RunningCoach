@@ -4,6 +4,7 @@ import {
   buildUserNoteRelevancePolicy,
   detectCoachAnswerIntent,
   resolveCoachResponseMode,
+  shouldAttachInjurySnapshot,
   shouldApplyTrustLayer,
   type CoachResponseMode
 } from './responseMode.ts'
@@ -290,8 +291,11 @@ async function persistCoachResult(
       if (error) throw error
     }
 
-    // 코칭 생성 시점의 (시점필터된) 부상 컨텍스트를 얼려 저장한다 — 과거 리포트가 그때 부상 상태를 충실히 재현하도록.
-    const injuryContextSnapshot = buildInjuryContextSnapshot(context.injuryItems, context.activeInjuryItem, context.selectedRunDate ?? null)
+    // 코칭 생성 시점의 (시점필터된) 부상 컨텍스트를 얼려 저장한다.
+    // 일반 개념/명칭 질문에는 화면 메타데이터도 부상 맥락을 억지로 붙이지 않는다.
+    const injuryContextSnapshot = shouldAttachInjurySnapshot(userNote, context.coachResponseMode)
+      ? buildInjuryContextSnapshot(context.injuryItems, context.activeInjuryItem, context.selectedRunDate ?? null)
+      : null
 
     const report = shouldApplyTrustLayer(userNote, context.coachResponseMode)
       ? applyTrustLayer(ai.report, context.trustLayerNote)
@@ -1064,12 +1068,14 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
   // 프리셋 커맨드는 키워드 분류 대신 커맨드 전용 리포트 형식을 강제한다(#237 우선순위 정상화).
   const coachCommandFormat = commandId ? COACH_COMMAND_FORMATS[commandId] ?? null : null
   const coachResponseMode: CoachResponseMode = coachCommandFormat ? 'report' : resolveCoachResponseMode(userNote, answerIntent)
+  const trustLayerApplies = shouldApplyTrustLayer(userNote, coachResponseMode)
   const userNoteRelevancePolicy = buildUserNoteRelevancePolicy(userNote, coachResponseMode)
   return {
     userNote,
     hasUserNote: userNote.trim().length > 0,
     answerIntent,
     coachResponseMode,
+    trustLayerApplies,
     userNoteRelevancePolicy,
     coachCommandId: commandId,
     coachCommandFormat,
@@ -1078,7 +1084,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       : null,
     coachResponseModePolicy:
       'coachResponseMode가 응답 형식을 결정한다. ' +
-      '대화 턴에서는 context.userNoteRelevancePolicy가 선택 세션 데이터를 어디까지 쓸지 결정한다. ' +
+      '대화 턴에서는 context.userNoteRelevancePolicy가 선택 세션 데이터를 어디까지 쓸지 결정하고, context.trustLayerApplies가 부상/목표 보호 문단을 붙일 수 있는지 결정한다. ' +
       '[command] context.coachCommandFormat이 있으면(프리셋 커맨드) coachCommandPolicy의 섹션 구성을 따른 리포트로 답한다. 이것이 키워드 분류보다 우선한다. ' +
       '[conversational] 사용자가 userNote로 가벼운 말/메모/잡담을 보낸 경우다. 리포트가 아니라 친구 같은 코치와의 "사담"으로 답한다. ' +
       '절대 금지: "## 핵심 지표", "## 오늘 해석", "## 조심할 점", "## 다음 훈련", "## 루틴 업데이트", "## 한 줄 요약" 같은 마크다운 섹션 헤더와 지표 나열 목록. ' +
@@ -1274,7 +1280,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     selectedRunDate: selectedRunDateForTemporalContext,
     injuryCheckInPolicy,
     recoveryOutlook,
-    trustLayerNote,
+    trustLayerNote: trustLayerApplies ? trustLayerNote : null,
     injuryTemporalPolicy: selectedRun
       ? 'injuryItems와 activeInjuryItem은 selectedRun.date 이전 또는 당일에 이미 발생/등록된 항목만 포함한다. 여기에 없는 현재 active 부상은 선택 세션 당시에는 아직 발생하지 않은 것으로 보고 언급하지 마라.'
       : '현재 흐름 코칭이므로 현재 active/monitoring 부상 항목을 사용할 수 있다.',
@@ -1482,7 +1488,7 @@ function buildResponseTemplatePolicy() {
     optionalSections: [
       '## 핵심 지표: 선택 세션과 구간/심박 데이터가 있을 때만. dataAvailability.hasLapData=false이거나 현재 흐름 코칭이면 평균값 한두 줄로 줄이거나 생략한다.',
       '## 오늘 해석 또는 ## 세션 해석: 해석할 거리가 있으면 넣는다. 짧은 후속 질문 답변이면 생략 가능.',
-      '## 조심할 점: 부상/통증/경계 초과/회복 우려 신호가 있을 때만 넣는다. 신호가 없으면 없는 위험을 만들지 않는다. **context.trustLayerNote가 비어있지 않으면(부상 active/monitoring) 이 섹션을 반드시 넣고, trustLayerNote의 내용(목표 보호 + 현재 전망 + 복귀 기간)을 코치 말투로 자연스럽게 풀어 반드시 포함한다. 생략 금지.** 의료 진단은 하지 않는다.',
+      '## 조심할 점: 부상/통증/경계 초과/회복 우려 신호가 있을 때만 넣는다. 신호가 없으면 없는 위험을 만들지 않는다. **context.trustLayerApplies=true이고 context.trustLayerNote가 비어있지 않으면(부상 active/monitoring) 이 섹션을 반드시 넣고, trustLayerNote의 내용(목표 보호 + 현재 전망 + 복귀 기간)을 코치 말투로 자연스럽게 풀어 반드시 포함한다. 생략 금지.** 의료 진단은 하지 않는다.',
       '## 다음 훈련: nextTrainingAdviceRelevant=true일 때만.',
       '## 루틴 업데이트: nextTrainingAdviceRelevant=true이고 routineUpdateCheck에 유지가 아닌 변화(상향/하향/보류 전환)나 명확한 상향 조건이 있을 때만 상세히. 변화 근거가 없으면 한 줄("루틴은 유지, 다음 상향 조건은 ~")로 줄이거나 생략한다.',
       '## 한 줄 요약: 기본적으로 넣되, 아주 짧은 후속 답변에서는 생략 가능.'
@@ -1504,6 +1510,7 @@ function buildConversationalInstructions(runnerLevel: RunnerLevel, levelGuide: R
     '너는 사용자를 오래 봐온 한국어 러닝 코치다. 지금은 분석 리포트가 아니라 친구 같은 코치와의 짧은 대화(사담) 중이다.',
     `이 사용자의 runnerLevel은 ${runnerLevel}이다. ${levelGuide.tone} ${levelGuide.termDepth}`,
     'context.userNoteRelevancePolicy를 반드시 따른다. 선택 세션이 화면에 열려 있어도 사용자가 그 세션을 묻지 않았으면 세션 숫자·의도·목표 예상·부상 노트를 억지로 연결하지 않는다.',
+    'context.userNoteRelevancePolicy가 일반 개념 설명/잡담이면 activeGoal, activeInjuryItem, trustLayerNote를 답변에 붙이지 않는다. 질문 주제 자체에만 답한다.',
     '절대 금지: 마크다운 섹션 헤더(##), "핵심 지표 / 오늘 해석 / 세션 해석 / 조심할 점 / 다음 훈련 / 루틴 업데이트 / 한 줄 요약" 같은 섹션, 지표 나열 목록(- 페이스: …, - 심박: …), 세션 전체 재분석. context.responseTemplatePolicy와 context.coachingDecisionBoard는 이 모드에서 완전히 무시한다.',
     '사용자가 방금 한 말(context.userNote)에 직접 반응해서 2~6문장으로 자연스럽게 답한다. 한국어 반말, 따뜻하고 담백하게. 첫 문장은 숫자가 아니라 반응으로 시작한다.',
     '숫자가 꼭 필요하면 문장 속에 한두 개만 가볍게 녹인다. 세션 데이터를 요약하거나 나열하지 않는다.',
@@ -1524,6 +1531,7 @@ function buildEvidenceInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnT
     '지금은 근거/출처 설명 모드다. 짧은 사담으로 끝내지 말고 판단 근거와 출처 설명을 우선한다.',
     '사용자의 질문(context.userNote)에 직접 답한다. 질문이 가리키는 판단이 무엇인지 먼저 잡고, 그 판단의 근거를 댄다.',
     'context.userNoteRelevancePolicy를 반드시 따른다. 일반 훈련법/개념의 근거를 묻는 질문이면 선택 세션을 예시로 끌어오지 않는다. 사용자가 "내 경우/이 세션/방금 답"을 묻는 경우에만 사용자 데이터 적용 단락을 둔다.',
+    'context.userNoteRelevancePolicy가 일반 개념 설명/잡담이면 activeGoal, activeInjuryItem, trustLayerNote를 답변에 붙이지 않는다. 질문 주제 자체에만 답한다.',
     'context.trainingKnowledge가 있으면 일반 모델 지식보다 이 승인된 지식을 우선 사용한다.',
     'trainingKnowledge.sources(title/author/summary), trainingKnowledge.methods(name/summary/sourceTitle), trainingKnowledge.prescriptionRules(prescription/evidenceSummary/sourceTitle)를 근거로 설명한다.',
     '출처가 context.trainingKnowledge에 없으면 출처를 지어내지 말고 "앱 지식 보관소에 확인된 출처가 부족하다"고 솔직히 말한 뒤, 일반 코칭 원칙 수준으로만 조심스럽게 설명한다.',
@@ -1549,6 +1557,7 @@ function buildExplainInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnTy
     '사용자가 "뭐야/무엇/어떤 흐름/어떻게 짜여/구조"를 물으면 첫 문단에서 바로 정의하거나 흐름을 요약한다. 현재 세션·목표·부상 이야기로 우회해서 시작하지 않는다.',
     '일반 훈련법 질문의 기본 순서는 1) 한 줄 정의, 2) 구성 요소나 진행 흐름, 3) 인터벌/템포/Easy 같은 헷갈리는 개념과의 구분, 4) 주의점이다. 개인 적용은 사용자가 "나한테/내 경우"를 묻거나 userNoteRelevancePolicy가 허용할 때만 붙인다.',
     'context.userNoteRelevancePolicy를 반드시 따른다. 질문이 일반 개념/용어 설명이면 선택 세션은 언급하지 않는다. 질문이 개인 훈련 적용이면 activeGoal·부상·스케줄 같은 넓은 맥락을 쓰고, 선택 세션 지표는 그 세션을 직접 묻는 경우에만 쓴다.',
+    'context.userNoteRelevancePolicy가 일반 개념 설명/잡담이면 activeGoal, activeInjuryItem, trustLayerNote를 답변에 붙이지 않는다. 질문 주제 자체에만 답한다.',
     '필요하면 마크다운 소제목을 사용할 수 있다. 다만 selectedRun 리뷰 리포트 템플릿(핵심 지표/오늘 해석/루틴 업데이트 등 고정 헤더 전체)을 그대로 찍어내지 않는다.',
     '사용자의 최근 러닝 데이터, context.activeGoal, context.activeInjuryItem, context.heartRateModel, context.paceModel, context.trainingKnowledge는 질문과 직접 관련된 만큼만 반영한다. "관련이 있으면 좋겠다"가 아니라 사용자의 질문을 이해하는 데 실제로 필요한 경우만 쓴다.',
     '용어/개념 질문이면 먼저 용어를 구분해 설명한 뒤, 사용자 상황에 맞는 추천을 준다.',
@@ -1750,7 +1759,7 @@ function buildCoachInstructions(context: unknown) {
     '루틴 업데이트 섹션에서는 이대로 activeGoal을 향해 가도 되는지, 주간 루틴을 유지할지, 변경이 필요한 시점인지 한두 문장으로 말한다.',
     '유지가 맞으면 "루틴은 유지"라고 짧게 말하고 trainingMemoryPatch는 null로 둔다. 조정이 필요하면 weeklyPattern 전체를 업데이트한다.',
     '매 코칭 요청마다 부상/주의 상태도 확인한다. pain_note, activeInjuryItem, 최근 강훈련/롱런 이후 회복 반응을 보고 다음 세션 강도에 반영하되 의료 진단처럼 말하지 않는다.',
-    '신뢰 레이어(#313): context.trustLayerNote가 비어있지 않으면(=부상 active/monitoring), 어떤 응답 모드든 그 내용을 반드시 자연스럽게 포함한다. 사용자가 "이렇게 보수적으로 가도 목표를 달성할 수 있나?"라는 의문을 갖는다고 가정하고, 강도를 줄이는 것은 목표 포기가 아니라 목표 보호이며 현재 전망과 복귀 기간을 함께 말한다. 과장하거나 달성을 확정 단언하지 말고, 의료 진단은 하지 않는다.',
+    '신뢰 레이어(#313): context.trustLayerApplies=true이고 context.trustLayerNote가 비어있지 않으면(=부상 active/monitoring), 그 내용을 반드시 자연스럽게 포함한다. 사용자가 "이렇게 보수적으로 가도 목표를 달성할 수 있나?"라는 의문을 갖는다고 가정하고, 강도를 줄이는 것은 목표 포기가 아니라 목표 보호이며 현재 전망과 복귀 기간을 함께 말한다. 과장하거나 달성을 확정 단언하지 말고, 의료 진단은 하지 않는다.',
     'chronicLoadTrend.ageWeight가 1 이상이면 나이대를 고려해 회복을 더 보수적으로 본다(40대 1, 50대 2, 60대+ 3). 나이가 많을수록 같은 부하 증가에도 회복 여유를 더 주고 강도 상향을 천천히 권한다. 단 나이를 이유로 단정적으로 제한하지 말고 회복 보수성 근거로만 쓴다.',
     '루틴 변경이 필요 없으면 trainingMemoryPatch는 null로 둔다.',
     '루틴 변경이 필요하면 trainingMemoryPatch.weeklyPattern에 새 주간 루틴을 전체 배열로 넣는다. 일부만 넣지 말고 전체 주간 패턴을 반환한다.',

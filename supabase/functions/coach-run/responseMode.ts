@@ -2,6 +2,16 @@ export type CoachResponseMode = 'report' | 'conversational' | 'explain' | 'evide
 export type CoachAnswerIntent = 'chat' | 'explain' | 'evidence'
 export type UserNoteRunRelevance = 'general' | 'personal_training' | 'selected_run'
 
+function asksTrainingConcept(text: string): boolean {
+  const hasTrainingTerm = /nsm|노르웨이|노르웨이식|easy|이지|이지스트라이드|스트라이드|strides?|템포|tempo|인터벌|interval|회복런|롱런|lsd|훈련법|훈련/.test(text)
+  const asksConcept = /뭐야|무엇|뭔데|뭐임|약자|뜻|의미|개념|원리|흐름|구조|구성|짜여|같아|비슷|차이|다르|아니야|맞아|비교/.test(text)
+  return hasTrainingTerm && asksConcept
+}
+
+function directlyMentionsSelectedRun(text: string): boolean {
+  return /이\s*세션|이번\s*세션|선택\s*세션|이\s*기록|이번\s*기록|이\s*런|이번\s*런|이\s*훈련|이번\s*훈련|방금|아까|오늘\s*(러닝|뛴|달린|세션|기록|훈련|템포|인터벌|스트라이드|이지|easy|회복런|롱런|lsd)|방금\s*(뛴|달린)|아까\s*(뛴|달린)/.test(text)
+}
+
 // userNote 문구로 사용자 의도를 분류한다(서버 권위 분류).
 // 프론트가 보조 힌트를 보내더라도 서버는 항상 여기서 다시 분류한다.
 export function detectCoachAnswerIntent(note: string): CoachAnswerIntent {
@@ -12,6 +22,7 @@ export function detectCoachAnswerIntent(note: string): CoachAnswerIntent {
     return 'evidence'
   }
   if (
+    asksTrainingConcept(text) ||
     /자세히|자세하게|상세|분석|평가|설명|비교|정리|풀어서|구체적/.test(text) ||
     /뭐야|무엇|뭔데|뭐임|어떤\s*(흐름|구조|방식|원리)|흐름.*짜여|짜여\s*있|구성|구조|원리/.test(text)
   ) {
@@ -32,9 +43,11 @@ export function detectUserNoteRunRelevance(note: string): UserNoteRunRelevance {
   const text = note.trim().toLowerCase()
   if (!text) return 'selected_run'
 
-  if (
-    /이\s*세션|이번\s*세션|이\s*기록|이\s*런|방금|아까|오늘\s*(러닝|뛴|달린|세션)|그\s*(답|판단|분석|코칭)|페이스|심박|케이던스|구간|랩|스플릿|의도\s*(달성|평가)?|회복런|템포|롱런|lsd|strides?|스트라이드|rpe/.test(text)
-  ) {
+  if (asksTrainingConcept(text) && !directlyMentionsSelectedRun(text)) return 'general'
+
+  if (directlyMentionsSelectedRun(text)) return 'selected_run'
+
+  if (/페이스|심박|케이던스|구간|랩|스플릿|의도\s*(달성|평가)?|rpe/.test(text)) {
     return 'selected_run'
   }
 
@@ -65,4 +78,9 @@ export function buildUserNoteRelevancePolicy(note: string, mode: CoachResponseMo
 export function shouldApplyTrustLayer(note: string, mode: CoachResponseMode): boolean {
   if (mode === 'report') return true
   return detectUserNoteRunRelevance(note) === 'selected_run'
+}
+
+export function shouldAttachInjurySnapshot(note: string, mode: CoachResponseMode): boolean {
+  if (mode === 'report') return true
+  return detectUserNoteRunRelevance(note) !== 'general'
 }
