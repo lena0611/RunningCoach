@@ -1,10 +1,12 @@
 //
 //  ContentView.swift
-//  PaceLabWatch Watch App — #552 Phase 1~3
+//  PaceLabWatch Watch App — #552 Phase 1~4
 //
 //  라이브 지표 화면. 시작 전(StartView) → 측정 중(MetricsView) → 요약(EndedView).
 //  Phase 2: 고스트 격차 히어로(앞=초록/뒤=빨강, #552 UX) + 최근 안내 문구 + 완주 요약.
 //  Phase 3: 카탈로그 기반 거리·상대 선택(폰 동기화, 오프라인 변경 가능) + 완주 결과 상승.
+//  Phase 4: 상시표시(저휘도) 대응 — 워크아웃 세션 중 AOD 1Hz 갱신은 시스템이 보장하므로
+//           여기선 isLuminanceReduced 에 맞춰 감광·보조요소 숨김만 한다. 음성은 합의대로 v1 제외.
 //
 
 import SwiftUI
@@ -27,6 +29,10 @@ struct ContentView: View {
                 }
             }
         }
+        #if targetEnvironment(simulator)
+        // 자율 QA 훅: 시뮬은 AOD 전환을 못 만드므로 런치 인자로 저휘도 환경을 강제해 검증한다.
+        .environment(\.isLuminanceReduced, ProcessInfo.processInfo.arguments.contains("--sim-luminance-reduced"))
+        #endif
         .onAppear {
             // 완주 결과 → WCSession 상승(폰 미연결이어도 시스템이 큐잉·재전달).
             controller.onRaceFinished = { [weak sync] payload in
@@ -176,53 +182,61 @@ private struct StartView: View {
     }
 }
 
-// MARK: - 측정 중 화면
+// MARK: - 측정 중 화면 (저휘도=상시표시 대응)
 
 private struct MetricsView: View {
     @ObservedObject var controller: WatchRaceController
+    /// 상시표시(손목 내림) 여부. 워크아웃 세션 중엔 시스템이 1Hz 갱신을 유지해주므로
+    /// 여기선 표시만 줄인다 — 핵심(격차·시간·거리)은 감광 유지, 보조(문구·버튼)는 숨김.
+    @Environment(\.isLuminanceReduced) private var luminanceReduced
 
     var body: some View {
         ScrollView {
             VStack(spacing: 10) {
                 if let gap = controller.gap {
-                    GapHeroView(gap: gap, mode: controller.announceConfig.gapMode)
+                    GapHeroView(gap: gap, mode: controller.announceConfig.gapMode, dimmed: luminanceReduced)
                 }
 
                 Text(MetricFormat.time(controller.elapsedSec))
                     .font(.system(size: controller.gap == nil ? 42 : 30, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .opacity(luminanceReduced ? 0.8 : 1)
 
                 HStack(spacing: 8) {
                     MetricCell(label: "거리", value: MetricFormat.distanceKm(controller.distanceM), unit: "km")
                     MetricCell(label: "페이스", value: MetricFormat.pace(controller.paceSecPerKm), unit: "/km")
                 }
-                HStack(spacing: 8) {
-                    MetricCell(
-                        label: "심박",
-                        value: controller.heartRateBpm > 0 ? "\(Int(controller.heartRateBpm))" : "--",
-                        unit: "bpm",
-                        tint: .red
-                    )
-                    MetricCell(label: "칼로리", value: "\(Int(controller.activeKcal))", unit: "kcal")
-                }
+                .opacity(luminanceReduced ? 0.7 : 1)
 
-                if let announcement = controller.lastAnnouncementText {
-                    Text(announcement)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                if !luminanceReduced {
+                    HStack(spacing: 8) {
+                        MetricCell(
+                            label: "심박",
+                            value: controller.heartRateBpm > 0 ? "\(Int(controller.heartRateBpm))" : "--",
+                            unit: "bpm",
+                            tint: .red
+                        )
+                        MetricCell(label: "칼로리", value: "\(Int(controller.activeKcal))", unit: "kcal")
+                    }
 
-                Button(role: .destructive) {
-                    controller.end()
-                } label: {
-                    Text("종료")
-                        .frame(maxWidth: .infinity)
+                    if let announcement = controller.lastAnnouncementText {
+                        Text(announcement)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    Button(role: .destructive) {
+                        controller.end()
+                    } label: {
+                        Text("종료")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .tint(.red)
+                    .padding(.top, 2)
                 }
-                .tint(.red)
-                .padding(.top, 2)
             }
             .padding(.horizontal, 4)
         }
@@ -234,6 +248,8 @@ private struct MetricsView: View {
 private struct GapHeroView: View {
     let gap: GapState
     let mode: GapDisplayMode
+    /// 저휘도(상시표시)에서는 배경 카드를 빼고 글자만 감광 — AOD 화면 밝기 예산 준수.
+    var dimmed = false
 
     private var tint: Color {
         switch gap.leadState {
@@ -265,11 +281,12 @@ private struct GapHeroView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
-        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+        .background(dimmed ? Color.clear : tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+        .opacity(dimmed ? 0.8 : 1)
     }
 }
 
-// MARK: - 요약 화면
+// MARK: - 요약(마감) 화면
 
 private struct EndedView: View {
     @ObservedObject var controller: WatchRaceController
@@ -277,8 +294,9 @@ private struct EndedView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 10) {
-                Text("레이스 완료")
+                Text(outcomeTitle)
                     .font(.headline)
+                    .foregroundStyle(finishTint)
 
                 if let summary = controller.finishSummaryText {
                     Text(summary)
@@ -290,6 +308,14 @@ private struct EndedView: View {
                 Text(MetricFormat.time(controller.elapsedSec))
                     .font(.system(size: 34, weight: .semibold, design: .rounded))
                     .monospacedDigit()
+
+                // 타겟 대비 마감 라인: 내 베스트(고스트) 시간과 오늘 결과를 나란히.
+                if let target = controller.targetPb, controller.finalGap != nil {
+                    HStack(spacing: 8) {
+                        MetricCell(label: "내 베스트", value: MetricFormat.time(target.elapsedSec), unit: "타겟")
+                        MetricCell(label: "오늘", value: MetricFormat.time(controller.elapsedSec), unit: "기록", tint: finishTint)
+                    }
+                }
 
                 HStack(spacing: 8) {
                     MetricCell(label: "거리", value: MetricFormat.distanceKm(controller.distanceM), unit: "km")
@@ -310,6 +336,16 @@ private struct EndedView: View {
                 .padding(.top, 2)
             }
             .padding(.horizontal, 4)
+        }
+    }
+
+    /// 마감 타이틀: 승/패/동률을 첫 줄에서 확정. 고스트 없으면 중립 완료.
+    private var outcomeTitle: String {
+        guard let gap = controller.finalGap else { return "레이스 완료" }
+        switch gap.leadState {
+        case .ahead: return "승리! 🏆"
+        case .behind: return "아쉽다!"
+        case .even: return "동률!"
         }
     }
 
