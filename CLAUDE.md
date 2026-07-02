@@ -88,6 +88,10 @@
 - `.harness/project/professional-coach-review-trigger.md` (`#전문코치리뷰` 트리거 시 필수)
 - `.harness/project/data-change-impact-map.md` (런 인입·세션·부상·휴식복귀·삭제·레이싱·목표 등 **데이터/이벤트 변경 시 구현 전 필독 게이트** — 작은 변경이 일으키는 하류 코칭 연쇄를 진입점 트리로 확인. 연쇄 코드를 바꾸면 이 맵도 함께 갱신한다)
 
+## 구현 단순성 (프로젝트 전용 — 현 개발 단계)
+- 모든 구현은 **단순성 우선(YAGNI)**: 알려진 요구에 가장 단순한 구현, 투기적 추상·군더더기·불가능 시나리오 방어코드 금지(패턴 3회 반복 시에만 추상화). **단, 의도적 리팩터링과 로드맵상 '알려진' 토대 구축은 예외**(과설계 아님, 과업). 특히 현재 모델(Opus 4.8)의 과설계 경향 브레이크.
+- 상세·근거·예외는 `.harness/project/architecture-rules.md`의 "구현 단순성" 섹션. 안정화 단계 진입 시 외과적 변경(side-effect 최소화) 강조 재검토.
+
 ## 채팅 트리거
 - 사용자가 채팅에 **`#전문코치리뷰`**(또는 `#전문코치 리뷰`, `#코치리뷰`)라고 입력하면 `.harness/project/professional-coach-review-trigger.md` 프로토콜을 실행합니다. 방금/현재 문맥의 코칭 작업이 딥리서치의 권위 있는 코치 의도와 부합하는지, 사용자(초보 러너) 요청에 휘둘려 전문 코치라면 안 할 선택을 하지 않았는지 도메인 교차검증합니다. **코드 리뷰가 아닙니다**(코드 품질은 `/codex`).
 - **코칭 작업 기본 절차(예외 없이)**: 코칭 동작/지식(coach-run, sessionQuality/sessionBriefing 등 `src/shared/lib/coaching`, CoachMessage, 처방·브리핑·피드백)을 건드리는 작업은 **코드를 짜기 전에 먼저** 코치 SSOT(`running-coaching-standards.md`, 부상 관련 시 `running-injury-knowledge.md`)와 관련 메모리를 읽습니다. 사용자 요청이 권위 코치 의도와 배치되면 **구현 전에** 사용자와 그릴(사전 조율)합니다. 필요한 코치 지식이 SSOT에 없으면 심층 리서치로 확보→SSOT 적재 후 진행합니다. 이건 권장이 아니라 기본값입니다.
