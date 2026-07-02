@@ -19,6 +19,12 @@ export type CoachReport = {
   injuryUpdateProposal?: CoachInjuryUpdateProposal | null
   /** 코칭 생성 시점의 부상 컨텍스트 스냅샷(그때 알던 부상 상태). 과거 리포트가 그때 상태를 충실히 표시·참조하게. */
   injuryContextSnapshot?: CoachInjuryContextSnapshot | null
+  persistenceWarnings?: CoachPersistenceWarning[]
+}
+
+export type CoachPersistenceWarning = {
+  stage: string
+  message: string
 }
 
 /** 코칭 시점에 얼린 부상 컨텍스트(coach_reports.injury_context_snapshot). 없으면 null(이 기능 이전 리포트). */
@@ -170,21 +176,15 @@ export async function requestCoachRunStream(
     const parsed = drainSseBuffer(buffer)
     buffer = parsed.rest
 
-    for (const event of parsed.events) {
-      if (event.event === 'delta') {
-        const delta = getString(event.data, 'delta')
-        if (delta) options.onDelta(delta)
-        continue
-      }
-      if (event.event === 'done') {
-        const report = parseCoachReport(event.data)
-        if (report) return report
-        throw new Error('AI 코칭 저장 응답이 비어 있습니다.')
-      }
-      if (event.event === 'error') {
-        throw new Error(getString(event.data, 'error') || 'AI 코칭 스트리밍 실패')
-      }
-    }
+    const report = consumeCoachStreamEvents(parsed.events, options.onDelta)
+    if (report) return report
+  }
+
+  buffer += decoder.decode()
+  if (buffer.trim()) {
+    const parsed = drainSseBuffer(hasSseTerminator(buffer) ? buffer : `${buffer}\n\n`)
+    const report = consumeCoachStreamEvents(parsed.events, options.onDelta)
+    if (report) return report
   }
 
   throw new Error('AI 코칭 스트림이 완료되지 않았습니다.')
@@ -225,7 +225,7 @@ export async function fetchCoachReports(): Promise<CoachReport[]> {
   return (data ?? []).map(fromRow)
 }
 
-function drainSseBuffer(buffer: string) {
+export function drainSseBuffer(buffer: string) {
   const events: Array<{ event: string; data: unknown }> = []
   const chunks = buffer.split(/\r?\n\r?\n/)
   const rest = chunks.pop() ?? ''
@@ -248,6 +248,35 @@ function drainSseBuffer(buffer: string) {
   }
 
   return { events, rest }
+}
+
+function hasSseTerminator(buffer: string) {
+  return /\r?\n\r?\n$/.test(buffer)
+}
+
+export function consumeCoachStreamEvents(events: Array<{ event: string; data: unknown }>, onDelta: (delta: string) => void): CoachReport | null {
+  for (const event of events) {
+    if (event.event === 'delta') {
+      const delta = getString(event.data, 'delta')
+      if (delta) onDelta(delta)
+      continue
+    }
+    if (event.event === 'done') {
+      const report = parseCoachReport(event.data)
+      if (report) return report
+      throw new Error('AI 코칭 저장 응답이 비어 있습니다.')
+    }
+    if (event.event === 'error') {
+      throw new Error(formatCoachStreamError(event.data))
+    }
+  }
+  return null
+}
+
+function formatCoachStreamError(value: unknown) {
+  const message = getString(value, 'error') || 'AI 코칭 스트리밍 실패'
+  const stage = getString(value, 'stage')
+  return stage ? `${message} [${stage}]` : message
 }
 
 function parseCoachReport(value: unknown): CoachReport | null {

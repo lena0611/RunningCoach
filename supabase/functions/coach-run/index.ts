@@ -53,6 +53,29 @@ type CoachReportRow = {
   created_at: string
 }
 
+type CoachPersistenceWarning = {
+  stage: string
+  message: string
+}
+
+class CoachPipelineError extends Error {
+  stage: string
+
+  constructor(stage: string, error: unknown, fallbackMessage = 'AI 코칭 처리 실패') {
+    super(getErrorMessage(error, fallbackMessage))
+    this.name = 'CoachPipelineError'
+    this.stage = stage
+  }
+}
+
+function getErrorMessage(error: unknown, fallbackMessage: string) {
+  if (error instanceof Error) return error.message
+  if (error && typeof error === 'object' && typeof (error as { message?: unknown }).message === 'string') {
+    return (error as { message: string }).message
+  }
+  return fallbackMessage
+}
+
 type CoachMemoryItemRow = {
   id?: string
   content: string
@@ -238,7 +261,14 @@ Deno.serve(async (req) => {
 
     return json(result)
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500)
+    console.error('coach-run request failed', {
+      stage: error instanceof CoachPipelineError ? error.stage : undefined,
+      message: getErrorMessage(error, 'Unknown error')
+    })
+    return json({
+      error: getErrorMessage(error, 'Unknown error'),
+      stage: error instanceof CoachPipelineError ? error.stage : undefined
+    }, 500)
   }
 })
 
@@ -280,69 +310,91 @@ async function persistCoachResult(
   context: CoachContext,
   ai: { report: string; memoryItems: string[]; trainingMemoryPatch: TrainingMemoryPatch | null; injuryUpdateProposal: InjuryUpdateProposal | null }
 ) {
-    const durableMemoryItems = normalizeMemoryItems(ai.memoryItems, [...(context.coreMemoryItems ?? []), ...context.coachMemoryItems])
-    const memoryPatch = normalizeTrainingMemoryPatch(ai.trainingMemoryPatch)
-    const injuryUpdateProposal = normalizeInjuryUpdateProposal(ai.injuryUpdateProposal, context.activeInjuryItem)
-    const updatedMemory = memoryPatch ? mergeTrainingMemoryPatch(context.trainingMemory, memoryPatch) : null
-    if (updatedMemory) {
-      const { error } = await admin.from('training_memory').upsert({
-        user_id: userId,
-        memory: updatedMemory,
-        updated_at: new Date().toISOString()
-      })
-      if (error) throw error
-    }
+  const durableMemoryItems = normalizeMemoryItems(ai.memoryItems, [...(context.coreMemoryItems ?? []), ...context.coachMemoryItems])
+  const memoryPatch = normalizeTrainingMemoryPatch(ai.trainingMemoryPatch)
+  const injuryUpdateProposal = normalizeInjuryUpdateProposal(ai.injuryUpdateProposal, context.activeInjuryItem)
+  const updatedMemory = memoryPatch ? mergeTrainingMemoryPatch(context.trainingMemory, memoryPatch) : null
+  const persistenceWarnings: CoachPersistenceWarning[] = []
 
-    // 코칭 생성 시점의 (시점필터된) 부상 컨텍스트를 얼려 저장한다.
-    // 일반 개념/명칭 질문에는 화면 메타데이터도 부상 맥락을 억지로 붙이지 않는다.
-    const injuryContextSnapshot = shouldAttachInjurySnapshot(userNote, context.coachResponseMode)
-      ? buildInjuryContextSnapshot(context.injuryItems, context.activeInjuryItem, context.selectedRunDate ?? null)
-      : null
+  // 코칭 생성 시점의 (시점필터된) 부상 컨텍스트를 얼려 저장한다.
+  // 일반 개념/명칭 질문에는 화면 메타데이터도 부상 맥락을 억지로 붙이지 않는다.
+  const injuryContextSnapshot = shouldAttachInjurySnapshot(userNote, context.coachResponseMode)
+    ? buildInjuryContextSnapshot(context.injuryItems, context.activeInjuryItem, context.selectedRunDate ?? null)
+    : null
 
-    const report = shouldApplyTrustLayer(userNote, context.coachResponseMode)
-      ? applyTrustLayer(ai.report, context.trustLayerNote)
-      : ai.report
-    const { data: reportRow, error: reportError } = await admin
-      .from('coach_reports')
-      .insert({
-        user_id: userId,
-        selected_run_id: selectedRunId,
-        user_note: userNote,
-        report,
-        injury_context_snapshot: injuryContextSnapshot,
-        updated_at: new Date().toISOString()
-      })
-      .select('id, selected_run_id, user_note, report, created_at, updated_at, injury_context_snapshot')
-      .single()
-    if (reportError) throw reportError
-
-    const memoryItems = durableMemoryItems.map((content) => ({
+  const report = shouldApplyTrustLayer(userNote, context.coachResponseMode)
+    ? applyTrustLayer(ai.report, context.trustLayerNote)
+    : ai.report
+  const { data: reportRow, error: reportError } = await admin
+    .from('coach_reports')
+    .insert({
       user_id: userId,
-      content,
-      source_report_id: reportRow.id,
-      importance: deriveMemoryImportance(content)
-    }))
-    if (memoryItems.length) {
-      const { error } = await admin.from('coach_memory_items').insert(memoryItems)
-      if (error) throw error
-    }
+      selected_run_id: selectedRunId,
+      user_note: userNote,
+      report,
+      injury_context_snapshot: injuryContextSnapshot,
+      updated_at: new Date().toISOString()
+    })
+    .select('id, selected_run_id, user_note, report, created_at, updated_at, injury_context_snapshot')
+    .single()
+  if (reportError) throw new CoachPipelineError('coach_reports.insert', reportError, 'AI 코칭 리포트 저장 실패')
 
-    return {
-      report: {
-        id: reportRow.id,
-        selectedRunId: reportRow.selected_run_id,
-        userNote: reportRow.user_note,
-        report: reportRow.report,
-        createdAt: reportRow.created_at,
-        updatedAt: reportRow.updated_at,
-        trainingMemoryUpdated: Boolean(updatedMemory),
-        injuryUpdateProposal,
-        injuryContextSnapshot: reportRow.injury_context_snapshot ?? null
-      },
-      trainingMemoryUpdated: Boolean(updatedMemory),
-      trainingMemoryPatch: memoryPatch,
-      injuryUpdateProposal
+  let trainingMemoryUpdated = false
+  if (updatedMemory) {
+    const { error } = await admin.from('training_memory').upsert({
+      user_id: userId,
+      memory: updatedMemory,
+      updated_at: new Date().toISOString()
+    })
+    if (error) {
+      const warning = toPersistenceWarning('training_memory.upsert', error)
+      console.warn('coach-run persistence warning', warning)
+      persistenceWarnings.push(warning)
+    } else {
+      trainingMemoryUpdated = true
     }
+  }
+
+  const memoryItems = durableMemoryItems.map((content) => ({
+    user_id: userId,
+    content,
+    source_report_id: reportRow.id,
+    importance: deriveMemoryImportance(content)
+  }))
+  if (memoryItems.length) {
+    const { error } = await admin.from('coach_memory_items').insert(memoryItems)
+    if (error) {
+      const warning = toPersistenceWarning('coach_memory_items.insert', error)
+      console.warn('coach-run persistence warning', warning)
+      persistenceWarnings.push(warning)
+    }
+  }
+
+  return {
+    report: {
+      id: reportRow.id,
+      selectedRunId: reportRow.selected_run_id,
+      userNote: reportRow.user_note,
+      report: reportRow.report,
+      createdAt: reportRow.created_at,
+      updatedAt: reportRow.updated_at,
+      trainingMemoryUpdated,
+      injuryUpdateProposal,
+      injuryContextSnapshot: reportRow.injury_context_snapshot ?? null,
+      persistenceWarnings
+    },
+    trainingMemoryUpdated,
+    trainingMemoryPatch: memoryPatch,
+    injuryUpdateProposal,
+    persistenceWarnings
+  }
+}
+
+function toPersistenceWarning(stage: string, error: unknown): CoachPersistenceWarning {
+  return {
+    stage,
+    message: getErrorMessage(error, 'AI 코칭 보조 저장 실패')
+  }
 }
 
 type RunnerLevel = 'beginner' | 'intermediate' | 'advanced'
@@ -2025,7 +2077,14 @@ function streamCoachRun(
         send('done', result)
         controller.close()
       } catch (error) {
-        send('error', { error: error instanceof Error ? error.message : 'AI 코칭 스트리밍 실패' })
+        console.error('coach-run stream failed', {
+          stage: error instanceof CoachPipelineError ? error.stage : undefined,
+          message: getErrorMessage(error, 'AI 코칭 스트리밍 실패')
+        })
+        send('error', {
+          error: getErrorMessage(error, 'AI 코칭 스트리밍 실패'),
+          stage: error instanceof CoachPipelineError ? error.stage : undefined
+        })
         controller.close()
       }
     }
