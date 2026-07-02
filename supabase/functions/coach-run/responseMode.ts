@@ -84,3 +84,8 @@ export function shouldAttachInjurySnapshot(note: string, mode: CoachResponseMode
   if (mode === 'report') return true
   return detectUserNoteRunRelevance(note) !== 'general'
 }
+
+export function shouldUseStructuredCoachContext(note: string, mode: CoachResponseMode): boolean {
+  if (mode === 'report') return true
+  return detectUserNoteRunRelevance(note) !== 'general'
+}

@@ -3,9 +3,11 @@ import { filterInjuryItemsForRunDate, getActiveInjuryItemForRunDate } from './in
 import {
   buildUserNoteRelevancePolicy,
   detectCoachAnswerIntent,
+  detectUserNoteRunRelevance,
   resolveCoachResponseMode,
   shouldAttachInjurySnapshot,
   shouldApplyTrustLayer,
+  shouldUseStructuredCoachContext,
   type CoachResponseMode
 } from './responseMode.ts'
 
@@ -1068,6 +1070,8 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
   // 프리셋 커맨드는 키워드 분류 대신 커맨드 전용 리포트 형식을 강제한다(#237 우선순위 정상화).
   const coachCommandFormat = commandId ? COACH_COMMAND_FORMATS[commandId] ?? null : null
   const coachResponseMode: CoachResponseMode = coachCommandFormat ? 'report' : resolveCoachResponseMode(userNote, answerIntent)
+  const userNoteRunRelevance = detectUserNoteRunRelevance(userNote)
+  const structuredCoachContext = Boolean(coachCommandFormat) || shouldUseStructuredCoachContext(userNote, coachResponseMode)
   const trustLayerApplies = shouldApplyTrustLayer(userNote, coachResponseMode)
   const userNoteRelevancePolicy = buildUserNoteRelevancePolicy(userNote, coachResponseMode)
   return {
@@ -1075,6 +1079,8 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     hasUserNote: userNote.trim().length > 0,
     answerIntent,
     coachResponseMode,
+    userNoteRunRelevance,
+    structuredCoachContext,
     trustLayerApplies,
     userNoteRelevancePolicy,
     coachCommandId: commandId,
@@ -1086,14 +1092,10 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       'coachResponseMode가 응답 형식을 결정한다. ' +
       '대화 턴에서는 context.userNoteRelevancePolicy가 선택 세션 데이터를 어디까지 쓸지 결정하고, context.trustLayerApplies가 부상/목표 보호 문단을 붙일 수 있는지 결정한다. ' +
       '[command] context.coachCommandFormat이 있으면(프리셋 커맨드) coachCommandPolicy의 섹션 구성을 따른 리포트로 답한다. 이것이 키워드 분류보다 우선한다. ' +
-      '[conversational] 사용자가 userNote로 가벼운 말/메모/잡담을 보낸 경우다. 리포트가 아니라 친구 같은 코치와의 "사담"으로 답한다. ' +
-      '절대 금지: "## 핵심 지표", "## 오늘 해석", "## 조심할 점", "## 다음 훈련", "## 루틴 업데이트", "## 한 줄 요약" 같은 마크다운 섹션 헤더와 지표 나열 목록. ' +
-      '대신 사용자가 한 말에 반응해서 2~6문장 정도로 자연스럽게 대화한다. 숫자가 필요하면 문장 속에 한두 개만 가볍게 녹이고, 세션 전체를 다시 분석하지 않는다. ' +
-      '사용자 표현(예: "오랜만에 5km 30분 도전")을 그대로 받아 맥락에 맞게 사람처럼 답한다. ' +
-      '[explain] 사용자가 "뭐야/무엇/어떤 흐름/구조/자세히/분석/설명/비교/정리"처럼 개념·구조·깊은 설명을 요청한 경우다. 고정 섹션을 기계적으로 채우지 말고 질문에 맞춰 직접 정의→흐름/구조→주의할 오해→필요한 경우에만 사용자 적용 순으로 답한다. ' +
-      '[evidence] 사용자가 "근거/출처/왜 그렇게 판단했는지/이 훈련법이 실제로 있는지"를 물은 경우다. 짧은 사담으로 끝내지 말고 결론→판단 근거→사용자 데이터 적용→참고한 훈련 원칙/출처 순으로 trainingKnowledge와 러닝 데이터를 근거로 답한다. 출처가 trainingKnowledge에 없으면 지어내지 말고 확인된 출처가 부족하다고 말한다. ' +
+      '[free] context.structuredCoachContext=false이면 자유대화다. 응답 템플릿, 첫 문장 반응 패턴, "ㅋㅋ" 같은 웃음 시작, 세션 분석 재료를 쓰지 말고 일반 GPT처럼 질문에 직접 답한다. ' +
+      '[structured] context.structuredCoachContext=true일 때만 세션 분석/훈련 품질/개인 처방용 구조와 안전 메타를 사용한다. ' +
       '[report] userNote가 없으면(세션만 열림) 기존 selectedRun 리뷰 리포트 형식(responseTemplatePolicy)으로 답한다.',
-    responseStyle,
+    responseStyle: structuredCoachContext ? responseStyle : null,
     runnerLevel,
     runnerLevelGuide: buildRunnerLevelGuide(runnerLevel),
     dataAvailability,
@@ -1105,7 +1107,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       policy:
         'targetRunDays는 사용자가 실제로 달릴 수 있는 주간 가용 일수 제약이다(데이터로 도출 불가한 생활 제약). weeklyPattern(주간 루틴)의 러닝 세션 수가 이 값을 넘지 않도록 처방·조정한다. currentWeeklyPatternDays가 targetRunDays보다 많으면 세션 수를 줄여 맞추고(우선순위 낮은 추가 Easy부터 축소), 적으면 목표에 필요할 때만 가용 한도 내에서 늘린다. targetRunDays가 null(미입력)이면 제약 없이 목표와 회복을 보고 과훈련을 피하는 선에서 처방한다.',
     },
-    heartRateModel: {
+    heartRateModel: structuredCoachContext ? {
       tempoCeilingBpm: coachHeartRateModel.tempoCeilingBpm,
       easyCeilingBpm: coachHeartRateModel.easyCeilingBpm,
       recoveryCeilingBpm: coachHeartRateModel.recoveryCeilingBpm,
@@ -1115,8 +1117,8 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       source: coachHeartRateModel.source,
       policy:
         '심박 상한(템포/이지/회복)은 개인 심박 기준에서 파생한 값이다. 본문에 특정 기본 숫자(예: 165)를 임의로 쓰지 말고 이 상한 값만 쓴다. source=insufficient(상한 null)이면 심박 상한을 말하지 말고 페이스/RPE/심박 드리프트로 평가하며, "나이나 역치/최대심박을 입력하면 개인화된 심박 기준으로 코칭한다"고 한 번 안내한다. source=age_estimated 또는 age_data_corrected는 추정이므로 단정하지 말고, 더 정확히 하려면 30분 역치 테스트(LTHR) 입력을 권하면 좋다고 한 번만 덧붙인다. lthr/measured_max는 사용자가 직접 입력한 값이다.',
-    },
-    paceModel: {
+    } : null,
+    paceModel: structuredCoachContext ? {
       vdot: coachPaceModel.vdot,
       source: coachPaceModel.source,
       confidence: coachPaceModel.confidence,
@@ -1127,14 +1129,14 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       basis: coachPaceModel.basis,
       policy:
         '페이스 모델은 보조 신호다. 강도의 권위 기준은 항상 heartRateModel의 심박 상한이고, 페이스는 그 하위에서 참고 타깃으로만 쓴다. source=insufficient면 페이스 타깃을 만들지 말고 심박/RPE로만 말한다. confidence=estimate(VO2max 기반)면 "추정치"임을 한 번 밝히고 단정하지 않는다. confidence=measured(PB/레이스 환산)는 더 신뢰할 수 있다. 다음 훈련에 페이스를 제시할 때도 "심박 상한을 넘기지 않는 선에서 템포 ~분/km 참고" 식으로 심박 상한을 우선한다. 레이스 예상 언급은 기존 racePredictionPolicy를 따른다.',
-    },
-    responseTemplatePolicy: buildResponseTemplatePolicy(),
+    } : null,
+    responseTemplatePolicy: structuredCoachContext ? buildResponseTemplatePolicy() : null,
     currentDate,
     currentDateDisplay: formatDateWithWeekday(currentDate),
-    contextMode: selectedRun ? 'selected_run_review' : 'current_flow_review',
-    selectedRunTiming,
-    selectedRunAgeDays,
-    nextTrainingAdviceRelevant: selectedRunAgeDays !== null && selectedRunAgeDays <= 7 && runsAfterSelected.length === 0,
+    contextMode: structuredCoachContext ? (selectedRun ? 'selected_run_review' : 'current_flow_review') : 'free_conversation',
+    selectedRunTiming: structuredCoachContext ? selectedRunTiming : null,
+    selectedRunAgeDays: structuredCoachContext ? selectedRunAgeDays : null,
+    nextTrainingAdviceRelevant: structuredCoachContext && selectedRunAgeDays !== null && selectedRunAgeDays <= 7 && runsAfterSelected.length === 0,
     nextTrainingAdvicePolicy:
       'nextTrainingAdviceRelevant는 이 세션의 "다음 훈련/루틴 업데이트"를 현재 처방으로 줘도 되는지다. 세션이 7일 이내이고(ATL 7일 시간상수 기준) 그 이후 새 기록이 없을 때만 true다. false이면(7일 넘게 지났거나 그 세션 이후 이미 다른 기록이 있으면) 다음 훈련은 그 세션 다음 스텝 회고로 한 줄만 쓰고, 루틴 업데이트는 단일 과거 세션으로 현재 루틴을 판단하지 않는다고 짧게 말한다.',
     anchorDateForWindowStats: anchorDate,
@@ -1144,10 +1146,10 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     currentWeather,
     instructionForWeatherHandling:
       'currentWeather는 iOS WeatherKit에서 받은 현재/향후 12시간 날씨이며 다음 세션 준비용이다. selectedRun이 과거 기록이면 currentWeather를 그 과거 훈련 당시 날씨로 착각하지 마라. selectedRun.date가 오늘이거나 사용자가 다음 훈련/오늘 뛸지 묻는 경우에만 체감온도, 강수확률, 강수량, 비 가능 시간대를 짧게 반영한다.',
-    achievements,
+    achievements: structuredCoachContext ? achievements : null,
     instructionForAchievements:
       'achievements는 웹이 전체 기록에서 산출한 개인 업적이다(거리별 PB·최장 거리/시간·최속 평균 페이스·거리 마일스톤 첫 달성, 훈련/레이싱 컨텍스트 분리). 동기부여·신뢰 강화를 위해 맥락에 맞을 때만 1~2개를 사실 그대로 짧게 인용한다. 매 답변에 기계적으로 나열하지 말고, 수치를 과장하거나 없는 기록을 지어내지 마라. PB/기록 값은 재계산하지 말고 주어진 값을 그대로 쓴다. race가 null이면 아직 레이싱(자기와의 대결) 기록이 없다는 뜻이니 레이싱 업적을 언급하지 않는다. achievements.distancePbs[].elapsedSec는 distanceM 거리(예: 5000=5K)에 실제 도달한 기록이며 performanceProjection(목표 기록·레이스 예측)과는 별개다. 특정 거리(예: 5K) 질문에는 그 거리의 distancePbs 기록으로 답하고, 다른 거리의 예측·목표 시간을 그 거리의 기록인 것처럼 라벨하지 마라(예: 10K 목표/예측 시간을 "5K"라고 말하지 않는다). achievements.cumulative(있으면)는 훈련/레이싱 구분 없는 통합 습관 지표다(longestStreakDays=최장 연속 러닝 일수, bestWeeklyVolumeKm·bestMonthlyVolumeKm=주/월 최다 누적 거리). 꾸준함·볼륨 관련 동기부여 맥락에서만 짧게 인용한다. achievements.recentRacingResults(있으면)는 최근 "나와의 대결"(가상레이싱) 결과다(distanceM=레이싱 거리, resultGapSec 음수=내 베스트보다 빠름·양수=느림, outcome win/lose/tie, isPb=true면 새 PB 달성). 레이싱 동기부여 맥락에서만 1건을 사실 그대로 짧게 인용한다(isPb면 새 기록 축하, 아니면 목표까지 남은 차이를 가볍게). 이는 경쟁 주석일 뿐 훈련 강도·부하 평가에는 쓰지 않는다(레이싱이라고 해당 RunLog 를 Race 강도로 재해석하지 마라).',
-    tempoCoaching: tempoCoaching
+    tempoCoaching: structuredCoachContext && tempoCoaching
       ? {
           candidateCeilingBpm: tempoCoaching.candidateCeilingBpm,
           source: tempoCoaching.source,
@@ -1158,7 +1160,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       : null,
     instructionForTempoCoaching:
       'tempoCoaching는 웹이 최근 Tempo 수행으로 검증·적응한 심박 상한 서사다(#301). Tempo 평가는 이진 성공/실패가 아니라 A/B/C/D 등급으로 본다: A 처방 완전 준수, B 템포 자극 확보+경계 일부 초과, C 경계 크게/반복 초과, D 세션 목적 실패. **권위 있는 상한 숫자는 항상 heartRateModel.tempoCeilingBpm**(서버가 영속 채택값으로 산출한 effective)이며, tempoCoaching에는 상한 숫자를 넣지 않았으니 숫자는 heartRateModel에서만 가져온다. 그 상한을 넘겼는지로 초과를 판정하고 base 추정값으로 실패라고 단정하지 마라. source=adapted(confidence=high)이면 "최근 템포 수행으로 검증된 상한"이라고 신뢰 있게 말한다. candidateCeilingBpm이 있으면(관찰 중) "자극은 충분히 확보했고 현재 상한 기준 일부 초과가 있었지만 최근 패턴·회복이 안정적이라 N bpm 상향 후보로 관찰 중"처럼 즉시 확정이 아님을 분명히 한다(이 candidateCeilingBpm 숫자는 후보라 언급 가능). baseSource가 age_estimated/age_data_corrected면 base 추정이 보수적임을 감안해 단정 수위를 낮춘다. 상한은 상향만 적응하며 base 미만으로 내리지 않는다. rationale을 그대로 복붙하지 말고 1~2문장으로 자연스럽게 녹인다. tempoCoaching이 null이면 적응 서사를 쓰지 말고 기존 심박/페이스/드리프트 기준으로 평가한다.',
-    routineUpdatePolicy: {
+    routineUpdatePolicy: structuredCoachContext ? {
       purpose:
         '주간 루틴은 activeGoal 달성을 위한 처방이다. 세션별 코칭 때마다 유지/조정 여부를 확인하되, 단일 기록 하나만으로 자주 바꾸지 않는다.',
       externalCoachingStandards:
@@ -1202,30 +1204,30 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
         'context.adaptiveProgress는 웹이 결정적으로 산출한 진행 평가다(#336~#338): progressionCriteria 4기준 status(ready/watch/blocked), 현재 phase, phaseProposal(다음 단계 전환 제안과 blockers), 적응값(Easy 상한/Long Run 드리프트 허용/회복 휴식일). 이것이 있으면 루틴 진화·단계 판단의 1차 근거로 쓴다. ' +
         '루틴 진화 트리거: 해당 기준이 ready로 안정됐을 때만 한 번에 한 요소를 소폭 올린다(예: Tempo 상한 준수 ready 2주 → Tempo 지속 +1세트, Long Run 지속성 ready → Long 거리 소폭↑). watch면 유지하며 관찰, blocked면 낮추거나 회복을 우선한다. ' +
         'phaseProposal.shouldTransition=true이면 report의 루틴/다음훈련 섹션에서 "다음 단계(toPhase) 전환 준비가 됐다"고 근거(reason)와 함께 제안하되, 단정적 자동 변경이 아니라 사용자 확인이 필요한 제안으로 말한다. blockers가 있으면 무엇이 남았는지 1~2개만 짚는다. adaptiveProgress가 null이면 이 정책을 적용하지 않고 기존 기준으로 판단한다.'
-    },
-    trainingMemory,
+    } : null,
+    trainingMemory: structuredCoachContext ? trainingMemory : null,
     trainingMethodology: buildTrainingMethodologyAlgorithm(),
     trainingKnowledge,
-    adaptiveProgress,
-    upcomingSchedule,
+    adaptiveProgress: structuredCoachContext ? adaptiveProgress : null,
+    upcomingSchedule: structuredCoachContext ? upcomingSchedule : null,
     upcomingSchedulePolicy:
       'context.upcomingSchedule는 실제 주기화 스케줄의 다음 세션들(날짜·유형·거리)이다. "## 다음 훈련"은 반드시 이 실제 세션을 기준으로 말하고, weeklyPattern/prescriptionTemplates로 다른 세션(예: 다음이 토요일 LSD인데 화요일 Easy)을 지어내지 마라. 요약 화면(캐러셀)과 어긋나면 안 된다. 부상·회복으로 하향이 필요하면 "그 스케줄 세션(예: 토요일 LSD)을 이렇게 조정/대체하자"처럼 실제 세션을 기준으로 조정한다. upcomingSchedule이 비어있거나 null일 때만 일반 가이드로 답한다.',
-    restState,
+    restState: structuredCoachContext ? restState : null,
     instructionForRest:
       'context.restState는 사용자가 스스로 선언한 휴식(#473) 상태다(없으면 평소처럼 답한다). active=true면 지금 쉬는 중이다 — "## 다음 훈련"에서 훈련을 재촉하거나 처방을 들이밀지 말고 "푹 쉬세요, 일정은 정리해둘게요. 돌아오면 가볍게 시작해요"처럼 휴식을 존중한다(능동 휴식은 missed가 아니다). 사용자가 먼저 "그래도 뭘 하면 좋을지"를 물을 때만 가벼운 대안(스트레칭·산책, 통제 가능한 휴식이면 가벼운 회복주)을 1회 제안하되 강권하지 않는다. reason이 injury면 통증을 우선하고 무리한 대안을 권하지 않는다. isReturnDay=true이거나 daysUntilReturn이 0~1이면 "놓쳤다"가 아니라 "회복 후 정리" 톤으로 복귀 일정을 안내한다. longLayoff=true(4주 초과)면 복귀를 더 가볍게 시작해야 함과 목표(레이스) 실현가능성 재점검을 정직하게 덧붙인다. active=true면 휴식 존중이 upcomingSchedule 처방보다 우선이다.',
-    recentInjuryWindow,
+    recentInjuryWindow: structuredCoachContext ? recentInjuryWindow : null,
     instructionForInjuryHistory:
       'context.recentInjuryWindow는 사용자의 최근 12개월 부상 이력 요약이다(부위 무관 전역 재부상 위험창). 이전 부상은 러닝 부상의 가장 강하고 일관된 예측인자이고, 재부상의 상당수는 같은 부위가 아니라 다른 부위에서 온다. 있으면(hasRecentInjury=true): ① 지금 통증이 없거나 주행거리가 적어도 "이전 부상 이력이 있으니 조금 더 보수적으로, 점진적으로 가자"는 톤을 유지한다. ② 특히 "마일리지가 낮으니 안전하다/괜찮다"는 안심을 주지 마라 — 이전부상군에서는 저볼륨·낮은 ACWR이 신규 부상을 막아주지 못한다(근거 기반). ③ areas는 과거 부위라 모니터링 보조로만 쓰고 "그 부위만 조심하면 된다"고 단정하지 마라(재부상은 다른 부위로도 온다). mostRecentDaysAgo가 작을수록(최근일수록) 더 보수적으로. 단 이는 집단 통계적 연관이지 개인 부상 확정이 아니므로 부상 확률(%)을 단정하지 말고, 겁주거나 닦달하지 말고 안심시키는 코칭으로 전달한다. recentInjuryWindow가 null이면 이 보수화를 적용하지 않는다(과도한 부상 프레이밍 금지). redFlag·통증 안전 신호가 항상 우선이다.',
-    marathonFlag,
+    marathonFlag: structuredCoachContext ? marathonFlag : false,
     instructionForMarathonGoal:
       'context.marathonFlag가 true면 사용자의 현재 목표가 풀마라톤이다 — 풀마라톤 목표는 10km 대비 신규 부상 위험을 독립적으로 높인다(하프마라톤은 해당 없으니 하프엔 적용하지 마라). 점진적 빌드업·충분한 회복·롱런 관리를 강조하고, recentInjuryWindow가 함께 있으면 특히 보수적으로 안내한다. 이는 목표를 막거나 겁주려는 게 아니라 "조금 더 보수적으로, 무리하지 말고 길게 보자"는 신호다. marathonFlag가 false면 이 지침을 적용하지 않는다.',
-    injurySignals,
+    injurySignals: structuredCoachContext ? injurySignals : null,
     instructionForInjurySignals:
       'context.injurySignals는 활성 부상이 있을 때 웹이 통증 부위 + 보유 데이터(부하·케이던스·재발 등)로 좁힌 상위 1~2개의 "가능성 있는 원인 가설"(hypotheses)과 안전 적신호(redFlag)다(없으면 null — 이 지침을 적용하지 않는다). 이건 의료 진단이 아니라 러닝 부하 조절 코칭 보조다. ' +
       '① hypotheses는 확정 진단이 아니라 "가능성"으로만 말한다(예: "~일 가능성이 있어요", "~쪽일 수도 있어요"). 확률(%)·단정·의학적 진단명 나열 금지. possibility=가설명, why=감별 단서, levers=조절 레버(볼륨 동결/강도 하향/케이던스 큐(보조)/스트라이드 보류/회복 전환)다. 다음 훈련·루틴 조정에 이 levers를 자연스럽게 한두 가지만 녹이되, 처방을 들이밀듯 나열하지 말고 핵심 하나를 부드럽게 권한다. 케이던스 큐는 보조이니 단독 해법처럼 강조하지 않는다. ' +
       '② redFlag.tripped=true면 가설·레버 제안을 미루고 "이런 신호(reasons)는 단순 부하 문제가 아닐 수 있으니, 우선 무리한 훈련을 멈추고 전문가(병원/물리치료) 평가를 받아보자"는 의뢰를 최우선으로 안내한다(escape hatch). 이때 의뢰가 처방·일정보다 우선이다. ' +
       '③ severity가 높거나 통증이 또렷하면 강도/볼륨을 낮추는 쪽으로 기운다. 어느 경우든 의사 흉내(진단 확정·확률·치료 처방) 금지, 겁주지 말고 안심·동행 톤으로. redFlag와 통증 안전 신호는 항상 처방·목표보다 우선이다.',
-    sessionEvidence,
+    sessionEvidence: structuredCoachContext ? sessionEvidence : null,
     sessionEvidencePolicy:
       'context.sessionEvidence는 웹이 선택 세션 타입별로 산출한 다단계 품질 증거다(#354). 규칙이 pass/fail 최종 판정을 내린 게 아니라 "증거"이며, 최종 해석은 네가 목표·부상·날씨·성향을 얹어서 한다. ' +
       'Steady Long: rawHrDrift가 아니라 adjustedHrDrift(후반 가속 보정)를 우선 본다. grade는 quality/aggressive/strained/failed. 네거티브 스플릿(paceDeltaSec 음수=후반 빨라짐)을 "심박이 따라붙어 실패"로 단정하지 마라 — 보정 드리프트가 낮으면 잘 통제된 것이다. ' +
@@ -1238,7 +1240,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       'coachResponseMode=report 또는 explain이고 선택 세션에 구간/심박 데이터가 충분하면(특히 롱런/품질 세션) 아래 리치 분석을 만든다(conversational/a주 짧은 후속에는 적용 안 함). 항상 "장점 먼저, 리스크는 체크포인트처럼" 순서로. ' +
       '① 한 줄 결론(긍정/핵심 먼저) ② 핵심 지표(거리·시간·평균페이스·평균심박·케이던스·RPE) ③ 스플릿 분석(lapProcess의 구간 페이스·심박 흐름을 초반/중반/후반으로 — 평균만 반복 금지) ④ 심박 분석(흐름 + context.efficiencyVsPast가 hasComparison이면 "같은 심박대 대비 페이스 변화"를 반드시 언급) ⑤ 케이던스(구간 cadence 흐름이 있으면) ⑥ 부상 체크(activeInjuryItem이 있으면 부위별 다음날 구체 신호 1~2개) ⑦ 점수: context.sessionScorecard가 있으면 페이스 운영/심박 관리/지구력/부상 리스크 관리를 각 N/10로 제시하되 점수는 sessionScorecard 값을 그대로 쓰고 임의로 만들지 않는다. ' +
       'context.efficiencyVsPast.verdict=faster_same_hr면 "같은 심박으로 더 빠르게 달리고 있다"는 효율 향상 신호로 긍정 해석한다. sessionScorecard/efficiencyVsPast가 null이거나 hasComparison=false면 그 항목은 생략한다(없는 비교를 지어내지 마라).',
-    adaptiveTrainingProfile,
+    adaptiveTrainingProfile: structuredCoachContext ? adaptiveTrainingProfile : null,
     adaptiveAlgorithmPolicy: {
       principle:
         '문헌 기반 기준선은 코드/프롬프트가 제공하고, 개인화 알고리즘은 trainingMemory.adaptiveTrainingProfile에 저장된 반복 패턴과 세션별 보정 가이드로 진화한다.',
@@ -1257,9 +1259,9 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
         '목표 달성 보장을 암시해야만 설명 가능한 변경이다.'
       ]
     },
-    goals,
-    activeGoal,
-    performanceProjection,
+    goals: structuredCoachContext ? goals : [],
+    activeGoal: structuredCoachContext ? activeGoal : null,
+    performanceProjection: structuredCoachContext ? performanceProjection : null,
     runnerIdentity,
     coachBeliefs,
     memorySelectionPolicy: {
@@ -1267,17 +1269,18 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
         'coachMemoryItems는 최신순 전체가 아니라 목표/부상/반복 패턴/높은 confidence belief와의 관련도를 우선해 고른 장기 기억 일부다.',
       priority: ['activeGoal 관련', 'activeInjuryItem 또는 riskFactors 관련', '반복 출현 패턴', 'confirmed/high confidence coachBeliefs', '최근 명시 피드백']
     },
-    runningAnalysisEngine,
+    runningAnalysisEngine: structuredCoachContext ? runningAnalysisEngine : null,
     runningAnalysisEngineInstruction:
       'runningAnalysisEngine은 코드가 먼저 계산한 훈련 판단이다. AI는 이 값을 재계산하지 말고 설명과 처방 언어로 번역한다. 단일 세션 감상보다 hrDrift/loadTrend/chronicLoadTrend/recoveryStatus/injuryRisk/overtrainingWarning/trainingSuitabilityScore를 우선 확인한다.',
     chronicLoadTrendInstruction:
       'chronicLoadTrend는 최근 30일 누적과 직전 30일을 비교한 중장기 부하다. 7일 급성 부하(loadTrend)가 안정적이어도 한 달에 걸쳐 누적이 천천히 spike로 늘었으면 부상 위험과 회복을 보수적으로 본다. 단 부상 예측 공식이 아니라 강도 조절 신호로만 쓴다.',
-    coachingDecisionBoard,
-    coachingDecisionBoardInstruction:
-      'coachingDecisionBoard는 이번 답변의 판단 보드다. 답변 전에 selectedRunEvidence, lapProcess, prescriptionCompliance, goalProjectionCheck, routineUpdateCheck를 먼저 확인하고, 핵심 지표/해석 섹션/루틴 업데이트에 그 근거를 반영한다. 이 보드와 원본 RunLog가 충돌하면 원본 RunLog를 우선하되, 보드는 설명 구조를 잡는 데 사용한다.',
-    injuryItems,
-    activeInjuryItem,
-    selectedRunDate: selectedRunDateForTemporalContext,
+    coachingDecisionBoard: structuredCoachContext ? coachingDecisionBoard : null,
+    coachingDecisionBoardInstruction: structuredCoachContext
+      ? 'coachingDecisionBoard는 이번 답변의 판단 보드다. 답변 전에 selectedRunEvidence, lapProcess, prescriptionCompliance, goalProjectionCheck, routineUpdateCheck를 먼저 확인하고, 핵심 지표/해석 섹션/루틴 업데이트에 그 근거를 반영한다. 이 보드와 원본 RunLog가 충돌하면 원본 RunLog를 우선하되, 보드는 설명 구조를 잡는 데 사용한다.'
+      : null,
+    injuryItems: structuredCoachContext ? injuryItems : [],
+    activeInjuryItem: structuredCoachContext ? activeInjuryItem : null,
+    selectedRunDate: structuredCoachContext ? selectedRunDateForTemporalContext : null,
     injuryCheckInPolicy,
     recoveryOutlook,
     trustLayerNote: trustLayerApplies ? trustLayerNote : null,
@@ -1288,14 +1291,14 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     coreMemoryItemsInstruction:
       'coreMemoryItems는 이 사용자를 대할 때 항상 안고 가는 활성 핵심 기억이다(사람으로 치면 늘 떠올리는 그 사람의 주요 서사·목표·동기·정체성·중요 제약). 매 답변의 기본 전제로 삼아 일관되게 사용자를 대한다. 사용자의 want to/하고 싶다/원한다 같은 욕구와 목표 서사를 특히 잊지 말고, 관련될 때 자연스럽게 이어 말해 신뢰를 쌓는다. 단 매번 통째로 나열하지 말고 맥락에 맞게 녹인다.',
     coachMemoryItems: tieredMemory.coachMemoryItems,
-    recentCoachReports: reportRows.slice(0, 5).map((report) => ({
+    recentCoachReports: structuredCoachContext ? reportRows.slice(0, 5).map((report) => ({
       selectedRunId: report.selected_run_id,
       userNote: report.user_note,
       createdAt: report.created_at,
       createdAtDisplay: formatDateTimeWithWeekday(report.created_at)
-    })),
-    similarPastCoachSnippets: buildSimilarPastCoachSnippets(selectedRun, runRows, reportRows),
-    selectedRunCoachThread: selectedRunId
+    })) : [],
+    similarPastCoachSnippets: structuredCoachContext ? buildSimilarPastCoachSnippets(selectedRun, runRows, reportRows) : [],
+    selectedRunCoachThread: structuredCoachContext && selectedRunId
       ? reportRows
           .filter((report) => report.selected_run_id === selectedRunId)
           .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
@@ -1307,24 +1310,28 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
             createdAtDisplay: formatDateTimeWithWeekday(report.created_at)
           }))
       : [],
-    selectedRun: summarizeRunForCoach(selectedRun),
-    selectedRunLapAnalysis,
-    selectedRunExecutionGuide,
-    lapAnalysisInstruction:
-      'selectedRunLapAnalysis와 selectedRunExecutionGuide가 있으면 반드시 코칭에 반영한다. 핵심 지표에는 페이스 흐름과 심박 흐름을 화살표로 짧게 보여주고, 해석 섹션에는 초반 오버페이스 여부, 심박이 터졌는지/잘 눌렸는지, 세션 유형별 심박/페이스 경계 초과 여부, 후반 페이스-심박 품질을 짚는다. 구간 데이터가 없을 때만 평균값 중심으로 말한다.',
-    contextFactorInstruction:
-      '세션 품질을 페이스/심박 숫자만으로 단독 평가하지 않는다. 그 기록을 유발한 외부 요인과 내부 요인을 함께 보고 "이 결과가 왜 이렇게 나왔는지"를 설명한다. 외부 요인: selectedRun.weather(기온/습도/바람), courseType(고도/지형), companion(동반주), 시간대. 내부 요인: activeInjuryItem/pain_note(부상·통증), sleep_quality(수면), condition_score(컨디션), stress_level(스트레스), rpe, recent7/14/30 누적과 중장기 부하 추세(최근 부하/피로). 과거 세션 복기든 최근 7일 현재 흐름이든 동일하게 적용한다.',
-    contextFactorHeatInstruction:
-      '특히 그날 기온이 높거나(대략 25도 이상) 습도가 높으면 같은 페이스에도 심박이 올라가므로, 심박 상승이나 페이스 저하를 실력 저하로 단정하지 않고 더위 맥락으로 설명한다. 직전 볼륨이 급증했거나 강훈련이 몰렸으면 후반 저하를 피로 맥락으로 본다. 수면 부족/낮은 컨디션/높은 스트레스도 같은 방식으로 그날 결과를 설명하는 요인으로 쓴다. 단 해당 요인 데이터가 없으면 억지로 끌어오거나 추측하지 않는다.',
-    prescriptionAdjustmentInstruction:
-      '선택 세션을 단순 기록이 아니라 이전 처방을 수행한 결과로 본다. selectedRunExecutionGuide에 맞게 훈련했는지 먼저 평가하고, 잘 지켰으면 유지 또는 소폭 상향 조건을 말한다. 경계를 반복적으로 넘었거나 회복/부상 신호가 있으면 다음 처방을 낮추거나 기준을 바꾼다. 조정 필요성이 명확하면 trainingMemoryPatch에 반영한다.',
-    recentPrescriptionComplianceSignals,
-    prescriptionComplianceSummary,
+    selectedRun: structuredCoachContext ? summarizeRunForCoach(selectedRun) : null,
+    selectedRunLapAnalysis: structuredCoachContext ? selectedRunLapAnalysis : null,
+    selectedRunExecutionGuide: structuredCoachContext ? selectedRunExecutionGuide : null,
+    lapAnalysisInstruction: structuredCoachContext
+      ? 'selectedRunLapAnalysis와 selectedRunExecutionGuide가 있으면 반드시 코칭에 반영한다. 핵심 지표에는 페이스 흐름과 심박 흐름을 화살표로 짧게 보여주고, 해석 섹션에는 초반 오버페이스 여부, 심박이 터졌는지/잘 눌렸는지, 세션 유형별 심박/페이스 경계 초과 여부, 후반 페이스-심박 품질을 짚는다. 구간 데이터가 없을 때만 평균값 중심으로 말한다.'
+      : null,
+    contextFactorInstruction: structuredCoachContext
+      ? '세션 품질을 페이스/심박 숫자만으로 단독 평가하지 않는다. 그 기록을 유발한 외부 요인과 내부 요인을 함께 보고 "이 결과가 왜 이렇게 나왔는지"를 설명한다. 외부 요인: selectedRun.weather(기온/습도/바람), courseType(고도/지형), companion(동반주), 시간대. 내부 요인: activeInjuryItem/pain_note(부상·통증), sleep_quality(수면), condition_score(컨디션), stress_level(스트레스), rpe, recent7/14/30 누적과 중장기 부하 추세(최근 부하/피로). 과거 세션 복기든 최근 7일 현재 흐름이든 동일하게 적용한다.'
+      : null,
+    contextFactorHeatInstruction: structuredCoachContext
+      ? '특히 그날 기온이 높거나(대략 25도 이상) 습도가 높으면 같은 페이스에도 심박이 올라가므로, 심박 상승이나 페이스 저하를 실력 저하로 단정하지 않고 더위 맥락으로 설명한다. 직전 볼륨이 급증했거나 강훈련이 몰렸으면 후반 저하를 피로 맥락으로 본다. 수면 부족/낮은 컨디션/높은 스트레스도 같은 방식으로 그날 결과를 설명하는 요인으로 쓴다. 단 해당 요인 데이터가 없으면 억지로 끌어오거나 추측하지 않는다.'
+      : null,
+    prescriptionAdjustmentInstruction: structuredCoachContext
+      ? '선택 세션을 단순 기록이 아니라 이전 처방을 수행한 결과로 본다. selectedRunExecutionGuide에 맞게 훈련했는지 먼저 평가하고, 잘 지켰으면 유지 또는 소폭 상향 조건을 말한다. 경계를 반복적으로 넘었거나 회복/부상 신호가 있으면 다음 처방을 낮추거나 기준을 바꾼다. 조정 필요성이 명확하면 trainingMemoryPatch에 반영한다.'
+      : null,
+    recentPrescriptionComplianceSignals: structuredCoachContext ? recentPrescriptionComplianceSignals : [],
+    prescriptionComplianceSummary: structuredCoachContext ? prescriptionComplianceSummary : null,
     prescriptionMemoryInstruction:
       'recentPrescriptionComplianceSignals는 최근 세션들이 각 유형별 처방 기준을 얼마나 지켰는지 보는 신호다. 단일 세션 결과를 장기기억으로 저장하지 말고, 최근 여러 세션에서 반복되는 준수/이탈 패턴만 memoryItems에 저장한다. 예: "최근 Tempo는 템포 상한을 대체로 지키지만 후반 1~2구간에서 흔들린다", "Recovery는 심박을 잘 누르는 편이다".',
-    runsAfterSelectedRun: runsAfterSelected.slice(0, 10).map(summarizeRunForCoach),
-    recent14: recent14.slice(0, 20).map(summarizeRunForCoach),
-    summaryStats
+    runsAfterSelectedRun: structuredCoachContext ? runsAfterSelected.slice(0, 10).map(summarizeRunForCoach) : [],
+    recent14: structuredCoachContext ? recent14.slice(0, 20).map(summarizeRunForCoach) : [],
+    summaryStats: structuredCoachContext ? summaryStats : null
   }
 }
 
@@ -1505,22 +1512,19 @@ function buildResponseTemplatePolicy() {
   }
 }
 
-function buildConversationalInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnType<typeof buildRunnerLevelGuide>) {
+function buildFreeConversationInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnType<typeof buildRunnerLevelGuide>) {
   return [
-    '너는 사용자를 오래 봐온 한국어 러닝 코치다. 지금은 분석 리포트가 아니라 친구 같은 코치와의 짧은 대화(사담) 중이다.',
-    `이 사용자의 runnerLevel은 ${runnerLevel}이다. ${levelGuide.tone} ${levelGuide.termDepth}`,
-    'context.userNoteRelevancePolicy를 반드시 따른다. 선택 세션이 화면에 열려 있어도 사용자가 그 세션을 묻지 않았으면 세션 숫자·의도·목표 예상·부상 노트를 억지로 연결하지 않는다.',
-    'context.userNoteRelevancePolicy가 일반 개념 설명/잡담이면 activeGoal, activeInjuryItem, trustLayerNote를 답변에 붙이지 않는다. 질문 주제 자체에만 답한다.',
-    '절대 금지: 마크다운 섹션 헤더(##), "핵심 지표 / 오늘 해석 / 세션 해석 / 조심할 점 / 다음 훈련 / 루틴 업데이트 / 한 줄 요약" 같은 섹션, 지표 나열 목록(- 페이스: …, - 심박: …), 세션 전체 재분석. context.responseTemplatePolicy와 context.coachingDecisionBoard는 이 모드에서 완전히 무시한다.',
-    '사용자가 방금 한 말(context.userNote)에 직접 반응해서 2~6문장으로 자연스럽게 답한다. 한국어 반말, 따뜻하고 담백하게. 첫 문장은 숫자가 아니라 반응으로 시작한다.',
-    '숫자가 꼭 필요하면 문장 속에 한두 개만 가볍게 녹인다. 세션 데이터를 요약하거나 나열하지 않는다.',
-    'context.coreMemoryItems(항상 안고 가는 핵심 기억: 사용자의 주요 서사·욕구·목표)와 context.coachMemoryItems(관련 기억)를 활용해 "너를 기억한다"는 느낌으로 이어 말한다. 사용자의 want to/하고 싶다/원한다 같은 욕구에 특히 공감하고 이어간다.',
-    '강도 얘기가 자연스럽게 나오면 심박 상한(context.heartRateModel)이 기준이고 페이스(context.paceModel)는 보조다. 단, 사용자가 묻지 않았으면 처방을 길게 늘어놓지 말고 대화에 필요한 만큼만 짧게.',
-    '부상/통증 신호가 보이면 무리한 조언 대신 한 줄로 조심스럽게 챙긴다. 의료 진단처럼 말하지 않는다.',
-    '의학적 경계(중요): 우리는 의사·전문의가 아니다. 부상 원인은 단정 진단이 아니라 "가능성"으로만 말한다(예: "케이던스가 낮아 지면 접촉이 길어진 영향일 수도, 최근 볼륨이 올라간 영향일 수도 있어요"). 그리고 빠져나갈 구멍을 분명히 둔다: 같은 통증이 1~2주 이상 지속되거나, 점점 심해지거나, 걷기 같은 일상에도 아프면 "코칭으로 무리하게 끌지 말고 병원·전문가(정형외과/물리치료) 진료를 한 번 받아보세요"라고 권한다. 코칭은 부하 조절·예방 보조이지 치료가 아니다.',
-    '사용자가 명시적으로 "분석해줘 / 리포트 / 자세히 평가해줘"라고 요청할 때만 예외적으로 구조화해서 답한다.',
+    '너는 한국어로 자연스럽게 답하는 러닝 코치다. 지금은 자유대화다.',
+    `이 사용자의 runnerLevel은 ${runnerLevel}이다. 전문 용어 깊이는 ${levelGuide.termDepth}`,
+    '사용자 질문(context.userNote)에 바로 답한다. 정해진 응답 템플릿, 고정 섹션, 첫 문장 반응 패턴을 쓰지 않는다.',
+    '절대 금지: "ㅋㅋ", "좋아", "아," 같은 습관적 시작을 매번 붙이지 않는다. 사용자가 웃으며 말한 경우가 아니면 웃음 표현으로 시작하지 않는다.',
+    '절대 금지: "## 핵심 지표 / 오늘 해석 / 조심할 점 / 다음 훈련 / 루틴 업데이트 / 한 줄 요약" 같은 코칭 리포트 섹션, 지표 나열, 세션 전체 재분석.',
+    'context.responseStyle, context.responseTemplatePolicy, context.coachingDecisionBoard, selectedRun, activeGoal, activeInjuryItem, trustLayerNote가 없다고 보고 답한다. 자유대화에서는 질문 주제 자체만 다룬다.',
+    '답변 길이와 형식은 질문에 맞춘다. 짧은 확인 질문이면 짧게, 개념 질문이면 필요한 만큼 설명하되 불필요한 개인화 단락을 붙이지 않는다.',
+    '마크다운은 필요할 때만 쓴다. 제목이나 목록을 쓰더라도 질문을 더 읽기 쉽게 만드는 목적일 때만 사용한다.',
+    '의학적 진단이나 통증 처방을 하지 않는다. 사용자가 통증/부상을 직접 물으면 일반 안전 원칙 수준에서 조심스럽게 말한다.',
     'memoryItems에는 이 대화에서 새로 알게 된 사용자의 안정적인 개인 맥락(목표/욕구/선호/서사)만 0~3개 넣는다. 일회성 잡담이나 단일 세션 수치는 넣지 않는다. 이미 core/coachMemoryItems에 있으면 다시 넣지 않는다.',
-    '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal. report에 사담 본문(섹션 없는 평문)을 넣고, trainingMemoryPatch와 injuryUpdateProposal은 null로 둔다.'
+    '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal. report에 자유대화 본문을 넣고, trainingMemoryPatch와 injuryUpdateProposal은 null로 둔다.'
   ].join('\n')
 }
 
@@ -1575,6 +1579,9 @@ function buildCoachInstructions(context: unknown) {
   const ctx = context as Record<string, unknown> | null
   const runnerLevel = normalizeRunnerLevel(ctx?.runnerLevel)
   const levelGuide = buildRunnerLevelGuide(runnerLevel)
+  if (ctx?.structuredCoachContext === false) {
+    return buildFreeConversationInstructions(runnerLevel, levelGuide)
+  }
   // 대화 턴(사용자가 입력함)이면 리포트 지침 세트를 아예 보내지 않고 의도별 전용 지침만 보낸다.
   // (리포트 few-shot 예시/섹션 정책이 함께 가면 모델이 계속 템플릿으로 빠진다.)
   if (ctx?.coachResponseMode === 'evidence') {
@@ -1584,7 +1591,7 @@ function buildCoachInstructions(context: unknown) {
     return buildExplainInstructions(runnerLevel, levelGuide)
   }
   if (ctx?.coachResponseMode === 'conversational') {
-    return buildConversationalInstructions(runnerLevel, levelGuide)
+    return buildFreeConversationInstructions(runnerLevel, levelGuide)
   }
   return [
     '너는 사용자를 오래 봐온 한국어 러닝 코치다.',
