@@ -27,6 +27,7 @@ import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { resolveRunnerLevel } from '@/shared/lib/runnerLevel'
 import { formatDateTimeWithWeekday, formatDateWithWeekday } from '@/shared/lib/format'
 import { buildCoachStreamFailurePresentation } from './coachStreamFailure'
+import { buildCoachStreamSuccessReport } from './coachStreamSuccess'
 import CoachMessage from '@/shared/ui/CoachMessage.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import SchedulingHelpSheet from '@/shared/ui/SchedulingHelpSheet.vue'
@@ -378,6 +379,7 @@ async function requestCoach() {
 
 async function sendCoachRequest(note: string) {
   if (!coachRun.value) return
+  const targetRunId = coachRun.value.id
   const commandId = selectedCommandId.value || null
   coachLoading.value = true
   coachError.value = ''
@@ -393,7 +395,7 @@ async function sendCoachRequest(note: string) {
   coachRevealStopped = false
   startCoachThinkingTimer()
   try {
-    const report = await requestCoachRunStream(coachRun.value.id, note, weatherStore.snapshot, {
+    const report = await requestCoachRunStream(targetRunId, note, weatherStore.snapshot, {
       signal: controller.signal,
       onDelta: enqueueCoachReveal,
       runnerLevel: resolveRunnerLevel(memoryStore.memory.athleteProfile, runStore.sortedRuns).level,
@@ -446,7 +448,13 @@ async function sendCoachRequest(note: string) {
       })()
     })
     await waitForCoachRevealDrain()
-    reports.value = [report, ...reports.value.filter((item) => item.id !== report.id)]
+    const visibleReport = buildCoachStreamSuccessReport({
+      report,
+      targetRunId,
+      displayedText: streamingCoachText.value,
+      pendingText: coachRevealPending
+    })
+    reports.value = [visibleReport, ...reports.value.filter((item) => item.id !== visibleReport.id)]
     pendingUserNote.value = ''
     selectedCommandId.value = ''
     coachCommandOpen.value = false
