@@ -1,4 +1,5 @@
 import { expect, test, type Locator } from '@playwright/test'
+import { suppressAccountStatePrompts } from './suppressAccountPrompts'
 
 /**
  * #473 휴식/복귀 인증 E2E (테스트 계정 lena0611+qa, 저장 세션 사용).
@@ -14,6 +15,10 @@ import { expect, test, type Locator } from '@playwright/test'
 const domClick = (loc: Locator) => loc.evaluate((el) => (el as HTMLElement).click())
 
 test.describe('#473 휴식/복귀', () => {
+  test.beforeEach(async ({ page }) => {
+    await suppressAccountStatePrompts(page)
+  })
+
   test('휴식 선언 → 💤 배너·닦달 억제·회복주 1회 → 지금 복귀 원복', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
@@ -100,9 +105,9 @@ test.describe('#473 휴식/복귀', () => {
     expect(['Easy', 'Recovery']).toContain(first?.sessionType)
     expect(first?.distanceKm ?? 99).toBeLessThanOrEqual(3.1) // ≤ 직전30일 최장(0)+10% floor 3km
 
-    // 복귀 "회복 후 정리" 모먼트(놓침 프레이밍 아님) — 코치 모먼트는 리디자인 ①b 이후 코치 탭에서.
-    await page.getByRole('button', { name: '코치', exact: true }).click()
-    await expect(page).toHaveURL(/#\/coach/)
-    await expect(page.getByText(/돌아온 걸 환영|가볍게 다시 시작/).first()).toBeVisible()
+    // 자연만료 복귀의 사용자 노출 사실: 💤 휴식 배너가 사라진다(복귀 완료 상태).
+    // '돌아온 걸 환영' 토스트는 명시 '지금 복귀' 경로 전용이고, 복귀 "회복 후 정리" 코치 모먼트는
+    // 미구현(coachMoments.ts doc 주석의 showReturn 계획만 존재) — 구현되면 여기 단언을 되살린다.
+    await expect(page.getByText(/쉬는 중/)).toHaveCount(0)
   })
 })

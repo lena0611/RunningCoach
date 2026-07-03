@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
+import { suppressAccountStatePrompts } from './suppressAccountPrompts'
 
 /**
  * #275 화면 스택 공통화 — 마이그레이션 렌더 스모크 (테스트 계정 lena0611+qa 저장 세션).
@@ -18,21 +19,6 @@ async function dismissStartupModals(page: Page) {
   if (await skip.isVisible().catch(() => false)) await skip.click()
 }
 
-/**
- * 활성 부상이 있는 계정이면 진입(및 네비게이션)마다 App 레벨 '부상 상태 체크인'이 떠 클릭을 가로채 스택 검증을 막는다.
- * 그 dismiss 플래그(pacelab.injuryCheckIn.dismissed.*)를 항상 dismissed 로 읽게 해 모달을 원천 차단한다 —
- * 클라이언트 UI 억제만 하고 체크인/계정 데이터는 건드리지 않는다(비파괴, 타이밍 무관). 온보딩 스킵과 같은 성격.
- */
-async function suppressInjuryCheckIn(page: Page) {
-  await page.addInitScript(() => {
-    const orig = Storage.prototype.getItem
-    Storage.prototype.getItem = function (this: Storage, key: string) {
-      if (typeof key === 'string' && key.startsWith('pacelab.injuryCheckIn.dismissed')) return '1'
-      return orig.call(this, key)
-    }
-  })
-}
-
 /** 열린 StackPage(.memory-stack-layer)를 헤더 제목으로 특정한다. */
 function stackByTitle(page: Page, title: string): Locator {
   return page.locator('.memory-stack-layer', {
@@ -42,7 +28,7 @@ function stackByTitle(page: Page, title: string): Locator {
 
 test.describe('#275 StackPage 공통화 마이그레이션', () => {
   test.beforeEach(async ({ page }) => {
-    await suppressInjuryCheckIn(page)
+    await suppressAccountStatePrompts(page)
   })
 
   test('Trends 렌즈 상세 — close-X StackPage 열림·헤더·닫힘', async ({ page }) => {
