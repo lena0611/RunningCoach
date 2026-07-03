@@ -46,6 +46,7 @@ PaceLAB is a personal running coach app, not an admin dashboard.
 - Pace fields must display rounded `m:ss` values. Never show raw fractional seconds such as `7:13.2714718`.
 - Account/profile management belongs in the header account drawer, not inside the `Memo` tab.
 - The account drawer opens from right to left. Profile editing is a second right-to-left stack inside the drawer.
+- Achievements (업적) also live in the account drawer as a second-level stack (moved out of the Memory tab in the 2026-07 redesign ①c). Do not reintroduce achievements or runner-profile sections into tab pages.
 - Account-level settings live in the account drawer as a separate settings stack, opened by an icon-only gear action in the account header. Do not add global settings into tab pages.
 - 테마 설정 UI는 존재하지 않는다(다크 단일). `settingsStore`는 알림 등 나머지 설정을 소유하며, 새 설정은 이 store 또는 형제 settings 도메인으로 확장한다 — 컴포넌트에 localStorage 읽기를 흩뿌리지 않는다.
 
@@ -53,7 +54,7 @@ PaceLAB is a personal running coach app, not an admin dashboard.
 
 Use a screen stack when the user is drilling into a deeper flow without changing the main tab.
 
-- A tab remains the root surface. Deeper screens slide over it instead of replacing the bottom tab context. Anything that is NOT a bottom-nav tab root (요약/기록/추세/기억) is a stack detail.
+- A tab remains the root surface. Deeper screens slide over it instead of replacing the bottom tab context. Anything that is NOT a bottom-nav tab root (요약/코치/기록/추세/기억) is a stack detail.
 - First-level stack screens (entry: opened from a tab via tap) animate **bottom-to-top** (rise / `stack-page-up`) and show only a **close (X) action in the top right**.
 - Going forward from a first-level stack into a deeper detail/edit screen animates **right-to-left** (push / `stack-page`) and shows a **back (←) action on the left of the title** (no close X). This is the router's forward direction.
 - The shared `StackPage` enforces this automatically: `back=false` → rise + top-right close; `back=true` → push + left back. Only override `transition` for special cases.
@@ -78,10 +79,10 @@ Use a screen stack when the user is drilling into a deeper flow without changing
 - Dashboard and Coach must surface the active goal and active injury context near the top. The user should not have to infer which goal or restriction the recommendation used.
 - Upload: simple HealthKit/FIT/manual import flow with large upload/import cards.
 - Run Log: chronological cards, run type badges, distance/pace/HR summary, edit/delete actions.
-- Trends: 전문 러닝 인사이트 화면. Lens selector, 기간/비교 기준, 핵심 변화 hero, 3~4개 요약 카드, 시각화, 해석, 근거 세션, 다음 처방 영향을 순서대로 보여준다. 통계표보다 발전/퇴보와 처방 조정 신호를 우선한다.
+- Trends: 전문 러닝 인사이트 화면(2026-07 리디자인 ①c에서 밀도 낮춤). L1은 비교 기준 선택 → 종합 판단 hero 1개(톤 배지 + 한 줄 결론 + 신뢰도) → 렌즈 리스트(좌측 액센트 바 = 판단색, 값 + 판단 + chevron)만 둔다. 렌즈를 탭하면 상세 스택(그 지표 hero, 요약 카드, 시각화, 해석, 다음 처방 영향, 근거 세션)으로 drill-in. 5개 지표를 L1에 동시에 펼치지 않는다. 통계표보다 발전/퇴보와 처방 조정 신호를 우선한다.
 - Memory: training context only: goal management, injury management, AI-managed weekly routine, long-run strategy, heat/style notes. Do not mix account registration controls into this screen. Weekly routine is shown as AI-managed context, not as a freeform user-authored plan.
 - Memory goal and injury management must use separated flows: overview card -> list -> edit or new item screen. Do not place active selection, edit fields, creation fields, and full lists in one long mixed form.
-- Memory overview should summarize the current coaching basis first, then provide drill-in cards for goal and injury management. Deep edit fields belong only on focused edit/create screens.
+- Memory overview (L1) is a "현재 코칭 기준" summary card (active goal + constraint) followed by a grouped 4-row management nav: 목표 · 몸 상태 · 훈련 기준 · AI 기억. Deep edit fields belong only on focused drill-in screens, each with its own per-section save button — there is no global save on the tab root (2026-07 redesign ①c).
 - Memory injury management must normalize body parts. Use the shared body selector with rotatable front/right/back/left views plus upper/lower/foot list fallback. Do not reintroduce free-text-only injury area entry; free text belongs in notes, triggers, and management details.
 - Coach: chat-like user and coach messages, markdown rendered as readable headings, paragraphs, lists, code blocks, and dividers.
 - Streaming coach answers should auto-follow the latest text line while the user is at the bottom. If the user intentionally scrolls upward, stop auto-following and show a centered down-arrow button above the input bar that smoothly returns to the latest message.

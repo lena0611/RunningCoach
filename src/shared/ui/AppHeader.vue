@@ -27,7 +27,8 @@ import HeartRateTestGuideSheet from '@/shared/ui/HeartRateTestGuideSheet.vue'
 import StackPage from '@/shared/ui/StackPage.vue'
 
 defineProps<{ isAuthenticated: boolean }>()
-const emit = defineEmits<{ signOut: [] }>()
+// openAchievements: 업적 스택은 App 레벨이 호스팅(#397 래칫 — shared 가 entities 도메인 컴포넌트를 직접 들지 않는다)
+const emit = defineEmits<{ signOut: []; openAchievements: [] }>()
 
 const authStore = useAuthStore()
 const healthKitSyncStore = useHealthKitSyncStore()
@@ -509,6 +510,18 @@ function openSettingsPanel(focus: SettingsPanelFocus | null = null) {
         <dd>{{ activeInjuryTitle }}</dd>
       </div>
     </dl>
+
+    <!-- 업적(리디자인 ①c): 기억 탭에서 계정 메뉴로 이전 — PB·마일스톤·꾸준함. 스택 호스팅은 App 레벨 -->
+    <button class="drawer-link-row" type="button" @click="emit('openAchievements')">
+      <span class="drawer-link-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M8 21h8" /><path d="M12 17v4" /><path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" /><path d="M7 6H4a3 3 0 0 0 3 4" /><path d="M17 6h3a3 3 0 0 1-3 4" /></svg>
+      </span>
+      <span class="drawer-link-text">
+        <strong>업적</strong>
+        <span>PB · 마일스톤 · 꾸준함 기록 모아보기</span>
+      </span>
+      <svg class="drawer-link-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+    </button>
 
     <button class="drawer-link-row" type="button" @click="goGlossary">
       <span class="drawer-link-icon" aria-hidden="true">

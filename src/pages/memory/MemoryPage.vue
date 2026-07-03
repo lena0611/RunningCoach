@@ -15,11 +15,8 @@ import {
   type InjuryAreaSelection
 } from '@/entities/training-memory/injuryAreas'
 import type { TrainingKnowledgeCatalog, TrainingKnowledgeRequest, TrainingMethod } from '@/entities/training-knowledge/model'
-import { formatDateWithWeekday, formatDuration } from '@/shared/lib/format'
-import { RUNNER_LEVEL_LABEL, resolveRunnerLevel } from '@/shared/lib/runnerLevel'
+import { formatDateWithWeekday } from '@/shared/lib/format'
 import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
-import { computeTempoCeilingAdaptation, describeTempoCeilingMeta } from '@/shared/lib/coaching/tempoAdaptation'
-import { getActiveInjuryItem } from '@/entities/training-memory/model'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 import { createTrainingKnowledgeRequest, fetchTrainingKnowledgeCatalog } from '@/shared/api/trainingKnowledgeRepository'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
@@ -27,17 +24,15 @@ import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import ClearableField from '@/shared/ui/ClearableField.vue'
 import DateField from '@/shared/ui/DateField.vue'
 import FormGrid from '@/shared/ui/FormGrid.vue'
-import InfoPairGrid from '@/shared/ui/InfoPairGrid.vue'
 import InjuryBodySelector from '@/shared/ui/InjuryBodySelector.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
-import SectionGroup from '@/shared/ui/SectionGroup.vue'
-import AchievementsSection from '@/pages/memory/AchievementsSection.vue'
-import { computeAchievements } from '@/shared/lib/achievement/achievements'
+import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
 import SchedulingHelpSheet from '@/shared/ui/SchedulingHelpSheet.vue'
 import StackPage from '@/shared/ui/StackPage.vue'
 
-type MemoryPanel = 'overview' | 'goals' | 'goal-edit' | 'goal-new' | 'injuries' | 'injury-edit' | 'injury-new' | 'achievements' | 'knowledge' | 'knowledge-request'
+// 리디자인 ①c: 러너 프로필·업적은 계정 드로어(AppHeader) 소관. 훈련 기준·AI 기억은 인라인 편집에서 drill-in 패널로 분리.
+type MemoryPanel = 'overview' | 'goals' | 'goal-edit' | 'goal-new' | 'injuries' | 'injury-edit' | 'injury-new' | 'training' | 'ai-memory' | 'knowledge' | 'knowledge-request'
 
 const memoryStore = useMemoryStore()
 const runStore = useRunStore()
@@ -130,14 +125,6 @@ const secondaryGoals = computed(() => draft.goals
   .sort((a, b) => a.priority - b.priority)
 )
 const managedInjuries = computed(() => draft.injuryItems.filter((item) => item.status === 'active' || item.status === 'monitoring'))
-const activeGoalMeta = computed(() => {
-  if (!activeGoal.value) return '목표 없음'
-  return [activeGoal.value.category, activeGoal.value.targetDate ? `${formatDateWithWeekday(activeGoal.value.targetDate)}까지` : '목표일 미정'].join(' · ')
-})
-const activeInjuryMeta = computed(() => {
-  if (!activeInjury.value) return '관리 항목 없음'
-  return [activeInjury.value.status, activeInjury.value.severity !== null ? `${activeInjury.value.severity}/5` : '강도 미입력'].join(' · ')
-})
 const panel = computed<MemoryPanel>(() => stack.value.at(-1) ?? 'overview')
 const isStackOpen = computed(() => panel.value !== 'overview')
 const isDirty = computed(() => JSON.stringify(draft) !== memorySnapshot.value)
@@ -155,12 +142,14 @@ const stackTitle = computed(() => {
       return '새 부상/주의사항'
     case 'injury-edit':
       return '부상/주의사항 편집'
+    case 'training':
+      return '훈련 기준'
+    case 'ai-memory':
+      return 'AI 기억'
     case 'knowledge':
       return '훈련 지식'
     case 'knowledge-request':
       return '지식화 검토 요청'
-    case 'achievements':
-      return '업적'
     default:
       return '코칭 메모리'
   }
@@ -185,47 +174,53 @@ const weeklyRoutineGuides = computed(() => draft.weeklyPattern.map((item) => ({
 const trainingPhase = computed(() => draft.adaptiveTrainingProfile.trainingPhase)
 const progressionCriteria = computed(() => draft.adaptiveTrainingProfile.progressionCriteria)
 const prescriptionTemplates = computed(() => draft.adaptiveTrainingProfile.prescriptionTemplates)
-const runnerLevelFact = computed(() => {
-  const derived = resolveRunnerLevel(draft.athleteProfile, runStore.sortedRuns)
-  const label = RUNNER_LEVEL_LABEL[derived.level]
-  return derived.source === 'manual' ? `${label} (직접 설정)` : `${label} (자동)`
-})
-const HEART_RATE_SOURCE_LABEL: Record<string, string> = {
-  lthr: '역치심박(직접 입력)',
-  measured_max: '측정 최대심박(직접 입력)',
-  observed_data: '누적 기록 추정',
-  age_estimated: '나이 추정',
-  age_data_corrected: '나이 + 누적 기록 보정',
-  insufficient: '미설정'
-}
-const heartRateModelFact = computed(() => {
-  const observed = deriveObservedMaxHr(runStore.sortedRuns.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })))
-  const model = deriveHeartRateModel(draft.athleteProfile, new Date().getFullYear(), observed)
-  if (model.tempoCeilingBpm === null) return '미설정 (나이 또는 심박 입력 필요)'
-  // Tempo 상한 적응(#301): effective + 출처·신뢰도. 상향 후보가 있으면 함께 표시.
-  const adaptation = computeTempoCeilingAdaptation(runStore.sortedRuns, model.tempoCeilingBpm, {
-    injuryActive: Boolean(getActiveInjuryItem(draft)),
-    adoptedCeilingBpm: draft.adaptiveTrainingProfile.tempoCeiling?.adoptedBpm ?? null
-  })
-  const { effectiveBpm, suffix } = describeTempoCeilingMeta(adaptation, model.tempoCeilingBpm, HEART_RATE_SOURCE_LABEL[model.source] ?? model.source)
-  return `템포 ${effectiveBpm} · 이지 ${model.easyCeilingBpm}bpm ${suffix}`
-})
-const profileFacts = computed(() => [
-  { label: '러너', value: memoryStore.selectedUser.name || '기본 사용자' },
-  { label: '출생연도', value: draft.athleteProfile.birthYear ? `${draft.athleteProfile.birthYear}` : '미입력' },
-  { label: '성별', value: sexLabel(draft.athleteProfile.sex) },
-  { label: '러닝 경력', value: formatExperience(draft.athleteProfile.runningExperienceMonths) },
-  { label: '체중', value: draft.athleteProfile.weightKg ? `${draft.athleteProfile.weightKg}kg` : '미입력' },
-  { label: '러너 레벨', value: runnerLevelFact.value },
-  { label: '주간 목표', value: draft.athleteProfile.weeklyRunDaysTarget ? `${draft.athleteProfile.weeklyRunDaysTarget}회` : '미입력' },
-  { label: '롱런 요일', value: draft.athleteProfile.preferredLongRunDay || '미입력' },
-  { label: '템포 상한', value: heartRateModelFact.value }
-])
-const personalBestPreview = computed(() => draft.athleteProfile.personalBests
-  .slice(0, 4)
-  .map((pb) => `${pb.distanceKm}km · ${formatDuration(pb.durationSec)} · ${formatDateWithWeekday(pb.date)}`)
-)
 const aiMemoryCount = computed(() => draft.knownIssues.length + draft.runningStyle.length + draft.heatStrategy.length + draft.aiNotes.length)
+
+// ── 현재 코칭 기준 요약 카드 + 관리 nav (리디자인 ①c) ─────────────────
+const basisGoalMeta = computed(() => {
+  if (!activeGoal.value) return '기억 > 목표에서 목표를 만들어 주세요'
+  const target = activeGoal.value.targetDate
+  if (!target) return `${activeGoal.value.category} · 목표일 미정`
+  const dday = Math.ceil((new Date(`${target}T00:00:00`).getTime() - Date.now()) / 86_400_000)
+  const ddayText = dday > 0 ? `D-${dday}` : dday === 0 ? 'D-DAY' : '목표일 지남'
+  return `${ddayText} · ${formatDateWithWeekday(target)}`
+})
+const basisConstraintTitle = computed(() => {
+  if (!activeInjury.value) return '제약 없음'
+  const severity = activeInjury.value.severity
+  return severity !== null ? `${activeInjury.value.title} Lv.${severity}` : activeInjury.value.title
+})
+const basisConstraintMeta = computed(() => {
+  if (!activeInjury.value) return '부상/주의사항 없음'
+  return activeInjury.value.restrictions[0] || injuryStatusLabel(activeInjury.value.status)
+})
+const hasInjuryAlert = computed(() => draft.injuryItems.some((item) => item.status === 'active'))
+const goalsNavMeta = computed(() => `${activeGoal.value ? '활성 1개' : '활성 없음'} · 보조 ${secondaryGoals.value.length}개`)
+const injuriesNavMeta = computed(() => (managedInjuries.value.length ? `관리 중 ${managedInjuries.value.length}건` : '관리 항목 없음'))
+const trainingNavMeta = computed(() => `${trainingPhase.value.currentPhase} · 주간 루틴 ${draft.weeklyPattern.length}회`)
+const aiNavMeta = computed(() => `장기 메모 ${aiMemoryCount.value}개`)
+
+// ── 항목별 저장(리디자인 ①c): 전역 저장 제거 — 패널 그룹별 dirty 판정·부분 커밋 ──
+type MemorySection = 'goals' | 'injuries' | 'training' | 'ai'
+const SECTION_KEYS: Record<MemorySection, (keyof TrainingMemory)[]> = {
+  goals: ['goals', 'activeGoalId', 'goal'],
+  injuries: ['injuryItems', 'activeInjuryItemId'],
+  training: ['longRunStrategy', 'currentVolumeNote'],
+  ai: ['knownIssues', 'runningStyle', 'heatStrategy', 'aiNotes']
+}
+const snapshotMemory = computed<TrainingMemory>(() => JSON.parse(memorySnapshot.value))
+const panelSection = computed<MemorySection | null>(() => {
+  if (panel.value.startsWith('goal')) return 'goals'
+  if (panel.value.startsWith('injur')) return 'injuries'
+  if (panel.value === 'training') return 'training'
+  if (panel.value === 'ai-memory') return 'ai'
+  return null
+})
+const isSectionDirty = computed(() => {
+  const section = panelSection.value
+  if (!section) return false
+  return SECTION_KEYS[section].some((key) => JSON.stringify(draft[key]) !== JSON.stringify(snapshotMemory.value[key]))
+})
 
 watch(
   () => memoryStore.selectedUserId,
@@ -268,24 +263,8 @@ function syncDraftFromStore() {
   memorySnapshot.value = JSON.stringify(draft)
 }
 
-function sexLabel(value: TrainingMemory['athleteProfile']['sex']) {
-  switch (value) {
-    case 'male':
-      return '남성'
-    case 'female':
-      return '여성'
-    case 'other':
-      return '기타'
-    default:
-      return '미입력'
-  }
-}
-
-function formatExperience(months: number | null) {
-  if (months === null) return '미입력'
-  if (months < 12) return '1년 미만'
-  const years = Math.floor(months / 12)
-  return `${years}년`
+function injuryStatusLabel(status: TrainingInjuryItem['status']) {
+  return injuryStatusOptions.find((option) => option.value === status)?.label ?? status
 }
 
 function goalDateMeta(goal: TrainingGoal) {
@@ -409,32 +388,18 @@ function openInjuries() {
   pushPanel('injuries')
 }
 
-function openAchievements() {
-  pushPanel('achievements')
+function openTraining() {
+  pushPanel('training')
+}
+
+function openAiMemory() {
+  pushPanel('ai-memory')
 }
 
 function openKnowledge() {
   pushPanel('knowledge')
   void loadKnowledge()
 }
-
-const achievementPreview = computed(() => {
-  const set = computeAchievements(runStore.sortedRuns)
-  const pb5k = set.distancePbs.find((p) => p.context === 'training' && p.distanceM === 5000)
-  const longest = set.longestDistance.find((r) => r.context === 'training')
-  const streak = set.cumulative.longestStreak
-  const weekly = set.cumulative.bestWeeklyVolume
-  const headline: string[] = []
-  if (pb5k) headline.push(`5K ${formatDuration(pb5k.elapsedSec)}`)
-  if (longest) headline.push(`최장 ${longest.distanceKm.toFixed(1)}km`)
-  const sub: string[] = []
-  if (streak) sub.push(`최장 연속 ${streak.days}일`)
-  if (weekly) sub.push(`주 최고 ${weekly.distanceKm}km`)
-  return {
-    headline: headline.join(' · ') || '아직 업적이 없어요',
-    sub: sub.join(' · ') || '기록을 쌓으면 PB·꾸준함 업적이 표시됩니다'
-  }
-})
 
 function openKnowledgeRequest() {
   knowledgeRequestSaved.value = false
@@ -734,14 +699,25 @@ function replaceTopPanel(nextPanel: MemoryPanel) {
   })
 }
 
-async function save() {
+// 항목별 저장(리디자인 ①c): 열려 있는 패널 그룹의 키만 스토어 기준 위에 얹어 커밋한다.
+// 다른 패널의 미저장 편집은 draft·스냅샷 양쪽에 그대로 남아 함께 저장되지 않는다.
+async function saveSection(section: MemorySection) {
   saving.value = true
   error.value = ''
   try {
-    syncLegacyGoal()
-    await memoryStore.update(JSON.parse(JSON.stringify(draft)))
-    Object.assign(draft, JSON.parse(JSON.stringify(memoryStore.memory)))
-    memorySnapshot.value = JSON.stringify(draft)
+    if (section === 'goals') syncLegacyGoal()
+    const payload = JSON.parse(JSON.stringify(memoryStore.memory)) as TrainingMemory
+    for (const key of SECTION_KEYS[section]) {
+      ;(payload as Record<string, unknown>)[key] = JSON.parse(JSON.stringify(draft[key]))
+    }
+    await memoryStore.update(payload)
+    const saved = JSON.parse(JSON.stringify(memoryStore.memory)) as TrainingMemory
+    const nextSnapshot = JSON.parse(memorySnapshot.value) as TrainingMemory
+    for (const key of SECTION_KEYS[section]) {
+      ;(draft as Record<string, unknown>)[key] = JSON.parse(JSON.stringify(saved[key]))
+      ;(nextSnapshot as Record<string, unknown>)[key] = saved[key]
+    }
+    memorySnapshot.value = JSON.stringify(nextSnapshot)
   } catch (err) {
     error.value = err instanceof Error ? err.message : '저장 실패'
   } finally {
@@ -752,165 +728,61 @@ async function save() {
 
 <template>
   <PageLayout variant="memory">
-    <SectionGroup class="memory-overview-card" title="목표" :surface="false">
-      <template #actions>
-        <button type="button" :disabled="saving || !isDirty" @click="save">{{ saving ? '저장 중' : '저장' }}</button>
-      </template>
-      <p v-if="error || memoryStore.error" class="error">{{ error || memoryStore.error }}</p>
+    <p v-if="error || memoryStore.error" class="error">{{ error || memoryStore.error }}</p>
 
-      <button class="memory-hero memory-hero-button" type="button" @click="openGoals">
-        <span class="context-chip">활성 목표</span>
-        <strong>{{ activeGoal?.title || '목표 없음' }}</strong>
-        <small>{{ activeGoalMeta }}</small>
-        <small v-if="activeGoal?.successCriteria">{{ activeGoal.successCriteria }}</small>
-        <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
-      </button>
-
-      <div v-if="secondaryGoals.length" class="memory-compact-list">
-        <div v-for="goal in secondaryGoals.slice(0, 3)" :key="goal.id">
-          <span>{{ goal.status }}</span>
-          <strong>{{ goal.title }}</strong>
-          <small>{{ goal.category }}{{ goalDateMeta(goal) }}</small>
+    <!-- 현재 코칭 기준 요약(리디자인 ①c): 코칭이 무엇을 기준으로 삼는지 한눈에 — 활성 목표 + 제약 -->
+    <SectionCard class="memory-basis-card">
+      <span class="memory-basis-eyebrow">현재 코칭 기준</span>
+      <div class="memory-basis-row">
+        <span class="memory-basis-pill memory-basis-pill-goal">목표</span>
+        <div class="memory-basis-body">
+          <strong>{{ activeGoal?.title || '목표 없음' }}</strong>
+          <small>{{ basisGoalMeta }}</small>
         </div>
       </div>
-    </SectionGroup>
+      <div class="memory-basis-row">
+        <span class="memory-basis-pill memory-basis-pill-constraint" :class="{ 'memory-basis-pill-none': !activeInjury }">제약</span>
+        <div class="memory-basis-body">
+          <strong>{{ basisConstraintTitle }}</strong>
+          <small>{{ basisConstraintMeta }}</small>
+        </div>
+      </div>
+    </SectionCard>
 
-    <SectionGroup title="몸 상태" :surface="false">
-      <button class="memory-nav-card memory-nav-card-standalone" type="button" @click="openInjuries">
-        <span>
-          <strong>{{ activeInjury?.title || '관리 항목 없음' }}</strong>
-          <small>{{ activeInjury ? `${injuryAreaMeta(activeInjury)} · ${activeInjuryMeta}` : '부상/주의사항 없음' }}</small>
+    <!-- 관리 항목 nav: 목표 · 몸 상태 · 훈련 기준 · AI 기억 — 편집은 전부 drill-in, 항목별 저장 -->
+    <nav class="memory-manage-list" aria-label="코칭 기억 관리">
+      <button type="button" class="memory-manage-row" @click="openGoals">
+        <span class="memory-manage-main">
+          <strong>목표</strong>
+          <small>{{ goalsNavMeta }}</small>
         </span>
         <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
       </button>
-      <div v-if="activeInjury" class="memory-context-block">
-        <strong>복귀 기준</strong>
-        <p>{{ activeInjury.returnToRunCriteria || 'Easy 후 다음날 반응을 기준으로 조정합니다.' }}</p>
-      </div>
-      <div v-if="managedInjuries.length > 1" class="memory-compact-list">
-        <div v-for="item in managedInjuries.slice(0, 3)" :key="item.id">
-          <span>{{ item.status }}</span>
-          <strong>{{ item.title }}</strong>
-          <small>{{ injuryAreaMeta(item) }}{{ injuryDateMeta(item) }}</small>
-        </div>
-      </div>
-    </SectionGroup>
-
-    <SectionGroup title="러너 프로필" :surface="false">
-      <InfoPairGrid :items="profileFacts" />
-      <div v-if="personalBestPreview.length" class="memory-context-block">
-        <strong>PB</strong>
-        <ul>
-          <li v-for="pb in personalBestPreview" :key="pb">{{ pb }}</li>
-        </ul>
-      </div>
-      <p class="helper">프로필과 PB 수정은 우상단 계정 메뉴에서 관리합니다.</p>
-    </SectionGroup>
-
-    <SectionGroup title="업적" :surface="false">
-      <button class="memory-nav-card memory-nav-card-standalone" type="button" @click="openAchievements">
-        <span>
-          <strong>{{ achievementPreview.headline }}</strong>
-          <small>{{ achievementPreview.sub }}</small>
+      <button type="button" class="memory-manage-row" @click="openInjuries">
+        <span class="memory-manage-main">
+          <strong>몸 상태</strong>
+          <small>{{ injuriesNavMeta }}</small>
+        </span>
+        <span v-if="hasInjuryAlert" class="memory-manage-badge">주의</span>
+        <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
+      </button>
+      <button type="button" class="memory-manage-row" @click="openTraining">
+        <span class="memory-manage-main">
+          <strong>훈련 기준</strong>
+          <small>{{ trainingNavMeta }}</small>
         </span>
         <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
       </button>
-    </SectionGroup>
+      <button type="button" class="memory-manage-row" @click="openAiMemory">
+        <span class="memory-manage-main">
+          <strong>AI 기억</strong>
+          <small>{{ aiNavMeta }}</small>
+        </span>
+        <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
+      </button>
+    </nav>
 
-    <SectionGroup title="훈련 기준" :surface="false">
-      <template #actions>
-        <button class="help-icon-button" type="button" aria-label="AI 스케줄링 기준 보기" @click="schedulingHelpOpen = true">?</button>
-      </template>
-      <div class="training-phase-card">
-        <span class="context-chip">현재 단계</span>
-        <strong>{{ trainingPhase.currentPhase }} · {{ trainingPhase.goal }}</strong>
-        <small>다음 후보: {{ trainingPhase.nextPhase || '미정' }} · 검토: {{ trainingPhase.reviewAfter }}</small>
-        <div class="phase-focus-list">
-          <span v-for="focus in trainingPhase.focus" :key="focus">{{ focus }}</span>
-        </div>
-      </div>
-
-      <div class="memory-note-grid">
-        <label>
-          장거리 전략
-          <ClearableField v-model="draft.longRunStrategy" as="textarea" rows="3" />
-        </label>
-        <label>
-          현재 볼륨 노트
-          <ClearableField v-model="draft.currentVolumeNote" as="textarea" rows="3" />
-        </label>
-      </div>
-
-      <div class="memory-subsection">
-        <strong>주간 루틴</strong>
-        <ul class="routine-guide-list">
-          <li v-for="guide in weeklyRoutineGuides" :key="guide.item">
-            <div class="routine-guide-head">
-              <strong>{{ guide.item }}</strong>
-              <span>{{ guide.metric }}</span>
-            </div>
-            <small>{{ guide.title }}</small>
-            <ul>
-              <li v-for="detail in guide.details" :key="detail">{{ detail }}</li>
-            </ul>
-          </li>
-        </ul>
-      </div>
-    </SectionGroup>
-
-    <SectionGroup title="AI 기억" :surface="false">
-      <div class="memory-ai-summary">
-        <span class="context-chip">장기 메모 {{ aiMemoryCount }}개</span>
-        <button class="memory-link-button" type="button" @click="openKnowledge">훈련 지식 보관소</button>
-      </div>
-
-      <div class="memory-subsection">
-        <strong>승급 조건</strong>
-        <ul class="progression-criteria-list">
-          <li v-for="criterion in progressionCriteria" :key="criterion.id">
-            <div>
-              <span class="context-chip" :class="`criterion-${criterion.status}`">{{ criterion.status }}</span>
-              <strong>{{ criterion.label }}</strong>
-            </div>
-            <small>{{ criterion.evidence }}</small>
-            <p>{{ criterion.action }}</p>
-          </li>
-        </ul>
-      </div>
-
-      <div class="memory-subsection">
-        <strong>처방 템플릿</strong>
-        <div class="prescription-template-list">
-          <article v-for="template in prescriptionTemplates.slice(0, 4)" :key="template.id">
-            <span class="context-chip">{{ template.phase }}</span>
-            <strong>{{ template.name }}</strong>
-            <small>{{ template.sessionType }} · {{ template.purpose }}</small>
-            <ul>
-              <li v-for="step in template.workout.slice(0, 3)" :key="step">{{ step }}</li>
-            </ul>
-          </article>
-        </div>
-      </div>
-
-      <FormGrid class="memory-ai-fields">
-        <label class="full">
-          기타 주의사항
-          <ClearableField :model-value="join(draft.knownIssues)" as="textarea" rows="5" @update:model-value="draft.knownIssues = split(String($event ?? ''))" />
-        </label>
-        <label class="full">
-          러닝 스타일
-          <ClearableField :model-value="join(draft.runningStyle)" as="textarea" rows="6" @update:model-value="draft.runningStyle = split(String($event ?? ''))" />
-        </label>
-        <label class="full">
-          여름 전략
-          <ClearableField :model-value="join(draft.heatStrategy)" as="textarea" rows="5" @update:model-value="draft.heatStrategy = split(String($event ?? ''))" />
-        </label>
-        <label class="full">
-          코칭 메모
-          <ClearableField :model-value="join(draft.aiNotes)" as="textarea" rows="5" @update:model-value="draft.aiNotes = split(String($event ?? ''))" />
-        </label>
-      </FormGrid>
-    </SectionGroup>
+    <p class="helper memory-account-hint">프로필 · 업적은 우상단 계정 메뉴에서 관리합니다.</p>
 
     <StackPage
       :open="isStackOpen"
@@ -1127,8 +999,99 @@ async function save() {
           </ActionGroup>
             </FormGrid>
 
-            <div v-else-if="panel === 'achievements'" class="memory-stack">
-              <AchievementsSection :runs="runStore.sortedRuns" />
+            <div v-else-if="panel === 'training'" class="memory-stack">
+              <SectionHeader title="훈련 단계" compact>
+                <button class="help-icon-button" type="button" aria-label="AI 스케줄링 기준 보기" @click="schedulingHelpOpen = true">?</button>
+              </SectionHeader>
+              <div class="training-phase-card">
+                <span class="context-chip">현재 단계</span>
+                <strong>{{ trainingPhase.currentPhase }} · {{ trainingPhase.goal }}</strong>
+                <small>다음 후보: {{ trainingPhase.nextPhase || '미정' }} · 검토: {{ trainingPhase.reviewAfter }}</small>
+                <div class="phase-focus-list">
+                  <span v-for="focus in trainingPhase.focus" :key="focus">{{ focus }}</span>
+                </div>
+              </div>
+
+              <div class="memory-note-grid">
+                <label>
+                  장거리 전략
+                  <ClearableField v-model="draft.longRunStrategy" as="textarea" rows="3" />
+                </label>
+                <label>
+                  현재 볼륨 노트
+                  <ClearableField v-model="draft.currentVolumeNote" as="textarea" rows="3" />
+                </label>
+              </div>
+
+              <div class="memory-subsection">
+                <strong>주간 루틴</strong>
+                <ul class="routine-guide-list">
+                  <li v-for="guide in weeklyRoutineGuides" :key="guide.item">
+                    <div class="routine-guide-head">
+                      <strong>{{ guide.item }}</strong>
+                      <span>{{ guide.metric }}</span>
+                    </div>
+                    <small>{{ guide.title }}</small>
+                    <ul>
+                      <li v-for="detail in guide.details" :key="detail">{{ detail }}</li>
+                    </ul>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <div v-else-if="panel === 'ai-memory'" class="memory-stack">
+              <div class="memory-ai-summary">
+                <span class="context-chip">장기 메모 {{ aiMemoryCount }}개</span>
+                <button class="memory-link-button" type="button" @click="openKnowledge">훈련 지식 보관소</button>
+              </div>
+
+              <div class="memory-subsection">
+                <strong>승급 조건</strong>
+                <ul class="progression-criteria-list">
+                  <li v-for="criterion in progressionCriteria" :key="criterion.id">
+                    <div>
+                      <span class="context-chip" :class="`criterion-${criterion.status}`">{{ criterion.status }}</span>
+                      <strong>{{ criterion.label }}</strong>
+                    </div>
+                    <small>{{ criterion.evidence }}</small>
+                    <p>{{ criterion.action }}</p>
+                  </li>
+                </ul>
+              </div>
+
+              <div class="memory-subsection">
+                <strong>처방 템플릿</strong>
+                <div class="prescription-template-list">
+                  <article v-for="template in prescriptionTemplates.slice(0, 4)" :key="template.id">
+                    <span class="context-chip">{{ template.phase }}</span>
+                    <strong>{{ template.name }}</strong>
+                    <small>{{ template.sessionType }} · {{ template.purpose }}</small>
+                    <ul>
+                      <li v-for="step in template.workout.slice(0, 3)" :key="step">{{ step }}</li>
+                    </ul>
+                  </article>
+                </div>
+              </div>
+
+              <FormGrid class="memory-ai-fields">
+                <label class="full">
+                  기타 주의사항
+                  <ClearableField :model-value="join(draft.knownIssues)" as="textarea" rows="5" @update:model-value="draft.knownIssues = split(String($event ?? ''))" />
+                </label>
+                <label class="full">
+                  러닝 스타일
+                  <ClearableField :model-value="join(draft.runningStyle)" as="textarea" rows="6" @update:model-value="draft.runningStyle = split(String($event ?? ''))" />
+                </label>
+                <label class="full">
+                  여름 전략
+                  <ClearableField :model-value="join(draft.heatStrategy)" as="textarea" rows="5" @update:model-value="draft.heatStrategy = split(String($event ?? ''))" />
+                </label>
+                <label class="full">
+                  코칭 메모
+                  <ClearableField :model-value="join(draft.aiNotes)" as="textarea" rows="5" @update:model-value="draft.aiNotes = split(String($event ?? ''))" />
+                </label>
+              </FormGrid>
             </div>
 
             <div v-else-if="panel === 'knowledge'" class="memory-stack">
@@ -1209,8 +1172,11 @@ async function save() {
           </div>
         </Transition>
       </main>
-      <template #footer>
-        <button type="button" :disabled="saving || !isDirty" @click="save">{{ saving ? '저장 중' : isDirty ? '변경사항 저장' : '저장됨' }}</button>
+      <!-- 항목별 저장(리디자인 ①c): 열린 패널 그룹만 저장 — knowledge 계열은 자체 저장이라 footer 없음 -->
+      <template v-if="panelSection" #footer>
+        <button type="button" :disabled="saving || !isSectionDirty" @click="panelSection && saveSection(panelSection)">
+          {{ saving ? '저장 중' : isSectionDirty ? '변경사항 저장' : '저장됨' }}
+        </button>
       </template>
     </StackPage>
 

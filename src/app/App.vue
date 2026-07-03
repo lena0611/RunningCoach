@@ -16,9 +16,11 @@ import {
   createInjuryScreeningPromptedKey
 } from '@/features/injury-check-in/injuryCheckInPrompt'
 import { hasNativeBridge } from '@/shared/lib/runtime'
+import AchievementsSection from '@/features/achievements/AchievementsSection.vue'
 import AppShell from '@/shared/ui/AppShell.vue'
 import CoachSessionOverlay from '@/features/coach-session/CoachSessionOverlay.vue'
 import SessionDetailOverlay from '@/features/session-detail/SessionDetailOverlay.vue'
+import StackPage from '@/shared/ui/StackPage.vue'
 import { useCoachStore } from '@/app/stores/coachStore'
 import { useSessionDetailStore } from '@/app/stores/sessionDetailStore'
 import InjuryCheckInSheet from '@/shared/ui/InjuryCheckInSheet.vue'
@@ -48,6 +50,9 @@ const injuryFlowStore = useInjuryFlowStore()
 const coachStore = useCoachStore()
 const sessionDetailStore = useSessionDetailStore()
 const watchRaceStore = useWatchRaceStore()
+
+// 업적 스택(리디자인 ①c): 계정 드로어에서 열리는 App 레벨 오버레이 — #397 래칫상 shared(AppHeader)가 도메인 컴포넌트를 직접 들지 않는다.
+const achievementsOpen = ref(false)
 
 // #552 Phase 3: runs 변동 → 워치 고스트 카탈로그 재하강(디바운스). PB 갱신·삭제가 워치 상대에 반영된다.
 let watchCatalogPushTimer: number | null = null
@@ -886,10 +891,14 @@ function animateTabRelease(targetOffset: number, targetRoute: string | null) {
 </script>
 
 <template>
-  <AppShell :nav-items="navItems" :is-authenticated="authStore.isAuthenticated" @sign-out="authStore.signOut()">
+  <AppShell :nav-items="navItems" :is-authenticated="authStore.isAuthenticated" @sign-out="authStore.signOut()" @open-achievements="achievementsOpen = true">
     <ToastHost />
     <CoachSessionOverlay />
     <SessionDetailOverlay />
+    <!-- 업적(리디자인 ①c): 계정 드로어 위에 얹히는 2차 스택 — 닫으면 드로어(계정 정보)로 복귀 -->
+    <StackPage :open="achievementsOpen" title="업적" back dismiss-label="계정 정보로 돌아가기" layer-class="stack-layer-top" @close="achievementsOpen = false">
+      <AchievementsSection :runs="runStore.sortedRuns" />
+    </StackPage>
     <OnboardingFlow v-if="showOnboarding" />
     <CelebrationModal
       v-if="levelStore.pendingCelebration"

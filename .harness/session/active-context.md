@@ -52,7 +52,7 @@
 ## 제품 구조 (고정 사실)
 - 제품명 `PaceLAB`. GitHub Pages 정적 프론트 + Supabase Auth/Postgres/Edge Function + OpenAI + iOS WKWebView/HealthKit 하이브리드.
 - **모노레포(#250, 2026-06-08)**: 웹(repo root `src/`)과 네이티브(`native/`)가 **단일 .git/origin**. 브리지 계약은 웹↔네이티브 원자적 동시 변경. 네이티브 빌드는 harness:check 밖(수동 Xcode). 상세 [[native-repo-git-management]].
-- AI 코칭은 세션 상세에서 열며 별도 Coach 탭 없음.
+- 하단 네비 **5탭: 요약 · 코치 · 기록 · 추세 · 기억** (2026-07 리디자인 ①b에서 코치 탭 신설, 4→5탭). AI 코칭 "대화"는 세션 상세 및 코치 탭에서 App 레벨 오버레이로 연다. 프로필·업적은 탭이 아니라 우상단 계정 드로어(AppHeader) 소관(①c).
 
 ## 운영 기준 (단일 출처 포인터)
 - 요청 단위 풀스택 창 운영, 완료 책임 창, Issue/worktree/branch 분리, 완료 승인 전 build/test/배포/commit/push 게이트, `main` 직접 commit/push 차단(`HARNESS_ALLOW_MAIN_*` 예외) → `.harness/project/workflow-rules.md` + `CLAUDE.md` 단일 출처.

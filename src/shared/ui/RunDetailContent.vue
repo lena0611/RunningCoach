@@ -23,6 +23,9 @@ const contentRef = ref<HTMLElement | null>(null)
 let stickyOffsetResizeObserver: ResizeObserver | null = null
 let stickyOffsetFrame = 0
 
+// RunTypeBadge와 동일한 slug 규칙 — 타입 틴트 히어로 그라디언트용(리디자인 ①c)
+const runTypeClass = computed(() => `run-type-${String(props.run.type).toLowerCase().replaceAll(' ', '-').replaceAll('+', 'plus')}`)
+
 const detailMetrics = computed(() => [
   { id: 'avg-pace', label: '평균 페이스', value: formatPace(props.run.avgPaceSec), unit: '/km' },
   { id: 'cadence', label: '평균 케이던스', value: formatInteger(props.run.cadence) },
@@ -98,7 +101,8 @@ function syncRouteStickyOffset() {
 
 <template>
   <main ref="contentRef" class="memory-stack-content run-detail-content">
-    <SectionCard class="run-detail-hero">
+    <!-- 메타 카드 / 타이틀 카드 분리 + 메모는 차트 뒤 (리디자인 ①c, 핸드오프 상세 명세) -->
+    <SectionCard class="run-detail-meta">
       <div class="run-detail-topline">
         <div class="run-detail-datetime">
           <span class="list-row-kicker">{{ formatDateWithWeekday(run.date) }}</span>
@@ -106,6 +110,9 @@ function syncRouteStickyOffset() {
         </div>
         <slot name="actions" />
       </div>
+    </SectionCard>
+
+    <SectionCard class="run-detail-hero" :class="runTypeClass">
       <div class="run-detail-identity">
         <RunTypeIcon :type="run.type" size="large" />
         <div>
@@ -117,19 +124,25 @@ function syncRouteStickyOffset() {
         </div>
       </div>
       <div class="run-detail-metrics">
-        <strong><UnitValue :amount="run.distanceKm" unit="km" /></strong>
-        <span>{{ formatDuration(run.durationSec) }}</span>
-        <span><UnitValue :amount="formatPace(run.avgPaceSec)" unit="/km" /></span>
+        <strong class="run-detail-distance"><UnitValue :amount="run.distanceKm" unit="km" /></strong>
+        <dl class="run-detail-submetrics">
+          <div>
+            <dt>시간</dt>
+            <dd class="num-mono">{{ formatDuration(run.durationSec) }}</dd>
+          </div>
+          <div>
+            <dt>평균 페이스</dt>
+            <dd><UnitValue :amount="formatPace(run.avgPaceSec)" unit="/km" /></dd>
+          </div>
+          <div>
+            <dt>평균 심박</dt>
+            <dd><UnitValue :amount="formatInteger(run.avgHeartRate)" :unit="run.avgHeartRate === null ? '' : 'bpm'" /></dd>
+          </div>
+        </dl>
       </div>
     </SectionCard>
 
     <MetricPairList :items="detailMetrics" density="compact" :vertical-divider="false" />
-
-    <SectionGroup v-if="run.memo || run.workoutFeeling || run.painNote" title="메모">
-      <p v-if="run.memo">{{ run.memo }}</p>
-      <p v-if="run.workoutFeeling" class="helper">느낌: {{ run.workoutFeeling }}</p>
-      <p v-if="run.painNote" class="helper">통증/주의: {{ run.painNote }}</p>
-    </SectionGroup>
 
     <FitnessDetailCharts
       v-if="(run.metricSamples?.length ?? 0) || (run.routePoints?.length ?? 0)"
@@ -141,5 +154,11 @@ function syncRouteStickyOffset() {
       :laps="run.laps"
       :metric-samples="run.metricSamples"
     />
+
+    <SectionGroup v-if="run.memo || run.workoutFeeling || run.painNote" title="메모">
+      <p v-if="run.memo">{{ run.memo }}</p>
+      <p v-if="run.workoutFeeling" class="helper">느낌: {{ run.workoutFeeling }}</p>
+      <p v-if="run.painNote" class="helper">통증/주의: {{ run.painNote }}</p>
+    </SectionGroup>
   </main>
 </template>

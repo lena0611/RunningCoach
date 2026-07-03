@@ -42,7 +42,7 @@
 - Issue worktree는 `node_modules`를 자동으로 가져오지 않는다. 이 프로젝트는 `package-lock.json` 기준 npm 프로젝트이므로 새 worktree에서 `node_modules`가 없으면 `npm ci`로 의존성을 준비한 뒤 TypeScript/build/test를 실행한다.
 - Issue worktree는 `node_modules`를 자동으로 가져오지 않는다(`package-lock.json` npm 프로젝트). worktree에서 commit 전 **`npm ci` 필수**(미설치 시 hook `harness:check`가 `vitest: command not found`로 실패). hook은 추적 상태(`profile.json` activeStack + 커밋된 `.harness/stacks/.applied/<stack>/manifest.json` 스냅샷)로 적용 여부를 derive해 lint/test/build를 실제 실행하므로 build/test 수동 보강은 불필요. 스냅샷이 없으면 통과가 아니라 실패 → `npm run stack:apply` 후 스냅샷 커밋. (과거 silent-skip 본체 결함 경위·상류 수정 전문 → `decision-log-2026H1.md`)
 - 부상관리 도메인은 0~5 통증 체크인, 사용자 승인 기반 완치 처리, 목표 예상/훈련 강도에 반영되는 부상/회복 게이트, 근거 출처와 의료 한계를 포함한 참고용 보강운동 기준을 따른다.
-- 하단 네비 4탭(요약/기록/추세/기억)은 App.vue가 4페이지를 한 트랙에 동시 마운트하는 좌우 스와이프 pager다(`.app-shell.is-tab-home` 고정 100dvh + 각 `.tab-swipe-panel` 독립 내부 스크롤러, 바디 미스크롤). 탭 페이지는 `defineAsyncComponent` 지연 로드이며 App.vue 정적 import 금지(코드분할 무력화). 스크롤 모델·iOS 제스처 7계약의 단일 출처는 2026-06-05 decision-log "하단 네비 스와이프 탭" 항목과 `.claude` memory `tab-swipe-pager-contract`다.
+- 하단 네비 5탭(요약/코치/기록/추세/기억 — 2026-07 리디자인 ①b에서 코치 탭 신설)은 App.vue가 5페이지를 한 트랙에 동시 마운트하는 좌우 스와이프 pager다(`.app-shell.is-tab-home` 고정 100dvh + 각 `.tab-swipe-panel` 독립 내부 스크롤러, 바디 미스크롤). 탭 페이지는 `defineAsyncComponent` 지연 로드이며 App.vue 정적 import 금지(코드분할 무력화). 스크롤 모델·iOS 제스처 7계약의 단일 출처는 2026-06-05 decision-log "하단 네비 스와이프 탭" 항목과 `.claude` memory `tab-swipe-pager-contract`다(탭 개수와 무관하게 유효).
 
 ## 기록 원칙
 - 한 번뿐인 구현 세부사항은 기록하지 않습니다.

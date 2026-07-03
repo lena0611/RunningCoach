@@ -22,7 +22,9 @@ test('bottom navigation loads lazy feature routes', async ({ page }) => {
 
   await page.getByRole('button', { name: '기억', exact: true }).click()
   await expect(page).toHaveURL(/#\/memory/)
-  await expect(page.getByText('러너 프로필')).toBeVisible()
+  // 리디자인 ①c: 기억 L1 = 현재 코칭 기준 요약 + 관리 nav (러너 프로필·업적은 계정 드로어로 이동)
+  await expect(page.getByText('현재 코칭 기준')).toBeVisible()
+  await expect(page.getByRole('button', { name: /AI 기억/ })).toBeVisible()
   await expect(page.locator('body')).not.toContainText('Vue 화면이 렌더링되지 않았습니다')
 
   await page.getByRole('button', { name: '요약', exact: true }).click()

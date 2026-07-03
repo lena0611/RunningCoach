@@ -9,7 +9,7 @@ const props = defineProps<{
   isAuthenticated: boolean
 }>()
 
-const emit = defineEmits<{ signOut: [] }>()
+const emit = defineEmits<{ signOut: []; openAchievements: [] }>()
 const route = useRoute()
 
 function getRouteIndex(path: string | undefined) {
@@ -35,7 +35,7 @@ watch(
 
 <template>
   <div class="app-shell" :class="{ 'is-tab-home': isTabRoute }">
-    <AppHeader :is-authenticated="isAuthenticated" @sign-out="emit('signOut')" />
+    <AppHeader :is-authenticated="isAuthenticated" @sign-out="emit('signOut')" @open-achievements="emit('openAchievements')" />
     <main class="app-main">
       <slot />
     </main>

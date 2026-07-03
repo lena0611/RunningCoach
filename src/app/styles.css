@@ -161,6 +161,7 @@
   min-height: 76px;
   padding: var(--space-3);
   border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border-strong); /* 좌측 액센트 바 = 렌즈 판단색 (리디자인 ①c) */
   border-radius: var(--radius-card);
   background: var(--color-surface-card);
   color: var(--color-text);
@@ -219,7 +220,11 @@
 }
 
 .trend-lens-row-good {
-  border-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
+  border-left-color: var(--color-primary);
+}
+
+.trend-lens-row-good .trend-lens-row-value strong {
+  color: var(--color-primary-text);
 }
 
 .trend-lens-row-good .trend-lens-row-value span {
@@ -227,11 +232,23 @@
 }
 
 .trend-lens-row-warning {
-  border-color: color-mix(in srgb, var(--color-warning) 48%, transparent);
+  border-left-color: var(--color-warning);
+}
+
+.trend-lens-row-warning .trend-lens-row-value strong {
+  color: var(--color-warning-text);
 }
 
 .trend-lens-row-warning .trend-lens-row-value span {
   color: var(--color-warning);
+}
+
+.trend-lens-row-watch {
+  border-left-color: var(--color-accent);
+}
+
+.trend-lens-row-watch .trend-lens-row-value span {
+  color: var(--color-accent);
 }
 
 .trend-control-row {
@@ -245,12 +262,52 @@
   gap: var(--space-4);
 }
 
+/* 종합 판단 hero(리디자인 ①c): 톤 틴트 그라디언트 + 톤 보더 */
 .trend-overall-good {
   border-color: color-mix(in srgb, var(--color-primary) 48%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 8%, transparent), var(--color-surface) 60%);
 }
 
 .trend-overall-warning {
   border-color: color-mix(in srgb, var(--color-warning) 55%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-warning) 8%, transparent), var(--color-surface) 60%);
+}
+
+.trend-overall-watch {
+  border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-accent) 7%, transparent), var(--color-surface) 60%);
+}
+
+.trend-overall-eyebrow {
+  color: var(--color-muted-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.trend-overall-good .trend-overall-eyebrow {
+  color: var(--color-primary);
+}
+
+.trend-overall-warning .trend-overall-eyebrow {
+  color: var(--color-warning);
+}
+
+.trend-tone-good {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+}
+
+.trend-tone-warning {
+  background: var(--color-warning-soft);
+  color: var(--color-warning-text);
+}
+
+.trend-tone-watch {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
 }
 
 .trend-overall-header {
@@ -277,89 +334,6 @@
   color: var(--color-muted);
   font-size: var(--text-caption-size);
   line-height: var(--text-caption-line);
-}
-
-.trend-overall-summary-list {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.trend-overall-summary-row {
-  appearance: none;
-  display: grid;
-  grid-template-columns: minmax(100px, auto) 1fr auto;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-  min-height: 52px;
-  padding: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  background: var(--color-field);
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
-
-.trend-overall-summary-row-action {
-  cursor: pointer;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.trend-overall-summary-row-action:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--color-primary) 76%, transparent);
-  outline-offset: 2px;
-}
-
-.trend-overall-summary-row-action:active {
-  transform: scale(0.99);
-  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-}
-
-.trend-overall-summary-label {
-  color: var(--color-muted);
-  font-size: 12px;
-  font-weight: var(--font-weight-bold);
-  line-height: 1.25;
-  word-break: keep-all;
-}
-
-.trend-overall-summary-row strong {
-  display: -webkit-box;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--color-text);
-  font-size: 15px;
-  font-weight: var(--font-weight-bold);
-  line-height: 1.35;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.trend-overall-summary-cta {
-  color: var(--color-primary);
-  font-size: 12px;
-  font-weight: var(--font-weight-bold);
-  white-space: nowrap;
-}
-
-.trend-overall-summary-good {
-  border-color: color-mix(in srgb, var(--color-primary) 34%, transparent);
-  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-field));
-}
-
-.trend-overall-summary-warning {
-  border-color: color-mix(in srgb, var(--color-warning) 40%, transparent);
-  background: color-mix(in srgb, var(--color-warning) 8%, var(--color-field));
-}
-
-.trend-overall-summary-watch {
-  border-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
-}
-
-.trend-overall-summary-neutral {
-  border-color: var(--color-border);
 }
 
 .trend-hero-card {
@@ -1616,8 +1590,7 @@ button.hero-card {
 }
 
 .context-strip > div,
-.coach-context-card,
-.memory-hero {
+.coach-context-card {
   display: grid;
   gap: 8px;
   min-width: 0;
@@ -1640,8 +1613,7 @@ button.hero-card {
 }
 
 .context-strip strong,
-.coach-context-card strong,
-.memory-hero strong {
+.coach-context-card strong {
   overflow: hidden;
   color: var(--color-text);
   font-size: 18px;
@@ -1650,8 +1622,7 @@ button.hero-card {
 }
 
 .context-strip small,
-.coach-context-card small,
-.memory-hero small {
+.coach-context-card small {
   color: var(--color-muted);
   font-size: 13px;
   font-weight: 750;
@@ -2774,9 +2745,17 @@ button.run-session-row {
   min-height: 1px;
 }
 
+.run-detail-meta {
+  padding: 12px 16px;
+}
+
 .run-detail-hero {
   display: grid;
-  gap: 12px;
+  gap: 14px;
+  /* 타입 틴트 그라디언트(리디자인 ①c): run-type-* 클래스가 주입하는 --run-type-color 사용 */
+  --run-type-color: var(--color-muted);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--run-type-color) 9%, transparent), var(--color-surface) 58%);
+  border-color: color-mix(in srgb, var(--run-type-color) 26%, var(--color-border));
 }
 
 .run-detail-topline {
@@ -2836,22 +2815,65 @@ button.run-session-row {
 }
 
 .run-detail-metrics {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
+  display: grid;
+  gap: 12px;
 }
 
-.run-detail-metrics strong {
+.run-detail-distance {
   color: var(--color-text);
-  font-size: 24px;
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.run-detail-submetrics {
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+  margin: 0;
+}
+
+.run-detail-submetrics > div {
+  display: grid;
+  gap: 4px;
+}
+
+.run-detail-submetrics dt {
+  color: var(--color-muted-2);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.run-detail-submetrics dd {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 17px;
   font-weight: 700;
   line-height: 1;
 }
 
-.run-detail-metrics span {
-  color: var(--color-text);
-  font-size: 20px;
+/* 지표 액센트 매핑(README): 페이스=amber · 심박=blue */
+.run-detail-submetrics > div:nth-child(2) dd {
+  color: var(--color-warning-text);
+}
+
+.run-detail-submetrics > div:nth-child(3) dd {
+  color: var(--color-accent);
+}
+
+/* UnitValue 기본 weight(500)를 히어로 지표 굵기로 올린다 */
+.run-detail-distance .unit-value-number {
+  font-weight: 800;
+}
+
+.run-detail-distance .unit-value-unit {
+  font-size: 0.45em;
+  color: var(--color-muted-2);
+}
+
+.run-detail-submetrics dd .unit-value-number {
   font-weight: 700;
 }
 
@@ -5285,108 +5307,169 @@ button.run-session-row {
   gap: var(--section-stack-gap);
 }
 
-.memory-overview-card {
+/* ── 기억 L1(리디자인 ①c): 현재 코칭 기준 요약 카드 + 관리 nav ───────── */
+.memory-basis-card {
   display: grid;
-  gap: var(--section-title-body-gap);
+  gap: 0;
 }
 
-.memory-hero-button {
-  position: relative;
-  width: 100%;
-  border: 0;
-  color: inherit;
-  text-align: left;
+.memory-basis-eyebrow {
+  margin-bottom: 13px;
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
-.memory-hero-button .select-chevron {
-  position: absolute;
-  top: 18px;
-  right: 16px;
+.memory-basis-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.memory-basis-row + .memory-basis-row {
+  border-top: 1px solid var(--color-border);
+}
+
+.memory-basis-row:first-of-type {
+  padding-top: 0;
+}
+
+.memory-basis-row:last-of-type {
+  padding-bottom: 0;
+}
+
+.memory-basis-pill {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 21px;
+  padding: 0 9px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.memory-basis-pill-goal {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.memory-basis-pill-constraint {
+  background: var(--color-warning-soft);
+  color: var(--color-warning-text);
+}
+
+.memory-basis-pill-none {
+  background: var(--color-field);
   color: var(--color-muted);
 }
 
-.memory-compact-list,
-.memory-context-block,
+.memory-basis-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.memory-basis-body strong {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 15px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+}
+
+.memory-basis-body small {
+  color: var(--color-muted);
+  font-size: var(--text-caption-size);
+  font-weight: 700;
+  line-height: var(--text-caption-line);
+}
+
+.memory-manage-list {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+
+.memory-manage-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text);
+  box-shadow: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.memory-manage-row + .memory-manage-row {
+  border-top: 1px solid var(--color-border);
+}
+
+.memory-manage-main {
+  display: grid;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.memory-manage-main strong {
+  color: var(--color-text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.memory-manage-main small {
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: var(--text-caption-size);
+  font-weight: 700;
+  line-height: var(--text-caption-line);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-manage-badge {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-warning-soft);
+  color: var(--color-warning-text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.memory-manage-row .select-chevron {
+  flex: 0 0 auto;
+  color: var(--color-muted);
+}
+
+.memory-account-hint {
+  margin: 0 2px;
+}
+
 .info-pair-grid,
 .memory-note-grid,
 .memory-subsection {
   min-width: 0;
 }
 
-.memory-compact-list {
-  display: grid;
-  overflow: hidden;
-  border-radius: var(--radius-card);
-  background: var(--color-surface-panel);
-  box-shadow: var(--shadow-card);
-}
-
-.memory-compact-list > div {
-  display: grid;
-  gap: 4px;
-  padding: 14px 16px;
-}
-
-.memory-compact-list > div + div {
-  border-top: 1px solid var(--color-border);
-}
-
-.memory-compact-list span {
-  width: fit-content;
-  border-radius: var(--radius-pill);
-  background: var(--color-field);
-  color: var(--color-muted);
-  padding: 3px 8px;
-  font-size: 11px;
-  font-weight: 900;
-}
-
-.memory-compact-list strong {
-  overflow: hidden;
-  color: var(--color-text);
-  font-size: 16px;
-  line-height: 1.3;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.memory-compact-list small {
-  overflow: hidden;
-  color: var(--color-muted);
-  font-size: var(--text-caption-size);
-  font-weight: 750;
-  line-height: var(--text-caption-line);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.memory-context-block {
-  display: grid;
-  gap: 8px;
-  border-radius: var(--radius-card);
-  background: var(--color-field);
-  padding: 15px 16px;
-}
-
-.memory-context-block strong,
 .memory-subsection > strong {
   color: var(--color-text);
   font-size: 15px;
   line-height: 1.3;
-}
-
-.memory-context-block p,
-.memory-context-block ul {
-  margin: 0;
-  color: var(--color-muted);
-  font-size: var(--text-info-size);
-  line-height: var(--text-info-line);
-}
-
-.memory-context-block ul {
-  display: grid;
-  gap: 5px;
-  padding-left: 18px;
 }
 
 .info-pair-grid {
@@ -6077,7 +6160,6 @@ button.run-session-row {
   transform: translateX(28px);
 }
 
-.memory-nav-card,
 .memory-list-card {
   display: flex;
   align-items: center;
@@ -6094,41 +6176,23 @@ button.run-session-row {
   text-align: left;
 }
 
-.memory-nav-list,
 .memory-card-list {
   overflow: hidden;
   border-radius: var(--radius-card);
-  background: var(--color-surface-panel);
-  padding: 2px 14px;
-  box-shadow: var(--shadow-card);
-}
-
-.memory-card-list {
   background: var(--color-surface);
-  box-shadow: none;
+  padding: 2px 14px;
 }
 
-.memory-nav-card-standalone {
-  min-height: 74px;
-  border-radius: var(--radius-card);
-  background: var(--color-surface-panel);
-  padding: 15px 16px;
-  box-shadow: var(--shadow-card);
-}
-
-.memory-nav-card + .memory-nav-card,
 .memory-list-card + .memory-list-card {
   border-top: 1px solid var(--color-border);
 }
 
-.memory-nav-card span,
 .memory-list-card span {
   display: grid;
   gap: 5px;
   min-width: 0;
 }
 
-.memory-nav-card strong,
 .memory-list-card strong {
   overflow: hidden;
   color: var(--color-text);
@@ -6137,7 +6201,6 @@ button.run-session-row {
   white-space: nowrap;
 }
 
-.memory-nav-card small,
 .memory-list-card small {
   overflow: hidden;
   color: var(--color-muted);
@@ -6148,7 +6211,6 @@ button.run-session-row {
   white-space: nowrap;
 }
 
-.memory-nav-card .select-chevron,
 .memory-list-card .select-chevron {
   color: var(--color-muted);
 }

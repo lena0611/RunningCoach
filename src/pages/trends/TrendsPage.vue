@@ -11,7 +11,6 @@ import {
   type TrendInsightCard,
   type TrendInsightConfidence,
   type TrendLensKey,
-  type TrendOverallItem,
   type TrendPeriod
 } from '@/shared/lib/trendInsights'
 import { formatDateWithWeekday } from '@/shared/lib/format'
@@ -83,13 +82,6 @@ const overallSummary = computed(() =>
   trendAnalysis.value.overallSummary
 )
 
-const overallItems = computed<TrendOverallItem[]>(() => [
-  overallSummary.value.recentFlow,
-  overallSummary.value.bestSignal,
-  overallSummary.value.cautionSignal,
-  overallSummary.value.prescriptionDirection
-])
-
 const evidenceRuns = computed(() =>
   result.value.evidenceRuns
     .flatMap((evidence) => {
@@ -140,11 +132,6 @@ function openLensDetail(key: TrendLensKey) {
 
 function closeLensDetail() {
   openLens.value = null
-}
-
-function selectOverallItem(item: TrendOverallItem) {
-  if (!item.lens) return
-  openLensDetail(item.lens)
 }
 
 function openRun(runId: string) {
@@ -205,38 +192,15 @@ function evidenceRoleTone(role: TrendEvidenceRun['role']) {
         <BottomSheetSelect v-model="selectedCompare" compact label="비교 방법" :options="compareOptions" />
       </div>
 
+      <!-- 종합 판단 hero(리디자인 ①c): 첫인상 1개 — 톤 배지 + 한 줄 결론 + 신뢰도. 4행 요약 리스트는 아래 렌즈 리스트와 중복이라 제거. -->
       <SectionCard class="trend-overall-card" :class="`trend-overall-${overallSummary.tone}`">
         <div class="trend-overall-header">
           <div>
-            <span class="trend-hero-label">종합 판단</span>
+            <span class="trend-overall-eyebrow">종합 판단</span>
             <h3>{{ overallSummary.title }}</h3>
             <p>{{ overallConfidenceLabel }} · {{ activeCompare.label }}</p>
           </div>
-          <span class="trend-confidence">{{ overallToneLabel }}</span>
-        </div>
-        <div class="trend-overall-summary-list">
-          <template v-for="item in overallItems" :key="item.label">
-            <button
-              v-if="item.lens"
-              type="button"
-              class="trend-overall-summary-row trend-overall-summary-row-action"
-              :class="`trend-overall-summary-${item.tone}`"
-              :aria-label="`${item.label}: ${item.title} 렌즈 보기`"
-              @click="selectOverallItem(item)"
-            >
-              <span class="trend-overall-summary-label">{{ item.label }}</span>
-              <strong>{{ item.title }}</strong>
-              <span class="trend-overall-summary-cta">보기</span>
-            </button>
-            <div
-              v-else
-              class="trend-overall-summary-row"
-              :class="`trend-overall-summary-${item.tone}`"
-            >
-              <span class="trend-overall-summary-label">{{ item.label }}</span>
-              <strong>{{ item.title }}</strong>
-            </div>
-          </template>
+          <span class="trend-confidence" :class="`trend-tone-${overallSummary.tone}`">{{ overallToneLabel }}</span>
         </div>
       </SectionCard>
 
@@ -255,7 +219,7 @@ function evidenceRoleTone(role: TrendEvidenceRun['role']) {
               <span>{{ item.description }}</span>
             </div>
             <div class="trend-lens-row-value">
-              <strong>{{ item.hero.value }}</strong>
+              <strong :class="{ 'num-mono': isMetricValue(item.hero.value) }">{{ item.hero.value }}</strong>
               <span>{{ toneLabel(item.hero.tone) }}</span>
             </div>
             <svg class="card-arrow trend-lens-row-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
@@ -268,7 +232,7 @@ function evidenceRoleTone(role: TrendEvidenceRun['role']) {
       <SectionCard class="trend-hero-card" :class="`trend-hero-${result.hero.tone}`">
         <div>
           <span class="trend-hero-label">{{ heroToneLabel }}</span>
-          <h3 :class="{ 'trend-hero-text-value': !isMetricValue(result.hero.value) }">{{ result.hero.value }}</h3>
+          <h3 :class="{ 'trend-hero-text-value': !isMetricValue(result.hero.value), 'num-mono': isMetricValue(result.hero.value) }">{{ result.hero.value }}</h3>
           <strong>{{ result.hero.label }}</strong>
           <p>{{ result.hero.detail }}</p>
         </div>

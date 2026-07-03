@@ -4,6 +4,19 @@
 
 > 하네스 본체의 변경 이력이나 릴리스 노트가 아닙니다. 하네스 본체 변경 기록은 하네스 저장소의 `CHANGELOG.md` 또는 릴리스 태그를 확인합니다.
 
+## 2026-07-03 - 리디자인 ①c: 기억 탭 축소·항목별 저장 + 프로필/업적 계정 드로어 이관 + 추세/상세 리스킨
+
+PaceLAB 다크 리스킨 이식(핸드오프 README = 스펙 SSOT)의 ①c 단계. ①a(토큰·다크 단일화)·①b(5탭·코치 탭·요약 재구성)에 이어 나머지 화면을 스펙에 정렬.
+
+- **기억 L1 재작성**: 6개 SectionGroup 세로 나열 + 전역 저장 → **"현재 코칭 기준" 요약 카드(활성 목표+제약 2행) + 관리 nav 4항목(목표·몸 상태(주의 배지)·훈련 기준·AI 기억)**. 훈련 기준·AI 기억의 인라인 편집 필드는 신규 drill-in 패널(`training`·`ai-memory`)로 이동.
+- **항목별 저장**: 전역 `save()` 제거 → `saveSection(section)`. 열려 있는 패널 그룹의 키만(`SECTION_KEYS`) 스토어 스냅샷 위에 얹어 `memoryStore.update()` 호출 — **다른 패널의 미저장 편집은 draft·스냅샷에 남고 함께 저장되지 않는다**. 스토어에 부분 저장 API를 새로 만들지 않고(YAGNI, Supabase upsert 전체 저장 유지) 뷰 레이어에서 부분 머지로 해결.
+- **업적 이관**: `AchievementsSection.vue`를 `src/pages/memory/` → `src/shared/ui/`로 git mv, AppHeader 계정 드로어 4번째 패널(`achievements`, `stack-layer-top`)로 연결. 러너 프로필은 이미 드로어에 있었으므로(ui-guidelines 기존 규칙) 기억 탭 표시 전용 섹션만 제거 — **이 변경은 "계정/프로필은 드로어" 규칙을 뒤늦게 준수하는 것**.
+- **추세**: 종합판단 hero를 첫인상 1개(톤 배지+한 줄 결론+신뢰도)로 축소 — 기존 4행 요약 리스트는 아래 렌즈 리스트와 중복이라 제거(로직 무변경, `trendInsights` 그대로). 렌즈 행에 좌측 액센트 바(판단색)+watch 톤 추가.
+- **세션 상세**: 메타 카드/타이틀 카드 분리, 타이틀 카드에 run-type 틴트 그라디언트+빅 mono 거리+서브지표 트리오(시간/페이스=amber/심박=blue), 메모를 차트 뒤로 이동(스펙 순서).
+- **기록 탭은 무변경**: 매핑 결과 스펙 8할 기구현(필터×2·캘린더 마커·월요약 5행·RunSessionList) — "밀도 유지(좋은 모델)" 판정이라 손대지 않음.
+- **문서 정합**: `active-context.md`("코치 탭 없음" 고정사실 폐기→5탭), `project-memory.md`(4탭→5탭), `domain-rules.md`(코치 탭 신설·기억 축소·5탭 정보구조), `navigation-information-architecture.md`(3메뉴 시대 문서 전면 갱신), `ui-guidelines.md`(탭 루트·업적 드로어·기억/추세 L1 구조). e2e `app-smoke` 기억 탭 단언 '러너 프로필'→'현재 코칭 기준'.
+- → 권위: 디자인 핸드오프 `~/Downloads/design_handoff_pacelab_redesign/README.md`, IA Flow(✔ 확정: "프로필·업적을 기억 탭에서 빼 계정 메뉴로"). 후속: ②(업적 홈+홀로그래픽 TrophyCard).
+
 ## 2026-07-02 - config-contract 변경은 Node 버전 enforcement와 무관 (sync-gap 예외 기록)
 
 `docs(harness)` 커밋(구현 단순성 규칙 추가 + 옛 네이티브 경로 모노레포 정정, #250 후속)에서 `.harness/project/config-contract.md`를 수정하자 pre-commit이 `common.runtime.minimum-node` sync-gap을 blocking으로 띄웠다(config-contract 변경 → Node 최소버전 enforcement 코드 동기화 요구).
