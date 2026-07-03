@@ -86,28 +86,36 @@ test.describe('#473 휴식/복귀', () => {
     const seeded = await page.evaluate(() => (window as unknown as { __pacelabE2E: { seedReturnRamp: () => Promise<{ ok: boolean }> } }).__pacelabE2E.seedReturnRamp())
     expect(seeded?.ok).toBe(true)
 
-    // 새로고침 → doEnsureSchedule 자연만료 분기가 복귀 램프를 적용한다.
-    await page.reload()
-    await page.waitForLoadState('networkidle')
+    try {
+      // 새로고침 → doEnsureSchedule 자연만료 분기가 복귀 램프를 적용한다.
+      await page.reload()
+      await page.waitForLoadState('networkidle')
 
-    // 복귀 첫(가장 이른 미래) 세션이 Easy 계열 + 거리 캡(직전30일 런 0 → floor 3km)으로 점진 복원되는지.
-    await expect
-      .poll(
-        async () => {
-          const s = await page.evaluate(() => (window as unknown as { __pacelabE2E: { firstUpcomingSession: () => { sessionType: string; distanceKm: number | null } | null } }).__pacelabE2E.firstUpcomingSession())
-          return s ? `${s.sessionType}|${s.distanceKm}` : 'null'
-        },
-        { timeout: 25_000, intervals: [500, 1000, 2000, 3000] }
+      // 복귀 첫(가장 이른 미래) 세션이 Easy 계열 + 거리 캡(직전30일 런 0 → floor 3km)으로 점진 복원되는지.
+      await expect
+        .poll(
+          async () => {
+            const s = await page.evaluate(() => (window as unknown as { __pacelabE2E: { firstUpcomingSession: () => { sessionType: string; distanceKm: number | null } | null } }).__pacelabE2E.firstUpcomingSession())
+            return s ? `${s.sessionType}|${s.distanceKm}` : 'null'
+          },
+          { timeout: 25_000, intervals: [500, 1000, 2000, 3000] }
+        )
+        .toMatch(/^(Easy|Recovery)\|/)
+
+      const first = await page.evaluate(() => (window as unknown as { __pacelabE2E: { firstUpcomingSession: () => { sessionType: string; distanceKm: number | null } | null } }).__pacelabE2E.firstUpcomingSession())
+      expect(['Easy', 'Recovery']).toContain(first?.sessionType)
+      expect(first?.distanceKm ?? 99).toBeLessThanOrEqual(3.1) // ≤ 직전30일 최장(0)+10% floor 3km
+
+      // 자연만료 복귀의 사용자 노출 사실: 💤 휴식 배너가 사라진다(복귀 완료 상태).
+      // '돌아온 걸 환영' 토스트는 명시 '지금 복귀' 경로 전용이고, 복귀 "회복 후 정리" 코치 모먼트는
+      // 미구현(coachMoments.ts doc 주석의 showReturn 계획만 존재) — 구현되면 여기 단언을 되살린다.
+      await expect(page.getByText(/쉬는 중/)).toHaveCount(0)
+    } finally {
+      // 시드 잔재 원복(실계정 보호) — 2026-07-03 사고: 클린업 없이 끝나 실계정 활성 목표가 'E2E'로 남았다.
+      const cleaned = await page.evaluate(() =>
+        (window as unknown as { __pacelabE2E: { cleanupReturnRamp: () => Promise<{ ok: boolean }> } }).__pacelabE2E.cleanupReturnRamp()
       )
-      .toMatch(/^(Easy|Recovery)\|/)
-
-    const first = await page.evaluate(() => (window as unknown as { __pacelabE2E: { firstUpcomingSession: () => { sessionType: string; distanceKm: number | null } | null } }).__pacelabE2E.firstUpcomingSession())
-    expect(['Easy', 'Recovery']).toContain(first?.sessionType)
-    expect(first?.distanceKm ?? 99).toBeLessThanOrEqual(3.1) // ≤ 직전30일 최장(0)+10% floor 3km
-
-    // 자연만료 복귀의 사용자 노출 사실: 💤 휴식 배너가 사라진다(복귀 완료 상태).
-    // '돌아온 걸 환영' 토스트는 명시 '지금 복귀' 경로 전용이고, 복귀 "회복 후 정리" 코치 모먼트는
-    // 미구현(coachMoments.ts doc 주석의 showReturn 계획만 존재) — 구현되면 여기 단언을 되살린다.
-    await expect(page.getByText(/쉬는 중/)).toHaveCount(0)
+      expect(cleaned?.ok).toBe(true)
+    }
   })
 })

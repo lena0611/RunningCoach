@@ -11,6 +11,7 @@ import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 import { formatDateWithWeekday } from '@/shared/lib/format'
+import { friendlyErrorMessage } from '@/shared/lib/friendlyError'
 import StackPage from '@/shared/ui/StackPage.vue'
 import RunDetailContent from '@/shared/ui/RunDetailContent.vue'
 import RunForm from '@/shared/ui/RunForm.vue'
@@ -82,7 +83,7 @@ async function saveEdit() {
     editing.value = null
     editSnapshot.value = ''
   } catch (err) {
-    error.value = err instanceof Error ? err.message : '수정 실패'
+    error.value = friendlyErrorMessage(err, '수정에 실패했어요. 잠시 후 다시 시도해주세요.')
   } finally {
     saving.value = false
   }
@@ -112,7 +113,7 @@ async function confirmRemove() {
     sessionDetailStore.close()
     toastStore.success('삭제되었습니다.')
   } catch (err) {
-    error.value = err instanceof Error ? err.message : '삭제 실패'
+    error.value = friendlyErrorMessage(err, '삭제하지 못했어요. 잠시 후 다시 시도해주세요.')
     toastStore.error(error.value)
   } finally {
     deletingId.value = null

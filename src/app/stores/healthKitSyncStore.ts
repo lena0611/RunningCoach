@@ -21,6 +21,7 @@ import {
 import { mergeHealthKitRefreshRun } from '@/features/import-healthkit-run/mergeHealthKitRefreshRun'
 import { notifyHealthKitNewRuns } from '@/features/sync-native-notifications/notificationBridge'
 import { hasNativeBridge } from '@/shared/lib/runtime'
+import { friendlyErrorMessage } from '@/shared/lib/friendlyError'
 import { deriveHeartRateModel, deriveObservedMaxHr, type HeartRateModel } from '@/shared/lib/heartRateZones'
 import { computeTempoCeilingAdaptation } from '@/shared/lib/coaching/tempoAdaptation'
 import { getActiveInjuryItem } from '@/entities/training-memory/model'
@@ -109,7 +110,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
       } catch (err) {
         this.syncing = false
         this.status = ''
-        this.error = err instanceof Error ? err.message : 'HealthKit 동기화 요청 실패'
+        this.error = friendlyErrorMessage(err, 'HealthKit 동기화 요청 실패')
         if (this.syncFeedbackMode === 'toast') showSyncToast('error', this.error, 4200)
         this.syncFeedbackMode = 'toast'
       }
@@ -134,7 +135,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         this.syncing = false
         this.historicalMigrationRange = null
         this.status = ''
-        this.error = err instanceof Error ? err.message : 'HealthKit 과거 기록 마이그레이션 요청 실패'
+        this.error = friendlyErrorMessage(err, 'HealthKit 과거 기록 마이그레이션 요청 실패')
         showSyncToast('error', this.error, 4200)
       }
     },
@@ -164,7 +165,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
       } catch (err) {
         this.refreshingRunId = ''
         this.status = ''
-        this.error = err instanceof Error ? err.message : 'HealthKit 세션 갱신 요청 실패'
+        this.error = friendlyErrorMessage(err, 'HealthKit 세션 갱신 요청 실패')
         showSyncToast('error', this.error, 4200)
       }
     },
@@ -222,7 +223,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         await linkSelfRaceResults() // 가상레이싱 보류 결과 ↔ 정본 RunLog 근접 매칭(#233)
         await applyTempoCeilingAdaptation() // Tempo 상한 적응 채택값 영속화(#301)
       } catch (err) {
-        this.error = err instanceof Error ? err.message : 'HealthKit 동기화 저장 실패'
+        this.error = friendlyErrorMessage(err, 'HealthKit 동기화 저장 실패')
         if (this.syncFeedbackMode === 'toast') showSyncToast('error', this.error, 4200)
       } finally {
         this.syncing = false
@@ -261,7 +262,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         await applyTempoCeilingAdaptation() // Tempo 상한 적응 채택값 영속화(#301)
         showSyncToast('success', this.status, 4200)
       } catch (err) {
-        this.error = err instanceof Error ? err.message : 'HealthKit 과거 기록 마이그레이션 저장 실패'
+        this.error = friendlyErrorMessage(err, 'HealthKit 과거 기록 마이그레이션 저장 실패')
         this.status = ''
         showSyncToast('error', this.error, 4200)
       } finally {
@@ -292,7 +293,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         this.error = ''
         showSyncToast('success', this.status, 3200)
       } catch (err) {
-        this.error = err instanceof Error ? err.message : 'HealthKit 세션 갱신 저장 실패'
+        this.error = friendlyErrorMessage(err, 'HealthKit 세션 갱신 저장 실패')
         showSyncToast('error', this.error, 4200)
       } finally {
         this.refreshingRunId = ''
@@ -368,7 +369,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         await linkSelfRaceResults() // 방금 유입된 RunLog ↔ competition_result 근접 매칭(#233)
       } catch (err) {
         // 비치명적: 결과 요약은 PendingSelfRace로 이미 표시됨. 실패 시 다음 정기 sync가 재시도.
-        this.error = err instanceof Error ? err.message : '레이싱 결과 HealthKit 유입 실패'
+        this.error = friendlyErrorMessage(err, '레이싱 결과 HealthKit 유입 실패')
       }
     },
     handleRunUpdateError(externalId: string | null, message: string) {
@@ -387,7 +388,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         requestLatestVo2Max()
       } catch (err) {
         this.vo2MaxRequesting = false
-        showSyncToast('error', err instanceof Error ? err.message : 'VO2max 조회 요청 실패', 4200)
+        showSyncToast('error', friendlyErrorMessage(err, 'VO2max 조회 요청에 실패했어요. 잠시 후 다시 시도해요.'), 4200)
       }
     },
     // 받은 샘플은 state에만 둔다. 프로필 화면이 watch해서 draft에 채우고, 사용자가 저장할 때 영속화한다.
@@ -628,18 +629,25 @@ function formatRange(range: HistoricalMigrationRange) {
 async function ensureRunStoreLoaded() {
   const runStore = useRunStore()
   if (runStore.loaded) return
-  if (!runStore.loading) {
-    await runStore.load()
-    return
+  if (runStore.loading) {
+    // 부트 로드가 진행 중이면 끝날 때까지 기다린다. 느린 회선(5G 약전계)에서 전체 run_logs 페치는
+    // 수 초를 훌쩍 넘길 수 있어 짧게 포기하면 아래 재시도·실패 경로로 새는 것이 예사가 된다.
+    await new Promise<void>((resolve) => {
+      const startedAt = Date.now()
+      const timer = window.setInterval(() => {
+        if (!runStore.loading || Date.now() - startedAt > 60000) {
+          window.clearInterval(timer)
+          resolve()
+        }
+      }, 120)
+    })
   }
-
-  await new Promise<void>((resolve) => {
-    const startedAt = Date.now()
-    const timer = window.setInterval(() => {
-      if (!runStore.loading || runStore.loaded || Date.now() - startedAt > 5000) {
-        window.clearInterval(timer)
-        resolve()
-      }
-    }, 80)
-  })
+  // 실패했으면 1회 재시도(순간적인 회선 문제 흡수).
+  if (!runStore.loaded && !runStore.loading) await runStore.load()
+  // ⚠ 그래도 미적재면 동기화를 진행하면 안 된다 — 빈 기록 기준으로 latestSavedDate=null 이 되어
+  // HealthKit 후보 전체를 "새 러닝"으로 오판, 대량 재삽입을 시도하다 타임아웃·중복 위험이 커진다.
+  // (기존엔 조용히 진행해 이 경로가 5G 시작 직후 "The request timed out." 토스트의 근원이었다.)
+  if (!runStore.loaded) {
+    throw new Error('러닝 기록을 아직 불러오지 못했어요. 연결이 안정되면 자동으로 다시 동기화해요.')
+  }
 }

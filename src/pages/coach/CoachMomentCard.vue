@@ -5,10 +5,11 @@ import type { CoachMoment, CoachMomentOption } from '@/shared/lib/coaching/coach
 /**
  * 코치 모먼트 카드 (#382). 코치가 유의미한 순간에 먼저 말 거는 표면.
  * 의도 질문(options)이 있으면 트레이니가 고르고, 코치가 분기 피드백(response)을 답한다.
- * 옵션에 probe(§5 Phase C grill)가 있으면 select 로 올려 부모가 답을 부상 항목에 영속한다(응답은 계속 표시).
+ * 어떤 옵션이든 select 로 올린다 — 부모가 "답한 모먼트 재닦달 금지"를 영속하고,
+ * probe(§5 Phase C grill)면 답을 부상 항목에도 영속한다(응답은 계속 표시).
  */
 const props = defineProps<{ moment: CoachMoment }>()
-const emit = defineEmits<{ dismiss: [key: string]; action: [moment: CoachMoment]; select: [option: CoachMomentOption] }>()
+const emit = defineEmits<{ dismiss: [key: string]; action: [moment: CoachMoment]; select: [option: CoachMomentOption, momentKey: string] }>()
 
 const response = ref<string | null>(null)
 const sentiment = ref<string | null>(null)
@@ -16,7 +17,7 @@ const sentiment = ref<string | null>(null)
 function choose(option: CoachMomentOption) {
   response.value = option.response
   sentiment.value = option.sentiment
-  if (option.probe) emit('select', option)
+  emit('select', option, props.moment.key)
 }
 </script>
 

@@ -16,6 +16,7 @@ import { buildDoubleSuggestion, evaluateDoubleEligibility, type DoubleEligibilit
 import type { CriterionStatus } from '@/shared/lib/coaching/progressionCriteria'
 import { sessionTypeLabel } from '@/shared/lib/coaching/sessionBriefing'
 import { dateOnly, diffDaysIso, type useTrainingWeek } from '@/pages/dashboard/useTrainingWeek'
+import { loadMomentDismissals, persistMomentDismissal, type MomentDismissalMap } from './momentDismissal'
 
 /*
  * 코치 모먼트 상태 공유 composable (리디자인 ①b — CoachPage 에서 추출, 값 의미 무변경).
@@ -26,7 +27,11 @@ import { dateOnly, diffDaysIso, type useTrainingWeek } from '@/pages/dashboard/u
 type TrainingWeek = ReturnType<typeof useTrainingWeek>
 
 // dismiss 는 모듈 스코프(세션 공유) — 요약·코치 어느 탭에서 닫아도 같은 모먼트가 다른 탭에 재노출되지 않는다.
-const dismissedMomentKeys = ref(new Set<string>())
+// + 로컬 영속(momentDismissal, 7일 쿨다운): 닫거나 답한 모먼트는 앱을 다시 열어도 재노출하지 않는다
+//   ("한 번 응답하면 다시 닦달하지 않는다" — SSOT §주말 트리아지의 모먼트 일반화. 기존엔 메모리에만 있어
+//   앱 재시작마다 같은 질문이 반복됐다).
+let dismissalMap: MomentDismissalMap = loadMomentDismissals(new Date())
+const dismissedMomentKeys = ref(new Set<string>(Object.keys(dismissalMap)))
 // 프로브 답 영속 in-flight 가드(두 탭 인스턴스 공유) — memoryStore.update 중복 쓰기 방지.
 const probeSaving = ref(false)
 
@@ -216,6 +221,7 @@ export function useCoachMoments(week: TrainingWeek) {
   )
   const topCoachMoment = computed(() => coachMoments.value[0] ?? null)
   function dismissMoment(key: string) {
+    dismissalMap = persistMomentDismissal(dismissalMap, key, new Date())
     dismissedMomentKeys.value = new Set([...dismissedMomentKeys.value, key])
   }
 
@@ -225,7 +231,10 @@ export function useCoachMoments(week: TrainingWeek) {
    * ⚠ 비파괴 add 전용(probeAnswers 1키 추가 + subtypeResolved 1개). 다른 메모리 라이터와 겹친 덮어쓰기를 막으려 in-flight 가드를 둔다 —
    *    이 액션을 destructive(기존 항목 삭제/덮어쓰기)하게 확장하지 말 것.
    */
-  async function onMomentSelect(option: CoachMomentOption) {
+  async function onMomentSelect(option: CoachMomentOption, momentKey?: string) {
+    // 답변한 모먼트는 재닦달 금지 대상 — 영속만 하고 reactive set 은 안 건드려
+    // 이번 세션의 코치 응답 표시는 유지한다(다음 앱 실행부터 쿨다운 동안 숨김).
+    if (momentKey) dismissalMap = persistMomentDismissal(dismissalMap, momentKey, new Date())
     const probe = option.probe
     if (!probe || probeSaving.value) return
     probeSaving.value = true
