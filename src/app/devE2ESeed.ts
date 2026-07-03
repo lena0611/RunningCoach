@@ -22,6 +22,8 @@ function isoOffset(days: number): string {
 }
 
 const RACE_GOAL_ID = 'e2e-race-10k'
+/** 시드 직전의 실계정 활성 상태 스냅샷(클린업 복원용). 시드→클린업 한 사이클 동안만 존재. */
+const PREV_STATE_KEY = 'e2e.returnRamp.prevState'
 
 /**
  * 복귀 램프 시나리오를 깐다: 레이스 10K 목표 + 2주 전 시작해 이틀 전 끝난 휴식(durationDays≈13, returnRampApplied=false).
@@ -49,6 +51,17 @@ export async function seedReturnRamp(): Promise<{ ok: true }> {
     notes: '',
     createdAt: `${start}T00:00:00.000Z`,
     updatedAt: new Date().toISOString()
+  }
+
+  // 0) 시드 직전 활성 상태 스냅샷 — cleanupReturnRamp 가 실계정 원상태로 복원한다
+  //    (2026-07-03 사고: 클린업 없이 스펙이 끝나 실계정 활성 목표가 'E2E'로 남았다).
+  try {
+    localStorage.setItem(
+      PREV_STATE_KEY,
+      JSON.stringify({ activeGoalId: memory.memory.activeGoalId, goal: memory.memory.goal, activeRest: memory.memory.activeRest })
+    )
+  } catch {
+    /* 스냅샷 실패 시에도 시드는 진행 — cleanup 은 e2e 목표 제거+첫 실 목표 활성화로 폴백 */
   }
 
   // 1) 레이스 목표를 활성화 + 기존 휴식 제거. 비파괴: 실 목표를 교체하지 않고 e2e 목표만 더한다(공유 실계정 보호).
@@ -212,6 +225,51 @@ export function firstUpcomingSession(): { date: string; sessionType: string; dis
  * memoryStore.load() 는 localStorage 를 덮어쓰지 않으므로(update 만 기록), 파괴적 시드(목표 교체 등) 후
  * 원본이 localStorage 에 남아 있을 때 계정을 원복하는 데 쓴다.
  */
+/**
+ * seedReturnRamp 잔재를 실계정에서 걷어낸다 — e2e 목표 제거 + 시드 직전 활성 목표/휴식 복원.
+ * 스냅샷이 없으면(과거 시드 잔재) 첫 실 목표를 활성화하는 폴백. 멱등 — 잔재가 없으면 no-op.
+ * ⚠ e2e 목표의 스케줄 행은 goalId 로만 접근되므로 목표 제거로 도달 불가(잔존해도 무해).
+ */
+export async function cleanupReturnRamp(): Promise<{ ok: boolean; restoredActiveGoalId: string | null }> {
+  const memory = useMemoryStore()
+  const mem = memory.memory
+  const hasSeed = mem.goals.some((g) => g.id === RACE_GOAL_ID) || mem.activeGoalId === RACE_GOAL_ID
+  let prev: { activeGoalId?: string | null; goal?: string; activeRest?: TrainingMemory['activeRest'] } | null = null
+  try {
+    const raw = localStorage.getItem(PREV_STATE_KEY)
+    prev = raw ? JSON.parse(raw) : null
+  } catch {
+    prev = null
+  }
+  if (!hasSeed) {
+    try {
+      localStorage.removeItem(PREV_STATE_KEY)
+    } catch { /* noop */ }
+    return { ok: true, restoredActiveGoalId: null }
+  }
+
+  const realGoals = mem.goals.filter((g) => g.id !== RACE_GOAL_ID)
+  const fallbackActive = realGoals.find((g) => g.status === 'active') ?? realGoals[0] ?? null
+  const restoredActiveGoalId =
+    prev?.activeGoalId && prev.activeGoalId !== RACE_GOAL_ID ? prev.activeGoalId : (fallbackActive?.id ?? null)
+  const restoredGoalTitle =
+    prev?.goal && prev.goal !== '10K 레이스(E2E)'
+      ? prev.goal
+      : (realGoals.find((g) => g.id === restoredActiveGoalId)?.title ?? '')
+
+  await memory.update({
+    ...mem,
+    goals: realGoals,
+    activeGoalId: restoredActiveGoalId ?? undefined,
+    goal: restoredGoalTitle,
+    activeRest: prev ? (prev.activeRest ?? null) : null
+  })
+  try {
+    localStorage.removeItem(PREV_STATE_KEY)
+  } catch { /* noop */ }
+  return { ok: true, restoredActiveGoalId }
+}
+
 export async function restoreMemoryFromLocalSnapshot(): Promise<{ ok: boolean; goals?: string[]; activeGoalId?: string }> {
   const raw = localStorage.getItem('runcontext.trainingMemory')
   if (!raw) return { ok: false }

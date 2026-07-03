@@ -683,10 +683,12 @@ label {
   }
 }
 
+/* 탭 홈: 페이지 여백을 .app-main(스크롤러 바깥)이 아니라 각 패널(스크롤러) 안쪽에 둔다 —
+   스크롤바가 상세 스택(.memory-stack-content)처럼 화면 가장자리에 붙는다(안쪽 여백 값은 동일). */
 .app-shell.is-tab-home .app-main {
   min-height: 0;
   overflow: hidden;
-  padding-bottom: 0;
+  padding: 0;
 }
 
 .app-header {
@@ -1260,7 +1262,8 @@ body.tab-swiping {
   overscroll-behavior: contain;
   /* 세로는 네이티브 스크롤, 수평은 JS pager가 소유(브라우저 수평 팬 비활성). */
   touch-action: pan-y;
-  padding: 0 0 var(--bottom-nav-reserve);
+  /* 좌우/위 여백은 스크롤러(패널) 안쪽 — .is-tab-home .app-main 은 padding 0 (스크롤바 가장자리 정렬). */
+  padding: 18px 18px var(--bottom-nav-reserve);
 }
 
 .tab-swipe-panel[aria-hidden='true'] {
@@ -6743,6 +6746,11 @@ button.run-session-row {
   }
 
   .app-main {
+    padding: 24px 28px var(--bottom-nav-reserve);
+  }
+
+  /* 탭 홈 패널 여백도 데스크톱 스케일 미러(24/28 — is-tab-home 의 .app-main 은 padding 0). */
+  .tab-swipe-panel {
     padding: 24px 28px var(--bottom-nav-reserve);
   }
 
