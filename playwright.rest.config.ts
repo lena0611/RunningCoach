@@ -14,6 +14,9 @@ const BASE_URL = process.env.REST_E2E_BASE_URL || 'http://localhost:5175'
 export default defineConfig({
   testDir: './e2e',
   testMatch: /(rest-return|stackpage-275|session-detail-overlay)\.spec\.ts/,
+  // 공유 실계정 하나를 모든 spec 이 쓴다 — rest-return 이 휴식을 선언하는 동안 다른 워커의
+  // 대시보드 히어로('다음 훈련')가 숨는 등 계정 상태 레이스가 나므로 파일 간 병렬을 금지한다.
+  workers: 1,
   timeout: 45_000,
   expect: { timeout: 8_000 },
   retries: 0,

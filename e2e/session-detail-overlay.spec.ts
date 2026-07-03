@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
+import { suppressAccountStatePrompts } from './suppressAccountPrompts'
 
 /**
  * 세션 상세 App 레벨 오버레이 (#275 후속) 렌더 스모크 — 테스트 계정 lena0611+qa 저장 세션.
@@ -15,21 +16,6 @@ const domClick = (loc: Locator) => loc.evaluate((el) => (el as HTMLElement).clic
 async function dismissStartupModals(page: Page) {
   const skip = page.getByRole('dialog', { name: '시작 인터뷰' }).getByRole('button', { name: '건너뛰기' })
   if (await skip.isVisible().catch(() => false)) await skip.click()
-}
-
-/**
- * 활성 부상이 있는 계정이면 진입(및 네비게이션)마다 App 레벨 '부상 상태 체크인'이 떠 클릭을 가로채 스택/상세 검증을 막는다.
- * 그 dismiss 플래그(pacelab.injuryCheckIn.dismissed.*)를 항상 dismissed 로 읽게 해 모달을 원천 차단한다 —
- * 클라이언트 UI 억제만 하고 체크인/계정 데이터는 건드리지 않는다(비파괴, 타이밍 무관). 온보딩 스킵과 같은 성격.
- */
-async function suppressInjuryCheckIn(page: Page) {
-  await page.addInitScript(() => {
-    const orig = Storage.prototype.getItem
-    Storage.prototype.getItem = function (this: Storage, key: string) {
-      if (typeof key === 'string' && key.startsWith('pacelab.injuryCheckIn.dismissed')) return '1'
-      return orig.call(this, key)
-    }
-  })
 }
 
 /** 열린 StackPage(.memory-stack-layer)를 헤더 제목으로 특정한다. */
@@ -50,7 +36,7 @@ async function openFirstRunDetail(page: Page) {
 
 test.describe('세션 상세 App 레벨 오버레이 (#275 후속)', () => {
   test.beforeEach(async ({ page }) => {
-    await suppressInjuryCheckIn(page)
+    await suppressAccountStatePrompts(page)
   })
 
   test('기록 탭: 런 클릭 → 세션 상세 오버레이 열림·본문·닫힘', async ({ page }) => {
