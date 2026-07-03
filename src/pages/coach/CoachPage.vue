@@ -6,6 +6,8 @@ import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { useGlossaryStore } from '@/app/stores/glossaryStore'
+import { useWeatherStore } from '@/app/stores/weatherStore'
+import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
 import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
 import type { TrainingPhaseName } from '@/entities/training-memory/model'
 import { isActiveSession, type ScheduledSession } from '@/entities/training-schedule/model'
@@ -49,6 +51,10 @@ const scheduleStore = useTrainingScheduleStore()
 const sessionIntentStore = useSessionIntentStore()
 const toastStore = useToastStore()
 const glossaryStore = useGlossaryStore()
+// 날씨(작전 맥락): '다음 훈련' 얇은 스택 제거(2026-07-04)로 상세 날씨 카드가 코치 탭으로 이관됐다.
+const weatherStore = useWeatherStore()
+weatherStore.init()
+void weatherStore.refreshAfterActivation()
 
 const week = useTrainingWeek({ routePath: '/coach' })
 const {
@@ -676,6 +682,17 @@ async function applyPhaseTransition() {
         </article>
       </template>
     </WeekTrainingCarousel>
+
+    <!-- 날씨(작전 보조): 활성일 기준 예보 — 요약 히어로의 한 줄 요약과 달리 상세 카드는 여기가 정위치. -->
+    <WeatherCard
+      v-if="hasSchedule"
+      :snapshot="weatherStore.snapshot"
+      :loading="weatherStore.loading"
+      :error="weatherStore.error"
+      :target-date="scheduleDays[activeDayIndex]?.date ?? todayDate"
+      :session-title="activeSession ? sessionTypeLabel(activeSession.sessionType) : ''"
+      @refresh="weatherStore.requestForecast()"
+    />
 
     <!-- 스케줄 로딩 중: 폴백 깜빡임 방지 플레이스홀더(#390) -->
     <div v-else-if="scheduleLoadingPlaceholder" class="schedule-loading">
