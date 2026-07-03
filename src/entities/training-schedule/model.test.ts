@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   defaultScheduledSessionPrescription,
+  findDuplicatePlannedClones,
   isActiveSession,
   isPlannedSession,
   isRestedSession,
@@ -175,5 +176,38 @@ describe('selectBetterTypeMatchForRun (라벨 재추론 후 매칭 재연결)', 
       session({ id: 'lsd-other', date: '2026-06-21', sessionType: 'LSD', keySession: true, status: 'planned' })
     ]
     expect(selectBetterTypeMatchForRun(sessions, { date: '2026-06-21', type: 'LSD' }, 'lsd-self')?.id).toBe('lsd-other')
+  })
+})
+
+describe('findDuplicatePlannedClones', () => {
+  it('같은 (goalId·date·slot·type) planned 클론에서 최신 1건만 남기고 잉여를 반환한다', () => {
+    const a = { ...session({ id: 'a', date: '2026-07-04', sessionType: 'LSD' }), updatedAt: '2026-07-03T14:47:16Z' }
+    const b = { ...session({ id: 'b', date: '2026-07-04', sessionType: 'LSD' }), updatedAt: '2026-07-03T14:47:16Z' }
+    const c = { ...session({ id: 'c', date: '2026-07-04', sessionType: 'LSD' }), updatedAt: '2026-07-03T14:47:16Z' }
+    const extras = findDuplicatePlannedClones([a, b, c])
+    // 동률 updatedAt → id 사전순 뒤(c)를 유지, a·b 가 잉여(결정론).
+    expect(extras.map((s) => s.id).sort()).toEqual(['a', 'b'])
+  })
+
+  it('updatedAt 이 다르면 최신을 유지한다', () => {
+    const old = { ...session({ id: 'old', date: '2026-07-04' }), updatedAt: '2026-07-01T00:00:00Z' }
+    const fresh = { ...session({ id: 'fresh', date: '2026-07-04' }), updatedAt: '2026-07-03T00:00:00Z' }
+    expect(findDuplicatePlannedClones([old, fresh]).map((s) => s.id)).toEqual(['old'])
+  })
+
+  it('정상 더블(AM/PM 슬롯)·다른 타입·다른 목표는 클론이 아니다', () => {
+    const am = session({ id: 'am', date: '2026-07-04', slot: 'AM', sessionType: 'Easy' })
+    const pm = session({ id: 'pm', date: '2026-07-04', slot: 'PM', sessionType: 'Easy' })
+    const lsd = session({ id: 'lsd', date: '2026-07-04', sessionType: 'LSD' })
+    const otherGoal = session({ id: 'g2', date: '2026-07-04', sessionType: 'LSD', goalId: 'goal-2' })
+    expect(findDuplicatePlannedClones([am, pm, lsd, otherGoal])).toEqual([])
+  })
+
+  it('done/superseded/skipped/런 연결 세션은 대상이 아니다(멱등)', () => {
+    const done = session({ id: 'd', date: '2026-07-04', sessionType: 'LSD', status: 'done', runId: 'r1' })
+    const sup = session({ id: 's', date: '2026-07-04', sessionType: 'LSD', status: 'superseded' })
+    const planned = session({ id: 'p', date: '2026-07-04', sessionType: 'LSD' })
+    const linked = session({ id: 'l', date: '2026-07-04', sessionType: 'LSD', runId: 'r2' })
+    expect(findDuplicatePlannedClones([done, sup, planned, linked])).toEqual([])
   })
 })

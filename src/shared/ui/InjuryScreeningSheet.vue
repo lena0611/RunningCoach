@@ -50,6 +50,7 @@ function finishGuide() {
 </script>
 
 <template>
+  <Transition name="bottom-sheet">
   <div v-if="open" class="bottom-sheet-layer injury-screening-layer" role="presentation" @click.self="closeSheet">
     <section
       class="bottom-sheet injury-screening-sheet"
@@ -115,4 +116,5 @@ function finishGuide() {
       </template>
     </section>
   </div>
+  </Transition>
 </template>

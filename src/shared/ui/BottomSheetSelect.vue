@@ -106,6 +106,7 @@ function confirmMultiple() {
     </button>
 
     <Teleport to="body">
+      <Transition name="bottom-sheet">
       <div v-if="open" class="bottom-sheet-layer" role="presentation" @pointerdown.stop @click.self="open = false">
         <section class="bottom-sheet" :class="{ 'bottom-sheet-dragging': drag.dragging.value }" :style="drag.sheetStyle.value" role="dialog" aria-modal="true" :aria-label="label" @click.stop>
           <div class="bottom-sheet-handle bottom-sheet-drag-zone" @pointerdown="drag.startDrag" />
@@ -140,6 +141,7 @@ function confirmMultiple() {
           </button>
         </section>
       </div>
+      </Transition>
     </Teleport>
   </div>
 </template>

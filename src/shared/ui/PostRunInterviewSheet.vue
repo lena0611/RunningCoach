@@ -84,6 +84,7 @@ function submit() {
 </script>
 
 <template>
+  <Transition name="bottom-sheet">
   <div v-if="open && run" class="bottom-sheet-layer" role="presentation" @click.self="emit('close')">
     <section
       class="bottom-sheet"
@@ -169,4 +170,5 @@ function submit() {
       </div>
     </section>
   </div>
+  </Transition>
 </template>

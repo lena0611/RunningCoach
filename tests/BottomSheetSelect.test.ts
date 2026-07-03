@@ -46,7 +46,8 @@ describe('BottomSheetSelect', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual(['Tempo'])
-    expect(document.body.querySelector('.bottom-sheet-layer')).toBeNull()
+    // 퇴장 트랜지션(딤 페이드) 동안 레이어가 잠시 남는다 — 제거 완료를 기다린다.
+    await vi.waitFor(() => expect(document.body.querySelector('.bottom-sheet-layer')).toBeNull())
     expect(document.body.classList.contains('sheet-open')).toBe(false)
   })
 
@@ -85,7 +86,7 @@ describe('BottomSheetSelect', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([['Easy', 'Tempo']])
-    expect(document.body.querySelector('.bottom-sheet-layer')).toBeNull()
+    await vi.waitFor(() => expect(document.body.querySelector('.bottom-sheet-layer')).toBeNull())
   })
 
   it('renders the all label when every option is selected', () => {
@@ -168,6 +169,8 @@ describe('BottomSheetSelect', () => {
     vi.advanceTimersByTime(180)
     await wrapper.vm.$nextTick()
 
+    // 퇴장 트랜지션(딤 페이드) 완료까지 fake 타이머로 raf/타이머를 굴린다.
+    await vi.advanceTimersByTimeAsync(400)
     expect(document.body.querySelector('.bottom-sheet-layer')).toBeNull()
 
     await wrapper.get('button.bottom-sheet-trigger').trigger('click')
