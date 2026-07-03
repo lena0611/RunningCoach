@@ -42,9 +42,13 @@ test.describe('#473 휴식/복귀', () => {
     await sheet.getByRole('button', { name: '1주', exact: true }).click()
     await sheet.getByRole('button', { name: '푹 쉴게요' }).click()
 
-    // 차분 배너 + 복귀 D-N (코치 카드·캐러셀 카드 양쪽에 나오므로 first).
-    await expect(page.getByText('💤 쉬는 중')).toBeVisible()
+    // 차분 배너 + 복귀 D-N (리디자인 ①b: 요약 홈 휴식 히어로. 코치 탭도 열면 양쪽에 나오므로 first).
+    await expect(page.getByText('💤 쉬는 중').first()).toBeVisible()
     await expect(page.getByText(/복귀까지 D-\d/).first()).toBeVisible()
+
+    // 코치 모먼트·브리핑 카드는 리디자인 ①b 이후 코치 탭 소관 — 코치 탭에서 확인.
+    await page.getByRole('button', { name: '코치', exact: true }).click()
+    await expect(page).toHaveURL(/#\/coach/)
 
     // 통제 휴식이라 "가벼운 회복주" 1회 제시(코치 모먼트).
     await expect(page.getByRole('button', { name: /가벼운 회복주/ })).toBeVisible()
@@ -52,6 +56,10 @@ test.describe('#473 휴식/복귀', () => {
 
     // 닦달성 사전 카드('오늘의 작전')는 억제되어 사라진다.
     await expect(page.getByText('📋 오늘의 작전')).toHaveCount(0)
+
+    // 요약 홈으로 복귀 — '지금 복귀' 컨트롤은 요약 히어로 소유.
+    await page.getByRole('button', { name: '요약', exact: true }).click()
+    await expect(page).toHaveURL(/#\/?$/)
 
     // 지금 복귀 → 휴식 종료(배너 사라짐). 선언 op(runScheduleOp/intentBusy)가 아직 진행 중이면 클릭이
     // 무시될 수 있으므로 클릭+검증을 재시도로 감싼다(레이스 해소).
@@ -92,7 +100,9 @@ test.describe('#473 휴식/복귀', () => {
     expect(['Easy', 'Recovery']).toContain(first?.sessionType)
     expect(first?.distanceKm ?? 99).toBeLessThanOrEqual(3.1) // ≤ 직전30일 최장(0)+10% floor 3km
 
-    // 복귀 "회복 후 정리" 모먼트(놓침 프레이밍 아님).
+    // 복귀 "회복 후 정리" 모먼트(놓침 프레이밍 아님) — 코치 모먼트는 리디자인 ①b 이후 코치 탭에서.
+    await page.getByRole('button', { name: '코치', exact: true }).click()
+    await expect(page).toHaveURL(/#\/coach/)
     await expect(page.getByText(/돌아온 걸 환영|가볍게 다시 시작/).first()).toBeVisible()
   })
 })

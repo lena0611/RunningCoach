@@ -71,16 +71,17 @@ test.describe('#275 StackPage 공통화 마이그레이션', () => {
     await expect(stackByTitle(page, '다음 훈련')).toHaveCount(0)
   })
 
-  test('Dashboard 거리 추이(이번 달) — close-X StackPage', async ({ page }) => {
+  test('Dashboard 거리 추이(주간 거리) — close-X StackPage', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
     await dismissStartupModals(page)
 
-    await domClick(page.getByText('이번 달', { exact: true }))
-    const stack = stackByTitle(page, '이번 달 거리 추이')
+    // 리디자인 ①b: NumbersGrid 2×2 — '이번 달' 카드는 '주간 거리'(최근 7일 추이)로 대체됨.
+    await domClick(page.getByText('주간 거리', { exact: true }))
+    const stack = stackByTitle(page, '최근 7일 거리 추이')
     await expect(stack).toBeVisible()
     await stack.locator('.memory-stack-header .stack-icon-button').click()
-    await expect(stackByTitle(page, '이번 달 거리 추이')).toHaveCount(0)
+    await expect(stackByTitle(page, '최근 7일 거리 추이')).toHaveCount(0)
   })
 
   test('Glossary 용어 안내 — back-arrow(3-col :has 헤더) StackPage', async ({ page }) => {

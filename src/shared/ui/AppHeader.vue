@@ -3,6 +3,7 @@ import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/app/stores/authStore'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
+import { useLevelStore } from '@/app/stores/levelStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { notificationSettingRows, useSettingsStore, type NotificationSettingKey, type NotificationSettings, type SettingsPanelFocus } from '@/app/stores/settingsStore'
@@ -12,6 +13,7 @@ import { isHealthKitBridgeAvailable } from '@/features/import-healthkit-run/heal
 import { syncNativeNotifications } from '@/features/sync-native-notifications/notificationBridge'
 import { formatDateWithWeekday } from '@/shared/lib/format'
 import { RUNNER_LEVEL_LABEL, resolveRunnerLevel } from '@/shared/lib/runnerLevel'
+import { resolveRunnerProgress, runnerProgressLabel } from '@/shared/lib/level/levelModel'
 import { resolvePaceModel, formatPaceSec } from '@/shared/lib/vdotPaces'
 import { deriveHeartRateModel, deriveObservedMaxHr, deriveRecommendedHeartRateModel } from '@/shared/lib/heartRateZones'
 import { computeTempoCeilingAdaptation, describeTempoCeilingMeta } from '@/shared/lib/coaching/tempoAdaptation'
@@ -29,6 +31,7 @@ const emit = defineEmits<{ signOut: [] }>()
 
 const authStore = useAuthStore()
 const healthKitSyncStore = useHealthKitSyncStore()
+const levelStore = useLevelStore()
 const memoryStore = useMemoryStore()
 const runStore = useRunStore()
 const settingsStore = useSettingsStore()
@@ -110,6 +113,17 @@ const runnerLevelDisplay = computed(() => {
   const label = RUNNER_LEVEL_LABEL[derived.level]
   return derived.source === 'manual' ? `${label} (직접 설정)` : `${label} (자동)`
 })
+// 헤더 러너 레벨 칩(리디자인 ①b): LevelCard 와 동일 모델(runnerProgress — App.vue syncRewards 계산과 같은 소스).
+// ⚠ 위 runnerLevelDisplay(초급/중급 판정 모델)와 다른 축 — 혼동 금지. 탭하면 코치 탭(전체 레벨 카드)으로.
+const headerRunnerProgress = computed(() =>
+  resolveRunnerProgress(memoryStore.memory.athleteProfile, runStore.sortedRuns, new Date(), {
+    maxDistanceM: levelStore.selfReportedMaxDistanceM
+  })
+)
+const headerLevelLabel = computed(() => runnerProgressLabel(headerRunnerProgress.value))
+function goCoachLevel() {
+  router.push('/coach')
+}
 const HEART_RATE_SOURCE_LABEL: Record<string, string> = {
   lthr: '역치심박(직접 입력)',
   measured_max: '측정 최대심박(직접 입력)',
@@ -435,14 +449,19 @@ function openSettingsPanel(focus: SettingsPanelFocus | null = null) {
         <span class="brand-word">PACE<strong>LAB</strong></span>
       </button>
     </div>
-    <button v-if="isAuthenticated" class="account-menu-button" type="button" aria-label="계정 메뉴 열기" @click="openDrawer">
-      <span class="account-avatar-mini" aria-hidden="true">{{ accountLabel.slice(0, 1).toUpperCase() }}</span>
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4 7h16" />
-        <path d="M4 12h16" />
-        <path d="M4 17h16" />
-      </svg>
-    </button>
+    <div v-if="isAuthenticated" class="app-header-side">
+      <button class="header-level-chip" type="button" aria-label="내 레벨 — 코치 탭에서 보기" @click="goCoachLevel">
+        {{ headerLevelLabel }}
+      </button>
+      <button class="account-menu-button" type="button" aria-label="계정 메뉴 열기" @click="openDrawer">
+        <span class="account-avatar-mini" aria-hidden="true">{{ accountLabel.slice(0, 1).toUpperCase() }}</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 7h16" />
+          <path d="M4 12h16" />
+          <path d="M4 17h16" />
+        </svg>
+      </button>
+    </div>
   </header>
 
   <StackPage :open="drawerOpen" title="계정 정보" wide-actions>

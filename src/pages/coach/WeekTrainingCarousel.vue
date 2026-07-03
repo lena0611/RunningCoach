@@ -23,6 +23,8 @@ export type CarouselDay = {
   state: 'past' | 'today' | 'future' | 'rest' | 'done' | 'open' | 'missed' | 'skipped' | 'rested'
   /** 칩에 표시할 짧은 세션 라벨/아이콘 텍스트. */
   chip: string
+  /** 그 날의 런/표시 세션 타입(RunType) — 요약 홈 WeekStrip 의 타입색 dot 용. 없으면 null. */
+  type?: string | null
   /** 같은 날 더블(#455, AM+PM 2세션)이면 true → "×2 AM·PM" shoulder 배지. */
   double?: boolean
 }

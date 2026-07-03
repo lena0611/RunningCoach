@@ -30,7 +30,7 @@ import { useToastStore } from '@/app/stores/toastStore'
 import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
 import { buildInterviewRunPatch, type PostRunInterviewResult } from '@/features/post-run-interview/buildInterviewRunPatch'
 import OnboardingFlow from '@/pages/onboarding/OnboardingFlow.vue'
-import CelebrationModal from '@/pages/dashboard/CelebrationModal.vue'
+import CelebrationModal from '@/pages/coach/CelebrationModal.vue'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { resolveRunnerProgress } from '@/shared/lib/level/levelModel'
 import { getThisWeekRuns } from '@/shared/lib/runStats'
@@ -119,16 +119,18 @@ watch(
 const router = useRouter()
 const navItems: BottomNavItem[] = [
   { to: '/', label: '요약', shortLabel: '요약', icon: 'home' },
+  { to: '/coach', label: '코치', shortLabel: '코치', icon: 'coach' },
   { to: '/runs', label: '기록', shortLabel: '기록', icon: 'log' },
   { to: '/trends', label: '추세', shortLabel: '추세', icon: 'trend' },
   { to: '/memory', label: '기억', shortLabel: '기억', icon: 'memo' }
 ]
 const route = useRoute()
 const transitionName = ref('page-slide-forward')
-const mainTabRoutes = ['/', '/runs', '/trends', '/memory']
+const mainTabRoutes = ['/', '/coach', '/runs', '/trends', '/memory']
 // 탭 페이지는 지연 로드: 활성 탭만 우선 받고, 스와이프 시작/탭 선택 시 이웃·대상 탭을 비동기로 채운다.
 const TabSkeleton = () => h('div', { class: 'tab-panel-skeleton', 'aria-hidden': 'true' })
 const DashboardPage = defineAsyncComponent({ loader: () => import('@/pages/dashboard/DashboardPage.vue'), loadingComponent: TabSkeleton, delay: 0 })
+const CoachPage = defineAsyncComponent({ loader: () => import('@/pages/coach/CoachPage.vue'), loadingComponent: TabSkeleton, delay: 0 })
 const RunLogPage = defineAsyncComponent({ loader: () => import('@/pages/run-log/RunLogPage.vue'), loadingComponent: TabSkeleton, delay: 0 })
 const TrendsPage = defineAsyncComponent({ loader: () => import('@/pages/trends/TrendsPage.vue'), loadingComponent: TabSkeleton, delay: 0 })
 const MemoryPage = defineAsyncComponent({ loader: () => import('@/pages/memory/MemoryPage.vue'), loadingComponent: TabSkeleton, delay: 0 })
@@ -942,15 +944,19 @@ function animateTabRelease(targetOffset: number, targetRoute: string | null) {
           <TabSkeleton v-else />
         </section>
         <section :ref="(element) => setTabPanelRef(element, 1)" class="tab-swipe-panel" :aria-hidden="currentTabIndex !== 1" :inert="currentTabIndex !== 1">
-          <RunLogPage v-if="loadedTabs.has(1)" />
+          <CoachPage v-if="loadedTabs.has(1)" />
           <TabSkeleton v-else />
         </section>
         <section :ref="(element) => setTabPanelRef(element, 2)" class="tab-swipe-panel" :aria-hidden="currentTabIndex !== 2" :inert="currentTabIndex !== 2">
-          <TrendsPage v-if="loadedTabs.has(2)" />
+          <RunLogPage v-if="loadedTabs.has(2)" />
           <TabSkeleton v-else />
         </section>
         <section :ref="(element) => setTabPanelRef(element, 3)" class="tab-swipe-panel" :aria-hidden="currentTabIndex !== 3" :inert="currentTabIndex !== 3">
-          <MemoryPage v-if="loadedTabs.has(3)" />
+          <TrendsPage v-if="loadedTabs.has(3)" />
+          <TabSkeleton v-else />
+        </section>
+        <section :ref="(element) => setTabPanelRef(element, 4)" class="tab-swipe-panel" :aria-hidden="currentTabIndex !== 4" :inert="currentTabIndex !== 4">
+          <MemoryPage v-if="loadedTabs.has(4)" />
           <TabSkeleton v-else />
         </section>
       </div>

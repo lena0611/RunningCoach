@@ -74,6 +74,7 @@
   --color-danger-text: #fecaca;
   --color-danger-soft: rgba(248, 113, 113, 0.12);
   --color-perf: #a78bfa;
+  --color-race: #ec4899; /* pink — Steady Long · Race (지표 액센트 매핑, 리디자인 ①b) */
   --color-recovery-text: #c4b5fd;
   --color-surface-card: linear-gradient(180deg, var(--color-surface), var(--color-surface-2));
   --color-surface-panel: linear-gradient(180deg, var(--color-surface-gradient-start), var(--color-surface-gradient-end));
@@ -782,6 +783,35 @@ label {
   box-shadow: none;
 }
 
+/* 헤더 우측(레벨 칩 + 계정 버튼) 묶음 — 리디자인 ①b */
+.app-header-side {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* 러너 레벨 칩(레벨 축소 노출 — 전체 카드는 코치 탭). 탭하면 코치 탭으로. */
+.header-level-chip {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-muted);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: none;
+  cursor: pointer;
+}
+
 .account-menu-button {
   display: inline-flex;
   align-items: center;
@@ -1092,7 +1122,7 @@ label {
   bottom: max(calc(env(safe-area-inset-bottom) - 4px), 8px);
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(var(--bottom-nav-count, 4), 1fr);
   justify-content: stretch;
   gap: 4px;
   margin: 0;
@@ -1132,7 +1162,8 @@ label {
   grid-template-rows: 25px auto;
   place-items: center;
   gap: 3px;
-  min-width: 70px;
+  /* 5탭(코치 신설) 기준: 좁은 뷰포트(375px)에서도 그리드 트랙을 넘치지 않는 최소폭 */
+  min-width: 56px;
   min-height: 60px;
   flex: 1 1 0%;
   padding: 7px 6px 6px;
@@ -1156,7 +1187,7 @@ label {
 }
 
 .bottom-nav-item.router-link-active {
-  min-width: 70px;
+  min-width: 56px;
   flex: 1 1 0%;
   background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface-2) 88%, transparent), color-mix(in srgb, var(--color-surface) 76%, transparent));
   color: var(--color-primary);
@@ -1681,6 +1712,25 @@ button.stat-card {
 .stat-card-label {
   display: block;
   padding-right: 28px;
+}
+
+/* 지표 액센트 dot(리디자인 NumbersGrid) — 색은 StatCard tone 클래스가 지정(기본 primary). */
+.stat-card-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  vertical-align: 1px;
+  border-radius: 50%;
+  background: var(--stat-dot-color, var(--color-primary));
+}
+
+.stat-card-accent {
+  --stat-dot-color: var(--color-accent);
+}
+
+.stat-card-warning {
+  --stat-dot-color: var(--color-warning);
 }
 
 .stat-card-data {

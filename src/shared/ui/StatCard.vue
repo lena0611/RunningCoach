@@ -8,6 +8,8 @@ const props = defineProps<{
   hint?: string
   unit?: string
   tone?: 'primary' | 'accent' | 'warning'
+  /** 지표 액센트 dot(리디자인 NumbersGrid) — 색은 tone 을 따른다(기본 primary). */
+  dot?: boolean
   interactive?: boolean
   loading?: boolean
   valueKind?: 'metric' | 'text'
@@ -35,7 +37,7 @@ const parsedValue = computed(() => {
     :type="interactive ? 'button' : undefined"
     @click="interactive && emit('click')"
   >
-    <span class="stat-card-label">{{ label }}</span>
+    <span class="stat-card-label"><i v-if="dot" class="stat-card-dot" aria-hidden="true" />{{ label }}</span>
     <div v-if="loading" class="stat-card-data stat-card-skeleton" aria-hidden="true">
       <span class="skeleton-line skeleton-line-value" />
       <span v-if="hint" class="skeleton-line skeleton-line-hint" />

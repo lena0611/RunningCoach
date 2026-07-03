@@ -8,7 +8,7 @@ export const router = createRouter({
     { path: '/runs', component: () => import('@/pages/run-log/RunLogPage.vue') },
     { path: '/trends', component: () => import('@/pages/trends/TrendsPage.vue') },
     { path: '/memory', component: () => import('@/pages/memory/MemoryPage.vue') },
-    { path: '/coach', redirect: '/runs' },
+    { path: '/coach', component: () => import('@/pages/coach/CoachPage.vue') },
     { path: '/auth', component: () => import('@/pages/auth/AuthPage.vue') },
     { path: '/access', component: () => import('@/pages/access-gate/AccessGuidePage.vue') },
     { path: '/prompt', redirect: '/runs' },
