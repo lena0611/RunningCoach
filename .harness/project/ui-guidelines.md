@@ -47,6 +47,7 @@ PaceLAB is a personal running coach app, not an admin dashboard.
 - Account/profile management belongs in the header account drawer, not inside the `Memo` tab.
 - The account drawer opens from right to left. Profile editing is a second right-to-left stack inside the drawer.
 - Achievements (업적) also live in the account drawer as a second-level stack (moved out of the Memory tab in the 2026-07 redesign ①c). Do not reintroduce achievements or runner-profile sections into tab pages.
+- 전리품(트로피) 카드(리디자인 ②): 티어 장식색은 전역 토큰(`--trophy-gold/silver/bronze-*`)만 쓴다 — 컴포넌트에 티어 hex 하드코딩 금지. 홀로그래픽 풀 카드(`TrophyCard`)는 L3 상세 전용, 스트립/그리드는 미니 타일(`TrophyTile`). 포일/시닌은 색상 레이어가 아니라 효과 레이어(rgba 흰색·color-dodge)로 취급한다. NEW 배지는 달성 맥락이므로 celebrate(라임)를 쓰되, 획득 완료(idle) 상태에는 쓰지 않는다.
 - Account-level settings live in the account drawer as a separate settings stack, opened by an icon-only gear action in the account header. Do not add global settings into tab pages.
 - 테마 설정 UI는 존재하지 않는다(다크 단일). `settingsStore`는 알림 등 나머지 설정을 소유하며, 새 설정은 이 store 또는 형제 settings 도메인으로 확장한다 — 컴포넌트에 localStorage 읽기를 흩뿌리지 않는다.
 

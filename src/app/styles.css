@@ -65,6 +65,36 @@
   --color-celebrate: #a3e635;
   --color-celebrate-soft: rgba(163, 230, 53, 0.16);
   --color-on-celebrate: #1a2e05;
+  --color-celebrate-text: #cdf87a;
+  /* 전리품(트로피) 카드 티어 팔레트 — Trophy Cards.dc.html 이식(리디자인 ②). 카드 전용 장식색.
+     bg-a→bg-b→bg-c=몸체 그라디언트, chip 위 텍스트=bg-b, foil=color-dodge 발광 그라디언트 스탑. */
+  --trophy-gold-bg-a: #3a2f12;
+  --trophy-gold-bg-b: #1a1508;
+  --trophy-gold-bg-c: #12100a;
+  --trophy-gold-border: #d9b44a;
+  --trophy-gold-chip: #e8c574;
+  --trophy-gold-text: #f4e2ad;
+  --trophy-gold-foil-a: #fde68a;
+  --trophy-gold-foil-b: #fffbe6;
+  --trophy-gold-foil-c: #fbbf24;
+  --trophy-silver-bg-a: #2a3038;
+  --trophy-silver-bg-b: #161a20;
+  --trophy-silver-bg-c: #10141a;
+  --trophy-silver-border: #c0c7d0;
+  --trophy-silver-chip: #c7cdd6;
+  --trophy-silver-text: #dfe3e9;
+  --trophy-silver-foil-a: #eef2f8;
+  --trophy-silver-foil-b: #c7cdd6;
+  --trophy-silver-foil-c: #9ec4ff;
+  --trophy-bronze-bg-a: #3a2418;
+  --trophy-bronze-bg-b: #1a120b;
+  --trophy-bronze-bg-c: #120c07;
+  --trophy-bronze-border: #c08552;
+  --trophy-bronze-chip: #d8a06a;
+  --trophy-bronze-text: #ecc9a8;
+  --trophy-bronze-foil-a: #f5cfa8;
+  --trophy-bronze-foil-b: #fff1e0;
+  --trophy-bronze-foil-c: #e08a50;
   --color-accent: #6ba6ff;
   --color-accent-soft: rgba(107, 166, 255, 0.14);
   --color-warning: #fbbf24;

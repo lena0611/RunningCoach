@@ -141,4 +141,18 @@ describe('computeDistancePbs', () => {
     expect(pbs.map((p) => p.distanceM)).toEqual([1000, 2000, 3000])
     expect(pb(pbs, 'training', 1000)!.elapsedSec).toBeCloseTo(300, 5)
   })
+
+  it('extraDistancesM 로 버킷 배수가 아닌 캐노니컬 거리(하프)를 함께 산출한다', () => {
+    const run = makeRun({ id: 'r-22k', distanceKm: 22, durationSec: 7920 })
+    const pbs = computeDistancePbs([run], 5000, [21097.5, 42195])
+    expect(pbs.map((p) => p.distanceM)).toEqual([5000, 10000, 15000, 20000, 21097.5])
+    // 등속: 7920 × (21097.5 / 22000)
+    expect(pb(pbs, 'training', 21097.5)!.elapsedSec).toBeCloseTo((7920 * 21097.5) / 22000, 5)
+  })
+
+  it('extraDistancesM 중 stepM 배수·총거리 초과분은 무시한다', () => {
+    const run = makeRun({ id: 'r-12k', distanceKm: 12, durationSec: 3600 })
+    const pbs = computeDistancePbs([run], 5000, [5000, 10000, 21097.5])
+    expect(pbs.map((p) => p.distanceM)).toEqual([5000, 10000])
+  })
 })
