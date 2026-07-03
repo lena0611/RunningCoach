@@ -4,6 +4,34 @@
 
 > 하네스 본체의 변경 이력이나 릴리스 노트가 아닙니다. 하네스 본체 변경 기록은 하네스 저장소의 `CHANGELOG.md` 또는 릴리스 태그를 확인합니다.
 
+## 2026-07-03 - 리디자인 ②: 업적 홈 개편 + 홀로그래픽 전리품(트로피) 카드
+
+리디자인 마지막 단계(핸드오프 README §8 + `Trophy Cards.dc.html` = 스펙 SSOT). 업적 홈(L1) 재구성 + 전리품 컬렉션(L2) + 카드 상세(L3) 신설.
+
+- **카탈로그 = 컨텍스트당 14장 고정**: PB(캐노니컬 5K/10K/하프/풀) 4=골드 · 첫 마일스톤 4=골드 · 스트릭/주·월 최다 3=실버 · 누적 클럽(100/500/1000km) 3=브론즈. `src/features/achievements/trophyCatalog.ts`(순수 함수+테스트)가 `AchievementSet`에서 파생 — 저장 테이블 없음(#181 결정과 동형). **기록(최장 거리·시간·최속 페이스)은 카드가 아니라 L1 정보 섹션**(README 발급 규칙 4종에 없음).
+- **PB 골드 카드는 5km 버킷 전체가 아니라 캐노니컬 4거리만**: 버킷 사다리(15K·20K…)를 전부 카드화하면 스프롤+컷오프 문제가 생겨 마일스톤 거리와 동일한 4거리로 통일. 이를 위해 `computeDistancePbs(runs, stepM, extraDistancesM)` 옵션 파라미터 신설 — 하프(21097.5)·풀(42195)은 5000 배수가 아니라 버킷에 안 걸리던 갭을 해소. 기존 호출부(raceTargets=자체 stepM, coach 요약=slice(0,2) 정렬 불변) 영향 없음 확인.
+- **실버는 저문턱 획득 + "갱신"이 NEW 재점화 훅**: 스트릭은 2일(연속의 정의), 주/월 최다는 기록 존재 시 획득. 임의 도메인 문턱(주 30km 등)을 발명하지 않음 — README의 "스트릭/주·월 최고=실버"를 기록 보유형 카드로 해석.
+- **누적 클럽은 전체(훈련+레이싱) 통합**, 발급일 = 정렬 순회로 목표를 처음 넘은 런의 날짜(결정적). 평생 누적 km 계산은 코드베이스에 없어 신설(`computeLifetimeDistanceKm`, 뷰 레이어 카탈로그 소유 — AchievementSet 비확장, YAGNI).
+- **NEW 배지 seen 상태**: `runcontext.achievements.seen`(카드 id→지문 맵, 로컬 저장 인라인 관례). 지문=획득값+시점 — 값이 바뀌면(기록 갱신) NEW 재점화. **최초 방문(키 없음)은 무음 베이스라인**으로 과거 업적 전체 NEW 폭발 오탐 방지(HealthKit 옵저버 초기콜백 교훈 동형). 훈련+레이싱 합본으로 스냅샷해 토글 안 해본 컨텍스트의 NEW 유실 방지.
+- **레이어링**: L2=AchievementsSection 내부 중첩 StackPage(push), L3=Teleport 모달(`z-index: var(--z-stack)`, 나중에 append 되어 같은 z에서 위에 그려지는 기존 스태킹 관행). 획득 스트립 타일 탭=L3 직행, 잠금/+N=L2.
+- **티어 장식색 토큰 승격**: 골드/실버/브론즈 팔레트(`--trophy-*-bg/border/chip/text/foil-*`)를 styles.css :root로 — ui-system-contract "토큰 없는 새 색 금지" 준수. 브론즈는 데모 부재라 컬렉션 헤더 칩 색에서 파생 저작. 포일/시닌의 rgba 흰색은 색이 아니라 효과 레이어로 취급. `--color-celebrate-text(#cdf87a)` 신설.
+- **틸트는 README 값(±10°/잠금 ±8°)**, 데모 JS 계수(10/11·5/6)와 다름 — 라이브 확인 결과 README 값으로 확정. deviceorientation 권한 플로우 대신 포인터/터치 드래그 단일 경로(`touch-action:none`은 L3 프레임 한정).
+- **검증**: vue-tsc + 유닛 881(신규 catalog/seen/extraDistances 13) + Playwright 라우트 스모크 5/5 + 라이브 QA(:5199 로컬 시드, 케이스 목록은 세션 보고) — 계정 드로어 실계정 진입만 인증 세션 만료로 배포 후 확인 대상.
+- → 권위: `~/Downloads/design_handoff_pacelab_redesign/README.md` §8·전리품 카드 구현 명세, Trophy Cards.dc.html(최종본), RunningCoach Redesign.dc.html Row 7. 후속 후보: 획득 순간 celebrate 토스트 연동(발급 규칙엔 명시, 이번 스코프는 열람 화면), 모바일 deviceorientation 틸트.
+
+## 2026-07-03 - 리디자인 ①c: 기억 탭 축소·항목별 저장 + 프로필/업적 계정 드로어 이관 + 추세/상세 리스킨
+
+PaceLAB 다크 리스킨 이식(핸드오프 README = 스펙 SSOT)의 ①c 단계. ①a(토큰·다크 단일화)·①b(5탭·코치 탭·요약 재구성)에 이어 나머지 화면을 스펙에 정렬.
+
+- **기억 L1 재작성**: 6개 SectionGroup 세로 나열 + 전역 저장 → **"현재 코칭 기준" 요약 카드(활성 목표+제약 2행) + 관리 nav 4항목(목표·몸 상태(주의 배지)·훈련 기준·AI 기억)**. 훈련 기준·AI 기억의 인라인 편집 필드는 신규 drill-in 패널(`training`·`ai-memory`)로 이동.
+- **항목별 저장**: 전역 `save()` 제거 → `saveSection(section)`. 열려 있는 패널 그룹의 키만(`SECTION_KEYS`) 스토어 스냅샷 위에 얹어 `memoryStore.update()` 호출 — **다른 패널의 미저장 편집은 draft·스냅샷에 남고 함께 저장되지 않는다**. 스토어에 부분 저장 API를 새로 만들지 않고(YAGNI, Supabase upsert 전체 저장 유지) 뷰 레이어에서 부분 머지로 해결.
+- **업적 이관**: `AchievementsSection.vue`를 `src/pages/memory/` → `src/features/achievements/`로 이동(최초 시도했던 shared/ui 배치는 #397 래칫(shared→entities 86) 초과로 pre-commit 실패 → features로 확정). 진입은 AppHeader 드로어 행 → `openAchievements` emit → AppShell 중계 → **App.vue가 StackPage(`stack-layer-top`)로 호스팅**(shared 가 도메인 컴포넌트를 직접 들지 않는 emit-up 체인). 러너 프로필은 이미 드로어에 있었으므로(ui-guidelines 기존 규칙) 기억 탭 표시 전용 섹션만 제거 — **이 변경은 "계정/프로필은 드로어" 규칙을 뒤늦게 준수하는 것**.
+- **추세**: 종합판단 hero를 첫인상 1개(톤 배지+한 줄 결론+신뢰도)로 축소 — 기존 4행 요약 리스트는 아래 렌즈 리스트와 중복이라 제거(로직 무변경, `trendInsights` 그대로). 렌즈 행에 좌측 액센트 바(판단색)+watch 톤 추가.
+- **세션 상세**: 메타 카드/타이틀 카드 분리, 타이틀 카드에 run-type 틴트 그라디언트+빅 mono 거리+서브지표 트리오(시간/페이스=amber/심박=blue), 메모를 차트 뒤로 이동(스펙 순서).
+- **기록 탭은 무변경**: 매핑 결과 스펙 8할 기구현(필터×2·캘린더 마커·월요약 5행·RunSessionList) — "밀도 유지(좋은 모델)" 판정이라 손대지 않음.
+- **문서 정합**: `active-context.md`("코치 탭 없음" 고정사실 폐기→5탭), `project-memory.md`(4탭→5탭), `domain-rules.md`(코치 탭 신설·기억 축소·5탭 정보구조), `navigation-information-architecture.md`(3메뉴 시대 문서 전면 갱신), `ui-guidelines.md`(탭 루트·업적 드로어·기억/추세 L1 구조). e2e `app-smoke` 기억 탭 단언 '러너 프로필'→'현재 코칭 기준'.
+- → 권위: 디자인 핸드오프 `~/Downloads/design_handoff_pacelab_redesign/README.md`, IA Flow(✔ 확정: "프로필·업적을 기억 탭에서 빼 계정 메뉴로"). 후속: ②(업적 홈+홀로그래픽 TrophyCard).
+
 ## 2026-07-02 - config-contract 변경은 Node 버전 enforcement와 무관 (sync-gap 예외 기록)
 
 `docs(harness)` 커밋(구현 단순성 규칙 추가 + 옛 네이티브 경로 모노레포 정정, #250 후속)에서 `.harness/project/config-contract.md`를 수정하자 pre-commit이 `common.runtime.minimum-node` sync-gap을 blocking으로 띄웠다(config-contract 변경 → Node 최소버전 enforcement 코드 동기화 요구).

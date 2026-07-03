@@ -625,12 +625,23 @@ export const GLOSSARY_FALLBACK_TERMS: GlossaryTerm[] = [
     id: 'distance-pb',
     slug: 'distance-pb',
     term: '거리별 PB',
-    aka: ['distance pb', '거리별 개인최고', '5K PB', '10K PB'],
+    aka: ['distance pb', '거리별 개인최고', '5K PB', '10K PB', '하프 PB', '풀 PB'],
     category: 'achievement',
-    shortDef: '출발선부터 5km 단위 거리에 가장 빨리 도달한 기록.',
-    detail: '전체 기록에서 자동 산출하며, 훈련과 레이싱(자기와의 대결)을 분리해 각각 관리합니다. 세션 기록의 페이스 흐름을 적분해 5K·10K처럼 거리별 도달 시간을 추정합니다.',
-    relatedSlugs: ['pb', 'run-streak'],
+    shortDef: '출발선부터 5K·10K·하프·풀 같은 기준 거리에 가장 빨리 도달한 기록.',
+    detail: '전체 기록에서 자동 산출하며, 훈련과 레이싱(자기와의 대결)을 분리해 각각 관리합니다. 세션 기록의 페이스 흐름을 적분해 거리별 도달 시간을 추정하고, 5km 단위 버킷에 더해 하프(21.0975km)·풀(42.195km)도 산출합니다.',
+    relatedSlugs: ['pb', 'run-streak', 'trophy-card'],
     orderIndex: 20
+  },
+  {
+    id: 'trophy-card',
+    slug: 'trophy-card',
+    term: '전리품 카드',
+    aka: ['트로피 카드', 'trophy card', '컬렉션', '홀로그래픽 카드'],
+    category: 'achievement',
+    shortDef: '업적을 수집형 홀로그래픽 카드로 발급한 트로피.',
+    detail: '거리별 PB와 첫 5K·10K·하프·풀 완주는 골드, 스트릭·주/월 최다 거리는 실버, 누적 거리 클럽(100/500/1000km)은 브론즈 카드로 발급됩니다. 기록을 갱신하면 해당 카드에 NEW 배지가 다시 켜지고, 미획득 카드는 잠금 상태로 진행률을 보여줍니다. 업적 화면(계정 메뉴)에서 컬렉션으로 모아볼 수 있습니다.',
+    relatedSlugs: ['distance-pb', 'run-streak'],
+    orderIndex: 40
   },
   {
     id: 'run-streak',

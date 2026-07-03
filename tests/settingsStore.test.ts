@@ -1,48 +1,36 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useSettingsStore } from '@/app/stores/settingsStore'
 
 describe('settingsStore', () => {
   beforeEach(() => {
     localStorage.clear()
-    document.documentElement.className = ''
-    document.documentElement.removeAttribute('data-theme')
-    document.documentElement.removeAttribute('data-theme-preference')
     setActivePinia(createPinia())
-    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
-      matches: true,
-      addEventListener: vi.fn()
-    }))
   })
 
-  it('starts in dark mode by default and can follow iOS theme', () => {
+  it('persists notification settings and ignores legacy theme keys', () => {
+    // 과거 저장된 테마 설정이 남아 있어도(다크 단일화 이전 사용자) 로드가 깨지지 않는다
+    localStorage.setItem('runcontext.settings', JSON.stringify({
+      themePreference: 'light',
+      notificationSettings: { allEnabled: true, healthKitNewRun: false }
+    }))
+    setActivePinia(createPinia())
     const store = useSettingsStore()
 
-    store.initTheme()
-    expect(store.themePreference).toBe('dark')
-    expect(store.effectiveTheme).toBe('dark')
-    expect(document.documentElement.classList.contains('theme-dark')).toBe(true)
+    expect(store.notificationSettings).toMatchObject({
+      allEnabled: true,
+      healthKitNewRun: false,
+      scheduledWorkout: true,
+      workoutMorning: true
+    })
 
-    store.setFollowSystem(true)
+    store.setNotificationSetting('scheduledWorkout', false)
 
-    expect(store.themePreference).toBe('system')
-    expect(store.effectiveTheme).toBe('light')
-    expect(document.documentElement.classList.contains('theme-light')).toBe(true)
-
-    store.setFollowSystem(false)
-    expect(store.themePreference).toBe('light')
-
-    store.setManualTheme('dark')
-
-    expect(store.themePreference).toBe('dark')
-    expect(document.documentElement.classList.contains('theme-dark')).toBe(true)
-    expect(document.documentElement.dataset.themePreference).toBe('dark')
-    expect(JSON.parse(localStorage.getItem('runcontext.settings') || '{}')).toMatchObject({
-      themePreference: 'dark',
+    expect(JSON.parse(localStorage.getItem('runcontext.settings') || '{}')).toEqual({
       notificationSettings: {
-        allEnabled: false,
-        healthKitNewRun: true,
-        scheduledWorkout: true,
+        allEnabled: true,
+        healthKitNewRun: false,
+        scheduledWorkout: false,
         workoutMorning: true
       }
     })

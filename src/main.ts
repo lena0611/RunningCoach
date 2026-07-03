@@ -17,7 +17,6 @@ const app = createApp(App)
 app.use(pinia)
 const isE2ERouteSmoke = import.meta.env.DEV && import.meta.env.VITE_E2E_ROUTE_SMOKE === 'true'
 
-useSettingsStore().initTheme()
 // WKWebView에서 serviceWorker.getRegistrations()/caches가 멈추면 부팅이 무한정 막혀
 // 스플래시가 영원히 남을 수 있다(타임아웃 없는 await). 2초 가드로 부팅을 보장한다.
 await withTimeout(cleanupLegacyWebCaches(), 2000, '레거시 캐시 정리 시간 초과').catch(() => undefined)

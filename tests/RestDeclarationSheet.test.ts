@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
-import RestDeclarationSheet from '@/pages/dashboard/RestDeclarationSheet.vue'
+import RestDeclarationSheet from '@/pages/coach/RestDeclarationSheet.vue'
 
 // #473 휴식 선언/복귀일 조정 시트 — 마운트 기반 상호작용 테스트.
 // 보고된 버그(복귀일 조정 시 저장 비활성)의 회귀 가드 + 다양한 조건 검증.

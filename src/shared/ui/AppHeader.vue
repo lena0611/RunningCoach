@@ -3,15 +3,17 @@ import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/app/stores/authStore'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
+import { useLevelStore } from '@/app/stores/levelStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
-import { notificationSettingRows, useSettingsStore, type ManualThemeMode, type NotificationSettingKey, type NotificationSettings, type SettingsPanelFocus } from '@/app/stores/settingsStore'
+import { notificationSettingRows, useSettingsStore, type NotificationSettingKey, type NotificationSettings, type SettingsPanelFocus } from '@/app/stores/settingsStore'
 import { useGlossaryStore } from '@/app/stores/glossaryStore'
 import { getActiveGoal, getActiveInjuryItem, type PersonalBest, type TrainingMemory } from '@/entities/training-memory/model'
 import { isHealthKitBridgeAvailable } from '@/features/import-healthkit-run/healthKitBridge'
 import { syncNativeNotifications } from '@/features/sync-native-notifications/notificationBridge'
 import { formatDateWithWeekday } from '@/shared/lib/format'
 import { RUNNER_LEVEL_LABEL, resolveRunnerLevel } from '@/shared/lib/runnerLevel'
+import { resolveRunnerProgress, runnerProgressLabel } from '@/shared/lib/level/levelModel'
 import { resolvePaceModel, formatPaceSec } from '@/shared/lib/vdotPaces'
 import { deriveHeartRateModel, deriveObservedMaxHr, deriveRecommendedHeartRateModel } from '@/shared/lib/heartRateZones'
 import { computeTempoCeilingAdaptation, describeTempoCeilingMeta } from '@/shared/lib/coaching/tempoAdaptation'
@@ -25,10 +27,12 @@ import HeartRateTestGuideSheet from '@/shared/ui/HeartRateTestGuideSheet.vue'
 import StackPage from '@/shared/ui/StackPage.vue'
 
 defineProps<{ isAuthenticated: boolean }>()
-const emit = defineEmits<{ signOut: [] }>()
+// openAchievements: 업적 스택은 App 레벨이 호스팅(#397 래칫 — shared 가 entities 도메인 컴포넌트를 직접 들지 않는다)
+const emit = defineEmits<{ signOut: []; openAchievements: [] }>()
 
 const authStore = useAuthStore()
 const healthKitSyncStore = useHealthKitSyncStore()
+const levelStore = useLevelStore()
 const memoryStore = useMemoryStore()
 const runStore = useRunStore()
 const settingsStore = useSettingsStore()
@@ -66,10 +70,6 @@ const sexOptions = [
   { value: 'male', label: '남성' },
   { value: 'female', label: '여성' },
   { value: 'other', label: '기타' }
-]
-const themeModeOptions = [
-  { value: 'light', label: '라이트', description: '밝은 배경과 선명한 텍스트를 사용합니다.' },
-  { value: 'dark', label: '다크', description: '어두운 배경과 낮은 눈부심을 사용합니다.' }
 ]
 const weekdayOptions = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'].map((day) => ({ value: day, label: day }))
 const birthYearOptions = [
@@ -114,6 +114,17 @@ const runnerLevelDisplay = computed(() => {
   const label = RUNNER_LEVEL_LABEL[derived.level]
   return derived.source === 'manual' ? `${label} (직접 설정)` : `${label} (자동)`
 })
+// 헤더 러너 레벨 칩(리디자인 ①b): LevelCard 와 동일 모델(runnerProgress — App.vue syncRewards 계산과 같은 소스).
+// ⚠ 위 runnerLevelDisplay(초급/중급 판정 모델)와 다른 축 — 혼동 금지. 탭하면 코치 탭(전체 레벨 카드)으로.
+const headerRunnerProgress = computed(() =>
+  resolveRunnerProgress(memoryStore.memory.athleteProfile, runStore.sortedRuns, new Date(), {
+    maxDistanceM: levelStore.selfReportedMaxDistanceM
+  })
+)
+const headerLevelLabel = computed(() => runnerProgressLabel(headerRunnerProgress.value))
+function goCoachLevel() {
+  router.push('/coach')
+}
 const HEART_RATE_SOURCE_LABEL: Record<string, string> = {
   lthr: '역치심박(직접 입력)',
   measured_max: '측정 최대심박(직접 입력)',
@@ -379,11 +390,6 @@ function signOutAndClose() {
   emit('signOut')
 }
 
-function setThemeMode(value: string | string[]) {
-  if (Array.isArray(value)) return
-  if (value === 'light' || value === 'dark') settingsStore.setManualTheme(value as ManualThemeMode)
-}
-
 function setAllNotifications(enabled: boolean) {
   settingsStore.setAllNotifications(enabled)
   syncNotifications({
@@ -444,14 +450,19 @@ function openSettingsPanel(focus: SettingsPanelFocus | null = null) {
         <span class="brand-word">PACE<strong>LAB</strong></span>
       </button>
     </div>
-    <button v-if="isAuthenticated" class="account-menu-button" type="button" aria-label="계정 메뉴 열기" @click="openDrawer">
-      <span class="account-avatar-mini" aria-hidden="true">{{ accountLabel.slice(0, 1).toUpperCase() }}</span>
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4 7h16" />
-        <path d="M4 12h16" />
-        <path d="M4 17h16" />
-      </svg>
-    </button>
+    <div v-if="isAuthenticated" class="app-header-side">
+      <button class="header-level-chip" type="button" aria-label="내 레벨 — 코치 탭에서 보기" @click="goCoachLevel">
+        {{ headerLevelLabel }}
+      </button>
+      <button class="account-menu-button" type="button" aria-label="계정 메뉴 열기" @click="openDrawer">
+        <span class="account-avatar-mini" aria-hidden="true">{{ accountLabel.slice(0, 1).toUpperCase() }}</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 7h16" />
+          <path d="M4 12h16" />
+          <path d="M4 17h16" />
+        </svg>
+      </button>
+    </div>
   </header>
 
   <StackPage :open="drawerOpen" title="계정 정보" wide-actions>
@@ -499,6 +510,18 @@ function openSettingsPanel(focus: SettingsPanelFocus | null = null) {
         <dd>{{ activeInjuryTitle }}</dd>
       </div>
     </dl>
+
+    <!-- 업적(리디자인 ①c): 기억 탭에서 계정 메뉴로 이전 — PB·마일스톤·꾸준함. 스택 호스팅은 App 레벨 -->
+    <button class="drawer-link-row" type="button" @click="emit('openAchievements')">
+      <span class="drawer-link-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M8 21h8" /><path d="M12 17v4" /><path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" /><path d="M7 6H4a3 3 0 0 0 3 4" /><path d="M17 6h3a3 3 0 0 1-3 4" /></svg>
+      </span>
+      <span class="drawer-link-text">
+        <strong>업적</strong>
+        <span>PB · 마일스톤 · 꾸준함 기록 모아보기</span>
+      </span>
+      <svg class="drawer-link-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+    </button>
 
     <button class="drawer-link-row" type="button" @click="goGlossary">
       <span class="drawer-link-icon" aria-hidden="true">
@@ -621,40 +644,6 @@ function openSettingsPanel(focus: SettingsPanelFocus | null = null) {
     layer-class="stack-layer-top"
     @close="drawerPanel = 'account'"
   >
-    <section class="settings-section">
-      <div class="settings-section-heading">
-        <p class="eyebrow">Theme</p>
-        <h3>화면 테마</h3>
-      </div>
-
-      <div class="settings-row">
-        <div>
-          <strong>iOS 테마 자동 따라가기</strong>
-          <span>기기 appearance가 바뀌면 PaceLAB도 같이 바뀝니다.</span>
-        </div>
-        <button
-          class="switch-control"
-          :class="{ on: settingsStore.followsSystem }"
-          type="button"
-          role="switch"
-          :aria-checked="settingsStore.followsSystem"
-          @click="settingsStore.setFollowSystem(!settingsStore.followsSystem)"
-        >
-          <span />
-        </button>
-      </div>
-
-      <BottomSheetSelect
-        v-if="!settingsStore.followsSystem"
-        :model-value="settingsStore.manualTheme"
-        label="수동 테마"
-        :options="themeModeOptions"
-        @update:model-value="setThemeMode"
-      />
-
-      <p class="helper">현재 적용: {{ settingsStore.effectiveTheme === 'light' ? '라이트' : '다크' }}</p>
-    </section>
-
     <section class="settings-section" data-settings-section="notifications">
       <div class="settings-section-heading">
         <p class="eyebrow">Notifications</p>

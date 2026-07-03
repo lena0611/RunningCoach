@@ -5,8 +5,8 @@ struct PaceLabSplashView: View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 7 / 255, green: 11 / 255, blue: 18 / 255),
-                    Color(red: 11 / 255, green: 15 / 255, blue: 20 / 255)
+                    Color(red: 10 / 255, green: 13 / 255, blue: 18 / 255),
+                    Color(red: 14 / 255, green: 17 / 255, blue: 22 / 255)
                 ],
                 startPoint: .top,
                 endPoint: .bottom

@@ -10,6 +10,11 @@ test('mobile app shell boots', async ({ page }) => {
 test('bottom navigation loads lazy feature routes', async ({ page }) => {
   await page.goto('/')
 
+  await page.getByRole('button', { name: '코치', exact: true }).click()
+  await expect(page).toHaveURL(/#\/coach/)
+  await expect(page.getByRole('heading', { name: '한계 도전' })).toBeVisible()
+  await expect(page.locator('body')).not.toContainText('Vue 화면이 렌더링되지 않았습니다')
+
   await page.getByRole('button', { name: '기록', exact: true }).click()
   await expect(page).toHaveURL(/#\/runs/)
   await expect(page.getByText('모든 세션 유형')).toBeVisible()
@@ -17,7 +22,9 @@ test('bottom navigation loads lazy feature routes', async ({ page }) => {
 
   await page.getByRole('button', { name: '기억', exact: true }).click()
   await expect(page).toHaveURL(/#\/memory/)
-  await expect(page.getByText('러너 프로필')).toBeVisible()
+  // 리디자인 ①c: 기억 L1 = 현재 코칭 기준 요약 + 관리 nav (러너 프로필·업적은 계정 드로어로 이동)
+  await expect(page.getByText('현재 코칭 기준')).toBeVisible()
+  await expect(page.getByRole('button', { name: /AI 기억/ })).toBeVisible()
   await expect(page.locator('body')).not.toContainText('Vue 화면이 렌더링되지 않았습니다')
 
   await page.getByRole('button', { name: '요약', exact: true }).click()
@@ -56,12 +63,12 @@ test('bottom navigation remains bottom aligned at the 900px viewport boundary', 
   expect(metrics.width).toBeLessThanOrEqual(431)
   expect(metrics.bottomGap).toBeGreaterThanOrEqual(0)
   expect(metrics.bottomGap).toBeLessThanOrEqual(16)
-  expect(metrics.gridColumnCount).toBe(4)
-  expect(metrics.itemRects).toHaveLength(4)
+  expect(metrics.gridColumnCount).toBe(5)
+  expect(metrics.itemRects).toHaveLength(5)
   for (const item of metrics.itemRects) {
-    expect(item.minWidth).toBe('70px')
+    expect(item.minWidth).toBe('56px')
     expect(item.flex).toBe('1 1 0%')
-    expect(item.width).toBeGreaterThanOrEqual(70)
+    expect(item.width).toBeGreaterThanOrEqual(56)
   }
 })
 
@@ -81,6 +88,7 @@ test('main tabs support interactive horizontal swipe navigation', async ({ page 
   await page.mouse.move(box.x + box.width * 0.18, y, { steps: 6 })
   await page.mouse.up()
 
-  await expect(page).toHaveURL(/#\/runs/)
-  await expect(page.getByText('모든 세션 유형')).toBeVisible()
+  // 5탭(요약·코치·기록·추세·기억): 요약에서 한 번 스와이프하면 코치 탭
+  await expect(page).toHaveURL(/#\/coach/)
+  await expect(page.getByRole('heading', { name: '한계 도전' })).toBeVisible()
 })

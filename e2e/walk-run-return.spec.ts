@@ -41,6 +41,10 @@ test.describe('#501 부상 복귀 walk-run 처방', () => {
       )
       .toBe('Easy|active|true')
 
+    // 작전 카드(브리핑)는 리디자인 ①b 이후 코치 탭 캐러셀에 있다.
+    await page.getByRole('button', { name: '코치', exact: true }).click()
+    await expect(page).toHaveURL(/#\/coach/)
+
     // 작전 카드(브리핑)가 보인다 — 코치 카드와 캐러셀 카드 양쪽 가능성으로 first.
     await expect(page.getByText('📋 오늘의 작전').first()).toBeVisible()
 

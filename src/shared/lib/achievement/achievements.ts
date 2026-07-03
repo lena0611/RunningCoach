@@ -138,7 +138,9 @@ export function computeCumulativeAchievements(runs: RunLog[]): CumulativeAchieve
 
 /** 전체 RunLog 에서 컨텍스트별 업적 집합을 결정적으로 산출한다. */
 export function computeAchievements(runs: RunLog[]): AchievementSet {
-  const distancePbs = computeDistancePbs(runs)
+  // 하프·풀은 5km 버킷 배수가 아니라 extra 로 산출한다(업적 PB 그리드 캐노니컬 4거리, 리디자인 ②).
+  // 레이싱 타겟(raceTargets.ts)은 자체 stepM 호출이라 영향 없음. coach 요약 slice(0,2)도 정렬상 불변.
+  const distancePbs = computeDistancePbs(runs, 5000, [...DISTANCE_MILESTONES_M])
   const fastestPace: PaceRecord[] = []
   const longestDistance: DistanceRecord[] = []
   const longestDuration: DurationRecord[] = []

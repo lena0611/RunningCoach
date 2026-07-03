@@ -32,11 +32,12 @@ const SELF_RACE_TAG = 'self-race'
  * 전체 RunLog 에서 거리별 PB 를 훈련/레이싱 컨텍스트별로 산출한다.
  * 전체 재산출이므로 새 기록 import 시 호출만으로 자동 갱신된다(별도 트리거 불필요).
  *
- * @param runs   전체 RunLog
  * @param stepM  버킷 간격(m). 기본 5000(5km).
+ * @param extraDistancesM  stepM 배수가 아닌 추가 산출 거리(m) — 하프(21097.5)·풀(42195) 같은
+ *   캐노니컬 거리용(리디자인 ② 업적 PB 그리드). stepM 배수는 중복이므로 무시된다.
  * @returns 컨텍스트별·거리별 PB. distanceM 오름차순, training → race 순.
  */
-export function computeDistancePbs(runs: RunLog[], stepM = 5000): DistancePb[] {
+export function computeDistancePbs(runs: RunLog[], stepM = 5000, extraDistancesM: number[] = []): DistancePb[] {
   if (!Number.isFinite(stepM) || stepM <= 0) return []
   const training: RunLog[] = []
   const race: RunLog[] = []
@@ -44,13 +45,14 @@ export function computeDistancePbs(runs: RunLog[], stepM = 5000): DistancePb[] {
     if ((run.tags ?? []).includes(SELF_RACE_TAG)) race.push(run)
     else training.push(run)
   }
+  const extras = extraDistancesM.filter((d) => Number.isFinite(d) && d > 0 && d % stepM !== 0)
   return [
-    ...computeForContext(training, 'training', stepM),
-    ...computeForContext(race, 'race', stepM)
+    ...computeForContext(training, 'training', stepM, extras),
+    ...computeForContext(race, 'race', stepM, extras)
   ]
 }
 
-function computeForContext(runs: RunLog[], context: PbContext, stepM: number): DistancePb[] {
+function computeForContext(runs: RunLog[], context: PbContext, stepM: number, extraDistancesM: number[]): DistancePb[] {
   const best = new Map<number, DistancePb>()
   for (const run of runs) {
     const totalM = (run.distanceKm ?? 0) * 1000
@@ -59,7 +61,10 @@ function computeForContext(runs: RunLog[], context: PbContext, stepM: number): D
     if (!reach) continue
     const achievedAt = run.startAt ?? run.date
     const maxBucket = Math.floor(totalM / stepM) * stepM
-    for (let d = stepM; d <= maxBucket; d += stepM) {
+    const targets: number[] = []
+    for (let d = stepM; d <= maxBucket; d += stepM) targets.push(d)
+    for (const d of extraDistancesM) if (d <= totalM) targets.push(d)
+    for (const d of targets) {
       const sec = reach(d)
       if (sec == null || !Number.isFinite(sec) || sec <= 0) continue
       const cur = best.get(d)
