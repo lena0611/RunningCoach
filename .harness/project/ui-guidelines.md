@@ -5,7 +5,7 @@ PaceLAB is a personal running coach app, not an admin dashboard.
 ## Product Feel
 
 - Mobile-first.
-- Follow iOS day/night appearance with `prefers-color-scheme`; dark remains the default visual baseline.
+- **Dark-only.** 라이트 모드/테마 토글은 지원하지 않는다(2026-07 리디자인에서 제거 확정). 새 UI는 다크 팔레트 기준으로만 검증한다.
 - The visual target is between Apple Fitness, Strava, and a ChatGPT coaching card.
 - Primary screens should feel like a running app: strong metrics, card-based summaries, and readable coaching text.
 - Avoid wireframe/admin-table layouts unless debugging.
@@ -18,10 +18,11 @@ PaceLAB is a personal running coach app, not an admin dashboard.
 - TDS adaptation source: https://tossmini-docs.toss.im/tds-mobile/
 - Before any UI/UX change, inspect the relevant TDS Mobile category and choose the closest pattern first. Examples: screen headers -> `Top`, repeated items -> `ListRow`, forms -> `TextField`, selections -> `BottomSheet`, persistent save actions -> `FixedBottomCTA`, feedback -> `Toast`, confirmations -> `Dialog` or bottom sheet. Then adapt the pattern to PaceLAB instead of inventing a new local interaction.
 - If no TDS pattern fits, document the reason in the implementation note or harness decision log before adding a new page-specific UI pattern.
-- Define theme values through CSS tokens. Add light-mode overrides in `@media (prefers-color-scheme: light)` instead of hard-coding one-off light colors.
+- Define theme values through CSS tokens. 라이트 모드 오버라이드는 만들지 않는다 — 다크 단일 `:root` 토큰이 유일한 진실이다.
 - New colors should be added as semantic tokens or TDS-like scale tokens first. Do not scatter page-specific hex values across components.
+- 달성 순간(자기기록·목표 완료·퀘스트 클리어·연속 스트릭·레벨업)에만 `--color-celebrate`(라임)를 쓴다. 그 외 모든 일상 CTA·강조는 `--color-primary`(에메랄드). 라임을 일상 UI에 쓰지 않는다.
 - Typography must use a small set of shared scale tokens: display, title, body, caption, and metric. Avoid one-off font-size values in page components unless the component is genuinely unique.
-- Light mode must be checked separately from dark mode. Buttons need explicit foreground contrast, and cards/nav should look clean white rather than washed-out green-gray.
+- 본문·제목은 Pretendard Variable(`--font-sans`), 숫자·시간·페이스·거리는 JetBrains Mono tabular(`--font-mono`)를 쓴다. `UnitValue`는 자동 적용되고, 그 외 도메인 숫자에는 `.num-mono` 유틸리티를 쓴다.
 - Important metrics use large, bold numerals.
 - Metric units such as `km`, `%`, and `회` must render smaller than the number and should not be concatenated at the same visual size in compact cards.
 - Supporting labels and metadata are smaller and muted.
@@ -46,7 +47,7 @@ PaceLAB is a personal running coach app, not an admin dashboard.
 - Account/profile management belongs in the header account drawer, not inside the `Memo` tab.
 - The account drawer opens from right to left. Profile editing is a second right-to-left stack inside the drawer.
 - Account-level settings live in the account drawer as a separate settings stack, opened by an icon-only gear action in the account header. Do not add global settings into tab pages.
-- Theme settings are owned by `settingsStore`: `system` follows iOS appearance, while manual `light`/`dark` applies explicit `html.theme-light` or `html.theme-dark` classes. Future settings should extend this store or a sibling settings domain instead of scattering localStorage reads in components.
+- 테마 설정 UI는 존재하지 않는다(다크 단일). `settingsStore`는 알림 등 나머지 설정을 소유하며, 새 설정은 이 store 또는 형제 settings 도메인으로 확장한다 — 컴포넌트에 localStorage 읽기를 흩뿌리지 않는다.
 
 ## Screen Stack Pattern
 

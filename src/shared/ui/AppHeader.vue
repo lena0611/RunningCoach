@@ -5,7 +5,7 @@ import { useAuthStore } from '@/app/stores/authStore'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
-import { notificationSettingRows, useSettingsStore, type ManualThemeMode, type NotificationSettingKey, type NotificationSettings, type SettingsPanelFocus } from '@/app/stores/settingsStore'
+import { notificationSettingRows, useSettingsStore, type NotificationSettingKey, type NotificationSettings, type SettingsPanelFocus } from '@/app/stores/settingsStore'
 import { useGlossaryStore } from '@/app/stores/glossaryStore'
 import { getActiveGoal, getActiveInjuryItem, type PersonalBest, type TrainingMemory } from '@/entities/training-memory/model'
 import { isHealthKitBridgeAvailable } from '@/features/import-healthkit-run/healthKitBridge'
@@ -66,10 +66,6 @@ const sexOptions = [
   { value: 'male', label: '남성' },
   { value: 'female', label: '여성' },
   { value: 'other', label: '기타' }
-]
-const themeModeOptions = [
-  { value: 'light', label: '라이트', description: '밝은 배경과 선명한 텍스트를 사용합니다.' },
-  { value: 'dark', label: '다크', description: '어두운 배경과 낮은 눈부심을 사용합니다.' }
 ]
 const weekdayOptions = ['월요일', '화요일', '수요일', '목요일', '금요일', '토요일', '일요일'].map((day) => ({ value: day, label: day }))
 const birthYearOptions = [
@@ -379,11 +375,6 @@ function signOutAndClose() {
   emit('signOut')
 }
 
-function setThemeMode(value: string | string[]) {
-  if (Array.isArray(value)) return
-  if (value === 'light' || value === 'dark') settingsStore.setManualTheme(value as ManualThemeMode)
-}
-
 function setAllNotifications(enabled: boolean) {
   settingsStore.setAllNotifications(enabled)
   syncNotifications({
@@ -621,40 +612,6 @@ function openSettingsPanel(focus: SettingsPanelFocus | null = null) {
     layer-class="stack-layer-top"
     @close="drawerPanel = 'account'"
   >
-    <section class="settings-section">
-      <div class="settings-section-heading">
-        <p class="eyebrow">Theme</p>
-        <h3>화면 테마</h3>
-      </div>
-
-      <div class="settings-row">
-        <div>
-          <strong>iOS 테마 자동 따라가기</strong>
-          <span>기기 appearance가 바뀌면 PaceLAB도 같이 바뀝니다.</span>
-        </div>
-        <button
-          class="switch-control"
-          :class="{ on: settingsStore.followsSystem }"
-          type="button"
-          role="switch"
-          :aria-checked="settingsStore.followsSystem"
-          @click="settingsStore.setFollowSystem(!settingsStore.followsSystem)"
-        >
-          <span />
-        </button>
-      </div>
-
-      <BottomSheetSelect
-        v-if="!settingsStore.followsSystem"
-        :model-value="settingsStore.manualTheme"
-        label="수동 테마"
-        :options="themeModeOptions"
-        @update:model-value="setThemeMode"
-      />
-
-      <p class="helper">현재 적용: {{ settingsStore.effectiveTheme === 'light' ? '라이트' : '다크' }}</p>
-    </section>
-
     <section class="settings-section" data-settings-section="notifications">
       <div class="settings-section-heading">
         <p class="eyebrow">Notifications</p>
