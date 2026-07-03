@@ -12,7 +12,6 @@ import type { RestReason } from '@/entities/training-memory/model'
 import type { RunType } from '@/entities/run/model'
 import { buildInjuryCoachSignals } from '@/entities/training-memory/injurySignals'
 import RecentRuns from '@/widgets/recent-runs/RecentRuns.vue'
-import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
 import { getEasyRatio, getFatigueWarning, getRunsWithinDays, getTrainingDayView, sumDistance } from '@/shared/lib/runStats'
 import { formatDateWithWeekday, formatDuration, formatInteger } from '@/shared/lib/format'
 import {
@@ -62,7 +61,6 @@ const toastStore = useToastStore()
 const router = useRouter()
 const trendMetric = ref<'last7' | 'easy' | 'hard' | null>(null)
 const projectionDetailOpen = ref(false)
-const nextSessionDetailOpen = ref(false)
 
 // 훈련 주간 상태(요약 홈 인스턴스 — activeDayIndex 는 항상 오늘에 고정돼 있어 hero=오늘 세션).
 const week = useTrainingWeek({
@@ -441,7 +439,7 @@ const trendChartPoints = computed<TrendChartPoint[]>(() => {
 })
 
 watch(
-  () => Boolean(trendMetric.value || projectionDetailOpen.value || nextSessionDetailOpen.value),
+  () => Boolean(trendMetric.value || projectionDetailOpen.value),
   (open) => {
     document.body.classList.toggle('memory-stack-open', open)
   }
@@ -454,7 +452,6 @@ onBeforeUnmount(() => {
 onBeforeRouteLeave(() => {
   closeTrend()
   closeProjectionDetail()
-  closeNextSessionDetail()
 })
 
 function closeTrend() {
@@ -467,14 +464,6 @@ function openProjectionDetail() {
 
 function closeProjectionDetail() {
   projectionDetailOpen.value = false
-}
-
-function openNextSessionDetail() {
-  nextSessionDetailOpen.value = true
-}
-
-function closeNextSessionDetail() {
-  nextSessionDetailOpen.value = false
 }
 
 function openGoalCard() {
@@ -530,8 +519,8 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
       :class="`hero-topic-${heroTopic}`"
       role="button"
       tabindex="0"
-      @click="openNextSessionDetail"
-      @keydown.enter="openNextSessionDetail"
+      @click="goCoachTab"
+      @keydown.enter="goCoachTab"
     >
       <HeroIllustration :topic="heroTopic" />
       <div class="hero-body">
@@ -584,10 +573,9 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
           {{ heroWeatherLine }} · {{ formatDateWithWeekday(todayDate) }} 기준
         </p>
 
-        <!-- 주 CTA: 수락=상세(다음 훈련), 보조=코치 탭에서 바꾸기 -->
+        <!-- 주 CTA: 상세 브리핑(의도·웜업·단계·성공기준)은 코치 탭 작전 카드가 정본 — 그리로 보낸다. -->
         <div v-if="hasSchedule && todayHero && !activeDoneRun" class="hero-actions">
-          <button type="button" class="hero-action-primary" @click.stop="openNextSessionDetail">이 훈련으로 갈게요</button>
-          <button type="button" class="hero-action-secondary" @click.stop="goCoachTab">바꾸기</button>
+          <button type="button" class="hero-action-primary" @click.stop="goCoachTab">상세 브리핑 보기</button>
         </div>
       </div>
       <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
@@ -684,32 +672,6 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
 
     <RecentRuns :runs="runs.slice(0, 5)" :weekly-pattern="memoryStore.memory.weeklyPattern" @show-all="router.push('/runs')" @select="sessionDetailStore.open" />
 
-    <StackPage :open="nextSessionDetailOpen" title="다음 훈련" @close="closeNextSessionDetail">
-      <SectionGroup title="추천 세션">
-        <div class="recommendation-card">
-          <strong>{{ nextSession.title }}</strong>
-          <span>{{ formatDateWithWeekday(nextSession.plannedDate) }} · {{ nextSession.dayName }}</span>
-        </div>
-        <div v-if="nextSession.injuryAdjusted" class="next-session-injury-note">
-          <strong>부상 조정</strong>
-          <p>{{ nextSession.injuryNote }}</p>
-        </div>
-        <div v-if="nextSession.loadCaution" class="next-session-injury-note next-session-load-note">
-          <strong>부하 주의</strong>
-          <p>{{ nextSession.loadNote }}</p>
-        </div>
-        <p>{{ nextSession.reason }}</p>
-        <p class="helper">{{ nextSession.intensity }}</p>
-        <WeatherCard
-          :snapshot="weatherStore.snapshot"
-          :loading="weatherStore.loading"
-          :error="weatherStore.error"
-          :target-date="nextSession.plannedDate"
-          :session-title="nextSession.title"
-          @refresh="weatherStore.requestForecast()"
-        />
-      </SectionGroup>
-    </StackPage>
 
     <StackPage :open="!!trendMetric" :title="trendTitle" @close="closeTrend">
       <SectionGroup title="추이">

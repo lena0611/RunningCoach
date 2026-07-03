@@ -45,16 +45,16 @@ test.describe('#275 StackPage 공통화 마이그레이션', () => {
     await expect(stackByTitle(page, '목표까지')).toHaveCount(0)
   })
 
-  test('Dashboard 다음 훈련 — close-X StackPage', async ({ page }) => {
+  test('Dashboard 오늘의 처방 히어로 → 코치 탭 상세 브리핑(2026-07-04 CTA 개편)', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
     await dismissStartupModals(page)
 
+    // '다음 훈련' 얇은 스택은 제거됨 — 히어로(카드/CTA '상세 브리핑 보기')는 코치 탭으로 보낸다.
     await domClick(page.locator('.hero-card-interactive').first())
-    const stack = stackByTitle(page, '다음 훈련')
-    await expect(stack).toBeVisible()
-    await stack.locator('.memory-stack-header .stack-icon-button').click()
-    await expect(stackByTitle(page, '다음 훈련')).toHaveCount(0)
+    await expect(page).toHaveURL(/#\/coach/)
+    // 작전 브리핑 카드(오늘/미래 활성 세션) 또는 상태 카드가 캐러셀에 떠야 한다 — 핵심은 브리핑 상세('오늘의 작전').
+    await expect(page.locator('.brief-card, .carousel-card, .debrief-card').first()).toBeVisible()
   })
 
   test('Dashboard 거리 추이(주간 거리) — close-X StackPage', async ({ page }) => {
