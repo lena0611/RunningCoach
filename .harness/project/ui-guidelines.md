@@ -43,7 +43,7 @@ PaceLAB is a personal running coach app, not an admin dashboard.
 - Do not use native `<select>` for app workflows. Use `BottomSheetSelect`, opening options in a bottom sheet.
 - `BottomSheetSelect` overlays must sit above screen stacks, fixed action bars, and side drawers. It must stop pointer/click propagation on the trigger and sheet so stack swipe/overlay handlers cannot swallow the tap. When adding stack/drawer/modal z-index layers, keep the common bottom sheet layer higher than those surfaces and destructive confirmation sheets higher than ordinary selection sheets.
 - App date inputs must use the shared `DateField` wrapper instead of exposing native `input[type='date']` directly. The visible field must show the shared weekday format such as `2026-05-23(토)` while the hidden native input only provides the platform picker.
-- Pace fields must display rounded `m:ss` values. Never show raw fractional seconds such as `7:13.2714718`.
+- Pace fields must display rounded `m:ss` values. Never show raw fractional seconds such as `7:13.2714718`. 단위 포함 표기는 항상 `5:30/km`, **구간은 `5:30~6:30/km`처럼 앞쪽 단위를 생략**한다(2026-07-04 통일 — `formatPace`/`formatPaceSec`/`formatPaceRangeSec`가 SSOT, coach-run `formatPaceForCoach` 미러).
 - Account/profile management belongs in the header account drawer, not inside the `Memo` tab.
 - The account drawer opens from right to left. Profile editing is a second right-to-left stack inside the drawer.
 - Achievements (업적) also live in the account drawer as a second-level stack (moved out of the Memory tab in the 2026-07 redesign ①c). Do not reintroduce achievements or runner-profile sections into tab pages.
