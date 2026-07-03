@@ -4829,6 +4829,25 @@ button.run-session-row {
   backdrop-filter: blur(8px);
 }
 
+/* 바텀시트 입퇴장(Transition name="bottom-sheet") — 딤은 페이드, 시트는 퇴장 시 슬라이드다운.
+   진입 슬라이드업은 기존 sheet-rise keyframes(마운트 시)가 담당한다. 모든 시트 호스트 공통. */
+.bottom-sheet-enter-active {
+  transition: opacity 180ms ease-out;
+}
+.bottom-sheet-leave-active {
+  transition: opacity 200ms ease-in;
+}
+.bottom-sheet-enter-from,
+.bottom-sheet-leave-to {
+  opacity: 0;
+}
+.bottom-sheet-leave-active .bottom-sheet {
+  transition: transform 200ms ease-in;
+}
+.bottom-sheet-leave-to .bottom-sheet {
+  transform: translateY(100%);
+}
+
 .bottom-sheet {
   display: flex;
   flex-direction: column;

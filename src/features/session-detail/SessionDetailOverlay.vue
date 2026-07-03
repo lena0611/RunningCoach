@@ -189,6 +189,7 @@ async function confirmRemove() {
 
   <!-- 삭제 확인 -->
   <Teleport to="body">
+    <Transition name="bottom-sheet">
     <div v-if="pendingDeleteRun" class="bottom-sheet-layer confirm-layer" role="presentation" @click.self="pendingDeleteRun = null">
       <section class="bottom-sheet confirm-sheet" :class="{ 'bottom-sheet-dragging': deleteSheetDrag.dragging.value }" :style="deleteSheetDrag.sheetStyle.value" role="dialog" aria-modal="true" aria-label="삭제 확인">
         <div class="bottom-sheet-handle bottom-sheet-drag-zone" @pointerdown="deleteSheetDrag.startDrag" />
@@ -202,5 +203,6 @@ async function confirmRemove() {
         </div>
       </section>
     </div>
+    </Transition>
   </Teleport>
 </template>

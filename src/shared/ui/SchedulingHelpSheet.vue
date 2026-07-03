@@ -26,6 +26,7 @@ onBeforeUnmount(() => {
 
 <template>
   <Teleport to="body">
+    <Transition name="bottom-sheet">
     <div v-if="open" class="bottom-sheet-layer" role="presentation" @click.self="emit('close')">
       <section class="bottom-sheet scheduling-help-sheet" :class="{ 'bottom-sheet-dragging': drag.dragging.value }" :style="drag.sheetStyle.value" role="dialog" aria-modal="true" aria-label="AI 스케줄링 기준">
         <div class="bottom-sheet-handle bottom-sheet-drag-zone" @pointerdown="drag.startDrag" />
@@ -94,5 +95,6 @@ onBeforeUnmount(() => {
         </div>
       </section>
     </div>
+    </Transition>
   </Teleport>
 </template>

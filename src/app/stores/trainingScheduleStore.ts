@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import {
+  findDuplicatePlannedClones,
   isActiveSession,
   isPlannedSession,
   selectBetterTypeMatchForRun,
@@ -67,6 +68,15 @@ export const useTrainingScheduleStore = defineStore('trainingScheduleStore', {
         this.sessions = await fetchTrainingSchedule(goalId)
         this.loaded = true
         this.loadedGoalId = goalId ?? null
+        // 크로스 클라이언트 재정렬 레이스가 남긴 같은 날 planned 클론 자가치유(멱등, 2026-07-04 사고).
+        // 치유 실패는 로드를 막지 않는다 — 다음 로드에서 재시도된다.
+        try {
+          for (const clone of findDuplicatePlannedClones(this.sessions)) {
+            await this.setStatus(clone.id, 'superseded')
+          }
+        } catch {
+          /* noop */
+        }
       } catch (err) {
         this.error = err instanceof Error ? err.message : '훈련 스케줄을 불러오지 못했습니다.'
       } finally {

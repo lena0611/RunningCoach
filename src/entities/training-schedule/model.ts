@@ -112,6 +112,33 @@ export function isActiveSession(session: ScheduledSession): boolean {
 }
 
 /**
+ * 크로스 클라이언트 재정렬 레이스가 남긴 **같은 날 중복 planned 클론**을 찾는다
+ * (2026-07-04 실계정 사고: 폰+데스크톱이 동시에 ensure→realign 을 돌려 같은 날 LSD planned 3행).
+ * 정상 더블(#455)은 slot('AM'/'PM')으로 구분되므로 (goalId, date, slot, sessionType) 이 전부 같은
+ * run 미연결 planned 만 클론으로 본다. 유지 1건 = updatedAt 최신(동률이면 id 사전순 뒤) — 결정론·멱등.
+ * 반환: superseded 로 내릴 잉여 세션들(유지분 제외).
+ */
+export function findDuplicatePlannedClones(sessions: ScheduledSession[]): ScheduledSession[] {
+  const groups = new Map<string, ScheduledSession[]>()
+  for (const session of sessions) {
+    if (!isPlannedSession(session)) continue
+    const key = `${session.goalId ?? ''}|${session.date}|${session.slot ?? ''}|${session.sessionType}`
+    const group = groups.get(key)
+    if (group) group.push(session)
+    else groups.set(key, [session])
+  }
+  const extras: ScheduledSession[] = []
+  for (const group of groups.values()) {
+    if (group.length < 2) continue
+    const sorted = [...group].sort(
+      (a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '') || b.id.localeCompare(a.id)
+    )
+    extras.push(...sorted.slice(1))
+  }
+  return extras
+}
+
+/**
  * 사용자가 선언한 휴식 기간의 세션인가(#473). active/planned 아님 — 닦달 경로에서 자동 제외되지만,
  * UI(차분한 💤 표시·복귀 배너)는 이 술어로 rested 를 명시적으로 인지한다(generic rest 와 구분).
  */

@@ -61,6 +61,7 @@ function submit() {
 
 <template>
   <Teleport to="body">
+    <Transition name="bottom-sheet">
     <div v-if="open" class="bottom-sheet-layer" role="presentation" data-no-swipe @click.self="emit('close')">
       <section
         class="bottom-sheet doubles-sheet"
@@ -128,6 +129,7 @@ function submit() {
         </div>
       </section>
     </div>
+    </Transition>
   </Teleport>
 </template>
 

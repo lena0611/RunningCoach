@@ -18,6 +18,7 @@ const drag = useBottomSheetDrag(() => emit('close'))
 </script>
 
 <template>
+  <Transition name="bottom-sheet">
   <div v-if="open" class="bottom-sheet-layer notification-settings-layer" role="presentation" @click.self="emit('close')">
     <section
       class="bottom-sheet notification-settings-sheet"
@@ -55,6 +56,7 @@ const drag = useBottomSheetDrag(() => emit('close'))
       </div>
     </section>
   </div>
+  </Transition>
 </template>
 
 <style scoped>

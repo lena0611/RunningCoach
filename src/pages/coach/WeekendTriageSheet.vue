@@ -26,6 +26,7 @@ onBeforeUnmount(() => document.body.classList.remove('sheet-open'))
 
 <template>
   <Teleport to="body">
+    <Transition name="bottom-sheet">
     <div v-if="open" class="bottom-sheet-layer" role="presentation" data-no-swipe @click.self="emit('close')">
       <section
         class="bottom-sheet triage-sheet"
@@ -57,6 +58,7 @@ onBeforeUnmount(() => document.body.classList.remove('sheet-open'))
         </div>
       </section>
     </div>
+    </Transition>
   </Teleport>
 </template>
 

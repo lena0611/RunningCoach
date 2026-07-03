@@ -926,6 +926,7 @@ function stopCoachThinkingTimer() {
   </Teleport>
 
   <Teleport to="body">
+    <Transition name="bottom-sheet">
     <div v-if="pendingGoalProposal" class="bottom-sheet-layer confirm-layer" role="presentation" @click.self="closeGoalProposal">
       <section class="bottom-sheet confirm-sheet goal-intent-sheet" :class="{ 'bottom-sheet-dragging': goalSheetDrag.dragging.value }" :style="goalSheetDrag.sheetStyle.value" role="dialog" aria-modal="true" aria-label="목표 후보 등록 확인">
         <div class="bottom-sheet-handle bottom-sheet-drag-zone" @pointerdown="goalSheetDrag.startDrag" />
@@ -944,6 +945,7 @@ function stopCoachThinkingTimer() {
         </div>
       </section>
     </div>
+    </Transition>
     <SchedulingHelpSheet :open="schedulingHelpOpen" @close="schedulingHelpOpen = false" />
   </Teleport>
 </template>

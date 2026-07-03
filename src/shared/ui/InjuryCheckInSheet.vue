@@ -132,6 +132,7 @@ function deriveMaxPainLevel(areas: InjuryAreaSelection[]) {
 </script>
 
 <template>
+  <Transition name="bottom-sheet">
   <div v-if="open && item" class="bottom-sheet-layer injury-checkin-layer" role="presentation" @click.self="emit('close')">
     <section
       class="bottom-sheet injury-checkin-sheet"
@@ -237,4 +238,5 @@ function deriveMaxPainLevel(areas: InjuryAreaSelection[]) {
       <button type="button" class="rest-from-injury" :disabled="saving" @click="emit('declareRest')">💤 통증이 계속되면, 한동안 쉴게요</button>
     </section>
   </div>
+  </Transition>
 </template>
