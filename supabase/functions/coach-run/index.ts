@@ -1180,7 +1180,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       intervalPaceSec: coachPaceModel.intervalPaceSec,
       basis: coachPaceModel.basis,
       policy:
-        '페이스 모델은 보조 신호다. 강도의 권위 기준은 항상 heartRateModel의 심박 상한이고, 페이스는 그 하위에서 참고 타깃으로만 쓴다. source=insufficient면 페이스 타깃을 만들지 말고 심박/RPE로만 말한다. confidence=estimate(VO2max 기반)면 "추정치"임을 한 번 밝히고 단정하지 않는다. confidence=measured(PB/레이스 환산)는 더 신뢰할 수 있다. 다음 훈련에 페이스를 제시할 때도 "심박 상한을 넘기지 않는 선에서 템포 ~분/km 참고" 식으로 심박 상한을 우선한다. 레이스 예상 언급은 기존 racePredictionPolicy를 따른다.',
+        '페이스 모델은 보조 신호다. 강도의 권위 기준은 항상 heartRateModel의 심박 상한이고, 페이스는 그 하위에서 참고 타깃으로만 쓴다. source=insufficient면 페이스 타깃을 만들지 말고 심박/RPE로만 말한다. confidence=estimate(VO2max 기반)면 "추정치"임을 한 번 밝히고 단정하지 않는다. confidence=measured(PB/레이스 환산)는 더 신뢰할 수 있다. 다음 훈련에 페이스를 제시할 때도 "심박 상한을 넘기지 않는 선에서 템포 5:30/km 참고"(페이스 표기는 항상 m:ss/km, 구간은 5:30~6:30/km처럼 앞쪽 단위 생략) 식으로 심박 상한을 우선한다. 레이스 예상 언급은 기존 racePredictionPolicy를 따른다.',
     } : null,
     responseTemplatePolicy: structuredCoachContext ? buildResponseTemplatePolicy() : null,
     currentDate,
@@ -1832,7 +1832,7 @@ function buildCoachInstructions(context: unknown) {
     'report는 UI가 마크다운처럼 렌더링할 수 있게 짧은 제목, bullet list, --- divider를 적절히 사용한다.',
     '이모지는 문맥에 맞으면 0~3개 사용한다. 좋은 회복/잘 눌림/주의/날씨/다음 훈련 같은 감정이나 의미를 살릴 때만 쓰고, 제목마다 기계적으로 붙이거나 장식처럼 남발하지 않는다.',
     '이모지를 쓸 때는 문장 흐름 안에 자연스럽게 넣는다. 예: "좋다. 이건 진짜 회복런 맞다 👍", "발바닥은 다음 착지감만 보자.", "더위가 있으면 여기서 욕심내면 안 된다 🌡️"',
-    '좋은 출력 예시의 밀도: "좋다. 이건 진짜 회복런 맞다. 어제 롱런 뒤에 강도 욕심 안 내고 아주 잘 눌렀어.\\n\\n## 핵심 지표\\n- 세션: Recovery / 와이프 동반주\\n- 거리: 5.02km\\n- 평균 페이스: 10분09초/km\\n- 평균 심박: 115\\n\\n## 오늘 해석\\n제일 좋은 건 심박이 완전히 낮게 잡혔다는 점이다.\\n\\n롱런 다음날인데 평균 115면, 몸을 더 밀어붙인 게 아니라 회복 쪽으로 잘 돌린 세션이다.\\n\\n## 조심할 점\\n체크할 건 하나다. 오른발 발바닥이 다음에도 조용한지.\\n\\n## 다음 훈련\\n- 내일: 휴식 or 5km 완전 이지\\n- 뛰면: 페이스 보지 말고 착지감만 보기\\n- 강도훈련: 발바닥이 조용해진 뒤 진행\\n\\n## 루틴 업데이트\\n루틴은 유지해도 된다. activeGoal 기준으로는 지금처럼 Easy 기반을 두고, 발바닥 반응만 확인하면 된다.\\n\\n## 한 줄 요약\\n오늘은 더 뛴 게 아니라 잘 풀어준 날이다."',
+    '좋은 출력 예시의 밀도: "좋다. 이건 진짜 회복런 맞다. 어제 롱런 뒤에 강도 욕심 안 내고 아주 잘 눌렀어.\\n\\n## 핵심 지표\\n- 세션: Recovery / 와이프 동반주\\n- 거리: 5.02km\\n- 평균 페이스: 10:09/km\\n- 평균 심박: 115\\n\\n## 오늘 해석\\n제일 좋은 건 심박이 완전히 낮게 잡혔다는 점이다.\\n\\n롱런 다음날인데 평균 115면, 몸을 더 밀어붙인 게 아니라 회복 쪽으로 잘 돌린 세션이다.\\n\\n## 조심할 점\\n체크할 건 하나다. 오른발 발바닥이 다음에도 조용한지.\\n\\n## 다음 훈련\\n- 내일: 휴식 or 5km 완전 이지\\n- 뛰면: 페이스 보지 말고 착지감만 보기\\n- 강도훈련: 발바닥이 조용해진 뒤 진행\\n\\n## 루틴 업데이트\\n루틴은 유지해도 된다. activeGoal 기준으로는 지금처럼 Easy 기반을 두고, 발바닥 반응만 확인하면 된다.\\n\\n## 한 줄 요약\\n오늘은 더 뛴 게 아니라 잘 풀어준 날이다."',
     '오래된 과거 세션(selectedRunTiming=past, nextTrainingAdviceRelevant=false) 올바른 출력 예시 — "다음 훈련"과 "루틴 업데이트" 섹션이 아예 없다: "초반을 서두르지 않고 들어가서 템포 상한만 살짝 넘긴 템포였다.\\n\\n## 핵심 지표\\n- 세션: Tempo / 5.12km / 31:54\\n- 페이스: 7분03초 → 6분02초 → ... → 6분27초\\n- 심박: max 169 (템포 상한 초과)\\n\\n## 세션 해석\\n초반 통제는 좋았고 후반 페이스도 살아 있었는데, 템포 핵심인 상한을 끝내 넘긴 게 이 세션의 포인트였다.\\n\\n## 조심할 점\\n그날의 교훈은 페이스보다 심박 상한이 먼저였다는 점이다.\\n\\n## 한 줄 요약\\n그날은 잘 달렸지만 템포의 문턱은 아직 상한 아래였다." — past+false에서는 "다음 훈련"·"루틴 업데이트" 섹션 자체를 넣지 않고 한 줄 요약으로 끝낸다.',
     'context.responseStyle이 있으면 반드시 따른다. tone=conversational_coach, firstSentence=reaction_before_analysis, avoid=report_style/medical_diagnosis/long_paragraphs를 강하게 우선한다.',
     'memoryItems는 0~3개만 반환한다. 반복 패턴, 성향, 부상/더위/회복 기준, 계획 변경처럼 다음 코칭에도 쓸 장기 기억만 넣는다.',
@@ -5385,7 +5385,8 @@ function formatPaceForCoach(value: number | null) {
   if (!value || !Number.isFinite(value)) return null
   const minutes = Math.floor(value / 60)
   const seconds = Math.round(value % 60)
-  return `${minutes}분${String(seconds).padStart(2, '0')}초`
+  // 표기 통일(2026-07-04, 웹 formatPace 미러): 페이스는 항상 m:ss — 응답에 인용될 때 "5:30/km" 형태가 되게 한다.
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
 function formatDateWithWeekday(value: string | null | undefined) {

@@ -3,7 +3,8 @@ export function formatPace(seconds: number | null): string {
   const rounded = Math.round(seconds)
   const min = Math.floor(rounded / 60)
   const sec = String(rounded % 60).padStart(2, '0')
-  return `${min}'${sec}"`
+  // 표기 통일(2026-07-04): 페이스는 항상 m:ss (호출부가 '/km' 부착) — ui-guidelines 'rounded m:ss' 계약.
+  return `${min}:${sec}`
 }
 
 export function formatDuration(seconds: number | null): string {

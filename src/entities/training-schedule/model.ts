@@ -96,9 +96,20 @@ export function normalizeScheduledSessionPrescription(raw: unknown): ScheduledSe
   return {
     distanceKm: toNumberOrNull(obj.distanceKm),
     durationMin: toNumberOrNull(obj.durationMin),
-    paceRange: typeof obj.paceRange === 'string' ? obj.paceRange : '',
+    paceRange: typeof obj.paceRange === 'string' ? normalizeLegacyPaceText(obj.paceRange) : '',
     note: typeof obj.note === 'string' ? obj.note : ''
   }
+}
+
+/**
+ * 표기 통일(2026-07-04) 이전에 저장된 처방 문자열("5분10초/km~5분35초/km")을 "5:10~5:35/km" 로 변환한다.
+ * 로드 시 표시용 정규화 — 재정렬이 돌면 새 포맷으로 다시 저장되므로 과도기 호환 계층이다.
+ */
+export function normalizeLegacyPaceText(text: string): string {
+  if (!text.includes('분')) return text
+  const converted = text.replace(/(\d+)분(\d{2})초\/km/g, '$1:$2/km')
+  // 구간이면 앞쪽 단위 생략: "5:10/km~5:35/km" → "5:10~5:35/km"
+  return converted.replace(/(\d+:\d{2})\/km~(\d+:\d{2})\/km/g, '$1~$2/km')
 }
 
 /** 아직 수행되지 않은(계획) 세션인가. */

@@ -7,6 +7,7 @@ import {
   pacesFromVdot,
   racePredictionSec,
   resolvePaceModel,
+  formatPaceRangeSec,
   formatPaceSec,
   formatClock
 } from './vdotPaces'
@@ -146,9 +147,15 @@ describe('resolvePaceModel 우선순위', () => {
 
 describe('포맷 헬퍼', () => {
   it('formatPaceSec', () => {
-    expect(formatPaceSec(255)).toBe('4분15초/km')
+    expect(formatPaceSec(255)).toBe('4:15/km')
     expect(formatPaceSec(null)).toBe('-')
     expect(formatPaceSec(0)).toBe('-')
+  })
+
+  it('formatPaceRangeSec — 구간은 앞쪽 단위 생략', () => {
+    expect(formatPaceRangeSec(330, 390)).toBe('5:30~6:30/km')
+    expect(formatPaceRangeSec(null, 390)).toBe('-')
+    expect(formatPaceRangeSec(330, 0)).toBe('-')
   })
   it('formatClock', () => {
     expect(formatClock(1285)).toBe('21:25')

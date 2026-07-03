@@ -14,7 +14,7 @@ import { syncNativeNotifications } from '@/features/sync-native-notifications/no
 import { formatDateWithWeekday } from '@/shared/lib/format'
 import { RUNNER_LEVEL_LABEL, resolveRunnerLevel } from '@/shared/lib/runnerLevel'
 import { resolveRunnerProgress, runnerProgressLabel } from '@/shared/lib/level/levelModel'
-import { resolvePaceModel, formatPaceSec } from '@/shared/lib/vdotPaces'
+import { resolvePaceModel, formatPaceRangeSec, formatPaceSec } from '@/shared/lib/vdotPaces'
 import { deriveHeartRateModel, deriveObservedMaxHr, deriveRecommendedHeartRateModel } from '@/shared/lib/heartRateZones'
 import { computeTempoCeilingAdaptation, describeTempoCeilingMeta } from '@/shared/lib/coaching/tempoAdaptation'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
@@ -260,9 +260,7 @@ const paceModelSummary = computed(() => {
   const m = paceModel.value
   if (m.source === 'insufficient') return ''
   const tempo = formatPaceSec(m.thresholdPaceSec)
-  const easyRange = m.easyPaceRangeSec
-    ? `${formatPaceSec(m.easyPaceRangeSec[0])} ~ ${formatPaceSec(m.easyPaceRangeSec[1])}`
-    : '-'
+  const easyRange = m.easyPaceRangeSec ? formatPaceRangeSec(m.easyPaceRangeSec[0], m.easyPaceRangeSec[1]) : '-'
   return `템포 ${tempo} · 이지 ${easyRange}`
 })
 const paceModelBasis = computed(() => {

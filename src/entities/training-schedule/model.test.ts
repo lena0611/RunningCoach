@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   defaultScheduledSessionPrescription,
+  normalizeLegacyPaceText,
   findDuplicatePlannedClones,
   isActiveSession,
   isPlannedSession,
@@ -209,5 +210,18 @@ describe('findDuplicatePlannedClones', () => {
     const planned = session({ id: 'p', date: '2026-07-04', sessionType: 'LSD' })
     const linked = session({ id: 'l', date: '2026-07-04', sessionType: 'LSD', runId: 'r2' })
     expect(findDuplicatePlannedClones([done, sup, planned, linked])).toEqual([])
+  })
+})
+
+describe('normalizeLegacyPaceText', () => {
+  it('구 표기 처방 문자열을 m:ss 로 변환하고 구간은 앞쪽 단위를 생략한다', () => {
+    expect(normalizeLegacyPaceText('5분10초/km~5분35초/km')).toBe('5:10~5:35/km')
+    expect(normalizeLegacyPaceText('5분10초/km 내외(역치)')).toBe('5:10/km 내외(역치)')
+    expect(normalizeLegacyPaceText('6분05초/km 이상(느리게)')).toBe('6:05/km 이상(느리게)')
+  })
+
+  it('신 표기는 그대로 통과한다', () => {
+    expect(normalizeLegacyPaceText('5:10~5:35/km')).toBe('5:10~5:35/km')
+    expect(normalizeLegacyPaceText('')).toBe('')
   })
 })

@@ -335,7 +335,7 @@ function fmtKm(m: number | null | undefined): string {
 function fmtPace(secPerKm: number | null | undefined): string {
   if (secPerKm == null || !Number.isFinite(secPerKm) || secPerKm <= 0) return '—'
   const s = Math.round(secPerKm)
-  return `${Math.floor(s / 60)}'${String(s % 60).padStart(2, '0')}"/km`
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}/km`
 }
 // 화면 격차 표기. 단위(거리/시간)는 gapMode를 따르고, 앞/뒤/나란히 판정은 네이티브 leadState로
 // 통일한다(음성과 동일 기준). 양(量)은 음성과 같은 formatGapAmount로 포맷해 표현을 일치시킨다.
