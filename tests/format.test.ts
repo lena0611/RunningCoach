@@ -3,8 +3,8 @@ import { formatDateTimeWithWeekday, formatDateWithWeekday, formatDuration, forma
 
 describe('format helpers', () => {
   it('rounds fractional pace seconds and never leaks decimals', () => {
-    expect(formatPace(433.271471813598737)).toBe('7\'13"')
-    expect(formatPace(584.61891942784405)).toBe('9\'45"')
+    expect(formatPace(433.271471813598737)).toBe('7:13')
+    expect(formatPace(584.61891942784405)).toBe('9:45')
   })
 
   it('rounds fractional duration seconds into clock text', () => {

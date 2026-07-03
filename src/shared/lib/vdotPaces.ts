@@ -208,11 +208,27 @@ export function formatClock(totalSec: number): string {
   return `${m}:${sec.toString().padStart(2, '0')}`
 }
 
-// 페이스 sec/km → "m분ss초/km" (PaceLAB 표시 관례)
+// 페이스 sec/km → "m:ss/km" (표기 통일 2026-07-04 — 구간은 formatPaceRangeSec 로 앞쪽 단위 생략)
 export function formatPaceSec(secPerKm: number | null): string {
   if (secPerKm === null || !Number.isFinite(secPerKm) || secPerKm <= 0) return '-'
+  return `${formatPaceClock(secPerKm)}/km`
+}
+
+/** 페이스 구간 → "5:30~6:30/km" (앞쪽 단위 생략 — 표기 규칙). 한쪽이라도 무효면 '-'. */
+export function formatPaceRangeSec(fromSecPerKm: number | null, toSecPerKm: number | null): string {
+  if (
+    fromSecPerKm === null || toSecPerKm === null ||
+    !Number.isFinite(fromSecPerKm) || !Number.isFinite(toSecPerKm) ||
+    fromSecPerKm <= 0 || toSecPerKm <= 0
+  ) {
+    return '-'
+  }
+  return `${formatPaceClock(fromSecPerKm)}~${formatPaceClock(toSecPerKm)}/km`
+}
+
+function formatPaceClock(secPerKm: number): string {
   const total = Math.round(secPerKm)
   const min = Math.floor(total / 60)
   const sec = total % 60
-  return `${min}분${sec.toString().padStart(2, '0')}초/km`
+  return `${min}:${sec.toString().padStart(2, '0')}`
 }

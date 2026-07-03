@@ -19,7 +19,7 @@ import type {
   ScheduledSessionPrescription,
   TrainingPhaseName
 } from '@/entities/training-schedule/model'
-import { formatPaceSec, resolvePaceModel, type PaceModel } from '@/shared/lib/vdotPaces'
+import { formatPaceRangeSec, formatPaceSec, resolvePaceModel, type PaceModel } from '@/shared/lib/vdotPaces'
 
 // 코칭 스케줄 타입 재노출 — 코칭 순수로직(reschedule/weeklyTriage 등)이 entities 를 직접 import 하지 않고
 // 이 코칭 허브를 거쳐 쓰게 한다(#397 shared→entities 역방향 최소화, 아키텍처 래칫 정합).
@@ -306,7 +306,7 @@ function paceRangeFor(type: RunType, pace: PaceModel): string {
     case 'LSD':
     case 'Steady Long':
       return pace.easyPaceRangeSec
-        ? `${formatPaceSec(pace.easyPaceRangeSec[0])}~${formatPaceSec(pace.easyPaceRangeSec[1])}`
+        ? formatPaceRangeSec(pace.easyPaceRangeSec[0], pace.easyPaceRangeSec[1])
         : ''
     case 'Race':
       return '' // 한계 시험(TT)은 전력 측정 — 페이스 목표 없음(결과로 체력 갱신)
@@ -314,7 +314,7 @@ function paceRangeFor(type: RunType, pace: PaceModel): string {
       return pace.easyPaceRangeSec ? `${formatPaceSec(pace.easyPaceRangeSec[0])} 이상(느리게)` : ''
     default: // Easy, Easy + Strides
       return pace.easyPaceRangeSec
-        ? `${formatPaceSec(pace.easyPaceRangeSec[0])}~${formatPaceSec(pace.easyPaceRangeSec[1])}`
+        ? formatPaceRangeSec(pace.easyPaceRangeSec[0], pace.easyPaceRangeSec[1])
         : ''
   }
 }

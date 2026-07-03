@@ -63,16 +63,16 @@ export function deriveRunnerLevel(profile: AthleteProfile, runs: RunLog[], today
     reasons.push('기준 거리(3km+) PB 미입력으로 페이스 점수는 0.')
   } else if (pbPace! > 390) {
     pbPts = 0
-    reasons.push(`PB 환산 페이스 ${formatPace(pbPace!)}/km(6분30초 초과).`)
+    reasons.push(`PB 환산 페이스 ${formatPace(pbPace!)}/km(6:30/km 초과).`)
   } else if (pbPace! > 330) {
     pbPts = 1
-    reasons.push(`PB 환산 페이스 ${formatPace(pbPace!)}/km(5분30초~6분30초).`)
+    reasons.push(`PB 환산 페이스 ${formatPace(pbPace!)}/km(5:30~6:30/km).`)
   } else if (pbPace! > 285) {
     pbPts = 2
-    reasons.push(`PB 환산 페이스 ${formatPace(pbPace!)}/km(4분45초~5분30초).`)
+    reasons.push(`PB 환산 페이스 ${formatPace(pbPace!)}/km(4:45~5:30/km).`)
   } else {
     pbPts = 3
-    reasons.push(`PB 환산 페이스 ${formatPace(pbPace!)}/km(4분45초 미만).`)
+    reasons.push(`PB 환산 페이스 ${formatPace(pbPace!)}/km(4:45/km 미만).`)
   }
 
   const score = expPts + volumePts + freqPts + pbPts
