@@ -72,6 +72,8 @@ if (import.meta.env.DEV) {
     ;(window as unknown as { __pacelabE2E?: Record<string, unknown> }).__pacelabE2E = {
       seedReturnRamp: m.seedReturnRamp,
       cleanupReturnRamp: m.cleanupReturnRamp,
+      clearActiveRestForE2E: m.clearActiveRestForE2E,
+      activeRestState: m.activeRestState,
       firstUpcomingSession: m.firstUpcomingSession,
       seedWalkRunReturn: m.seedWalkRunReturn,
       walkRunActiveState: m.walkRunActiveState,
