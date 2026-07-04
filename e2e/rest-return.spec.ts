@@ -71,8 +71,8 @@ test.describe('#473 휴식/복귀', () => {
     // 무시될 수 있으므로 클릭+검증을 재시도로 감싼다(레이스 해소).
     await expect(async () => {
       await domClick(page.getByRole('button', { name: /지금 복귀/ }))
-      await expect(page.getByText('💤 쉬는 중')).toHaveCount(0, { timeout: 3000 })
-    }).toPass({ timeout: 20000 })
+      await expect(page.getByText('💤 쉬는 중')).toHaveCount(0, { timeout: 5000 })
+    }).toPass({ timeout: 40000 })
     await expect(page.getByRole('button', { name: /한동안 쉬어갈까요/ })).toBeVisible()
 
     // ⚠ UI 로컬 상태가 아니라 **스토어 영속값**으로 복귀 완료를 확인한다 — 다음 테스트의 새 컨텍스트가

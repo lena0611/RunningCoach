@@ -79,7 +79,7 @@ async function saveEdit() {
     }
     const updated = await runStore.updateRun(editing.value)
     // 상세 패널이 갱신된 런을 보이도록 스토어의 activeRun 을 교체한다.
-    if (updated) sessionDetailStore.open(updated)
+    if (updated) sessionDetailStore.open(updated, { nested: sessionDetailStore.nested })
     editing.value = null
     editSnapshot.value = ''
   } catch (err) {
@@ -126,6 +126,7 @@ async function confirmRemove() {
   <StackPage
     :open="!!detailRun"
     title="세션 상세"
+    :back="sessionDetailStore.nested"
     bare
     footer-class="run-detail-cta"
     layer-class="session-overlay-layer"

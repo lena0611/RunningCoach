@@ -11,14 +11,18 @@ import type { RunLog } from '@/entities/run/model'
  */
 export const useSessionDetailStore = defineStore('sessionDetail', () => {
   const activeRun = ref<RunLog | null>(null)
+  /** 다른 스택(주간거리 상세·추세 렌즈 등) 위에서 열렸는가 — StackPage back(push) 형식 결정(2026-07-04). */
+  const nested = ref(false)
 
-  function open(run: RunLog) {
+  function open(run: RunLog, options: { nested?: boolean } = {}) {
     activeRun.value = run
+    nested.value = Boolean(options.nested)
   }
 
   function close() {
     activeRun.value = null
+    nested.value = false
   }
 
-  return { activeRun, open, close }
+  return { activeRun, nested, open, close }
 })
