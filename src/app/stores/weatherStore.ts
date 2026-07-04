@@ -4,6 +4,7 @@ import { useRunStore } from '@/app/stores/runStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { getCurrentCoords, requestKmaForecast, type Coords } from '@/features/import-kma/kmaWeather'
+import { friendlyErrorMessage } from '@/shared/lib/friendlyError'
 import { requestOpenMeteoForecast } from '@/features/import-open-meteo/openMeteoWeather'
 import {
   hasWeatherKitBridge,
@@ -31,6 +32,8 @@ export const useWeatherStore = defineStore('weatherStore', {
     locationSource: 'current' as WeatherLocationSource,
     coords: null as Coords | null,
     lastRequestedAt: 0,
+    /** 마지막 요청이 무음(silent) 배경 갱신이었는가 — 네이티브 콜백 에러 토스트 억제용. */
+    lastRequestSilent: false,
     lastReceivedAt: 0
   }),
   getters: {
@@ -91,6 +94,7 @@ export const useWeatherStore = defineStore('weatherStore', {
       this.loading = true
       this.error = ''
       this.lastRequestedAt = Date.now()
+      this.lastRequestSilent = Boolean(options.silent)
       try {
         if (hasWeatherKitBridge()) {
           requestWeatherForecast()
@@ -118,7 +122,9 @@ export const useWeatherStore = defineStore('weatherStore', {
         this.handleForecast(snapshot)
       } catch (err) {
         this.loading = false
-        this.error = formatWeatherError(err)
+        // 위치 권한 계열은 구체 한국어 안내 유지, 그 외(시스템 원문 "The request timed out." 등)는 친화 문구로.
+        this.error = friendlyErrorMessage(err, '날씨를 가져오지 못했어요. 잠시 후 자동으로 다시 시도해요.')
+        if (isGeolocationError(err)) this.error = formatWeatherError(err)
         if (!options.silent) {
           useToastStore().error(this.error, { placement: 'top', delayMs: 280, durationMs: 3600 })
         }
@@ -130,10 +136,14 @@ export const useWeatherStore = defineStore('weatherStore', {
       this.error = ''
       this.lastReceivedAt = Date.now()
     },
+    // 네이티브(WeatherKit) 콜백 에러 — iOS 시스템 원문("The request timed out.")이 그대로 올 수 있어
+    // 친화 문구로 바꾸고, 배경(silent) 갱신 실패는 토스트 없이 카드 상태로만 남긴다(활성화 시 자동 재시도).
     handleError(message: string) {
       this.loading = false
-      this.error = message || '날씨 가져오기 실패'
-      useToastStore().error(this.error, { placement: 'top', delayMs: 280, durationMs: 3600 })
+      this.error = friendlyErrorMessage(message ? new Error(message) : null, '날씨를 가져오지 못했어요. 잠시 후 자동으로 다시 시도해요.')
+      if (!this.lastRequestSilent) {
+        useToastStore().error(this.error, { placement: 'top', delayMs: 280, durationMs: 3600 })
+      }
     }
   }
 })
