@@ -9,7 +9,8 @@ import type { TrophyCardItem } from './trophyCatalog'
  * 레이어(아래→위): 몸체(티어 그라디언트+보더) → 베이스 패턴(리본 격자+업적 아이콘, blend 없음)
  * → 노이즈 모틀(feTurbulence) → 콘텐츠 → 포일 발광(color-dodge, 포인터 radial 마스크)
  * → 유리 시닌(155deg) → 홀로 시닌 밴드+글리터. 원형 radial 글레어는 제거 확정(README).
- * 틸트: rotateX/Y ±10°(잠금 ±8°) + scale 1.02, leave 시 0.5s ease 복귀.
+ * 틸트: 계수 16(코너 실측 ±8°/축, 잠금 10=±5°) + scale 1.03, leave 시 0.5s ease 복귀
+ *   (README 기본 계수 10/8에서 사용자 피드백으로 상향 — 2026-07-04 "틸팅을 좀 더").
  * 패턴 위치는 카드 고정 — 움직이는 것은 마스크·그라디언트 각도뿐.
  * 모바일: 포인터 드래그(touch-action:none)로 동일 동작(deviceorientation 권한 대신 터치 폴백).
  */
@@ -36,11 +37,11 @@ function onLeave() {
 }
 
 const cardStyle = computed(() => {
-  const max = locked.value ? 8 : 10
+  const max = locked.value ? 10 : 16
   const rx = active.value ? (0.5 - py.value) * max : 0
   const ry = active.value ? (px.value - 0.5) * max : 0
   return {
-    transform: `rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) scale(${active.value ? 1.02 : 1})`,
+    transform: `rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) scale(${active.value ? 1.03 : 1})`,
     transition: active.value ? 'transform 0.08s ease-out, box-shadow 0.3s ease' : 'transform 0.5s ease, box-shadow 0.5s ease'
   }
 })
