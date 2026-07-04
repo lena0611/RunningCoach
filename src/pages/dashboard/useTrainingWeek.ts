@@ -367,9 +367,15 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
       (expectsSchedule.value || scheduleStore.loading || memoryStore.loading || !memoryStore.loaded)
   )
   const activeDayIndex = ref((new Date(today.value).getDay() + 6) % 7) // 기본 = 이번 주 오늘(월=0)
+  // 활성 일자를 마지막으로 만진 달력일 — 자정이 지나면(앱이 살아있는 채 날이 바뀌면) 오늘로 재앵커하기 위함.
+  let activeDayAnchorDate = dateOnly(today.value)
   // 주를 넘기면 활성 일자를 그 주 첫날로(현재 주면 오늘로) 맞춘다.
   watch(weekOffset, (v) => {
     activeDayIndex.value = v === 0 ? todayWeekdayIndex.value : 0
+  })
+  // 사용자가 날짜를 고르면(캐러셀 등) 그 시점 달력일을 앵커로 — 당일 내 탐색은 재진입에도 보존된다.
+  watch(activeDayIndex, () => {
+    activeDayAnchorDate = dateOnly(new Date())
   })
   const activeDay = computed(() => scheduleDays.value[activeDayIndex.value] ?? null)
   const activeSession = computed<ScheduledSession | null>(() =>
@@ -590,6 +596,13 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
   // === 컨텍스트 새로고침(탭 재진입·포커스·가시성) ===
   function refreshContext() {
     today.value = new Date()
+    // 달력일이 넘어갔으면 활성 일자를 오늘로 스냅(2026-07-04: 금요일에 마운트된 코치 캐러셀이
+    // 토요일 '상세 브리핑 보기' 진입에서도 금요일에 머문 버그). 같은 날 안의 탐색은 건드리지 않는다.
+    if (activeDayAnchorDate !== dateOnly(today.value)) {
+      weekOffset.value = 0
+      activeDayIndex.value = todayWeekdayIndex.value
+      activeDayAnchorDate = dateOnly(today.value)
+    }
     expireRestMetaIfOver()
     if (!runStore.loaded && !runStore.loading) {
       void runStore.load()
