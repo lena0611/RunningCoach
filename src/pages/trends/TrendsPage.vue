@@ -137,7 +137,7 @@ function closeLensDetail() {
 function openRun(runId: string) {
   // 세션 상세는 App 레벨 오버레이 — 기록 탭으로 점프하지 않고 추세 위에 바로 띄운다(#275 후속).
   const run = runStore.runs.find((item) => item.id === runId)
-  if (run) sessionDetailStore.open(run)
+  if (run) sessionDetailStore.open(run, { nested: openLens.value !== null })
 }
 
 function isMetricValue(value: string) {

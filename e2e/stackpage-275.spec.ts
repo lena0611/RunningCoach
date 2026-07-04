@@ -57,6 +57,29 @@ test.describe('#275 StackPage 공통화 마이그레이션', () => {
     await expect(page.locator('.brief-card, .carousel-card, .debrief-card').first()).toBeVisible()
   })
 
+  test('주간 거리 상세 위 세션 상세 — 중첩(back·push) 형식 (2026-07-04)', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
+    await dismissStartupModals(page)
+
+    // 주간 거리 StatCard → 상세 스택(1차, close-X)
+    await domClick(page.getByRole('button', { name: /주간 거리/ }).first())
+    const trend = page.locator('.memory-stack-layer', { has: page.locator('h2') }).first()
+    await expect(trend).toBeVisible()
+
+    // 스택 안 세션 목록 → 세션 상세(2차): 헤더 첫 자식이 back 버튼이어야 한다(스택 위 스택 = 드릴인 형식).
+    await domClick(trend.locator('.run-session-row').first())
+    const detail = stackByTitle(page, '세션 상세')
+    await expect(detail).toBeVisible()
+    await expect(detail.locator('.memory-stack-header > .stack-icon-button:first-child')).toBeVisible()
+    await expect(detail.locator('.memory-stack-header .stack-icon-button[aria-label="뒤로"]')).toBeVisible()
+
+    // back 으로 닫으면 주간 거리 상세로 복귀(원래 스택 보존).
+    await detail.locator('.memory-stack-header .stack-icon-button').first().click()
+    await expect(stackByTitle(page, '세션 상세')).toHaveCount(0)
+    await expect(trend).toBeVisible()
+  })
+
   test('Dashboard 거리 추이(주간 거리) — close-X StackPage', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')
