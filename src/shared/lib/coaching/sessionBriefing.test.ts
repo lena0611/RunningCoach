@@ -226,3 +226,32 @@ describe('buildSessionBriefing', () => {
     expect(tempo.paceBasis).toBe('')
   })
 })
+
+describe('intent.why 부상 심각도 라이브 정합 (2026-07-04)', () => {
+  it('스냅샷 문구의 통증 N/5 를 현재 severity 로 치환한다', () => {
+    const b = buildSessionBriefing(session({ sessionType: 'LSD', keySession: true }), {
+      goal,
+      injury: injury({ severity: 1, status: 'active' }),
+      chronic: noChronic,
+      intent: {
+        why: '우측 족저근막/발바닥 통증 2/5입니다. 강훈련 전 체크포인트로 통증 변화를 먼저 확인하세요. 활성 부상 2/5라 체크포인트를 권합니다.',
+        successCriteria: [],
+        targets: { hrCeilingBpm: null, hrRange: null, rpeRange: null, paceHold: '' }
+      }
+    })
+    expect(b.why).toContain('통증 1/5')
+    expect(b.why).toContain('부상 1/5')
+    expect(b.why).not.toContain('2/5')
+  })
+
+  it('부상이 없거나 해소 상태면 문구를 건드리지 않는다', () => {
+    const text = '통증 2/5 스냅샷 문구'
+    const none = buildSessionBriefing(session({}), { goal, injury: null, chronic: noChronic, intent: { why: text, successCriteria: [], targets: { hrCeilingBpm: null, hrRange: null, rpeRange: null, paceHold: '' } } })
+    expect(none.why).toBe(text)
+    const resolved = buildSessionBriefing(session({}), {
+      goal, injury: injury({ severity: 0, status: 'resolved' }), chronic: noChronic,
+      intent: { why: text, successCriteria: [], targets: { hrCeilingBpm: null, hrRange: null, rpeRange: null, paceHold: '' } }
+    })
+    expect(resolved.why).toBe(text)
+  })
+})

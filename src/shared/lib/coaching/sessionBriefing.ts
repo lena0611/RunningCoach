@@ -449,7 +449,7 @@ export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBrie
   return {
     keyPoint: keyPointFor(session.sessionType, walkRun),
     goalLine,
-    why: ctx.intent?.why ?? '',
+    why: syncInjurySeverityText(ctx.intent?.why ?? '', ctx.injury),
     effect: effect.text,
     execution,
     successCriteria: ctx.intent?.successCriteria ?? [],
@@ -510,4 +510,16 @@ function phaseLabelKo(phase: ScheduledSession['phase']): string {
     default:
       return ''
   }
+}
+
+/**
+ * 저장된 SessionIntent.why 의 부상 문구는 **의도 생성 시점 스냅샷**이라, 사용자가 이후 심각도를
+ * 조절하면 몸 상태 카드(라이브)와 표기가 어긋난다(2026-07-04: 항목 1/5 vs 브리핑 2/5).
+ * 문장 재생성 없이 '통증 N/5'·'부상 N/5' 숫자만 라이브 값으로 결정론 치환한다.
+ * (부상이 해소된 뒤 남는 문장 자체의 stale 은 별도 과제 — developer-input-queue 참조.)
+ */
+function syncInjurySeverityText(text: string, injury: TrainingInjuryItem | null | undefined): string {
+  if (!text || !injury || (injury.status !== 'active' && injury.status !== 'monitoring')) return text
+  const sev = injury.severity ?? 0
+  return text.replace(/통증 \d\/5/g, `통증 ${sev}/5`).replace(/부상 \d\/5/g, `부상 ${sev}/5`)
 }
