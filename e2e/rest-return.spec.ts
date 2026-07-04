@@ -37,6 +37,7 @@ test.describe('#473 휴식/복귀', () => {
       await expect(page.getByText('💤 쉬는 중')).toHaveCount(0)
     }
 
+    try {
     // 휴식 선언 진입 → 시트(좌표 클릭이 안 먹는 케이스 대비 DOM click).
     await domClick(page.getByRole('button', { name: /한동안 쉬어갈까요/ }))
     const sheet = page.getByRole('dialog', { name: '휴식 선언' })
@@ -73,6 +74,28 @@ test.describe('#473 휴식/복귀', () => {
       await expect(page.getByText('💤 쉬는 중')).toHaveCount(0, { timeout: 3000 })
     }).toPass({ timeout: 20000 })
     await expect(page.getByRole('button', { name: /한동안 쉬어갈까요/ })).toBeVisible()
+
+    // ⚠ UI 로컬 상태가 아니라 **스토어 영속값**으로 복귀 완료를 확인한다 — 다음 테스트의 새 컨텍스트가
+    // DB 를 읽는 시점과의 레이스로, 테스트가 선언한 휴식이 실계정에 잔존한 사고(2026-07-04)의 재발 방지.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const rest = (window as unknown as { __pacelabE2E: { activeRestState: () => { untilDate: string } | null } }).__pacelabE2E.activeRestState()
+            if (!rest) return true
+            const t = new Date()
+            const iso = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`
+            return rest.untilDate < iso
+          }),
+        { timeout: 15000 }
+      )
+      .toBe(true)
+    } finally {
+      // 크래시/중단돼도 테스트가 선언한 휴식을 반드시 걷어낸다(멱등 — 정상 종료 시엔 no-op에 가깝다).
+      await page
+        .evaluate(() => (window as unknown as { __pacelabE2E: { clearActiveRestForE2E: () => Promise<{ ok: boolean }> } }).__pacelabE2E.clearActiveRestForE2E())
+        .catch(() => {})
+    }
   })
 
   test('복귀 램프: 과거 휴식(레이스 목표) 복귀 시 첫 세션 Easy·캡 (DEV 시드)', async ({ page }) => {

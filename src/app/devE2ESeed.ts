@@ -225,6 +225,23 @@ export function firstUpcomingSession(): { date: string; sessionType: string; dis
  * memoryStore.load() 는 localStorage 를 덮어쓰지 않으므로(update 만 기록), 파괴적 시드(목표 교체 등) 후
  * 원본이 localStorage 에 남아 있을 때 계정을 원복하는 데 쓴다.
  */
+/** E2E 원복 가드: 활성 휴식 메타를 걷어내고 오늘 이후 rested 세션을 planned 로 되돌린다(멱등).
+ * rest-return 스펙이 finally 에서 호출 — 2026-07-04 사고(테스트가 선언한 날씨 휴식이 원복 레이스로
+ * 실계정에 잔존, 당일 LSD 가 rested 로 잠김) 재발 방지. */
+export async function clearActiveRestForE2E(): Promise<{ ok: true; unrested: number }> {
+  const memory = useMemoryStore()
+  const sched = useTrainingScheduleStore()
+  const goalId = memory.memory.activeGoalId ?? null
+  await memory.setActiveRest(null)
+  const unrested = await sched.unrestFrom(goalId, isoOffset(0))
+  return { ok: true, unrested }
+}
+
+/** E2E 폴링용: 현재 activeRest 메타(영속 확인 — UI 로컬 상태가 아니라 스토어 값). */
+export function activeRestState() {
+  return useMemoryStore().memory.activeRest
+}
+
 /**
  * seedReturnRamp 잔재를 실계정에서 걷어낸다 — e2e 목표 제거 + 시드 직전 활성 목표/휴식 복원.
  * 스냅샷이 없으면(과거 시드 잔재) 첫 실 목표를 활성화하는 폴백. 멱등 — 잔재가 없으면 no-op.
