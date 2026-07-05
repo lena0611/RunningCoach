@@ -65,6 +65,9 @@ runStore.addRun() / addRuns()                              src/app/stores/runSto
    └─ doEnsureSchedule 정합 파이프라인 (마운트/포커스)      DashboardPage.vue:415-517  → #3 참조
       ├─ reinferMislabeledLongRuns (로드타임 타입 치유)     runStore.ts:164 (호출 DashboardPage.vue:1386)
       ├─ reconcileRuns / repointReinferredRuns             trainingScheduleStore.ts:204/223
+      ├─ 처방 채택(shouldAdoptPrescribedRunType, 2026-07-05)  entities/training-schedule/model.ts (호출 useTrainingWeek ensure 파이프라인, repoint 뒤)
+      │   — done 연결된 롱런 계열 처방을 70%+ 이행한 Easy/Recovery 라벨 런 → 처방 타입 채택(+tag type:prescribed).
+      │     초보 램프 짧은 LSD(<10km)가 inferRunType 게이트에 안 걸리는 갭 보정. type:user·self-race 제외.
       └─ settleClosedWeeks                                 trainingScheduleStore.ts:101 (호출 :511)
 ```
 
