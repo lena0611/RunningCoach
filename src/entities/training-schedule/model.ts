@@ -122,6 +122,36 @@ export function isActiveSession(session: ScheduledSession): boolean {
   return session.status === 'planned' || session.status === 'missed'
 }
 
+/** 처방 채택 대상 롱런 계열. */
+const LONG_RUN_SESSION_TYPES = new Set(['LSD', 'Steady Long'])
+/** 처방 채택으로 교정 가능한 저강도 추론 라벨(같은 저강도 계열 — 채점 프레임 왜곡 없음). */
+const LOW_INTENSITY_RUN_TYPES = new Set(['Easy', 'Recovery'])
+/** 처방 이행으로 인정하는 최소 거리 비율. */
+const PRESCRIBED_ADOPT_MIN_RATIO = 0.7
+
+/**
+ * 매칭(done)된 런의 라벨이 처방을 따라야 하는가 — **처방 채택**(2026-07-05).
+ * 초보 램프의 짧은 LSD(예: 7~8km)는 inferRunType 롱런 게이트(10km+/80분+)에 안 걸려 Easy 로
+ * 떨어진다. 처방이 롱런 계열이고 런이 저강도 계열로 추론됐으며 처방 거리의 70% 이상을 이행했으면
+ * 라벨은 처방을 따른다(브리핑↔채점 일관성 — 시킨 대로 했는데 다른 이름으로 채점하지 않는다).
+ * 사용자가 직접 지정한 타입(type:user)·레이싱 런은 건드리지 않는다. 중도 포기(<70%)는 추론 유지.
+ */
+export function shouldAdoptPrescribedRunType(
+  run: { id: string; type?: string; distanceKm: number | null; tags?: string[] | null; source?: string },
+  session: ScheduledSession
+): boolean {
+  if (session.status !== 'done' || session.runId !== run.id) return false
+  if (!LONG_RUN_SESSION_TYPES.has(session.sessionType)) return false
+  if (!run.type || !LOW_INTENSITY_RUN_TYPES.has(run.type)) return false
+  if (run.tags?.includes('type:user') || run.tags?.includes('self-race')) return false
+  if (run.source !== 'healthkit' && run.source !== 'file_import') return false
+  const prescribedKm = session.prescription?.distanceKm
+  if (prescribedKm == null || !Number.isFinite(prescribedKm) || prescribedKm <= 0) return false
+  const ranKm = run.distanceKm
+  if (ranKm == null || !Number.isFinite(ranKm)) return false
+  return ranKm >= prescribedKm * PRESCRIBED_ADOPT_MIN_RATIO
+}
+
 /**
  * 크로스 클라이언트 재정렬 레이스가 남긴 **같은 날 중복 planned 클론**을 찾는다
  * (2026-07-04 실계정 사고: 폰+데스크톱이 동시에 ensure→realign 을 돌려 같은 날 LSD planned 3행).

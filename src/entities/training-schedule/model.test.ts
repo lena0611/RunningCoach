@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   defaultScheduledSessionPrescription,
   normalizeLegacyPaceText,
+  shouldAdoptPrescribedRunType,
   findDuplicatePlannedClones,
   isActiveSession,
   isPlannedSession,
@@ -223,5 +224,38 @@ describe('normalizeLegacyPaceText', () => {
   it('신 표기는 그대로 통과한다', () => {
     expect(normalizeLegacyPaceText('5:10~5:35/km')).toBe('5:10~5:35/km')
     expect(normalizeLegacyPaceText('')).toBe('')
+  })
+})
+
+describe('shouldAdoptPrescribedRunType (처방 채택, 2026-07-05)', () => {
+  const lsdDone = (runId: string, km: number | null = 8) =>
+    session({ id: 'sd', sessionType: 'LSD', status: 'done', runId, keySession: true, prescription: { ...defaultScheduledSessionPrescription(), distanceKm: km } })
+  const run = (over: Partial<{ id: string; type: string; distanceKm: number | null; tags: string[]; source: string }> = {}) => ({
+    id: 'r1', type: 'Easy', distanceKm: 8, tags: [] as string[], source: 'healthkit', ...over
+  })
+
+  it('LSD 처방을 충분히 이행한 Easy 라벨 런은 채택 대상', () => {
+    expect(shouldAdoptPrescribedRunType(run(), lsdDone('r1'))).toBe(true)
+    expect(shouldAdoptPrescribedRunType(run({ type: 'Recovery', distanceKm: 6 }), lsdDone('r1'))).toBe(true) // 6 ≥ 8×0.7
+  })
+
+  it('중도 포기(<70%)·처방 거리 없음·다른 런 연결은 채택 안 함', () => {
+    expect(shouldAdoptPrescribedRunType(run({ distanceKm: 5 }), lsdDone('r1'))).toBe(false) // 5 < 5.6
+    expect(shouldAdoptPrescribedRunType(run(), lsdDone('r1', null))).toBe(false)
+    expect(shouldAdoptPrescribedRunType(run(), lsdDone('other'))).toBe(false)
+  })
+
+  it('비 롱런 처방·비 저강도 라벨·사용자 지정·레이싱·수동 소스는 채택 안 함', () => {
+    const tempoDone = session({ sessionType: 'Tempo', status: 'done', runId: 'r1', prescription: { ...defaultScheduledSessionPrescription(), distanceKm: 8 } })
+    expect(shouldAdoptPrescribedRunType(run(), tempoDone)).toBe(false)
+    expect(shouldAdoptPrescribedRunType(run({ type: 'Tempo' }), lsdDone('r1'))).toBe(false)
+    expect(shouldAdoptPrescribedRunType(run({ tags: ['type:user'] }), lsdDone('r1'))).toBe(false)
+    expect(shouldAdoptPrescribedRunType(run({ tags: ['self-race'] }), lsdDone('r1'))).toBe(false)
+    expect(shouldAdoptPrescribedRunType(run({ source: 'manual' }), lsdDone('r1'))).toBe(false)
+  })
+
+  it('done 이 아니면(planned 등) 채택 안 함', () => {
+    const planned = session({ sessionType: 'LSD', status: 'planned', runId: null, prescription: { ...defaultScheduledSessionPrescription(), distanceKm: 8 } })
+    expect(shouldAdoptPrescribedRunType(run(), planned)).toBe(false)
   })
 })

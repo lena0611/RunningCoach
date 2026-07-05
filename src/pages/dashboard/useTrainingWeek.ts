@@ -8,7 +8,7 @@ import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
 import type { ActiveRest, TrainingGoal } from '@/entities/training-memory/model'
 import { deriveRestState } from '@/entities/training-memory/restWindow'
-import { isActiveSession, type ScheduledSession } from '@/entities/training-schedule/model'
+import { isActiveSession, shouldAdoptPrescribedRunType, type ScheduledSession } from '@/entities/training-schedule/model'
 import { isSelfRaceRun } from '@/entities/competition/model'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { getAgeLoadWeight, getChronicLoadTrend, getLongestRunKmWithinDays, getNextSessionRecommendation, type NextSessionRecommendation } from '@/shared/lib/runStats'
@@ -172,6 +172,19 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
       // 라벨 재추론(reinferRunTypesOnce)으로 타입이 바뀐 런이 같은 날 더 맞는 세션(예: LSD)에 잘못 연결돼 있으면
       // 그쪽으로 재연결(정산 전). "같은 날 Easy done·LSD missed" 더블 오매칭 치유.
       await scheduleStore.repointReinferredRuns(trainingRunsForSchedule)
+      // 처방 채택(2026-07-05): 롱런 계열 처방(LSD/Steady Long)에 done 으로 연결됐고 처방 거리 70% 이상을
+      // 이행한 저강도(Easy/Recovery) 라벨 런은 처방 타입으로 교정한다 — 초보 램프의 짧은 LSD(7~8km)가
+      // inferRunType 롱런 게이트(10km+/80분+)에 안 걸려 Easy 로 남는 갭(브리핑↔채점 일관성). 멱등: 교정되면 후보 아님.
+      for (const session of scheduleStore.sessions) {
+        if (session.status !== 'done' || !session.runId) continue
+        const run = trainingRunsForSchedule.find((r) => r.id === session.runId)
+        if (!run || !shouldAdoptPrescribedRunType(run, session)) continue
+        await runStore.updateRun({
+          ...run,
+          type: session.sessionType,
+          tags: Array.from(new Set([...(run.tags ?? []), 'type:prescribed']))
+        })
+      }
       const mine = scheduleStore.sessions.filter((s) => s.goalId === goal.id)
       const hasActive = mine.some(isActiveSession)
       // 앵커 드리프트 기준선(영속). 빌드/재앵커 때마다 currentWeeklyKm 로 갱신해 ratio≈1 로 수렴(멱등).
