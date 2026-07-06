@@ -97,6 +97,8 @@ final class WatchRaceController: NSObject, ObservableObject {
     private var routeBuilder: HKWorkoutRouteBuilder?
     /// 삽입된 위치 수. 0이면 finishRoute 대신 discard(빈 경로 finish는 에러).
     private var routeInsertCount = 0
+    /// 음성 안내 — "발화는 시작한 기기에서" 합의: 워치 시작 레이스는 워치가 말한다(햅틱과 병행).
+    private let speech = WatchSpeech()
     private var ticker: Timer?
     /// 벽시계 기준 시작 시각. 자동일시정지 끔이라 벽시계 경과 == 운동 경과.
     private var workoutStart: Date?
@@ -273,6 +275,7 @@ final class WatchRaceController: NSObject, ObservableObject {
         if let fin = engine.finish(tick) {
             finishSummaryText = fin.text
             WKInterfaceDevice.current().play(.success)
+            speech.speak(fin.text)
         }
         emitResult(tick: tick)
     }
@@ -309,6 +312,7 @@ final class WatchRaceController: NSObject, ObservableObject {
     /// 요약 화면에서 새 레이스 준비(지표 초기화 → idle).
     func reset() {
         guard phase == .ended || isErrorPhase else { return }
+        speech.stop() // 직전 레이스의 남은 발화 정리
         elapsedSec = 0
         distanceM = 0
         heartRateBpm = 0
@@ -361,9 +365,10 @@ final class WatchRaceController: NSObject, ObservableObject {
         handleAnnouncements(result.announcements)
     }
 
-    /// 안내 → 햅틱은 전부, 보조 문구는 최고 우선순위 1개만.
+    /// 안내 → 햅틱은 전부, 보조 문구·음성은 최고 우선순위 1개만.
     /// 같은 틱에 역전(priority 3)+랩(priority 2)이 겹치면 문구는 역전이 이겨야 한다 —
     /// 순회 덮어쓰기는 배열 뒤쪽(랩)이 항상 이겨 RaceCore priority 계약을 뒤집는다.
+    /// 음성도 같은 1개만 — 한 틱에 여러 문장을 다 읽으면 안내가 밀려 실시간성이 죽는다(폰과 동일 원칙).
     private func handleAnnouncements(_ announcements: [Announcement]) {
         guard !announcements.isEmpty else { return }
         for announcement in announcements {
@@ -371,6 +376,7 @@ final class WatchRaceController: NSObject, ObservableObject {
         }
         if let top = announcements.max(by: { $0.priority < $1.priority }) {
             lastAnnouncementText = top.text
+            speech.speak(top.text)
         }
     }
 
