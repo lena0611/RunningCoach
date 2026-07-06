@@ -1102,7 +1102,7 @@ async function saveSection(section: MemorySection) {
                 승인된 훈련법과 처방 규칙만 AI 코칭에 들어갑니다. 원문 전체가 아니라 출처, 적용 조건, 처방 규칙만 저장합니다.
               </p>
               <p class="helper">
-                검토 요청은 OpenAI API를 호출하지 않고 Supabase 대기 목록에만 저장됩니다.
+                검토 요청은 AI API를 호출하지 않고 Supabase 대기 목록에만 저장됩니다.
               </p>
               <p v-if="knowledgeRequestSaved" class="success">지식화 검토 요청을 저장했습니다. 비용이 발생하는 AI 조사는 자동 실행하지 않습니다.</p>
               <p v-if="knowledgeError" class="error">{{ knowledgeError }}</p>
@@ -1140,7 +1140,7 @@ async function saveSection(section: MemorySection) {
             <FormGrid v-else-if="panel === 'knowledge-request'">
               <div class="form-section-title full">지식화 검토 요청</div>
               <p class="helper full">
-                예: MAF 훈련법, Daniels 10K 템포 기준, Hanson Marathon Method. 이 화면은 요청만 저장하며 OpenAI API를 호출하지 않습니다.
+                예: MAF 훈련법, Daniels 10K 템포 기준, Hanson Marathon Method. 이 화면은 요청만 저장하며 AI API를 호출하지 않습니다.
               </p>
               <p class="helper full">
                 출처 URL이나 네가 참고한 내용을 넣으면 이후 코덱스 검토를 거쳐 구조화 지식으로 승인합니다.
