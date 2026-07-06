@@ -2,8 +2,13 @@ import type { RunLog, RunType } from '@/entities/run/model'
 
 export type RunMetaChip = {
   label: string
-  tone: 'schedule' | 'extra' | 'period' | 'weather'
+  tone: 'race' | 'schedule' | 'extra' | 'period' | 'weather'
 }
+
+// SSOT 는 entities/competition/model.ts 의 SELF_RACE_TAG 지만, shared→entities 값 import 는
+// 아키텍처 래칫(architecture-boundaries.test.ts, #397)이 막는다 — achievements.ts·distancePb.ts 와
+// 같은 이유의 의도적 로컬 복제(값 변경 시 grep 'self-race' 일괄).
+const SELF_RACE_TAG = 'self-race'
 
 export type RunFilterTag = {
   value: string
@@ -22,10 +27,13 @@ const sourceLabels: Record<RunLog['source'], string> = {
 }
 
 export function getRunMetaChips(run: RunLog, weeklyPattern: string[] = []): RunMetaChip[] {
+  // 레이스는 훈련 플랜 문맥(스케줄/추가) 밖의 별도 컨텍스트 — 첫 칩이 정체를 밝힌다(#552 워치 유입 포함).
   const chips: RunMetaChip[] = [
-    isScheduledSession(run.date, run.type, weeklyPattern)
-      ? { label: '스케줄', tone: 'schedule' }
-      : { label: '추가', tone: 'extra' }
+    run.tags.includes(SELF_RACE_TAG)
+      ? { label: '🏁 레이스', tone: 'race' }
+      : isScheduledSession(run.date, run.type, weeklyPattern)
+        ? { label: '스케줄', tone: 'schedule' }
+        : { label: '추가', tone: 'extra' }
   ]
 
   const period = getRunPeriod(run)

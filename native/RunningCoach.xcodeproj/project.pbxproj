@@ -502,6 +502,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = PaceLabWatch;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "레이스 중 심박·거리·칼로리를 실시간으로 보여주기 위해 건강 데이터를 읽습니다.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "완료한 레이스를 운동 기록으로 건강 앱에 저장합니다.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "레이스 경로를 지도로 남기기 위해 달리는 동안 위치를 기록합니다.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.lena0611.RunningCoach;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -539,6 +540,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = PaceLabWatch;
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "레이스 중 심박·거리·칼로리를 실시간으로 보여주기 위해 건강 데이터를 읽습니다.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "완료한 레이스를 운동 기록으로 건강 앱에 저장합니다.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "레이스 경로를 지도로 남기기 위해 달리는 동안 위치를 기록합니다.";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.lena0611.RunningCoach;
 				LD_RUNPATH_SEARCH_PATHS = (

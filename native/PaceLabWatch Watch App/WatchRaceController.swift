@@ -19,6 +19,7 @@
 
 import Foundation
 import Combine
+import CoreLocation
 import HealthKit
 import WatchKit
 import RaceCore
@@ -44,6 +45,10 @@ final class WatchRaceController: NSObject, ObservableObject {
     @Published private(set) var activeKcal: Double = 0
     /// 평균 페이스(초/km). 0 = 아직 산출 전.
     @Published private(set) var paceSecPerKm: Double = 0
+    /// 평균 케이던스(spm). 0 = 아직 산출 전. 폰 임포터와 동일하게 총 걸음/경과(분)로 구한다.
+    @Published private(set) var cadenceSpm: Double = 0
+    /// HK 누적 걸음수(케이던스 원천). didCollectDataOf 가 cumulativeSum 으로 채운다.
+    private var totalSteps: Double = 0
 
     // ── 고스트 격차 (Phase 2) ───────────────────────────────────────────────
     /// 현재 격차. 고스트 없는 자유주행이면 nil → UI는 히어로를 숨긴다.
@@ -87,6 +92,11 @@ final class WatchRaceController: NSObject, ObservableObject {
     private let healthStore = HKHealthStore()
     private var session: HKWorkoutSession?
     private var builder: HKLiveWorkoutBuilder?
+    /// GPS 경로(지도) 기록. 위치 권한이 거부되면 조용히 경로 없는 레이스로 진행한다(best-effort).
+    private let locationManager = CLLocationManager()
+    private var routeBuilder: HKWorkoutRouteBuilder?
+    /// 삽입된 위치 수. 0이면 finishRoute 대신 discard(빈 경로 finish는 에러).
+    private var routeInsertCount = 0
     private var ticker: Timer?
     /// 벽시계 기준 시작 시각. 자동일시정지 끔이라 벽시계 경과 == 운동 경과.
     private var workoutStart: Date?
@@ -101,13 +111,15 @@ final class WatchRaceController: NSObject, ObservableObject {
 
     // MARK: - 권한 타입
 
-    /// 저장(share): 완주 시 운동 기록 저장에 필요.
+    /// 저장(share): 완주 시 운동 기록 저장에 필요. 걸음수(케이던스 원천)·경로(지도)도 워크아웃에 싣는다.
     private var shareTypes: Set<HKSampleType> {
         [
             HKObjectType.workoutType(),
             HKQuantityType(.activeEnergyBurned),
             HKQuantityType(.distanceWalkingRunning),
             HKQuantityType(.heartRate),
+            HKQuantityType(.stepCount),
+            HKSeriesType.workoutRoute(),
         ]
     }
 
@@ -117,6 +129,7 @@ final class WatchRaceController: NSObject, ObservableObject {
             HKQuantityType(.heartRate),
             HKQuantityType(.distanceWalkingRunning),
             HKQuantityType(.activeEnergyBurned),
+            HKQuantityType(.stepCount),
         ]
     }
 
@@ -156,11 +169,16 @@ final class WatchRaceController: NSObject, ObservableObject {
         do {
             let session = try HKWorkoutSession(healthStore: healthStore, configuration: config)
             let builder = session.associatedWorkoutBuilder()
-            builder.dataSource = HKLiveWorkoutDataSource(healthStore: healthStore, workoutConfiguration: config)
+            let dataSource = HKLiveWorkoutDataSource(healthStore: healthStore, workoutConfiguration: config)
+            // 걸음수는 러닝 기본 수집에 없어 명시 활성화 — 완주 저장 시 워크아웃에 연결돼
+            // 폰 임포터(queryStepSamples, predicateForObjects)가 케이던스로 환산한다.
+            dataSource.enableCollection(for: HKQuantityType(.stepCount), predicate: nil)
+            builder.dataSource = dataSource
             session.delegate = self
             builder.delegate = self
             self.session = session
             self.builder = builder
+            startRouteRecording()
 
             // #552 Phase 3: self-race 표식 메타데이터 — 폰 HealthKit 유입 시 '생성 시점부터' 태깅돼(§10)
             // 훈련 세션·의도를 오소비하지 않는다. 키는 폰 HealthKitRunImporter 와 미러(PaceLABCompetition).
@@ -188,6 +206,30 @@ final class WatchRaceController: NSObject, ObservableObject {
         } catch {
             phase = .error("운동 세션 생성 실패: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - GPS 경로 (v2: 세션상세 지도)
+
+    /// 위치 권한 요청 + 경로 빌더 준비 + 업데이트 시작. 권한 거부 시 콜백이 안 와서
+    /// 경로만 비는 것으로 자연 강등된다(레이스 자체는 막지 않는다).
+    private func startRouteRecording() {
+        routeBuilder?.discard() // 시작 실패 후 재시도 경로의 잔여 빌더 정리
+        routeBuilder = HKWorkoutRouteBuilder(healthStore: healthStore, device: nil)
+        routeInsertCount = 0
+        locationManager.delegate = self
+        locationManager.desiredAccuracy = kCLLocationAccuracyBest
+        locationManager.activityType = .fitness
+        locationManager.requestWhenInUseAuthorization()
+        // WKBackgroundModes(location)와 짝 — 손목 내림(백그라운드)에서도 경로가 끊기지 않는다.
+        locationManager.allowsBackgroundLocationUpdates = true
+        locationManager.startUpdatingLocation()
+    }
+
+    /// 필터된 위치를 경로 빌더에 적재(메인). insertRouteData 는 내부 큐 처리라 완료를 기다리지 않는다.
+    private func appendRoute(_ locations: [CLLocation]) {
+        guard phase == .running || phase == .starting, let routeBuilder else { return }
+        routeInsertCount += locations.count
+        routeBuilder.insertRouteData(locations) { _, _ in }
     }
 
     /// 레이스 공통 시작 처리: 엔진 재생성(1회분 상태 초기화) + 시작 햅틱 + running 전환.
@@ -272,6 +314,9 @@ final class WatchRaceController: NSObject, ObservableObject {
         heartRateBpm = 0
         activeKcal = 0
         paceSecPerKm = 0
+        cadenceSpm = 0
+        totalSteps = 0
+        routeInsertCount = 0
         gap = nil
         lastAnnouncementText = nil
         finishSummaryText = nil
@@ -349,15 +394,20 @@ final class WatchRaceController: NSObject, ObservableObject {
         // 20m 미만/0초에서는 페이스가 튀므로 억제.
         guard distanceM > 20, elapsedSec > 0 else { return }
         paceSecPerKm = elapsedSec / (distanceM / 1000)
+        // 케이던스도 같은 게이트에서 갱신(초반 표본 요동 억제). 폰 임포터와 같은 정의: 총 걸음/분.
+        if totalSteps > 0, elapsedSec >= 15 {
+            cadenceSpm = totalSteps / (elapsedSec / 60)
+        }
     }
 
     // MARK: - delegate → main 반영
 
     /// HK 델리게이트(백그라운드 큐)가 추출한 원시값을 메인에서 발행.
-    fileprivate func applyMetrics(hr: Double?, distanceM: Double?, kcal: Double?) {
+    fileprivate func applyMetrics(hr: Double?, distanceM: Double?, kcal: Double?, steps: Double?) {
         if let hr { heartRateBpm = hr }
         if let distanceM { self.distanceM = distanceM }
         if let kcal { activeKcal = kcal }
+        if let steps { totalSteps = steps }
         recomputePace()
     }
 
@@ -365,19 +415,36 @@ final class WatchRaceController: NSObject, ObservableObject {
     /// (이름 주의: NSObject.finalize() 와 충돌하므로 finalize 금지.)
     fileprivate func finishAndSave() {
         stopTicker()
+        locationManager.stopUpdatingLocation()
         // 시스템 강제종료 폴백(#552 Phase 3 리뷰): 종료 버튼 없이 세션이 .ended 로 전이한 경우
         // (다른 운동앱 세션 경합 등) 결과 상승이 누락되지 않게 여기서도 마감을 보장한다.
         // 종료 버튼 경로에서는 raceFinalized 가드로 no-op(이중 방출 방지).
         finishRace()
+        // 경로 빌더는 여기서 '동기적으로' 회수한다 — stopUpdatingLocation 이후에도 이미 배달된
+        // 위치 콜백의 @MainActor Task 가 남아 있을 수 있고, 아래 await 지점들 사이에 끼어들면
+        // 마감 중인 빌더에 insert 하게 된다(다중 렌즈 리뷰 확정). nil 회수 후엔 appendRoute 가 no-op.
+        let routeBuilder = self.routeBuilder
+        self.routeBuilder = nil
+        let insertedRoutePoints = routeInsertCount
         let builder = self.builder
         Task { @MainActor in
             if let builder {
                 do {
                     try await builder.endCollection(at: Date())
-                    _ = try await builder.finishWorkout()
+                    // Optional 승격 대입: SDK 시그니처(HKWorkout/HKWorkout?) 어느 쪽이든 컴파일된다.
+                    let workout: HKWorkout? = try await builder.finishWorkout()
+                    // 경로는 워크아웃 저장 뒤에만 붙일 수 있다. 빈 경로 finish 는 에러 → discard.
+                    if let workout, let routeBuilder, insertedRoutePoints > 0 {
+                        _ = try? await routeBuilder.finishRoute(with: workout, metadata: nil)
+                    } else {
+                        routeBuilder?.discard()
+                    }
                 } catch {
                     // 저장 실패는 무시 — 완료 판정을 막지 않는다.
+                    routeBuilder?.discard()
                 }
+            } else {
+                routeBuilder?.discard()
             }
             self.session = nil
             self.builder = nil
@@ -485,6 +552,7 @@ extension WatchRaceController: HKLiveWorkoutBuilderDelegate {
         var hr: Double?
         var dist: Double?
         var kcal: Double?
+        var steps: Double?
         for type in collectedTypes {
             guard let qt = type as? HKQuantityType,
                   let stats = workoutBuilder.statistics(for: qt) else { continue }
@@ -495,15 +563,32 @@ extension WatchRaceController: HKLiveWorkoutBuilderDelegate {
                 dist = stats.sumQuantity()?.doubleValue(for: .meter())
             case HKQuantityTypeIdentifier.activeEnergyBurned.rawValue:
                 kcal = stats.sumQuantity()?.doubleValue(for: .kilocalorie())
+            case HKQuantityTypeIdentifier.stepCount.rawValue:
+                steps = stats.sumQuantity()?.doubleValue(for: .count())
             default:
                 break
             }
         }
-        let h = hr, d = dist, k = kcal
-        Task { @MainActor in self.applyMetrics(hr: h, distanceM: d, kcal: k) }
+        let h = hr, d = dist, k = kcal, s = steps
+        Task { @MainActor in self.applyMetrics(hr: h, distanceM: d, kcal: k, steps: s) }
     }
 
     nonisolated func workoutBuilderDidCollectEvent(_ workoutBuilder: HKLiveWorkoutBuilder) {
         // 이벤트(일시정지/재개 마커 등)는 미사용 — 자동일시정지 끔(#552 UX).
+    }
+}
+
+// MARK: - CLLocationManagerDelegate (백그라운드 큐 → 메인 hop)
+
+extension WatchRaceController: CLLocationManagerDelegate {
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        // 폰 LiveRunTracker 와 같은 기준: 수평정확도 0~50m 만 경로로 신뢰(터널·초기 fix 튐 배제).
+        let filtered = locations.filter { $0.horizontalAccuracy > 0 && $0.horizontalAccuracy <= 50 }
+        guard !filtered.isEmpty else { return }
+        Task { @MainActor in self.appendRoute(filtered) }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        // 위치 실패는 경로만 비게 둔다 — 레이스(HK 지표) 진행에는 영향 없음.
     }
 }

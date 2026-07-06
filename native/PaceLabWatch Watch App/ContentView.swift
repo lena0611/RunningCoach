@@ -220,6 +220,14 @@ private struct MetricsView: View {
                         MetricCell(label: "칼로리", value: "\(Int(controller.activeKcal))", unit: "kcal")
                     }
 
+                    HStack(spacing: 8) {
+                        MetricCell(
+                            label: "케이던스",
+                            value: controller.cadenceSpm > 0 ? "\(Int(controller.cadenceSpm))" : "--",
+                            unit: "spm"
+                        )
+                    }
+
                     if let announcement = controller.lastAnnouncementText {
                         Text(announcement)
                             .font(.system(size: 11))
@@ -324,6 +332,9 @@ private struct EndedView: View {
                 HStack(spacing: 8) {
                     MetricCell(label: "심박", value: controller.heartRateBpm > 0 ? "\(Int(controller.heartRateBpm))" : "--", unit: "bpm", tint: .red)
                     MetricCell(label: "칼로리", value: "\(Int(controller.activeKcal))", unit: "kcal")
+                }
+                HStack(spacing: 8) {
+                    MetricCell(label: "케이던스", value: controller.cadenceSpm > 0 ? "\(Int(controller.cadenceSpm))" : "--", unit: "spm")
                 }
 
                 Button {
