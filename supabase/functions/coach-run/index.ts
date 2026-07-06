@@ -204,8 +204,11 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = requiredEnv('SUPABASE_URL')
     const serviceKey = requiredEnv('SUPABASE_SERVICE_ROLE_KEY')
-    const openaiKey = requiredEnv('OPENAI_API_KEY')
-    const model = Deno.env.get('OPENAI_MODEL') || 'gpt-5.4-mini'
+    // LLM 프로바이더는 env 3종으로 교체 가능(OpenAI 호환 Chat Completions면 무엇이든).
+    // NVIDIA 무료 엔드포인트는 개발 기간 한정 — Trial ToS상 프로덕션 금지, 출시 전 유료 프로바이더로 복귀.
+    const llmApiKey = requiredEnv('LLM_API_KEY')
+    const llmBaseUrl = Deno.env.get('LLM_BASE_URL') || 'https://integrate.api.nvidia.com/v1'
+    const model = Deno.env.get('LLM_MODEL') || 'z-ai/glm-5.2'
     const authHeader = req.headers.get('Authorization') ?? ''
     const token = authHeader.replace(/^Bearer\s+/i, '')
     if (!token) return json({ error: 'Missing bearer token' }, 401)
@@ -253,10 +256,10 @@ Deno.serve(async (req) => {
     const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress, sessionEvidence, upcomingSchedule, restState, recentInjuryWindow, marathonFlag, injurySignals)
     const ownedSelectedRunId = context.selectedRun?.id ?? null
     if (shouldStream) {
-      return streamCoachRun(admin, userId, ownedSelectedRunId, userNote, openaiKey, model, context)
+      return streamCoachRun(admin, userId, ownedSelectedRunId, userNote, llmApiKey, llmBaseUrl, model, context)
     }
 
-    const ai = await callOpenAI(openaiKey, model, context)
+    const ai = await callCoachLlm(llmApiKey, llmBaseUrl, model, context)
     const result = await persistCoachResult(admin, userId, ownedSelectedRunId, userNote, context, ai)
 
     return json(result)
@@ -1487,10 +1490,15 @@ function applyPastSectionPolicy(ai: CoachAiResult, context: unknown): CoachAiRes
   return { ...ai, report: stripPastSessionSections(ai.report) }
 }
 
-async function callOpenAI(apiKey: string, model: string, context: unknown): Promise<CoachAiResult> {
-  const instructions = buildCoachInstructions(context)
+function buildCoachMessages(context: unknown) {
+  return [
+    { role: 'system', content: buildCoachInstructions(context) },
+    { role: 'user', content: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context)}` }
+  ]
+}
 
-  const response = await fetch('https://api.openai.com/v1/responses', {
+async function callCoachLlm(apiKey: string, baseUrl: string, model: string, context: unknown): Promise<CoachAiResult> {
+  const response = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -1498,15 +1506,14 @@ async function callOpenAI(apiKey: string, model: string, context: unknown): Prom
     },
     body: JSON.stringify({
       model,
-      instructions,
-      input: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context)}`,
-      text: buildCoachResponseTextFormat()
+      messages: buildCoachMessages(context),
+      response_format: buildCoachResponseFormat()
     })
   })
 
-  if (!response.ok) throw new Error(`OpenAI API failed: ${response.status}`)
+  if (!response.ok) throw new Error(`LLM API failed: ${response.status}`)
   const payload = await response.json()
-  const text = extractOpenAIResponseText(payload)
+  const text = extractChatCompletionText(payload)
   return applyPastSectionPolicy(parseCoachAiText(text), context)
 }
 
@@ -1840,15 +1847,16 @@ function buildCoachInstructions(context: unknown) {
     'memoryItems에 단일 세션의 거리/페이스/심박, "오늘 잘했다", "다음 훈련은 휴식" 같은 일회성 코멘트를 넣지 않는다. 개인 맥락도 한 번의 가벼운 언급이면 저장하지 말고, 명시적 목표/선호이거나 반복해서 나온 것만 저장한다.',
     '이미 context.coachMemoryItems나 trainingMemory에 같은 의미가 있으면 memoryItems에 다시 넣지 않는다.',
     '스트리밍 UI가 report를 먼저 표시하므로 JSON 객체의 키 순서는 반드시 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal 순서로 둔다.',
-    'Responses API structured output schema가 JSON 구조를 강제한다. JSON 외 텍스트를 붙이지 말고, 업데이트가 없으면 trainingMemoryPatch와 injuryUpdateProposal은 null, memoryItems는 빈 배열로 둔다.'
+    'structured output 스키마가 JSON 구조를 강제한다. JSON 외 텍스트를 붙이지 말고, 업데이트가 없으면 trainingMemoryPatch와 injuryUpdateProposal은 null, memoryItems는 빈 배열로 둔다.',
+    '모든 텍스트 값은 자연스러운 한국어로만 작성한다. 다른 언어를 섞지 않는다.'
   ].join('\n')
 
 }
 
-function buildCoachResponseTextFormat() {
+function buildCoachResponseFormat() {
   return {
-    format: {
-      type: 'json_schema',
+    type: 'json_schema',
+    json_schema: {
       name: 'pace_lab_coach_response',
       strict: true,
       schema: {
@@ -2060,6 +2068,7 @@ function streamCoachRun(
   selectedRunId: string | null,
   userNote: string,
   apiKey: string,
+  baseUrl: string,
   model: string,
   context: CoachContext
 ) {
@@ -2072,7 +2081,7 @@ function streamCoachRun(
       }
 
       try {
-        const ai = await callOpenAIStream(apiKey, model, context, (delta) => send('delta', { delta }))
+        const ai = await callCoachLlmStream(apiKey, baseUrl, model, context, (delta) => send('delta', { delta }))
         const result = await persistCoachResult(admin, userId, selectedRunId, userNote, context, ai)
         send('done', result)
         controller.close()
@@ -2100,13 +2109,14 @@ function streamCoachRun(
   })
 }
 
-async function callOpenAIStream(
+async function callCoachLlmStream(
   apiKey: string,
+  baseUrl: string,
   model: string,
   context: unknown,
   onReportDelta: (delta: string) => void
 ): Promise<CoachAiResult> {
-  const response = await fetch('https://api.openai.com/v1/responses', {
+  const response = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -2114,15 +2124,14 @@ async function callOpenAIStream(
     },
     body: JSON.stringify({
       model,
-      instructions: buildCoachInstructions(context),
-      input: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context)}`,
-      text: buildCoachResponseTextFormat(),
+      messages: buildCoachMessages(context),
+      response_format: buildCoachResponseFormat(),
       stream: true
     })
   })
 
   if (!response.ok || !response.body) {
-    throw new Error(`OpenAI API failed: ${response.status}`)
+    throw new Error(`LLM API failed: ${response.status}`)
   }
 
   const decoder = new TextDecoder()
@@ -2131,14 +2140,10 @@ async function callOpenAIStream(
   const stripSections = shouldStripPastSections(context)
   let sseBuffer = ''
   let fullText = ''
-  let completedText = ''
   let streamedReport = ''
 
   const handleEvent = (event: unknown) => {
-    const completed = getOpenAICompletedText(event)
-    if (completed) completedText = completed
-
-    const delta = getOpenAITextDelta(event)
+    const delta = getChatCompletionDelta(event)
     if (!delta) return
     fullText += delta
     const reportDelta = reportExtractor.push(delta)
@@ -2152,18 +2157,18 @@ async function callOpenAIStream(
     const { value, done } = await reader.read()
     if (done) break
     sseBuffer += decoder.decode(value, { stream: true })
-    const parsed = drainOpenAISseBuffer(sseBuffer)
+    const parsed = drainSseBuffer(sseBuffer)
     sseBuffer = parsed.rest
     parsed.events.forEach(handleEvent)
   }
 
   sseBuffer += decoder.decode()
   if (sseBuffer.trim()) {
-    const parsed = drainOpenAISseBuffer(`${sseBuffer}\n\n`)
+    const parsed = drainSseBuffer(`${sseBuffer}\n\n`)
     parsed.events.forEach(handleEvent)
   }
 
-  const ai = parseCoachAiText(completedText || fullText, streamedReport)
+  const ai = parseCoachAiText(fullText, streamedReport)
   if (stripSections) {
     const cleaned = stripPastSessionSections(ai.report)
     onReportDelta(cleaned)
@@ -2190,7 +2195,7 @@ function parseCoachAiText(text: string, fallbackReport = ''): CoachAiResult {
   return ai
 }
 
-function drainOpenAISseBuffer(buffer: string) {
+function drainSseBuffer(buffer: string) {
   const events: unknown[] = []
   const chunks = buffer.split(/\r?\n\r?\n/)
   const rest = chunks.pop() ?? ''
@@ -2207,68 +2212,28 @@ function drainOpenAISseBuffer(buffer: string) {
     try {
       events.push(JSON.parse(data))
     } catch {
-      // OpenAI SSE can include non-JSON keepalive chunks. Ignore them.
+      // SSE can include non-JSON keepalive chunks. Ignore them.
     }
   }
 
   return { events, rest }
 }
 
-function getOpenAITextDelta(event: unknown) {
+// Chat Completions 스트림 청크에서 본문 델타만 뽑는다. reasoning_content(GLM 계열 사고 토큰)는 의도적으로 무시.
+function getChatCompletionDelta(event: unknown): string {
   if (!event || typeof event !== 'object') return ''
-  const item = event as Record<string, unknown>
-  if (typeof item.delta === 'string') return item.delta
-  if (typeof item.text === 'string' && String(item.type).includes('delta')) return item.text
-  if (typeof item.output_text === 'string' && String(item.type).includes('delta')) return item.output_text
-  return ''
+  const choices = (event as { choices?: unknown }).choices
+  if (!Array.isArray(choices) || choices.length === 0) return ''
+  const delta = (choices[0] as { delta?: { content?: unknown } })?.delta
+  return typeof delta?.content === 'string' ? delta.content : ''
 }
 
-function getOpenAICompletedText(event: unknown): string {
-  if (!event || typeof event !== 'object') return ''
-  const item = event as Record<string, unknown>
-  const type = String(item.type ?? '')
-  if (
-    type !== 'response.completed' &&
-    type !== 'response.output_item.done' &&
-    type !== 'response.content_part.done' &&
-    type !== 'response.output_text.done'
-  ) return ''
-  return extractOpenAIResponseText(item.response ?? item.item ?? item.part ?? item)
-}
-
-function extractOpenAIResponseText(payload: unknown): string {
+function extractChatCompletionText(payload: unknown): string {
   if (!payload || typeof payload !== 'object') return ''
-  const item = payload as Record<string, unknown>
-  if (typeof item.output_text === 'string') return item.output_text
-  if (typeof item.text === 'string') return item.text
-  if (typeof item.delta === 'string') return item.delta
-
-  const contentText = extractOpenAIContentText(item.content)
-  if (contentText) return contentText
-
-  if (Array.isArray(item.output)) {
-    return item.output
-      .map((outputItem) => extractOpenAIResponseText(outputItem))
-      .filter(Boolean)
-      .join('\n')
-  }
-
-  return ''
-}
-
-function extractOpenAIContentText(content: unknown): string {
-  if (!Array.isArray(content)) return ''
-  return content
-    .map((part) => {
-      if (!part || typeof part !== 'object') return ''
-      const item = part as Record<string, unknown>
-      if (typeof item.text === 'string') return item.text
-      if (typeof item.output_text === 'string') return item.output_text
-      if (typeof item.value === 'string') return item.value
-      return ''
-    })
-    .filter(Boolean)
-    .join('\n')
+  const choices = (payload as { choices?: unknown }).choices
+  if (!Array.isArray(choices) || choices.length === 0) return ''
+  const message = (choices[0] as { message?: { content?: unknown } })?.message
+  return typeof message?.content === 'string' ? message.content : ''
 }
 
 function createReportStreamExtractor() {

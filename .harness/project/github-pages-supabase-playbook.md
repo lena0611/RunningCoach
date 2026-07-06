@@ -55,7 +55,7 @@
    - `supabase/.temp`는 로컬 링크 정보이므로 커밋하지 않는다.
 6. DB와 Edge Function을 배포한다.
    - 에이전트는 `supabase db push`로 migration을 적용할 수 있다.
-   - 사용자가 Supabase Edge Function secrets에 `OPENAI_API_KEY`, `OPENAI_MODEL`을 넣는다.
+   - 사용자가 Supabase Edge Function secrets에 `LLM_API_KEY`(필수)를 넣는다. `LLM_BASE_URL`, `LLM_MODEL`은 선택(기본값: NVIDIA `https://integrate.api.nvidia.com/v1` / `z-ai/glm-5.2` — NVIDIA 무료 API는 개발 한정, 출시 전 유료 프로바이더 복귀).
    - 에이전트는 `supabase functions deploy <function-name>`을 실행할 수 있다.
 7. GitHub Pages workflow를 작성한다.
    - 에이전트가 `.github/workflows/pages.yml`을 만든다.
@@ -65,7 +65,7 @@
 8. GitHub repository variables를 등록한다.
    - 사용자가 repository Settings에서 `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`를 등록한다.
    - 이 값은 public client 설정이므로 GitHub Variables에 둔다.
-   - OpenAI API Key, Supabase service role key는 GitHub Pages workflow variables에 넣지 않는다.
+   - LLM API Key(NVIDIA/OpenAI 등), Supabase service role key는 GitHub Pages workflow variables에 넣지 않는다.
 9. GitHub Pages source를 설정한다.
    - 사용자가 repository `Settings > Pages > Build and deployment > Source`를 `GitHub Actions`로 변경한다.
 10. GitHub에 push하고 Actions 배포를 확인한다.
@@ -84,7 +84,7 @@
     - 일반 브라우저 GitHub Pages 접속은 `/access`로 가야 한다.
     - iOS WebView 또는 localhost에서는 `/auth`가 보여야 한다.
     - OTP 코드 입력 후 기능 화면에 접근되어야 한다.
-    - RunLog 저장, Supabase RLS, Edge Function 호출, OpenAI key 비노출을 확인한다.
+    - RunLog 저장, Supabase RLS, Edge Function 호출, LLM key 비노출을 확인한다.
 
 ## 사용자가 직접 해야 하는 GitHub 설정
 - GitHub Pages 최초 설정:
@@ -111,8 +111,9 @@
 - Project Settings > API keys에서 publishable key와 Project URL을 확인한다.
 - `VITE_SUPABASE_ANON_KEY`에는 publishable key만 넣는다. secret key 또는 service role key를 넣지 않는다.
 - Edge Function secret에는 서버에서만 필요한 값을 넣는다.
-  - `OPENAI_API_KEY`
-  - `OPENAI_MODEL`
+  - `LLM_API_KEY` (필수 — OpenAI 호환 Chat Completions 프로바이더 키)
+  - `LLM_BASE_URL` (선택 — 기본 `https://integrate.api.nvidia.com/v1`)
+  - `LLM_MODEL` (선택 — 기본 `z-ai/glm-5.2`)
   - `APP_SESSION_HMAC_SECRET`
   - `APP_SECURITY_MODE`
   - `PACELAB_ALLOWED_EMAILS`
