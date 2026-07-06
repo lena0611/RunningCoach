@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { useRunStore } from '@/app/stores/runStore'
 import { useCompetitionStore } from '@/app/stores/competitionStore'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
+import { useWatchRaceStore } from '@/app/stores/watchRaceStore'
 import { useLiveRun } from '@/features/live-run/useLiveRun'
 import { ghostCurveForRun, listDistanceOptions, listOpponents, type OpponentOption } from '@/features/live-run/raceTargets'
 import type { CompetitionTargetPb } from '@/entities/competition/model'
@@ -38,6 +39,7 @@ const LS_KEY = 'race_last_settings_v1'
 const runStore = useRunStore()
 const competitionStore = useCompetitionStore()
 const healthKitSync = useHealthKitSyncStore()
+const watchRaceStore = useWatchRaceStore()
 const live = useLiveRun()
 const route = useRoute()
 
@@ -177,6 +179,9 @@ function saveSettings() {
   } catch {
     // 저장 실패는 치명적 아님
   }
+  // 워치 카탈로그는 lastSelection·announceConfig 로 이 설정을 미러한다(#552).
+  // runs 변경 감시(App.vue)만으론 설정 단독 변경이 워치에 안 가므로 저장 직후 즉시 push.
+  watchRaceStore.pushCatalog()
   settingsOpen.value = false
 }
 
