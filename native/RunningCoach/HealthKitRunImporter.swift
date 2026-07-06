@@ -435,6 +435,22 @@ final class HealthKitRunImporter {
         return types
     }
 
+    /// 백그라운드 알림 게이트용(#552 후속): 가장 최근에 종료된 '러닝' 워크아웃의 endDate.
+    /// enableBackgroundDelivery 는 워크아웃 타입 전체로만 걸려 사이클링 등 비러닝 저장에도 앱이
+    /// 깨므로, 배너를 내기 전에 실제 새 러닝이 있는지 이 값으로 판별한다. 러닝 없으면 nil.
+    func latestRunningWorkoutEndDate(completion: @escaping (Date?) -> Void) {
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        let query = HKSampleQuery(
+            sampleType: HKObjectType.workoutType(),
+            predicate: HKQuery.predicateForWorkouts(with: .running),
+            limit: 1,
+            sortDescriptors: [sort]
+        ) { _, samples, _ in
+            completion((samples?.first as? HKWorkout)?.endDate)
+        }
+        healthStore.execute(query)
+    }
+
     private func startRunningWorkoutObserver(onChange: @escaping () -> Void) {
         let workoutType = HKObjectType.workoutType()
         let runningPredicate = HKQuery.predicateForWorkouts(with: .running)

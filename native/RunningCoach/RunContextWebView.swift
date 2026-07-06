@@ -762,10 +762,40 @@ struct RunContextWebView: UIViewRepresentable {
             // 이 초기 콜백을 "새 러닝"으로 오인해, 새 러닝이 0개여도 런치마다 배너가 떴다.
             // → .background 일 때만 알림으로 보내고, active/inactive(런치·전환 중)는 웹 동기화로 처리한다.
             if UIApplication.shared.applicationState == .background {
-                notificationManager.showHealthKitDetectedNotificationIfEnabled()
+                verifyNewRunningWorkoutThenNotify()
                 return
             }
             requestWebHealthKitSync(reason: "background-delivery")
+        }
+
+        /// 러닝 게이트(#552 후속, 2026-07-06 사이클링 오발화): 백그라운드 전달은 워크아웃 타입
+        /// 전체로 깨우므로(사이클링·근력 등 포함) '마지막으로 알린 것보다 나중에 끝난 러닝'이
+        /// 실제로 있을 때만 배너를 낸다. 앵커는 알림 판정 시 갱신되는 러닝 endDate.
+        private static let lastNotifiedRunningEndKey = "pacelab.lastNotifiedRunningWorkoutEnd"
+
+        private func verifyNewRunningWorkoutThenNotify() {
+            importer.latestRunningWorkoutEndDate { [weak self] endDate in
+                guard let self, let endDate else {
+                    print("[RunContext Notifications] workout wake without any running workout — banner suppressed")
+                    return
+                }
+                let key = Self.lastNotifiedRunningEndKey
+                let anchor = UserDefaults.standard.double(forKey: key)
+                let end = endDate.timeIntervalSince1970
+                guard end > anchor else {
+                    print("[RunContext Notifications] non-running workout wake (latest run unchanged) — banner suppressed")
+                    return
+                }
+                UserDefaults.standard.set(end, forKey: key)
+                // 최초 앵커(미설정)일 때 과거 이력 러닝으로 오발화하지 않게, 방금(3시간 내) 끝난 러닝만 알린다.
+                if anchor == 0, Date().timeIntervalSince(endDate) > 3 * 3600 {
+                    print("[RunContext Notifications] first anchor set from historical run — banner suppressed")
+                    return
+                }
+                DispatchQueue.main.async {
+                    self.notificationManager.showHealthKitDetectedNotificationIfEnabled()
+                }
+            }
         }
 
         private func requestWebHealthKitSync(reason: String) {
