@@ -2433,6 +2433,11 @@ button.run-session-row {
   padding-inline: 7px;
 }
 
+.run-meta-chip-race {
+  background: color-mix(in srgb, var(--color-warning) 16%, transparent);
+  color: var(--color-warning);
+}
+
 .run-meta-chip-schedule {
   background: color-mix(in srgb, var(--color-primary) 15%, transparent);
   color: var(--color-primary);

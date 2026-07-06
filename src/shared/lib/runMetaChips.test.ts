@@ -35,6 +35,27 @@ describe('getRunMetaChips', () => {
       { label: '아침', tone: 'period' }
     ])
   })
+
+  it('replaces the schedule/extra chip with a race chip for self-race runs', () => {
+    const run = createRun({
+      date: '2026-05-26',
+      sessionTitle: '화요일 오후 러닝',
+      type: 'Easy + Strides',
+      tags: ['healthkit', 'type:auto', 'self-race']
+    })
+
+    // 스케줄 매칭이 되는 날이어도 레이스는 훈련 플랜 문맥이 아니다 — 레이스 칩이 대체한다.
+    expect(getRunMetaChips(run, ['화요일: Easy + Strides'])).toEqual([
+      { label: '🏁 레이스', tone: 'race' },
+      { label: '오후', tone: 'period' }
+    ])
+
+    // 필터 파셋은 칩과 달리 '대체'가 아니라 추가형이다(의도): 스케줄 파셋은 유지되고
+    // 레이스는 tag:self-race 로 별도 필터 가능. 이 비대칭이 회귀로 뒤집히지 않게 고정한다.
+    const filterValues = getRunFilterTags(run, ['화요일: Easy + Strides']).map((tag) => tag.value)
+    expect(filterValues).toContain('schedule:scheduled')
+    expect(filterValues).toContain('tag:self-race')
+  })
 })
 
 describe('getRunFilterTags', () => {
