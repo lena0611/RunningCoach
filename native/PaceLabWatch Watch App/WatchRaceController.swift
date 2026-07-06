@@ -222,8 +222,10 @@ final class WatchRaceController: NSObject, ObservableObject {
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
         locationManager.activityType = .fitness
         locationManager.requestWhenInUseAuthorization()
-        // WKBackgroundModes(location)와 짝 — 손목 내림(백그라운드)에서도 경로가 끊기지 않는다.
-        locationManager.allowsBackgroundLocationUpdates = true
+        // ⚠️ allowsBackgroundLocationUpdates 는 설정하지 않는다 — 실기기(watchOS 10.6.2/Series 4)에서
+        // 이 설정이 시작 즉시 하드 크래시를 유발했다(2026-07-06 야외 스모크, 권한 허용 직후 반복 사망).
+        // 어차피 불필요: 활성 HKWorkoutSession 이 워크아웃 런타임을 보장해 손목 내림에서도
+        // 앱이 suspend 되지 않고 위치 콜백이 계속 온다. WKBackgroundModes(location)는 유지(무해).
         locationManager.startUpdatingLocation()
     }
 
