@@ -58,6 +58,24 @@ private struct StartView: View {
     @State private var selectedDistanceM: Double?
     @State private var useGhost = true
 
+    /// 카탈로그 미도착 폴백: 설정 화면은 폰 동기화와 무관하게 항상 보여야 한다(사용자 합의 2026-07-06).
+    /// 표준 거리로 거리 선택을 열어두고(기록 없음 → 자유 측정), 카탈로그가 오면 내 기록 기반으로 대체된다.
+    /// 라벨은 웹 kmLabel 형식(raceTargets.ts) 미러.
+    private static let fallbackEntries: [WatchSyncManager.Catalog.Entry] = [
+        .init(distanceM: 1000, label: "1km", best: nil),
+        .init(distanceM: 3000, label: "3km", best: nil),
+        .init(distanceM: 5000, label: "5km", best: nil),
+        .init(distanceM: 10000, label: "10km", best: nil),
+        .init(distanceM: 21097.5, label: "21.1km", best: nil),
+        .init(distanceM: 42195, label: "42.2km", best: nil),
+    ]
+
+    /// 화면이 실제로 쓰는 목록: 동기화된 카탈로그 우선, 없으면 표준 거리.
+    private var entries: [WatchSyncManager.Catalog.Entry] {
+        if let synced = sync.catalog?.entries, !synced.isEmpty { return synced }
+        return Self.fallbackEntries
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 8) {
@@ -103,42 +121,50 @@ private struct StartView: View {
             }
             .padding(.horizontal, 6)
         }
+        .onAppear {
+            // 폴백 목록에서도 기본 선택이 있어야 피커가 비지 않는다. 카탈로그가 이미 있으면 그 기본을 따른다.
+            if selectedDistanceM == nil {
+                selectedDistanceM = sync.catalog?.lastSelection.distanceM
+                    ?? sync.catalog?.entries.first?.distanceM
+                    ?? 5000
+            }
+        }
         .onReceive(sync.$catalog) { catalog in
-            guard let catalog, selectedDistanceM == nil else { return }
-            selectedDistanceM = catalog.lastSelection.distanceM ?? catalog.entries.first?.distanceM
-            useGhost = catalog.lastSelection.opponentKind != "none"
+            guard let catalog else { return }
+            // 카탈로그 도착 시 폰의 마지막 선택으로 승격 — 단 사용자가 이미 폴백에서 고른 값이
+            // 카탈로그에도 있으면 그 선택을 존중한다.
+            let hasCurrent = catalog.entries.contains { $0.distanceM == selectedDistanceM }
+            if !hasCurrent {
+                selectedDistanceM = catalog.lastSelection.distanceM ?? catalog.entries.first?.distanceM
+                useGhost = catalog.lastSelection.opponentKind != "none"
+            }
         }
     }
 
-    /// 거리·상대 선택부. 카탈로그가 아직 없으면(첫 페어링 전) 자유 측정만 안내.
+    /// 거리·상대 선택부 — 카탈로그 유무와 무관하게 항상 노출(없으면 표준 거리 + 자유 측정).
     @ViewBuilder
     private var setupSection: some View {
-        if let catalog = sync.catalog, !catalog.entries.isEmpty {
-            Picker("거리", selection: $selectedDistanceM) {
-                ForEach(catalog.entries, id: \.distanceM) { entry in
-                    Text(entry.label).tag(Optional(entry.distanceM))
-                }
+        Picker("거리", selection: $selectedDistanceM) {
+            ForEach(entries, id: \.distanceM) { entry in
+                Text(entry.label).tag(Optional(entry.distanceM))
             }
-            .pickerStyle(.navigationLink)
+        }
+        .pickerStyle(.navigationLink)
 
-            if let best = selectedBest {
-                Toggle(isOn: $useGhost) {
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("내 베스트와 대결")
-                            .font(.caption2)
-                        Text(MetricFormat.time(best.elapsedSec))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+        if let best = selectedBest {
+            Toggle(isOn: $useGhost) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("내 베스트와 대결")
+                        .font(.caption2)
+                    Text(MetricFormat.time(best.elapsedSec))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
-            } else {
-                Text("이 거리는 기록이 없어 자유 측정으로 달려요")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
             }
         } else {
-            Text("아이폰과 연결되면 고스트 목록이 동기화돼요 · 지금은 자유 측정")
+            Text(sync.catalog == nil
+                ? "아이폰 앱과 연결되면 내 기록과 대결할 수 있어요 · 지금은 자유 측정"
+                : "이 거리는 기록이 없어 자유 측정으로 달려요")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -146,12 +172,12 @@ private struct StartView: View {
     }
 
     private var selectedBest: WatchSyncManager.Catalog.Best? {
-        sync.catalog?.entries.first { $0.distanceM == selectedDistanceM }?.best
+        entries.first { $0.distanceM == selectedDistanceM }?.best
     }
 
     /// 선택을 굳혀 레이스 구성 후 시작. 곡선 2점 미만(손상 카탈로그)이면 자유 측정으로 폴백.
     private func startRace() {
-        let entry = sync.catalog?.entries.first { $0.distanceM == selectedDistanceM }
+        let entry = entries.first { $0.distanceM == selectedDistanceM }
         if useGhost, let entry, let best = entry.best, best.curvePoints.count >= 2 {
             let curve = GhostCurve(points: best.curvePoints.map {
                 GhostCurvePoint(distanceM: $0.distanceM, elapsedSec: $0.elapsedSec)
