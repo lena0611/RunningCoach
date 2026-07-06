@@ -239,12 +239,25 @@ final class HealthKitRunImporter {
         }
     }
 
+    /// 읽기 권한 요청 1회 완료 마커. 요청 타입 중 iOS 가 권한 시트에 표시하지 못하는 항목
+    /// (예: iOS 18 workoutEffortScore)이 '미결정'으로 영구히 남으면, 매 동기화의 재요청마다
+    /// 시트가 다시 떠서 "앱 열 때마다 건강 팝업" 이 된다(2026-07-06 실기기 확인).
+    /// 최초 1회 성공 후에는 시스템 요청을 생략한다 — 읽기 권한은 실제 쿼리에서 그대로 반영되므로
+    /// 기능 손실이 없다. 새 read 타입을 추가하면 시트를 다시 띄우도록 키의 v 를 올린다.
+    private static let readAuthRequestedKey = "pacelab.healthReadAuthRequested.v1"
+
     private func requestAuthorization(completion: @escaping (Result<Void, Error>) -> Void) {
+        if UserDefaults.standard.bool(forKey: Self.readAuthRequestedKey) {
+            completion(.success(()))
+            return
+        }
         let readTypes = Set(healthTypesToRead())
         healthStore.requestAuthorization(toShare: [], read: readTypes) { success, error in
             if let error {
                 completion(.failure(error))
             } else if success {
+                // 시트 완료(또는 물을 것 없음) 시에만 마킹 — 사용자가 시트를 취소하면 다음에 다시 묻는다.
+                UserDefaults.standard.set(true, forKey: Self.readAuthRequestedKey)
                 completion(.success(()))
             } else {
                 completion(.failure(HealthKitImportError.authorizationDenied))
