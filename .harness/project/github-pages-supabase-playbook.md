@@ -114,6 +114,7 @@
   - `LLM_API_KEY` (필수 — OpenAI 호환 Chat Completions 프로바이더 키)
   - `LLM_BASE_URL` (선택 — 기본 `https://integrate.api.nvidia.com/v1`)
   - `LLM_MODEL` (선택 — 기본 `z-ai/glm-5.2`)
+  - LLM 프로바이더 구성·키 위치·복귀 절차 상세는 `.harness/project/llm-provider-runbook.md`
   - `APP_SESSION_HMAC_SECRET`
   - `APP_SECURITY_MODE`
   - `PACELAB_ALLOWED_EMAILS`
