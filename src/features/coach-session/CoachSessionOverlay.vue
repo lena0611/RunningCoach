@@ -14,6 +14,7 @@ import type { TrainingGoal, TrainingInjuryCheckIn, TrainingMemory } from '@/enti
 import { detectGoalIntent, type GoalIntentProposal } from '@/features/detect-goal-intent/detectGoalIntent'
 import { fetchCoachReports, requestCoachRunStream, type CoachInjuryUpdateProposal, type CoachReport } from '@/shared/api/coachRepository'
 import { summarizeAchievementsForCoach } from '@/shared/lib/achievement/achievements'
+import { coachModelLabel } from '@/shared/lib/coaching/coachModels'
 import { summarizeTempoCoaching } from '@/shared/lib/coaching/tempoAdaptation'
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { buildCoachSessionEvidence } from '@/shared/lib/coaching/sessionQuality'
@@ -854,6 +855,7 @@ function stopCoachThinkingTimer() {
               <div v-for="report in selectedReports" :key="report.id" class="coach-turn">
                 <CoachMessage v-if="report.userNote" role="user" :text="report.userNote" :meta="formatDateTimeWithWeekday(report.createdAt)" />
                 <CoachMessage role="coach" :text="report.report" :meta="formatDateTimeWithWeekday(report.updatedAt || report.createdAt)" />
+                <small v-if="coachModelLabel(report.model)" class="coach-model-tag">✨ {{ coachModelLabel(report.model) }} 제공</small>
                 <small v-if="reportInjuryContextLabel(report)" class="coach-injury-snapshot">{{ reportInjuryContextLabel(report) }}</small>
                 <article v-if="report.injuryUpdateProposal && shouldShowInjuryProposal(report)" class="coach-injury-proposal-card">
                   <span class="context-chip">사용자 승인 필요</span>

@@ -197,6 +197,11 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS'
 }
 
+// 코칭 모델 allowlist(웹 coachModels.ts 미러). 클라이언트가 보낸 body.model은 이 집합일 때만 허용,
+// 그 외에는 env(LLM_MODEL) 또는 기본값으로 폴백. GLM이 NVIDIA에서 DEGRADED라 기본은 DeepSeek.
+const ALLOWED_LLM_MODELS = ['deepseek-ai/deepseek-v4-pro', 'z-ai/glm-5.2']
+const DEFAULT_LLM_MODEL = 'deepseek-ai/deepseek-v4-pro'
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
@@ -208,7 +213,7 @@ Deno.serve(async (req) => {
     // NVIDIA 무료 엔드포인트는 개발 기간 한정 — Trial ToS상 프로덕션 금지, 출시 전 유료 프로바이더로 복귀.
     const llmApiKey = requiredEnv('LLM_API_KEY')
     const llmBaseUrl = Deno.env.get('LLM_BASE_URL') || 'https://integrate.api.nvidia.com/v1'
-    const model = Deno.env.get('LLM_MODEL') || 'z-ai/glm-5.2'
+    const envModel = Deno.env.get('LLM_MODEL') || DEFAULT_LLM_MODEL
     const authHeader = req.headers.get('Authorization') ?? ''
     const token = authHeader.replace(/^Bearer\s+/i, '')
     if (!token) return json({ error: 'Missing bearer token' }, 401)
@@ -246,6 +251,7 @@ Deno.serve(async (req) => {
     const runnerLevel = normalizeRunnerLevel(body.runnerLevel)
     const responseStyle = normalizeResponseStyle(body.responseStyle, runnerLevel)
     const shouldStream = body.stream === true
+    const model = typeof body.model === 'string' && ALLOWED_LLM_MODELS.includes(body.model) ? body.model : envModel
 
     const access = await requireAppSession(admin, req, userId)
     if (!access.ok) return json({ error: access.error }, access.status)
@@ -260,7 +266,7 @@ Deno.serve(async (req) => {
     }
 
     const ai = await callCoachLlm(llmApiKey, llmBaseUrl, model, context)
-    const result = await persistCoachResult(admin, userId, ownedSelectedRunId, userNote, context, ai)
+    const result = await persistCoachResult(admin, userId, ownedSelectedRunId, userNote, context, ai, model)
 
     return json(result)
   } catch (error) {
@@ -311,7 +317,8 @@ async function persistCoachResult(
   selectedRunId: string | null,
   userNote: string,
   context: CoachContext,
-  ai: { report: string; memoryItems: string[]; trainingMemoryPatch: TrainingMemoryPatch | null; injuryUpdateProposal: InjuryUpdateProposal | null }
+  ai: { report: string; memoryItems: string[]; trainingMemoryPatch: TrainingMemoryPatch | null; injuryUpdateProposal: InjuryUpdateProposal | null },
+  model: string
 ) {
   const durableMemoryItems = normalizeMemoryItems(ai.memoryItems, [...(context.coreMemoryItems ?? []), ...context.coachMemoryItems])
   const memoryPatch = normalizeTrainingMemoryPatch(ai.trainingMemoryPatch)
@@ -336,9 +343,10 @@ async function persistCoachResult(
       user_note: userNote,
       report,
       injury_context_snapshot: injuryContextSnapshot,
+      model,
       updated_at: new Date().toISOString()
     })
-    .select('id, selected_run_id, user_note, report, created_at, updated_at, injury_context_snapshot')
+    .select('id, selected_run_id, user_note, report, created_at, updated_at, injury_context_snapshot, model')
     .single()
   if (reportError) throw new CoachPipelineError('coach_reports.insert', reportError, 'AI 코칭 리포트 저장 실패')
 
@@ -384,6 +392,7 @@ async function persistCoachResult(
       trainingMemoryUpdated,
       injuryUpdateProposal,
       injuryContextSnapshot: reportRow.injury_context_snapshot ?? null,
+      model: reportRow.model ?? model,
       persistenceWarnings
     },
     trainingMemoryUpdated,
@@ -2095,7 +2104,7 @@ function streamCoachRun(
 
       try {
         const ai = await callCoachLlmStream(apiKey, baseUrl, model, context, (delta) => send('delta', { delta }))
-        const result = await persistCoachResult(admin, userId, selectedRunId, userNote, context, ai)
+        const result = await persistCoachResult(admin, userId, selectedRunId, userNote, context, ai, model)
         send('done', result)
         controller.close()
       } catch (error) {

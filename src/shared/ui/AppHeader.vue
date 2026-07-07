@@ -7,6 +7,8 @@ import { useLevelStore } from '@/app/stores/levelStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { notificationSettingRows, useSettingsStore, type NotificationSettingKey, type NotificationSettings, type SettingsPanelFocus } from '@/app/stores/settingsStore'
+import { COACH_MODELS, type CoachModelId } from '@/shared/lib/coaching/coachModels'
+import SegmentTabs from '@/shared/ui/SegmentTabs.vue'
 import { useGlossaryStore } from '@/app/stores/glossaryStore'
 import { getActiveGoal, getActiveInjuryItem, type PersonalBest, type TrainingMemory } from '@/entities/training-memory/model'
 import { isHealthKitBridgeAvailable } from '@/features/import-healthkit-run/healthKitBridge'
@@ -686,6 +688,22 @@ function openSettingsPanel(focus: SettingsPanelFocus | null = null) {
       </div>
 
       <p class="helper">iPhone에서는 알림 권한을 허용해야 배너가 표시됩니다. 루틴 변경 후에는 가까운 2주 알림을 다시 예약합니다.</p>
+    </section>
+
+    <section class="settings-section" data-settings-section="coaching-model">
+      <div class="settings-section-heading">
+        <p class="eyebrow">AI Model</p>
+        <h3>코칭 모델</h3>
+      </div>
+      <p class="helper">AI 코칭 답변을 생성하는 모델이에요. 한 모델이 불안정하면 다른 모델로 바꿔 쓸 수 있어요.</p>
+      <SegmentTabs
+        variant="pill"
+        tone="ok"
+        aria-label="코칭 모델 선택"
+        :items="COACH_MODELS.map((m) => ({ value: m.id, label: m.label }))"
+        :active="settingsStore.coachingModel"
+        @change="settingsStore.setCoachingModel($event as CoachModelId)"
+      />
     </section>
   </StackPage>
 
