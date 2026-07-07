@@ -199,6 +199,7 @@ public enum GhostMath {
         elapsedSec: Double = 0,
         reversal: ReversalKind? = nil,
         periodicStep: Int? = nil,
+        paceSecPerKm: Double? = nil,
         gapMode: GapDisplayMode = .distance
     ) -> Announcement {
         let kmBucket = Int(floor(distanceM / 1000))
@@ -213,9 +214,14 @@ public enum GhostMath {
             }
             return Announcement(text: text, priority: priority[.periodic]!, dedupeKey: "periodic:\(periodicStep ?? kmBucket)")
         case .lap:
-            let g = gap ?? GapState(timeGapSec: 0, distanceGapM: 0, leadState: .even)
+            // "3km 통과 — 페이스 6분 15초, 고스트보다 150m 앞서는 중." 페이스=직전 구간(랩) 페이스.
+            // 격차 절은 고스트 대결일 때만 — gap 이 없는 TT(자유측정)는 페이스까지만 말한다(ghost.ts 미러 + TT 확장).
+            var clauses: [String] = []
+            if let pace = paceSecPerKm { clauses.append("페이스 \(formatGapSeconds(pace))") }
+            if let g = gap { clauses.append(gapClause(g, gapMode)) }
+            let tail = clauses.isEmpty ? "" : " — \(clauses.joined(separator: ", "))"
             return Announcement(
-                text: "\(kmLabel(distanceM)) 통과 — \(gapClause(g, gapMode)).",
+                text: "\(kmLabel(distanceM)) 통과\(tail).",
                 priority: priority[.lap]!,
                 dedupeKey: "lap:\(Int((distanceM / 1000).rounded()))"
             )
@@ -302,6 +308,8 @@ public final class GhostRaceEngine {
     private let config: AnnounceConfig
     private var prevGap: GapState?
     private var lastPeriodicStep = 0    // 0 = 아직 첫 step 미통과
+    /// 직전 거리-주기 통과점(거리·경과시간). lap 문구의 구간 페이스 계산 기준. 시작점 = (0, 0).
+    private var lastStepMark: (distanceM: Double, elapsedSec: Double) = (0, 0)
     private var finished = false
     /// 시작 직후 grace(초): 이 시간 전엔 역전 안내를 억제한다(시작 멘트와 겹침·즉시 "추월당함" 방지).
     private let reversalGraceSec: Double = 8
@@ -336,13 +344,15 @@ public final class GhostRaceEngine {
             let step = Int(floor(tick.cumulativeDistanceM / config.stepM))
             if step > lastPeriodicStep {
                 lastPeriodicStep = step
-                out.append(periodicAnnouncement(at: tick, gap: gap, step: step))
+                let pace = segmentPaceSecPerKm(to: tick)
+                lastStepMark = (tick.cumulativeDistanceM, tick.elapsedSec)
+                out.append(periodicAnnouncement(at: tick, gap: gap, step: step, paceSecPerKm: pace))
             }
         case .time:
             let step = Int(floor(tick.elapsedSec / config.stepSec))
             if step > lastPeriodicStep {
                 lastPeriodicStep = step
-                out.append(periodicAnnouncement(at: tick, gap: gap, step: step))
+                out.append(periodicAnnouncement(at: tick, gap: gap, step: step, paceSecPerKm: nil))
             }
         case .silent:
             break
@@ -362,12 +372,20 @@ public final class GhostRaceEngine {
         return nil
     }
 
-    private func periodicAnnouncement(at tick: LiveTick, gap: GapState?, step: Int) -> Announcement {
+    /// 직전 주기 통과점 이후 구간의 km당 페이스(초). 구간이 비정상적으로 짧으면 nil(페이스 절 생략).
+    private func segmentPaceSecPerKm(to tick: LiveTick) -> Double? {
+        let segKm = (tick.cumulativeDistanceM - lastStepMark.distanceM) / 1000
+        guard segKm > 0.05 else { return nil }
+        return (tick.elapsedSec - lastStepMark.elapsedSec) / segKm
+    }
+
+    private func periodicAnnouncement(at tick: LiveTick, gap: GapState?, step: Int, paceSecPerKm: Double?) -> Announcement {
+        // km 단위 거리 주기는 고스트 유무와 무관하게 '통과 — 페이스' 형식(TT 는 격차 절 생략).
+        if config.periodicKind == .distance, config.stepM.truncatingRemainder(dividingBy: 1000) == 0 {
+            return GhostMath.formatAnnouncement(.lap, gap: gap, distanceM: tick.cumulativeDistanceM, paceSecPerKm: paceSecPerKm, gapMode: config.gapMode)
+        }
         guard gap != nil else {
             return GhostMath.formatAnnouncement(.progress, gap: nil, distanceM: tick.cumulativeDistanceM, elapsedSec: tick.elapsedSec)
-        }
-        if config.periodicKind == .distance, config.stepM.truncatingRemainder(dividingBy: 1000) == 0 {
-            return GhostMath.formatAnnouncement(.lap, gap: gap, distanceM: tick.cumulativeDistanceM, gapMode: config.gapMode)
         }
         return GhostMath.formatAnnouncement(.periodic, gap: gap, distanceM: tick.cumulativeDistanceM, periodicStep: step, gapMode: config.gapMode)
     }
