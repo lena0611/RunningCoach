@@ -5749,8 +5749,21 @@ button.run-session-row {
   margin: 0 auto;
   min-height: 0;
   overflow-y: auto;
+  /* 최상단/최하단 rubber-band 오버스크롤이 문서·페이지로 전파돼 고정 푸터(AI 코칭 CTA)를 끌어올리지 않게 격리 */
+  overscroll-behavior: contain;
   padding: 16px 16px calc(var(--keyboard-inset-bottom) + 112px);
   -webkit-overflow-scrolling: touch;
+}
+
+/* 코치 상세 헤더: 우측에 액션 2개(모델 아이콘 + ?)를 가로로 나란히. 기본 grid(단일 액션 열)면 세로로 쌓인다. */
+.coach-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.coach-detail-header > .coach-header-title {
+  flex: 1;
+  min-width: 0;
 }
 
 /* GlossarySheet 본문(StackPage content-class)의 간격 조정 — #275 공통화 시 스코프드→전역 이전 */
@@ -5784,8 +5797,10 @@ button.run-session-row {
 }
 
 .stack-action-bar {
-  position: sticky;
-  bottom: 0;
+  /* 고정 높이 grid(.memory-stack-page: auto 1fr auto)의 마지막 행이라 이미 하단에 고정된다.
+     position:sticky는 불필요하고, iOS rubber-band 오버스크롤 때 이 sticky 요소가 위로 딸려 올라가는
+     버그를 유발한다 → position:relative로 두어 grid 행 위치에 고정한다. */
+  position: relative;
   z-index: 3;
   padding: 12px 16px calc(env(safe-area-inset-bottom) + 12px);
   border-top: 1px solid var(--color-border);

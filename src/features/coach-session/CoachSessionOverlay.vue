@@ -830,29 +830,31 @@ function stopCoachThinkingTimer() {
     <Transition name="stack-page">
       <div v-if="coachRun" class="memory-stack-layer coach-overlay-layer" data-no-swipe @pointerdown.capture="dismissCoachKeyboardOnOutsideTap">
       <section class="memory-stack-page">
-        <header class="memory-stack-header">
+        <header class="memory-stack-header coach-detail-header">
           <button class="stack-icon-button" type="button" aria-label="뒤로" @click="closeCoach">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
           </button>
-          <div>
+          <div class="coach-header-title">
             <h2>AI 코칭</h2>
           </div>
-          <BottomSheetSelect
-            label="코칭 모델"
-            :model-value="settingsStore.coachingModel"
-            :options="COACH_MODELS.map((m) => ({ value: m.id, label: m.full }))"
-            @update:model-value="(v) => isCoachModelId(v) && settingsStore.setCoachingModel(v)"
-          >
-            <template #trigger="{ open }">
-              <button class="stack-icon-button" type="button" aria-label="코칭 모델 선택" @click.stop="open">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 3v2m0 14v2m9-9h-2M5 12H3m14.5-6.5-1.4 1.4M7.9 16.1l-1.4 1.4m11.6 0-1.4-1.4M7.9 7.9 6.5 6.5" />
-                  <circle cx="12" cy="12" r="3.2" />
-                </svg>
-              </button>
-            </template>
-          </BottomSheetSelect>
-          <button class="stack-icon-button" type="button" aria-label="AI 스케줄링 기준 보기" @click="schedulingHelpOpen = true">?</button>
+          <div class="stack-header-actions">
+            <BottomSheetSelect
+              label="코칭 모델"
+              :model-value="settingsStore.coachingModel"
+              :options="COACH_MODELS.map((m) => ({ value: m.id, label: m.full }))"
+              @update:model-value="(v) => isCoachModelId(v) && settingsStore.setCoachingModel(v)"
+            >
+              <template #trigger="{ open }">
+                <button class="stack-icon-button" type="button" aria-label="코칭 모델 선택" @click.stop="open">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 3.5l1.7 4.1 4.1 1.7-4.1 1.7L12 15.1l-1.7-4.1L6.2 9.3l4.1-1.7z" />
+                    <path d="M18 14.5l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8z" />
+                  </svg>
+                </button>
+              </template>
+            </BottomSheetSelect>
+            <button class="stack-icon-button" type="button" aria-label="AI 스케줄링 기준 보기" @click="schedulingHelpOpen = true">?</button>
+          </div>
         </header>
         <main ref="coachScrollContainer" class="memory-stack-content coach-stack-content" @scroll="onCoachScroll">
           <CoachMessage role="user" :text="`${formatDateWithWeekday(coachRun.date)} ${coachRun.sessionTitle || coachRun.type}`" />
