@@ -19,6 +19,11 @@
 - 네이티브 빌드는 `npm run harness:check` 대상이 아니다(수동). 단 **순수 로직 Swift 패키지는 CLI 검증 가능**하다 — 예: `cd native/RaceCore && DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer swift test` (⚠️ `/usr/bin/swift` 커맨드라인툴은 XCTest가 없어 실패한다).
 - "기기 검증 대기"를 이유로 커밋을 무기한 보류하지 않는다.
 
+## ⚠️ 워치 앱 설치 = "앱이 실제로 실행"까지가 완료 (무조건 상기)
+- **`devicectl install` 이 성공을 리턴해도 설치 완료가 아니다.** watchOS는 ①목록 등록 → ②바이너리·아이콘 전송 순이라, 전송이 중간에 끊기면 **아이콘 없고 눌러도 무반응인 껍데기**(목록엔 뜸)가 남는다. **워치에서 아이콘이 뜨고 앱이 실행되는 것**을 사용자가 확인해야만 완료 처리한다. "프로파일 발급됨"·"install 성공"만 보고 완료로 넘기지 말 것(2026-07-07 껍데기 사고).
+- 워치 설치는 항상 **`xcrun devicectl device install app --timeout 900 …`** — Series 4(2.4GHz 전용)는 DDI 포함 전송이 ~2~3분이라 기본 타임아웃이 중도 포기하며 `IXRemoteError 6`(연결 끊김)·`ExistingTransferInProgress` 껍데기를 만든다.
+- 껍데기/전송 실패(`IXRemoteError 6`, `CoreDeviceError 4000`) 복구: **워치 재부팅**(끊긴 전송·터널 리셋) → 재부팅 직후 터널 안정화까지 잠깐 필요(연결 즉시 끊기면 ~20s 간격 재시도) → 필요 시 `devicectl device uninstall app com.lena0611.RunningCoach.watchkitapp` → `install --timeout 900`. 설치는 항상 충전기 위에서 진행(사용자 루틴).
+
 ## 공유 코드 (RaceCore)
 - `native/RaceCore/` 스위프트 패키지 = 웹 순수 로직 `src/shared/lib/selfRace/ghost.ts`의 네이티브 포팅(`GhostRaceEngine`). **iOS 앱과 watchOS 앱이 함께 링크**한다.
 - ghost.ts는 이제 **3-소비자 계약**(web · iOS · watch). ghost.ts를 바꾸면 `RaceCore/Sources/RaceCore/GhostRaceEngine.swift` + `RaceCoreTests`를 함께 갱신하고, 웹 `.harness/project/data-change-impact-map.md`의 self-race 항목에도 워치 소비자를 반영한다.
