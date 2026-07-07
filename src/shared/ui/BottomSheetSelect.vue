@@ -93,17 +93,21 @@ function confirmMultiple() {
 </script>
 
 <template>
-  <div class="bottom-sheet-select" :class="{ 'bottom-sheet-select-compact': compact }">
-    <span class="bottom-sheet-label-row">
-      <span class="bottom-sheet-label">{{ label }}</span>
-      <slot name="label-suffix" />
-    </span>
-    <button class="bottom-sheet-trigger" type="button" @click.stop="openSheet">
-      <span>{{ displayText }}</span>
-      <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24">
-        <path d="m6 9 6 6 6-6" />
-      </svg>
-    </button>
+  <div class="bottom-sheet-select" :class="{ 'bottom-sheet-select-compact': compact, 'bottom-sheet-select-trigger-only': !!$slots.trigger }">
+    <!-- 커스텀 트리거(예: 헤더 아이콘 버튼). 제공되면 기본 라벨행+트리거 대신 이것만 렌더한다. -->
+    <slot v-if="$slots.trigger" name="trigger" :open="openSheet" :display="displayText" />
+    <template v-else>
+      <span class="bottom-sheet-label-row">
+        <span class="bottom-sheet-label">{{ label }}</span>
+        <slot name="label-suffix" />
+      </span>
+      <button class="bottom-sheet-trigger" type="button" @click.stop="openSheet">
+        <span>{{ displayText }}</span>
+        <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+    </template>
 
     <Teleport to="body">
       <Transition name="bottom-sheet">
