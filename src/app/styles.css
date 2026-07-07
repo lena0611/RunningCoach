@@ -147,6 +147,53 @@
   --z-session: 880;
   --z-coach: 900;
   --z-confirm-sheet: 1100;
+  /* ── Tab Patterns 토큰 (.harness/project/tab-patterns.md · SegmentTabs/WeekStrip 전용) ──
+     스펙 방언 매핑: --ok→--color-primary · --accent→--color-accent · --warning→--color-warning
+     --surface-2→--color-surface-2 · --text-3→--color-muted-2 · --border→--color-border */
+  --tab-inactive-bg: var(--color-surface-2);
+  --tab-inactive-text: var(--color-muted-2);
+  --tab-inactive-border: var(--color-border);
+  --tab-inactive-weight: 600;
+  --tab-active-weight: 700;
+  --tab-ok-bg: rgba(52, 211, 153, 0.14);
+  --tab-ok-text: #66e0b1;
+  --tab-ok-border: #2a5544;
+  --tab-ok-solid: var(--color-primary);
+  --tab-accent-bg: rgba(107, 166, 255, 0.16);
+  --tab-accent-text: #9ec4ff;
+  --tab-accent-border: #2f4f7a;
+  --tab-accent-solid: var(--color-accent);
+  --tab-warning-bg: rgba(251, 191, 36, 0.13);
+  --tab-warning-text: #fcd34d;
+  --tab-warning-border: #5a4a1e;
+  --tab-warning-solid: var(--color-warning);
+  --tab-chip-pad: 7px 11px;
+  --tab-chip-radius: 8px;
+  --tab-chip-gap: 6px;
+  --tab-chip-font-size: 12px;
+  --tab-seg-pad: 9px 0;
+  --tab-seg-radius: 9px;
+  --tab-seg-gap: 7px;
+  --tab-seg-font-size: 12px;
+  --tab-pill-wrap-pad: 4px;
+  --tab-pill-radius: 999px;
+  --tab-pill-gap: 4px;
+  --tab-pill-font-size: 12.5px;
+  --tab-under-gap: 18px;
+  --tab-under-pad: 10px 2px;
+  --tab-under-bar: 2px;
+  --tab-under-font-size: 13px;
+  --tab-group-radius: 10px;
+  --tab-group-pad: 9px 0;
+  --tab-group-font-size: 12px;
+  --weekstrip-gap: 6px;
+  --weekstrip-cell-pad: 8px 0;
+  --weekstrip-cell-radius: 9px;
+  --weekstrip-today-border: 1.5px solid var(--color-primary);
+  --weekstrip-today-bg: rgba(52, 211, 153, 0.1);
+  --weekstrip-day-size: 9px;
+  --weekstrip-date-size: 12px;
+  --weekstrip-done-dot: 4px;
   --run-calendar-count-bg: #000000;
   --run-calendar-count-text: #ffffff;
   --pressable-bg: var(--color-subtle-2);
@@ -3918,45 +3965,6 @@ button.run-session-row {
   gap: 12px;
 }
 
-.body-model-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  padding: 5px;
-  border-radius: 18px;
-  background: var(--color-field);
-}
-
-.body-model-tabs button {
-  display: grid;
-  gap: 2px;
-  min-height: 46px;
-  padding: 8px 6px;
-  border-radius: 14px;
-  background: transparent;
-  color: var(--color-muted);
-  box-shadow: none;
-}
-
-.body-model-tabs button.active {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-}
-
-.body-model-tabs span {
-  font-size: 12px;
-  font-weight: 850;
-}
-
-.body-model-tabs small {
-  overflow: hidden;
-  font-size: 9px;
-  font-weight: 700;
-  opacity: 0.72;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .body-view-toolbar {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) 34px;
@@ -4073,34 +4081,6 @@ button.run-session-row {
   font-weight: 900;
   text-anchor: middle;
   dominant-baseline: middle;
-}
-
-.body-view-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
-  padding: 4px;
-  border-radius: var(--radius-pill);
-  background: var(--color-field);
-}
-
-.body-view-tabs button {
-  min-height: 30px;
-  padding: 0 6px;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--color-muted);
-  font-size: 11px;
-  box-shadow: none;
-}
-
-.body-view-tabs button.active {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-}
-
-.body-view-angle-tabs {
-  grid-template-columns: repeat(auto-fit, minmax(42px, 1fr));
 }
 
 .body-view-label {
@@ -5892,28 +5872,6 @@ button.run-session-row {
   color: var(--color-text);
   font-size: 14px;
   line-height: 1.35;
-}
-
-.segmented-choice {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  padding: 4px;
-  border-radius: var(--radius-pill);
-  background: var(--color-surface);
-}
-
-.segmented-choice button {
-  min-height: 40px;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--color-muted);
-  box-shadow: none;
-}
-
-.segmented-choice button.active {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
 }
 
 .checkin-note {

@@ -8,6 +8,7 @@ import {
   type InjuryAreaSelection
 } from '@/entities/training-memory/injuryAreas'
 import ScaleSlider from './ScaleSlider.vue'
+import SegmentTabs from './SegmentTabs.vue'
 
 type BodyModelId = 'upper' | 'lower' | 'foot'
 type AnatomicalViewId = 'front' | 'right' | 'back' | 'left'
@@ -152,6 +153,8 @@ const availableViewOptions = computed(() => {
   return aroundViews('lower')
 })
 const activeViewOption = computed(() => availableViewOptions.value.find((item) => item.id === activeView.value) ?? availableViewOptions.value[0])
+const bodyModelTabItems = bodyModelOptions.map((model) => ({ value: model.id, label: model.label, detail: model.description }))
+const viewTabItems = computed(() => availableViewOptions.value.map((view) => ({ value: view.id, label: view.label })))
 const activeFrameSrc = computed(() => frameImages[activeViewOption.value.imageKey])
 const activeViewLabel = computed(() => `${activeModelLabel.value} · ${activeViewOption.value.label}`)
 const visibleZones = computed(() => hitZones.filter((zone) => zone.model === activeModel.value && zone.views.includes(activeView.value)))
@@ -250,20 +253,13 @@ function openZone(zoneId: string) {
 
     <div class="injury-body-layout">
       <section class="body-view-card" aria-label="인체 부위 선택">
-        <div class="body-model-tabs" role="tablist" aria-label="인체 모델 범위">
-          <button
-            v-for="model in bodyModelOptions"
-            :key="model.id"
-            type="button"
-            role="tab"
-            :aria-selected="activeModel === model.id"
-            :class="{ active: activeModel === model.id }"
-            @click="setActiveModel(model.id)"
-          >
-            <span>{{ model.label }}</span>
-            <small>{{ model.description }}</small>
-          </button>
-        </div>
+        <SegmentTabs
+          variant="segmented"
+          aria-label="인체 모델 범위"
+          :items="bodyModelTabItems"
+          :active="activeModel"
+          @change="setActiveModel($event as BodyModelId)"
+        />
 
         <div class="body-view-toolbar">
           <button type="button" aria-label="이전 각도" @click="rotateView(-1)">
@@ -278,19 +274,13 @@ function openZone(zoneId: string) {
           </button>
         </div>
 
-        <div class="body-view-tabs body-view-angle-tabs" role="tablist" aria-label="모델 각도">
-          <button
-            v-for="view in availableViewOptions"
-            :key="view.id"
-            type="button"
-            role="tab"
-            :aria-selected="activeView === view.id"
-            :class="{ active: activeView === view.id }"
-            @click="selectView(view.id)"
-          >
-            {{ view.label }}
-          </button>
-        </div>
+        <SegmentTabs
+          variant="chips"
+          aria-label="모델 각도"
+          :items="viewTabItems"
+          :active="activeView"
+          @change="selectView($event as BodyViewId)"
+        />
 
         <div
           class="body-model-stage"

@@ -46,7 +46,8 @@ import CoachMomentCard from '@/pages/coach/CoachMomentCard.vue'
 import { useCoachMoments } from '@/pages/coach/useCoachMoments'
 import type { CoachMoment } from '@/shared/lib/coaching/coachMoments'
 import HeroIllustration, { type HeroIllustrationTopic } from './HeroIllustration.vue'
-import WeekStrip from './WeekStrip.vue'
+import WeekStrip from '@/shared/ui/WeekStrip.vue'
+import SegmentTabs, { type SegmentTabValue } from '@/shared/ui/SegmentTabs.vue'
 import { useTrainingWeek, dayAfterIso } from './useTrainingWeek'
 import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
 
@@ -175,11 +176,11 @@ function raceBenchmarkSelectedSegment(item: RaceBenchmarkComparison): RaceBenchm
   const preferred = raceBenchmarkSegmentSelection.value[item.snapshot.id] ?? raceBenchmarkUserSegment()
   return item.segments.find((segment) => segment.segment === preferred) ?? item.segments[0]
 }
-function isRaceBenchmarkSegmentActive(item: RaceBenchmarkComparison, segment: RaceBenchmarkSegmentKey): boolean {
-  return raceBenchmarkSelectedSegment(item)?.segment === segment
+function setRaceBenchmarkSegment(id: string, segment: SegmentTabValue) {
+  raceBenchmarkSegmentSelection.value = { ...raceBenchmarkSegmentSelection.value, [id]: segment as RaceBenchmarkSegmentKey }
 }
-function setRaceBenchmarkSegment(id: string, segment: RaceBenchmarkSegmentKey) {
-  raceBenchmarkSegmentSelection.value = { ...raceBenchmarkSegmentSelection.value, [id]: segment }
+function raceBenchmarkSegmentItems(item: RaceBenchmarkComparison) {
+  return item.segments.map((segment) => ({ value: segment.segment, label: formatRaceBenchmarkSegmentLabel(segment.segment) }))
 }
 function raceBenchmarkPointText(item: RaceBenchmarkComparison): string {
   const segment = raceBenchmarkSelectedSegment(item)
@@ -724,19 +725,15 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
                 {{ raceBenchmarkPointText(item) }}
               </span>
               <span v-else class="race-benchmark-status">컷 준비 중</span>
-              <div v-if="item.status === 'ready' && item.segments.length > 1" class="race-benchmark-segments" role="group" aria-label="성별 구간 선택">
-                <button
-                  v-for="segment in item.segments"
-                  :key="segment.segment"
-                  type="button"
-                  class="race-benchmark-segment"
-                  :class="{ 'is-active': isRaceBenchmarkSegmentActive(item, segment.segment) }"
-                  :aria-pressed="isRaceBenchmarkSegmentActive(item, segment.segment)"
-                  @click="setRaceBenchmarkSegment(item.snapshot.id, segment.segment)"
-                >
-                  {{ formatRaceBenchmarkSegmentLabel(segment.segment) }}
-                </button>
-              </div>
+              <SegmentTabs
+                v-if="item.status === 'ready' && item.segments.length > 1"
+                variant="segmented"
+                tone="accent"
+                aria-label="성별 구간 선택"
+                :items="raceBenchmarkSegmentItems(item)"
+                :active="raceBenchmarkSelectedSegment(item)?.segment ?? null"
+                @change="setRaceBenchmarkSegment(item.snapshot.id, $event)"
+              />
               <p>
                 {{ item.status === 'ready'
                   ? raceBenchmarkDetailText(item)
