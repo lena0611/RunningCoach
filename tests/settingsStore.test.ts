@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useSettingsStore } from '@/app/stores/settingsStore'
+import { DEFAULT_COACH_MODEL } from '@/shared/lib/coaching/coachModels'
 
 describe('settingsStore', () => {
   beforeEach(() => {
@@ -32,7 +33,19 @@ describe('settingsStore', () => {
         healthKitNewRun: false,
         scheduledWorkout: false,
         workoutMorning: true
-      }
+      },
+      coachingModel: DEFAULT_COACH_MODEL
     })
+  })
+
+  it('persists coaching model and falls back to default for invalid stored value', () => {
+    localStorage.setItem('runcontext.settings', JSON.stringify({ coachingModel: 'bogus/model' }))
+    setActivePinia(createPinia())
+    const store = useSettingsStore()
+    expect(store.coachingModel).toBe(DEFAULT_COACH_MODEL)
+
+    store.setCoachingModel('z-ai/glm-5.2')
+    expect(store.coachingModel).toBe('z-ai/glm-5.2')
+    expect(JSON.parse(localStorage.getItem('runcontext.settings') || '{}').coachingModel).toBe('z-ai/glm-5.2')
   })
 })

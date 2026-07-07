@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { DEFAULT_COACH_MODEL, isCoachModelId, type CoachModelId } from '@/shared/lib/coaching/coachModels'
 
 export type NotificationSettingKey = 'scheduledWorkout' | 'workoutMorning' | 'healthKitNewRun'
 export type SettingsPanelFocus = 'notifications'
@@ -55,6 +56,7 @@ export const notificationSettingRows = [
 export const useSettingsStore = defineStore('settingsStore', {
   state: () => ({
     notificationSettings: loadSettings().notificationSettings,
+    coachingModel: loadSettings().coachingModel,
     settingsPanelRequestId: 0,
     settingsPanelFocus: null as SettingsPanelFocus | null
   }),
@@ -73,13 +75,18 @@ export const useSettingsStore = defineStore('settingsStore', {
       }
       this.persist()
     },
+    setCoachingModel(model: CoachModelId) {
+      this.coachingModel = model
+      this.persist()
+    },
     requestSettingsPanel(focus: SettingsPanelFocus | null = null) {
       this.settingsPanelFocus = focus
       this.settingsPanelRequestId += 1
     },
     persist() {
       localStorage.setItem(storageKey, JSON.stringify({
-        notificationSettings: this.notificationSettings
+        notificationSettings: this.notificationSettings,
+        coachingModel: this.coachingModel
       }))
     }
   }
@@ -92,17 +99,18 @@ export function getDisabledNotificationItems(settings: NotificationSettings): Di
   return notificationSettingRows.filter((row) => !settings[row.key])
 }
 
-function loadSettings(): { notificationSettings: NotificationSettings } {
+function loadSettings(): { notificationSettings: NotificationSettings; coachingModel: CoachModelId } {
   if (typeof localStorage === 'undefined') {
-    return { notificationSettings: defaultNotificationSettings }
+    return { notificationSettings: defaultNotificationSettings, coachingModel: DEFAULT_COACH_MODEL }
   }
   try {
-    const parsed = JSON.parse(localStorage.getItem(storageKey) || '{}') as { notificationSettings?: Partial<NotificationSettings> }
+    const parsed = JSON.parse(localStorage.getItem(storageKey) || '{}') as { notificationSettings?: Partial<NotificationSettings>; coachingModel?: unknown }
     return {
-      notificationSettings: normalizeNotificationSettings(parsed.notificationSettings)
+      notificationSettings: normalizeNotificationSettings(parsed.notificationSettings),
+      coachingModel: isCoachModelId(parsed.coachingModel) ? parsed.coachingModel : DEFAULT_COACH_MODEL
     }
   } catch {
-    return { notificationSettings: defaultNotificationSettings }
+    return { notificationSettings: defaultNotificationSettings, coachingModel: DEFAULT_COACH_MODEL }
   }
 }
 

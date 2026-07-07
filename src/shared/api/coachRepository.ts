@@ -1,5 +1,7 @@
 import { getSupabaseAnonKey, getSupabaseFunctionUrl, requireSupabase } from '@/shared/api/supabase'
 import { getAppSessionToken } from '@/shared/api/appSecurity'
+import { useSettingsStore } from '@/app/stores/settingsStore'
+import { DEFAULT_COACH_MODEL, isCoachModelId } from '@/shared/lib/coaching/coachModels'
 import type { WeatherSnapshot } from '@/features/import-weatherkit/weatherKitBridge'
 import type { RunnerLevel } from '@/entities/training-memory/model'
 import type { CoachAchievementSummary } from '@/shared/lib/achievement/achievements'
@@ -19,6 +21,8 @@ export type CoachReport = {
   injuryUpdateProposal?: CoachInjuryUpdateProposal | null
   /** 코칭 생성 시점의 부상 컨텍스트 스냅샷(그때 알던 부상 상태). 과거 리포트가 그때 상태를 충실히 표시·참조하게. */
   injuryContextSnapshot?: CoachInjuryContextSnapshot | null
+  /** 이 리포트를 생성한 LLM 모델 id(coach_reports.model). 이 기능 이전 리포트는 null. */
+  model?: string | null
   persistenceWarnings?: CoachPersistenceWarning[]
 }
 
@@ -53,6 +57,13 @@ type CoachReportRow = {
   created_at: string
   updated_at?: string
   injury_context_snapshot?: CoachInjuryContextSnapshot | null
+  model?: string | null
+}
+
+/** 현재 설정에서 코칭에 쓸 모델 id(검증). 서버는 allowlist로 재검증한다. */
+function currentCoachingModel(): string {
+  const stored = useSettingsStore().coachingModel
+  return isCoachModelId(stored) ? stored : DEFAULT_COACH_MODEL
 }
 
 export async function requestCoachRun(selectedRunId: string | null, userNote: string, currentWeather: WeatherSnapshot | null = null, runnerLevel: RunnerLevel = 'beginner', achievements: CoachAchievementSummary | null = null, tempoCoaching: TempoCoachingSummary | null = null): Promise<CoachReport> {
@@ -64,6 +75,7 @@ export async function requestCoachRun(selectedRunId: string | null, userNote: st
     body: {
       selectedRunId,
       userNote,
+      model: currentCoachingModel(),
       currentWeather: summarizeWeatherForCoach(currentWeather),
       achievements,
       tempoCoaching,
@@ -135,6 +147,7 @@ export async function requestCoachRunStream(
     body: JSON.stringify({
       selectedRunId,
       userNote,
+      model: currentCoachingModel(),
       currentWeather: summarizeWeatherForCoach(currentWeather),
       achievements: options.achievements ?? null,
       tempoCoaching: options.tempoCoaching ?? null,
@@ -301,7 +314,8 @@ function fromRow(row: CoachReportRow): CoachReport {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     trainingMemoryUpdated: false,
-    injuryContextSnapshot: normalizeInjurySnapshot(row.injury_context_snapshot)
+    injuryContextSnapshot: normalizeInjurySnapshot(row.injury_context_snapshot),
+    model: row.model ?? null
   }
 }
 

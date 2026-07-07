@@ -3810,6 +3810,15 @@ button.run-session-row {
   color: var(--color-muted);
 }
 
+/* 코칭 피드백 밑 "제공 모델" 캡션 — 작고 은은하게(내부 스케줄 조정용 메타, 강조 아님). */
+.coach-model-tag {
+  display: block;
+  width: min(520px, 100%);
+  margin: -4px 0 6px;
+  font-size: 11px;
+  color: var(--color-muted-2);
+}
+
 .coach-injury-proposal-card > strong {
   color: var(--color-text);
   font-size: 15px;
