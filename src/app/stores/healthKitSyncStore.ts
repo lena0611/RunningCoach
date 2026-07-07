@@ -492,8 +492,11 @@ function getLookbackDays(latestDate: string | null) {
   return Math.min(Math.max(diffDays, 1), maxLookbackDays)
 }
 
+// 날짜 필터는 "최근 저장일 이후"만 좁히는 lookback 최적화일 뿐, 실제 중복 판정은 isAlreadySaved(externalId)가 한다.
+// strict `>`면 최근 저장일과 '같은 날' 새 러닝(오늘 2번째 러닝 등)이 dedup 전에 걸러져 누락된다(healthkit-sync-sameday-miss).
+// `>=`로 같은 날 후보를 통과시키고, 진짜 중복은 externalId dedup에 맡긴다.
 function isAfterLatestSaved(candidate: HealthKitRunCandidate, latestDate: string | null) {
-  return !latestDate || candidate.date > latestDate
+  return !latestDate || candidate.date >= latestDate
 }
 
 function isWithinRange(candidate: HealthKitRunCandidate, range: HistoricalMigrationRange) {
@@ -517,6 +520,10 @@ function isAlreadySaved(candidate: HealthKitRunCandidate) {
   if (candidate.externalId && runStore.deniedExternalIds.includes(candidate.externalId)) return true
   return runStore.runs.some((run) => {
     if (run.externalId && run.externalId === candidate.externalId) return true
+    // externalId(워크아웃 UUID)는 워크아웃별 유일 키다. 둘 다 externalId가 있고 서로 다르면 다른 워크아웃.
+    // date+거리+시간 휴리스틱은 externalId 없는(레거시/수동) 후보 dedup 전용 — 그렇지 않으면 같은 날
+    // 거리·시간이 우연히 같은 별개 워크아웃(오늘 2번째 러닝 등)을 중복으로 오판해 누락시킨다.
+    if (candidate.externalId && run.externalId) return false
     return (
       run.source === 'healthkit' &&
       run.date === candidate.date &&
