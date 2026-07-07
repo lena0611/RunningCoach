@@ -113,4 +113,23 @@ describe('mergeHealthKitRefreshRun', () => {
     expect(merged.workoutFeeling).toBe('편함')
     expect(merged.memo).toBe('사용자 확인 완료')
   })
+
+  it('리프레시가 route/샘플/랩을 못 받아오면 기존 값을 보존한다 (빈 배열로 덮어 지도·차트 소실 방지)', () => {
+    const target: RunLog = {
+      ...baseRun,
+      routePoints: [{ offsetSec: 0, latitude: 37.5, longitude: 127.0 }],
+      metricSamples: [{ offsetSec: 30, heartRate: 130, paceSec: 460, cadence: 165 }],
+      laps: [{ index: 1, distanceKm: 1, paceSec: 470, avgHeartRate: 130, cadence: 165 }]
+    }
+    // 리프레시 결과가 route/샘플/랩을 비워서 돌려줌
+    const merged = mergeHealthKitRefreshRun(target, { ...healthKitExtracted, routePoints: [], metricSamples: [], laps: [] })
+
+    expect(merged.routePoints).toHaveLength(1)
+    expect(merged.metricSamples).toHaveLength(1)
+    expect(merged.laps).toHaveLength(1)
+    // 그러나 rich 데이터가 오면 갱신은 정상 동작
+    const updated = mergeHealthKitRefreshRun(target, healthKitExtracted)
+    expect(updated.metricSamples).toHaveLength(1)
+    expect(updated.laps).toHaveLength(1)
+  })
 })

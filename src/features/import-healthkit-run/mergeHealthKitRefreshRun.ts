@@ -23,10 +23,12 @@ export function mergeHealthKitRefreshRun(target: RunLog, extracted: ExtractedRun
     courseType: extracted.courseType === 'Unknown' ? target.courseType : extracted.courseType,
     rpe: extracted.rpe ?? target.rpe,
     memo: mergeHealthKitMemo(target.memo, extracted.memo),
-    laps: extracted.laps,
-    fastSegments: extracted.fastSegments ?? [],
-    metricSamples: extracted.metricSamples ?? [],
-    routePoints: extracted.routePoints ?? [],
+    // 리프레시가 rich 데이터를 못 받아오면(route/샘플 fetch 실패 등) 기존 값을 보존한다 —
+    // 빈 배열로 덮으면 지도·차트가 사라진다(repairExistingHealthKitRuns와 동일 보존 패턴).
+    laps: extracted.laps?.length ? extracted.laps : target.laps,
+    fastSegments: extracted.fastSegments?.length ? extracted.fastSegments : (target.fastSegments ?? []),
+    metricSamples: extracted.metricSamples?.length ? extracted.metricSamples : (target.metricSamples ?? []),
+    routePoints: extracted.routePoints?.length ? extracted.routePoints : (target.routePoints ?? []),
     tags: mergeTypeTags(target.tags ?? []),
     source: 'healthkit'
   }

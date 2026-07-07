@@ -478,7 +478,12 @@ final class HealthKitRunImporter {
     }
 
     private func queryRecentRunningWorkouts(days: Int, completion: @escaping (Result<[HealthKitRunCandidate], Error>) -> Void) {
-        let startDate = Calendar.current.date(byAdding: .day, value: -max(days - 1, 0), to: Date()) ?? Date()
+        // 조회 시작점은 'N일 전 자정(startOfDay)'이어야 그날 하루 전체가 포함된다.
+        // startOfDay 없이 Date()에서 -(days-1)일만 빼면 days=1일 때 startDate가 '지금'이 되어
+        // 조회창이 [지금, 지금]으로 붕괴 → 오늘 이미 끝난 워크아웃(오늘 2번째 러닝/레이스)이 통째로 누락된다.
+        // (같은 날 오전 저장으로 latestSavedDate=오늘이 되면 웹 getLookbackDays가 days=1을 넘긴다.)
+        let lookbackAnchor = Calendar.current.date(byAdding: .day, value: -max(days - 1, 0), to: Date()) ?? Date()
+        let startDate = Calendar.current.startOfDay(for: lookbackAnchor)
         let datePredicate = HKQuery.predicateForSamples(withStart: startDate, end: Date(), options: [])
         let runningPredicate = HKQuery.predicateForWorkouts(with: .running)
         let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [datePredicate, runningPredicate])

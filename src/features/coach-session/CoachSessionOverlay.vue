@@ -14,7 +14,9 @@ import type { TrainingGoal, TrainingInjuryCheckIn, TrainingMemory } from '@/enti
 import { detectGoalIntent, type GoalIntentProposal } from '@/features/detect-goal-intent/detectGoalIntent'
 import { fetchCoachReports, requestCoachRunStream, type CoachInjuryUpdateProposal, type CoachReport } from '@/shared/api/coachRepository'
 import { summarizeAchievementsForCoach } from '@/shared/lib/achievement/achievements'
-import { coachModelLabel } from '@/shared/lib/coaching/coachModels'
+import { coachModelLabel, COACH_MODELS, isCoachModelId } from '@/shared/lib/coaching/coachModels'
+import { useSettingsStore } from '@/app/stores/settingsStore'
+import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import { summarizeTempoCoaching } from '@/shared/lib/coaching/tempoAdaptation'
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { buildCoachSessionEvidence } from '@/shared/lib/coaching/sessionQuality'
@@ -41,6 +43,7 @@ const memoryStore = useMemoryStore()
 const scheduleStore = useTrainingScheduleStore()
 const weatherStore = useWeatherStore()
 const sessionIntentStore = useSessionIntentStore()
+const settingsStore = useSettingsStore()
 
 // 코칭 대상 런은 스토어가 단일 소유한다(어느 탭에서든 open(run)으로 열림).
 const coachRun = computed(() => coachStore.activeRun)
@@ -836,6 +839,16 @@ function stopCoachThinkingTimer() {
           </div>
           <button class="stack-icon-button" type="button" aria-label="AI 스케줄링 기준 보기" @click="schedulingHelpOpen = true">?</button>
         </header>
+        <div class="coach-model-bar">
+          <span class="coach-model-bar-label">코칭 모델</span>
+          <BottomSheetSelect
+            compact
+            label="코칭 모델"
+            :model-value="settingsStore.coachingModel"
+            :options="COACH_MODELS.map((m) => ({ value: m.id, label: m.full }))"
+            @update:model-value="(v) => isCoachModelId(v) && settingsStore.setCoachingModel(v)"
+          />
+        </div>
         <main ref="coachScrollContainer" class="memory-stack-content coach-stack-content" @scroll="onCoachScroll">
           <CoachMessage role="user" :text="`${formatDateWithWeekday(coachRun.date)} ${coachRun.sessionTitle || coachRun.type}`" />
           <IntentFulfillmentCard v-if="coachIntent && coachIntentFulfillment" :intent="coachIntent" :fulfillment="coachIntentFulfillment" />
