@@ -107,6 +107,43 @@ final class GhostRaceEngineTests: XCTestCase {
         XCTAssertTrue(GhostMath.formatAnnouncement(.finish, gap: gap(.ahead, -50), gapMode: .distance).text.contains("앞서 들어왔"))
     }
 
+    // ── formatAnnouncement: lap 페이스 절 (ghost.test.ts 미러 + TT 확장) ──
+    func testLapPaceClause() {
+        // 페이스 주입 시: "3km 통과 — 페이스 6분 15초, 고스트보다 12m 앞서는 중."
+        let withPace = GhostMath.formatAnnouncement(.lap, gap: gap(.ahead, -12), distanceM: 3000, paceSecPerKm: 375)
+        XCTAssertEqual(withPace.text, "3km 통과 — 페이스 6분 15초, 고스트보다 12m 앞서는 중.")
+        // 페이스 미주입(하위호환): 기존 문구 그대로.
+        let withoutPace = GhostMath.formatAnnouncement(.lap, gap: gap(.ahead, -12), distanceM: 3000)
+        XCTAssertEqual(withoutPace.text, "3km 통과 — 고스트보다 12m 앞서는 중.")
+        // TT(무고스트): 격차 절 없이 페이스까지만.
+        let tt = GhostMath.formatAnnouncement(.lap, gap: nil, distanceM: 3000, paceSecPerKm: 375)
+        XCTAssertEqual(tt.text, "3km 통과 — 페이스 6분 15초.")
+    }
+
+    // ── 엔진: km 통과마다 직전 구간 페이스로 lap 발화 (고스트/TT 공통) ──
+    func testEngineLapAnnouncesSegmentPace() {
+        // 고스트 대결: 1km=375s, 2km 구간=390s → 각각 "6분 15초", "6분 30초".
+        let engine = GhostRaceEngine(curve: curve, config: .default)
+        let first = engine.process(LiveTick(cumulativeDistanceM: 1000, elapsedSec: 375))
+        let firstLap = first.announcements.first { $0.dedupeKey == "lap:1" }
+        XCTAssertNotNil(firstLap)
+        XCTAssertTrue(firstLap!.text.contains("페이스 6분 15초"))
+        XCTAssertTrue(firstLap!.text.contains("고스트보다"))
+
+        let second = engine.process(LiveTick(cumulativeDistanceM: 2000, elapsedSec: 765))
+        let secondLap = second.announcements.first { $0.dedupeKey == "lap:2" }
+        XCTAssertNotNil(secondLap)
+        XCTAssertTrue(secondLap!.text.contains("페이스 6분 30초"))
+
+        // TT(커브 없음): km 통과가 progress 가 아닌 lap(페이스만) 형식이어야 한다.
+        let ttEngine = GhostRaceEngine(curve: nil, config: .default)
+        let tt = ttEngine.process(LiveTick(cumulativeDistanceM: 1000, elapsedSec: 375))
+        let ttLap = tt.announcements.first { $0.dedupeKey == "lap:1" }
+        XCTAssertNotNil(ttLap)
+        XCTAssertEqual(ttLap!.text, "1km 통과 — 페이스 6분 15초.")
+        XCTAssertFalse(ttLap!.text.contains("고스트"))
+    }
+
     // ── 엔진: 시작 직후 grace 동안 역전 억제 + 완주 1회성 ──
     func testEngineReversalGraceAndFinishOnce() {
         let engine = GhostRaceEngine(curve: curve, config: .default)

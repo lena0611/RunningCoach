@@ -56,6 +56,8 @@ export type AnnouncementContext = {
   periodicStep?: number
   /** reversal 종류. */
   reversal?: 'overtake' | 'overtaken'
+  /** lap 의 직전 구간(랩) 페이스(초/km). 엔진이 계산해 주입하며, 있으면 "페이스 6분 15초" 절을 붙인다. */
+  paceSecPerKm?: number
 }
 
 export type Announcement = { text: string; priority: number; dedupeKey: string }
@@ -246,7 +248,12 @@ export function formatAnnouncement(kind: AnnouncementKind, ctx: AnnouncementCont
       return { text, priority: PRIORITY.periodic, dedupeKey: `periodic:${ctx.periodicStep ?? kmBucket}` }
     }
     case 'lap': {
-      return { text: `${kmLabel(distanceM)} 통과 — ${gapClause(ctx.gap, mode)}.`, priority: PRIORITY.lap, dedupeKey: `lap:${Math.round(distanceM / 1000)}` }
+      // "3km 통과 — 페이스 6분 15초, 고스트보다 150m 앞서는 중." 페이스=직전 구간(랩) 페이스.
+      // 격차 절은 고스트 대결일 때만 — 무고스트(TT) lap 은 네이티브(RaceCore) 전용이라 웹은 항상 gap 이 있다.
+      const clauses: string[] = []
+      if (ctx.paceSecPerKm != null) clauses.push(`페이스 ${formatGapSeconds(ctx.paceSecPerKm)}`)
+      clauses.push(gapClause(ctx.gap, mode))
+      return { text: `${kmLabel(distanceM)} 통과 — ${clauses.join(', ')}.`, priority: PRIORITY.lap, dedupeKey: `lap:${Math.round(distanceM / 1000)}` }
     }
     case 'reversal': {
       const type = ctx.reversal ?? (ctx.gap.leadState === 'ahead' ? 'overtake' : 'overtaken')

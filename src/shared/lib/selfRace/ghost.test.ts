@@ -135,6 +135,14 @@ describe('formatAnnouncement', () => {
     expect(a.text).toContain('앞서')
   })
 
+  it('prepends the last-lap pace clause to lap text when paceSecPerKm is given', () => {
+    const withPace = formatAnnouncement('lap', { gap: gap('ahead', -12), distanceM: 3000, paceSecPerKm: 375 })
+    expect(withPace.text).toBe('3km 통과 — 페이스 6분 15초, 고스트보다 12m 앞서는 중.')
+    // 페이스 미주입(구버전 호출)이면 기존 문구 그대로 — 하위호환.
+    const withoutPace = formatAnnouncement('lap', { gap: gap('ahead', -12), distanceM: 3000 })
+    expect(withoutPace.text).toBe('3km 통과 — 고스트보다 12m 앞서는 중.')
+  })
+
   it('dedupes periodic by step (not km) so time-based intervals within one km stay distinct', () => {
     // 시간 주기(예: 1분마다): 같은 km 안에 여러 멘트가 생긴다. step 으로 dedupe 해야
     // 2번째 발화부터 무음 드롭되지 않는다(#229 백그라운드 무음 회귀 방지).
