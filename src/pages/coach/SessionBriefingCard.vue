@@ -188,7 +188,7 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
 }
 
 .brief-title-info {
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   color: var(--color-primary);
   font-weight: 600;
 }
@@ -207,7 +207,7 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
 
 .brief-goal {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
 }
 
@@ -324,7 +324,7 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
   flex: 1;
   padding: 10px 12px;
   border-radius: var(--radius-button, 12px);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 600;
   cursor: pointer;
 }
@@ -393,7 +393,7 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
   border: 1px dashed var(--color-primary);
   background: var(--color-primary-soft, rgba(34, 160, 107, 0.1));
   color: var(--color-primary);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 600;
   cursor: pointer;
   box-shadow: none;

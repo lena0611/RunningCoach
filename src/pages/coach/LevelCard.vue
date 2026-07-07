@@ -139,7 +139,7 @@ const gradeLine = computed(() => {
   justify-content: space-between;
   align-items: baseline;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   color: var(--color-text);
 }
 

@@ -248,7 +248,7 @@ const cumulative = computed(() => set.value.cumulative)
   margin: 0 1px 9px;
 }
 .ach-sec-head > span:first-child {
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 700;
   color: var(--color-muted);
 }

@@ -134,7 +134,7 @@ const transitionReady = computed(() => props.summary.phaseProposal.shouldTransit
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   color: var(--color-text);
 }
 

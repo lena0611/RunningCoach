@@ -66,7 +66,7 @@ defineProps<{ intent: SessionIntent; fulfillment: IntentFulfillment }>()
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   color: var(--color-text);
 }
 

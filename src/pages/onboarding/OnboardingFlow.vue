@@ -463,7 +463,7 @@ async function persist(placed: boolean) {
   background: none;
   border: none;
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   cursor: pointer;
 }
 
@@ -481,7 +481,7 @@ async function persist(placed: boolean) {
 }
 
 .onboarding-help {
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
   margin: 0;
 }
@@ -677,7 +677,7 @@ async function persist(placed: boolean) {
 }
 
 .rx-purpose {
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   color: var(--color-text);
   margin: 0;
 }
@@ -723,7 +723,7 @@ async function persist(placed: boolean) {
 }
 
 .onboarding-error {
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   color: #d05050;
   margin: 0;
 }

@@ -159,7 +159,7 @@ onBeforeUnmount(() => {
 }
 
 .phase-eval-blockers li {
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   color: var(--color-text);
 }
 

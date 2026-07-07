@@ -146,7 +146,7 @@ onBeforeUnmount(() => document.body.classList.remove('sheet-open'))
   color: var(--color-warning-text, var(--color-muted));
   box-shadow: none;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 600;
 }
 </style>

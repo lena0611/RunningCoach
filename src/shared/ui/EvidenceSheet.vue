@@ -102,7 +102,7 @@ onBeforeUnmount(() => {
 }
 
 .evidence-item a {
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   color: var(--color-primary);
 }
 

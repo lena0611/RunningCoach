@@ -824,7 +824,7 @@ async function applyPhaseTransition() {
   padding: 2px 2px 0;
 }
 .week-nav-label {
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 600;
   color: var(--color-text);
 }
@@ -867,7 +867,7 @@ async function applyPhaseTransition() {
   flex: 1;
   padding: 10px 12px;
   border-radius: var(--radius-button, 12px);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 600;
   cursor: pointer;
   box-shadow: none;

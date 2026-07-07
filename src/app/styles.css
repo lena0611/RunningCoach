@@ -140,6 +140,9 @@
   --text-info-line: 1.56;
   --text-caption-size: 13px;
   --text-caption-line: 1.45;
+  /* 순수 장식/메타 마이크로 텍스트(카운트 배지·eyebrow 태그) 전용 하한. 읽는 텍스트엔 쓰지 말 것(그건 caption 이상). */
+  --text-micro-size: 11px;
+  --text-micro-line: 1.3;
   --text-metric-size: clamp(28px, 7.8vw, 38px);
   --z-toast: 1200;
   --z-bottom-sheet: 1000;
@@ -969,7 +972,7 @@ label {
 
 .account-details dt {
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 850;
 }
 
@@ -1091,7 +1094,7 @@ label {
 
 .settings-row span {
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   line-height: 1.45;
 }
 
@@ -1642,7 +1645,7 @@ button.hero-card {
 .stat-card > span,
 .metric span {
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 800;
 }
 
@@ -1705,7 +1708,7 @@ button.hero-card {
 .context-strip small,
 .coach-context-card small {
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 750;
   line-height: 1.45;
 }
@@ -2038,7 +2041,7 @@ button.stat-card {
   border-radius: 999px;
   background: var(--color-surface);
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 700;
   text-align: center;
 }
@@ -2519,7 +2522,7 @@ button.run-session-row {
   flex: 0 0 auto;
   padding-bottom: 3px;
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 750;
   line-height: 1;
   white-space: nowrap;
@@ -2926,8 +2929,9 @@ button.run-session-row {
 }
 
 .run-detail-submetrics dt {
-  color: var(--color-muted-2);
-  font-size: 10.5px;
+  /* 세션 지표 레이블(읽는 텍스트) — 10.5px→caption 하한, muted-2(4.42:1 미달)→muted(7.99:1)로 대비 확보. */
+  color: var(--color-muted);
+  font-size: var(--text-caption-size);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -3093,7 +3097,7 @@ button.run-session-row {
 
 .lap-row span {
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 850;
 }
 
@@ -3201,9 +3205,10 @@ button.run-session-row {
 }
 
 .compact-helper {
+  /* 읽는 도움말 텍스트 — 12px→caption 하한. */
   margin: 0;
-  font-size: 12px;
-  line-height: 1.35;
+  font-size: var(--text-caption-size);
+  line-height: 1.4;
 }
 
 .lap-metric-card {
@@ -3293,7 +3298,7 @@ button.run-session-row {
   background: transparent;
   color: var(--color-muted);
   box-shadow: none;
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 700;
 }
 
@@ -3915,7 +3920,7 @@ button.run-session-row {
 
 .scale-slider-head span {
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: var(--font-weight-bold);
 }
 
@@ -4021,7 +4026,7 @@ button.run-session-row {
 
 .body-view-status strong {
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 800;
 }
 
@@ -4167,7 +4172,7 @@ button.run-session-row {
 }
 
 .body-zone-option-grid span {
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 850;
 }
 
@@ -4226,7 +4231,7 @@ button.run-session-row {
 }
 
 .injury-area-chip-grid span {
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 850;
 }
 
@@ -4594,7 +4599,7 @@ button.run-session-row {
   padding-top: 16px;
   border-top: 1px solid var(--color-border);
   color: var(--color-primary);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 900;
 }
 
@@ -4751,8 +4756,10 @@ button.run-session-row {
 }
 
 .vo2-pace-basis {
+  /* 판단용 코칭 근거 문장 — ui-system-contract.md:22(판단용 텍스트는 caption으로 낮추지 말 것) 준수 복구(11px→info). */
   margin: 2px 0 0;
-  font-size: 11px;
+  font-size: var(--text-info-size);
+  line-height: var(--text-info-line);
   font-weight: 600;
   color: var(--color-muted);
 }
@@ -5237,7 +5244,7 @@ button.run-session-row {
 .routine-guide-head span {
   max-width: 48%;
   color: var(--color-primary);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 700;
   line-height: 1.35;
   text-align: right;
@@ -5611,7 +5618,7 @@ button.run-session-row {
   color: var(--color-text);
   padding: 0 12px;
   box-shadow: none;
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 850;
 }
 
@@ -5785,7 +5792,7 @@ button.run-session-row {
 
 .stack-save-row span {
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 750;
   line-height: 1.45;
 }
@@ -5884,7 +5891,7 @@ button.run-session-row {
   border-radius: 16px;
   background: var(--color-field);
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 800;
   line-height: 1.45;
 }
@@ -5920,7 +5927,7 @@ button.run-session-row {
   display: grid;
   gap: 8px;
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 800;
 }
 
@@ -6013,7 +6020,7 @@ button.run-session-row {
   border-radius: 14px;
   background: transparent;
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 600;
   cursor: pointer;
 }
@@ -6033,7 +6040,7 @@ button.run-session-row {
   border-radius: 14px;
   background: transparent;
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 700;
 }
 
@@ -6101,7 +6108,7 @@ button.run-session-row {
 }
 
 .injury-screening-choice span {
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 650;
   opacity: 0.85;
 }
@@ -6339,7 +6346,7 @@ button.run-session-row {
 
 .knowledge-rule-list span {
   color: var(--color-primary);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 800;
 }
 
@@ -6367,7 +6374,7 @@ button.run-session-row {
   min-height: 34px;
   margin: 0 0 8px;
   padding: 0 12px;
-  font-size: 13px;
+  font-size: var(--text-caption-size);
 }
 
 .weather-refresh-button {
@@ -6421,7 +6428,7 @@ button.run-session-row {
 
 .next-session-injury-note strong {
   color: var(--color-warning);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 800;
 }
 
@@ -6460,7 +6467,7 @@ button.run-session-row {
 .weather-target {
   margin: -4px 0 0;
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 850;
 }
 
@@ -6680,7 +6687,7 @@ button.run-session-row {
   width: 100%;
   min-width: 320px;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   line-height: 1.45;
 }
 
@@ -6710,7 +6717,7 @@ button.run-session-row {
   background: var(--color-code-bg);
   color: var(--color-text);
   padding: 14px;
-  font-size: 13px;
+  font-size: var(--text-caption-size);
 }
 
 .coach-report hr {

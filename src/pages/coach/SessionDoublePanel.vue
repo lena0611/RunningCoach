@@ -144,7 +144,7 @@ const gapText = computed(() => {
 
 .row-meta {
   margin: 4px 0 0;
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
 }
 
@@ -168,7 +168,7 @@ const gapText = computed(() => {
   border: 1px solid var(--color-border, rgba(120, 120, 120, 0.3));
   background: transparent;
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 600;
   cursor: pointer;
   box-shadow: none;

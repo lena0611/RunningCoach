@@ -67,7 +67,7 @@ const emit = defineEmits<{ 'open-method': [] }>()
 }
 .debrief-grade {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
 }
 .debrief-next {

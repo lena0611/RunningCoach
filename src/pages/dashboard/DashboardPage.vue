@@ -835,7 +835,7 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
   border: 1px dashed var(--color-border, rgba(120, 120, 120, 0.3));
   background: transparent;
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 600;
   cursor: pointer;
   box-shadow: none;
@@ -962,7 +962,7 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
   flex: 1;
   padding: 10px 12px;
   border-radius: var(--radius-button, 12px);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 600;
   cursor: pointer;
   box-shadow: none;
