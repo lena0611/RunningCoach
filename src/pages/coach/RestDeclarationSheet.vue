@@ -177,7 +177,7 @@ onBeforeUnmount(() => document.body.classList.remove('sheet-open'))
   gap: 8px;
 }
 .rest-field-label {
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 600;
   color: var(--color-muted);
 }
@@ -192,7 +192,7 @@ onBeforeUnmount(() => document.body.classList.remove('sheet-open'))
   border: 1px solid var(--color-border, rgba(120, 120, 120, 0.25));
   background: transparent;
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 600;
   cursor: pointer;
   box-shadow: none;
@@ -204,7 +204,7 @@ onBeforeUnmount(() => document.body.classList.remove('sheet-open'))
 }
 .rest-until-note {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
 }
 .rest-confirm {

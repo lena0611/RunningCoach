@@ -173,7 +173,7 @@ function submit() {
 }
 .elig-title {
   margin: 0 0 8px;
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 700;
 }
 .elig-ok .elig-title {

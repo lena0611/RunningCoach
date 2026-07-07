@@ -112,7 +112,7 @@ const ceilingText = computed(() =>
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   color: var(--color-text);
 }
 
@@ -127,7 +127,7 @@ const ceilingText = computed(() =>
   flex: 1;
   padding: 10px 12px;
   border-radius: var(--radius-button, 12px);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 600;
   cursor: pointer;
 }

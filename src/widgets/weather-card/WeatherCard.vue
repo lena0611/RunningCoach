@@ -304,11 +304,11 @@ function formatClock(date: Date | null) {
   background: var(--surface-soft, rgba(120, 120, 130, 0.08));
 }
 .weather-outfit strong {
-  font-size: 13px;
+  font-size: var(--text-caption-size);
 }
 .weather-outfit p {
   margin: 2px 0 0;
-  font-size: 13px;
+  font-size: var(--text-caption-size);
 }
 .weather-temp-toggle {
   margin-bottom: 8px;

@@ -129,7 +129,7 @@ const drag = useBottomSheetDrag(() => emit('close'))
 
 .notification-settings-list span {
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   line-height: 1.45;
 }
 

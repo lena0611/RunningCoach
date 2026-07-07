@@ -66,7 +66,7 @@ function choose(option: CoachMomentOption) {
   background: transparent;
   border: none;
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   cursor: pointer;
   padding: 0;
 }
@@ -88,7 +88,7 @@ function choose(option: CoachMomentOption) {
   border: 1px solid rgba(120, 120, 120, 0.3);
   background: transparent;
   color: var(--color-text);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   cursor: pointer;
 }
 .moment-response {
@@ -114,7 +114,7 @@ function choose(option: CoachMomentOption) {
   border: none;
   background: var(--color-primary);
   color: var(--color-on-primary, #fff);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   font-weight: 600;
   cursor: pointer;
 }
@@ -124,7 +124,7 @@ function choose(option: CoachMomentOption) {
   border: 1px solid var(--color-border, rgba(120, 120, 120, 0.3));
   background: transparent;
   color: var(--color-muted);
-  font-size: 13px;
+  font-size: var(--text-caption-size);
   cursor: pointer;
 }
 </style>
