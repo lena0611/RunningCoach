@@ -7,8 +7,7 @@ import { useLevelStore } from '@/app/stores/levelStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { notificationSettingRows, useSettingsStore, type NotificationSettingKey, type NotificationSettings, type SettingsPanelFocus } from '@/app/stores/settingsStore'
-import { COACH_MODELS, type CoachModelId } from '@/shared/lib/coaching/coachModels'
-import SegmentTabs from '@/shared/ui/SegmentTabs.vue'
+import { COACH_MODELS, isCoachModelId } from '@/shared/lib/coaching/coachModels'
 import { useGlossaryStore } from '@/app/stores/glossaryStore'
 import { getActiveGoal, getActiveInjuryItem, type PersonalBest, type TrainingMemory } from '@/entities/training-memory/model'
 import { isHealthKitBridgeAvailable } from '@/features/import-healthkit-run/healthKitBridge'
@@ -696,13 +695,11 @@ function openSettingsPanel(focus: SettingsPanelFocus | null = null) {
         <h3>코칭 모델</h3>
       </div>
       <p class="helper">AI 코칭 답변을 생성하는 모델이에요. 한 모델이 불안정하면 다른 모델로 바꿔 쓸 수 있어요.</p>
-      <SegmentTabs
-        variant="pill"
-        tone="ok"
-        aria-label="코칭 모델 선택"
-        :items="COACH_MODELS.map((m) => ({ value: m.id, label: m.label }))"
-        :active="settingsStore.coachingModel"
-        @change="settingsStore.setCoachingModel($event as CoachModelId)"
+      <BottomSheetSelect
+        label="코칭 모델"
+        :model-value="settingsStore.coachingModel"
+        :options="COACH_MODELS.map((m) => ({ value: m.id, label: m.full }))"
+        @update:model-value="(v) => isCoachModelId(v) && settingsStore.setCoachingModel(v)"
       />
     </section>
   </StackPage>

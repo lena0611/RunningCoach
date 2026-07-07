@@ -3819,6 +3819,22 @@ button.run-session-row {
   color: var(--color-muted-2);
 }
 
+/* 코치 상세 헤더 아래 모델 스위처 바 — 모델을 고른 뒤 대화를 보내는 흐름이라 상단에 둔다. */
+.coach-model-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--color-hairline);
+  background: var(--color-header-bg);
+}
+.coach-model-bar-label {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
 .coach-injury-proposal-card > strong {
   color: var(--color-text);
   font-size: 15px;
