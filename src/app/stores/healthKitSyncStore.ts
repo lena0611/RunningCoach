@@ -289,9 +289,13 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         const memoryStore = useMemoryStore()
         const extracted = toExtractedRunData(candidate, memoryStore.memory.weeklyPattern, buildInferenceHeartRateModel())
         const updated = await runStore.updateRun(mergeHealthKitRefreshRun(target, extracted))
-        this.status = `${updated.date} HealthKit 세션 갱신 완료`
+        // 임시 진단(지도 유실 추적): 네이티브가 보낸 경로점 수 vs 저장된 경로점 수를 노출.
+        // 수신 0 → 네이티브가 경로를 안 보냄(네이티브 문제). 수신>0·저장 0 → 웹 병합/영속 문제. 원인 확정 후 제거.
+        const recvPts = candidate.routePoints?.length ?? 0
+        const savedPts = updated.routePoints?.length ?? 0
+        this.status = `${updated.date} 갱신 완료 · 수신 경로 ${recvPts}점 · 저장 ${savedPts}점`
         this.error = ''
-        showSyncToast('success', this.status, 3200)
+        showSyncToast('success', this.status, 6000)
       } catch (err) {
         this.error = friendlyErrorMessage(err, 'HealthKit 세션 갱신 저장 실패')
         showSyncToast('error', this.error, 4200)
