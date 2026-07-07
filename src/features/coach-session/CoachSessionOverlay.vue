@@ -837,18 +837,23 @@ function stopCoachThinkingTimer() {
           <div>
             <h2>AI 코칭</h2>
           </div>
-          <button class="stack-icon-button" type="button" aria-label="AI 스케줄링 기준 보기" @click="schedulingHelpOpen = true">?</button>
-        </header>
-        <div class="coach-model-bar">
-          <span class="coach-model-bar-label">코칭 모델</span>
           <BottomSheetSelect
-            compact
             label="코칭 모델"
             :model-value="settingsStore.coachingModel"
             :options="COACH_MODELS.map((m) => ({ value: m.id, label: m.full }))"
             @update:model-value="(v) => isCoachModelId(v) && settingsStore.setCoachingModel(v)"
-          />
-        </div>
+          >
+            <template #trigger="{ open }">
+              <button class="stack-icon-button" type="button" aria-label="코칭 모델 선택" @click.stop="open">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3v2m0 14v2m9-9h-2M5 12H3m14.5-6.5-1.4 1.4M7.9 16.1l-1.4 1.4m11.6 0-1.4-1.4M7.9 7.9 6.5 6.5" />
+                  <circle cx="12" cy="12" r="3.2" />
+                </svg>
+              </button>
+            </template>
+          </BottomSheetSelect>
+          <button class="stack-icon-button" type="button" aria-label="AI 스케줄링 기준 보기" @click="schedulingHelpOpen = true">?</button>
+        </header>
         <main ref="coachScrollContainer" class="memory-stack-content coach-stack-content" @scroll="onCoachScroll">
           <CoachMessage role="user" :text="`${formatDateWithWeekday(coachRun.date)} ${coachRun.sessionTitle || coachRun.type}`" />
           <IntentFulfillmentCard v-if="coachIntent && coachIntentFulfillment" :intent="coachIntent" :fulfillment="coachIntentFulfillment" />

@@ -3819,21 +3819,6 @@ button.run-session-row {
   color: var(--color-muted-2);
 }
 
-/* 코치 상세 헤더 아래 모델 스위처 바 — 모델을 고른 뒤 대화를 보내는 흐름이라 상단에 둔다. */
-.coach-model-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--color-hairline);
-  background: var(--color-header-bg);
-}
-.coach-model-bar-label {
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--color-muted);
-  white-space: nowrap;
-}
 
 .coach-injury-proposal-card > strong {
   color: var(--color-text);
@@ -4620,6 +4605,11 @@ button.run-session-row {
 .bottom-sheet-select {
   display: grid;
   gap: 8px;
+}
+
+/* 커스텀 트리거(#trigger 슬롯, 예: 헤더 아이콘)일 때 래퍼가 레이아웃에 끼어들지 않게 — 트리거 버튼이 부모 flex의 직접 자식처럼 동작. */
+.bottom-sheet-select-trigger-only {
+  display: contents;
 }
 
 .bottom-sheet-select-compact {
