@@ -289,13 +289,15 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         const memoryStore = useMemoryStore()
         const extracted = toExtractedRunData(candidate, memoryStore.memory.weeklyPattern, buildInferenceHeartRateModel())
         const updated = await runStore.updateRun(mergeHealthKitRefreshRun(target, extracted))
-        // 임시 진단(지도 유실 추적): 네이티브가 보낸 경로점 수 vs 저장된 경로점 수를 노출.
-        // 수신 0 → 네이티브가 경로를 안 보냄(네이티브 문제). 수신>0·저장 0 → 웹 병합/영속 문제. 원인 확정 후 제거.
+        // 임시 진단(지도 유실 추적): 매칭된 워크아웃의 출처·경로점 수를 노출.
+        // 수신 0 + 출처가 앱(PaceLAB) → 경로 없는 앱/레이스 워크아웃을 매칭한 것. 출처가 Apple Watch인데 0 → 경로 조회/권한 문제.
+        // 원인 확정 후 제거.
         const recvPts = candidate.routePoints?.length ?? 0
         const savedPts = updated.routePoints?.length ?? 0
-        this.status = `${updated.date} 갱신 완료 · 수신 경로 ${recvPts}점 · 저장 ${savedPts}점`
+        const src = candidate.sourceName || '출처?'
+        this.status = `갱신 완료 · 경로 수신 ${recvPts}·저장 ${savedPts} · 출처 ${src}`
         this.error = ''
-        showSyncToast('success', this.status, 6000)
+        showSyncToast('success', this.status, 7000)
       } catch (err) {
         this.error = friendlyErrorMessage(err, 'HealthKit 세션 갱신 저장 실패')
         showSyncToast('error', this.error, 4200)
