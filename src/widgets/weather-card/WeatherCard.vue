@@ -7,6 +7,7 @@ import { getOutfitRecommendation, getRunningSafety, type DerivedHour } from '@/s
 import { getSunTimes } from '@/shared/lib/sunTimes'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
+import SegmentTabs, { type SegmentTabValue } from '@/shared/ui/SegmentTabs.vue'
 import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
 import UnitValue from '@/shared/ui/UnitValue.vue'
 
@@ -179,19 +180,31 @@ function formatClock(date: Date | null) {
 
     <!-- 위치 소스 전환 -->
     <div class="weather-controls">
-      <div class="weather-segment" role="group" aria-label="위치 선택">
-        <button type="button" :class="{ active: weatherStore.locationSource === 'current' }" @click="weatherStore.setLocationSource('current')">현위치</button>
-        <button type="button" :class="{ active: weatherStore.locationSource === 'last-run' }" :disabled="!weatherStore.hasLastRunLocation" @click="weatherStore.setLocationSource('last-run')">마지막 러닝</button>
-      </div>
+      <SegmentTabs
+        variant="pill"
+        tone="ok"
+        aria-label="위치 선택"
+        :items="[
+          { value: 'current', label: '현위치' },
+          { value: 'last-run', label: '마지막 러닝', disabled: !weatherStore.hasLastRunLocation }
+        ]"
+        :active="weatherStore.locationSource"
+        @change="weatherStore.setLocationSource($event as 'current' | 'last-run')"
+      />
       <span v-if="weatherStore.locationName" class="weather-location">📍 {{ weatherStore.locationName }}</span>
     </div>
 
     <!-- 시점(날짜) 전환: 이미 받은 3일 예보 안에서 -->
-    <div v-if="snapshot && availableDates.length" class="weather-days">
-      <button v-for="date in availableDates" :key="date" type="button" :class="{ active: date === selectedDate }" @click="selectedDate = date">
-        {{ formatDayChip(date) }}
-      </button>
-    </div>
+    <SegmentTabs
+      v-if="snapshot && availableDates.length"
+      class="weather-days"
+      variant="chips"
+      tone="accent"
+      aria-label="예보 날짜 선택"
+      :items="availableDates.map((date) => ({ value: date, label: formatDayChip(date) }))"
+      :active="selectedDate"
+      @change="selectedDate = $event as string"
+    />
     <p class="weather-target">{{ selectedDate }} · {{ sessionTitle || '러닝 준비' }}</p>
 
     <p v-if="targetOutOfRange" class="helper weather-range-note">
@@ -238,10 +251,18 @@ function formatClock(date: Date | null) {
 
     <!-- 시간대별 + 실제/체감 토글 -->
     <div v-if="snapshot && tempPoints.length" class="weather-chart-card">
-      <div class="weather-segment weather-temp-toggle" role="group" aria-label="온도 표시">
-        <button type="button" :class="{ active: tempMode === 'actual' }" @click="tempMode = 'actual'">실제 온도</button>
-        <button type="button" :class="{ active: tempMode === 'feel' }" @click="tempMode = 'feel'">체감 온도</button>
-      </div>
+      <SegmentTabs
+        class="weather-temp-toggle"
+        variant="group"
+        tone="accent"
+        aria-label="온도 표시"
+        :items="[
+          { value: 'actual', label: '실제 온도' },
+          { value: 'feel', label: '체감 온도' }
+        ]"
+        :active="tempMode"
+        @change="tempMode = $event as 'actual' | 'feel'"
+      />
       <div class="weather-hour-icons">
         <span v-for="hour in displayHours" :key="hour.time" :class="{ 'is-past': isPastHour(hour) }">{{ weatherSymbolToEmoji(hour.symbolName) }}</span>
       </div>
@@ -266,54 +287,12 @@ function formatClock(date: Date | null) {
   flex-wrap: wrap;
   margin: 4px 0 8px;
 }
-.weather-segment {
-  display: inline-flex;
-  border: 1px solid var(--border, rgba(120, 120, 130, 0.3));
-  border-radius: 999px;
-  overflow: hidden;
-}
-.weather-segment button {
-  border: none;
-  background: transparent;
-  padding: 4px 12px;
-  font-size: 12px;
-  color: var(--text-muted, #888);
-  cursor: pointer;
-}
-.weather-segment button.active {
-  background: var(--accent-soft, rgba(80, 130, 255, 0.16));
-  color: var(--accent, #4a7dff);
-  font-weight: 600;
-}
-.weather-segment button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
 .weather-location {
   font-size: 12px;
-  color: var(--text-muted, #888);
+  color: var(--color-muted-2);
 }
 .weather-days {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
   margin-bottom: 6px;
-}
-.weather-days button {
-  border: 1px solid var(--border, rgba(120, 120, 130, 0.3));
-  background: transparent;
-  border-radius: 10px;
-  min-width: 38px;
-  padding: 4px 0;
-  font-size: 12px;
-  color: var(--text-muted, #888);
-  cursor: pointer;
-}
-.weather-days button.active {
-  background: var(--accent-soft, rgba(80, 130, 255, 0.16));
-  color: var(--accent, #4a7dff);
-  border-color: var(--accent, #4a7dff);
-  font-weight: 600;
 }
 .weather-range-note {
   color: var(--warning, #c97a00);

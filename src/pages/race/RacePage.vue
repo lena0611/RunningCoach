@@ -619,13 +619,23 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
             @change="gapMode = $event as GapDisplayMode"
           />
         </div>
-        <label class="race-toggle" :class="{ 'is-disabled': !hasGhost }">
+        <div class="race-toggle" :class="{ 'is-disabled': !hasGhost }">
           <span class="toggle-label">
             역전 알림 (추월/추월당함)
             <small v-if="!hasGhost" class="toggle-hint">상대를 선택하면 켤 수 있어요</small>
           </span>
-          <input type="checkbox" v-model="reversalAlert" :disabled="!hasGhost" />
-        </label>
+          <button
+            class="switch-control"
+            :class="{ on: reversalAlert && hasGhost }"
+            type="button"
+            role="switch"
+            :aria-checked="reversalAlert && hasGhost"
+            :disabled="!hasGhost"
+            @click="reversalAlert = !reversalAlert"
+          >
+            <span />
+          </button>
+        </div>
       </SectionGroup>
       <template #footer>
         <button class="race-cta" type="button" @click="saveSettings">설정 저장</button>
@@ -669,7 +679,6 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
 .race-toggle { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-top: 12px; }
 .race-toggle .toggle-label { flex: 1; min-width: 0; color: var(--color-text); font-size: 0.92rem; }
 .race-toggle .toggle-hint { display: block; font-size: 0.75rem; color: var(--color-muted); margin-top: 3px; }
-.race-toggle input { flex: none; width: 22px; height: 22px; accent-color: var(--color-primary); }
 .race-toggle.is-disabled { opacity: 0.55; }
 .race-toggle.is-disabled .toggle-label { color: var(--color-muted); }
 
