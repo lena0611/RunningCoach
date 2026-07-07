@@ -1,18 +1,28 @@
 <script setup lang="ts">
-import type { CarouselDay } from '@/pages/coach/WeekTrainingCarousel.vue'
-
 /**
- * 요약 홈 주간 스트립(리디자인 ①b) — 월~일 7요일 칩(주간 SSOT = 월요일 시작, useTrainingWeek.scheduleDays).
- * 오늘 = primary 테두리 강조, 요일별 스케줄 세션 타입 dot(run-type-* 타입색), 완료한 날 ✓, 선언 휴식 💤.
- * 인터랙션은 최소(YAGNI): 탭하면 코치 탭(주간 캐러셀)으로 이동만 한다.
+ * WeekStrip — 요약 홈 날짜 스트립 (.harness/project/tab-patterns.md).
+ * 월~일 7칸 등폭, 오늘 = primary 링, 상태 마커(완료 ✓ / 선언휴식 💤 / 예정 타입 dot).
+ * 지오메트리·색은 --weekstrip-* 토큰만 참조한다.
+ * 인터랙션은 최소(YAGNI): 탭하면 select emit (요약 홈에선 코치 탭 이동).
  */
-defineProps<{ days: CarouselDay[]; today: string }>()
+export interface WeekStripDay {
+  date: string
+  /** 요일+일 라벨(예: "화 16") — 첫 토큰을 요일로 쓴다. */
+  label: string
+  /** done: 완료 ✓ · rested: 선언 휴식 💤 · 그 외 type 있으면 타입색 dot */
+  state: string
+  /** 접근성 라벨용 짧은 세션 설명 */
+  chip: string
+  type?: string | null
+}
+
+defineProps<{ days: WeekStripDay[]; today: string }>()
 const emit = defineEmits<{ select: [] }>()
 
-function weekdayOf(day: CarouselDay): string {
+function weekdayOf(day: WeekStripDay): string {
   return day.label.split(' ')[0] ?? ''
 }
-function dayNumOf(day: CarouselDay): string {
+function dayNumOf(day: WeekStripDay): string {
   return String(Number(day.date.slice(8, 10)))
 }
 /** RunTypeIcon/RunTypeBadge 와 동일 슬러그 규칙 — 전역 run-type-* 색 변수를 재사용한다. */
@@ -46,7 +56,7 @@ function typeSlug(type: string): string {
 <style scoped>
 .week-strip {
   display: flex;
-  gap: 6px;
+  gap: var(--weekstrip-gap);
   min-width: 0;
 }
 
@@ -57,23 +67,23 @@ function typeSlug(type: string): string {
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 8px 0 7px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-chip, 8px);
+  padding: var(--weekstrip-cell-pad);
+  border: 1px solid var(--tab-inactive-border);
+  border-radius: var(--weekstrip-cell-radius);
   background: var(--color-surface);
   box-shadow: none;
   cursor: pointer;
 }
 
 .week-strip-weekday {
-  font-size: 10px;
+  font-size: var(--weekstrip-day-size);
   font-weight: 600;
-  color: var(--color-muted-2);
+  color: var(--tab-inactive-text);
   line-height: 1;
 }
 
 .week-strip-date {
-  font-size: 12px;
+  font-size: var(--weekstrip-date-size);
   font-weight: 700;
   color: var(--color-muted);
   line-height: 1;
@@ -89,18 +99,17 @@ function typeSlug(type: string): string {
   color: var(--color-primary);
 }
 
-/* 전역 run-type-* 클래스가 이 요소에 --run-type-color 를 지정한다. */
+/* 전역 run-type-* 클래스가 이 요소에 --run-type-color 를 지정한다. 크기 기준 = 완료 도트 토큰 +2px */
 .week-strip-dot {
-  width: 6px;
-  height: 6px;
+  width: calc(var(--weekstrip-done-dot) + 2px);
+  height: calc(var(--weekstrip-done-dot) + 2px);
   border-radius: 50%;
   background: var(--run-type-color, var(--color-muted));
 }
 
-/* 오늘 강조 = primary(green) 테두리 (디자인 Row5 FINAL) */
 .week-strip-day.is-today {
-  border: 1.5px solid var(--color-primary);
-  background: var(--color-primary-soft);
+  border: var(--weekstrip-today-border);
+  background: var(--weekstrip-today-bg);
 }
 .week-strip-day.is-today .week-strip-weekday,
 .week-strip-day.is-today .week-strip-date {

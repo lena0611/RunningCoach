@@ -5,6 +5,7 @@ import type { RunLog } from '@/entities/run/model'
 import { getInjuryAreaLabel, type InjuryAreaSelection } from '@/entities/training-memory/injuryAreas'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 import ScaleSlider from './ScaleSlider.vue'
+import SegmentTabs from './SegmentTabs.vue'
 
 const props = defineProps<{
   item: TrainingInjuryItem | null
@@ -178,26 +179,38 @@ function deriveMaxPainLevel(areas: InjuryAreaSelection[]) {
 
         <div class="checkin-question">
           <strong>지난 러닝 중이나 뒤에 더 신경 쓰였나요?</strong>
-          <div class="segmented-choice">
-            <button type="button" :class="{ active: draft.worsenedDuringOrAfterRun === false }" @click="setBoolean('worsenedDuringOrAfterRun', false)">아니요</button>
-            <button type="button" :class="{ active: draft.worsenedDuringOrAfterRun === true }" @click="setBoolean('worsenedDuringOrAfterRun', true)">예</button>
-          </div>
+          <SegmentTabs
+            variant="segmented"
+            tone="warning"
+            aria-label="러닝 중·후 악화 여부"
+            :items="[{ value: false, label: '아니요' }, { value: true, label: '예' }]"
+            :active="draft.worsenedDuringOrAfterRun"
+            @change="setBoolean('worsenedDuringOrAfterRun', $event === true)"
+          />
         </div>
 
         <div class="checkin-question">
           <strong>걷기나 계단에서도 신호가 있나요?</strong>
-          <div class="segmented-choice">
-            <button type="button" :class="{ active: draft.dailyActivityPain === false }" @click="setBoolean('dailyActivityPain', false)">없음</button>
-            <button type="button" :class="{ active: draft.dailyActivityPain === true }" @click="setBoolean('dailyActivityPain', true)">있음</button>
-          </div>
+          <SegmentTabs
+            variant="segmented"
+            tone="warning"
+            aria-label="일상 보행·계단 신호 여부"
+            :items="[{ value: false, label: '없음' }, { value: true, label: '있음' }]"
+            :active="draft.dailyActivityPain"
+            @change="setBoolean('dailyActivityPain', $event === true)"
+          />
         </div>
 
         <div class="checkin-question">
           <strong>오늘 강훈련이나 롱런을 그대로 해도 될 만큼 조용한가요?</strong>
-          <div class="segmented-choice">
-            <button type="button" :class="{ active: draft.readyForQualitySession === true }" @click="setBoolean('readyForQualitySession', true)">조용함</button>
-            <button type="button" :class="{ active: draft.readyForQualitySession === false }" @click="setBoolean('readyForQualitySession', false)">보수적으로</button>
-          </div>
+          <SegmentTabs
+            variant="segmented"
+            tone="warning"
+            aria-label="강훈련 가능 여부"
+            :items="[{ value: true, label: '조용함' }, { value: false, label: '보수적으로' }]"
+            :active="draft.readyForQualitySession"
+            @change="setBoolean('readyForQualitySession', $event === true)"
+          />
         </div>
 
         <label class="checkin-note">

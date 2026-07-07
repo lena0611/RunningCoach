@@ -85,6 +85,7 @@
 - `.harness/project/running-injury-knowledge.md` (부상·통증 관련 코칭 작업 시 **구현 전 필수 선행**)
 - `.harness/project/ui-guidelines.md` (UI/화면/컴포넌트/스타일/레이아웃 작업 시 **구현 전 필수 선행**)
 - `.harness/project/ui-system-contract.md` (UI 토큰·공유 컴포넌트 1차 강제 계약 — UI 작업 시 먼저 읽는다)
+- `.harness/project/tab-patterns.md` (탭/전환 UI 스펙 — SegmentTabs/WeekStrip/BottomNav, 탭·필터·세그먼트·모드 토글 작업 시 **구현 전 필수 선행**)
 - `.harness/project/professional-coach-review-trigger.md` (`#전문코치리뷰` 트리거 시 필수)
 - `.harness/project/data-change-impact-map.md` (런 인입·세션·부상·휴식복귀·삭제·레이싱·목표 등 **데이터/이벤트 변경 시 구현 전 필독 게이트** — 작은 변경이 일으키는 하류 코칭 연쇄를 진입점 트리로 확인. 연쇄 코드를 바꾸면 이 맵도 함께 갱신한다)
 

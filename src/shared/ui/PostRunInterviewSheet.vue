@@ -4,6 +4,7 @@ import type { RunLog } from '@/entities/run/model'
 import type { PainGroup, PostRunInterviewResult, PostRunPainSeverity } from '@/features/post-run-interview/buildInterviewRunPatch'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 import ScaleSlider from './ScaleSlider.vue'
+import SegmentTabs from './SegmentTabs.vue'
 
 const props = defineProps<{ run: RunLog | null; open: boolean; saving?: boolean }>()
 const emit = defineEmits<{ close: []; submit: [value: PostRunInterviewResult] }>()
@@ -112,32 +113,26 @@ function submit() {
 
         <div class="checkin-question">
           <strong>운동 후 통증이 있었나요?</strong>
-          <div class="segmented-choice">
-            <button
-              v-for="s in SEVERITIES"
-              :key="s.value"
-              type="button"
-              :class="{ active: draft.painSeverity === s.value }"
-              @click="setSeverity(s.value)"
-            >
-              {{ s.label }}
-            </button>
-          </div>
+          <SegmentTabs
+            variant="segmented"
+            tone="warning"
+            aria-label="운동 후 통증 정도"
+            :items="SEVERITIES"
+            :active="draft.painSeverity"
+            @change="setSeverity($event as PostRunPainSeverity)"
+          />
         </div>
 
         <div v-if="hasPain" class="checkin-question">
           <strong>어느 쪽이었나요?</strong>
-          <div class="segmented-choice">
-            <button
-              v-for="g in PAIN_GROUPS"
-              :key="g.value"
-              type="button"
-              :class="{ active: draft.painGroup === g.value }"
-              @click="draft.painGroup = g.value"
-            >
-              {{ g.label }}
-            </button>
-          </div>
+          <SegmentTabs
+            variant="segmented"
+            tone="warning"
+            aria-label="통증 부위"
+            :items="PAIN_GROUPS"
+            :active="draft.painGroup"
+            @change="draft.painGroup = $event as PainGroup"
+          />
           <p class="helper">정확한 부위·정도는 나중에 코치가 부상 체크인으로 짧게 도와드려요.</p>
         </div>
 

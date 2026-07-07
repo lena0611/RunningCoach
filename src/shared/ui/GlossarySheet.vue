@@ -9,6 +9,7 @@ import {
   type GlossaryCategory
 } from '@/entities/glossary/model'
 import ClearableField from '@/shared/ui/ClearableField.vue'
+import SegmentTabs from '@/shared/ui/SegmentTabs.vue'
 import StackPage from '@/shared/ui/StackPage.vue'
 
 const props = defineProps<{ open: boolean; focusSlug?: string }>()
@@ -94,20 +95,14 @@ const resultCount = computed(() => filteredGroups.value.reduce((sum, group) => s
       <ClearableField v-model="query" type="search" inputmode="search" placeholder="용어 검색 (예: 페이스, LTHR, 템포)" />
     </div>
 
-    <div class="glossary-chips" role="tablist" aria-label="용어 분류">
-      <button
-        v-for="chip in categoryChips"
-        :key="chip.value"
-        class="glossary-chip"
-        :class="{ active: activeCategory === chip.value }"
-        type="button"
-        role="tab"
-        :aria-selected="activeCategory === chip.value"
-        @click="activeCategory = chip.value"
-      >
-        {{ chip.label }}
-      </button>
-    </div>
+    <SegmentTabs
+      variant="chips"
+      tone="accent"
+      aria-label="용어 분류"
+      :items="categoryChips"
+      :active="activeCategory"
+      @change="activeCategory = $event as GlossaryCategory | 'all'"
+    />
 
     <p class="glossary-count helper">
       <template v-if="query.trim() || activeCategory !== 'all'">{{ resultCount }}개 표시 / 전체 {{ totalCount }}개</template>
@@ -150,29 +145,6 @@ const resultCount = computed(() => filteredGroups.value.reduce((sum, group) => s
 
 .glossary-search {
   margin: 0;
-}
-
-.glossary-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.glossary-chip {
-  border: 1px solid var(--color-border);
-  background: var(--color-subtle);
-  color: var(--color-muted);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 0.82rem;
-  cursor: pointer;
-  box-shadow: none;
-}
-
-.glossary-chip.active {
-  background: var(--color-accent-soft);
-  border-color: var(--color-accent);
-  color: var(--color-text);
 }
 
 .glossary-count {

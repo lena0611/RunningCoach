@@ -14,6 +14,7 @@ import type { LiveGapPayload, LiveTickPayload } from '@/features/live-run/liveRu
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import ListRow from '@/shared/ui/ListRow.vue'
 import StackPage from '@/shared/ui/StackPage.vue'
+import SegmentTabs, { type SegmentTabValue } from '@/shared/ui/SegmentTabs.vue'
 import { formatTime } from '@/shared/lib/format'
 import { evaluateDoubleGap, type DoubleGapStatus } from '@/shared/lib/coaching/doubleSession'
 
@@ -550,9 +551,15 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
     <!-- 2차 스택: 레이싱 설정 -->
     <StackPage :open="settingsOpen" title="레이싱 설정" back dismiss-label="뒤로" @close="settingsOpen = false">
       <SectionGroup title="거리 설정">
-        <div v-if="distances.length" class="race-chips">
-          <button v-for="d in distances" :key="d.distanceM" type="button" :class="{ active: selectedDistanceM === d.distanceM }" @click="selectDistance(d.distanceM)">{{ d.label }}</button>
-        </div>
+        <SegmentTabs
+          v-if="distances.length"
+          variant="chips"
+          tone="ok"
+          aria-label="레이싱 거리 선택"
+          :items="distances.map((d) => ({ value: d.distanceM, label: d.label }))"
+          :active="selectedDistanceM"
+          @change="selectDistance($event as number)"
+        />
         <p v-else class="race-muted">5km 이상 기록이 쌓이면 거리가 표시됩니다. 그 전엔 '없음'으로 자유 레이싱할 수 있어요.</p>
       </SectionGroup>
 
@@ -568,23 +575,34 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
       </SectionGroup>
 
       <SectionGroup title="음성 안내 설정">
-        <div class="race-tabs" role="tablist">
-          <button type="button" role="tab" :aria-selected="periodicKind === 'distance'" :class="{ active: periodicKind === 'distance' }" @click="periodicKind = 'distance'">거리</button>
-          <button type="button" role="tab" :aria-selected="periodicKind === 'time'" :class="{ active: periodicKind === 'time' }" @click="periodicKind = 'time'">시간</button>
-          <button type="button" role="tab" :aria-selected="periodicKind === 'silent'" :class="{ active: periodicKind === 'silent' }" @click="periodicKind = 'silent'">조용히</button>
-        </div>
+        <SegmentTabs
+          variant="segmented"
+          tone="ok"
+          aria-label="음성 안내 주기 종류"
+          :items="[{ value: 'distance', label: '거리' }, { value: 'time', label: '시간' }, { value: 'silent', label: '조용히' }]"
+          :active="periodicKind"
+          @change="periodicKind = $event as PeriodicAnnounceKind"
+        />
         <div v-if="periodicKind !== 'silent'" class="race-sub">
           <span class="race-sub-label">{{ periodicKind === 'distance' ? '구간마다 안내' : '시간마다 안내' }}</span>
-          <div v-if="periodicKind === 'distance'" class="race-sub-options">
-            <button type="button" :class="{ active: stepM === 100 }" @click="stepM = 100">100m</button>
-            <button type="button" :class="{ active: stepM === 500 }" @click="stepM = 500">500m</button>
-            <button type="button" :class="{ active: stepM === 1000 }" @click="stepM = 1000">1km</button>
-          </div>
-          <div v-else class="race-sub-options">
-            <button type="button" :class="{ active: stepSec === 60 }" @click="stepSec = 60">1분</button>
-            <button type="button" :class="{ active: stepSec === 180 }" @click="stepSec = 180">3분</button>
-            <button type="button" :class="{ active: stepSec === 300 }" @click="stepSec = 300">5분</button>
-          </div>
+          <SegmentTabs
+            v-if="periodicKind === 'distance'"
+            variant="group"
+            tone="ok"
+            aria-label="거리 구간"
+            :items="[{ value: 100, label: '100m' }, { value: 500, label: '500m' }, { value: 1000, label: '1km' }]"
+            :active="stepM"
+            @change="stepM = $event as 100 | 500 | 1000"
+          />
+          <SegmentTabs
+            v-else
+            variant="group"
+            tone="ok"
+            aria-label="시간 구간"
+            :items="[{ value: 60, label: '1분' }, { value: 180, label: '3분' }, { value: 300, label: '5분' }]"
+            :active="stepSec"
+            @change="stepSec = $event as number"
+          />
         </div>
         <p v-else class="race-sub-silent">음성 안내 없이 측정만 합니다.</p>
         <div class="race-sub" :class="{ 'is-disabled': !hasGhost }">
@@ -592,10 +610,14 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
             격차 표시 단위
             <small v-if="!hasGhost" class="toggle-hint">상대를 선택하면 설정할 수 있어요</small>
           </span>
-          <div class="race-sub-options">
-            <button type="button" :class="{ active: gapMode === 'distance' }" :disabled="!hasGhost" @click="gapMode = 'distance'">거리</button>
-            <button type="button" :class="{ active: gapMode === 'time' }" :disabled="!hasGhost" @click="gapMode = 'time'">시간</button>
-          </div>
+          <SegmentTabs
+            variant="group"
+            tone="accent"
+            aria-label="격차 표시 단위"
+            :items="[{ value: 'distance', label: '거리', disabled: !hasGhost }, { value: 'time', label: '시간', disabled: !hasGhost }]"
+            :active="gapMode"
+            @change="gapMode = $event as GapDisplayMode"
+          />
         </div>
         <label class="race-toggle" :class="{ 'is-disabled': !hasGhost }">
           <span class="toggle-label">
@@ -633,10 +655,6 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
 .race-setting-list .row-value { color: var(--color-muted); font-size: 0.92rem; max-width: 60vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .race-setting-list .row-chevron { width: 18px; height: 18px; color: var(--color-muted); flex: none; }
 
-.race-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.race-chips button { padding: 9px 18px; border: 1px solid var(--color-border); border-radius: 999px; background: transparent; color: var(--color-text); font-size: 0.92rem; cursor: pointer; box-shadow: none; }
-.race-chips button.active { background: var(--color-primary); color: var(--color-on-primary); border-color: var(--color-primary); font-weight: 700; }
-
 .race-options { display: flex; flex-direction: column; gap: 10px; }
 .race-option { display: flex; flex-direction: column; gap: 3px; padding: 13px 14px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-field); cursor: pointer; }
 .race-option.active { border-color: var(--color-primary); background: var(--color-primary-soft); }
@@ -644,15 +662,8 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
 .option-main { font-weight: 600; color: var(--color-text); }
 .option-sub { font-size: 0.8rem; color: var(--color-muted); }
 
-.race-tabs { display: flex; gap: 8px; }
-.race-tabs button { flex: 1; padding: 11px 0; border: 1px solid var(--color-border); border-radius: 10px; background: transparent; color: var(--color-muted); font-size: 0.92rem; cursor: pointer; box-shadow: none; }
-.race-tabs button.active { background: var(--color-primary); color: var(--color-on-primary); border-color: var(--color-primary); font-weight: 700; }
-
 .race-sub { margin: 12px 0 2px; padding: 12px 12px 12px 14px; border-left: 2px solid var(--color-primary); background: var(--color-subtle); border-radius: 0 12px 12px 0; }
 .race-sub-label { display: block; font-size: 0.78rem; color: var(--color-muted); margin-bottom: 9px; }
-.race-sub-options { display: flex; gap: 8px; }
-.race-sub-options button { flex: 1; padding: 9px 0; border: 1px solid var(--color-border); border-radius: 9px; background: var(--color-surface-2); color: var(--color-text); font-size: 0.88rem; cursor: pointer; box-shadow: none; }
-.race-sub-options button.active { background: var(--color-primary); color: var(--color-on-primary); border-color: var(--color-primary); font-weight: 700; }
 .race-sub-silent { margin: 12px 0 2px; font-size: 0.84rem; color: var(--color-muted); }
 
 .race-toggle { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-top: 12px; }
