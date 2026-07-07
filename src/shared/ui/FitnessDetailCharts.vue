@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue'
 import type { RunLog, RunRoutePoint } from '@/entities/run/model'
 import { formatDuration, formatInteger, formatPace } from '@/shared/lib/format'
 import { formatLocationAddress } from '@/shared/lib/location'
@@ -50,6 +50,37 @@ const routeLocationName = ref('')
 const selectedRoutePosition = computed(() => selectedRoutePoint.value && routeMap.value ? pointToMapPosition(selectedRoutePoint.value, routeMap.value.zoom) : null)
 const startPointPosition = computed(() => scopedRoutePoints.value[0] && routeMap.value ? pointToMapPosition(scopedRoutePoints.value[0], routeMap.value.zoom) : null)
 const endPointPosition = computed(() => scopedRoutePoints.value.at(-1) && routeMap.value ? pointToMapPosition(scopedRoutePoints.value.at(-1)!, routeMap.value.zoom) : null)
+
+// 경로 노드(원)는 viewBox 단위라 자동 줌마다 화면 크기가 달라진다. 렌더 폭을 재어
+// viewBox 단위/화면 px 비율을 구해, 노드 반지름을 항상 같은 화면 px로 환산한다.
+// (선 굵기는 CSS `vector-effect: non-scaling-stroke`로 화면 px 고정 — JS 불필요.)
+const routeSvg = ref<SVGSVGElement | null>(null)
+const routeSvgWidthPx = ref(0)
+let routeResizeObserver: ResizeObserver | null = null
+watch(routeSvg, (el) => {
+  routeResizeObserver?.disconnect()
+  if (!el || typeof ResizeObserver === 'undefined') return
+  routeResizeObserver = new ResizeObserver((entries) => {
+    routeSvgWidthPx.value = entries[0]?.contentRect.width ?? el.clientWidth
+  })
+  routeResizeObserver.observe(el)
+  routeSvgWidthPx.value = el.clientWidth
+})
+onBeforeUnmount(() => routeResizeObserver?.disconnect())
+const routeUnitPerPx = computed(() => {
+  const width = Number(routeMap.value?.viewBox.split(' ')[2])
+  if (!width || !routeSvgWidthPx.value) return 0
+  return width / routeSvgWidthPx.value
+})
+// 목표 화면 px → viewBox 단위 환산. 미측정(초기 프레임) 시 기존 고정값으로 폴백.
+function routeUnit(px: number, fallback: number) {
+  return routeUnitPerPx.value ? px * routeUnitPerPx.value : fallback
+}
+const nodeRadius = computed(() => ({
+  point: routeUnit(7, 9),
+  ring: routeUnit(13, 16),
+  selected: routeUnit(6.5, 8)
+}))
 const selectedDistanceKm = computed(() => {
   const samples = scopedSamples.value
   if (!samples.length || !props.run.distanceKm) return props.run.distanceKm
@@ -238,7 +269,7 @@ function writeCachedLocationName(key: string, value: string) {
 
     <div v-if="routeMap" class="fitness-route-sticky-group">
       <div class="fitness-route-card">
-        <svg class="fitness-route-map" :viewBox="routeMap.viewBox" role="img" aria-label="러닝 경로">
+        <svg ref="routeSvg" class="fitness-route-map" :viewBox="routeMap.viewBox" role="img" aria-label="러닝 경로">
           <image
             v-for="tile in routeMap.tiles"
             :key="`${tile.x}-${tile.y}`"
@@ -253,10 +284,10 @@ function writeCachedLocationName(key: string, value: string) {
           <rect class="fitness-route-dim" x="-100000" y="-100000" width="200000" height="200000" />
           <polyline class="fitness-route-line-casing" :points="routeMap.path" />
           <polyline class="fitness-route-line" :points="routeMap.path" />
-          <circle v-if="startPointPosition" class="fitness-route-start" :cx="startPointPosition.x" :cy="startPointPosition.y" r="9" />
-          <circle v-if="endPointPosition" class="fitness-route-end" :cx="endPointPosition.x" :cy="endPointPosition.y" r="9" />
-          <circle v-if="selectedRoutePosition" class="fitness-route-selected-ring" :cx="selectedRoutePosition.x" :cy="selectedRoutePosition.y" r="16" />
-          <circle v-if="selectedRoutePosition" class="fitness-route-selected" :cx="selectedRoutePosition.x" :cy="selectedRoutePosition.y" r="8" />
+          <circle v-if="startPointPosition" class="fitness-route-start" :cx="startPointPosition.x" :cy="startPointPosition.y" :r="nodeRadius.point" />
+          <circle v-if="endPointPosition" class="fitness-route-end" :cx="endPointPosition.x" :cy="endPointPosition.y" :r="nodeRadius.point" />
+          <circle v-if="selectedRoutePosition" class="fitness-route-selected-ring" :cx="selectedRoutePosition.x" :cy="selectedRoutePosition.y" :r="nodeRadius.ring" />
+          <circle v-if="selectedRoutePosition" class="fitness-route-selected" :cx="selectedRoutePosition.x" :cy="selectedRoutePosition.y" :r="nodeRadius.selected" />
         </svg>
         <a
           class="fitness-route-attribution"

@@ -3368,6 +3368,17 @@ button.run-session-row {
   stroke-linejoin: round;
 }
 
+/* 경로 선·노드 테두리를 화면 px로 고정 — viewBox(자동 줌)가 달라져도 굵기 일정.
+   원 반지름(fill)은 non-scaling-stroke로 안 되므로 컴포넌트에서 px 환산(nodeRadius). */
+.fitness-route-line,
+.fitness-route-line-casing,
+.fitness-route-start,
+.fitness-route-end,
+.fitness-route-selected,
+.fitness-route-selected-ring {
+  vector-effect: non-scaling-stroke;
+}
+
 .fitness-route-line-casing {
   stroke: rgba(2, 6, 12, 0.82);
   stroke-width: 8.6;
