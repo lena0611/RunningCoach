@@ -1490,6 +1490,19 @@ function applyPastSectionPolicy(ai: CoachAiResult, context: unknown): CoachAiRes
   return { ...ai, report: stripPastSessionSections(ai.report) }
 }
 
+// 업스트림 LLM 실패(프로바이더 저하·rate limit 등)를 사용자에게 친절한 한국어로 전달한다.
+// 원 상태코드/본문은 서버 로그로만 남기고, 화면엔 raw "LLM API failed: 400"을 노출하지 않는다.
+function llmUpstreamErrorMessage(status: number): string {
+  if (status === 429) return 'AI 코칭 요청이 잠시 몰렸어요. 30초쯤 뒤에 다시 시도해 주세요.'
+  return 'AI 코칭 서버가 일시적으로 불안정해요. 잠시 후 다시 시도해 주세요.'
+}
+
+async function throwLlmUpstreamError(response: Response, where: string): Promise<never> {
+  const detail = await response.text().catch(() => '')
+  console.error('coach LLM upstream failed', { where, status: response.status, detail: detail.slice(0, 300) })
+  throw new Error(llmUpstreamErrorMessage(response.status))
+}
+
 function buildCoachMessages(context: unknown) {
   return [
     { role: 'system', content: buildCoachInstructions(context) },
@@ -1511,7 +1524,7 @@ async function callCoachLlm(apiKey: string, baseUrl: string, model: string, cont
     })
   })
 
-  if (!response.ok) throw new Error(`LLM API failed: ${response.status}`)
+  if (!response.ok) await throwLlmUpstreamError(response, 'callCoachLlm')
   const payload = await response.json()
   const text = extractChatCompletionText(payload)
   return applyPastSectionPolicy(parseCoachAiText(text), context)
@@ -2130,9 +2143,8 @@ async function callCoachLlmStream(
     })
   })
 
-  if (!response.ok || !response.body) {
-    throw new Error(`LLM API failed: ${response.status}`)
-  }
+  if (!response.ok) await throwLlmUpstreamError(response, 'callCoachLlmStream')
+  if (!response.body) throw new Error(llmUpstreamErrorMessage(0))
 
   const decoder = new TextDecoder()
   const reader = response.body.getReader()
