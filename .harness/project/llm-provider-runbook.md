@@ -3,14 +3,19 @@
 AI 코칭(coach-run Edge Function)의 LLM 프로바이더 구성·키/모델 정보 위치·복귀 절차의 단일 출처.
 LLM 콜 지점은 `supabase/functions/coach-run/index.ts` **한 곳**이며, OpenAI 호환 Chat Completions 형식을 사용한다.
 
-## 현재 구성 (2026-07-06, PR #581)
+## 현재 구성 (2026-07-07 업데이트, PR #598)
 
 | 항목 | 값 |
 |---|---|
 | 프로바이더 | **NVIDIA build.nvidia.com 무료 API** |
-| 모델 | `z-ai/glm-5.2` (코드 기본값) |
+| 모델 | 사용자가 설정에서 전환(**DeepSeek V4 Pro** ↔ **GLM-5.2**). 기본 `deepseek-ai/deepseek-v4-pro` (GLM이 NVIDIA에서 DEGRADED라 기본 전환) |
 | Base URL | `https://integrate.api.nvidia.com/v1` (코드 기본값) |
-| 사용 env | `LLM_API_KEY`(필수) / `LLM_BASE_URL`(선택) / `LLM_MODEL`(선택) |
+| 사용 env | `LLM_API_KEY`(필수) / `LLM_BASE_URL`(선택) / `LLM_MODEL`(선택, 서버 기본 모델) |
+| 모델 스위처 | 설정(계정 드로어 > 설정) "코칭 모델". 웹 `settingsStore.coachingModel` → coach-run `body.model`. 서버 allowlist 검증(`ALLOWED_LLM_MODELS`), 그 외 env/기본값 폴백 |
+| 모델 레지스트리 | 웹 `src/shared/lib/coaching/coachModels.ts` ↔ coach-run `ALLOWED_LLM_MODELS` (미러 유지) |
+| 리포트별 모델 | `coach_reports.model` 컬럼에 생성 모델 저장, 피드백 밑 "✨ &lt;모델&gt; 제공" 캡션 |
+
+새 모델 추가/교체 시: 웹 `coachModels.ts`(COACH_MODELS)와 coach-run `ALLOWED_LLM_MODELS`를 **함께** 갱신하고, 실호출로 json_schema strict·한국어·스트리밍·report-first 키순서를 검증한다(§7 체크리스트).
 
 ⚠️ **개발 기간 한정.** NVIDIA API Trial ToS는 프로덕션(실사용자 서비스) 사용을 금지한다(평가·개발·리서치만 허용).
 **출시 전 반드시 유료 프로바이더로 복귀**해야 한다. 무료 티어 제약: 계정당 약 40 RPM, temperature/top_p 상한 1, 1회 출력 상한 32,768 토큰.
