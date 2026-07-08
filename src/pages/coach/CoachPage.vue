@@ -920,6 +920,7 @@ async function applyPhaseTransition() {
 }
 .week-summary-focus {
   color: var(--color-text);
+  font-size: var(--text-caption-size);
 }
 .week-summary-meta {
   margin-left: auto;

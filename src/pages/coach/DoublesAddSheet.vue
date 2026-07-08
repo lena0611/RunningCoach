@@ -194,7 +194,7 @@ function submit() {
   display: flex;
   gap: 8px;
   align-items: baseline;
-  font-size: 12px;
+  font-size: var(--text-caption-size);
   color: var(--color-text);
 }
 .crit-fail {
@@ -214,7 +214,7 @@ function submit() {
   margin: 0;
   display: flex;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--text-caption-size);
   line-height: 1.5;
   color: var(--color-muted);
   background: var(--color-field, rgba(120, 120, 120, 0.06));

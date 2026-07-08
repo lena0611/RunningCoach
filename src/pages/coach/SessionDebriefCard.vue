@@ -72,7 +72,7 @@ const emit = defineEmits<{ 'open-method': [] }>()
 }
 .debrief-next {
   margin: var(--space-1, 4px) 0 0;
-  font-size: 12px;
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
 }
 .debrief-method-link {

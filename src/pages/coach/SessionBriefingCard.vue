@@ -293,7 +293,7 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
 
 .brief-pace-basis {
   margin: 6px 0 0;
-  font-size: var(--text-micro-size);
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
 }
 
@@ -360,7 +360,7 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
 }
 
 .brief-orig-text {
-  font-size: 12px;
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
   min-width: 0;
   overflow-wrap: anywhere;
