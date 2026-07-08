@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { useAuthStore } from '@/app/stores/authStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { useSessionDetailStore } from '@/app/stores/sessionDetailStore'
 import { useCompetitionStore } from '@/app/stores/competitionStore'
 import { SELF_RACE_TAG } from '@/entities/competition/model'
 import { useSettingsStore } from '@/app/stores/settingsStore'
@@ -289,15 +290,13 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         const memoryStore = useMemoryStore()
         const extracted = toExtractedRunData(candidate, memoryStore.memory.weeklyPattern, buildInferenceHeartRateModel())
         const updated = await runStore.updateRun(mergeHealthKitRefreshRun(target, extracted))
-        // 임시 진단(지도 유실 추적): 매칭된 워크아웃의 출처·경로점 수를 노출.
-        // 수신 0 + 출처가 앱(PaceLAB) → 경로 없는 앱/레이스 워크아웃을 매칭한 것. 출처가 Apple Watch인데 0 → 경로 조회/권한 문제.
-        // 원인 확정 후 제거.
-        const recvPts = candidate.routePoints?.length ?? 0
-        const savedPts = updated.routePoints?.length ?? 0
-        const src = candidate.sourceName || '출처?'
-        this.status = `갱신 완료 · 경로 수신 ${recvPts}·저장 ${savedPts} · 출처 ${src}`
+        // 상세 오버레이가 이 런을 보고 있으면 갱신본으로 새로고침한다. activeRun은 스냅샷이라,
+        // runStore만 갱신하면 route/지도 반영이 재진입 전까지 안 보인다(사용자 리포트).
+        const detail = useSessionDetailStore()
+        if (detail.activeRun?.id === updated.id) detail.open(updated, { nested: detail.nested })
+        this.status = `${updated.date} HealthKit 세션 갱신 완료`
         this.error = ''
-        showSyncToast('success', this.status, 7000)
+        showSyncToast('success', this.status, 3200)
       } catch (err) {
         this.error = friendlyErrorMessage(err, 'HealthKit 세션 갱신 저장 실패')
         showSyncToast('error', this.error, 4200)
