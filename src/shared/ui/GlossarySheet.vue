@@ -199,7 +199,7 @@ const resultCount = computed(() => filteredGroups.value.reduce((sum, group) => s
 
 .glossary-aka {
   font-weight: 500;
-  font-size: 0.74rem;
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
 }
 
@@ -215,7 +215,7 @@ const resultCount = computed(() => filteredGroups.value.reduce((sum, group) => s
 }
 
 .glossary-detail {
-  font-size: 0.86rem;
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
   line-height: 1.5;
   white-space: pre-line; /* detail의 줄바꿈(왜/본질·유래/실행)을 그대로 렌더 */

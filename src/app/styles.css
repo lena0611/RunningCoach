@@ -1030,7 +1030,7 @@ label {
 }
 
 .drawer-link-text span {
-  font-size: 0.78rem;
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
 }
 

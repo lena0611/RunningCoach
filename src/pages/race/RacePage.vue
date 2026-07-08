@@ -646,9 +646,9 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
 
 <style scoped>
 .race-text { color: var(--color-text); margin: 0 0 6px; }
-.race-muted { font-size: 0.84rem; color: var(--color-muted); margin: 6px 0 0; line-height: 1.5; }
-.race-warn { font-size: 0.84rem; color: var(--color-warning-text); margin: 10px 0 0; }
-.race-diag { font-size: 0.72rem; color: var(--color-muted); margin: 8px 0 0; font-family: ui-monospace, monospace; }
+.race-muted { font-size: var(--text-caption-size); color: var(--color-muted); margin: 6px 0 0; line-height: 1.5; }
+.race-warn { font-size: var(--text-caption-size); color: var(--color-warning-text); margin: 10px 0 0; }
+.race-diag { font-size: var(--text-micro-size); color: var(--color-muted); margin: 8px 0 0; font-family: ui-monospace, monospace; }
 
 /* 상위 모드 탭 — 페이지 레벨 밑줄형 탭 스킨 */
 .race-modes { display: flex; gap: 2px; border-bottom: 1px solid var(--color-border); margin-bottom: 16px; }
@@ -670,15 +670,15 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
 .race-option.active { border-color: var(--color-primary); background: var(--color-primary-soft); }
 .race-option input { display: none; }
 .option-main { font-weight: 600; color: var(--color-text); }
-.option-sub { font-size: 0.8rem; color: var(--color-muted); }
+.option-sub { font-size: var(--text-caption-size); color: var(--color-muted); }
 
 .race-sub { margin: 12px 0 2px; padding: 12px 12px 12px 14px; border-left: 2px solid var(--color-primary); background: var(--color-subtle); border-radius: 0 12px 12px 0; }
-.race-sub-label { display: block; font-size: 0.78rem; color: var(--color-muted); margin-bottom: 9px; }
-.race-sub-silent { margin: 12px 0 2px; font-size: 0.84rem; color: var(--color-muted); }
+.race-sub-label { display: block; font-size: var(--text-caption-size); color: var(--color-muted); margin-bottom: 9px; }
+.race-sub-silent { margin: 12px 0 2px; font-size: var(--text-caption-size); color: var(--color-muted); }
 
 .race-toggle { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-top: 12px; }
 .race-toggle .toggle-label { flex: 1; min-width: 0; color: var(--color-text); font-size: 0.92rem; }
-.race-toggle .toggle-hint { display: block; font-size: 0.75rem; color: var(--color-muted); margin-top: 3px; }
+.race-toggle .toggle-hint { display: block; font-size: var(--text-caption-size); color: var(--color-muted); margin-top: 3px; }
 .race-toggle.is-disabled { opacity: 0.55; }
 .race-toggle.is-disabled .toggle-label { color: var(--color-muted); }
 
