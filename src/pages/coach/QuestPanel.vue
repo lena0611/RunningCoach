@@ -99,7 +99,7 @@ defineProps<{
 }
 
 .quest-body strong {
-  font-size: 15px;
+  font-size: var(--text-info-size);
   color: var(--color-text);
 }
 

@@ -96,7 +96,7 @@ function headline(kind: LevelUpEvent['kind']): string {
   border-radius: 14px;
   background: var(--color-primary);
   color: #08130d;
-  font-size: 15px;
+  font-size: var(--text-info-size);
   font-weight: 600;
   cursor: pointer;
 }

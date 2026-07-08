@@ -945,7 +945,7 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
 }
 
 .next-line {
-  font-size: 15px;
+  font-size: var(--text-info-size);
   font-weight: 600;
   color: var(--color-text);
   margin: 0;
