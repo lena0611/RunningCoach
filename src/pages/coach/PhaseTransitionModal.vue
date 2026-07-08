@@ -110,7 +110,7 @@ onBeforeUnmount(() => {
 }
 
 .phase-eval-reason {
-  font-size: 14px;
+  font-size: var(--text-info-size);
   color: var(--color-text);
   margin: 0;
 }
@@ -132,13 +132,13 @@ onBeforeUnmount(() => {
 }
 
 .phase-eval-criterion-label {
-  font-size: 14px;
+  font-size: var(--text-info-size);
   color: var(--color-text);
 }
 
 .phase-eval-criterion-evidence {
   grid-column: 2;
-  font-size: 12px;
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
 }
 

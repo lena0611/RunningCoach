@@ -683,7 +683,7 @@ async function persist(placed: boolean) {
 }
 
 .rx-workout {
-  font-size: 12px;
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
   margin: 0;
 }
@@ -711,7 +711,7 @@ async function persist(placed: boolean) {
 }
 
 .reveal-tentative {
-  font-size: 12px;
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
   margin: 0;
 }

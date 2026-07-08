@@ -104,7 +104,7 @@ defineProps<{
 }
 
 .quest-body small {
-  font-size: 12px;
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
   overflow-wrap: anywhere;
 }

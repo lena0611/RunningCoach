@@ -74,7 +74,7 @@ const ceilingText = computed(() =>
 }
 
 .prerun-badge {
-  font-size: var(--text-micro-size);
+  font-size: var(--text-caption-size);
   padding: 2px 8px;
   border-radius: var(--radius-pill, 999px);
   color: var(--color-muted);

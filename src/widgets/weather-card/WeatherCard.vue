@@ -291,6 +291,9 @@ function formatClock(date: Date | null) {
   font-size: 12px;
   color: var(--color-muted-2);
 }
+.weather-current small {
+  font-size: var(--text-caption-size);
+}
 .weather-days {
   margin-bottom: 6px;
 }

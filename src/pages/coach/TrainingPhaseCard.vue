@@ -152,7 +152,7 @@ const transitionReady = computed(() => props.summary.phaseProposal.shouldTransit
 }
 
 .phase-cta {
-  font-size: 12px;
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
   margin: 0;
 }

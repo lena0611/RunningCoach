@@ -3782,7 +3782,7 @@ button.run-session-row {
 .coach-command-item small {
   overflow: hidden;
   color: var(--color-muted);
-  font-size: 12px;
+  font-size: var(--text-caption-size);
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3817,7 +3817,7 @@ button.run-session-row {
   display: block;
   width: min(520px, 100%);
   margin: -2px 0 10px;
-  font-size: 12px;
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
 }
 
@@ -4039,7 +4039,7 @@ button.run-session-row {
 .body-view-status small {
   overflow: hidden;
   color: var(--color-muted);
-  font-size: var(--text-micro-size);
+  font-size: var(--text-caption-size);
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4150,7 +4150,7 @@ button.run-session-row {
 
 .body-zone-detail small {
   color: var(--color-muted);
-  font-size: 12px;
+  font-size: var(--text-caption-size);
   font-weight: 700;
 }
 

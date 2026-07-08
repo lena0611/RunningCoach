@@ -145,7 +145,7 @@ const gradeLine = computed(() => {
 
 .level-row-head small {
   color: var(--color-muted);
-  font-size: 12px;
+  font-size: var(--text-caption-size);
   text-align: right;
 }
 
@@ -174,13 +174,13 @@ const gradeLine = computed(() => {
 }
 
 .level-hint {
-  font-size: 12px;
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
   margin: 0;
 }
 
 .level-warn {
-  font-size: 12px;
+  font-size: var(--text-caption-size);
   color: #c2710c;
 }
 

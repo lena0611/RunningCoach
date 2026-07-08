@@ -150,7 +150,7 @@ const gapText = computed(() => {
 
 .row-note {
   margin: 5px 0 0;
-  font-size: 12px;
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
   overflow-wrap: anywhere;
 }
@@ -189,7 +189,7 @@ const gapText = computed(() => {
   background: var(--color-field, rgba(120, 120, 120, 0.06));
   border-top: 1px solid var(--color-border, rgba(120, 120, 120, 0.18));
   border-bottom: 1px solid var(--color-border, rgba(120, 120, 120, 0.18));
-  font-size: 12px;
+  font-size: var(--text-caption-size);
   color: var(--color-muted);
 }
 /* 동적 판정(#462): 오전 종료시각 기준 회복 간격 상태. */
