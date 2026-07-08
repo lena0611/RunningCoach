@@ -244,7 +244,9 @@ final class HealthKitRunImporter {
     /// 시트가 다시 떠서 "앱 열 때마다 건강 팝업" 이 된다(2026-07-06 실기기 확인).
     /// 최초 1회 성공 후에는 시스템 요청을 생략한다 — 읽기 권한은 실제 쿼리에서 그대로 반영되므로
     /// 기능 손실이 없다. 새 read 타입을 추가하면 시트를 다시 띄우도록 키의 v 를 올린다.
-    private static let readAuthRequestedKey = "pacelab.healthReadAuthRequested.v1"
+    /// v2: workoutRoute(경로) read 타입 추가 반영 — v1에서 경로 권한을 요청하지 않아 지도가 비어 있던 문제 수정.
+    /// (v1 사용자는 이 키가 false→요청 시트 재노출, iOS는 미결정 타입[경로]만 물어본다.)
+    private static let readAuthRequestedKey = "pacelab.healthReadAuthRequested.v2"
 
     private func requestAuthorization(completion: @escaping (Result<Void, Error>) -> Void) {
         if UserDefaults.standard.bool(forKey: Self.readAuthRequestedKey) {
