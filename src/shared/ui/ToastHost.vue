@@ -39,20 +39,24 @@ function onPointerEnd() {
 </script>
 
 <template>
-  <Transition :name="toastStore.current?.placement === 'top' ? 'toast-drop' : 'toast-rise'">
-    <div
-      v-if="toastStore.current"
-      :key="toastStore.current.id"
-      class="app-toast"
-      :class="[`app-toast-${toastStore.current.tone}`, `app-toast-${toastStore.current.placement}`, { 'app-toast-dragging': dragging }]"
-      :style="toastStyle"
-      role="status"
-      @pointerdown="onPointerDown"
-      @pointermove="onPointerMove"
-      @pointerup="onPointerEnd"
-      @pointercancel="onPointerEnd"
-    >
-      {{ toastStore.current.message }}
-    </div>
-  </Transition>
+  <!-- body로 teleport: 스택/코치 오버레이도 body로 teleport되므로, 같은 body 레벨에서 z-toast(1200)로
+       오버레이(z 860~900) 위에 뜨게 한다. App.vue 내부에 두면 상위 스택 컨텍스트에 갇혀 상세 페이지 밑에 깔린다. -->
+  <Teleport to="body">
+    <Transition :name="toastStore.current?.placement === 'top' ? 'toast-drop' : 'toast-rise'">
+      <div
+        v-if="toastStore.current"
+        :key="toastStore.current.id"
+        class="app-toast"
+        :class="[`app-toast-${toastStore.current.tone}`, `app-toast-${toastStore.current.placement}`, { 'app-toast-dragging': dragging }]"
+        :style="toastStyle"
+        role="status"
+        @pointerdown="onPointerDown"
+        @pointermove="onPointerMove"
+        @pointerup="onPointerEnd"
+        @pointercancel="onPointerEnd"
+      >
+        {{ toastStore.current.message }}
+      </div>
+    </Transition>
+  </Teleport>
 </template>
