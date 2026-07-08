@@ -173,7 +173,7 @@ onBeforeUnmount(() => {
   flex: 1;
   padding: 14px;
   border-radius: 14px;
-  font-size: 15px;
+  font-size: var(--text-info-size);
   font-weight: 600;
   cursor: pointer;
   border: none;

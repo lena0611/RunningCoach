@@ -595,7 +595,7 @@ async function persist(placed: boolean) {
   border: 1px solid rgba(120, 120, 120, 0.3);
   background: var(--color-surface-card);
   color: var(--color-text);
-  font-size: 15px;
+  font-size: var(--text-info-size);
   font-weight: 600;
   cursor: pointer;
 }
@@ -738,7 +738,7 @@ async function persist(placed: boolean) {
   flex: 1;
   padding: 14px;
   border-radius: 14px;
-  font-size: 15px;
+  font-size: var(--text-info-size);
   font-weight: 600;
   cursor: pointer;
   border: none;

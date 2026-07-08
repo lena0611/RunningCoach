@@ -22,7 +22,8 @@ PaceLAB is a personal running coach app, not an admin dashboard.
 - New colors should be added as semantic tokens or TDS-like scale tokens first. Do not scatter page-specific hex values across components.
 - 달성 순간(자기기록·목표 완료·퀘스트 클리어·연속 스트릭·레벨업)에만 `--color-celebrate`(라임)를 쓴다. 그 외 모든 일상 CTA·강조는 `--color-primary`(에메랄드). 라임을 일상 UI에 쓰지 않는다.
 - Typography must use a small set of shared scale tokens: display, title, body, caption, and metric. Avoid one-off font-size values in page components unless the component is genuinely unique.
-- 본문·제목은 Pretendard Variable(`--font-sans`), 숫자·시간·페이스·거리는 JetBrains Mono tabular(`--font-mono`)를 쓴다. `UnitValue`는 자동 적용되고, 그 외 도메인 숫자에는 `.num-mono` 유틸리티를 쓴다.
+- 본문·제목·**지표 숫자 전부 시스템(sans) 폰트**(`--font-sans`, Pretendard Variable)를 쓴다. 지표 숫자(거리·시간·페이스·심박 등)는 `UnitValue`(자동) 또는 `.num-mono` 유틸리티로 렌더하며, 두 훅 모두 `font-variant-numeric: tabular-nums`로 **자릿수 정렬만 유지**하고 서체는 sans다(mono 서체 폐지, 2026-07-08 사용자 결정). `.num-mono` 클래스명은 호환 위해 유지하되 더 이상 mono가 아니다.
+- `--font-mono`(JetBrains Mono)는 이제 **코드 블록·진단(diag)·트로피/업적 카드의 장식 숫자·일부 eyebrow 라벨**에만 남긴다. 새 지표 숫자에 `--font-mono`를 쓰지 않는다.
 - Important metrics use large, bold numerals.
 - Metric units such as `km`, `%`, and `회` must render smaller than the number and should not be concatenated at the same visual size in compact cards.
 - Supporting labels and metadata are smaller and muted.

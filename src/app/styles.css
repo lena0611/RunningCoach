@@ -136,12 +136,14 @@
   --text-title-line: 1.28;
   --text-body-size: 16px;
   --text-body-line: 1.6;
-  --text-info-size: 15px;
+  --text-info-size: 16px;
   --text-info-line: 1.56;
-  --text-caption-size: 13px;
+  --text-caption-size: 14px;
   --text-caption-line: 1.45;
-  /* 순수 장식/메타 마이크로 텍스트(카운트 배지·eyebrow 태그) 전용 하한. 읽는 텍스트엔 쓰지 말 것(그건 caption 이상). */
-  --text-micro-size: 11px;
+  /* 폰트 스케일: 12(micro) / 14(caption) / 16(info·body) / 22(title) / display·metric.
+     하한 = 12px(예외 없음) — 순수 장식/메타·단순 정보성 마이크로 텍스트(카운트 배지·eyebrow·요일 라벨 등) 전용.
+     의미 있는 중요 정보는 caption(14) 이상, 근거/본문은 info·body(16). 12px 미만은 어디에도 쓰지 않는다. */
+  --text-micro-size: 12px;
   --text-micro-line: 1.3;
   --text-metric-size: clamp(28px, 7.8vw, 38px);
   --z-toast: 1200;
@@ -195,7 +197,7 @@
   --weekstrip-cell-radius: 9px;
   --weekstrip-today-border: 1.5px solid var(--color-primary);
   --weekstrip-today-bg: rgba(52, 211, 153, 0.1);
-  --weekstrip-day-size: 9px;
+  --weekstrip-day-size: 12px; /* 앱 폰트 하한 12px (기존 9px) */
   --weekstrip-date-size: 12px;
   --weekstrip-done-dot: 4px;
   --run-calendar-count-bg: #000000;
@@ -362,7 +364,7 @@
 .trend-overall-eyebrow {
   color: var(--color-muted-2);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--text-micro-size);
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -860,7 +862,7 @@ label {
   border-radius: var(--radius-pill);
   background: var(--color-surface);
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: var(--text-micro-size);
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
@@ -1229,7 +1231,7 @@ label {
   background: transparent;
   text-decoration: none;
   border-radius: 999px;
-  font-size: 10.5px;
+  font-size: var(--text-micro-size);
   font-weight: 650;
   line-height: 1;
   box-shadow: none;
@@ -2019,7 +2021,7 @@ button.stat-card {
 
 .projection-factor strong {
   color: var(--color-text);
-  font-size: 15px;
+  font-size: var(--text-info-size);
   font-weight: 700;
 }
 
@@ -2077,15 +2079,17 @@ button.stat-card {
 .unit-value-number {
   flex: 0 0 auto;
   font: inherit;
-  font-family: var(--font-mono);
+  /* 지표 숫자는 시스템(sans) 폰트로(사용자 결정 — mono 서체 피로). tabular-nums로 자릿수 정렬은 유지. */
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-weight: 500;
   line-height: 1;
 }
 
-/* 숫자·시간·페이스·거리 공통 mono 처리(디자인 시그니처). UnitValue 밖의 도메인 숫자에 사용 */
+/* 숫자·시간·페이스·거리 공통 처리. 시스템(sans) 폰트 + tabular-nums(자릿수 정렬 유지). UnitValue 밖의 도메인 숫자에 사용.
+   (클래스명은 호환 위해 num-mono 유지하되 서체는 더 이상 mono 아님.) */
 .num-mono {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-variant-numeric: tabular-nums;
 }
 
@@ -2325,7 +2329,7 @@ button.stat-card {
 
 .run-month-summary-head strong {
   color: var(--color-muted);
-  font-size: 15px;
+  font-size: var(--text-info-size);
   font-weight: 400;
   line-height: 1.25;
 }
@@ -2476,7 +2480,7 @@ button.run-session-row {
   border-radius: 999px;
   background: var(--color-subtle-2);
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: var(--text-micro-size);
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
@@ -2674,7 +2678,7 @@ button.run-session-row {
 
 .trend-bar small {
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: var(--text-micro-size);
   font-weight: 850;
 }
 
@@ -2759,7 +2763,7 @@ button.run-session-row {
   background: transparent;
   color: var(--color-text);
   box-shadow: none;
-  font-size: 15px;
+  font-size: var(--text-info-size);
   font-weight: 600;
 }
 
@@ -2813,7 +2817,7 @@ button.run-session-row {
   border-radius: 8px;
   background: var(--run-calendar-count-bg);
   color: var(--run-calendar-count-text);
-  font-size: 10px;
+  font-size: var(--text-micro-size);
   font-weight: 800;
   line-height: 1;
   box-shadow: none;
@@ -3169,7 +3173,7 @@ button.run-session-row {
 
 .lap-split-head small {
   color: var(--color-muted);
-  font-size: 10px;
+  font-size: var(--text-micro-size);
   font-weight: 700;
   opacity: 0.78;
 }
@@ -3178,13 +3182,13 @@ button.run-session-row {
   min-height: 50px;
   border-top: 1px solid var(--color-border);
   color: var(--color-text);
-  font-size: 15px;
+  font-size: var(--text-info-size);
   font-weight: 400;
 }
 
 .lap-split-row strong {
   color: var(--color-muted);
-  font-size: 15px;
+  font-size: var(--text-info-size);
   font-weight: 400;
 }
 
@@ -3239,7 +3243,7 @@ button.run-session-row {
 .lap-metric-header span,
 .lap-metric-header small {
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: var(--text-micro-size);
   font-weight: 700;
 }
 
@@ -3437,7 +3441,7 @@ button.run-session-row {
   padding: 4px 7px;
   background: rgba(2, 6, 12, 0.56);
   color: rgba(255, 255, 255, 0.78);
-  font-size: 10px;
+  font-size: var(--text-micro-size);
   font-weight: 700;
   text-decoration: none;
   backdrop-filter: blur(10px);
@@ -3769,7 +3773,7 @@ button.run-session-row {
 
 .coach-command-item strong {
   overflow: hidden;
-  font-size: 15px;
+  font-size: var(--text-info-size);
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3822,14 +3826,14 @@ button.run-session-row {
   display: block;
   width: min(520px, 100%);
   margin: -4px 0 6px;
-  font-size: 11px;
+  font-size: var(--text-micro-size);
   color: var(--color-muted-2);
 }
 
 
 .coach-injury-proposal-card > strong {
   color: var(--color-text);
-  font-size: 15px;
+  font-size: var(--text-info-size);
   line-height: 1.35;
 }
 
@@ -4035,7 +4039,7 @@ button.run-session-row {
 .body-view-status small {
   overflow: hidden;
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: var(--text-micro-size);
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4199,7 +4203,7 @@ button.run-session-row {
 .injury-pain-panel > strong,
 .strength-plan-card > strong {
   color: var(--color-text);
-  font-size: 15px;
+  font-size: var(--text-info-size);
 }
 
 .injury-group-head small,
@@ -4239,7 +4243,7 @@ button.run-session-row {
 
 .injury-area-chip-grid small {
   color: currentColor;
-  font-size: 10px;
+  font-size: var(--text-micro-size);
   font-weight: 750;
   opacity: 0.72;
 }
@@ -4282,7 +4286,7 @@ button.run-session-row {
 
 .selected-injury-item small {
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: var(--text-micro-size);
   font-weight: 700;
 }
 
@@ -4336,7 +4340,7 @@ button.run-session-row {
 
 .strength-plan-detail-list article > strong {
   color: var(--color-text);
-  font-size: 15px;
+  font-size: var(--text-info-size);
 }
 
 .strength-plan-detail-list p {
@@ -4438,7 +4442,7 @@ button.run-session-row {
   border-radius: 999px;
   background: var(--run-type-soft);
   color: var(--run-type-color);
-  font-size: 11px;
+  font-size: var(--text-micro-size);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -4746,13 +4750,13 @@ button.run-session-row {
   border-radius: 999px;
   background: var(--color-primary);
   color: var(--color-on-primary, #fff);
-  font-size: 10px;
+  font-size: var(--text-micro-size);
   font-weight: 800;
 }
 
 .vo2-pace-line {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--text-info-size);
   font-weight: 800;
   color: var(--color-text);
 }
@@ -4778,7 +4782,7 @@ button.run-session-row {
   color: var(--color-text);
   border: 0;
   border-radius: var(--radius-field);
-  font-size: 15px;
+  font-size: var(--text-info-size);
   box-shadow: inset 0 0 0 1px var(--color-border);
   text-align: left;
   -webkit-tap-highlight-color: transparent;
@@ -5042,7 +5046,7 @@ button.run-session-row {
   background: var(--color-subtle);
   color: var(--color-text);
   box-shadow: none;
-  font-size: 15px;
+  font-size: var(--text-info-size);
   font-weight: 800;
   line-height: 1;
 }
@@ -5058,7 +5062,7 @@ button.run-session-row {
   overflow-y: auto;
   overscroll-behavior: contain;
   color: var(--color-text);
-  font-size: 15px;
+  font-size: var(--text-info-size);
   line-height: 1.65;
 }
 
@@ -5390,7 +5394,7 @@ button.run-session-row {
   margin-bottom: 13px;
   color: var(--color-accent);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--text-micro-size);
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -5422,7 +5426,7 @@ button.run-session-row {
   min-height: 21px;
   padding: 0 9px;
   border-radius: var(--radius-pill);
-  font-size: 11px;
+  font-size: var(--text-micro-size);
   font-weight: 700;
 }
 
@@ -5450,7 +5454,7 @@ button.run-session-row {
 .memory-basis-body strong {
   overflow: hidden;
   color: var(--color-text);
-  font-size: 15px;
+  font-size: var(--text-info-size);
   line-height: 1.3;
   text-overflow: ellipsis;
 }
@@ -5499,7 +5503,7 @@ button.run-session-row {
 
 .memory-manage-main strong {
   color: var(--color-text);
-  font-size: 15px;
+  font-size: var(--text-info-size);
   font-weight: 600;
   line-height: 1.3;
 }
@@ -5520,7 +5524,7 @@ button.run-session-row {
   border-radius: var(--radius-pill);
   background: var(--color-warning-soft);
   color: var(--color-warning-text);
-  font-size: 11px;
+  font-size: var(--text-micro-size);
   font-weight: 600;
 }
 
@@ -5541,7 +5545,7 @@ button.run-session-row {
 
 .memory-subsection > strong {
   color: var(--color-text);
-  font-size: 15px;
+  font-size: var(--text-info-size);
   line-height: 1.3;
 }
 
@@ -6322,7 +6326,7 @@ button.run-session-row {
 
 .knowledge-rule-list > strong {
   color: var(--color-text);
-  font-size: 15px;
+  font-size: var(--text-info-size);
 }
 
 .knowledge-rule-list ul {

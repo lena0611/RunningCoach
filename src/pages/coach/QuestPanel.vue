@@ -70,7 +70,7 @@ defineProps<{
 
 .quest-tag {
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: var(--text-micro-size);
   font-weight: 700;
   padding: 3px 8px;
   border-radius: var(--radius-pill, 999px);
@@ -99,7 +99,7 @@ defineProps<{
 }
 
 .quest-body strong {
-  font-size: 15px;
+  font-size: var(--text-info-size);
   color: var(--color-text);
 }
 

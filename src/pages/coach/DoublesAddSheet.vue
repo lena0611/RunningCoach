@@ -141,7 +141,7 @@ function submit() {
   padding: 4px 2px 8px;
 }
 .ctx-chip {
-  font-size: 10px;
+  font-size: var(--text-micro-size);
   font-weight: 700;
   color: var(--color-primary);
   background: var(--color-primary-soft, rgba(34, 160, 107, 0.14));

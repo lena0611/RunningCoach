@@ -373,7 +373,7 @@ const cumulative = computed(() => set.value.cumulative)
   color: var(--color-accent);
 }
 .ach-record-unit {
-  font-size: 9px;
+  font-size: var(--text-micro-size);
   color: var(--color-muted-2);
   margin-left: 1px;
 }

@@ -122,7 +122,7 @@ onBeforeUnmount(() => document.body.classList.remove('sheet-open'))
   font-weight: 700;
 }
 .cell-note {
-  font-size: 10.5px;
+  font-size: var(--text-micro-size);
   color: var(--color-muted);
 }
 .cell-free {
