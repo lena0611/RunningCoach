@@ -121,7 +121,7 @@ const gradeLine = computed(() => {
 }
 
 .level-badge {
-  font-size: 11px;
+  font-size: var(--text-micro-size);
   padding: 2px 8px;
   border-radius: var(--radius-pill, 999px);
   color: var(--color-muted);

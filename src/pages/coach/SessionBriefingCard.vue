@@ -162,7 +162,7 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
 }
 
 .brief-badge {
-  font-size: 11px;
+  font-size: var(--text-micro-size);
   padding: 2px 8px;
   border-radius: var(--radius-pill, 999px);
   color: var(--color-muted);
@@ -226,7 +226,7 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
 .brief-keypoint-tag {
   display: inline-block;
   margin-right: 6px;
-  font-size: 11px;
+  font-size: var(--text-micro-size);
   font-weight: 700;
   color: var(--color-primary);
 }
@@ -293,7 +293,7 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
 
 .brief-pace-basis {
   margin: 6px 0 0;
-  font-size: 11px;
+  font-size: var(--text-micro-size);
   color: var(--color-muted);
 }
 

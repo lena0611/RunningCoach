@@ -94,7 +94,7 @@ function typeSlug(type: string): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 9px;
+  font-size: var(--text-micro-size);
   line-height: 1;
   color: var(--color-primary);
 }

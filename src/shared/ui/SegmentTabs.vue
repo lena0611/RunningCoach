@@ -111,7 +111,7 @@ function onSelect(item: SegmentTabItem) {
   cursor: default;
 }
 .st-detail {
-  font-size: 10px;
+  font-size: var(--text-micro-size);
   font-weight: 500;
   color: inherit;
   opacity: 0.75;

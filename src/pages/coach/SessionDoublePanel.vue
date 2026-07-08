@@ -104,7 +104,7 @@ const gapText = computed(() => {
 .slot-badge {
   flex: 0 0 auto;
   margin-top: 1px;
-  font-size: 10px;
+  font-size: var(--text-micro-size);
   font-weight: 700;
   letter-spacing: 0.02em;
   padding: 3px 8px;
@@ -134,7 +134,7 @@ const gapText = computed(() => {
 }
 
 .key-chip {
-  font-size: 10px;
+  font-size: var(--text-micro-size);
   font-weight: 700;
   color: var(--color-warning-text, var(--color-muted));
   background: var(--color-warning-soft, rgba(251, 191, 36, 0.14));

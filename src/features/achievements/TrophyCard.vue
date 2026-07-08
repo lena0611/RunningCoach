@@ -376,7 +376,7 @@ const footDate = computed(() => (props.card.achievedAt ?? '').replaceAll('-', '.
   justify-content: space-between;
 }
 .trophy-progress-row span {
-  font-size: 11px;
+  font-size: var(--text-micro-size);
   font-weight: 600;
   color: var(--color-muted-2);
 }

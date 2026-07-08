@@ -173,7 +173,7 @@ function onPointerUp(event: PointerEvent) {
   background: var(--color-surface-card);
   color: var(--color-muted);
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--text-micro-size);
 }
 
 /* 같은 날 더블(#455) shoulder 배지 — 2세션 이상인 날만(달력 run-count chip 규칙).
@@ -183,7 +183,7 @@ function onPointerUp(event: PointerEvent) {
   top: -8px;
   right: -2px;
   min-width: 18px;
-  font-size: 9px;
+  font-size: var(--text-micro-size);
   font-weight: 800;
   line-height: 1;
   padding: 2px 5px;
@@ -210,7 +210,7 @@ function onPointerUp(event: PointerEvent) {
 }
 
 .week-chip-tag {
-  font-size: 10px;
+  font-size: var(--text-micro-size);
   white-space: nowrap;
 }
 

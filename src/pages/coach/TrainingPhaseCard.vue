@@ -77,7 +77,7 @@ const transitionReady = computed(() => props.summary.phaseProposal.shouldTransit
 }
 
 .phase-badge {
-  font-size: 11px;
+  font-size: var(--text-micro-size);
   padding: 2px 10px;
   border-radius: var(--radius-pill, 999px);
   color: var(--color-primary);
@@ -148,7 +148,7 @@ const transitionReady = computed(() => props.summary.phaseProposal.shouldTransit
 
 .phase-criterion-hint {
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: var(--text-micro-size);
 }
 
 .phase-cta {

@@ -885,7 +885,7 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
 .rest-hero .today-hero-eyebrow {
   color: color-mix(in srgb, var(--hero-accent) 78%, var(--color-text));
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--text-micro-size);
   letter-spacing: 0.14em;
 }
 
