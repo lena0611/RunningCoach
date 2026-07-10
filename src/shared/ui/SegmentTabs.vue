@@ -96,6 +96,9 @@ function onSelect(item: SegmentTabItem) {
   color: var(--tab-inactive-text);
   font-weight: var(--tab-inactive-weight);
   line-height: 1.2;
+  /* 탭 라벨은 어떤 폭에서도 줄바꿈 금지 — 좁은 컨텍스트(카드 헤더 actions 등)에서 한글이
+     글자 단위로 꺾여 2줄 pill 이 되는 것 방지(2026-07-10 세션상세 '스플릿' 실기기 리포트). */
+  white-space: nowrap;
   cursor: pointer;
   box-shadow: none;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
@@ -115,6 +118,8 @@ function onSelect(item: SegmentTabItem) {
   font-weight: 500;
   color: inherit;
   opacity: 0.75;
+  /* 보조 설명은 라벨과 달리 줄바꿈 허용(.st-item nowrap 상속 해제). */
+  white-space: normal;
 }
 
 /* ── underline: 최상위 뷰 전환 (한 화면 1개) ── */
