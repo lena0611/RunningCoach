@@ -77,7 +77,8 @@ if (import.meta.env.DEV) {
       firstUpcomingSession: m.firstUpcomingSession,
       seedWalkRunReturn: m.seedWalkRunReturn,
       walkRunActiveState: m.walkRunActiveState,
-      restoreMemoryFromLocalSnapshot: m.restoreMemoryFromLocalSnapshot
+      restoreMemoryFromLocalSnapshot: m.restoreMemoryFromLocalSnapshot,
+      openLapSplitPreview: m.openLapSplitPreview
     }
   })
 }

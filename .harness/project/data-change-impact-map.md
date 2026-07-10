@@ -133,6 +133,7 @@ useHealthKitSyncStore.handleRuns / handleHistoricalMigrationRuns   healthKitSync
 - Tempo 적응 영속의 silent 가드: loaded 아니면 no-op, 상향만, 부상 시 차단. 적응 공식 수정은 사용자에게 무음으로 처방을 바꿈 → Coach-Review 게이트.
 - persist 머지 경합: applyTempoCeilingAdaptation·persistScheduleAnchor·phase 전환·인터뷰 patch가 모두 `memoryStore.update(adaptiveTrainingProfile 스프레드 머지)`를 같은 틱 근처에서 호출 — 마지막 쓰기가 이김. 서로 필드 안 덮는지 확인.
 - best-effort try/catch 무음 / 로컬 vs Supabase 분기: 위 공통 패턴 참조.
+- **run.laps 이원 구성(2026-07-10 스플릿/랩 구분)**: 네이티브 `buildLaps`가 HKWorkoutEvent(.lap/.segment) 마커 있으면 **실제 랩(비균등 가능)**, 없으면 1km 재분할. FIT 임포트는 원래 실제 랩 그대로. laps 소비자(inferRunType·sessionQuality·lapDrift·trendInsights·performanceProjection)는 랩 개수 반분+거리가중이라 비균등 허용(FIT이 이미 공급 중)이지만, **laps가 균등 1km라고 가정하는 새 로직 금지**. 표시 판정은 `areLapsUniformKm`(lapSplits.ts) 단일 출처 — 1km 스플릿은 저장하지 않고 세션상세에서 파생 계산.
 
 ---
 
