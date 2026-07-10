@@ -6,8 +6,10 @@
  * 인증된 실 Supabase 세션에서만 동작한다(스토어 액션이 Supabase 에 쓴다).
  */
 import { useMemoryStore } from '@/app/stores/memoryStore'
+import { useSessionDetailStore } from '@/app/stores/sessionDetailStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { buildPeriodizedSchedule } from '@/shared/lib/coaching/periodizedSchedule'
+import type { RunLog, Lap, RunMetricSample } from '@/entities/run/model'
 import type { TrainingGoal, TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
 import type { ScheduledSession } from '@/entities/training-schedule/model'
 
@@ -285,6 +287,94 @@ export async function cleanupReturnRamp(): Promise<{ ok: boolean; restoredActive
     localStorage.removeItem(PREV_STATE_KEY)
   } catch { /* noop */ }
   return { ok: true, restoredActiveGoalId }
+}
+
+/**
+ * 스플릿/랩 탭 렌더 프리뷰(2026-07-10): 실제 WorkOutDoors 인터벌 FIT('Repeating Schedule', 웜업+6×(가속20s+이지100s)+쿨다운)
+ * 파싱값 그대로 비균등 랩 14개짜리 RunLog 를 만들어 세션상세를 in-memory 로 연다.
+ * DB·localStorage 미기록(비파괴) — 닫으면 흔적 없음.
+ */
+const FIT_INTERVAL_LAPS: Array<{ m: number; sec: number; hr: number; cad: number }> = [
+  { m: 1250, sec: 600, hr: 129, cad: 172 },
+  { m: 55, sec: 20, hr: 143, cad: 162 },
+  { m: 244, sec: 100, hr: 144, cad: 182 },
+  { m: 45, sec: 20, hr: 145, cad: 182 },
+  { m: 238, sec: 100, hr: 146, cad: 178 },
+  { m: 55, sec: 20, hr: 143, cad: 188 },
+  { m: 243, sec: 100, hr: 147, cad: 178 },
+  { m: 57, sec: 20, hr: 148, cad: 186 },
+  { m: 250, sec: 100, hr: 153, cad: 174 },
+  { m: 51, sec: 20, hr: 153, cad: 210 },
+  { m: 246, sec: 100, hr: 153, cad: 178 },
+  { m: 73, sec: 20, hr: 151, cad: 188 },
+  { m: 241, sec: 100, hr: 154, cad: 178 },
+  { m: 783, sec: 300, hr: 154, cad: 180 }
+]
+
+export function openLapSplitPreview(): { ok: true; laps: number } {
+  const now = new Date().toISOString()
+  const today = isoOffset(0)
+  const laps: Lap[] = []
+  const metricSamples: RunMetricSample[] = []
+  let offsetSec = 0
+  let totalMeter = 0
+  FIT_INTERVAL_LAPS.forEach((row, index) => {
+    const distanceKm = Math.round((row.m / 1000) * 100) / 100
+    laps.push({
+      index: index + 1,
+      distanceKm,
+      paceSec: Math.round(row.sec / (row.m / 1000)),
+      avgHeartRate: row.hr,
+      cadence: row.cad
+    })
+    const paceSec = Math.round(row.sec / (row.m / 1000))
+    for (let t = 10; t <= row.sec; t += 10) {
+      metricSamples.push({ offsetSec: offsetSec + t, heartRate: row.hr, paceSec, cadence: row.cad })
+    }
+    offsetSec += row.sec
+    totalMeter += row.m
+  })
+  const run: RunLog = {
+    id: 'e2e-lap-split-preview',
+    userId: 'e2e',
+    externalId: null,
+    sessionTitle: '인터벌 프리뷰(E2E) — Repeating Schedule',
+    date: today,
+    startAt: `${today}T09:00:00.000Z`,
+    endAt: `${today}T09:27:00.000Z`,
+    type: 'Easy + Strides',
+    distanceKm: Math.round((totalMeter / 1000) * 100) / 100,
+    durationSec: offsetSec,
+    avgPaceSec: Math.round(offsetSec / (totalMeter / 1000)),
+    avgHeartRate: 143,
+    maxHeartRate: 158,
+    cadence: 178,
+    activeEnergyKcal: 304,
+    temperature: null,
+    humidity: null,
+    windMps: null,
+    elevationGainM: 1,
+    elevationLossM: 5,
+    courseType: 'Flat',
+    rpe: null,
+    workoutFeeling: '',
+    painNote: '',
+    sleepQuality: null,
+    conditionScore: null,
+    stressLevel: null,
+    companion: '',
+    memo: '스플릿/랩 탭 렌더 프리뷰 — 실제 FIT 파싱값',
+    laps,
+    fastSegments: [],
+    metricSamples,
+    routePoints: [],
+    tags: ['type:auto'],
+    source: 'file_import',
+    createdAt: now,
+    updatedAt: now
+  }
+  useSessionDetailStore().open(run)
+  return { ok: true, laps: laps.length }
 }
 
 export async function restoreMemoryFromLocalSnapshot(): Promise<{ ok: boolean; goals?: string[]; activeGoalId?: string }> {

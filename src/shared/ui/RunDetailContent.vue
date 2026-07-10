@@ -153,6 +153,7 @@ function syncRouteStickyOffset() {
     <RunSplitSection
       :laps="run.laps"
       :metric-samples="run.metricSamples"
+      :route-points="run.routePoints"
     />
 
     <SectionGroup v-if="run.memo || run.workoutFeeling || run.painNote" title="메모">

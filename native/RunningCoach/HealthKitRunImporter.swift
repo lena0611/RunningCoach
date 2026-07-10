@@ -1009,6 +1009,18 @@ final class HealthKitRunImporter {
         fallbackDistanceKm: Double?,
         fallbackDurationSec: Double
     ) -> [HealthKitLap] {
+        // 기기/앱이 남긴 실제 랩 마커(HKWorkoutEvent .lap/.segment)가 있으면 그대로 보존 —
+        // 인터벌 구조 유지(웹 세션상세가 비균등 랩이면 랩|스플릿 탭으로 구분 표시). 없으면 기존 1km 재분할.
+        if let eventLaps = buildEventLaps(
+            workout: workout,
+            routeLocations: routeLocations,
+            distancePoints: distancePoints,
+            heartRatePoints: heartRatePoints,
+            stepPoints: stepPoints
+        ) {
+            return eventLaps
+        }
+
         if routeLocations.count >= 2 {
             return buildRouteLaps(locations: routeLocations, heartRatePoints: heartRatePoints, stepPoints: stepPoints)
         }
@@ -1027,6 +1039,89 @@ final class HealthKitRunImporter {
                 cadence: averageCadence(stepPoints, from: workout.startDate, to: workout.endDate)
             )
         ]
+    }
+
+    /// HKWorkoutEvent(.lap/.segment) 경계로 실제 랩을 만든다. 마커가 없거나(일반 러닝) 랩이 2개 미만이면
+    /// nil 을 반환해 기존 1km 재분할 fallback 으로 넘어간다.
+    private func buildEventLaps(
+        workout: HKWorkout,
+        routeLocations: [CLLocation],
+        distancePoints: [DistancePoint],
+        heartRatePoints: [HeartRatePoint],
+        stepPoints: [StepPoint]
+    ) -> [HealthKitLap]? {
+        let events = (workout.workoutEvents ?? []).filter { $0.type == .lap || $0.type == .segment }
+        guard !events.isEmpty else { return nil }
+
+        // 경계 시각 수집: 순간 마커는 start 만, 구간형(duration 있는 .segment)은 start·end 모두.
+        let start = workout.startDate
+        let end = workout.endDate
+        var boundaryKeys = Set<Int>()
+        var boundaries: [Date] = []
+        func addBoundary(_ date: Date) {
+            guard date > start.addingTimeInterval(1), date < end.addingTimeInterval(-1) else { return }
+            let key = Int(date.timeIntervalSinceReferenceDate.rounded())
+            guard boundaryKeys.insert(key).inserted else { return }
+            boundaries.append(date)
+        }
+        for event in events {
+            addBoundary(event.dateInterval.start)
+            if event.dateInterval.duration > 1 {
+                addBoundary(event.dateInterval.end)
+            }
+        }
+        guard !boundaries.isEmpty else { return nil }
+        boundaries.sort()
+
+        var laps: [HealthKitLap] = []
+        var spanStart = start
+        for cut in boundaries + [end] {
+            let duration = cut.timeIntervalSince(spanStart)
+            guard duration >= 1 else {
+                spanStart = cut
+                continue
+            }
+            let meter = spanMeters(from: spanStart, to: cut, routeLocations: routeLocations, distancePoints: distancePoints)
+            let distanceKm: Double? = meter > 0 ? meter / 1000 : nil
+            laps.append(
+                HealthKitLap(
+                    index: laps.count + 1,
+                    distanceKm: distanceKm.map { Self.rounded($0) },
+                    paceSec: distanceKm.map { Self.rounded(duration / $0) },
+                    avgHeartRate: averageHeartRate(heartRatePoints, from: spanStart, to: cut),
+                    cadence: averageCadence(stepPoints, from: spanStart, to: cut)
+                )
+            )
+            spanStart = cut
+        }
+        // 거리 소스가 전혀 없어 전 랩이 거리 미상이면 기존 fallback(단일 랩)이 낫다.
+        guard laps.count >= 2, laps.contains(where: { $0.distanceKm != nil }) else { return nil }
+        return laps
+    }
+
+    /// 시각 구간의 이동 거리(m). 경로가 있으면 GPS 세그먼트 중점 시각으로 귀속해 누적, 없으면 거리 샘플 겹침 비례 합산.
+    private func spanMeters(from start: Date, to end: Date, routeLocations: [CLLocation], distancePoints: [DistancePoint]) -> Double {
+        if routeLocations.count >= 2 {
+            var meters = 0.0
+            for index in 1..<routeLocations.count {
+                let previous = routeLocations[index - 1]
+                let current = routeLocations[index]
+                let midpoint = previous.timestamp.addingTimeInterval(current.timestamp.timeIntervalSince(previous.timestamp) / 2)
+                guard midpoint > start, midpoint <= end else { continue }
+                meters += max(current.distance(from: previous), 0)
+            }
+            return meters
+        }
+        var meters = 0.0
+        for point in distancePoints {
+            let overlapStart = max(point.startDate, start)
+            let overlapEnd = min(point.endDate, end)
+            let overlap = overlapEnd.timeIntervalSince(overlapStart)
+            guard overlap > 0 else { continue }
+            let pointDuration = max(point.endDate.timeIntervalSince(point.startDate), 0.001)
+            meters += point.meter * min(overlap / pointDuration, 1)
+        }
+        return meters
     }
 
     private func buildRouteLaps(locations: [CLLocation], heartRatePoints: [HeartRatePoint], stepPoints: [StepPoint]) -> [HealthKitLap] {

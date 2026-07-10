@@ -3155,6 +3155,18 @@ button.run-session-row {
   text-align: center;
 }
 
+/* 비균등 랩 뷰(인터벌 등) — 거리 열 추가 6열. 좁으면 .lap-split-table overflow-x로 스크롤. */
+.lap-split-head.with-distance,
+.lap-split-row.with-distance {
+  grid-template-columns: 24px minmax(46px, 0.7fr) minmax(48px, 0.8fr) minmax(66px, 1fr) minmax(64px, 0.9fr) minmax(54px, 0.8fr);
+  min-width: 376px;
+}
+
+.lap-dist {
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .lap-split-head {
   padding: 2px 0 10px;
   color: var(--color-muted);
