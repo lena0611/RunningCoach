@@ -260,7 +260,7 @@ Deno.serve(async (req) => {
     if (!rateLimit.ok) return json({ error: rateLimit.error, retryAfterSec: rateLimit.retryAfterSec }, 429)
 
     const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress, sessionEvidence, upcomingSchedule, restState, recentInjuryWindow, marathonFlag, injurySignals)
-    const ownedSelectedRunId = context.selectedRun?.id ?? null
+    const ownedSelectedRunId = context.selectedRunOwnedId ?? context.selectedRun?.id ?? null
     if (shouldStream) {
       return streamCoachRun(admin, userId, ownedSelectedRunId, userNote, llmApiKey, llmBaseUrl, model, context)
     }
@@ -1374,6 +1374,9 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
             createdAtDisplay: formatDateTimeWithWeekday(report.created_at)
           }))
       : [],
+    // 프롬프트용 selectedRun은 자유대화(structuredCoachContext=false)에서 null로 가려 세션 데이터가 새지 않게 한다(#559).
+    // 저장 귀속용 run id는 그 게이팅과 분리한다 — 세션을 보며 던진 자유질문도 그 세션 스레드에 남아야 하므로(#563 옵션1).
+    selectedRunOwnedId: selectedRun?.id ?? null,
     selectedRun: structuredCoachContext ? summarizeRunForCoach(selectedRun) : null,
     selectedRunLapAnalysis: structuredCoachContext ? selectedRunLapAnalysis : null,
     selectedRunExecutionGuide: structuredCoachContext ? selectedRunExecutionGuide : null,
