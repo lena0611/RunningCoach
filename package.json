@@ -37,6 +37,7 @@
     "@vitejs/plugin-vue": "^6.0.3",
     "echarts": "^6.1.0",
     "fit-file-parser": "^3.0.0",
+    "hover-tilt": "^1.0.0",
     "nanoid": "^5.1.6",
     "pinia": "^3.0.4",
     "typescript": "~5.9.3",
