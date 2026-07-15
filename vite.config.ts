@@ -5,7 +5,16 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   base: process.env.GITHUB_PAGES === 'true' ? '/RunningCoach/' : './',
-  plugins: [vue()],
+  plugins: [
+    vue({
+      template: {
+        compilerOptions: {
+          // hover-tilt 웹컴포넌트(전리품 카드 틸트/홀로) — Vue 컴포넌트 해석 대상에서 제외
+          isCustomElement: (tag) => tag === 'hover-tilt'
+        }
+      }
+    })
+  ],
   build: {
     assetsDir: '',
     chunkSizeWarningLimit: 650
