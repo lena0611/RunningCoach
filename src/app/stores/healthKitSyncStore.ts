@@ -592,10 +592,25 @@ function mergeHealthKitRepairTags(tags: string[], isSelfRace = false) {
   return Array.from(new Set(base))
 }
 
+// (#620) 경로 백필 판정(순수): 같은 워크아웃(externalId 일치)인데 저장본만 경로가 비어 있으면
+// 후보의 경로로 보강한다. 첫 임포트 시점에 경로가 비어 들어온 런(권한 결손·워치→폰 경로 늦은
+// 도착 레이스)은 dedupe(isAlreadySaved)와 기존 repair 선별(무-externalId 한정) 양쪽에서 빠져
+// 자동 복구 경로가 없었다. 백필 후엔 routePoints 가 차서 다시 매칭되지 않는다(멱등).
+export function isRouteBackfillTarget(run: RunLog, candidate: HealthKitRunCandidate): boolean {
+  return (
+    run.source === 'healthkit' &&
+    !!run.externalId &&
+    run.externalId === candidate.externalId &&
+    (run.routePoints?.length ?? 0) === 0 &&
+    (candidate.routePoints?.length ?? 0) > 0
+  )
+}
+
 function findRepairableHealthKitRun(candidate: HealthKitRunCandidate) {
   const runStore = useRunStore()
   return runStore.runs.find((run) => {
-    if (run.externalId || run.source !== 'healthkit') return false
+    if (run.externalId) return isRouteBackfillTarget(run, candidate)
+    if (run.source !== 'healthkit') return false
     return isSameWorkoutLike(run, candidate)
   }) ?? null
 }
