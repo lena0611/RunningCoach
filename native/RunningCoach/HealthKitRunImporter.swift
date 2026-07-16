@@ -246,7 +246,10 @@ final class HealthKitRunImporter {
     /// 기능 손실이 없다. 새 read 타입을 추가하면 시트를 다시 띄우도록 키의 v 를 올린다.
     /// v2: workoutRoute(경로) read 타입 추가 반영 — v1에서 경로 권한을 요청하지 않아 지도가 비어 있던 문제 수정.
     /// (v1 사용자는 이 키가 false→요청 시트 재노출, iOS는 미결정 타입[경로]만 물어본다.)
-    private static let readAuthRequestedKey = "pacelab.healthReadAuthRequested.v2"
+    /// v3: 경로 read 미결정인데 마커만 true로 남아 시트가 영영 안 뜨던 기기 복구(2026-07-16 지도 유실).
+    ///     마커는 "시트 완료" 사실만 알 뿐 개별 타입 허용 여부를 모른다 — 미결정 타입이 남은 채
+    ///     마킹되면 이 키를 올리는 것 외에 복구 경로가 없으므로, 진단 로그(아래)로 상태를 관측한다.
+    private static let readAuthRequestedKey = "pacelab.healthReadAuthRequested.v3"
 
     private func requestAuthorization(completion: @escaping (Result<Void, Error>) -> Void) {
         if UserDefaults.standard.bool(forKey: Self.readAuthRequestedKey) {
@@ -254,14 +257,18 @@ final class HealthKitRunImporter {
             return
         }
         let readTypes = Set(healthTypesToRead())
+        NSLog("[PaceLAB][HK] read 권한 요청 시작 — 타입 %d개 (route 포함 여부: %d)", readTypes.count, readTypes.contains(HKSeriesType.workoutRoute()) ? 1 : 0)
         healthStore.requestAuthorization(toShare: [], read: readTypes) { success, error in
             if let error {
+                NSLog("[PaceLAB][HK] read 권한 요청 실패: %@", error.localizedDescription)
                 completion(.failure(error))
             } else if success {
                 // 시트 완료(또는 물을 것 없음) 시에만 마킹 — 사용자가 시트를 취소하면 다음에 다시 묻는다.
+                NSLog("[PaceLAB][HK] read 권한 요청 완료(시트 완료 또는 물을 것 없음) — 마커 v3 설정")
                 UserDefaults.standard.set(true, forKey: Self.readAuthRequestedKey)
                 completion(.success(()))
             } else {
+                NSLog("[PaceLAB][HK] read 권한 요청 거절(success=false)")
                 completion(.failure(HealthKitImportError.authorizationDenied))
             }
         }
@@ -923,13 +930,18 @@ final class HealthKitRunImporter {
     private func queryRouteLocations(for workout: HKWorkout, completion: @escaping ([CLLocation]) -> Void) {
         let routeType = HKSeriesType.workoutRoute()
         let predicate = HKQuery.predicateForObjects(from: workout)
-        let query = HKSampleQuery(sampleType: routeType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { [weak self] _, samples, _ in
+        let query = HKSampleQuery(sampleType: routeType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { [weak self] _, samples, error in
             guard let self else {
                 completion([])
                 return
             }
+            // 경로 read는 권한 미허용도 에러 없이 0건으로 온다 — 유실 원인 관측을 위해 결과를 항상 남긴다.
+            if let error {
+                NSLog("[PaceLAB][HK] 경로 샘플 쿼리 에러(%@): %@", workout.uuid.uuidString, error.localizedDescription)
+            }
             let routes = (samples as? [HKWorkoutRoute]) ?? []
             guard !routes.isEmpty else {
+                NSLog("[PaceLAB][HK] 경로 샘플 0건(%@) — 권한 미허용 또는 HealthKit 미기록", workout.uuid.uuidString)
                 completion([])
                 return
             }
@@ -957,11 +969,23 @@ final class HealthKitRunImporter {
 
     private func collectLocations(from route: HKWorkoutRoute, completion: @escaping ([CLLocation]) -> Void) {
         var locations: [CLLocation] = []
-        let query = HKWorkoutRouteQuery(route: route) { _, batch, done, _ in
+        var finished = false
+        let query = HKWorkoutRouteQuery(route: route) { _, batch, done, error in
+            if let error {
+                // 에러 시 done 보장이 없어 completion 미호출로 동기화가 멈출 수 있다 — 로그 후 즉시 종료.
+                // (에러 후 done 콜백이 또 와도 completion 중복 호출은 finished 가드로 차단)
+                NSLog("[PaceLAB][HK] 경로 위치 스트림 에러: %@", error.localizedDescription)
+                if !finished {
+                    finished = true
+                    completion(locations)
+                }
+                return
+            }
             if let batch {
                 locations.append(contentsOf: batch)
             }
-            if done {
+            if done, !finished {
+                finished = true
                 completion(locations)
             }
         }
