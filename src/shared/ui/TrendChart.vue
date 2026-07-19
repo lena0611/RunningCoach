@@ -7,6 +7,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ECharts, EChartsOption } from 'echarts'
 import { init } from 'echarts/core'
 import { getChartDomain, inferChartMetricKind } from '@/shared/lib/chartAxis'
+import { touchAxisTooltipBase } from '@/shared/lib/chartTouchTooltip'
 
 use([BarChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer])
 
@@ -72,10 +73,20 @@ function renderChart() {
     grid: { left: 8, right: 8, top: 18, bottom: 26, containLabel: true },
     tooltip: {
       trigger: 'axis',
+      ...touchAxisTooltipBase(),
       borderWidth: 0,
       backgroundColor: getColor('--color-surface') || '#141a21',
       textStyle: { color: text },
-      valueFormatter: (value) => `${Number(value).toFixed(2)}${props.unit ?? ''}`
+      // bars variant는 막대+라인이 같은 값이라 첫 시리즈만 표시(중복 제거), detail 있으면 함께.
+      formatter: (params) => {
+        const list = Array.isArray(params) ? params : [params]
+        const first = list[0] as { axisValue?: string | number; dataIndex?: number; value?: number } | undefined
+        const value = Number(first?.value)
+        if (!first || !Number.isFinite(value)) return ''
+        const detail = typeof first.dataIndex === 'number' ? props.points[first.dataIndex]?.detail : undefined
+        const detailHtml = detail ? `<div style="margin-top:4px">${detail}</div>` : ''
+        return `<strong>${first.axisValue ?? ''}</strong><div style="margin-top:4px"><strong>${value.toFixed(2)}${props.unit ?? ''}</strong></div>${detailHtml}`
+      }
     },
     xAxis: {
       type: 'category',
@@ -138,3 +149,10 @@ function renderChart() {
 <template>
   <div ref="chartRef" class="trend-echart" role="img" aria-label="러닝 추이 차트" />
 </template>
+
+<style scoped>
+.trend-echart {
+  /* 세로 스크롤은 페이지에 넘기고, 가로 드래그는 차트 스크럽(터치 툴팁)으로 쓴다. */
+  touch-action: pan-y;
+}
+</style>
