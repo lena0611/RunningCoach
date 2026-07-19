@@ -7,6 +7,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ECharts, EChartsOption } from 'echarts'
 import { init } from 'echarts/core'
 import { getChartDomain, type ChartMetricKind } from '@/shared/lib/chartAxis'
+import { touchAxisTooltipBase } from '@/shared/lib/chartTouchTooltip'
 import { formatInteger, formatPace } from '@/shared/lib/format'
 import { triggerSelectionHaptic } from '@/shared/lib/haptics'
 import { preparePaceChartDisplayValues } from '@/shared/lib/paceChartDisplay'
@@ -159,8 +160,8 @@ function renderChart() {
     grid: { left: 8, right: 8, top: 12, bottom: 18, containLabel: true },
     tooltip: {
       trigger: 'axis',
+      ...touchAxisTooltipBase(),
       axisPointer: { type: 'none' },
-      confine: true,
       borderWidth: 0,
       backgroundColor: getColor('--color-surface') || '#141a21',
       textStyle: { color: text },

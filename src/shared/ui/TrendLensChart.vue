@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ECharts, EChartsOption } from 'echarts'
 import { getChartDomain, inferChartMetricKind } from '@/shared/lib/chartAxis'
+import { touchAxisTooltipBase } from '@/shared/lib/chartTouchTooltip'
 import { formatInteger, formatNumberWithCommas } from '@/shared/lib/format'
 import type { TrendChartPoint } from '@/shared/lib/trendInsights'
 
@@ -93,8 +94,8 @@ function renderChart() {
     grid: { left: 8, right: 8, top: 12, bottom: 18, containLabel: true },
     tooltip: {
       trigger: 'axis',
+      ...touchAxisTooltipBase(),
       axisPointer: { type: 'shadow', shadowStyle: { color: subtle, opacity: 0.34 } },
-      confine: true,
       borderWidth: 0,
       backgroundColor: getColor('--color-surface') || '#141a21',
       textStyle: { color: text },

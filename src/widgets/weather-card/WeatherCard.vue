@@ -8,10 +8,9 @@ import { getSunTimes } from '@/shared/lib/sunTimes'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
 import SegmentTabs, { type SegmentTabValue } from '@/shared/ui/SegmentTabs.vue'
-import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
 import UnitValue from '@/shared/ui/UnitValue.vue'
 
-const TrendChart = defineAsyncComponent(() => import('@/shared/ui/TrendChart.vue'))
+const WeatherHourlyChart = defineAsyncComponent(() => import('./WeatherHourlyChart.vue'))
 
 const props = defineProps<{
   snapshot: WeatherSnapshot | null
@@ -52,20 +51,7 @@ const dayHours = computed<WeatherHourlyPoint[]>(() =>
   (props.snapshot?.hourly ?? []).filter((hour) => hour.time.slice(0, 10) === selectedDate.value).slice(0, 24)
 )
 
-// 타임라인 표시는 3시간 간격으로 듬성하게(시간별은 빡빡함).
-const displayHours = computed<WeatherHourlyPoint[]>(() =>
-  dayHours.value.filter((hour) => new Date(hour.time).getHours() % 3 === 0)
-)
-
-// "오전 6시" 식 라벨.
-function formatHourLabel(time: string) {
-  const h = new Date(time).getHours()
-  const period = h < 12 ? '오전' : '오후'
-  const display = h % 12 === 0 ? 12 : h % 12
-  return `${period} ${display}시`
-}
-
-// 요청(현재) 시각. 이 이전 시간은 타임라인에서 흐리게 표시한다.
+// 요청(현재) 시각. 오늘 차트의 과거 점선·'지금' 라인 기준.
 const requestTime = computed(() => {
   const parsed = props.snapshot?.observedAt ? Date.parse(props.snapshot.observedAt) : Date.now()
   return Number.isFinite(parsed) ? parsed : Date.now()
@@ -73,12 +59,6 @@ const requestTime = computed(() => {
 function isPastHour(hour: WeatherHourlyPoint) {
   return Date.parse(hour.time) < requestTime.value
 }
-// 과거가 끝나는 경계(첫 미래 표시시간)의 라벨 — 차트 과거 음영 기준.
-const dimBeforeLabel = computed(() => {
-  const firstFuture = displayHours.value.find((hour) => !isPastHour(hour))
-  if (!firstFuture || displayHours.value[0] === firstFuture) return undefined
-  return formatHourLabel(firstFuture.time)
-})
 
 // 선택 시점의 대표 현재값: 오늘이면 실황, 미래면 그 날 오전 시간대 예보.
 type RepCurrent = DerivedHour & { symbolName: string }
@@ -134,14 +114,6 @@ const outfit = computed(() => {
   const felt = repCurrent.value?.apparentTemperatureC ?? repCurrent.value?.temperatureC ?? null
   return getOutfitRecommendation(felt, { rain: maxRainChance.value >= 0.5, windy: (repCurrent.value?.windMps ?? 0) >= 7 })
 })
-
-const tempPoints = computed<TrendChartPoint[]>(() =>
-  displayHours.value.map((hour) => ({
-    label: formatHourLabel(hour.time),
-    value: Math.round((tempMode.value === 'feel' ? hour.apparentTemperatureC ?? hour.temperatureC : hour.temperatureC) ?? 0),
-    detail: hour.condition
-  }))
-)
 
 const sun = computed(() => {
   const coords = weatherStore.coords
@@ -250,7 +222,7 @@ function formatClock(date: Date | null) {
     </div>
 
     <!-- 시간대별 + 실제/체감 토글 -->
-    <div v-if="snapshot && tempPoints.length" class="weather-chart-card">
+    <div v-if="snapshot && dayHours.length" class="weather-chart-card">
       <SegmentTabs
         class="weather-temp-toggle"
         variant="group"
@@ -263,10 +235,7 @@ function formatClock(date: Date | null) {
         :active="tempMode"
         @change="tempMode = $event as 'actual' | 'feel'"
       />
-      <div class="weather-hour-icons">
-        <span v-for="hour in displayHours" :key="hour.time" :class="{ 'is-past': isPastHour(hour) }">{{ weatherSymbolToEmoji(hour.symbolName) }}</span>
-      </div>
-      <TrendChart :points="tempPoints" unit="°" variant="line" :dim-before-label="dimBeforeLabel" />
+      <WeatherHourlyChart :hours="dayHours" :now-ms="isSelectedToday ? requestTime : null" :temp-mode="tempMode" />
       <p v-if="sun" class="helper weather-sun">🌅 일출 {{ formatClock(sun.sunrise) }} · 🌇 일몰 {{ formatClock(sun.sunset) }}</p>
     </div>
 
@@ -318,8 +287,5 @@ function formatClock(date: Date | null) {
 }
 .weather-sun {
   margin-top: 6px;
-}
-.weather-hour-icons span.is-past {
-  opacity: 0.32;
 }
 </style>

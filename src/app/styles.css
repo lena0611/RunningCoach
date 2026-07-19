@@ -531,6 +531,8 @@
 .trend-lens-echart {
   width: 100%;
   height: 178px;
+  /* 세로 스크롤은 페이지에 넘기고, 가로 드래그는 차트 스크럽(터치 툴팁)으로 쓴다. */
+  touch-action: pan-y;
 }
 
 .trend-lens-latest {
