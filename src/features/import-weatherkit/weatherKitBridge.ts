@@ -1,3 +1,5 @@
+import { feltTemperatureC } from '@/shared/lib/runningWeather'
+
 export type WeatherHourlyPoint = {
   time: string
   temperatureC: number | null
@@ -89,14 +91,20 @@ export function hasWeatherKitBridge() {
 }
 
 function normalizeSnapshot(snapshot: WeatherSnapshot): WeatherSnapshot {
+  // iOS 브리지 경로는 Open-Meteo apparent_temperature(태양복사 과대반영)를 그대로 실어보내
+  // 기온 대비 체감이 비현실적으로 높게 뜬다(예: 15℃에 체감 30℃). KMA/웹 경로와 동일하게
+  // 우리 계절분기 공식(feltTemperatureC)으로 재계산해 통일한다. humidity는 0~1 → 0~100 환산.
+  const curTemp = normalizeNumber(snapshot.current?.temperatureC)
+  const curHumidity = normalizeNumber(snapshot.current?.humidity)
+  const curWind = normalizeNumber(snapshot.current?.windMps)
   return {
     locationName: typeof snapshot.locationName === 'string' && snapshot.locationName ? snapshot.locationName : null,
     observedAt: typeof snapshot.observedAt === 'string' ? snapshot.observedAt : new Date().toISOString(),
     current: {
-      temperatureC: normalizeNumber(snapshot.current?.temperatureC),
-      apparentTemperatureC: normalizeNumber(snapshot.current?.apparentTemperatureC),
-      humidity: normalizeNumber(snapshot.current?.humidity),
-      windMps: normalizeNumber(snapshot.current?.windMps),
+      temperatureC: curTemp,
+      apparentTemperatureC: feltTemperatureC(curTemp, curHumidity !== null ? curHumidity * 100 : null, curWind),
+      humidity: curHumidity,
+      windMps: curWind,
       precipitationIntensityMmPerHour: normalizeNumber(snapshot.current?.precipitationIntensityMmPerHour),
       condition: typeof snapshot.current?.condition === 'string' ? snapshot.current.condition : '',
       symbolName: typeof snapshot.current?.symbolName === 'string' ? snapshot.current.symbolName : 'cloud',
@@ -108,10 +116,13 @@ function normalizeSnapshot(snapshot: WeatherSnapshot): WeatherSnapshot {
 }
 
 function normalizeHourlyPoint(point: WeatherHourlyPoint): WeatherHourlyPoint {
+  const temp = normalizeNumber(point.temperatureC)
+  const hum = normalizeNumber(point.humidity ?? null)
   return {
     time: typeof point.time === 'string' ? point.time : '',
-    temperatureC: normalizeNumber(point.temperatureC),
-    apparentTemperatureC: normalizeNumber(point.apparentTemperatureC),
+    temperatureC: temp,
+    // current와 동일 이유로 체감을 자체 공식으로 재계산(브리지 hourly엔 풍속 없음 → 습도 기반).
+    apparentTemperatureC: feltTemperatureC(temp, hum !== null ? hum * 100 : null, null),
     precipitationChance: normalizePercent(point.precipitationChance),
     precipitationAmountMm: normalizeNumber(point.precipitationAmountMm),
     precipitationIntensityMmPerHour: normalizeNumber(point.precipitationIntensityMmPerHour),
