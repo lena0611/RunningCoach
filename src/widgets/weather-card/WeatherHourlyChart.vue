@@ -8,6 +8,7 @@ import type { ECharts, EChartsOption } from 'echarts'
 import type { WeatherHourlyPoint } from '@/features/import-weatherkit/weatherKitBridge'
 import { formatRainAmount, formatWeatherNumber, weatherSymbolToEmoji } from '@/shared/lib/weather'
 import { getChartDomain, inferChartMetricKind } from '@/shared/lib/chartAxis'
+import { triggerSelectionHaptic } from '@/shared/lib/haptics'
 
 use([LineChart, AxisPointerComponent, GridComponent, MarkLineComponent, CanvasRenderer])
 
@@ -77,7 +78,10 @@ onMounted(async () => {
   resizeObserver.observe(chartRef.value)
   chart.on('updateAxisPointer', (event) => {
     const value = (event as { axesInfo?: Array<{ value: number }> }).axesInfo?.[0]?.value
-    if (typeof value === 'number') scrubIndex.value = value
+    if (typeof value !== 'number' || value === scrubIndex.value) return
+    // 구간(시간)이 바뀔 때마다 선택 햅틱 — 드래그가 새 시간 칸에 들어왔음을 손끝으로 알림.
+    scrubIndex.value = value
+    triggerSelectionHaptic()
   })
   // 스크럽 종료(터치 놓음/포인터 이탈) 시 '지금'으로 복귀 — 선택이 화면에 눌어붙지 않게.
   const zr = chart.getZr()
@@ -121,7 +125,7 @@ function renderChart() {
 
   const option: EChartsOption = {
     animationDuration: 380,
-    grid: { left: 8, right: 12, top: 34, bottom: 22, containLabel: true },
+    grid: { left: 12, right: 8, top: 34, bottom: 22, containLabel: true },
     axisPointer: { triggerOn: 'mousemove|click' },
     xAxis: [
       {
@@ -130,13 +134,13 @@ function renderChart() {
         boundaryGap: false,
         axisLine: { show: false },
         axisTick: { show: false },
-        // X축 라벨은 12시간 간격만(빽빽함 방지). 데이터가 자정부터 시작하지 않는 날도
-        // 첫 지점은 항상 라벨을 준다(라벨 전무 방지).
+        // X축 라벨은 6시간 정각 그리드(오전 12·6시, 오후 12·6시). 마지막 지점은 축 끝에
+        // 잘려 붙으므로 제외(다음날 자정 등 경계 라벨 미표시).
         axisLabel: {
           color: muted,
           fontWeight: 700,
           fontSize: 12,
-          interval: (index: number) => index === 0 || hourOf(index) % 12 === 0,
+          interval: (index: number) => hourOf(index) % 6 === 0 && index !== props.hours.length - 1,
           formatter: (_: string, index: number) => formatHourLabel(props.hours[index].time)
         },
         axisPointer: {
@@ -165,6 +169,8 @@ function renderChart() {
     ],
     yAxis: {
       type: 'value',
+      // 라인 시작(좌측)이 온도축에 가려지지 않도록 눈금 라벨을 우측에 노출.
+      position: 'right',
       min: domain?.min,
       max: domain?.max,
       splitLine: { lineStyle: { color: subtle } },
@@ -223,7 +229,7 @@ function renderChart() {
         <span v-if="detailHour.humidity !== null && detailHour.humidity !== undefined">습도 {{ Math.round(detailHour.humidity * 100) }}%</span>
       </div>
     </div>
-    <div ref="chartRef" class="weather-hourly-chart" role="img" aria-label="시간대별 날씨 차트" />
+    <div ref="chartRef" class="weather-hourly-chart" data-no-swipe role="img" aria-label="시간대별 날씨 차트" />
   </div>
 </template>
 
