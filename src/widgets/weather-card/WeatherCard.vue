@@ -11,6 +11,7 @@ import SegmentTabs, { type SegmentTabValue } from '@/shared/ui/SegmentTabs.vue'
 import UnitValue from '@/shared/ui/UnitValue.vue'
 
 const WeatherHourlyChart = defineAsyncComponent(() => import('./WeatherHourlyChart.vue'))
+const WeatherRainChart = defineAsyncComponent(() => import('./WeatherRainChart.vue'))
 
 const props = defineProps<{
   snapshot: WeatherSnapshot | null
@@ -236,6 +237,7 @@ function formatClock(date: Date | null) {
         @change="tempMode = $event as 'actual' | 'feel'"
       />
       <WeatherHourlyChart :hours="dayHours" :now-ms="isSelectedToday ? requestTime : null" :temp-mode="tempMode" />
+      <WeatherRainChart :hours="dayHours" :now-ms="isSelectedToday ? requestTime : null" />
       <p v-if="sun" class="helper weather-sun">🌅 일출 {{ formatClock(sun.sunrise) }} · 🌇 일몰 {{ formatClock(sun.sunset) }}</p>
     </div>
 
