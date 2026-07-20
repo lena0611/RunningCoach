@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { LineChart } from 'echarts/charts'
-import { AxisPointerComponent, GridComponent, MarkLineComponent, TooltipComponent } from 'echarts/components'
+import { AxisPointerComponent, GridComponent, MarkLineComponent } from 'echarts/components'
 import { use, init } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ECharts, EChartsOption } from 'echarts'
 import type { WeatherHourlyPoint } from '@/features/import-weatherkit/weatherKitBridge'
-import { touchAxisTooltipBase } from '@/shared/lib/chartTouchTooltip'
+import { triggerSelectionHaptic } from '@/shared/lib/haptics'
 
-use([LineChart, AxisPointerComponent, GridComponent, MarkLineComponent, TooltipComponent, CanvasRenderer])
+use([LineChart, AxisPointerComponent, GridComponent, MarkLineComponent, CanvasRenderer])
 
 /**
  * 시간대별 강수확률 차트(온도 차트 아래 별도 신설).
@@ -25,6 +25,9 @@ const props = defineProps<{
 const chartRef = ref<HTMLElement | null>(null)
 let chart: ECharts | null = null
 let resizeObserver: ResizeObserver | null = null
+
+const scrubIndex = ref<number | null>(null)
+const isScrubbing = computed(() => scrubIndex.value !== null)
 
 const pops = computed(() =>
   props.hours.map((hour) => (hour.precipitationChance === null || hour.precipitationChance === undefined ? null : Math.round(hour.precipitationChance * 100)))
@@ -44,11 +47,15 @@ const nowIndex = computed(() => {
   return index
 })
 
-// 오늘 최대 강수확률(헤더 표시용). 오늘이 아니면 그날 전체 최대.
+// 오늘 최대 강수확률(헤더 기본 표시용). 오늘이 아니면 그날 전체 최대.
 const peakChance = computed(() => {
   const values = pops.value.filter((value): value is number => value !== null)
   return values.length ? Math.max(...values) : 0
 })
+
+// 스크럽 중이면 그 시각 값을 헤더 우측에 표시(손가락에 가리지 않도록 차트 위 헤더에).
+const scrubHour = computed(() => (scrubIndex.value !== null ? props.hours[scrubIndex.value] ?? null : null))
+const scrubChance = computed(() => (scrubIndex.value !== null ? pops.value[scrubIndex.value] : null))
 
 function hourOf(index: number) {
   return new Date(props.hours[index]?.time ?? 0).getHours()
@@ -66,6 +73,21 @@ onMounted(async () => {
   chart = init(chartRef.value, undefined, { renderer: 'canvas' })
   resizeObserver = new ResizeObserver(() => chart?.resize())
   resizeObserver.observe(chartRef.value)
+  // 온도 차트와 동일 방식: 스크럽 값은 차트 내부 툴팁이 아니라 차트 '위' 헤더에 표시
+  // (모바일에서 손가락이 툴팁을 가리는 문제 해소).
+  chart.on('updateAxisPointer', (event) => {
+    const value = (event as { axesInfo?: Array<{ value: number }> }).axesInfo?.[0]?.value
+    if (typeof value !== 'number' || value === scrubIndex.value) return
+    scrubIndex.value = value
+    triggerSelectionHaptic()
+  })
+  const zr = chart.getZr()
+  zr.on('mouseup', () => {
+    scrubIndex.value = null
+  })
+  zr.on('globalout', () => {
+    scrubIndex.value = null
+  })
   renderChart()
 })
 
@@ -91,8 +113,6 @@ function renderChart() {
   const accent = getColor('--color-accent') || '#38bdf8'
   const muted = getColor('--color-muted') || '#8b98a8'
   const subtle = getColor('--color-subtle-2') || 'rgba(255,255,255,0.08)'
-  const surface = getColor('--color-surface') || '#141a21'
-  const text = getColor('--color-text') || '#f4f7fb'
   const boundary = nowIndex.value
 
   const pastData = pops.value.map((value, index) => (boundary >= 0 && index <= boundary ? value : null))
@@ -101,25 +121,6 @@ function renderChart() {
   const option: EChartsOption = {
     animationDuration: 380,
     grid: { left: 12, right: 8, top: 12, bottom: 22, containLabel: true },
-    tooltip: {
-      trigger: 'axis',
-      ...touchAxisTooltipBase(),
-      axisPointer: { type: 'line', lineStyle: { color: accent, width: 1.5 } },
-      borderWidth: 0,
-      backgroundColor: surface,
-      textStyle: { color: text },
-      formatter: (params) => {
-        const list = Array.isArray(params) ? params : [params]
-        const first = list.find((item) => typeof (item as { value?: number }).value === 'number') as
-          | { axisValue?: string | number; dataIndex?: number }
-          | undefined
-        if (!first || typeof first.dataIndex !== 'number') return ''
-        const pop = pops.value[first.dataIndex]
-        const hour = props.hours[first.dataIndex]
-        if (pop === null || !hour) return ''
-        return `<strong>${formatHourLabel(hour.time)}</strong><div style="margin-top:4px">💧 강수확률 <strong>${pop}%</strong></div>`
-      }
-    },
     xAxis: {
       type: 'category',
       data: props.hours.map((_, index) => index),
@@ -181,9 +182,11 @@ function renderChart() {
 
 <template>
   <div v-if="hasData" class="weather-rain">
-    <div class="weather-rain-header">
+    <!-- 스크럽 값은 차트 위 헤더에 표시(손가락이 차트 내부 툴팁을 가리는 문제 해소) -->
+    <div class="weather-rain-header" :class="{ scrubbing: isScrubbing }" aria-live="polite">
       <strong>강수 확률</strong>
-      <span>오늘 최대 {{ peakChance }}%</span>
+      <span v-if="scrubHour && scrubChance !== null">{{ formatHourLabel(scrubHour.time) }} · 💧 {{ scrubChance }}%</span>
+      <span v-else>오늘 최대 {{ peakChance }}%</span>
     </div>
     <div ref="chartRef" class="weather-rain-chart" data-no-swipe role="img" aria-label="시간대별 강수확률 차트" />
   </div>
@@ -209,6 +212,11 @@ function renderChart() {
   font-size: var(--text-micro-size);
   color: var(--color-muted);
   font-variant-numeric: tabular-nums;
+  transition: color 0.15s ease;
+}
+.weather-rain-header.scrubbing span {
+  color: var(--color-accent);
+  font-weight: 700;
 }
 .weather-rain-chart {
   height: 130px;
