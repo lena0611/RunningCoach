@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue'
-import { onBeforeRouteLeave, useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
@@ -60,6 +60,7 @@ const scheduleStore = useTrainingScheduleStore()
 const sessionDetailStore = useSessionDetailStore()
 const toastStore = useToastStore()
 const router = useRouter()
+const route = useRoute()
 const trendMetric = ref<'last7' | 'easy' | 'hard' | null>(null)
 const projectionDetailOpen = ref(false)
 
@@ -450,10 +451,17 @@ onBeforeUnmount(() => {
   document.body.classList.remove('memory-stack-open')
 })
 
-onBeforeRouteLeave(() => {
-  closeTrend()
-  closeProjectionDetail()
-})
+// 탭 페이저 구조라 이 페이지는 <router-view> 자식이 아니라 페이저에 상시 마운트된다
+// (onBeforeRouteLeave는 여기선 무효·경고만 발생). 라우트가 대시보드('/')를 벗어나면 상세를 닫는다.
+watch(
+  () => route.path,
+  (path) => {
+    if (path !== '/') {
+      closeTrend()
+      closeProjectionDetail()
+    }
+  }
+)
 
 function closeTrend() {
   trendMetric.value = null

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useSessionDetailStore } from '@/app/stores/sessionDetailStore'
@@ -28,6 +28,7 @@ import TrendLensChart from '@/shared/ui/TrendLensChart.vue'
 const runStore = useRunStore()
 const memoryStore = useMemoryStore()
 const sessionDetailStore = useSessionDetailStore()
+const route = useRoute()
 const openLens = ref<TrendLensKey | null>(null)
 const selectedCompare = ref('recent-90')
 
@@ -122,9 +123,14 @@ onBeforeUnmount(() => {
   document.body.classList.remove('memory-stack-open')
 })
 
-onBeforeRouteLeave(() => {
-  closeLensDetail()
-})
+// 탭 페이저 구조라 이 페이지는 <router-view> 자식이 아니라 페이저에 상시 마운트된다
+// (onBeforeRouteLeave는 여기선 무효·경고만 발생). 라우트가 추세('/trends')를 벗어나면 렌즈를 닫는다.
+watch(
+  () => route.path,
+  (path) => {
+    if (path !== '/trends') closeLensDetail()
+  }
+)
 
 function openLensDetail(key: TrendLensKey) {
   openLens.value = key
