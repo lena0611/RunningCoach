@@ -4,6 +4,14 @@
 
 > 하네스 본체의 변경 이력이나 릴리스 노트가 아닙니다. 하네스 본체 변경 기록은 하네스 저장소의 `CHANGELOG.md` 또는 릴리스 태그를 확인합니다.
 
+## 2026-07-20 - iOS 체감온도(apparent) 자체 공식 재계산으로 통일 (open-meteo 태양복사 과대반영 제거)
+
+- 증상: iOS 앱에서 기온 15℃인데 체감 30℃로 비현실적. 웹은 정상(≈기온). "다른 날씨앱은 선선한데 우리만 30".
+- 원인: iOS는 `weatherStore`가 네이티브 브리지를 우선(`hasWeatherKitBridge`)하는데, 네이티브 `WeatherKitImporter.swift`가 이름과 달리 Apple WeatherKit이 아니라 **Open-Meteo API**(`api.open-meteo.com`)를 호출하고 그 `apparent_temperature`(직달일사를 크게 반영 → 맑은 날 과대)를 그대로 표시. #219 KMA 전환이 웹 경로만 반영되고 iOS 네이티브는 open-meteo로 남아 있던 불일치.
+- 결정: 체감온도 SSOT를 `src/shared/lib/runningWeather.feltTemperatureC`로 통일. iOS 브리지 스냅샷(`weatherKitBridge.normalizeSnapshot`/`normalizeHourlyPoint`)에서 provider의 apparent를 폐기하고 (기온, 습도%, 풍속)으로 재계산. 브리지 경로 한정이라 웹/KMA·dev fallback 무영향. 온화대(10~20℃)는 기온 그대로 → 15℃면 체감≈15.
+- 보류(별도 원자적 PR): iOS를 **완전히 KMA Edge로** 전환(국내 정확도 ↑). 네이티브에 좌표 전용 브리지가 없고(현 message handlers에 위치 없음) WKWebView `navigator.geolocation` 미검증이라, 네이티브 좌표 브리지 추가(Swift) + Xcode 빌드 + 실기기 스모크가 선행 필요. [[weather-runner-domain]]
+- 검증: `npm run harness:check`. iOS는 브리지 경로라 실기기 시각 스모크(맑은 날 체감이 기온 근처) 필요.
+
 ## 2026-07-03 - 리디자인 ②: 업적 홈 개편 + 홀로그래픽 전리품(트로피) 카드
 
 리디자인 마지막 단계(핸드오프 README §8 + `Trophy Cards.dc.html` = 스펙 SSOT). 업적 홈(L1) 재구성 + 전리품 컬렉션(L2) + 카드 상세(L3) 신설.
