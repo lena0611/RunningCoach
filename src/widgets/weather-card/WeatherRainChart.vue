@@ -149,7 +149,8 @@ function renderChart() {
 
   const option: EChartsOption = {
     animationDuration: 380,
-    grid: { left: 12, right: 8, top: 12, bottom: 22, containLabel: true },
+    // 좌측 여백 0 + X 라벨 좌측정렬 — 온도 차트와 동일(애플식, 플롯을 카드 왼쪽 끝까지).
+    grid: { left: 0, right: 8, top: 12, bottom: 22, containLabel: true },
     xAxis: {
       type: 'category',
       data: props.hours.map((_, index) => index),
@@ -160,6 +161,7 @@ function renderChart() {
         color: muted,
         fontWeight: 700,
         fontSize: 12,
+        align: 'left', // 라벨 좌측끝을 눈금에 붙인다(애플식)
         interval: (index: number) => hourOf(index) % 6 === 0 && index !== props.hours.length - 1,
         formatter: (_: string, index: number) => formatHourLabel(props.hours[index].time)
       },
@@ -180,6 +182,7 @@ function renderChart() {
         data: futureData,
         smooth: true,
         symbol: 'none',
+        connectNulls: true, // 먼 날짜 3시간 해상도 — 고립점을 이어야 선이 그려진다
         lineStyle: { width: 3, color: accent },
         areaStyle: { opacity: 0.16, color: accent },
         emphasis: { disabled: true },
