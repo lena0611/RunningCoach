@@ -61,6 +61,9 @@ const dayHours = computed<WeatherHourlyPoint[]>(() => {
   return Array.from({ length: 24 }, (_, hour) => byHour.get(hour) ?? emptyHourSlot(selectedDate.value, hour))
 })
 
+// 선택한 날의 실데이터 시각 수 — 2 미만이면(예보 범위 밖 등) 차트 대신 안내를 보여준다.
+const realHourCount = computed(() => dayHours.value.filter((hour) => hour.temperatureC !== null).length)
+
 // 요청(현재) 시각. 오늘 차트의 과거 점선·'지금' 라인 기준.
 const requestTime = computed(() => {
   const parsed = props.snapshot?.observedAt ? Date.parse(props.snapshot.observedAt) : Date.now()
@@ -247,8 +250,11 @@ function formatClock(date: Date | null) {
       <p class="helper">{{ outfit.note }}</p>
     </div>
 
-    <!-- 시간대별 + 실제/체감 토글 -->
-    <div v-if="snapshot && dayHours.length" class="weather-chart-card">
+    <!-- 시간대별 + 실제/체감 토글. 실데이터 2시간 미만(예보 범위 밖)이면 차트 대신 안내만. -->
+    <div v-if="snapshot && dayHours.length && realHourCount < 2" class="weather-chart-card">
+      <p class="helper">이 날은 아직 기상청 시간별 예보 범위 밖이에요. 날짜가 가까워지면 시간별 차트가 열립니다.</p>
+    </div>
+    <div v-else-if="snapshot && dayHours.length" class="weather-chart-card">
       <SegmentTabs
         class="weather-temp-toggle"
         variant="group"

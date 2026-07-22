@@ -144,7 +144,9 @@ function renderChart() {
 
   const option: EChartsOption = {
     animationDuration: 380,
-    grid: { left: 12, right: 8, top: 34, bottom: 22, containLabel: true },
+    // 좌측 여백 0 — X 라벨을 눈금 좌측정렬(align:left)로 바꿔 첫 라벨이 왼쪽으로 튀어나가지 않으므로
+    // 플롯을 카드 왼쪽 끝까지 밀어붙인다(애플 날씨 레퍼런스).
+    grid: { left: 0, right: 8, top: 34, bottom: 22, containLabel: true },
     axisPointer: { triggerOn: 'mousemove|click' },
     xAxis: [
       {
@@ -159,6 +161,7 @@ function renderChart() {
           color: muted,
           fontWeight: 700,
           fontSize: 12,
+          align: 'left', // 라벨 좌측끝을 눈금에 붙인다(애플식) — 첫 라벨의 좌측 돌출 제거
           interval: (index: number) => hourOf(index) % 6 === 0 && index !== props.hours.length - 1,
           formatter: (_: string, index: number) => formatHourLabel(props.hours[index].time)
         },
@@ -208,6 +211,7 @@ function renderChart() {
               smooth: true,
               symbol: 'none' as const,
               silent: true,
+              connectNulls: true, // 먼 날짜는 3시간 해상도(사이 슬롯 null) — 고립점을 이어야 선이 그려진다
               lineStyle: { width: 1.5, color: muted, opacity: 0.5 },
               emphasis: { disabled: true }
             }
@@ -219,6 +223,7 @@ function renderChart() {
         data: pastData,
         smooth: true,
         symbol: 'none',
+        connectNulls: true,
         lineStyle: { width: 2.5, color: muted, type: 'dashed' },
         emphasis: { disabled: true }
       },
@@ -228,6 +233,9 @@ function renderChart() {
         data: futureData,
         smooth: true,
         symbol: 'none',
+        // 먼 날짜(글피)는 3시간 해상도라 1시간 슬롯 패딩 사이가 null — 안 이으면 고립점만 남아
+        // 차트가 통째로 빈 것처럼 보인다(2026-07-22 토요일 무렌더 리포트).
+        connectNulls: true,
         lineStyle: { width: 3, color: primary },
         areaStyle: { opacity: 0.08, color: primary },
         emphasis: { disabled: true },
