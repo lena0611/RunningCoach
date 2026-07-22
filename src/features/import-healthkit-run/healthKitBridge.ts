@@ -93,7 +93,7 @@ declare global {
         runContextHealthKit?: {
           postMessage: (message: unknown) => void
         }
-        runContextWeatherKit?: {
+        runContextLocation?: {
           postMessage: (message: unknown) => void
         }
         runContextHaptics?: {

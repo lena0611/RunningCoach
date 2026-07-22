@@ -6,13 +6,8 @@ import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { getCurrentCoords, requestKmaForecast, type Coords } from '@/features/import-kma/kmaWeather'
 import { friendlyErrorMessage } from '@/shared/lib/friendlyError'
 import { requestOpenMeteoForecast } from '@/features/import-open-meteo/openMeteoWeather'
-import {
-  hasWeatherKitBridge,
-  registerWeatherKitBridge,
-  requestWeatherForecast,
-  unregisterWeatherKitBridge,
-  type WeatherSnapshot
-} from '@/features/import-weatherkit/weatherKitBridge'
+import { hasNativeLocationBridge, requestNativeCoords } from '@/features/native-location/nativeLocationBridge'
+import type { WeatherSnapshot } from '@/features/import-weatherkit/weatherKitBridge'
 
 const minRefreshIntervalMs = 15 * 60 * 1000
 let listenersAttached = false
@@ -37,7 +32,6 @@ export const useWeatherStore = defineStore('weatherStore', {
     lastReceivedAt: 0
   }),
   getters: {
-    hasBridge: () => hasWeatherKitBridge(),
     current: (state) => state.snapshot?.current ?? null,
     hourly: (state) => state.snapshot?.hourly ?? [],
     daily: (state) => state.snapshot?.daily ?? [],
@@ -48,14 +42,9 @@ export const useWeatherStore = defineStore('weatherStore', {
   actions: {
     init() {
       if (this.initialized) return
-      registerWeatherKitBridge({
-        onForecast: (snapshot) => this.handleForecast(snapshot),
-        onError: (message) => this.handleError(message)
-      })
       this.initialized = true
     },
     dispose() {
-      unregisterWeatherKitBridge()
       this.initialized = false
     },
     attachActivationListeners() {
@@ -87,6 +76,8 @@ export const useWeatherStore = defineStore('weatherStore', {
         // GPS 러닝이 없으면 현위치로 자연 강등한다.
         this.locationSource = 'current'
       }
+      // iOS WKWebView는 navigator.geolocation이 막혀 있어 네이티브(CLLocation) 위치를 우선한다.
+      if (hasNativeLocationBridge()) return requestNativeCoords()
       return getCurrentCoords()
     },
     async requestForecast(options: ForecastRequestOptions = {}) {
@@ -96,11 +87,6 @@ export const useWeatherStore = defineStore('weatherStore', {
       this.lastRequestedAt = Date.now()
       this.lastRequestSilent = Boolean(options.silent)
       try {
-        if (hasWeatherKitBridge()) {
-          requestWeatherForecast()
-          return
-        }
-
         const coords = await this.resolveCoords()
         this.coords = coords
 
@@ -135,15 +121,6 @@ export const useWeatherStore = defineStore('weatherStore', {
       this.loading = false
       this.error = ''
       this.lastReceivedAt = Date.now()
-    },
-    // 네이티브(WeatherKit) 콜백 에러 — iOS 시스템 원문("The request timed out.")이 그대로 올 수 있어
-    // 친화 문구로 바꾸고, 배경(silent) 갱신 실패는 토스트 없이 카드 상태로만 남긴다(활성화 시 자동 재시도).
-    handleError(message: string) {
-      this.loading = false
-      this.error = friendlyErrorMessage(message ? new Error(message) : null, '날씨를 가져오지 못했어요. 잠시 후 자동으로 다시 시도해요.')
-      if (!this.lastRequestSilent) {
-        useToastStore().error(this.error, { placement: 'top', delayMs: 280, durationMs: 3600 })
-      }
     }
   }
 })

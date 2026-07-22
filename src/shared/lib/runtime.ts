@@ -6,10 +6,6 @@ export function hasNativeBridge() {
   return Boolean(window.webkit?.messageHandlers?.runContextHealthKit)
 }
 
-export function hasWeatherBridge() {
-  return Boolean(window.webkit?.messageHandlers?.runContextWeatherKit)
-}
-
 export function canUseAppFeatures() {
   return isLocalhost() || hasNativeBridge()
 }
