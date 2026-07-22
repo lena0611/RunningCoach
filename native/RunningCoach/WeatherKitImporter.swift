@@ -5,9 +5,15 @@ import CoreLocation
 // 과거에는 여기서 Open-Meteo 날씨까지 받아 웹에 실어보냈으나(#219 이후 이관),
 // 이제 날씨는 웹의 KMA(weather-run) 경로로 통일한다 — 네이티브는 위치 해석만 담당한다.
 // (파일명은 pbxproj 참조 안정성을 위해 유지한다.)
+// 위경도만 담는 순수 값 — 브리지(RunContextWebView)가 CoreLocation을 import하지 않아도 되게 한다.
+struct GeoCoordinate {
+    let latitude: Double
+    let longitude: Double
+}
+
 final class NativeLocationProvider: NSObject, CLLocationManagerDelegate {
     private let locationManager = CLLocationManager()
-    private var completion: ((Result<CLLocationCoordinate2D, Error>) -> Void)?
+    private var completion: ((Result<GeoCoordinate, Error>) -> Void)?
     private var timeout: DispatchWorkItem?
     private var lastLocation: CLLocation?
 
@@ -17,9 +23,9 @@ final class NativeLocationProvider: NSObject, CLLocationManagerDelegate {
         locationManager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
     }
 
-    func requestCoords(completion: @escaping (Result<CLLocationCoordinate2D, Error>) -> Void) {
+    func requestCoords(completion: @escaping (Result<GeoCoordinate, Error>) -> Void) {
         if let cached = lastLocation, abs(cached.timestamp.timeIntervalSinceNow) < 30 * 60 {
-            completion(.success(cached.coordinate))
+            completion(.success(geo(cached)))
             return
         }
 
@@ -57,12 +63,12 @@ final class NativeLocationProvider: NSObject, CLLocationManagerDelegate {
             return
         }
         lastLocation = location
-        finish(.success(location.coordinate))
+        finish(.success(geo(location)))
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         if let cached = manager.location, abs(cached.timestamp.timeIntervalSinceNow) < 24 * 60 * 60 {
-            finish(.success(cached.coordinate))
+            finish(.success(geo(cached)))
             return
         }
         finish(.failure(error))
@@ -73,7 +79,7 @@ final class NativeLocationProvider: NSObject, CLLocationManagerDelegate {
         let item = DispatchWorkItem { [weak self] in
             guard let self, self.completion != nil else { return }
             if let cached = self.locationManager.location, abs(cached.timestamp.timeIntervalSinceNow) < 24 * 60 * 60 {
-                self.finish(.success(cached.coordinate))
+                self.finish(.success(self.geo(cached)))
                 return
             }
             self.finish(.failure(NativeLocationError.locationTimeout))
@@ -82,7 +88,11 @@ final class NativeLocationProvider: NSObject, CLLocationManagerDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 25, execute: item)
     }
 
-    private func finish(_ result: Result<CLLocationCoordinate2D, Error>) {
+    private func geo(_ location: CLLocation) -> GeoCoordinate {
+        GeoCoordinate(latitude: location.coordinate.latitude, longitude: location.coordinate.longitude)
+    }
+
+    private func finish(_ result: Result<GeoCoordinate, Error>) {
         guard let completion else { return }
         timeout?.cancel()
         timeout = nil
@@ -92,7 +102,7 @@ final class NativeLocationProvider: NSObject, CLLocationManagerDelegate {
 
     private func requestCurrentLocation() {
         if let cached = locationManager.location, abs(cached.timestamp.timeIntervalSinceNow) < 30 * 60 {
-            finish(.success(cached.coordinate))
+            finish(.success(geo(cached)))
             return
         }
         locationManager.requestLocation()
