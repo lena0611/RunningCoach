@@ -164,6 +164,23 @@ export type RealignPlan = {
 }
 
 /**
+ * 휴식 창 차단(#473 메타-독립 가드): status='rested' 행이 있는 날짜에는 새 초안을 깔지 않는다.
+ * 휴식 선언은 세션 status(rested)와 메타(training_memory.activeRest) 두 레이어인데, 메타는 JSON 통째
+ * last-write-wins 라 다중 클라이언트(폰+웹 동시 사용)에서 유실될 수 있다(2026-07-22 사고 — stale 탭의
+ * 앵커 저장이 방금 선언한 activeRest 를 덮어씀). 메타가 없어도 DB 의 rested 행 자체를 휴식 의사의
+ * 근거로 삼아, 재정렬/콜드스타트가 휴식 기간에 planned 를 다시 채우는 닦달 재발을 막는다(SSOT §휴식과 복귀).
+ */
+export function dropDraftsOnRestedDates<T extends { date: string }>(
+  drafts: T[],
+  existing: Array<Pick<ScheduledSession, 'date' | 'status'>>
+): T[] {
+  const restedDates = new Set<string>()
+  for (const s of existing) if (s.status === 'rested') restedDates.add(s.date)
+  if (!restedDates.size) return drafts
+  return drafts.filter((d) => !restedDates.has(d.date))
+}
+
+/**
  * 목표일을 고정한 채 "오늘부터" 스케줄을 재구축한다. allocatePhases 가 남은 주수에 맞춰
  * Phase 를 다시 압축하므로(주수↓→base↓), 잃은 기간이 자연히 반영된 forward 재계산이 된다.
  * shouldRealign 이 아니면 drafts 는 비고 fromDate 는 오늘(no-op 신호).
