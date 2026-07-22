@@ -94,8 +94,20 @@ async function buildWeather(grid: GridRow, target: Date) {
   const vilage = getVilageBase(kst)
   const targetIsNow = Math.abs(target.getTime() - Date.now()) < 60 * 60 * 1000
 
-  const vilageItems = await fetchKmaCached('getVilageFcst', nx, ny, vilage.baseDate, vilage.baseTime, 1000)
-  const hourly = buildHourly(vilageItems)
+  // 오늘 지나간 시간(자정~현재 발표 예보 시작 전)을 채우기 위해 지난밤(전일 2300) 발표 예보를 병합한다.
+  // 기상청은 과거 실측을 기본 제공하지 않아, 지난밤 예보로 오전 구간을 채워 차트가 자정부터 연속된다.
+  // 두 호출은 병렬 — KMA가 느려 직렬 2회(각 10s 타임아웃)는 콜드스타트에서 전체 실패를 만든다.
+  // buildHourly는 시간 키로 카테고리를 덮어쓰므로 backfill을 앞에 둬 겹치는 시간은 최신(현재 base)이 이긴다.
+  const backfill = getBackfillBase(kst)
+  const wantBackfill = backfill.baseDate !== vilage.baseDate || backfill.baseTime !== vilage.baseTime
+  const [vilageResult, backfillResult] = await Promise.allSettled([
+    fetchKmaCached('getVilageFcst', nx, ny, vilage.baseDate, vilage.baseTime, 1000),
+    wantBackfill ? fetchKmaCached('getVilageFcst', nx, ny, backfill.baseDate, backfill.baseTime, 1000) : Promise.resolve([] as KmaItem[])
+  ])
+  if (vilageResult.status === 'rejected') throw vilageResult.reason
+  // 백필 실패는 무시한다 — 현재 예보만으로도 동작한다(오전이 빌 뿐).
+  const backfillItems = backfillResult.status === 'fulfilled' ? backfillResult.value : []
+  const hourly = buildHourly([...backfillItems, ...vilageResult.value])
   if (!hourly.length) throw new Error('기상청 예보 데이터를 받지 못했습니다.')
 
   const lastFcst = Date.parse(hourly[hourly.length - 1].time)
@@ -103,7 +115,7 @@ async function buildWeather(grid: GridRow, target: Date) {
     return { ok: false, outOfRange: true, reason: 'beyond-forecast', locationName: locationLabel(grid), maxForecastAt: hourly[hourly.length - 1].time }
   }
 
-  const daily = buildDaily(vilageItems)
+  const daily = buildDaily(vilageResult.value)
   let current = nearestHourly(hourly, target)
 
   if (targetIsNow) {
@@ -213,6 +225,12 @@ function getVilageBase(kst: Date): { baseDate: string; baseTime: string } {
     return { baseDate: ymdUtc(prev), baseTime: '2300' }
   }
   return { baseDate: ymdUtc(kst), baseTime: `${pad2(chosen)}00` }
+}
+
+// 오늘 자정(00:00)부터를 커버하는 발표 시각 — 전일 2300 base가 당일 0000~를 예보한다.
+function getBackfillBase(kst: Date): { baseDate: string; baseTime: string } {
+  const prev = new Date(kst.getTime() - 24 * 60 * 60 * 1000)
+  return { baseDate: ymdUtc(prev), baseTime: '2300' }
 }
 
 function getNcstBase(kst: Date): { baseDate: string; baseTime: string } {

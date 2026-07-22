@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { LineChart } from 'echarts/charts'
-import { AxisPointerComponent, GridComponent, MarkLineComponent } from 'echarts/components'
+import { LineChart, ScatterChart } from 'echarts/charts'
+import { AxisPointerComponent, GridComponent, MarkLineComponent, MarkPointComponent } from 'echarts/components'
 import { use, init } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { ECharts, EChartsOption } from 'echarts'
 import type { WeatherHourlyPoint } from '@/features/import-weatherkit/weatherKitBridge'
 import { formatRainAmount, formatWeatherNumber, weatherSymbolToEmoji } from '@/shared/lib/weather'
-import { getChartDomain, inferChartMetricKind } from '@/shared/lib/chartAxis'
 import { triggerSelectionHaptic } from '@/shared/lib/haptics'
 
-use([LineChart, AxisPointerComponent, GridComponent, MarkLineComponent, CanvasRenderer])
+// ScatterChart=현재 시각 점, MarkPointComponent=최고/최저 라벨 — 미등록 시 조용히 안 그려진다.
+use([LineChart, ScatterChart, AxisPointerComponent, GridComponent, MarkLineComponent, MarkPointComponent, CanvasRenderer])
 
 /**
  * 날씨 시간대 차트(터치 우선).
@@ -65,7 +65,6 @@ function hourOf(index: number) {
 }
 function formatHourLabel(time: string) {
   const h = new Date(time).getHours()
-  if (h === 0) return '밤 12시'
   const period = h < 12 ? '오전' : '오후'
   const display = h % 12 === 0 ? 12 : h % 12
   return `${period} ${display}시`
@@ -124,13 +123,24 @@ function renderChart() {
   const accent = getColor('--color-accent') || '#38bdf8'
   const muted = getColor('--color-muted') || '#8b98a8'
   const subtle = getColor('--color-subtle-2') || 'rgba(255,255,255,0.08)'
-  // Y축은 실제·체감 두 모드 공통 도메인으로 고정한다 — 탭마다 축이 따로 스케일되면
-  // 체감(실제보다 높음)이 오히려 낮아 보이는 착시가 생긴다(축이 값과 함께 떠오름).
-  const domain = getChartDomain([...actualTemps.value, ...feltTemps.value], inferChartMetricKind('°'))
+  // Y축: 3° 눈금 + 실제·체감 공통 스케일. 최고점 2칸(6°) 위·최저점 2칸 아래로 여백을 둬
+  // 라인이 가운데 오게 하고, 탭 전환 시 축이 흔들리지 않게 한다(체감이 낮아 보이던 착시 방지).
+  const nums = [...actualTemps.value, ...feltTemps.value].filter((v): v is number => v != null)
+  const dataMax = nums.length ? Math.max(...nums) : 30
+  const dataMin = nums.length ? Math.min(...nums) : 18
+  const yMax = Math.round(dataMax / 3) * 3 + 6
+  const yMin = Math.round(dataMin / 3) * 3 - 6
   const boundary = nowIndex.value
 
   const pastData = temps.value.map((value, index) => (boundary >= 0 && index <= boundary ? value : null))
   const futureData = temps.value.map((value, index) => (boundary < 0 || index >= boundary ? value : null))
+
+  // 최고/최저 지점(표시 중인 지표 기준) — 애플 날씨식 라벨.
+  const disp = temps.value
+    .map((value, index) => ({ value, index }))
+    .filter((point): point is { value: number; index: number } => point.value != null)
+  const maxPoint = disp.length ? disp.reduce((best, cur) => (cur.value > best.value ? cur : best)) : null
+  const minPoint = disp.length ? disp.reduce((best, cur) => (cur.value < best.value ? cur : best)) : null
 
   const option: EChartsOption = {
     animationDuration: 380,
@@ -182,10 +192,11 @@ function renderChart() {
       type: 'value',
       // 라인 시작(좌측)이 온도축에 가려지지 않도록 눈금 라벨을 우측에 노출.
       position: 'right',
-      min: domain?.min,
-      max: domain?.max,
+      min: yMin,
+      max: yMax,
+      interval: 3,
       splitLine: { lineStyle: { color: subtle } },
-      axisLabel: { color: muted, fontWeight: 700, fontSize: 12 }
+      axisLabel: { color: muted, fontWeight: 700, fontSize: 12, formatter: (value: number) => `${value}°` }
     },
     series: [
       // 체감 탭일 때 실제 온도선을 흐리게 함께 그려 체감과 비교되게 한다(뒤에 깔림).
@@ -220,6 +231,21 @@ function renderChart() {
         lineStyle: { width: 3, color: primary },
         areaStyle: { opacity: 0.08, color: primary },
         emphasis: { disabled: true },
+        // 최고/최저 지점 라벨(애플 날씨식) — 표시 중인 지표의 하루 최고·최저.
+        markPoint:
+          maxPoint && minPoint
+            ? {
+                silent: true,
+                symbol: 'circle',
+                symbolSize: 5,
+                itemStyle: { color: primary },
+                label: { color: muted, fontSize: 11, fontWeight: 700, position: 'top', formatter: (p: { name?: string }) => p.name ?? '' },
+                data: [
+                  { name: '최고', coord: [maxPoint.index, maxPoint.value] },
+                  { name: '최저', coord: [minPoint.index, minPoint.value] }
+                ]
+              }
+            : undefined,
         markLine:
           boundary >= 0
             ? {
@@ -231,7 +257,21 @@ function renderChart() {
                 label: { show: false }
               }
             : undefined
-      }
+      },
+      // 현재 시각 흰 점(애플 날씨식) — 과거→미래 전환 지점.
+      ...(boundary >= 0 && temps.value[boundary] != null
+        ? [
+            {
+              type: 'scatter' as const,
+              data: [[boundary, temps.value[boundary]] as [number, number]],
+              symbol: 'circle' as const,
+              symbolSize: 9,
+              itemStyle: { color: '#ffffff', borderColor: primary, borderWidth: 2 },
+              silent: true,
+              z: 6
+            }
+          ]
+        : [])
     ]
   }
   chart.setOption(option, true)

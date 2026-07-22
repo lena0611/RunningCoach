@@ -62,7 +62,6 @@ function hourOf(index: number) {
 }
 function formatHourLabel(time: string) {
   const h = new Date(time).getHours()
-  if (h === 0) return '밤 12시'
   const period = h < 12 ? '오전' : '오후'
   const display = h % 12 === 0 ? 12 : h % 12
   return `${period} ${display}시`
@@ -220,7 +219,7 @@ function renderChart() {
   font-weight: 700;
 }
 .weather-rain-chart {
-  height: 130px;
+  height: 180px;
   /* 세로 스크롤은 페이지에, 가로 드래그는 차트 스크럽으로(터치). */
   touch-action: pan-y;
 }
