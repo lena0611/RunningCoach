@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { LineChart } from 'echarts/charts'
-import { AxisPointerComponent, GridComponent, MarkLineComponent } from 'echarts/components'
+import { AxisPointerComponent, GridComponent, MarkAreaComponent, MarkLineComponent } from 'echarts/components'
 import { use, init } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -8,7 +8,8 @@ import type { ECharts, EChartsOption } from 'echarts'
 import type { WeatherHourlyPoint } from '@/features/import-weatherkit/weatherKitBridge'
 import { triggerSelectionHaptic } from '@/shared/lib/haptics'
 
-use([LineChart, AxisPointerComponent, GridComponent, MarkLineComponent, CanvasRenderer])
+// MarkAreaComponent = 과거 구간 빗금 — 미등록 시 조용히 안 그려진다(ECharts 트리셰이킹 함정).
+use([LineChart, AxisPointerComponent, GridComponent, MarkAreaComponent, MarkLineComponent, CanvasRenderer])
 
 /**
  * 시간대별 강수확률 차트(온도 차트 아래 별도 신설).
@@ -108,6 +109,34 @@ function getColor(name: string) {
   return getComputedStyle(chartRef.value).getPropertyValue(name).trim()
 }
 
+// 과거 구간 빗금 패턴(애플 날씨 레퍼런스) — 지난 시간은 값 라인 대신 사선 해칭으로 "지나감"을 표현.
+// ECharts 색상 자리엔 {image, repeat} 패턴 객체를 넣는다(zrender ImagePattern).
+type EChartsPattern = { image: HTMLCanvasElement; repeat: 'repeat' }
+let hatchCanvas: HTMLCanvasElement | null = null
+function hatchPattern(color: string): EChartsPattern | string {
+  if (!hatchCanvas) {
+    const canvas = document.createElement('canvas')
+    canvas.width = 8
+    canvas.height = 8
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return 'transparent'
+    ctx.strokeStyle = color
+    ctx.globalAlpha = 0.28
+    ctx.lineWidth = 1.5
+    // 8px 타일에 이어지는 사선(↗) 스트라이프 — repeat 시 끊김 없음.
+    ctx.beginPath()
+    ctx.moveTo(-2, 10)
+    ctx.lineTo(10, -2)
+    ctx.moveTo(-2, 2)
+    ctx.lineTo(2, -2)
+    ctx.moveTo(6, 10)
+    ctx.lineTo(10, 6)
+    ctx.stroke()
+    hatchCanvas = canvas
+  }
+  return { image: hatchCanvas, repeat: 'repeat' }
+}
+
 function renderChart() {
   if (!chart || !props.hours.length) return
   const accent = getColor('--color-accent') || '#38bdf8'
@@ -115,7 +144,7 @@ function renderChart() {
   const subtle = getColor('--color-subtle-2') || 'rgba(255,255,255,0.08)'
   const boundary = nowIndex.value
 
-  const pastData = pops.value.map((value, index) => (boundary >= 0 && index <= boundary ? value : null))
+  // 과거는 라인을 그리지 않는다 — 대신 그 구간 전체를 빗금으로 덮는다(애플 날씨 스타일, 사용자 요청).
   const futureData = pops.value.map((value, index) => (boundary < 0 || index >= boundary ? value : null))
 
   const option: EChartsOption = {
@@ -148,21 +177,21 @@ function renderChart() {
     series: [
       {
         type: 'line',
-        data: pastData,
-        smooth: true,
-        symbol: 'none',
-        lineStyle: { width: 2.5, color: muted, type: 'dashed' },
-        areaStyle: { opacity: 0.06, color: muted },
-        emphasis: { disabled: true }
-      },
-      {
-        type: 'line',
         data: futureData,
         smooth: true,
         symbol: 'none',
         lineStyle: { width: 3, color: accent },
         areaStyle: { opacity: 0.16, color: accent },
         emphasis: { disabled: true },
+        // 지나간 구간(자정~지금)은 사선 빗금으로 덮는다 — 과거 라인 미표시(애플 날씨 스타일).
+        markArea:
+          boundary > 0
+            ? {
+                silent: true,
+                itemStyle: { color: hatchPattern(muted) },
+                data: [[{ xAxis: 0 }, { xAxis: boundary }]]
+              }
+            : undefined,
         markLine:
           boundary >= 0
             ? {
