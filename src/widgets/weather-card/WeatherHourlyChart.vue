@@ -33,9 +33,15 @@ let resizeObserver: ResizeObserver | null = null
 
 const scrubIndex = ref<number | null>(null)
 
-const actualTemps = computed(() => props.hours.map((hour) => Math.round(hour.temperatureC ?? 0)))
+// 온도 없는 빈 슬롯(자정~예보 시작 전 등)은 null로 둬 라인이 끊기게 한다(0°로 찍지 않음).
+const actualTemps = computed(() =>
+  props.hours.map((hour) => (hour.temperatureC == null ? null : Math.round(hour.temperatureC)))
+)
 const feltTemps = computed(() =>
-  props.hours.map((hour) => Math.round((hour.apparentTemperatureC ?? hour.temperatureC) ?? 0))
+  props.hours.map((hour) => {
+    const value = hour.apparentTemperatureC ?? hour.temperatureC
+    return value == null ? null : Math.round(value)
+  })
 )
 const temps = computed(() => (props.tempMode === 'feel' ? feltTemps.value : actualTemps.value))
 
@@ -59,6 +65,7 @@ function hourOf(index: number) {
 }
 function formatHourLabel(time: string) {
   const h = new Date(time).getHours()
+  if (h === 0) return '밤 12시'
   const period = h < 12 ? '오전' : '오후'
   const display = h % 12 === 0 ? 12 : h % 12
   return `${period} ${display}시`
@@ -165,7 +172,9 @@ function renderChart() {
           fontSize: 14,
           margin: 4,
           interval: (index: number) => hourOf(index) % 2 === 0,
-          formatter: (_: string, index: number) => weatherSymbolToEmoji(props.hours[index].symbolName)
+          // 빈 슬롯(symbolName 없음)엔 아이콘을 그리지 않는다(가짜 🌤️ 방지).
+          formatter: (_: string, index: number) =>
+            props.hours[index].symbolName ? weatherSymbolToEmoji(props.hours[index].symbolName) : ''
         }
       }
     ],
@@ -179,6 +188,20 @@ function renderChart() {
       axisLabel: { color: muted, fontWeight: 700, fontSize: 12 }
     },
     series: [
+      // 체감 탭일 때 실제 온도선을 흐리게 함께 그려 체감과 비교되게 한다(뒤에 깔림).
+      ...(props.tempMode === 'feel'
+        ? [
+            {
+              type: 'line' as const,
+              data: actualTemps.value,
+              smooth: true,
+              symbol: 'none' as const,
+              silent: true,
+              lineStyle: { width: 1.5, color: muted, opacity: 0.5 },
+              emphasis: { disabled: true }
+            }
+          ]
+        : []),
       {
         // 지난 시간: 점선 + muted (오늘이 아닐 땐 빈 시리즈)
         type: 'line',

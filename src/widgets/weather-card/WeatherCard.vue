@@ -25,7 +25,7 @@ const emit = defineEmits<{ refresh: [] }>()
 
 const weatherStore = useWeatherStore()
 
-const tempMode = ref<'actual' | 'feel'>('feel')
+const tempMode = ref<'actual' | 'feel'>('actual')
 const selectedDate = ref<string>('')
 
 const todayText = computed(() => formatLocalDate(new Date()))
@@ -47,10 +47,19 @@ watch(
 
 const isSelectedToday = computed(() => selectedDate.value === todayText.value)
 
-// 선택한 날 전체 시간(최대 24h). 안전등급·강수 계산용 풀 해상도.
-const dayHours = computed<WeatherHourlyPoint[]>(() =>
-  (props.snapshot?.hourly ?? []).filter((hour) => hour.time.slice(0, 10) === selectedDate.value).slice(0, 24)
-)
+// 선택한 로컬(KST) 날짜의 0~23시 슬롯. 시각은 UTC(Z)로 저장돼 있어 time.slice(UTC 날짜)로
+// 자르면 하루가 9시간 밀리므로(KST 9시 시작), 각 시각의 '로컬 날짜'로 그룹핑한다.
+// X축이 항상 그 날 자정에서 시작하고 6시간 라벨(0/6/12/18)이 맞물리도록 없는 시각은
+// 빈 슬롯(온도 null → 라인 끊김)으로 채운다.
+const dayHours = computed<WeatherHourlyPoint[]>(() => {
+  const byHour = new Map<number, WeatherHourlyPoint>()
+  for (const hour of props.snapshot?.hourly ?? []) {
+    const d = new Date(hour.time)
+    if (formatLocalDate(d) === selectedDate.value) byHour.set(d.getHours(), hour)
+  }
+  if (!byHour.size) return []
+  return Array.from({ length: 24 }, (_, hour) => byHour.get(hour) ?? emptyHourSlot(selectedDate.value, hour))
+})
 
 // 요청(현재) 시각. 오늘 차트의 과거 점선·'지금' 라인 기준.
 const requestTime = computed(() => {
@@ -77,7 +86,7 @@ const repCurrent = computed<RepCurrent | null>(() => {
       symbolName: c.symbolName
     }
   }
-  const hours = props.snapshot.hourly.filter((hour) => hour.time.slice(0, 10) === selectedDate.value)
+  const hours = props.snapshot.hourly.filter((hour) => formatLocalDate(new Date(hour.time)) === selectedDate.value)
   const morning = hours.find((hour) => new Date(hour.time).getHours() >= 7) ?? hours[0]
   if (!morning) return null
   return {
@@ -126,6 +135,22 @@ const sun = computed(() => {
 
 function formatLocalDate(value: Date) {
   return [value.getFullYear(), String(value.getMonth() + 1).padStart(2, '0'), String(value.getDate()).padStart(2, '0')].join('-')
+}
+// 예보에 없는 시각용 빈 슬롯 — 온도/강수는 null(라인 끊김), 시각만 그 날 로컬 정시로 둔다.
+function emptyHourSlot(date: string, hour: number): WeatherHourlyPoint {
+  const local = new Date(`${date}T${String(hour).padStart(2, '0')}:00:00`)
+  return {
+    time: local.toISOString(),
+    temperatureC: null,
+    apparentTemperatureC: null,
+    precipitationChance: null,
+    precipitationAmountMm: null,
+    precipitationIntensityMmPerHour: null,
+    condition: '',
+    symbolName: '',
+    isDaylight: hour >= 6 && hour < 19,
+    humidity: null
+  }
 }
 function formatDayChip(date: string) {
   if (date === todayText.value) return '오늘'
