@@ -197,7 +197,7 @@ struct RunContextWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let contentController = WKUserContentController()
         contentController.add(context.coordinator, name: "runContextHealthKit")
-        contentController.add(context.coordinator, name: "runContextWeatherKit")
+        contentController.add(context.coordinator, name: "runContextLocation")
         contentController.add(context.coordinator, name: "runContextHaptics")
         contentController.add(context.coordinator, name: "runContextNotifications")
         contentController.add(context.coordinator, name: "runContextAuth")
@@ -259,7 +259,7 @@ struct RunContextWebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate, UNUserNotificationCenterDelegate {
         weak var webView: WKWebView?
         private let importer = HealthKitRunImporter()
-        private let weatherImporter = OpenMeteoWeatherImporter()
+        private let locationProvider = NativeLocationProvider()
         private let notificationManager = RunContextNotificationManager()
         private let liveRunTracker = LiveRunTracker()
         private let watchRelay = PhoneWatchRelay()
@@ -348,8 +348,8 @@ struct RunContextWebView: UIViewRepresentable {
                 return
             }
 
-            if message.name == "runContextWeatherKit" {
-                handleWeatherMessage(message)
+            if message.name == "runContextLocation" {
+                handleLocationMessage(message)
                 return
             }
 
@@ -509,28 +509,28 @@ struct RunContextWebView: UIViewRepresentable {
             }
         }
 
-        private func handleWeatherMessage(_ message: WKScriptMessage) {
+        private func handleLocationMessage(_ message: WKScriptMessage) {
             guard let body = message.body as? [String: Any],
                   let type = body["type"] as? String else {
-                sendWeatherError("지원하지 않는 날씨 요청입니다.")
+                sendLocationError("지원하지 않는 위치 요청입니다.")
                 return
             }
 
-            guard type == "requestWeatherForecast" else {
-                sendWeatherError("지원하지 않는 날씨 요청입니다.")
+            guard type == "requestLocation" else {
+                sendLocationError("지원하지 않는 위치 요청입니다.")
                 return
             }
 
-            print("[RunContext Weather] requestWeatherForecast via Open-Meteo")
-            weatherImporter.fetchForecast { [weak self] result in
+            print("[RunContext Location] requestLocation")
+            locationProvider.requestCoords { [weak self] result in
                 DispatchQueue.main.async {
                     switch result {
-                    case .success(let snapshot):
-                        print("[RunContext Weather] fetched forecast")
-                        self?.sendWeatherForecast(snapshot)
+                    case .success(let coords):
+                        print("[RunContext Location] resolved", coords.latitude, coords.longitude)
+                        self?.sendLocation(latitude: coords.latitude, longitude: coords.longitude)
                     case .failure(let error):
-                        print("[RunContext Weather] failed:", error.localizedDescription)
-                        self?.sendWeatherError(error.localizedDescription)
+                        print("[RunContext Location] failed:", error.localizedDescription)
+                        self?.sendLocationError(error.localizedDescription)
                     }
                 }
             }
@@ -889,24 +889,19 @@ struct RunContextWebView: UIViewRepresentable {
             webView.evaluateJavaScript("window.RunContextHealthKit?.receiveVo2MaxError('\(escaped)');")
         }
 
-        private func sendWeatherForecast(_ snapshot: RunContextWeatherSnapshot) {
+        private func sendLocation(latitude: Double, longitude: Double) {
             guard let webView else { return }
-            do {
-                let data = try JSONEncoder().encode(snapshot)
-                let json = String(data: data, encoding: .utf8) ?? "{}"
-                webView.evaluateJavaScript("window.RunContextWeatherKit?.receiveForecast(\(json));")
-            } catch {
-                sendWeatherError("날씨 응답 직렬화 실패")
-            }
+            let json = "{\"lat\":\(latitude),\"lon\":\(longitude)}"
+            webView.evaluateJavaScript("window.RunContextLocation?.receiveLocation(\(json));")
         }
 
-        private func sendWeatherError(_ message: String) {
+        private func sendLocationError(_ message: String) {
             guard let webView else { return }
             let escaped = message
                 .replacingOccurrences(of: "\\", with: "\\\\")
                 .replacingOccurrences(of: "'", with: "\\'")
                 .replacingOccurrences(of: "\n", with: "\\n")
-            webView.evaluateJavaScript("window.RunContextWeatherKit?.receiveError('\(escaped)');")
+            webView.evaluateJavaScript("window.RunContextLocation?.receiveError('\(escaped)');")
         }
 
         private func sendError(_ message: String) {
