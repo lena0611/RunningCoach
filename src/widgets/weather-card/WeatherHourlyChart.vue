@@ -33,11 +33,11 @@ let resizeObserver: ResizeObserver | null = null
 
 const scrubIndex = ref<number | null>(null)
 
-const temps = computed(() =>
-  props.hours.map((hour) =>
-    Math.round((props.tempMode === 'feel' ? hour.apparentTemperatureC ?? hour.temperatureC : hour.temperatureC) ?? 0)
-  )
+const actualTemps = computed(() => props.hours.map((hour) => Math.round(hour.temperatureC ?? 0)))
+const feltTemps = computed(() =>
+  props.hours.map((hour) => Math.round((hour.apparentTemperatureC ?? hour.temperatureC) ?? 0))
 )
+const temps = computed(() => (props.tempMode === 'feel' ? feltTemps.value : actualTemps.value))
 
 // 마지막 과거 인덱스(경계 포함) — 이 지점까지 점선, 여기부터 실선이 이어진다.
 const nowIndex = computed(() => {
@@ -117,7 +117,9 @@ function renderChart() {
   const accent = getColor('--color-accent') || '#38bdf8'
   const muted = getColor('--color-muted') || '#8b98a8'
   const subtle = getColor('--color-subtle-2') || 'rgba(255,255,255,0.08)'
-  const domain = getChartDomain(temps.value, inferChartMetricKind('°'))
+  // Y축은 실제·체감 두 모드 공통 도메인으로 고정한다 — 탭마다 축이 따로 스케일되면
+  // 체감(실제보다 높음)이 오히려 낮아 보이는 착시가 생긴다(축이 값과 함께 떠오름).
+  const domain = getChartDomain([...actualTemps.value, ...feltTemps.value], inferChartMetricKind('°'))
   const boundary = nowIndex.value
 
   const pastData = temps.value.map((value, index) => (boundary >= 0 && index <= boundary ? value : null))
