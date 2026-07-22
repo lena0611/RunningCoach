@@ -349,7 +349,7 @@ function renderChart() {
   font-variant-numeric: tabular-nums;
 }
 .weather-hourly-chart {
-  height: 190px;
+  height: 240px;
   /* 세로 스크롤은 페이지에 넘기고, 가로 드래그만 차트 스크럽으로 쓴다(터치). */
   touch-action: pan-y;
 }
