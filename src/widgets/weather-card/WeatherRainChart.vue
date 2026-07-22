@@ -62,6 +62,7 @@ function hourOf(index: number) {
 }
 function formatHourLabel(time: string) {
   const h = new Date(time).getHours()
+  if (h === 0) return '밤 12시'
   const period = h < 12 ? '오전' : '오후'
   const display = h % 12 === 0 ? 12 : h % 12
   return `${period} ${display}시`
