@@ -18,7 +18,7 @@ import { returnRampWindowSessions, returnSessionCapKm } from '@/shared/lib/coach
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { buildPeriodizedSchedule, buildSteadyWeeklyRhythm, goalArchetype, prescriptionFor, trainingWeekRange, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
 import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
-import { buildRealignedSchedule } from '@/shared/lib/coaching/scheduleRealign'
+import { buildRealignedSchedule, dropDraftsOnRestedDates } from '@/shared/lib/coaching/scheduleRealign'
 import { buildSessionBriefing, sessionTypeLabel, type SessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
 import { resolvePaceModel } from '@/shared/lib/vdotPaces'
 import { buildSessionIntentDraft, type BuildSessionIntentArgs } from '@/features/build-session-intent/buildSessionIntentDraft'
@@ -192,28 +192,35 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
       if (archetype !== 'performance') {
         // 비성과: 비주기화 상시 주간 리듬. 롤링 소진(활성 없음) 시 재생성. 재정렬 없음.
         if (!hasActive) {
-          const drafts = buildSteadyWeeklyRhythm({
-            archetype,
-            profile: memoryStore.memory.athleteProfile,
-            today: today.value,
-            currentWeeklyKm: currentWeeklyKm.value,
-            observedEasyPace: observedEasyPace.value,
-            goalId: goal.id
-          })
+          // rested 날짜 차단(#473 메타-독립 가드) — 휴식 창에 새 planned 를 깔지 않는다.
+          const drafts = dropDraftsOnRestedDates(
+            buildSteadyWeeklyRhythm({
+              archetype,
+              profile: memoryStore.memory.athleteProfile,
+              today: today.value,
+              currentWeeklyKm: currentWeeklyKm.value,
+              observedEasyPace: observedEasyPace.value,
+              goalId: goal.id
+            }),
+            mine
+          )
           if (drafts.length) {
             await scheduleStore.insertMany(drafts)
             await persistScheduleAnchor(currentWeeklyKm.value)
           }
         }
       } else if (!hasActive) {
-        // 성과·콜드스타트: 주기화 골격 생성(currentWeeklyKm 앵커, #395).
-        const drafts = buildPeriodizedSchedule({
-          goal,
-          profile: memoryStore.memory.athleteProfile,
-          today: today.value,
-          currentWeeklyKm: currentWeeklyKm.value,
-          observedEasyPace: observedEasyPace.value
-        })
+        // 성과·콜드스타트: 주기화 골격 생성(currentWeeklyKm 앵커, #395). rested 날짜는 차단(#473).
+        const drafts = dropDraftsOnRestedDates(
+          buildPeriodizedSchedule({
+            goal,
+            profile: memoryStore.memory.athleteProfile,
+            today: today.value,
+            currentWeeklyKm: currentWeeklyKm.value,
+            observedEasyPace: observedEasyPace.value
+          }),
+          mine
+        )
         if (drafts.length) {
           await scheduleStore.insertMany(drafts)
           await persistScheduleAnchor(currentWeeklyKm.value)
@@ -245,6 +252,9 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
             anchorForCheck = currentWeeklyKm.value
           }
           const plan = buildRealignedSchedule(mine, goal, memoryStore.memory.athleteProfile, today.value, currentWeeklyKm.value, anchorForCheck, observedEasyPace.value, returnRamp)
+          // rested 날짜 차단(#473 메타-독립 가드): 메타가 유실돼도 재정렬이 휴식 창을 다시 채우지 않는다.
+          // (복귀 램프 경로는 위에서 unrestFrom 이 선행돼 rested 가 없으므로 필터가 no-op — 램프 초안 안 깎임)
+          plan.drafts = dropDraftsOnRestedDates(plan.drafts, scheduleStore.sessions.filter((s) => s.goalId === goal.id))
           if (plan.drafts.length) {
             await scheduleStore.realign(goal.id, plan.fromDate, plan.drafts)
             // 재앵커 발생 → 기준선을 현재 체력으로 갱신(다음 부팅부터 ratio≈1 로 수렴, 영구 재발동 방지).
@@ -265,8 +275,21 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
       // (builder 를 건드리지 않고 멱등 재적용 — 휴식 중 닦달 재발/중복카드 방지). 복귀일이 지나면 건너뛴다.
       // (만료 메타 해제는 expireRestMetaIfOver 가 스케줄 게이트와 무관하게 항상 처리한다.)
       const rest = memoryStore.memory.activeRest
-      if (rest && rest.untilDate >= dateOnly(today.value)) {
+      const todayStr = dateOnly(today.value)
+      if (rest && rest.untilDate >= todayStr) {
         await scheduleStore.declareRest(goal.id, rest.startDate, rest.untilDate)
+      } else if (!rest) {
+        // 메타 유실 fallback(2026-07-22 사고): activeRest 는 training_memory JSON 통째 저장이라
+        // 다른 클라이언트의 last-write-wins 로 지워질 수 있다. 오늘 이후 rested 행이 남아 있으면
+        // 그 관측 범위를 휴식 창으로 보고 재적용해 닦달 차단을 유지한다(멱등). 명시 복귀는
+        // unrestFrom 이 미래 rested 를 먼저 지우므로 이 fallback 과 충돌하지 않는다.
+        const futureRested = scheduleStore.sessions
+          .filter((s) => s.goalId === goal.id && s.status === 'rested' && s.date >= todayStr)
+          .map((s) => s.date)
+          .sort()
+        if (futureRested.length) {
+          await scheduleStore.declareRest(goal.id, todayStr, futureRested[futureRested.length - 1])
+        }
       }
     } catch {
       // best-effort: 스케줄 생성 실패가 대시보드를 막지 않는다.

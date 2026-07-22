@@ -4,7 +4,7 @@ import {
   defaultScheduledSessionPrescription,
   type ScheduledSession
 } from '@/entities/training-schedule/model'
-import { buildRealignedSchedule, detectScheduleDeviation } from '@/shared/lib/coaching/scheduleRealign'
+import { buildRealignedSchedule, detectScheduleDeviation, dropDraftsOnRestedDates } from '@/shared/lib/coaching/scheduleRealign'
 
 function session(overrides: Partial<ScheduledSession>): ScheduledSession {
   return {
@@ -270,5 +270,42 @@ describe('buildRealignedSchedule', () => {
     expect(plan.deviation.anchorDrift).toBe(false)
     expect(plan.deviation.shouldRealign).toBe(false)
     expect(plan.drafts).toEqual([])
+  })
+})
+
+// 휴식 창 차단(#473 메타-독립 가드) — activeRest 메타가 유실돼도(2026-07-22 다중 클라이언트
+// last-write-wins 사고) DB 의 rested 행이 있는 날짜엔 재정렬/콜드스타트 초안을 깔지 않는다.
+describe('dropDraftsOnRestedDates', () => {
+  const drafts = [
+    { date: '2026-07-23', type: 'Easy' },
+    { date: '2026-07-25', type: 'LSD' },
+    { date: '2026-08-01', type: 'LSD' }
+  ]
+
+  it('rested 행이 있는 날짜의 초안만 걸러낸다(휴식 창 밖 초안은 보존)', () => {
+    const existing = [
+      session({ date: '2026-07-23', status: 'rested' }),
+      session({ date: '2026-07-25', status: 'rested' }),
+      session({ date: '2026-07-25', status: 'superseded' })
+    ]
+    const kept = dropDraftsOnRestedDates(drafts, existing)
+    expect(kept.map((d) => d.date)).toEqual(['2026-08-01'])
+  })
+
+  it('rested 행이 없으면 초안을 그대로 반환한다(휴식 아님 = no-op)', () => {
+    const existing = [
+      session({ date: '2026-07-23', status: 'planned' }),
+      session({ date: '2026-07-25', status: 'superseded' })
+    ]
+    expect(dropDraftsOnRestedDates(drafts, existing)).toEqual(drafts)
+  })
+
+  it('같은 날 rested+planned 공존(메타 유실 사고 잔재)이어도 그 날짜는 차단된다', () => {
+    const existing = [
+      session({ date: '2026-07-23', status: 'planned' }),
+      session({ date: '2026-07-23', status: 'rested' })
+    ]
+    const kept = dropDraftsOnRestedDates(drafts, existing)
+    expect(kept.map((d) => d.date)).toEqual(['2026-07-25', '2026-08-01'])
   })
 })
