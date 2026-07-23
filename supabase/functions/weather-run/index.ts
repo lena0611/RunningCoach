@@ -62,12 +62,26 @@ Deno.serve(async (req) => {
     if (!Number.isFinite(target.getTime())) return json({ error: 'invalid when' }, 400)
 
     const grid = findNearestGrid(lat, lon)
-    const result = await buildWeather(grid, target)
-    return json(result)
+    const targetIsNow = Math.abs(target.getTime() - Date.now()) < 60 * 60 * 1000
+    try {
+      const result = await buildWeather(grid, target)
+      // 현재 시점 성공 응답은 격자별로 보관 — 포털 장애 시 stale 로라도 응답한다(빈 화면·에러 토스트보다 낫다).
+      if (targetIsNow && (result as { ok?: boolean }).ok) lastGood.set(`${grid[0]},${grid[1]}`, result)
+      return json(result)
+    } catch (error) {
+      // 공공데이터포털 과부하(간헐 502·타임아웃, 2026-07-23 관측) 폴백: 같은 격자의 마지막 성공 응답이
+      // 있으면 그걸 준다(웜 격리 한정). 데이터는 최대 수시간 전 예보지만 러닝 준비 용도로 유효하다.
+      const stale = targetIsNow ? lastGood.get(`${grid[0]},${grid[1]}`) : undefined
+      if (stale) return json({ ...stale, stale: true })
+      return json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500)
+    }
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500)
   }
 })
+
+// 격자별 마지막 성공 응답(현재 시점 요청 한정) — 포털 장애 시 stale 폴백용. 격리 수명 한정(콜드스타트엔 없음).
+const lastGood = new Map<string, unknown>()
 
 function findNearestGrid(lat: number, lon: number): GridRow {
   let best = GRID[0]
@@ -147,7 +161,14 @@ async function fetchKmaCached(endpoint: string, nx: number, ny: number, baseDate
   const key = `${endpoint}:${nx},${ny}:${baseDate}${baseTime}`
   const hit = cache.get(key)
   if (hit && hit.expiresAt > Date.now()) return hit.value as KmaItem[]
-  const items = await fetchKma(endpoint, nx, ny, baseDate, baseTime, numOfRows)
+  // 공공데이터포털은 과부하 시 간헐 502/타임아웃을 뱉는다(2026-07-23 관측) — 1회 재시도로 스파이크를 흡수한다.
+  let items: KmaItem[]
+  try {
+    items = await fetchKma(endpoint, nx, ny, baseDate, baseTime, numOfRows)
+  } catch {
+    await new Promise((resolve) => setTimeout(resolve, 800))
+    items = await fetchKma(endpoint, nx, ny, baseDate, baseTime, numOfRows)
+  }
   cache.set(key, { value: items, expiresAt: Date.now() + CACHE_TTL_MS })
   return items
 }
@@ -177,7 +198,7 @@ async function fetchKma(endpoint: string, nx: number, ny: number, baseDate: stri
   }
 
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 10_000)
+  const timer = setTimeout(() => controller.abort(), 12_000)
   let text: string
   try {
     const res = await fetch(url, { signal: controller.signal })

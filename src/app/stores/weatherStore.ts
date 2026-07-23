@@ -10,6 +10,10 @@ import { hasNativeLocationBridge, requestNativeCoords } from '@/features/native-
 import type { WeatherSnapshot } from '@/features/import-weatherkit/weatherKitBridge'
 
 const minRefreshIntervalMs = 15 * 60 * 1000
+// 실패 토스트 스로틀 — 제공자(기상청 포털) 장애 중 화면 전환마다 토스트가 반복되지 않게(10분 1회).
+// 카드의 에러 상태 표시는 그대로 유지된다.
+const errorToastThrottleMs = 10 * 60 * 1000
+let lastErrorToastAt = 0
 let listenersAttached = false
 
 export type WeatherLocationSource = 'current' | 'last-run'
@@ -111,7 +115,8 @@ export const useWeatherStore = defineStore('weatherStore', {
         // 위치 권한 계열은 구체 한국어 안내 유지, 그 외(시스템 원문 "The request timed out." 등)는 친화 문구로.
         this.error = friendlyErrorMessage(err, '날씨를 가져오지 못했어요. 잠시 후 자동으로 다시 시도해요.')
         if (isGeolocationError(err)) this.error = formatWeatherError(err)
-        if (!options.silent) {
+        if (!options.silent && Date.now() - lastErrorToastAt > errorToastThrottleMs) {
+          lastErrorToastAt = Date.now()
           useToastStore().error(this.error, { placement: 'top', delayMs: 280, durationMs: 3600 })
         }
       }
