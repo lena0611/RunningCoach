@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { filterInjuryItemsForRunDate, getActiveInjuryItemForRunDate } from './injuryTemporalFilter.ts'
+import { normalizeCoachScheduleProposal } from './scheduleProposal.ts'
 import {
   buildUserNoteRelevancePolicy,
   detectCoachAnswerIntent,
@@ -241,7 +242,10 @@ Deno.serve(async (req) => {
             date: String(s.date).slice(0, 10),
             type: typeof s.type === 'string' ? s.type : '',
             distanceKm: typeof s.distanceKm === 'number' ? s.distanceKm : null,
-            keySession: s.keySession === true
+            keySession: s.keySession === true,
+            // 상향(intensify) 적격 — 강도 사다리·품질 게이트가 웹 SSOT 라 판정을 웹이 보낸다(#639 G7).
+            // 값이 없으면 부적격(fail-safe deny).
+            canIntensify: s.canIntensify === true
           }))
       : null
     const restState = normalizeRestState(body.restState)
@@ -317,12 +321,20 @@ async function persistCoachResult(
   selectedRunId: string | null,
   userNote: string,
   context: CoachContext,
-  ai: { report: string; memoryItems: string[]; trainingMemoryPatch: TrainingMemoryPatch | null; injuryUpdateProposal: InjuryUpdateProposal | null },
+  ai: { report: string; memoryItems: string[]; trainingMemoryPatch: TrainingMemoryPatch | null; injuryUpdateProposal: InjuryUpdateProposal | null; coachScheduleProposal?: unknown },
   model: string
 ) {
   const durableMemoryItems = normalizeMemoryItems(ai.memoryItems, [...(context.coreMemoryItems ?? []), ...context.coachMemoryItems])
   const memoryPatch = normalizeTrainingMemoryPatch(ai.trainingMemoryPatch)
   const injuryUpdateProposal = normalizeInjuryUpdateProposal(ai.injuryUpdateProposal, context.activeInjuryItem)
+  // 스케줄 액션 제안(#639) — 승인형 후보. 게이트를 하나라도 못 넘으면 null 로 떨어진다(자동 적용 경로 없음).
+  const coachScheduleProposal = normalizeCoachScheduleProposal(ai.coachScheduleProposal, {
+    responseMode: context.coachResponseMode,
+    upcomingSchedule: context.upcomingSchedule,
+    restActive: context.scheduleProposalGate.restActive,
+    injuryBlocksIntensify: context.scheduleProposalGate.injuryBlocksIntensify,
+    today: new Date().toISOString().slice(0, 10)
+  })
   const updatedMemory = memoryPatch ? mergeTrainingMemoryPatch(context.trainingMemory, memoryPatch) : null
   const persistenceWarnings: CoachPersistenceWarning[] = []
 
@@ -391,6 +403,8 @@ async function persistCoachResult(
       updatedAt: reportRow.updated_at,
       trainingMemoryUpdated,
       injuryUpdateProposal,
+      // DB 미영속(injuryUpdateProposal 과 동일) — 히스토리 재로드 시 사라져 철 지난 제안이 되살아나지 않는다.
+      coachScheduleProposal,
       injuryContextSnapshot: reportRow.injury_context_snapshot ?? null,
       model: reportRow.model ?? model,
       persistenceWarnings
@@ -398,6 +412,7 @@ async function persistCoachResult(
     trainingMemoryUpdated,
     trainingMemoryPatch: memoryPatch,
     injuryUpdateProposal,
+    coachScheduleProposal,
     persistenceWarnings
   }
 }
@@ -938,7 +953,7 @@ function unifyPerformanceProjection(
   }
 }
 
-async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null, sessionEvidence: CoachSessionEvidence | null = null, upcomingSchedule: { date: string; type: string; distanceKm: number | null; keySession: boolean }[] | null = null, restState: CoachRestContext | null = null, recentInjuryWindow: CoachRecentInjuryWindow | null = null, marathonFlag = false, injurySignals: CoachInjurySignals | null = null) {
+async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null, sessionEvidence: CoachSessionEvidence | null = null, upcomingSchedule: { date: string; type: string; distanceKm: number | null; keySession: boolean; canIntensify: boolean }[] | null = null, restState: CoachRestContext | null = null, recentInjuryWindow: CoachRecentInjuryWindow | null = null, marathonFlag = false, injurySignals: CoachInjurySignals | null = null) {
   const memorySelect = 'id, content, created_at, importance, last_referenced_at, reference_count'
   const [
     { data: memoryRow },
@@ -1274,6 +1289,17 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     trainingKnowledge,
     adaptiveProgress: structuredCoachContext ? adaptiveProgress : null,
     upcomingSchedule: structuredCoachContext ? upcomingSchedule : null,
+    /**
+     * 스케줄 제안 게이트 입력(#639). **structuredCoachContext 로 가리지 않는다** — 컨텍스트 축약 모드에서
+     * restState 가 null 이 되면 "쉬는 중인데 또 쉬자고 제안"하는 구멍이 생기기 때문이다.
+     * 대상 세션 목록은 여기 복제하지 않고 context.upcomingSchedule 을 그대로 쓴다(프롬프트 크기 — 축약 모드면
+     * 목록이 null 이라 세션 액션은 자연히 전부 떨어진다 = fail-safe).
+     */
+    scheduleProposalGate: {
+      restActive: restState?.active === true,
+      // redFlag 발동 또는 고통증(4~5/5) → 상향 제안 차단. 부상 KB §4 게이트가 처방보다 우선.
+      injuryBlocksIntensify: injurySignals?.redFlag.tripped === true || (injurySignals?.severity ?? 0) >= 4
+    },
     upcomingSchedulePolicy:
       'context.upcomingSchedule는 실제 주기화 스케줄의 다음 세션들(날짜·유형·거리)이다. "## 다음 훈련"은 반드시 이 실제 세션을 기준으로 말하고, weeklyPattern/prescriptionTemplates로 다른 세션(예: 다음이 토요일 LSD인데 화요일 Easy)을 지어내지 마라. 요약 화면(캐러셀)과 어긋나면 안 된다. 부상·회복으로 하향이 필요하면 "그 스케줄 세션(예: 토요일 LSD)을 이렇게 조정/대체하자"처럼 실제 세션을 기준으로 조정한다. upcomingSchedule이 비어있거나 null일 때만 일반 가이드로 답한다.',
     restState: structuredCoachContext ? restState : null,
@@ -1477,6 +1503,7 @@ type CoachAiResult = {
   memoryItems: string[]
   trainingMemoryPatch: TrainingMemoryPatch | null
   injuryUpdateProposal: InjuryUpdateProposal | null
+  coachScheduleProposal: unknown
 }
 
 // 과거 세션 리뷰(selected_run_review)이고 nextTrainingAdviceRelevant=false면
@@ -1596,6 +1623,21 @@ function buildResponseTemplatePolicy() {
   }
 }
 
+/**
+ * 스케줄 액션 제안(#639) 공통 지침. report/conversational/explain/evidence **4 모드가 같은 규칙**을 쓴다 —
+ * 모드별 지침 세트가 서로를 대체하는 구조라 여기 한 곳에 두지 않으면 대화 모드에서만 규칙이 빠진다.
+ * (실제 안전 불변식은 프롬프트가 아니라 normalizeCoachScheduleProposal 게이트가 강제한다.)
+ */
+function buildScheduleProposalInstructions() {
+  return [
+    'coachScheduleProposal은 사용자가 대화(userNote)에서 휴식·중단·과부하·일정 불가·강도 조정을 직접 표현했을 때만 반환한다(그 외에는 null). 근거 없이 먼저 꺼내지 않고, report 본문에서 이미 사람으로서 대답한 뒤 그 실행 경로로만 덧붙인다. 이것은 스케줄을 바꾸는 명령이 아니라 사용자가 승인해야 적용되는 후보이며, 앱이 기존 화면(휴식 선언 시트·세션 카드)을 열어줄 뿐이다.',
+    'coachScheduleProposal.actionType은 declare_rest(쉬고 싶다·못 뛴다), ease_session(그날 세션이 버겁다), intensify_session(더 하고 싶다), reschedule_session(그날은 어렵고 다른 날은 된다), skip_session(이번엔 건너뛰겠다) 중 하나다. 전체 일정을 다시 짜는 액션은 없다 — 한 번의 대화로 주기화 골격을 재구축하지 않는다.',
+    '세션 액션(declare_rest 외)의 targetDate는 반드시 context.upcomingSchedule에 실제로 있는 날짜여야 한다. 없는 날짜를 지어내면 제안이 폐기된다. intensify_session은 그 세션의 canIntensify가 true일 때만 제안한다.',
+    'declare_rest의 suggestedRestUntil은 사용자가 "2주", "이번 주까지"처럼 기간을 명시했을 때만 그 날짜를 넣는다. "당분간", "좀"처럼 기간이 불명확하면 반드시 null로 두어 사용자가 직접 고르게 한다. 쉬는 기간은 코치가 정하는 게 아니라 사용자가 정한다 — report 본문에서도 기간을 단정하지 말고 "기간은 직접 정하시면 돼요"로 안내한다.',
+    '사용자가 완전 휴식을 원하면 존중하되, 통증이 심하거나 안전 신호(redFlag)가 있는 경우가 아니라면 "가벼운 회복주로 대신하는 선택지도 있다"를 report에서 1회만 덧붙인다(강권 금지). 부하가 원인인 부상은 완전 정지보다 낮은 부하 유지가 회복에 유리할 수 있다.'
+  ]
+}
+
 function buildFreeConversationInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnType<typeof buildRunnerLevelGuide>) {
   return [
     '너는 한국어로 자연스럽게 답하는 러닝 코치다. 지금은 자유대화다.',
@@ -1608,7 +1650,8 @@ function buildFreeConversationInstructions(runnerLevel: RunnerLevel, levelGuide:
     '마크다운은 필요할 때만 쓴다. 제목이나 목록을 쓰더라도 질문을 더 읽기 쉽게 만드는 목적일 때만 사용한다.',
     '의학적 진단이나 통증 처방을 하지 않는다. 사용자가 통증/부상을 직접 물으면 일반 안전 원칙 수준에서 조심스럽게 말한다.',
     'memoryItems에는 이 대화에서 새로 알게 된 사용자의 안정적인 개인 맥락(목표/욕구/선호/서사)만 0~3개 넣는다. 일회성 잡담이나 단일 세션 수치는 넣지 않는다. 이미 core/coachMemoryItems에 있으면 다시 넣지 않는다.',
-    '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal. report에 자유대화 본문을 넣고, trainingMemoryPatch와 injuryUpdateProposal은 null로 둔다.'
+    ...buildScheduleProposalInstructions(),
+    '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal, coachScheduleProposal. report에 자유대화 본문을 넣고, trainingMemoryPatch와 injuryUpdateProposal은 null로 둔다.'
   ].join('\n')
 }
 
@@ -1633,7 +1676,8 @@ function buildEvidenceInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnT
     '4. 참고한 훈련 원칙/출처',
     'memoryItems는 이 대화에서 새로 생긴 안정적인 장기 기억이 있을 때만 0~2개 넣는다. 이미 core/coachMemoryItems에 있으면 다시 넣지 않는다.',
     'trainingMemoryPatch와 injuryUpdateProposal은 명확한 필요가 없으면 null로 둔다.',
-    '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal. report에 위 설명 본문을 넣는다.'
+    ...buildScheduleProposalInstructions(),
+    '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal, coachScheduleProposal. report에 위 설명 본문을 넣는다.'
   ].join('\n')
 }
 
@@ -1655,7 +1699,8 @@ function buildExplainInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnTy
     '출력 구성은 질문에 맞게 유연하게 하되 결론 → 설명 → 사용자 적용 → 추천 순서를 기본으로 한다.',
     'memoryItems는 안정적인 장기 기억이 생긴 경우만 0~2개 넣는다. 이미 core/coachMemoryItems에 있으면 다시 넣지 않는다.',
     'trainingMemoryPatch와 injuryUpdateProposal은 명확한 필요가 없으면 null로 둔다.',
-    '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal. report에 설명 본문을 넣는다.'
+    ...buildScheduleProposalInstructions(),
+    '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal, coachScheduleProposal. report에 설명 본문을 넣는다.'
   ].join('\n')
 }
 
@@ -1823,6 +1868,7 @@ function buildCoachInstructions(context: unknown) {
     '부상 체크인 결과나 대화에서 통증 상태 변경 후보가 보여도 trainingMemoryPatch에 injuryItems, activeInjuryItemId, status, painLevel, resolvedAt, lastFlareDate를 넣지 않는다. 이런 값은 사용자 승인 전 자동 저장 금지다.',
     '완치 후보는 단정하지 않는다. 최근 0~1/5가 반복되고 Easy 조깅/일상 보행/강훈련 뒤 반응이 조용할 때만 report에서 앱 확인을 제안하고 injuryUpdateProposal로 사용자 승인 후보를 반환한다.',
     'injuryUpdateProposal은 부상 상태 변경 후보가 있을 때만 반환한다. 사용자가 승인해야 저장되는 제안이며, 치료 진단이나 자동 완치 처리로 표현하지 않는다.',
+    ...buildScheduleProposalInstructions(),
     '통증/부상 메모가 있어도 의료 진단처럼 말하지 않는다. 통증은 훈련 판단 기준과 관찰 포인트로만 다룬다.',
     '통증 수치가 없으면 단정하지 않는다. 예: "통증 강도가 안 나와 있으니 크게 단정하진 말자. 다만 다음 착지감은 체크하자."',
     '코칭은 해당 러닝 세션 평가에서 끝나지 않는다. 반드시 계정의 목표와 누적 데이터를 보고 현재 weeklyPattern을 유지할지 수정할지 판단한다.',
@@ -1871,8 +1917,8 @@ function buildCoachInstructions(context: unknown) {
     '훈련 준수 패턴뿐 아니라, 사용자가 대화(userNote)에서 직접 말한 개인 맥락과 주요 서사도 장기기억 대상이다: 본인이 밝힌 욕구·목표("오랜만에 5km 30분 도전하고 싶다", want to/하고 싶다/원한다 류), 동기와 이유, 선호("아내와 함께 이지런을 좋아한다"), 생활/환경 제약, 반복되는 컨디션·통증 호소, 코칭 톤 선호 등. 특히 사용자의 욕구·목표 서사는 코치가 오래 기억할수록 신뢰가 쌓이는 이 앱의 핵심이므로 잘 포착한다. 다음에 사용자를 더 잘 이해하는 데 쓸 안정적인 사실만 1인칭 사용자 관점으로 간결히 적는다. 예: "사용자는 오랜만에 5km를 30분 안에 들어오는 걸 목표로 의식한다."',
     'memoryItems에 단일 세션의 거리/페이스/심박, "오늘 잘했다", "다음 훈련은 휴식" 같은 일회성 코멘트를 넣지 않는다. 개인 맥락도 한 번의 가벼운 언급이면 저장하지 말고, 명시적 목표/선호이거나 반복해서 나온 것만 저장한다.',
     '이미 context.coachMemoryItems나 trainingMemory에 같은 의미가 있으면 memoryItems에 다시 넣지 않는다.',
-    '스트리밍 UI가 report를 먼저 표시하므로 JSON 객체의 키 순서는 반드시 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal 순서로 둔다.',
-    'structured output 스키마가 JSON 구조를 강제한다. JSON 외 텍스트를 붙이지 말고, 업데이트가 없으면 trainingMemoryPatch와 injuryUpdateProposal은 null, memoryItems는 빈 배열로 둔다.',
+    '스트리밍 UI가 report를 먼저 표시하므로 JSON 객체의 키 순서는 반드시 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal, coachScheduleProposal 순서로 둔다.',
+    'structured output 스키마가 JSON 구조를 강제한다. JSON 외 텍스트를 붙이지 말고, 업데이트가 없으면 trainingMemoryPatch·injuryUpdateProposal·coachScheduleProposal은 null, memoryItems는 빈 배열로 둔다.',
     '모든 텍스트 값은 자연스러운 한국어로만 작성한다. 다른 언어를 섞지 않는다.'
   ].join('\n')
 
@@ -1887,7 +1933,7 @@ function buildCoachResponseFormat() {
       schema: {
         type: 'object',
         additionalProperties: false,
-        required: ['report', 'memoryItems', 'trainingMemoryPatch', 'injuryUpdateProposal'],
+        required: ['report', 'memoryItems', 'trainingMemoryPatch', 'injuryUpdateProposal', 'coachScheduleProposal'],
         properties: {
           report: { type: 'string' },
           memoryItems: {
@@ -1938,6 +1984,29 @@ function buildCoachResponseFormat() {
                   rationale: { type: 'string' },
                   userApprovalPrompt: { type: 'string' },
                   safetyNotes: { type: 'array', items: { type: 'string' } }
+                }
+              }
+            ]
+          },
+          coachScheduleProposal: {
+            anyOf: [
+              { type: 'null' },
+              {
+                type: 'object',
+                additionalProperties: false,
+                required: ['actionType', 'targetDate', 'suggestedRestUntil', 'restReason', 'rationale', 'userApprovalPrompt'],
+                properties: {
+                  actionType: {
+                    type: 'string',
+                    enum: ['declare_rest', 'ease_session', 'intensify_session', 'reschedule_session', 'skip_session']
+                  },
+                  targetDate: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                  suggestedRestUntil: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+                  restReason: {
+                    anyOf: [{ type: 'string', enum: ['injury', 'weather', 'personal', 'other'] }, { type: 'null' }]
+                  },
+                  rationale: { type: 'string' },
+                  userApprovalPrompt: { type: 'string' }
                 }
               }
             ]
@@ -2213,7 +2282,9 @@ function parseCoachAiText(text: string, fallbackReport = ''): CoachAiResult {
     report: typeof parsed.report === 'string' ? parsed.report : fallbackReport || text,
     memoryItems: Array.isArray(parsed.memoryItems) ? parsed.memoryItems.filter((item: unknown) => typeof item === 'string').slice(0, 8) : [],
     trainingMemoryPatch: parsed.trainingMemoryPatch && typeof parsed.trainingMemoryPatch === 'object' ? parsed.trainingMemoryPatch as TrainingMemoryPatch : null,
-    injuryUpdateProposal: parsed.injuryUpdateProposal && typeof parsed.injuryUpdateProposal === 'object' ? parsed.injuryUpdateProposal as InjuryUpdateProposal : null
+    injuryUpdateProposal: parsed.injuryUpdateProposal && typeof parsed.injuryUpdateProposal === 'object' ? parsed.injuryUpdateProposal as InjuryUpdateProposal : null,
+    // 게이트(normalizeCoachScheduleProposal)가 소비 직전에 강제하므로 여기선 원형 그대로 넘긴다.
+    coachScheduleProposal: parsed.coachScheduleProposal ?? null
   }
   if (!ai.report.trim()) throw new Error('AI 코칭 응답이 비어 있습니다. 다시 요청해 주세요.')
   return ai
