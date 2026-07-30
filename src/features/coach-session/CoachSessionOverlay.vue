@@ -1,24 +1,28 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useCoachStore } from '@/app/stores/coachStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { useCompetitionStore } from '@/app/stores/competitionStore'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
+import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
+import { useCoachActionBridgeStore } from '@/app/stores/coachActionBridgeStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import { computeIntentFulfillment } from '@/entities/session-intent/computeIntentFulfillment'
 import IntentFulfillmentCard from '@/shared/ui/IntentFulfillmentCard.vue'
 import type { RunLog } from '@/entities/run/model'
 import type { TrainingGoal, TrainingInjuryCheckIn, TrainingMemory } from '@/entities/training-memory/model'
 import { detectGoalIntent, type GoalIntentProposal } from '@/features/detect-goal-intent/detectGoalIntent'
-import { fetchCoachReports, requestCoachRunStream, type CoachInjuryUpdateProposal, type CoachReport } from '@/shared/api/coachRepository'
+import { fetchCoachReports, requestCoachRunStream, type CoachInjuryUpdateProposal, type CoachReport, type CoachScheduleProposal } from '@/shared/api/coachRepository'
 import { summarizeAchievementsForCoach } from '@/shared/lib/achievement/achievements'
 import { coachModelLabel, COACH_MODELS, isCoachModelId } from '@/shared/lib/coaching/coachModels'
 import { useSettingsStore } from '@/app/stores/settingsStore'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import { summarizeTempoCoaching } from '@/shared/lib/coaching/tempoAdaptation'
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
+import { canIntensifySession } from '@/shared/lib/coaching/scheduleProposalEligibility'
 import { buildCoachSessionEvidence } from '@/shared/lib/coaching/sessionQuality'
 import { buildInjuryCoachSignals } from '@/entities/training-memory/injurySignals'
 import { getActiveGoal, getActiveInjuryItem, getRecentInjuryHistory, isFullMarathonGoal } from '@/entities/training-memory/model'
@@ -104,6 +108,17 @@ const pendingGoalProposal = ref<GoalIntentProposal | null>(null)
 const pendingGoalCoachNote = ref('')
 const savingGoalProposal = ref(false)
 const dismissedInjuryProposalIds = ref<string[]>([])
+const dismissedScheduleProposalIds = ref<string[]>([])
+const router = useRouter()
+
+/** 로컬 날짜 YYYY-MM-DD(UTC 변환 금지 — 자정 근처에서 하루 밀린다). */
+function todayIso() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** 현재 선언된 휴식 상태 — 휴식 제안 카드 중복 노출(W2) 판정용. */
+const currentRestState = computed(() => deriveRestState(memoryStore.memory.activeRest, todayIso()))
 const savingInjuryProposalId = ref('')
 const schedulingHelpOpen = ref(false)
 const goalSheetDrag = useBottomSheetDrag(closeGoalProposal)
@@ -399,6 +414,8 @@ async function sendCoachRequest(note: string) {
   coachRevealStopped = false
   startCoachThinkingTimer()
   try {
+    // 적응 진행 요약은 코치 컨텍스트와 상향 적격 판정이 함께 쓰므로 한 번만 계산한다(판정 근거 일치 보장).
+    const coachAdaptiveProgress = buildCoachAdaptiveProgress(runStore.sortedRuns, memoryStore.memory)
     const report = await requestCoachRunStream(targetRunId, note, weatherStore.snapshot, {
       signal: controller.signal,
       onDelta: enqueueCoachReveal,
@@ -407,7 +424,7 @@ async function sendCoachRequest(note: string) {
       achievements: summarizeAchievementsForCoach(runStore.sortedRuns, competitionStore.results),
       tempoCoaching: summarizeTempoCoaching(runStore.sortedRuns, memoryStore.memory),
       goalProjection: coachGoalProjection.value,
-      adaptiveProgress: buildCoachAdaptiveProgress(runStore.sortedRuns, memoryStore.memory),
+      adaptiveProgress: coachAdaptiveProgress,
       // 실제 주기화 스케줄의 다음 세션들 — 코치 "다음 훈련"이 weeklyPattern으로 엉뚱한 세션을 지어내지 않게(요약탭과 일치).
       upcomingSchedule: (() => {
         const today = new Date()
@@ -416,7 +433,9 @@ async function sendCoachRequest(note: string) {
           date: s.date,
           type: s.sessionType,
           distanceKm: s.prescription.distanceKm ?? null,
-          keySession: s.keySession
+          keySession: s.keySession,
+          // 상향(intensify) 적격 판정은 웹 소유(#639 G7) — 서버는 이 플래그만 보고 상향 제안을 통과/폐기한다.
+          canIntensify: canIntensifySession(s.sessionType, coachAdaptiveProgress)
         }))
       })(),
       // 활성 휴식(#502) — 휴식 중엔 코치가 "다음 훈련" 처방을 닦달하지 않게. 휴식과 무관하면 null.
@@ -692,6 +711,121 @@ function dismissInjuryProposal(report: CoachReport) {
   dismissedInjuryProposalIds.value = [...dismissedInjuryProposalIds.value, key]
 }
 
+// === 코치 제안 스케줄 액션(#639) — 승인형. 카드는 변이하지 않고 기존 액션 화면으로 연결만 한다 ===
+
+const SCHEDULE_ACTION_LABEL: Record<CoachScheduleProposal['actionType'], string> = {
+  declare_rest: '휴식 선언하기',
+  ease_session: '가볍게 바꾸기',
+  intensify_session: '더 강하게 바꾸기',
+  reschedule_session: '다른 날로 옮기기',
+  skip_session: '이번엔 놓아주기'
+}
+
+const SCHEDULE_ACTION_TITLE: Record<CoachScheduleProposal['actionType'], string> = {
+  declare_rest: '쉬어가기 제안',
+  ease_session: '세션 조정 제안',
+  intensify_session: '세션 상향 제안',
+  reschedule_session: '일정 조정 제안',
+  skip_session: '세션 정리 제안'
+}
+
+function getScheduleProposalKey(report: CoachReport) {
+  const proposal = report.coachScheduleProposal
+  if (!proposal) return ''
+  return `${report.id}:${proposal.actionType}:${proposal.targetDate ?? 'rest'}`
+}
+
+/**
+ * W1~W3: 서버 게이트를 통과했더라도 **화면 기준으로 다시 검증**한다 — 응답 사이에 상태가 바뀔 수 있다.
+ * W1 세션 액션은 그 날짜에 실제 활성 세션이 있어야 한다(그새 재정렬/수행되면 카드를 숨긴다).
+ * W2 declare_rest 는 이미 휴식 중이면 숨긴다. W3 사용자가 닫은 제안은 다시 띄우지 않는다.
+ */
+function shouldShowScheduleProposal(report: CoachReport) {
+  const proposal = report.coachScheduleProposal
+  if (!proposal) return false
+  const key = getScheduleProposalKey(report)
+  if (!key || dismissedScheduleProposalIds.value.includes(key)) return false
+  if (proposal.actionType === 'declare_rest') return !currentRestState.value.active
+  if (!proposal.targetDate) return false
+  return scheduleStore.sessionsOnDate(proposal.targetDate).length > 0
+}
+
+function getScheduleProposalTitle(proposal: CoachScheduleProposal) {
+  return SCHEDULE_ACTION_TITLE[proposal.actionType]
+}
+
+function getScheduleProposalActionLabel(proposal: CoachScheduleProposal) {
+  return SCHEDULE_ACTION_LABEL[proposal.actionType]
+}
+
+function getScheduleProposalTargetLabel(proposal: CoachScheduleProposal) {
+  if (proposal.actionType === 'declare_rest') {
+    return proposal.suggestedRestUntil ? `${formatDateWithWeekday(proposal.suggestedRestUntil)}까지 (조정 가능)` : '기간은 직접 정해요'
+  }
+  return proposal.targetDate ? formatDateWithWeekday(proposal.targetDate) : ''
+}
+
+/**
+ * SSOT §87: 완전 휴식보다 부하 경감(가벼운 회복주)이 나은 경우가 있다 — 부하성 부상이 대표적이다
+ * (부상 KB §3-B Rathleff 2015). 그래서 "부상이면 숨김"이 아니라 **통증·redFlag 로 멈춰야 할 때만** 숨긴다.
+ */
+const restAlternativeBlocked = computed(() => {
+  const signals = buildInjuryCoachSignals(memoryStore.memory, runStore.sortedRuns, new Date())
+  if (signals?.redFlag.tripped) return true
+  const item = getActiveInjuryItem(memoryStore.memory)
+  return (item?.severity ?? 0) >= 4
+})
+
+function shouldShowRestAlternative(proposal: CoachScheduleProposal) {
+  return proposal.actionType === 'declare_rest' && !restAlternativeBlocked.value
+}
+
+/** 휴식 선언 진입 — 부상 체크인 "한동안 쉴게요"와 동일 경로(대시보드 휴식 시트). */
+function applyRestProposal(report: CoachReport) {
+  const proposal = report.coachScheduleProposal
+  if (!proposal) return
+  dismissScheduleProposal(report)
+  useInjuryFlowStore().requestRestDeclaration(proposal.restReason ?? 'other', proposal.suggestedRestUntil)
+  coachStore.close()
+  void router.push('/')
+}
+
+/** 세션 액션 진입 — 코치 탭 해당 날짜 카드로. 실제 변경은 사용자가 그 화면에서 누른다. */
+function applySessionProposal(report: CoachReport) {
+  const proposal = report.coachScheduleProposal
+  if (!proposal?.targetDate) return
+  dismissScheduleProposal(report)
+  useCoachActionBridgeStore().focusSession(proposal.targetDate)
+  coachStore.close()
+  void router.push('/coach')
+}
+
+function applyScheduleProposal(report: CoachReport) {
+  if (report.coachScheduleProposal?.actionType === 'declare_rest') applyRestProposal(report)
+  else applySessionProposal(report)
+}
+
+/** "가벼운 회복주로 대신하기" — 휴식 대신 그날 세션을 낮추는 쪽으로 보낸다(SSOT §87 대안 1회 제시). */
+function applyRestAlternative(report: CoachReport) {
+  const nextSession = scheduleStore.upcoming(todayIso())[0]
+  dismissScheduleProposal(report)
+  if (!nextSession) {
+    useInjuryFlowStore().requestRestDeclaration(report.coachScheduleProposal?.restReason ?? 'other', null)
+    coachStore.close()
+    void router.push('/')
+    return
+  }
+  useCoachActionBridgeStore().focusSession(nextSession.date)
+  coachStore.close()
+  void router.push('/coach')
+}
+
+function dismissScheduleProposal(report: CoachReport) {
+  const key = getScheduleProposalKey(report)
+  if (!key) return
+  dismissedScheduleProposalIds.value = [...dismissedScheduleProposalIds.value, key]
+}
+
 async function approveInjuryProposal(report: CoachReport) {
   const proposal = report.injuryUpdateProposal
   if (!proposal) return
@@ -891,6 +1025,33 @@ function stopCoachThinkingTimer() {
                       {{ savingInjuryProposalId === getInjuryProposalKey(report) ? '저장 중' : '승인하고 저장' }}
                     </button>
                     <button class="ghost" type="button" :disabled="Boolean(savingInjuryProposalId)" @click="dismissInjuryProposal(report)">무시</button>
+                  </div>
+                </article>
+                <!-- 코치 제안 스케줄 액션(#639): 카드가 직접 바꾸지 않고 기존 액션 화면을 연다(사용자가 최종 확정). -->
+                <article
+                  v-if="report.coachScheduleProposal && shouldShowScheduleProposal(report)"
+                  class="coach-injury-proposal-card coach-schedule-proposal-card"
+                >
+                  <span class="context-chip">사용자 승인 필요</span>
+                  <strong>{{ getScheduleProposalTitle(report.coachScheduleProposal) }}</strong>
+                  <small v-if="getScheduleProposalTargetLabel(report.coachScheduleProposal)">
+                    {{ getScheduleProposalTargetLabel(report.coachScheduleProposal) }}
+                  </small>
+                  <p>{{ report.coachScheduleProposal.userApprovalPrompt || report.coachScheduleProposal.rationale }}</p>
+                  <small v-if="report.coachScheduleProposal.rationale">{{ report.coachScheduleProposal.rationale }}</small>
+                  <div class="coach-injury-proposal-actions">
+                    <button type="button" @click="applyScheduleProposal(report)">
+                      {{ getScheduleProposalActionLabel(report.coachScheduleProposal) }}
+                    </button>
+                    <button
+                      v-if="shouldShowRestAlternative(report.coachScheduleProposal)"
+                      class="ghost"
+                      type="button"
+                      @click="applyRestAlternative(report)"
+                    >
+                      가벼운 회복주로
+                    </button>
+                    <button class="ghost" type="button" @click="dismissScheduleProposal(report)">괜찮아요</button>
                   </div>
                 </article>
               </div>

@@ -3883,6 +3883,19 @@ button.run-session-row {
   min-height: 40px;
 }
 
+/*
+ * 코치 스케줄 제안(#639): 버튼이 2~3개로 가변이다(휴식 제안엔 "가벼운 회복주로" 대안이 하나 더 붙는다).
+ * 부상 카드의 2열 고정 그리드를 그대로 쓰면 3번째가 다음 줄 1열로 떨어져 빈칸이 생기므로 균등 flex 로 흐른다.
+ */
+.coach-schedule-proposal-card .coach-injury-proposal-actions {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.coach-schedule-proposal-card .coach-injury-proposal-actions button {
+  flex: 1 1 120px;
+}
+
 .chat-input-wrap {
   position: relative;
   min-width: 0;

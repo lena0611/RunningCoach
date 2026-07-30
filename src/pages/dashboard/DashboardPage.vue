@@ -275,6 +275,8 @@ watch(
   (reason) => {
     if (!reason) return
     restPresetReason.value = reason
+    // 코치 제안(#639)이 사용자가 명시한 기간을 넘겨준 경우만 프리셋. 없으면 시트 기본값(기간은 사용자가 정한다).
+    restPresetUntil.value = useInjuryFlowStore().restRequestUntil
     restSheetOpen.value = true
     useInjuryFlowStore().clearRest()
   },
