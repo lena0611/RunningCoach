@@ -78,7 +78,10 @@ if (import.meta.env.DEV) {
       seedWalkRunReturn: m.seedWalkRunReturn,
       walkRunActiveState: m.walkRunActiveState,
       restoreMemoryFromLocalSnapshot: m.restoreMemoryFromLocalSnapshot,
-      openLapSplitPreview: m.openLapSplitPreview
+      openLapSplitPreview: m.openLapSplitPreview,
+      coachProposalRestBridge: m.coachProposalRestBridge,
+      coachProposalSessionBridge: m.coachProposalSessionBridge,
+      coachProposalBridgeState: m.coachProposalBridgeState
     }
   })
 }

@@ -19,6 +19,11 @@ export type CoachReport = {
   updatedAt?: string
   trainingMemoryUpdated?: boolean
   injuryUpdateProposal?: CoachInjuryUpdateProposal | null
+  /**
+   * 코치 대화가 제안한 스케줄 액션 후보(#639). 부상 제안과 동일 등급 — 승인형이고 DB 미영속이라
+   * 히스토리 재로드 시 사라진다(철 지난 제안 부활 방지).
+   */
+  coachScheduleProposal?: CoachScheduleProposal | null
   /** 코칭 생성 시점의 부상 컨텍스트 스냅샷(그때 알던 부상 상태). 과거 리포트가 그때 상태를 충실히 표시·참조하게. */
   injuryContextSnapshot?: CoachInjuryContextSnapshot | null
   /** 이 리포트를 생성한 LLM 모델 id(coach_reports.model). 이 기능 이전 리포트는 null. */
@@ -37,6 +42,24 @@ export type CoachInjuryContextSnapshot = {
   capturedForRunDate: string | null
   activeInjuryItemId: string | null
   items: { id: string; title: string; area: string; status: string; severity: number | null; onsetDate: string | null }[]
+}
+
+export type CoachScheduleActionType =
+  | 'declare_rest'
+  | 'ease_session'
+  | 'intensify_session'
+  | 'reschedule_session'
+  | 'skip_session'
+
+/** 코치 제안 스케줄 액션(#639). 서버 게이트(scheduleProposal.ts)를 통과한 것만 온다. */
+export type CoachScheduleProposal = {
+  actionType: CoachScheduleActionType
+  targetDate: string | null
+  /** 사용자가 발화에서 명시한 기간만 담긴다(없으면 null → 시트 기본값). */
+  suggestedRestUntil: string | null
+  restReason: 'injury' | 'weather' | 'personal' | 'other' | null
+  rationale: string
+  userApprovalPrompt: string
 }
 
 export type CoachInjuryUpdateProposal = {
@@ -111,7 +134,7 @@ export async function requestCoachRunStream(
     adaptiveProgress?: CoachAdaptiveProgressSummary | null
     sessionEvidence?: CoachSessionEvidence | null
     /** 실제 주기화 스케줄의 다음 세션들(코치 "다음 훈련"이 weeklyPattern으로 지어내지 않게). */
-    upcomingSchedule?: { date: string; type: string; distanceKm: number | null; keySession: boolean }[] | null
+    upcomingSchedule?: { date: string; type: string; distanceKm: number | null; keySession: boolean; canIntensify: boolean }[] | null
     /** 활성 휴식 요약(#502) — 휴식 중 코치가 "다음 훈련" 처방을 닦달하지 않고 휴식을 존중하게(currentWeather 패턴). */
     restState?: { active: boolean; reason: string | null; daysUntilReturn: number | null; returnDate: string | null; isReturnDay: boolean; longLayoff: boolean } | null
     /** 최근 12개월 부상 이력 요약(전역 재부상 위험창) — 채팅 코치가 이전 부상 보유자에게 보수화·"저볼륨=안전" 안심 금지(getRecentInjuryHistory). */

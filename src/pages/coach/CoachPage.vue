@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useLevelStore } from '@/app/stores/levelStore'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
@@ -9,6 +9,7 @@ import { useGlossaryStore } from '@/app/stores/glossaryStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
 import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
+import { useCoachActionBridgeStore } from '@/app/stores/coachActionBridgeStore'
 import type { TrainingPhaseName } from '@/entities/training-memory/model'
 import { isActiveSession, type ScheduledSession } from '@/entities/training-schedule/model'
 import { isSelfRaceRun } from '@/entities/competition/model'
@@ -91,6 +92,34 @@ const {
   runScheduleOp,
   intentArgs
 } = week
+
+/**
+ * 코치 대화 제안(#639) 진입: 제안 카드가 요청한 날짜로 데이-스트립을 옮겨 그날 세션 카드를 띄운다.
+ * 여기서 스케줄을 바꾸지 않는다 — 사용자가 기존 버튼(더 쉽게/다른 날로/놓아주기)을 눌러야 적용된다.
+ * immediate: 코치 오버레이에서 탭 이동해 오면 이 페이지가 지연 로드로 뒤늦게 마운트되므로 한 번 집어낸다.
+ */
+watch(
+  () => useCoachActionBridgeStore().focusDate,
+  (date) => {
+    if (!date) return
+    const bridge = useCoachActionBridgeStore()
+    // 대상이 다음 주면 주를 먼저 넘긴다(제안 대상은 오늘~가까운 미래로 제한돼 있어 최대 한두 주).
+    for (let offset = 0; offset <= 2; offset += 1) {
+      weekOffset.value = offset
+      const index = scheduleDays.value.findIndex((day) => day.date === date)
+      if (index >= 0) {
+        activeDayIndex.value = index
+        bridge.clearFocus()
+        return
+      }
+    }
+    // 못 찾으면(그새 재정렬로 사라짐) 이번 주 오늘로 되돌리고 조용히 종료 — 엉뚱한 날을 열지 않는다.
+    weekOffset.value = 0
+    activeDayIndex.value = todayWeekdayIndex.value
+    bridge.clearFocus()
+  },
+  { immediate: true }
+)
 
 // 코치 모먼트·주변 신호(리디자인 ①b — useCoachMoments 로 추출, 요약 홈 CoachInsights 와 동일 소스).
 const {
