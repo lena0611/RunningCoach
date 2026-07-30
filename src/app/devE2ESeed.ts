@@ -8,6 +8,8 @@
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useSessionDetailStore } from '@/app/stores/sessionDetailStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
+import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
+import { useCoachActionBridgeStore } from '@/app/stores/coachActionBridgeStore'
 import { buildPeriodizedSchedule } from '@/shared/lib/coaching/periodizedSchedule'
 import type { RunLog, Lap, RunMetricSample } from '@/entities/run/model'
 import type { TrainingGoal, TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
@@ -383,4 +385,32 @@ export async function restoreMemoryFromLocalSnapshot(): Promise<{ ok: boolean; g
   const mem = JSON.parse(raw) as TrainingMemory
   await useMemoryStore().update(mem)
   return { ok: true, goals: (mem.goals || []).map((g) => g.title), activeGoalId: mem.activeGoalId }
+}
+
+
+/**
+ * 코치 제안 브리지(#639) 검증 시드. **아무것도 영속하지 않는다** — 코치 카드가 눌렸을 때 하는 일
+ * (요청 스토어에 플래그 세우기)만 재현해서, 수용부(대시보드 휴식 시트 / 코치 탭 날짜 포커스)가
+ * 실제로 반응하는지 렌더 레벨에서 확인한다.
+ *
+ * 왜 시드가 필요한가: 진짜 제안 카드는 coach-run 이 새 키를 돌려줘야 뜨고(Edge 배포 선행) LLM 호출이
+ * 필요하다. 브리지 계약은 그와 독립이므로 여기서 분리 검증한다 — 카드 실렌더는 배포 후 라이브 QA 몫.
+ */
+export function coachProposalRestBridge(untilDate: string | null): { ok: true } {
+  useInjuryFlowStore().requestRestDeclaration('personal', untilDate)
+  return { ok: true }
+}
+
+export function coachProposalSessionBridge(date: string): { ok: true } {
+  useCoachActionBridgeStore().focusSession(date)
+  return { ok: true }
+}
+
+/** 브리지 요청이 수용부에서 소비(clear)됐는지 — 소비 안 되면 다른 화면에서 재발동하는 누수다. */
+export function coachProposalBridgeState(): { restRequest: string | null; restUntil: string | null; focusDate: string | null } {
+  return {
+    restRequest: useInjuryFlowStore().restRequest,
+    restUntil: useInjuryFlowStore().restRequestUntil,
+    focusDate: useCoachActionBridgeStore().focusDate
+  }
 }
