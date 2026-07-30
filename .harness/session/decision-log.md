@@ -4,6 +4,28 @@
 
 > 하네스 본체의 변경 이력이나 릴리스 노트가 아닙니다. 하네스 본체 변경 기록은 하네스 저장소의 `CHANGELOG.md` 또는 릴리스 태그를 확인합니다.
 
+## 2026-07-28 - (설계) AI 코칭 대화 → 스케줄 반영: 승인형 제안 + 진입 브리지 (#639)
+
+세션 AI 코칭 대화에서 "당분간 쉬고 싶다"·"스케줄이 너무 힘들다"가 스케줄에 전혀 반영되지 않는 갭. 설계만 확정(구현 전).
+
+- **현상 확정**: `coach-run`은 tool-calling 없이 고정 JSON 4키만 출력하고, `upcomingSchedule`·`restState`는 **읽기 전용 컨텍스트 주입**이다. 코치 경로에서 `training_schedule` 행이 변이되는 지점은 0. 대화로 "쉴게요"라고 해도 `activeRest`가 안 생겨 다음날 planned가 그대로 뜨고 `missed`로 정산된다(말↔상태 불일치).
+- **결정 1 — 감지는 서버 LLM 구조화 출력**(`coachScheduleProposal` 5번째 키). 정규식(`detectGoalIntent` 방식)을 안 쓰는 이유: 목표 감지는 '숫자 페이스+목표동사'로 어휘가 좁아 통했지만, 휴식·과부하 표현은 어휘가 열려 있어("회사일 때문에 당분간 못 뛸 것 같아") 대부분 놓친다. coach-run이 이미 대화를 읽으므로 추가 호출·비용 0.
+- **결정 2 — v1 액션 어휘는 닫힌 5종**: `declare_rest`·`ease_session`·`intensify_session`·`reschedule_session`·`skip_session`. **`realign` 류를 어휘에 넣지 않는다** — SSOT §60("실시간 코칭은 알리고 돕되 골격을 다시 짜지 않는다")·§32(변경은 국소 처리). 골격 재구축은 `doEnsureSchedule`의 누적 이탈 임계가 계속 단독 소유.
+- **결정 3 — 실행은 "진입 브리지", 카드가 직접 변이하지 않는다.** 휴식은 기존 `injuryFlowStore.requestRestDeclaration` → `RestDeclarationSheet`(부상 체크인 "한동안 쉴게요"와 동일 경로, 대시보드 변경 0), 세션 4종은 신규 `coachActionBridgeStore.focusSession(date)` → 코치 탭 해당 날 카드. 근거: (a) 새 변이 코드 0 — 기존 게이트(키 세션 재배치 먼저 §36, 하드부하 소프트 경고 §37)와 되돌리기가 자동으로 붙는다, (b) 휴식 기간 확정이 시트에 남아 SSOT §80("기간은 사용자가 정한다")을 구조적으로 충족한다. 원클릭 적용은 이 두 가지를 우회하므로 v1에서 배제.
+- **세션 지정은 ID 아닌 날짜**: 재정렬로 세션 ID가 계속 갈리므로 서버가 ID를 들고 있으면 유령 참조가 된다. 날짜로 제안하고 웹이 `scheduleStore`로 실물 검증(W1).
+- **DB 미영속**: `injuryUpdateProposal`도 현재 `coach_reports`에 컬럼이 없어 히스토리 재로드 시 사라진다. 이 성질을 따라가면 철 지난 제안이 과거 리포트에서 되살아나지 않고 마이그레이션도 0.
+- **게이트는 프롬프트 아닌 코드**(`[[coach-always-on-block-deterministic]]`): enum 밖·배열·범위 밖 날짜·이미 휴식 중·redFlag 중 상향·**`responseMode==='report'`(빈 노트 자동 디브리핑)** 는 서버 normalize가 `null`로 떨군다. 마지막 항목이 핵심 — 사용자가 아무 말도 안 했는데 휴식 카드가 뜨면 닦달이다.
+- **#전문코치리뷰 결과(같은 날, 어긋남 1·부분 2·부합 3)**: ① 🔴 **F1** — 휴식 카드의 "회복주 대안"을 `reason=injury`면 차단하려 한 게 근거 역행. §87 "부하성 부상(족저 등)은 완전 정지보다 회복주가 낫다" + 부상 KB §3-B(Rathleff 2015, FFI −29점 "부하 자체가 원인이라 회복주+강화가 완전 정지보다 낫다") → **부상은 오히려 대안을 제시해야 할 대표 케이스**이고, 차단은 **redFlag·통증 정지 규칙**일 때만. 사용자 요청이 아니라 **에이전트의 무근거 과보수화**가 원인(yes-man의 반대쪽 실패). ② 🟡 **F2** — `intensify_session`이 버튼(pull)에서 코치 카드(push)로 바뀌며 권위가 실리는데 진행 게이트가 없었음 → **G7**: `adaptiveProgress` 판정 `ready`일 때만(신호는 이미 컨텍스트에 있음, `index.ts:1268`). 근거 §202~208·§188·§37. ③ 🟡 **F3** — LLM이 휴식 기간을 발명 가능 → 발화에 **명시된 기간만 추출**·미지정이면 null, **G8** 4주 초과 절단(§84). ④ 🟢 G6·브리지·realign 배제는 부합. **드리프트 자문**: 사용자 결정(harder 포함)이 에이전트 추천과 반대여서 1순위 의심했으나 §34·§225상 정당 — 진단은 "휘둘림"이 아니라 "게이트 누락"이라 결정 유지 권고.
+- 후속 게이트: 코칭 도메인이므로 구현 커밋에 `#전문코치리뷰` 후 `Coach-Review:` 트레일러 필수. 문서 정합은 `running-coaching-standards.md`(§세션 변경 행동 모델·§휴식과 복귀에 "대화 진입" 1줄)와 `data-change-impact-map.md`(#5·#6에 **새 변이가 아니라 기존 진입점의 새 상류 트리거**로 명시). [[rest-and-return-coaching]] [[coach-proactive-communication-vision]]
+
+## 2026-07-22 - iOS 날씨 KMA 통일(위치 브리지 전환) + 시간별 차트 애플 스타일(자정 백필)
+
+- **iOS→KMA 이관 완료(#628·#629)**: 7-20 결정의 "보류" 해소. 브리지 역할을 날씨→**위치**로 전환 — 네이티브 `NativeLocationProvider`(구 WeatherKitImporter, 파일명 유지)가 좌표만 주고, 날씨·체감은 웹 `weather-run`(KMA) 단일 경로. Open-Meteo는 iOS에서 완전 제거(브리지 스냅샷 felt 재계산도 폐기). 웹+네이티브 원자적 커밋, Xcode 재빌드·기기 스모크 통과. 함정: 브리지가 CLLocationCoordinate2D를 노출하면 소비자 Swift가 CoreLocation import 필요(`_LocationEssentials` 에러) → 순수 `GeoCoordinate` struct로 디커플링(#629). Xcode의 `import _LocationEssentials` 제안은 내부 모듈이라 따르지 말 것.
+- **시간별 차트 개편(#630~#633)**: ① X축 타임존 버그 — UTC 날짜 slice로 하루를 자르면 KST 9시부터 시작(9h 밀림) → 로컬 날짜 그룹핑+0~23시 슬롯 패딩. ② 애플 날씨 스타일(사용자 레퍼런스) — **지난밤(전일 2300) 발표 예보 백필**로 지나간 오전을 점선으로 채움(KMA는 과거 실측 미제공), Y축 3° 눈금(최고 2칸 위·최저 2칸 아래, 실제·체감 공통 스케일), 최고/최저 라벨+현재 흰 점, 체감 탭에 실제선 회색 비교, 기본 탭=실제, 차트 높이 온도 240px·강수 180px.
+- **Edge 함정 2건(재발 방지)**: ① Deno 배포는 타입체크 없음 — 리팩터링 잔재(`vilageItems is not defined`)가 런타임 500. **배포 전 `deno check supabase/functions/<fn>/index.ts` 필수.** ② KMA 2회 직렬 호출(각 10s)은 콜드스타트 타임아웃("signal aborted") → `Promise.allSettled` 병렬. 디버깅은 응답에 `_dbg` 필드 임시 노출(함수 로그 CLI 없음).
+- **ECharts 함정**: 미등록 컴포넌트(`ScatterChart`·`MarkPointComponent`)는 **조용히** 안 그려짐(트리셰이킹). 새 시리즈 타입/mark 계열 추가 시 `use([...])` 등록 확인.
+- 검증: deno check·vue-tsc·harness:check + 로컬 라이브 QA(실계정·배포 Edge, 24h 자정 시작/탭/라벨 스크린샷) + 기기 스모크(사용자). [[weather-runner-domain]]
+
 ## 2026-07-20 - iOS 체감온도(apparent) 자체 공식 재계산으로 통일 (open-meteo 태양복사 과대반영 제거)
 
 - 증상: iOS 앱에서 기온 15℃인데 체감 30℃로 비현실적. 웹은 정상(≈기온). "다른 날씨앱은 선선한데 우리만 30".
