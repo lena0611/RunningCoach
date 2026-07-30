@@ -235,6 +235,8 @@ coach-run 별도 입구(시점필터): getActiveInjuryItemForRunDate     coach-r
 
 진입점: [[doEnsureSchedule]] (자동) · runScheduleOp 핸들러 (수동) · 매칭축: [[selectSessionForRun]]
 
+**상류 트리거 추가(#639)**: AI 코칭 대화가 낸 승인형 제안(`coachScheduleProposal`)이 **여기에 새 변이를 만들지 않는다** — 코치 카드는 `coachActionBridgeStore.focusSession(date)` 로 코치 탭을 그 날짜로 옮기고, 사용자가 **위 수동 핸들러(더 쉽게/더 강하게/다른 날로/놓아주기)** 를 직접 누른다. 그래서 키 세션 재배치 선권유·주간 하드부하 경고·되돌리기가 자동으로 보존된다. 어휘에 realign 이 없어 대화가 골격을 재구축하는 경로도 없다. 게이트: `supabase/functions/coach-run/scheduleProposal.ts`(G1~G8) + 상향 적격 `scheduleProposalEligibility.ts`(웹 소유 — 강도 사다리·품질 기준이 웹 SSOT 라 서버 미러 금지). ⚠ 이 브리지를 바꾸면 제안 카드(`CoachSessionOverlay`)와 수용부(`CoachPage` focusDate watch) 를 함께 본다.
+
 ```
 trainingScheduleStore (변이 함수군)
 ├─ realign + supersedeSessionsFrom                         store:88-95 / repository:96 (planned/missed만 비움, rested 보존)
@@ -278,6 +280,8 @@ trainingScheduleStore (변이 함수군)
 휴식 선언과 복귀 램프의 하류. status 전환(declareRest)과 메타(setActiveRest)가 **별개 레이어**라 항상 동반돼야 한다. 🩺 코칭 도메인.
 
 진입점: [[onDeclareRest]] · [[returnFromRestNow]] · 자연만료 분기(doEnsureSchedule) · SSOT: [[returnRamp]] / [[rest-and-return-coaching]]
+
+**휴식 진입 4번째 경로(#639)**: AI 코칭 대화의 `declare_rest` 제안. 새 변이 레이어가 아니라 **기존 부상체크인 경로 재사용** — `injuryFlowStore.requestRestDeclaration(reason, untilDate)` → 대시보드 `restRequest` watch → `RestDeclarationSheet`. 즉 위 "휴식 진입(3경로)"이 4경로가 되고 하류는 완전히 동일하다. `untilDate` 프리셋은 **사용자가 발화에서 명시했을 때만** 채워지고(없으면 null=시트 기본값) 서버 G8 이 오늘+28일로 절단한다 — 기간은 코치가 아니라 사용자가 정한다(SSOT §80·§84). ⚠ `restRequest` watch 를 바꾸면 부상체크인 "한동안 쉴게요"와 코치 제안 **둘 다** 영향받는다.
 
 ```
 휴식 진입(3경로): openRestSheet / openRestAdjust / 부상체크인 restRequest watch  DashboardPage.vue:1051-1073
