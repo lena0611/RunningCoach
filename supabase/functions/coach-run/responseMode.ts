@@ -12,6 +12,18 @@ function directlyMentionsSelectedRun(text: string): boolean {
   return /이\s*세션|이번\s*세션|선택\s*세션|이\s*기록|이번\s*기록|이\s*런|이번\s*런|이\s*훈련|이번\s*훈련|방금|아까|오늘\s*(러닝|뛴|달린|세션|기록|훈련|템포|인터벌|스트라이드|이지|easy|회복런|롱런|lsd)|방금\s*(뛴|달린)|아까\s*(뛴|달린)/.test(text)
 }
 
+/**
+ * 스케줄 변경 의도(#639) — "쉬고 싶다 · 버겁다 · 건너뛰겠다 · 다른 날로 · 더 세게".
+ *
+ * 이런 발화는 잡담(general)이 아니라 개인 훈련 대화다. general 로 떨어지면 컨텍스트가 축약되어
+ * upcomingSchedule 이 빠지고, 코치가 실제 예정 세션을 모른 채 답하게 된다(제안의 targetDate 도 못 만든다).
+ * 2026-08-03 라이브 QA: "화요일 이지런이 부담스러워서 더 쉽게 하고 싶어요" 가 general 로 분류돼
+ * 세션 액션 제안이 매번 폐기됐다. 반대로 "두 문장 **이내**로" 처럼 우연히 '내' 가 섞이면 통과했다.
+ */
+function mentionsScheduleChange(text: string): boolean {
+  return /쉬고\s*싶|쉴게|쉬어야|쉬어갈|휴식|건너뛰|스킵|미루|옮기|다른\s*날|버겁|부담|힘들|무리|쉽게|줄이|낮추|가볍게|더\s*세게|더\s*강하게/.test(text)
+}
+
 // userNote 문구로 사용자 의도를 분류한다(서버 권위 분류).
 // 프론트가 보조 힌트를 보내더라도 서버는 항상 여기서 다시 분류한다.
 export function detectCoachAnswerIntent(note: string): CoachAnswerIntent {
@@ -52,6 +64,7 @@ export function detectUserNoteRunRelevance(note: string): UserNoteRunRelevance {
   }
 
   if (
+    mentionsScheduleChange(text) ||
     /나|내|나한테|내가|오늘\s*어떻게|다음\s*(훈련|러닝)|뛰어|달려|목표|루틴|스케줄|통증|아파|발바닥|부상|회복|컨디션|피곤|피로/.test(text)
   ) {
     return 'personal_training'

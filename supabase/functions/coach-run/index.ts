@@ -330,7 +330,8 @@ async function persistCoachResult(
   // 스케줄 액션 제안(#639) — 승인형 후보. 게이트를 하나라도 못 넘으면 null 로 떨어진다(자동 적용 경로 없음).
   const coachScheduleProposal = normalizeCoachScheduleProposal(ai.coachScheduleProposal, {
     responseMode: context.coachResponseMode,
-    upcomingSchedule: context.upcomingSchedule,
+    // 축약 컨텍스트에서 null 이 되는 context.upcomingSchedule 대신 게이트 전용 원본을 본다(위 scheduleProposalGate 주석).
+    upcomingSchedule: context.scheduleProposalGate.upcomingTargets,
     restActive: context.scheduleProposalGate.restActive,
     injuryBlocksIntensify: context.scheduleProposalGate.injuryBlocksIntensify,
     today: new Date().toISOString().slice(0, 10)
@@ -1292,13 +1293,17 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     /**
      * 스케줄 제안 게이트 입력(#639). **structuredCoachContext 로 가리지 않는다** — 컨텍스트 축약 모드에서
      * restState 가 null 이 되면 "쉬는 중인데 또 쉬자고 제안"하는 구멍이 생기기 때문이다.
-     * 대상 세션 목록은 여기 복제하지 않고 context.upcomingSchedule 을 그대로 쓴다(프롬프트 크기 — 축약 모드면
-     * 목록이 null 이라 세션 액션은 자연히 전부 떨어진다 = fail-safe).
+     *
+     * 대상 세션 목록(upcomingTargets)도 같은 이유로 여기서 원본을 들고 있는다. 예전에는 게이트가
+     * context.upcomingSchedule(축약 대상)을 그대로 봤는데, 제안은 G6 때문에 **대화 모드에서만** 허용되고
+     * 대화 모드는 축약될 수 있어서 — 세션 액션 4종이 구조적으로 항상 폐기됐다(2026-08-03 라이브 QA에서 확인).
+     * G3 의 목적은 "LLM 이 지어낸 날짜를 실물과 대조"하는 것이므로, 축약본이 아니라 원본과 대조하는 편이 더 강하다.
      */
     scheduleProposalGate: {
       restActive: restState?.active === true,
       // redFlag 발동 또는 고통증(4~5/5) → 상향 제안 차단. 부상 KB §4 게이트가 처방보다 우선.
-      injuryBlocksIntensify: injurySignals?.redFlag.tripped === true || (injurySignals?.severity ?? 0) >= 4
+      injuryBlocksIntensify: injurySignals?.redFlag.tripped === true || (injurySignals?.severity ?? 0) >= 4,
+      upcomingTargets: upcomingSchedule
     },
     upcomingSchedulePolicy:
       'context.upcomingSchedule는 실제 주기화 스케줄의 다음 세션들(날짜·유형·거리)이다. "## 다음 훈련"은 반드시 이 실제 세션을 기준으로 말하고, weeklyPattern/prescriptionTemplates로 다른 세션(예: 다음이 토요일 LSD인데 화요일 Easy)을 지어내지 마라. 요약 화면(캐러셀)과 어긋나면 안 된다. 부상·회복으로 하향이 필요하면 "그 스케줄 세션(예: 토요일 LSD)을 이렇게 조정/대체하자"처럼 실제 세션을 기준으로 조정한다. upcomingSchedule이 비어있거나 null일 때만 일반 가이드로 답한다.',

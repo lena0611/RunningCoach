@@ -83,4 +83,26 @@ describe('coach response mode and user note relevance', () => {
     expect(shouldUseStructuredCoachContext('나한테 다음 훈련은 어떻게 가져가면 돼?', 'explain')).toBe(true)
     expect(shouldUseStructuredCoachContext('오늘 템포 어땠어?', 'explain')).toBe(true)
   })
+
+  // #639 라이브 QA 회귀: 스케줄 변경 발화가 general 로 분류되면 컨텍스트가 축약돼
+  // upcomingSchedule 이 빠지고 세션 액션 제안이 매번 폐기된다.
+  it('treats schedule-change talk as personal training, not small talk (#639)', () => {
+    const notes = [
+      '이번 주 훈련이 너무 힘들어요. 화요일 이지런도 부담스러워서 좀 더 쉽게 하고 싶어요.',
+      '화요일 이지런이 부담스러워서 더 쉽게 하고 싶어요.',
+      '토요일 LSD는 이번엔 건너뛰겠어요.',
+      '토요일은 어려워서 다른 날로 옮기고 싶어요.',
+      '당분간 쉬고 싶어요.',
+      '요즘 잘 되는 것 같아서 더 세게 해보고 싶어요.'
+    ]
+    for (const note of notes) {
+      expect(detectUserNoteRunRelevance(note)).toBe('personal_training')
+      expect(shouldUseStructuredCoachContext(note, 'conversational')).toBe(true)
+    }
+  })
+
+  it('does not turn concept questions or small talk into personal training (#639 과발동 가드)', () => {
+    expect(detectUserNoteRunRelevance('Nsm훈련법이 뭐야')).toBe('general')
+    expect(detectUserNoteRunRelevance('그냥 잡담인데 오늘 날씨 좋네')).toBe('general')
+  })
 })
