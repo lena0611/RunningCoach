@@ -28,16 +28,35 @@ type ScheduledSessionRow = {
   updated_at: string
 }
 
-/** 활성 목표 스케줄 조회. goalId 가 주어지면 그 목표만, 없으면 전체(날짜 오름차순). */
+/**
+ * 한 번에 가져오는 행 수. Supabase(PostgREST)는 요청에 범위를 주지 않으면 기본 상한(1000행)에서
+ * **조용히 잘라서** 돌려준다 — 에러도 경고도 없다.
+ */
+const SCHEDULE_PAGE_SIZE = 1000
+
+/**
+ * 활성 목표 스케줄 조회. goalId 가 주어지면 그 목표만, 없으면 전체(날짜 오름차순).
+ *
+ * ⚠️ 페이지네이션 필수: 날짜 **오름차순**이라 상한에 걸리면 잘리는 쪽이 **미래 세션**이다.
+ * 2026-08-03 라이브 QA — 목표 필터 없이 부른 경우 과거 1000행만 와서 `upcoming()` 이 빈 배열이 됐고,
+ * AI 코칭이 "예정된 훈련이 없어요"라고 답하고 세션 액션 제안(#639)의 대조 대상도 사라졌다.
+ */
 export async function fetchTrainingSchedule(goalId?: string | null): Promise<ScheduledSession[]> {
-  let query = requireSupabase()
-    .from('training_schedule')
-    .select('*')
-    .order('session_date', { ascending: true })
-  if (goalId) query = query.eq('goal_id', goalId)
-  const { data, error } = await query
-  if (error) throw error
-  return (data ?? []).map(fromRow)
+  const rows: ScheduledSessionRow[] = []
+  for (let from = 0; ; from += SCHEDULE_PAGE_SIZE) {
+    let query = requireSupabase()
+      .from('training_schedule')
+      .select('*')
+      .order('session_date', { ascending: true })
+      .range(from, from + SCHEDULE_PAGE_SIZE - 1)
+    if (goalId) query = query.eq('goal_id', goalId)
+    const { data, error } = await query
+    if (error) throw error
+    const page = (data ?? []) as ScheduledSessionRow[]
+    rows.push(...page)
+    if (page.length < SCHEDULE_PAGE_SIZE) break
+  }
+  return rows.map(fromRow)
 }
 
 /** F2 생성기·A1 재정렬의 벌크 insert. 빈 배열이면 no-op. */
