@@ -34,6 +34,18 @@ describe('buildCoachStreamSuccessReport', () => {
     expect(report.selectedRunId).toBe('run-1')
   })
 
+  // #616: 전역 대화는 대상 런이 없다 — 세션 스레드로 새어 붙으면 안 된다.
+  it('keeps a global-scope report unattached to any run', () => {
+    const report = buildCoachStreamSuccessReport({
+      report: { ...baseReport, selectedRunId: null },
+      targetRunId: null,
+      displayedText: '당분간 쉬어도 괜찮아요.',
+      pendingText: ''
+    })
+
+    expect(report.selectedRunId).toBeNull()
+  })
+
   it('keeps the visible streamed answer when the done report has empty text', () => {
     const report = buildCoachStreamSuccessReport({
       report: { ...baseReport, report: '   ' },
