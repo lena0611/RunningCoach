@@ -174,13 +174,20 @@ const coachCommandItems = [
   }
 ]
 
+/**
+ * 스레드 = 리포트의 귀속 대상(#616). 세션 대화는 그 런의 리포트만, 전역 대화는 런에 매이지 않은
+ * 리포트(`selectedRunId === null`)만 모은다. 두 스레드는 섞이지 않는다.
+ */
 const selectedReports = computed(() => {
-  if (!coachRun.value) return []
+  if (!coachStore.isOpen) return []
+  const runId = coachRun.value?.id ?? null
+  if (coachStore.scope === 'session' && !runId) return []
   return reports.value
-    .filter((report) => report.selectedRunId === coachRun.value?.id)
+    .filter((report) => (report.selectedRunId ?? null) === runId)
     .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''))
 })
-const coachHistoryLoading = computed(() => Boolean(coachRun.value && isSupabaseConfigured && reportsLoading.value && !reportsLoaded.value))
+const coachHistoryLoading = computed(() => Boolean(coachStore.isOpen && isSupabaseConfigured && reportsLoading.value && !reportsLoaded.value))
+const isGlobalScope = computed(() => coachStore.scope === 'global')
 const coachCommandQuery = computed(() => {
   const text = coachNote.value.trimStart()
   return text.startsWith('/') ? text.slice(1).trim().toLowerCase() : ''
@@ -202,15 +209,17 @@ const filteredCoachCommands = computed(() => {
 
 let reportsLoadPromise: Promise<void> | null = null
 
-// 코치 오버레이 open/close 를 스토어의 activeRun 으로 구동한다.
-// null→run: 기존 openCoach 부수효과(의도/리포트 로드, 입력창 포커스/리사이즈, 맨 아래 스크롤).
-// run→null: 기존 closeCoach 정리(스트림 중단, 코치 상태 리셋).
+// 코치 오버레이 open/close 를 스토어가 구동한다.
+// 열림 판정은 scope 로 한다 — 전역 대화(#616)는 런이 없는 채로 열려 있어 "런 없음 = 닫힘" 이 성립하지 않는다.
+// 열림: 기존 openCoach 부수효과(의도/리포트 로드, 입력창 포커스/리사이즈, 맨 아래 스크롤).
+// 닫힘: 기존 closeCoach 정리(스트림 중단, 코치 상태 리셋).
 watch(
-  () => coachStore.activeRun,
-  (run, previous) => {
-    if (run && run.id !== previous?.id) {
+  () => [coachStore.scope, coachStore.activeRun?.id ?? null] as const,
+  ([scope, runId], previous) => {
+    const [previousScope, previousRunId] = previous ?? [null, null]
+    if (scope && (scope !== previousScope || runId !== previousRunId)) {
       void onCoachOpened()
-    } else if (!run && previous) {
+    } else if (!scope && previousScope) {
       onCoachClosed()
     }
   }
@@ -242,7 +251,7 @@ watch(visibleStreamingCoachText, () => {
 })
 
 watch(selectedReports, () => {
-  if (!coachRun.value) return
+  if (!coachStore.isOpen) return
   void nextTick(() => scrollCoachToBottom('auto'))
 })
 
@@ -392,7 +401,7 @@ function isCoachNearBottom(threshold = 96) {
 }
 
 async function requestCoach() {
-  if (!coachRun.value) return
+  if (!coachStore.isOpen) return
   if (coachLoading.value) {
     stopCoachStream()
     return
@@ -409,8 +418,9 @@ async function requestCoach() {
 }
 
 async function sendCoachRequest(note: string) {
-  if (!coachRun.value) return
-  const targetRunId = coachRun.value.id
+  if (!coachStore.isOpen) return
+  // 전역 대화(#616)는 대상 런이 없다 — 서버·요청 계층이 이미 null 을 받는다(selectedRunId: string | null).
+  const targetRunId = coachRun.value?.id ?? null
   const commandId = selectedCommandId.value || null
   coachLoading.value = true
   coachError.value = ''
@@ -479,11 +489,14 @@ async function sendCoachRequest(note: string) {
       // 활성 부상 감별 신호(§5 부상 KB) — 통증 부위+데이터로 좁힌 상위 1~2 "가능성" 가설+레버+안전 redFlag.
       // 활성 부상/신호 없으면 null(게이팅은 buildInjuryCoachSignals 내부). 진단 아님 — 코치가 "가능성"으로만 전달.
       injurySignals: buildInjuryCoachSignals(memoryStore.memory, runStore.sortedRuns, new Date()),
+      // 전역 대화(#616)는 평가할 세션이 없다 → null. 서버가 sessionEvidence null 을 이미 다룬다.
       sessionEvidence: (() => {
+        const run = coachRun.value
+        if (!run) return null
         const now = new Date()
         const observed = deriveObservedMaxHr(runStore.sortedRuns.map((r) => ({ maxHeartRate: r.maxHeartRate, date: r.date })), now)
         const hr = deriveHeartRateModel(memoryStore.memory.athleteProfile, now.getFullYear(), observed)
-        return buildCoachSessionEvidence(coachRun.value, { easyCeilingBpm: hr.easyCeilingBpm, recoveryCeilingBpm: hr.recoveryCeilingBpm })
+        return buildCoachSessionEvidence(run, { easyCeilingBpm: hr.easyCeilingBpm, recoveryCeilingBpm: hr.recoveryCeilingBpm })
       })()
     })
     await waitForCoachRevealDrain()
@@ -978,14 +991,14 @@ function stopCoachThinkingTimer() {
 <template>
   <Teleport to="body">
     <Transition name="stack-page">
-      <div v-if="coachRun" class="memory-stack-layer coach-overlay-layer" data-no-swipe @pointerdown.capture="dismissCoachKeyboardOnOutsideTap">
+      <div v-if="coachStore.isOpen" class="memory-stack-layer coach-overlay-layer" data-no-swipe @pointerdown.capture="dismissCoachKeyboardOnOutsideTap">
       <section class="memory-stack-page">
         <header class="memory-stack-header coach-detail-header">
           <button class="stack-icon-button" type="button" aria-label="뒤로" @click="closeCoach">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
           </button>
           <div class="coach-header-title">
-            <h2>AI 코칭</h2>
+            <h2>{{ isGlobalScope ? '코치와 대화' : 'AI 코칭' }}</h2>
           </div>
           <div class="stack-header-actions">
             <BottomSheetSelect
@@ -1007,7 +1020,7 @@ function stopCoachThinkingTimer() {
           </div>
         </header>
         <main ref="coachScrollContainer" class="memory-stack-content coach-stack-content" @scroll="onCoachScroll">
-          <CoachMessage role="user" :text="`${formatDateWithWeekday(coachRun.date)} ${coachRun.sessionTitle || coachRun.type}`" />
+          <CoachMessage v-if="coachRun" role="user" :text="`${formatDateWithWeekday(coachRun.date)} ${coachRun.sessionTitle || coachRun.type}`" />
           <IntentFulfillmentCard v-if="coachIntent && coachIntentFulfillment" :intent="coachIntent" :fulfillment="coachIntentFulfillment" />
           <div v-if="coachHistoryLoading" class="coach-history-skeleton" aria-label="기존 AI 코칭 대화 불러오는 중">
             <div class="coach-skeleton-user" aria-hidden="true">
@@ -1074,7 +1087,11 @@ function stopCoachThinkingTimer() {
             </template>
             <CoachMessage v-if="pendingUserNote" role="user" :text="pendingUserNote" />
             <CoachMessage v-if="visibleStreamingCoachText" role="coach" :text="visibleStreamingCoachText" :meta="streamingCoachMeta" :streaming="coachLoading" :thinking="coachLoading && !streamingCoachText" />
-            <EmptyState v-else-if="!selectedReports.length" title="아직 이 세션의 코칭이 없습니다." description="짧은 메모를 넣고 AI 코칭을 요청하세요." />
+            <EmptyState
+              v-else-if="!selectedReports.length"
+              :title="isGlobalScope ? '무엇이든 물어보세요.' : '아직 이 세션의 코칭이 없습니다.'"
+              :description="isGlobalScope ? '훈련·컨디션·일정 무엇이든 편하게 말해주세요. 쉬고 싶을 때도요.' : '짧은 메모를 넣고 AI 코칭을 요청하세요.'"
+            />
           </template>
           <p v-if="coachError" class="error">{{ coachError }}</p>
         </main>

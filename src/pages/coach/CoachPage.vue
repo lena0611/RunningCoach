@@ -10,6 +10,7 @@ import { useWeatherStore } from '@/app/stores/weatherStore'
 import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
 import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
 import { useCoachActionBridgeStore } from '@/app/stores/coachActionBridgeStore'
+import { useCoachStore } from '@/app/stores/coachStore'
 import type { TrainingPhaseName } from '@/entities/training-memory/model'
 import { isActiveSession, type ScheduledSession } from '@/entities/training-schedule/model'
 import { isSelfRaceRun } from '@/entities/competition/model'
@@ -52,6 +53,8 @@ const scheduleStore = useTrainingScheduleStore()
 const sessionIntentStore = useSessionIntentStore()
 const toastStore = useToastStore()
 const glossaryStore = useGlossaryStore()
+// 전역 대화(#616) 진입 — 오버레이는 App 레벨이라 여기선 스토어만 열어준다.
+const coachStore = useCoachStore()
 // 날씨(작전 맥락): '다음 훈련' 얇은 스택 제거(2026-07-04)로 상세 날씨 카드가 코치 탭으로 이관됐다.
 const weatherStore = useWeatherStore()
 weatherStore.init()
@@ -592,6 +595,20 @@ async function applyPhaseTransition() {
 
 <template>
   <PageLayout variant="coach">
+    <!--
+      전역 대화 진입(#616): 코치와의 대화가 이 탭의 대표 행동이라 최상단에 둔다.
+      세션 디브리핑(런 상세 → AI 코칭)과 달리 특정 런에 매이지 않는다 — 휴식·일정·컨디션·개념질문의 집.
+      밀도는 낮게(제목 1줄 + 보조 1줄) 유지해 아래 '오늘의 작전'과 시각적으로 경쟁하지 않게 한다.
+    -->
+    <button class="coach-chat-entry" type="button" @click="coachStore.openGlobal()">
+      <span class="coach-chat-entry-icon" aria-hidden="true">💬</span>
+      <span class="coach-chat-entry-copy">
+        <b>코치와 대화</b>
+        <small>무엇이든 물어보세요</small>
+      </span>
+      <svg class="coach-chat-entry-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+    </button>
+
     <!-- 코치 모먼트(#382): 유의미한 순간에 코치가 먼저 말 건다(우선순위 최상위 1건) -->
     <CoachMomentCard v-if="topCoachMoment" :key="topCoachMoment.key" :moment="topCoachMoment" @dismiss="dismissMoment" @action="onMomentAction" @select="onMomentSelect" />
 
@@ -818,6 +835,51 @@ async function applyPhaseTransition() {
 </template>
 
 <style scoped>
+/* #616 전역 대화 진입 카드 — 낮은 밀도(1행)로 '오늘의 작전'과 위계 경쟁하지 않게 한다. */
+.coach-chat-entry {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  width: 100%;
+  padding: var(--space-4, 16px);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card, 20px);
+  box-shadow: var(--shadow-card);
+  text-align: left;
+  cursor: pointer;
+}
+.coach-chat-entry-icon {
+  font-size: var(--text-title-size, 22px);
+  line-height: 1;
+}
+.coach-chat-entry-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.coach-chat-entry-copy b {
+  font-size: var(--text-body-size, 16px);
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--color-text);
+}
+.coach-chat-entry-copy small {
+  font-size: var(--text-caption-size, 14px);
+  color: var(--color-muted);
+}
+.coach-chat-entry-chevron {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  fill: none;
+  stroke: var(--color-muted-2);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 /* #362: 주간 캐러셀 슬라이드(디브리핑/휴식) */
 .carousel-date {
   margin-bottom: var(--space-2, 8px);
