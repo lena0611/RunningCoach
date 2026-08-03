@@ -1633,6 +1633,19 @@ function buildResponseTemplatePolicy() {
  * 모드별 지침 세트가 서로를 대체하는 구조라 여기 한 곳에 두지 않으면 대화 모드에서만 규칙이 빠진다.
  * (실제 안전 불변식은 프롬프트가 아니라 normalizeCoachScheduleProposal 게이트가 강제한다.)
  */
+/**
+ * 내부 식별자 노출 금지(모든 응답 모드 공용).
+ *
+ * 2026-08-03 라이브 QA 에서 대화 응답이 "지금 upcomingSchedule을 보면 토요일에 7km LSD가 예정되어 있어요"처럼
+ * **컨텍스트 키 이름을 사용자에게 그대로 노출**했다. 리포트 모드 지침에만 유사 규칙이 있었고
+ * 모드별 지침 세트는 서로를 대체하는 구조라 대화 모드에서 빠져 있었다(buildScheduleProposalInstructions 와 같은 함정).
+ */
+function buildInternalNamingGuard() {
+  return [
+    '⚠️ context 의 필드 이름(upcomingSchedule, restState, adaptiveProgress, injurySignals, goalProjection, tempoCoaching, sessionEvidence, trainingMemory 같은 영문 camelCase 키)을 답변 본문에 절대 쓰지 마라. 내부 데이터 구조 이름이고 사용자는 앱 화면의 우리말 표현만 안다. 예: "upcomingSchedule을 보면"이 아니라 "예정된 훈련을 보면", "restState가 active라서"가 아니라 "지금 쉬는 기간이라서"로 말한다.'
+  ]
+}
+
 function buildScheduleProposalInstructions() {
   return [
     'coachScheduleProposal은 사용자가 대화(userNote)에서 휴식·중단·과부하·일정 불가·강도 조정을 직접 표현했을 때만 반환한다(그 외에는 null). 근거 없이 먼저 꺼내지 않고, report 본문에서 이미 사람으로서 대답한 뒤 그 실행 경로로만 덧붙인다. 이것은 스케줄을 바꾸는 명령이 아니라 사용자가 승인해야 적용되는 후보이며, 앱이 기존 화면(휴식 선언 시트·세션 카드)을 열어줄 뿐이다.',
@@ -1655,6 +1668,7 @@ function buildFreeConversationInstructions(runnerLevel: RunnerLevel, levelGuide:
     '마크다운은 필요할 때만 쓴다. 제목이나 목록을 쓰더라도 질문을 더 읽기 쉽게 만드는 목적일 때만 사용한다.',
     '의학적 진단이나 통증 처방을 하지 않는다. 사용자가 통증/부상을 직접 물으면 일반 안전 원칙 수준에서 조심스럽게 말한다.',
     'memoryItems에는 이 대화에서 새로 알게 된 사용자의 안정적인 개인 맥락(목표/욕구/선호/서사)만 0~3개 넣는다. 일회성 잡담이나 단일 세션 수치는 넣지 않는다. 이미 core/coachMemoryItems에 있으면 다시 넣지 않는다.',
+    ...buildInternalNamingGuard(),
     ...buildScheduleProposalInstructions(),
     '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal, coachScheduleProposal. report에 자유대화 본문을 넣고, trainingMemoryPatch와 injuryUpdateProposal은 null로 둔다.'
   ].join('\n')
@@ -1681,6 +1695,7 @@ function buildEvidenceInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnT
     '4. 참고한 훈련 원칙/출처',
     'memoryItems는 이 대화에서 새로 생긴 안정적인 장기 기억이 있을 때만 0~2개 넣는다. 이미 core/coachMemoryItems에 있으면 다시 넣지 않는다.',
     'trainingMemoryPatch와 injuryUpdateProposal은 명확한 필요가 없으면 null로 둔다.',
+    ...buildInternalNamingGuard(),
     ...buildScheduleProposalInstructions(),
     '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal, coachScheduleProposal. report에 위 설명 본문을 넣는다.'
   ].join('\n')
@@ -1704,6 +1719,7 @@ function buildExplainInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnTy
     '출력 구성은 질문에 맞게 유연하게 하되 결론 → 설명 → 사용자 적용 → 추천 순서를 기본으로 한다.',
     'memoryItems는 안정적인 장기 기억이 생긴 경우만 0~2개 넣는다. 이미 core/coachMemoryItems에 있으면 다시 넣지 않는다.',
     'trainingMemoryPatch와 injuryUpdateProposal은 명확한 필요가 없으면 null로 둔다.',
+    ...buildInternalNamingGuard(),
     ...buildScheduleProposalInstructions(),
     '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal, coachScheduleProposal. report에 설명 본문을 넣는다.'
   ].join('\n')
@@ -1873,6 +1889,7 @@ function buildCoachInstructions(context: unknown) {
     '부상 체크인 결과나 대화에서 통증 상태 변경 후보가 보여도 trainingMemoryPatch에 injuryItems, activeInjuryItemId, status, painLevel, resolvedAt, lastFlareDate를 넣지 않는다. 이런 값은 사용자 승인 전 자동 저장 금지다.',
     '완치 후보는 단정하지 않는다. 최근 0~1/5가 반복되고 Easy 조깅/일상 보행/강훈련 뒤 반응이 조용할 때만 report에서 앱 확인을 제안하고 injuryUpdateProposal로 사용자 승인 후보를 반환한다.',
     'injuryUpdateProposal은 부상 상태 변경 후보가 있을 때만 반환한다. 사용자가 승인해야 저장되는 제안이며, 치료 진단이나 자동 완치 처리로 표현하지 않는다.',
+    ...buildInternalNamingGuard(),
     ...buildScheduleProposalInstructions(),
     '통증/부상 메모가 있어도 의료 진단처럼 말하지 않는다. 통증은 훈련 판단 기준과 관찰 포인트로만 다룬다.',
     '통증 수치가 없으면 단정하지 않는다. 예: "통증 강도가 안 나와 있으니 크게 단정하진 말자. 다만 다음 착지감은 체크하자."',

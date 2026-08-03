@@ -252,6 +252,18 @@ onBeforeUnmount(() => {
   resetCoachReveal()
 })
 
+/**
+ * 스케줄을 **활성 목표로 스코프해서** 로드한다(#398 loadedGoalId 패턴, CoachPage 와 동일).
+ *
+ * 목표 필터 없이 로드하면 지난 목표·E2E 시드 목표의 예정 세션까지 `upcoming()` 에 섞여
+ * 코치가 남의 목표 세션을 "다음 훈련"으로 말하고, 제안의 targetDate 도 그쪽을 가리킬 수 있다.
+ */
+async function ensureScheduleForActiveGoal() {
+  const activeGoalId = memoryStore.memory.activeGoalId ?? null
+  if (scheduleStore.loaded && scheduleStore.loadedGoalId === activeGoalId) return
+  await scheduleStore.load(activeGoalId)
+}
+
 async function onCoachOpened() {
   coachError.value = ''
   coachAutoScroll.value = true
@@ -259,7 +271,7 @@ async function onCoachOpened() {
   void nextTick(resizeCoachNoteInput)
   if (!sessionIntentStore.loaded) void sessionIntentStore.load()
   void competitionStore.ensureLoaded()
-  if (!scheduleStore.loaded && !scheduleStore.loading) void scheduleStore.load()
+  void ensureScheduleForActiveGoal()
   await ensureReportsLoaded()
   await nextTick()
   scrollCoachToBottom('auto')
@@ -414,6 +426,10 @@ async function sendCoachRequest(note: string) {
   coachRevealStopped = false
   startCoachThinkingTimer()
   try {
+    // 스케줄이 아직 안 올라왔으면 기다린다. onCoachOpened 의 로드는 fire-and-forget 이라,
+    // 오버레이를 열고 바로 보내면 upcomingSchedule 이 빈 배열로 나가 코치가 "예정된 훈련이 없다"고 답하고
+    // 세션 액션 제안(#639)의 대조 대상도 사라진다.
+    await ensureScheduleForActiveGoal()
     // 적응 진행 요약은 코치 컨텍스트와 상향 적격 판정이 함께 쓰므로 한 번만 계산한다(판정 근거 일치 보장).
     const coachAdaptiveProgress = buildCoachAdaptiveProgress(runStore.sortedRuns, memoryStore.memory)
     const report = await requestCoachRunStream(targetRunId, note, weatherStore.snapshot, {
