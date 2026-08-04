@@ -2,6 +2,14 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { filterInjuryItemsForRunDate, getActiveInjuryItemForRunDate } from './injuryTemporalFilter.ts'
 import { normalizeCoachScheduleProposal } from './scheduleProposal.ts'
 import {
+  normalizeQueryRunsArgs,
+  runQueryRuns,
+  QUERY_RUNS_FIELDS,
+  QUERY_RUNS_GROUPS,
+  QUERY_RUNS_METRICS,
+  type QueryRunsRow
+} from './queryRuns.ts'
+import {
   buildUserNoteRelevancePolicy,
   detectCoachAnswerIntent,
   detectUserNoteRunRelevance,
@@ -1606,6 +1614,91 @@ async function throwLlmUpstreamError(response: Response, where: string): Promise
   throw new Error(llmUpstreamErrorMessage(response.status))
 }
 
+/**
+ * 도구 정의(#652). **하나뿐이다** — 도구를 여러 개 만들면 "무엇을 물어볼지"를 다시 개발자가 예측하는
+ * 셈이고, 그건 화면 문제를 도구 시그니처로 옮기는 것에 불과하다. 필터·그룹·지표 조합으로 표현력을 낸다.
+ */
+function buildCoachTools() {
+  return [
+    {
+      type: 'function',
+      function: {
+        name: 'queryRuns',
+        description:
+          '사용자의 러닝 기록을 조건으로 걸러 집계한다. 기간·기온·심박·케이던스·코스·컨디션 등 임의 조합이 가능하다. ' +
+          '숫자를 말해야 하는 질문(언제 얼마나 뛰었나, 어떤 조건에서 어땠나)에는 **반드시 이 도구를 먼저 호출**하고, ' +
+          '도구가 돌려준 값만 인용한다. 추정으로 숫자를 만들지 않는다.',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['filters', 'groupBy', 'metrics'],
+          properties: {
+            filters: {
+              type: 'array',
+              description: '조건 목록(AND). 기간은 date 필드에 gte/lte 로 준다(YYYY-MM-DD).',
+              items: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['field', 'op', 'value'],
+                properties: {
+                  field: { type: 'string', enum: Object.keys(QUERY_RUNS_FIELDS) },
+                  op: { type: 'string', enum: ['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'contains'] },
+                  value: { type: ['string', 'number'] }
+                }
+              }
+            },
+            groupBy: { type: 'string', enum: [...QUERY_RUNS_GROUPS] },
+            metrics: { type: 'array', items: { type: 'string', enum: [...QUERY_RUNS_METRICS] } }
+          }
+        }
+      }
+    }
+  ]
+}
+
+/** 진행 표시용 조건 요약(#650 stage detail). 사용자가 "무엇을 기준으로 찾는지" 실시간으로 본다. */
+function summarizeQueryRunsArgsForDisplay(rawArgs: string): string {
+  const normalized = normalizeQueryRunsArgs((() => {
+    try {
+      return JSON.parse(rawArgs || '{}')
+    } catch {
+      return {}
+    }
+  })())
+  if ('error' in normalized) return ''
+  const { filters, groupBy } = normalized.spec
+  const parts = filters.map((filter) => `${filter.field} ${filter.op} ${filter.value}`)
+  if (groupBy !== 'none') parts.push(`${groupBy}별`)
+  return parts.join(' · ')
+}
+
+/** 도구 실행 — 조회 범위를 사용자 본인으로 **코드가** 고정한다(LLM 이 건드릴 수 없는 자리). */
+async function executeQueryRuns(admin: SupabaseAdminClient, userId: string, rawArgs: string) {
+  let parsedArgs: unknown = {}
+  try {
+    parsedArgs = JSON.parse(rawArgs || '{}')
+  } catch {
+    return { error: '조회 조건 형식을 이해하지 못했습니다.' }
+  }
+  const normalized = normalizeQueryRunsArgs(parsedArgs)
+  if ('error' in normalized) return { error: normalized.error }
+
+  const { data, error } = await admin
+    .from('run_logs')
+    .select(
+      'date, start_at, type, distance_km, duration_sec, avg_pace_sec, avg_heart_rate, max_heart_rate, cadence, active_energy_kcal, temperature, humidity, wind_mps, elevation_gain_m, elevation_loss_m, course_type, rpe, sleep_quality, condition_score, stress_level, companion'
+    )
+    .eq('user_id', userId)
+    .order('date', { ascending: false })
+    .limit(3000)
+  if (error) {
+    console.error('queryRuns fetch failed', { message: error.message })
+    return { error: '기록을 불러오지 못했습니다.' }
+  }
+  // 필터·집계는 받아온 행에서 계산한다. 이력 전체를 대상으로 하므로 컨텍스트의 120건 한계와 무관하다.
+  return runQueryRuns(normalized.spec, (data ?? []) as QueryRunsRow[])
+}
+
 function buildCoachMessages(context: unknown) {
   return [
     { role: 'system', content: buildCoachInstructions(context) },
@@ -1741,6 +1834,7 @@ function buildFreeConversationInstructions(runnerLevel: RunnerLevel, levelGuide:
     'context.responseStyle, context.responseTemplatePolicy, context.coachingDecisionBoard, selectedRun, activeGoal, activeInjuryItem, trustLayerNote가 없다고 보고 답한다. 자유대화에서는 질문 주제 자체만 다룬다.',
     '답변 길이와 형식은 질문에 맞춘다. 짧은 확인 질문이면 짧게, 개념 질문이면 필요한 만큼 설명하되 불필요한 개인화 단락을 붙이지 않는다.',
     ...buildCoachThreadInstruction(),
+    ...buildDataQuestionInstruction(),
     ...buildAnswerLengthCeiling(),
     '마크다운은 필요할 때만 쓴다. 제목이나 목록을 쓰더라도 질문을 더 읽기 쉽게 만드는 목적일 때만 사용한다.',
     '의학적 진단이나 통증 처방을 하지 않는다. 사용자가 통증/부상을 직접 물으면 일반 안전 원칙 수준에서 조심스럽게 말한다.',
@@ -1775,6 +1869,7 @@ function buildEvidenceInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnT
     ...buildInternalNamingGuard(),
     ...buildScheduleProposalInstructions(),
     ...buildCoachThreadInstruction(),
+    ...buildDataQuestionInstruction(),
     ...buildAnswerLengthCeiling(),
     '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal, coachScheduleProposal. report에 위 설명 본문을 넣는다.'
   ].join('\n')
@@ -1796,6 +1891,25 @@ function buildEvidenceInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnT
  * 2026-08-04 실측: 전역 대화에서 지시 대상 생략 질문("이지스트라이드와 어떻게 달라?")이 직전 주제와
  * 이어지지 않고 엉뚱한 대상과 비교됐다.
  */
+/**
+ * 데이터 질문 규율(#652, 모든 응답 모드 공용).
+ *
+ * 도구를 붙이는 것보다 이게 중요하다 — 2026-08-04 실사고: 코치가 심박 상한을 근거 없이 145/165 로
+ * 말했다(실제 138/157). 숫자를 지어내는 성향이 확인됐으므로 **출처를 도구 결과로 못박는다**.
+ */
+function buildDataQuestionInstruction() {
+  return [
+    '기록 수치를 말해야 하는 질문(언제 얼마나 뛰었나, 어떤 조건에서 어땠나, 기간 비교)에는 **반드시 queryRuns 를 먼저 호출**한다. 도구를 부르지 않고 거리·횟수·평균 페이스·평균 심박 같은 수치를 말하지 않는다. context 의 recent7/14/30 은 최근 창 합계일 뿐이라 임의 기간의 답이 아니다.',
+    '도구 결과를 말할 때 **적용된 조건(appliedFilters)과 표본 수를 함께** 밝힌다. 예: "6월 기준 14회 · 90.75km". 조건과 표본을 감추면 사용자가 검증할 수 없다.',
+    'caution 이 있으면 반드시 반영한다. 특히 matchedRuns 가 0 이면 **추정하지 말고 "그 조건에 맞는 기록이 없다"** 고 말하고, 표본이 적으면 경향으로 단정하지 않는다.',
+    'error 가 오면(저장하지 않는 항목·형식 오류) 그 이유를 사용자 말로 옮겨 "그 기준으로는 볼 수 없다"고 알린다. 비슷한 다른 항목으로 슬쩍 바꿔 답하지 않는다 — 예: 강수(비) 여부는 저장하지 않으므로 습도로 대체해 "비 온 날"이라 말하면 안 된다.',
+    '같은 질문에 도구를 두 번 이상 부르지 않는다. 한 번의 조건 조합으로 안 되는 질문(증가율·상관 등)은 지금 가능한 범위를 말하고 무엇이 더 필요한지 짚는다.',
+    // 2026-08-04 실측: "2달 전에 총 몇 키로"를 60일 창(6/04~8/03)으로 읽었다. 조건을 밝혀 거짓은 아니었지만
+    // 한국어에서 "N달 전"은 보통 **그 달 자체**를 뜻한다. 기간 해석을 날짜 산수에 맡기지 않고 못박는다.
+    '기간 표현은 **월 경계로 읽는다**. "2달 전"·"지난달"·"6월"은 그 달의 1일~말일이다(오늘이 8월이면 "2달 전"=6월 1일~6월 30일). "최근 N일"·"요즘"처럼 명시적으로 창을 말한 경우에만 오늘 기준 N일 창으로 읽는다. 어느 쪽인지 애매하면 월 경계로 조회하고, 답변에 그 범위를 밝혀 사용자가 바로잡을 수 있게 한다.'
+  ]
+}
+
 function buildCoachThreadInstruction() {
   return [
     'context.coachThread는 **지금 이 대화의 직전 문답들**이다(세션 대화면 그 세션 스레드, 전역 대화면 전역 스레드). 이 목록이 있으면 이전 답변을 리포트처럼 되풀이하지 말고 사용자의 새 질문/메모에 **이어서** 답한다. 특히 "그거랑 어떻게 달라?", "왜?", "그럼 뭐가 나아?" 처럼 **대상이 생략된 질문은 직전 문답에서 지시 대상을 찾아** 답한다 — 임의로 다른 대상을 골라 비교하지 마라. 직전 맥락으로도 대상이 불확실하면 추측해서 답하지 말고 무엇과 비교할지 한 줄로 되물어라.',
@@ -1833,6 +1947,7 @@ function buildExplainInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnTy
     ...buildInternalNamingGuard(),
     ...buildScheduleProposalInstructions(),
     ...buildCoachThreadInstruction(),
+    ...buildDataQuestionInstruction(),
     ...buildAnswerLengthCeiling(),
     '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal, coachScheduleProposal. report에 설명 본문을 넣는다.'
   ].join('\n')
@@ -1891,6 +2006,7 @@ function buildCoachInstructions(context: unknown) {
     '사용자가 쓴 표현과 뉘앙스를 자연스럽게 받아준다. 예: "와이프랑 완전 이지", "회복런 느낌", "오늘 LSD" 같은 표현을 답변에서 재해석해 이어 말한다.',
     '사용자가 이미 아는 정보를 길게 반복하지 않는다.',
     ...buildCoachThreadInstruction(),
+    ...buildDataQuestionInstruction(),
     '같은 세션의 추가 대화에서는 필요한 핵심만 짧게 답하고, 이전 평가를 바꿔야 할 때만 "아까 답에서 이 부분은 이렇게 보정된다"처럼 자연스럽게 수정한다.',
     'context.similarPastCoachSnippets는 다른 세션 중 현재 선택 세션과 타입/요일/거리/메모가 비슷한 과거 코칭 요약이다. 전체 대화 전문이 아니라 비용을 줄이기 위해 짧게 잘린 참고 자료다.',
     'similarPastCoachSnippets는 사용자의 반복 패턴과 이전 해석 톤을 떠올리는 데만 사용한다. 현재 선택 세션의 숫자와 날짜보다 우선하지 않는다.',
@@ -2354,7 +2470,18 @@ function streamCoachRun(
         // 컨텍스트 수집(DB 조회)은 이 응답이 열리기 **전에** 이미 끝나므로, 클라이언트에서 "첫 이벤트 도착 전"
         // 구간이 곧 그 단계다. 그래서 서버가 보낼 전환점은 생성 시작·저장 시작 둘뿐이다.
         send('stage', { stage: 'generating' })
-        const ai = await callCoachLlmStream(provider, context, (delta) => send('delta', { delta }))
+        const ai = await callCoachLlmStream(provider, context, (delta) => send('delta', { delta }), {
+          messages: buildCoachMessages(context),
+          tools: buildCoachTools(),
+          onToolCall: async (name, args) => {
+            if (name !== 'queryRuns') return { error: `지원하지 않는 도구입니다(${name}).` }
+            // 조회 조건을 화면에 그대로 노출한다 — 진행 표시가 신뢰 장치를 겸한다(#650 후속).
+            send('stage', { stage: 'querying', detail: summarizeQueryRunsArgsForDisplay(args) })
+            const result = await executeQueryRuns(admin, userId, args)
+            send('stage', { stage: 'generating' })
+            return result
+          }
+        })
         send('stage', { stage: 'saving' })
         const result = await persistCoachResult(admin, userId, selectedRunId, userNote, context, ai, storedModel)
         clearInterval(heartbeat)
@@ -2392,8 +2519,15 @@ function streamCoachRun(
 async function callCoachLlmStream(
   provider: LlmProvider,
   context: unknown,
-  onReportDelta: (delta: string) => void
+  onReportDelta: (delta: string) => void,
+  /** 도구 라운드 지원(#652). 없으면 예전처럼 단발 호출만 한다. */
+  toolSupport?: {
+    messages: unknown[]
+    tools: unknown[]
+    onToolCall: (name: string, args: string) => Promise<unknown>
+  }
 ): Promise<CoachAiResult> {
+  const messages = toolSupport?.messages ?? buildCoachMessages(context)
   const response = await fetch(`${provider.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -2402,9 +2536,11 @@ async function callCoachLlmStream(
     },
     body: JSON.stringify({
       model: provider.model,
-      messages: buildCoachMessages(context),
+      messages,
       response_format: buildCoachResponseFormat(),
       [provider.maxTokensField]: COACH_MAX_OUTPUT_TOKENS,
+      // 2라운드는 tools 를 비워 보낸다 → 빈 배열은 공급자가 거부할 수 있어 키 자체를 뺀다.
+      ...(toolSupport?.tools.length ? { tools: toolSupport.tools } : {}),
       stream: true
     })
   })
@@ -2420,9 +2556,12 @@ async function callCoachLlmStream(
   let fullText = ''
   let streamedReport = ''
   let finishReason = ''
+  /** 도구 호출 조각 누적(스트림에서 name·arguments 가 여러 청크로 쪼개져 온다). index 별로 모은다. */
+  const toolCallParts = new Map<number, { id: string; name: string; args: string }>()
 
   const handleEvent = (event: unknown) => {
     finishReason = getChatCompletionFinishReason(event) || finishReason
+    collectToolCallDeltas(event, toolCallParts)
     const delta = getChatCompletionDelta(event)
     if (!delta) return
     fullText += delta
@@ -2446,6 +2585,42 @@ async function callCoachLlmStream(
   if (sseBuffer.trim()) {
     const parsed = drainSseBuffer(`${sseBuffer}\n\n`)
     parsed.events.forEach(handleEvent)
+  }
+
+  /**
+   * 도구를 호출했으면 2라운드로 답을 만든다(#652).
+   *
+   * 1라운드에서 모델이 도구를 부르면 본문은 비어 있다. 실행 결과를 메시지에 붙여 다시 물으면
+   * 그때 최종 답변이 스트리밍된다. 데이터가 필요 없는 질문은 1라운드에서 바로 답이 나오므로
+   * **추가 왕복이 붙지 않는다**(고정 집계 팩을 상시 주입하는 방식과의 결정적 차이).
+   */
+  const toolCalls = [...toolCallParts.entries()].sort((a, b) => a[0] - b[0]).map(([, call]) => call)
+  if (toolSupport && toolCalls.length && !streamedReport) {
+    const toolResults = await Promise.all(
+      toolCalls.map(async (call) => ({ call, result: await toolSupport.onToolCall(call.name, call.args) }))
+    )
+    const nextMessages = [
+      ...messages,
+      {
+        role: 'assistant',
+        tool_calls: toolCalls.map((call) => ({
+          id: call.id,
+          type: 'function',
+          function: { name: call.name, arguments: call.args }
+        }))
+      },
+      ...toolResults.map(({ call, result }) => ({
+        role: 'tool',
+        tool_call_id: call.id,
+        content: JSON.stringify(result)
+      }))
+    ]
+    // 2라운드는 도구를 다시 주지 않는다 — 연쇄 호출로 지연이 눈덩이처럼 늘어나는 걸 막는다(v1 범위).
+    return await callCoachLlmStream(provider, context, onReportDelta, {
+      messages: nextMessages,
+      tools: [],
+      onToolCall: toolSupport.onToolCall
+    })
   }
 
   const ai = parseCoachAiText(fullText, streamedReport, finishReason)
@@ -2524,6 +2699,29 @@ function getChatCompletionDelta(event: unknown): string {
   if (!Array.isArray(choices) || choices.length === 0) return ''
   const delta = (choices[0] as { delta?: { content?: unknown } })?.delta
   return typeof delta?.content === 'string' ? delta.content : ''
+}
+
+/**
+ * 스트림에서 도구 호출 조각을 모은다(#652).
+ * `delta.tool_calls[]` 는 index 별로 `id`·`function.name`·`function.arguments` 가 **여러 청크로 쪼개져** 온다.
+ * arguments 는 이어붙여야 온전한 JSON 이 된다.
+ */
+function collectToolCallDeltas(event: unknown, into: Map<number, { id: string; name: string; args: string }>) {
+  if (!event || typeof event !== 'object') return
+  const choices = (event as { choices?: unknown }).choices
+  if (!Array.isArray(choices) || choices.length === 0) return
+  const calls = (choices[0] as { delta?: { tool_calls?: unknown } })?.delta?.tool_calls
+  if (!Array.isArray(calls)) return
+  for (const raw of calls) {
+    if (!raw || typeof raw !== 'object') continue
+    const call = raw as { index?: unknown; id?: unknown; function?: { name?: unknown; arguments?: unknown } }
+    const index = typeof call.index === 'number' ? call.index : 0
+    const current = into.get(index) ?? { id: '', name: '', args: '' }
+    if (typeof call.id === 'string' && call.id) current.id = call.id
+    if (typeof call.function?.name === 'string' && call.function.name) current.name = call.function.name
+    if (typeof call.function?.arguments === 'string') current.args += call.function.arguments
+    into.set(index, current)
+  }
 }
 
 /** 스트림 청크의 finish_reason. 'length' 면 출력 상한에 걸려 뒷부분이 잘렸다는 뜻이다. */

@@ -33,11 +33,22 @@ describe('coachRepository streaming SSE helpers', () => {
     expect(onStage.mock.calls.map((call) => call[0])).toEqual(['generating', 'saving'])
   })
 
+  // #652: 조회 단계는 조건 문구(detail)를 함께 올린다 — 진행 표시가 신뢰 장치를 겸한다.
+  it('passes the querying stage detail through', () => {
+    const onStage = vi.fn()
+    consumeCoachStreamEvents(
+      [{ event: 'stage', data: { stage: 'querying', detail: 'date gte 2026-06-01 · date lte 2026-06-30' } }],
+      vi.fn(),
+      onStage
+    )
+    expect(onStage).toHaveBeenCalledWith('querying', 'date gte 2026-06-01 · date lte 2026-06-30')
+  })
+
   // 구·신 버전이 섞여도 깨지지 않아야 한다(모르는 단계는 무시하고 계속 읽는다).
   it('ignores unknown stages and stage events without a handler', () => {
     const onStage = vi.fn()
     expect(() => {
-      consumeCoachStreamEvents([{ event: 'stage', data: { stage: 'querying' } }], vi.fn(), onStage)
+      consumeCoachStreamEvents([{ event: 'stage', data: { stage: 'compressing' } }], vi.fn(), onStage)
       consumeCoachStreamEvents([{ event: 'stage', data: { stage: 'generating' } }], vi.fn())
     }).not.toThrow()
     expect(onStage).not.toHaveBeenCalled()
