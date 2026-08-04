@@ -15,7 +15,7 @@ import IntentFulfillmentCard from '@/shared/ui/IntentFulfillmentCard.vue'
 import type { RunLog } from '@/entities/run/model'
 import type { TrainingGoal, TrainingInjuryCheckIn, TrainingMemory } from '@/entities/training-memory/model'
 import { detectGoalIntent, type GoalIntentProposal } from '@/features/detect-goal-intent/detectGoalIntent'
-import { fetchCoachReports, requestCoachRunStream, type CoachInjuryUpdateProposal, type CoachReport, type CoachScheduleProposal } from '@/shared/api/coachRepository'
+import { fetchCoachReports, requestCoachRunStream, type CoachInjuryUpdateProposal, type CoachReport, type CoachScheduleProposal, type CoachStreamStage } from '@/shared/api/coachRepository'
 import { summarizeAchievementsForCoach } from '@/shared/lib/achievement/achievements'
 import { coachModelLabel, COACH_MODELS, isCoachModelId } from '@/shared/lib/coaching/coachModels'
 import { useSettingsStore } from '@/app/stores/settingsStore'
@@ -99,6 +99,8 @@ const coachGraphemeSegmenter =
 // 한 프레임에 표시할 grapheme 상한 — 버스트 수신에도 점프 없이 부드럽게 따라잡도록 제한.
 const MAX_COACH_REVEAL_PER_FRAME = 5
 const coachThinkingSeconds = ref(1)
+/** 서버가 알린 현재 진행 단계(#650). null = 아직 첫 신호 전(= 서버가 컨텍스트 모으는 구간). */
+const coachStage = ref<CoachStreamStage | null>(null)
 const coachThinkingTimer = ref<number | null>(null)
 const coachAbortController = ref<AbortController | null>(null)
 const reports = ref<CoachReport[]>([])
@@ -193,10 +195,25 @@ const coachCommandQuery = computed(() => {
   return text.startsWith('/') ? text.slice(1).trim().toLowerCase() : ''
 })
 const showCoachCommands = computed(() => coachCommandOpen.value || coachNote.value.trimStart().startsWith('/'))
+/**
+ * 진행 단계 문구(#650). "N초째 잘 생각하는 중" 하나로는 사용자가 **뭘 기다리는지** 알 수 없다.
+ *
+ * 단계는 **실제 구간과 1:1로만** 붙인다(없는 단계를 꾸며내면 진행 표시가 거짓말이 된다):
+ * - 전송~첫 이벤트: 서버가 기록·기억·스케줄을 DB 에서 모으는 구간(응답이 열리기 전에 끝난다)
+ * - `generating`: LLM 이 답을 만드는 구간(첫 글자까지 오래 걸릴 수 있다 — 특히 사고 모델)
+ * - 델타 도착 후: 본문이 흐르므로 안내는 감춘다(텍스트 자체가 진행 표시다)
+ * - `saving`: 생성 끝나고 저장하는 구간(오늘 실패가 이 자리에서 났다 — 보여주는 편이 낫다)
+ */
+const COACH_STAGE_LABEL: Record<CoachStreamStage, string> = {
+  generating: '코치가 답을 만드는 중',
+  saving: '정리해서 저장하는 중'
+}
 const visibleStreamingCoachText = computed(() => {
   if (streamingCoachText.value) return streamingCoachText.value
-  if (coachLoading.value) return `${coachThinkingSeconds.value}초째 잘 생각하는 중`
-  return ''
+  if (!coachLoading.value) return ''
+  const label = coachStage.value ? COACH_STAGE_LABEL[coachStage.value] : '내 기록을 불러오는 중'
+  // 경과 초는 유지한다 — 오래 걸릴 때 "멈춘 게 아니다"를 알려주는 유일한 단서다.
+  return `${label} · ${coachThinkingSeconds.value}초`
 })
 const filteredCoachCommands = computed(() => {
   if (!showCoachCommands.value) return []
@@ -430,6 +447,8 @@ async function sendCoachRequest(note: string) {
   pendingUserNote.value = note
   streamingCoachText.value = ''
   streamingCoachMeta.value = 'AI 코치가 답변 중'
+  // 첫 단계 신호가 오기 전 구간 = 서버가 기록·기억·스케줄을 모으는 중(#650).
+  coachStage.value = null
   const controller = new AbortController()
   coachAbortController.value = controller
   resetCoachReveal()
@@ -445,6 +464,12 @@ async function sendCoachRequest(note: string) {
     const report = await requestCoachRunStream(targetRunId, note, weatherStore.snapshot, {
       signal: controller.signal,
       onDelta: enqueueCoachReveal,
+      onStage: (stage) => {
+        coachStage.value = stage
+        // 본문이 이미 흐르는 중이면 안내 문구가 본문에 가려진다 → 말풍선 아래 메타 라인으로 알린다.
+        // 저장 구간은 짧지만 실제로 실패가 나는 자리라(2026-08-04) 감추지 않는다.
+        if (stage === 'saving') streamingCoachMeta.value = COACH_STAGE_LABEL.saving
+      },
       runnerLevel: resolveRunnerLevel(memoryStore.memory.athleteProfile, runStore.sortedRuns).level,
       commandId,
       achievements: summarizeAchievementsForCoach(runStore.sortedRuns, competitionStore.results),
@@ -532,6 +557,7 @@ async function sendCoachRequest(note: string) {
   } finally {
     stopCoachThinkingTimer()
     coachLoading.value = false
+    coachStage.value = null
     if (coachAbortController.value === controller) coachAbortController.value = null
   }
 }

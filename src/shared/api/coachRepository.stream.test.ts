@@ -18,6 +18,31 @@ describe('coachRepository streaming SSE helpers', () => {
     expect(report?.report).toBe('답변')
   })
 
+  // #650: 진행 단계 표시. 서버 신호를 그대로 올려야 화면이 "지금 무슨 작업 중"을 정직하게 보여준다.
+  it('reports known progress stages and keeps streaming', () => {
+    const onStage = vi.fn()
+    const onDelta = vi.fn()
+    const report = consumeCoachStreamEvents([
+      { event: 'stage', data: { stage: 'generating' } },
+      { event: 'delta', data: { delta: '답' } },
+      { event: 'stage', data: { stage: 'saving' } }
+    ], onDelta, onStage)
+
+    expect(report).toBeNull()
+    expect(onDelta).toHaveBeenCalledWith('답')
+    expect(onStage.mock.calls.map((call) => call[0])).toEqual(['generating', 'saving'])
+  })
+
+  // 구·신 버전이 섞여도 깨지지 않아야 한다(모르는 단계는 무시하고 계속 읽는다).
+  it('ignores unknown stages and stage events without a handler', () => {
+    const onStage = vi.fn()
+    expect(() => {
+      consumeCoachStreamEvents([{ event: 'stage', data: { stage: 'querying' } }], vi.fn(), onStage)
+      consumeCoachStreamEvents([{ event: 'stage', data: { stage: 'generating' } }], vi.fn())
+    }).not.toThrow()
+    expect(onStage).not.toHaveBeenCalled()
+  })
+
   it('includes the server stage when a stream error carries one', () => {
     expect(() => {
       consumeCoachStreamEvents([
