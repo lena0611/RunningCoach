@@ -1434,18 +1434,26 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       createdAtDisplay: formatDateTimeWithWeekday(report.created_at)
     })) : [],
     similarPastCoachSnippets: structuredCoachContext ? buildSimilarPastCoachSnippets(selectedRun, runRows, reportRows) : [],
-    selectedRunCoachThread: structuredCoachContext && selectedRunId
-      ? reportRows
-          .filter((report) => report.selected_run_id === selectedRunId)
-          .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
-          .slice(-12)
-          .map((report) => ({
-            userNote: report.user_note,
-            coachAnswer: report.report,
-            createdAt: report.created_at,
-            createdAtDisplay: formatDateTimeWithWeekday(report.created_at)
-          }))
-      : [],
+    /**
+     * 지금 대화의 이력(같은 스레드의 직전 문답들).
+     *
+     * **두 가지를 고쳤다(2026-08-04 실측):**
+     * ① 전역 대화(#616)는 `selectedRunId` 가 null 이라 예전 조건(`&& selectedRunId`)에서 **이력이 전혀 안 갔다** →
+     *    코치가 매 턴 첫 대화처럼 답했다. "이지스트라이드와 어떻게 달라?" 를 직전 주제(NSM)와 못 잇고 이지런과 비교하고,
+     *    사용자가 "Nsm이랑 어떻게 다르냐고" 로 교정해도 엉뚱하게 Nsm vs PaceLAB 을 비교했다.
+     * ② `structuredCoachContext` 게이트도 뗐다 — 대화 이력은 '세션 데이터'가 아니라 **대화 그 자체**다.
+     *    개념 질문(relevance=general)이라 축약 모드로 떨어져도 직전 문답은 이어져야 한다.
+     */
+    coachThread: reportRows
+      .filter((report) => (report.selected_run_id ?? null) === (selectedRunId ?? null))
+      .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+      .slice(-12)
+      .map((report) => ({
+        userNote: report.user_note,
+        coachAnswer: report.report,
+        createdAt: report.created_at,
+        createdAtDisplay: formatDateTimeWithWeekday(report.created_at)
+      })),
     // 프롬프트용 selectedRun은 자유대화(structuredCoachContext=false)에서 null로 가려 세션 데이터가 새지 않게 한다(#559).
     // 저장 귀속용 run id는 그 게이팅과 분리한다 — 세션을 보며 던진 자유질문도 그 세션 스레드에 남아야 하므로(#563 옵션1).
     selectedRunOwnedId: selectedRun?.id ?? null,
@@ -1722,6 +1730,7 @@ function buildFreeConversationInstructions(runnerLevel: RunnerLevel, levelGuide:
     '절대 금지: "## 핵심 지표 / 오늘 해석 / 조심할 점 / 다음 훈련 / 루틴 업데이트 / 한 줄 요약" 같은 코칭 리포트 섹션, 지표 나열, 세션 전체 재분석.',
     'context.responseStyle, context.responseTemplatePolicy, context.coachingDecisionBoard, selectedRun, activeGoal, activeInjuryItem, trustLayerNote가 없다고 보고 답한다. 자유대화에서는 질문 주제 자체만 다룬다.',
     '답변 길이와 형식은 질문에 맞춘다. 짧은 확인 질문이면 짧게, 개념 질문이면 필요한 만큼 설명하되 불필요한 개인화 단락을 붙이지 않는다.',
+    ...buildCoachThreadInstruction(),
     ...buildAnswerLengthCeiling(),
     '마크다운은 필요할 때만 쓴다. 제목이나 목록을 쓰더라도 질문을 더 읽기 쉽게 만드는 목적일 때만 사용한다.',
     '의학적 진단이나 통증 처방을 하지 않는다. 사용자가 통증/부상을 직접 물으면 일반 안전 원칙 수준에서 조심스럽게 말한다.',
@@ -1755,6 +1764,7 @@ function buildEvidenceInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnT
     'trainingMemoryPatch와 injuryUpdateProposal은 명확한 필요가 없으면 null로 둔다.',
     ...buildInternalNamingGuard(),
     ...buildScheduleProposalInstructions(),
+    ...buildCoachThreadInstruction(),
     ...buildAnswerLengthCeiling(),
     '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal, coachScheduleProposal. report에 위 설명 본문을 넣는다.'
   ].join('\n')
@@ -1768,9 +1778,26 @@ function buildEvidenceInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnT
  * 그래서 분량을 "완결 가능한 수준"으로 조인다 — 잘린 장문보다 짧고 완결된 답이 낫다.
  * 유료 API 로 복귀해 속도가 확보되면 이 상한을 재검토한다.
  */
+/**
+ * 대화 이력 사용 지침(모든 응답 모드 공용).
+ *
+ * 모드별 지침 세트는 서로를 대체하는 구조라, 리포트 모드에만 두면 **대화 모드에서 이력 지침이 빠진다**
+ * (buildScheduleProposalInstructions·buildInternalNamingGuard 와 같은 함정).
+ * 2026-08-04 실측: 전역 대화에서 지시 대상 생략 질문("이지스트라이드와 어떻게 달라?")이 직전 주제와
+ * 이어지지 않고 엉뚱한 대상과 비교됐다.
+ */
+function buildCoachThreadInstruction() {
+  return [
+    'context.coachThread는 **지금 이 대화의 직전 문답들**이다(세션 대화면 그 세션 스레드, 전역 대화면 전역 스레드). 이 목록이 있으면 이전 답변을 리포트처럼 되풀이하지 말고 사용자의 새 질문/메모에 **이어서** 답한다. 특히 "그거랑 어떻게 달라?", "왜?", "그럼 뭐가 나아?" 처럼 **대상이 생략된 질문은 직전 문답에서 지시 대상을 찾아** 답한다 — 임의로 다른 대상을 골라 비교하지 마라. 직전 맥락으로도 대상이 불확실하면 추측해서 답하지 말고 무엇과 비교할지 한 줄로 되물어라.'
+  ]
+}
+
 function buildAnswerLengthCeiling() {
   return [
-    '분량 상한: 답변 본문은 **한국어 700자 이내로 완결**한다. 표를 그리거나 항목을 10개씩 나열하지 말고 핵심 3~5개만 문단으로 말한다. 길이보다 완결성이 우선이다 — 문장 중간에 끊기는 답변이 가장 나쁘다. 더 설명할 게 남았으면 다 쏟지 말고 "더 궁금한 부분을 짚어주면 이어서 설명할게요"로 닫는다.'
+    // ⚠ 예시 문장을 지침에 박으면 모델이 그걸 **매 답변에 그대로 복사**한다(2026-08-04: "더 궁금한 부분을 짚어주면
+    // 이어서 설명할게요" 가 3턴 연속 동일 문장으로 나왔다). 그래서 닫는 문장은 예시를 주지 않고 조건만 준다.
+    '분량 상한: 답변 본문은 **한국어 700자 이내로 완결**한다. 표를 그리거나 항목을 10개씩 나열하지 말고 핵심 3~5개만 문단으로 말한다. 길이보다 완결성이 우선이다 — 문장 중간에 끊기는 답변이 가장 나쁘다.',
+    '남은 설명이 있을 때만 이어가겠다는 뜻을 한 문장으로 덧붙인다. 매번 같은 문구를 쓰지 말고 그때 대화에 맞는 말로 자연스럽게 바꿔 쓰며, 덧붙일 게 없으면 생략한다.'
   ]
 }
 
@@ -1794,6 +1821,7 @@ function buildExplainInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnTy
     'trainingMemoryPatch와 injuryUpdateProposal은 명확한 필요가 없으면 null로 둔다.',
     ...buildInternalNamingGuard(),
     ...buildScheduleProposalInstructions(),
+    ...buildCoachThreadInstruction(),
     ...buildAnswerLengthCeiling(),
     '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal, coachScheduleProposal. report에 설명 본문을 넣는다.'
   ].join('\n')
@@ -1843,7 +1871,7 @@ function buildCoachInstructions(context: unknown) {
     '세션별 "잘 수행" 기준(각 타입의 주 목적만 본다): 이지/회복=충분히 느려 회복됐는가(느린 게 목표, 이게 전부다). 이지+스트라이드=이지 본런이 낮은 심박으로 편안했고 막판에 가벼운 가속을 넣었는가(가속의 날카로움·개수·회복폭은 채점 대상 아님). 템포=균등하게 쾌적하게 힘듦(후반 폭주는 역치 특이성 상실). 인터벌=렙 페이스 일관성·고강도 체류(첫 렙 심박 낮은 건 정상). 롱런=오래 편하게+후반 안 무너짐(빠른 롱런 영웅담 금지). Race/한계시험=통제된 출발→일관→강한 마무리(빠를수록 좋다 아님, 상한 없음).',
     'Easy + Strides 해석(중요·말투 본보기): 이 처방이 왜 있는지 기억하라 — 이지 위주로만 뛰면 빠른 감각이 무뎌질까봐, 이지 본래 의도(낮은 심박·회복)는 지키면서 신경근의 "빠른 감각"만 가볍게 살리려고 막판에 스트라이드를 섞는 것이다. 그러니 성공 = 이지를 편안하게 잘 눌렀고(주 목적) + 막판에 그 감각을 톡 살렸다(곁가지). 칭찬의 핵심은 "이지를 편안하게 잘 눌러 회복이 된 것"이다 — "이지 잘 유지하다가 막판에 스트라이드로 빠른 감각 한 번 살린 거 보이네요. 우리가 하려던 거 정확히 그거예요." 후반 km 평균이 빨라지고 케이던스가 오르는 건 스트라이드가 들어간 정상 신호이니 "강도 초과 / 품질 하향 / 의도보다 셌다"로 깎지 마라. 스트라이드가 "선명했는지·개수가 충분한지·회복 분리가 또렷했는지"는 회복런에서 채점하지도, 언급하지도 마라 — 그건 인터벌·템포 같은 품질 세션의 잣대이고, 회복런에 들이대면 사용자가 다음엔 더 세게 질러 이지 심박을 망친다(처방의 전제 자체를 배신하는 것). 부상(발바닥 active)이 있으면 "다음에도 막판 가속은 짧고 가볍게 톡, 무리 말고"처럼 보호하는 한마디만 부드럽게 더한다. "오늘 편하게 잘 뛰었어요" 같은 따뜻한 한마디로 닫는다.',
     'Easy + Strides에서 "후반에 심박이 따라붙었다 / 회복감이 희미해졌다 / 후반 자극이 커졌다 / 막판에 욕심이 섞였다 / 후반 심박 드리프트가 25bpm으로 크다 / 후반까지 더 조용하게 눌러야 한다" 같은 판정을 특히 경계하라 — 이건 모두 회복 분리/전후반 심박 차 채점이 다른 말로 새어나오는 것이다. 이 세션의 전후반 심박 차(드리프트)는 막판 스트라이드 때문에 부풀려진 무의미한 값이라 평가 데이터에서 제거했다(lapAnalysis에 null + frontBackHrDriftNote 참고). "드리프트"라는 말도 쓰지 마라 — 드리프트는 같은 페이스에서 서서히 오르는 현상이고 스트라이드 가속은 그게 아니다. 막판 빠른 구간(스트라이드)에서 심박이 오르는 건 세션 설계 그대로이지 회복의 흐트러짐이 아니다. 본런 평균심박이 이지 상한 아래로 눌렸고(주 목적 충족) RPE가 낮으면 그날은 잘 수행한 이지+스트라이드다 — 스트라이드가 막판 심박을 올렸다는 이유로 그날을 "욕심/과함"으로 규정하지 마라. (예: 평균 129.5, 상한 139, RPE 3, 막판 5:50 스트라이드에서 157 → 직후 140으로 하강 = 회복까지 된 모범 수행. 이걸 "욕심 섞인 날"로 부르면 틀린 것이다.) 사용자가 낮은 RPE로 "편했다"고 느낀 것을 데이터 패턴으로 뒤집어 "과했다"고 판정하지 마라 — 평균심박이 상한 아래면 본인 체감(RPE)을 신뢰한다. 부상이 있으면 오늘을 실패로 규정하지 말고 "다음에도 막판 가속은 짧고 가볍게"라는 앞을 향한 보호 조언만 더한다(오늘은 잘한 날, 조언은 미래용).',
-    '이전 코칭 스레드(selectedRunCoachThread)·과거 스니펫의 옛 답변을 평가의 출발점으로 삼지 마라. 데이터와 sessionEvidence(평균심박 판정 등)에서 새로 평가한다. 특히 첫 문장을 옛 결론("기본은 지켰지만 품질은 유지 쪽" 같은 차가운 판정)으로 시작하지 말고, 반드시 따뜻한 인정으로 연다. 옛 답변이 같은 세션을 부정적/차갑게 봤어도 그 톤·문구를 반복·강화하지 말고, 새 기준으로 자연스럽게 바로잡는다.',
+    '이전 코칭 스레드(coachThread)·과거 스니펫의 옛 답변을 평가의 출발점으로 삼지 마라. 데이터와 sessionEvidence(평균심박 판정 등)에서 새로 평가한다. 특히 첫 문장을 옛 결론("기본은 지켰지만 품질은 유지 쪽" 같은 차가운 판정)으로 시작하지 말고, 반드시 따뜻한 인정으로 연다. 옛 답변이 같은 세션을 부정적/차갑게 봤어도 그 톤·문구를 반복·강화하지 말고, 새 기준으로 자연스럽게 바로잡는다.',
     '운동 시각 맥락을 챙겨라(선택적): 늦은 저녁/밤 러닝이면 운동 후 몸이 안정되기까지 두세 시간 걸려 수면에 영향을 줄 수 있다. 저녁·밤 세션이거나 회복이 화제일 때는 가끔 "요즘 잠은 잘 주무세요? 수면 질은 어때요?"처럼 수면·회복을 챙기는 따뜻한 질문을 자연스럽게 던진다(매번은 말 것). 수면/HRV 데이터가 있으면 함께 본다. 이런 관계적 챙김이 "나를 안다·끝까지 챙긴다"는 신뢰를 만든다.',
     '답변은 보고서가 아니라 대화처럼 느껴져야 한다.',
     '첫 문장은 반드시 분석이나 숫자가 아니라 반응으로 시작한다. 예: "좋다. 이건 진짜 회복런 맞다.", "오 이건 꽤 잘 눌렀다.", "오늘은 욕심 안 낸 게 제일 잘한 점이다."',
@@ -1851,7 +1879,7 @@ function buildCoachInstructions(context: unknown) {
     '한국어 반말 기반으로 자연스럽게 말한다. 너무 정중한 리포트체를 피한다.',
     '사용자가 쓴 표현과 뉘앙스를 자연스럽게 받아준다. 예: "와이프랑 완전 이지", "회복런 느낌", "오늘 LSD" 같은 표현을 답변에서 재해석해 이어 말한다.',
     '사용자가 이미 아는 정보를 길게 반복하지 않는다.',
-    'context.selectedRunCoachThread는 같은 세션에서 이미 나눈 코칭 대화다. 이 목록이 있으면 이전 답변을 다시 리포트처럼 반복하지 말고, 사용자의 새 질문/메모에 이어서 답한다.',
+    ...buildCoachThreadInstruction(),
     '같은 세션의 추가 대화에서는 필요한 핵심만 짧게 답하고, 이전 평가를 바꿔야 할 때만 "아까 답에서 이 부분은 이렇게 보정된다"처럼 자연스럽게 수정한다.',
     'context.similarPastCoachSnippets는 다른 세션 중 현재 선택 세션과 타입/요일/거리/메모가 비슷한 과거 코칭 요약이다. 전체 대화 전문이 아니라 비용을 줄이기 위해 짧게 잘린 참고 자료다.',
     'similarPastCoachSnippets는 사용자의 반복 패턴과 이전 해석 톤을 떠올리는 데만 사용한다. 현재 선택 세션의 숫자와 날짜보다 우선하지 않는다.',
