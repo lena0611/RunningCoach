@@ -10,6 +10,8 @@
  * **거부 이유를 돌려준다** — 코치가 "그 기준으로는 볼 수 없다"고 정직하게 말할 수 있어야 한다.
  */
 
+import { buildDataGapDirective, type DataGapKind } from './dataGap.ts'
+
 /** 집계 입력 행(run_logs 의 화이트리스트 컬럼만). */
 export type QueryRunsRow = {
   date: string
@@ -104,16 +106,25 @@ export type QueryRunsResult = {
   /** 필터를 통과한 전체 러닝 수 — 표본 수 표기용. */
   matchedRuns: number
   rows: Array<Record<string, string | number | null>>
-  /** 결과가 비었거나 표본이 적을 때 코치가 반드시 반영할 주의. */
+  /** 실패 종류(#652 PR2) — 코드가 판정한다. 프롬프트가 상황을 알아서 읽길 기대하지 않는다. */
+  failureKind: DataGapKind | null
+  /** 결과가 비었거나 표본이 적을 때 코치가 반드시 반영할 주의. failureKind 별 고정 문구다. */
   caution: string | null
 }
 
 const MAX_ROWS = 24
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
-/** 화이트리스트 검증. 통과하면 spec, 아니면 사람이 읽을 거부 이유. */
-export function normalizeQueryRunsArgs(raw: unknown): { spec: QueryRunsSpec } | { error: string } {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { error: '조회 조건을 이해하지 못했습니다.' }
+/**
+ * 화이트리스트 검증. 통과하면 spec, 아니면 사람이 읽을 거부 이유 + **실패 종류**(#652 PR2).
+ * 종류를 함께 돌려주는 이유: 응대 지침을 코드가 고정하고, 실패를 기록해 확장 근거로 삼기 위해서다.
+ */
+export function normalizeQueryRunsArgs(
+  raw: unknown
+): { spec: QueryRunsSpec } | { error: string; kind: DataGapKind } {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { error: '조회 조건을 이해하지 못했습니다.', kind: 'invalid_args' }
+  }
   const value = raw as Record<string, unknown>
 
   const groupBy = QUERY_RUNS_GROUPS.find((group) => group === value.groupBy) ?? 'none'
@@ -130,19 +141,27 @@ export function normalizeQueryRunsArgs(raw: unknown): { spec: QueryRunsSpec } | 
     const filter = entry as Record<string, unknown>
     const field = typeof filter.field === 'string' ? filter.field : ''
     const spec = QUERY_RUNS_FIELDS[field]
-    if (!spec) return { error: `'${field || '알 수 없는 항목'}'은(는) 기록에 저장하지 않는 항목입니다.` }
+    if (!spec) {
+      return {
+        error: `'${field || '알 수 없는 항목'}'은(는) 기록에 저장하지 않는 항목입니다.`,
+        kind: 'unsupported_field'
+      }
+    }
     const op = OPS.find((candidate) => candidate === filter.op)
-    if (!op) return { error: `'${field}'에 쓸 수 없는 비교 방식입니다.` }
+    if (!op) return { error: `'${field}'에 쓸 수 없는 비교 방식입니다.`, kind: 'invalid_args' }
     if (spec.kind === 'number') {
       const numeric = typeof filter.value === 'number' ? filter.value : Number(filter.value)
-      if (!Number.isFinite(numeric)) return { error: `'${field}' 조건 값이 숫자가 아닙니다.` }
+      if (!Number.isFinite(numeric)) return { error: `'${field}' 조건 값이 숫자가 아닙니다.`, kind: 'invalid_args' }
       filters.push({ field, op, value: numeric })
       continue
     }
     const text = typeof filter.value === 'string' ? filter.value.trim() : String(filter.value ?? '')
-    if (!text) return { error: `'${field}' 조건 값이 비어 있습니다.` }
+    if (!text) return { error: `'${field}' 조건 값이 비어 있습니다.`, kind: 'invalid_args' }
     if (spec.kind === 'date' && !DATE_PATTERN.test(text) && op !== 'contains') {
-      return { error: `날짜 조건은 YYYY-MM-DD 형식이어야 합니다(받은 값: ${text}).` }
+      return {
+        error: `날짜 조건은 YYYY-MM-DD 형식이어야 합니다(받은 값: ${text}).`,
+        kind: 'invalid_args'
+      }
     }
     filters.push({ field, op, value: text })
   }
@@ -192,20 +211,41 @@ export function runQueryRuns(spec: QueryRunsSpec, rows: QueryRunsRow[]): QueryRu
     return row
   })
 
+  const failureKind = classifyFailure(spec, resultRows, matched.length, ordered.length)
   return {
     appliedFilters: spec.filters.map(describeFilter),
     groupBy: spec.groupBy,
     matchedRuns: matched.length,
     rows: resultRows,
-    caution: buildCaution(matched.length, ordered.length, spec.limit)
+    failureKind,
+    caution: failureKind ? buildDataGapDirective(failureKind, failureDetail(failureKind, spec, matched.length, ordered.length)) : null
   }
 }
 
-function buildCaution(matchedRuns: number, groupCount: number, limit: number): string | null {
-  if (matchedRuns === 0) return '조건에 맞는 기록이 없습니다. 없는 값을 추정해 말하지 말고 기록이 없다고 알려주세요.'
-  if (matchedRuns < 4) return `표본이 ${matchedRuns}건뿐입니다. 경향으로 단정하지 말고 표본이 적다는 점을 함께 말해주세요.`
-  if (groupCount > limit) return `그룹이 ${groupCount}개라 최근 ${limit}개만 돌려줬습니다. 전체가 아니라는 점을 밝혀주세요.`
+/**
+ * 실패 분류(#652 PR2). 순서가 곧 우선순위다 — 0건이면 표본 얘기는 의미가 없고,
+ * 값이 전부 비었으면 "표본 2건"보다 "그 값은 기록되지 않았다"가 사용자에게 정확하다.
+ */
+function classifyFailure(
+  spec: QueryRunsSpec,
+  rows: Array<Record<string, string | number | null>>,
+  matchedRuns: number,
+  groupCount: number
+): DataGapKind | null {
+  if (matchedRuns === 0) return 'no_matching_runs'
+  const valueMetrics = spec.metrics.filter((metric) => metric !== 'count')
+  if (valueMetrics.length && rows.every((row) => valueMetrics.every((metric) => row[`${metric}Samples`] === 0))) {
+    return 'missing_values'
+  }
+  if (matchedRuns < 4) return 'low_sample'
+  if (groupCount > spec.limit) return 'truncated_groups'
   return null
+}
+
+function failureDetail(kind: DataGapKind, spec: QueryRunsSpec, matchedRuns: number, groupCount: number): string | undefined {
+  if (kind === 'low_sample') return String(matchedRuns)
+  if (kind === 'truncated_groups') return `${groupCount}개 중 최근 ${spec.limit}개`
+  return undefined
 }
 
 function matchesFilter(row: QueryRunsRow, filter: QueryRunsFilter): boolean {
