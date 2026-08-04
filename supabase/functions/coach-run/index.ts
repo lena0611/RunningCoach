@@ -10,6 +10,13 @@ import {
   type QueryRunsRow
 } from './queryRuns.ts'
 import {
+  buildDataGapDirective,
+  normalizeReportDataGapArgs,
+  REPORT_DATA_GAP_REASONS,
+  type DataGapKind
+} from './dataGap.ts'
+import { detectUngroundedDataClaims } from './ungroundedClaim.ts'
+import {
   buildUserNoteRelevancePolicy,
   detectCoachAnswerIntent,
   detectUserNoteRunRelevance,
@@ -1615,8 +1622,14 @@ async function throwLlmUpstreamError(response: Response, where: string): Promise
 }
 
 /**
- * 도구 정의(#652). **하나뿐이다** — 도구를 여러 개 만들면 "무엇을 물어볼지"를 다시 개발자가 예측하는
+ * 도구 정의(#652).
+ *
+ * **데이터 조회 도구는 하나뿐이다** — 조회 도구를 여러 개 만들면 "무엇을 물어볼지"를 다시 개발자가 예측하는
  * 셈이고, 그건 화면 문제를 도구 시그니처로 옮기는 것에 불과하다. 필터·그룹·지표 조합으로 표현력을 낸다.
+ *
+ * 두 번째 `reportDataGap` 은 조회 도구가 아니라 **실패 통로**다(PR2). 못 하겠다고 말할 자리가 없으면
+ * 모델은 추정으로 답한다 — 실제로 그게 신뢰를 깨는 경로였다. 통로를 열고, 그 선언을 기록으로 남겨
+ * 무엇을 확장/저장해야 하는지의 근거로 쓴다.
  */
 function buildCoachTools() {
   return [
@@ -1652,6 +1665,27 @@ function buildCoachTools() {
           }
         }
       }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'reportDataGap',
+        description:
+          'queryRuns 로는 답할 수 없다고 판단했을 때 호출한다. 저장하지 않는 항목을 물었거나(missing_field), ' +
+          '조회 조건 조합으로 안 되는 계산이거나(beyond_tool — 증가율·상관·전후 비교), 질문 기준이 애매할 때(ambiguous). ' +
+          '**추정해서 답하지 말고 반드시 이 도구를 부른다.** 어떻게 답해야 하는지 지침을 돌려준다. ' +
+          'beyond_tool 은 조회를 두 번 나눠 해도 안 될 때만 쓴다 — 기간을 나눠 두 번 조회하면 되는 비교는 queryRuns 를 두 번 부른다.',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['reason', 'question'],
+          properties: {
+            reason: { type: 'string', enum: REPORT_DATA_GAP_REASONS },
+            question: { type: 'string', description: '사용자가 무엇을 물었는지 한 문장으로' },
+            needed: { type: 'string', description: '답하려면 무엇이 있어야 했는지(필드·계산). 확장 근거로 기록된다.' }
+          }
+        }
+      }
     }
   ]
 }
@@ -1672,16 +1706,45 @@ function summarizeQueryRunsArgsForDisplay(rawArgs: string): string {
   return parts.join(' · ')
 }
 
+/**
+ * 답하지 못한 질문을 기록한다(#652 PR2). **실패는 상시 상태**라서 관측이 없으면 확장 우선순위가 영원히 추측이다.
+ * 코칭 응답 품질과 무관한 관측 경로이므로 실패는 삼킨다 — 로깅 때문에 답변이 죽는 게 최악이다.
+ */
+async function recordDataGap(
+  admin: SupabaseAdminClient,
+  userId: string,
+  gap: { kind: DataGapKind; question: string; detail?: string; needed?: string; matchedRuns?: number | null }
+) {
+  try {
+    const { error } = await admin.from('coach_data_gaps').insert({
+      user_id: userId,
+      kind: gap.kind,
+      question: gap.question.slice(0, 500),
+      detail: (gap.detail ?? '').slice(0, 500),
+      needed: (gap.needed ?? '').slice(0, 300),
+      matched_runs: gap.matchedRuns ?? null
+    })
+    if (error) console.warn('coach_data_gaps insert failed', { kind: gap.kind, message: error.message })
+  } catch (error) {
+    console.warn('coach_data_gaps insert threw', { kind: gap.kind, message: getErrorMessage(error, 'unknown') })
+  }
+}
+
 /** 도구 실행 — 조회 범위를 사용자 본인으로 **코드가** 고정한다(LLM 이 건드릴 수 없는 자리). */
-async function executeQueryRuns(admin: SupabaseAdminClient, userId: string, rawArgs: string) {
+async function executeQueryRuns(admin: SupabaseAdminClient, userId: string, rawArgs: string, question: string) {
   let parsedArgs: unknown = {}
   try {
     parsedArgs = JSON.parse(rawArgs || '{}')
   } catch {
-    return { error: '조회 조건 형식을 이해하지 못했습니다.' }
+    await recordDataGap(admin, userId, { kind: 'invalid_args', question, detail: rawArgs.slice(0, 300) })
+    return { error: '조회 조건 형식을 이해하지 못했습니다.', guidance: buildDataGapDirective('invalid_args') }
   }
   const normalized = normalizeQueryRunsArgs(parsedArgs)
-  if ('error' in normalized) return { error: normalized.error }
+  if ('error' in normalized) {
+    await recordDataGap(admin, userId, { kind: normalized.kind, question, detail: JSON.stringify(parsedArgs).slice(0, 500) })
+    // 거부 이유만 주면 모델이 "비슷한 다른 항목"으로 바꿔 답한다(습도→비). 응대 방침까지 코드가 붙인다.
+    return { error: normalized.error, guidance: buildDataGapDirective(normalized.kind, normalized.error) }
+  }
 
   const { data, error } = await admin
     .from('run_logs')
@@ -1693,10 +1756,37 @@ async function executeQueryRuns(admin: SupabaseAdminClient, userId: string, rawA
     .limit(3000)
   if (error) {
     console.error('queryRuns fetch failed', { message: error.message })
-    return { error: '기록을 불러오지 못했습니다.' }
+    return { error: '기록을 불러오지 못했습니다.', guidance: buildDataGapDirective('query_failed') }
   }
   // 필터·집계는 받아온 행에서 계산한다. 이력 전체를 대상으로 하므로 컨텍스트의 120건 한계와 무관하다.
-  return runQueryRuns(normalized.spec, (data ?? []) as QueryRunsRow[])
+  const result = runQueryRuns(normalized.spec, (data ?? []) as QueryRunsRow[])
+  // 0건·전결측은 "질문에 답을 못 준" 관측이다. low_sample·truncated 는 답은 나간 것이라 기록하지 않는다.
+  if (result.failureKind === 'no_matching_runs' || result.failureKind === 'missing_values') {
+    await recordDataGap(admin, userId, {
+      kind: result.failureKind,
+      question,
+      detail: result.appliedFilters.join(' · '),
+      matchedRuns: result.matchedRuns
+    })
+  }
+  return result
+}
+
+/** `reportDataGap` 실행 — 선언을 기록하고, 어떻게 답할지 지침을 돌려준다. */
+async function executeReportDataGap(admin: SupabaseAdminClient, userId: string, rawArgs: string, question: string) {
+  let parsedArgs: unknown = {}
+  try {
+    parsedArgs = JSON.parse(rawArgs || '{}')
+  } catch {
+    /* 빈 인자로 진행 — 선언 자체는 유효하다 */
+  }
+  const gap = normalizeReportDataGapArgs(parsedArgs)
+  await recordDataGap(admin, userId, {
+    kind: gap.kind,
+    question: gap.question || question,
+    needed: gap.needed
+  })
+  return { acknowledged: true, guidance: buildDataGapDirective(gap.kind, gap.needed || undefined) }
 }
 
 function buildCoachMessages(context: unknown) {
@@ -1902,8 +1992,9 @@ function buildDataQuestionInstruction() {
     '기록 수치를 말해야 하는 질문(언제 얼마나 뛰었나, 어떤 조건에서 어땠나, 기간 비교)에는 **반드시 queryRuns 를 먼저 호출**한다. 도구를 부르지 않고 거리·횟수·평균 페이스·평균 심박 같은 수치를 말하지 않는다. context 의 recent7/14/30 은 최근 창 합계일 뿐이라 임의 기간의 답이 아니다.',
     '도구 결과를 말할 때 **적용된 조건(appliedFilters)과 표본 수를 함께** 밝힌다. 예: "6월 기준 14회 · 90.75km". 조건과 표본을 감추면 사용자가 검증할 수 없다.',
     'caution 이 있으면 반드시 반영한다. 특히 matchedRuns 가 0 이면 **추정하지 말고 "그 조건에 맞는 기록이 없다"** 고 말하고, 표본이 적으면 경향으로 단정하지 않는다.',
-    'error 가 오면(저장하지 않는 항목·형식 오류) 그 이유를 사용자 말로 옮겨 "그 기준으로는 볼 수 없다"고 알린다. 비슷한 다른 항목으로 슬쩍 바꿔 답하지 않는다 — 예: 강수(비) 여부는 저장하지 않으므로 습도로 대체해 "비 온 날"이라 말하면 안 된다.',
-    '같은 질문에 도구를 두 번 이상 부르지 않는다. 한 번의 조건 조합으로 안 되는 질문(증가율·상관 등)은 지금 가능한 범위를 말하고 무엇이 더 필요한지 짚는다.',
+    'error 가 오면(저장하지 않는 항목·형식 오류) 그 이유를 사용자 말로 옮겨 "그 기준으로는 볼 수 없다"고 알린다. 비슷한 다른 항목으로 슬쩍 바꿔 답하지 않는다 — 예: 강수(비) 여부는 저장하지 않으므로 습도로 대체해 "비 온 날"이라 말하면 안 된다. 도구 결과에 guidance 가 있으면 그 지침대로 답한다.',
+    '조회는 **최대 두 번**까지다. "부상 전후 비교"·"6월과 7월 비교"처럼 기간을 나누면 되는 질문은 queryRuns 를 두 번 부른다(한 번에 병렬로 불러도 된다). 두 번으로도 안 되는 계산(증가율 추세·상관)은 **머릿속으로 계산하지 말고 reportDataGap 을 부른다**.',
+    '답할 수 없는 질문(저장하지 않는 항목·도구로 안 되는 계산·기준이 애매한 질문)은 **추정으로 메꾸지 말고 reportDataGap 을 호출**한다. "모른다"는 실패가 아니라 정직한 1급 응답이다 — 지어낸 숫자가 신뢰를 깬다.',
     // 2026-08-04 실측: "2달 전에 총 몇 키로"를 60일 창(6/04~8/03)으로 읽었다. 조건을 밝혀 거짓은 아니었지만
     // 한국어에서 "N달 전"은 보통 **그 달 자체**를 뜻한다. 기간 해석을 날짜 산수에 맡기지 않고 못박는다.
     '기간 표현은 **월 경계로 읽는다**. "2달 전"·"지난달"·"6월"은 그 달의 1일~말일이다(오늘이 8월이면 "2달 전"=6월 1일~6월 30일). "최근 N일"·"요즘"처럼 명시적으로 창을 말한 경우에만 오늘 기준 N일 창으로 읽는다. 어느 쪽인지 애매하면 월 경계로 조회하고, 답변에 그 범위를 밝혀 사용자가 바로잡을 수 있게 한다.'
@@ -2470,18 +2561,38 @@ function streamCoachRun(
         // 컨텍스트 수집(DB 조회)은 이 응답이 열리기 **전에** 이미 끝나므로, 클라이언트에서 "첫 이벤트 도착 전"
         // 구간이 곧 그 단계다. 그래서 서버가 보낼 전환점은 생성 시작·저장 시작 둘뿐이다.
         send('stage', { stage: 'generating' })
+        let toolWasCalled = false
         const ai = await callCoachLlmStream(provider, context, (delta) => send('delta', { delta }), {
           messages: buildCoachMessages(context),
           tools: buildCoachTools(),
           onToolCall: async (name, args) => {
+            toolWasCalled = true
+            if (name === 'reportDataGap') return await executeReportDataGap(admin, userId, args, userNote)
             if (name !== 'queryRuns') return { error: `지원하지 않는 도구입니다(${name}).` }
             // 조회 조건을 화면에 그대로 노출한다 — 진행 표시가 신뢰 장치를 겸한다(#650 후속).
             send('stage', { stage: 'querying', detail: summarizeQueryRunsArgsForDisplay(args) })
-            const result = await executeQueryRuns(admin, userId, args)
+            const result = await executeQueryRuns(admin, userId, args, userNote)
             send('stage', { stage: 'generating' })
             return result
           }
         })
+        /**
+         * "모른다" 게이트 1단계(#652 PR2): 도구 없이 과거 기간+수치를 말한 문장을 잡는다.
+         * **지금은 관측만 한다** — "심박 138 이하로" 같은 정상 처방과의 구분이 완벽하지 않아,
+         * 오탐율을 이 로그로 측정한 뒤에 차단(재생성/문장 제거)으로 올린다. 순서를 건너뛰면
+         * 정상 코칭을 막는 회귀를 사용자가 먼저 발견하게 된다.
+         */
+        if (!toolWasCalled && userNote.trim()) {
+          const claims = detectUngroundedDataClaims(ai.report)
+          if (claims.length) {
+            console.warn('[coach-run] 도구 없이 과거 수치 주장 감지(관측 전용)', { count: claims.length, first: claims[0] })
+            await recordDataGap(admin, userId, {
+              kind: 'ungrounded_claim',
+              question: userNote,
+              detail: claims.map((claim) => claim.sentence).join(' | ').slice(0, 500)
+            })
+          }
+        }
         send('stage', { stage: 'saving' })
         const result = await persistCoachResult(admin, userId, selectedRunId, userNote, context, ai, storedModel)
         clearInterval(heartbeat)
@@ -2525,6 +2636,11 @@ async function callCoachLlmStream(
     messages: unknown[]
     tools: unknown[]
     onToolCall: (name: string, args: string) => Promise<unknown>
+    /**
+     * 남은 도구 라운드(#652 PR2). 미지정이면 2 — "부상 전후 비교"·"6월 vs 7월"은 조회를 두 번 나누면
+     * 되는 질문이라 1회 제한이 곧 beyond_tool 실패였다. 상한을 코드가 쥐므로 연쇄 폭주는 없다.
+     */
+    roundsLeft?: number
   }
 ): Promise<CoachAiResult> {
   const messages = toolSupport?.messages ?? buildCoachMessages(context)
@@ -2615,11 +2731,13 @@ async function callCoachLlmStream(
         content: JSON.stringify(result)
       }))
     ]
-    // 2라운드는 도구를 다시 주지 않는다 — 연쇄 호출로 지연이 눈덩이처럼 늘어나는 걸 막는다(v1 범위).
+    // 라운드 상한은 코드가 쥔다. 마지막 라운드엔 tools 를 빼서 모델이 답변으로 수렴하게 강제한다.
+    const roundsLeft = (toolSupport.roundsLeft ?? 2) - 1
     return await callCoachLlmStream(provider, context, onReportDelta, {
       messages: nextMessages,
-      tools: [],
-      onToolCall: toolSupport.onToolCall
+      tools: roundsLeft > 0 ? toolSupport.tools : [],
+      onToolCall: toolSupport.onToolCall,
+      roundsLeft
     })
   }
 

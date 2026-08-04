@@ -38,9 +38,15 @@ function spec(overrides: Partial<QueryRunsSpec> = {}): QueryRunsSpec {
 }
 
 describe('normalizeQueryRunsArgs — 화이트리스트가 거부 이유를 돌려준다', () => {
-  it('저장하지 않는 항목은 거부한다 (없는 걸 있는 척하지 않기)', () => {
+  it('저장하지 않는 항목은 거부하고 실패 종류를 밝힌다 (없는 걸 있는 척하지 않기)', () => {
     const result = normalizeQueryRunsArgs({ filters: [{ field: 'shoes', op: 'eq', value: 'A' }] })
     expect('error' in result && result.error).toContain('저장하지 않는')
+    expect('error' in result && result.kind).toBe('unsupported_field')
+  })
+
+  it('형식 오류는 invalid_args 로 분류된다', () => {
+    const result = normalizeQueryRunsArgs({ filters: [{ field: 'distanceKm', op: 'regex', value: 5 }] })
+    expect('error' in result && result.kind).toBe('invalid_args')
   })
 
   it('허용 밖 비교 방식을 거부한다', () => {
@@ -94,24 +100,35 @@ describe('runQueryRuns — 집계와 신뢰 장치', () => {
     expect(result.matchedRuns).toBe(1)
   })
 
-  it('결측 지표는 0 으로 속이지 않고 null + 표본 0 으로 알린다', () => {
+  it('결측 지표는 0 으로 속이지 않고 null + 표본 0 + missing_values 로 알린다', () => {
     const result = runQueryRuns(spec({ metrics: ['count', 'avgHeartRate'] }), [
       row({ avg_heart_rate: null }),
       row({ avg_heart_rate: null })
     ])
     expect(result.rows[0].avgHeartRate).toBeNull()
     expect(result.rows[0].avgHeartRateSamples).toBe(0)
+    // 표본 2건이기도 하지만, "그 값은 기록되지 않았다"가 사용자에게 더 정확한 실패다.
+    expect(result.failureKind).toBe('missing_values')
+    expect(result.caution).toContain('기록되어 있지 않다')
   })
 
-  it('결과가 없으면 추정 금지 주의를 붙인다', () => {
+  it('결과가 없으면 no_matching_runs + 추정 금지 주의를 붙인다', () => {
     const result = runQueryRuns(spec({ filters: [{ field: 'distanceKm', op: 'gte', value: 100 }] }), [row()])
     expect(result.matchedRuns).toBe(0)
+    expect(result.failureKind).toBe('no_matching_runs')
     expect(result.caution).toContain('기록이 없다고')
   })
 
-  it('표본이 적으면 단정 금지 주의를 붙인다', () => {
+  it('표본이 적으면 low_sample + 단정 금지 주의를 붙인다', () => {
     const result = runQueryRuns(spec(), [row(), row()])
+    expect(result.failureKind).toBe('low_sample')
     expect(result.caution).toContain('표본이 2건')
+  })
+
+  it('정상 결과는 실패 종류가 없다', () => {
+    const result = runQueryRuns(spec(), [row(), row(), row(), row()])
+    expect(result.failureKind).toBeNull()
+    expect(result.caution).toBeNull()
   })
 
   it('요일로 묶을 수 있다', () => {
