@@ -126,6 +126,8 @@ export async function requestCoachRunStream(
   options: {
     signal?: AbortSignal
     onDelta: (delta: string) => void
+    /** 진행 단계 전환 알림(#650). 화면이 "지금 무슨 작업 중"인지 정직하게 보여주기 위한 신호. */
+    onStage?: (stage: CoachStreamStage, detail: string) => void
     runnerLevel?: RunnerLevel
     commandId?: string | null
     achievements?: CoachAchievementSummary | null
@@ -212,14 +214,14 @@ export async function requestCoachRunStream(
     const parsed = drainSseBuffer(buffer)
     buffer = parsed.rest
 
-    const report = consumeCoachStreamEvents(parsed.events, options.onDelta)
+    const report = consumeCoachStreamEvents(parsed.events, options.onDelta, options.onStage)
     if (report) return report
   }
 
   buffer += decoder.decode()
   if (buffer.trim()) {
     const parsed = drainSseBuffer(hasSseTerminator(buffer) ? buffer : `${buffer}\n\n`)
-    const report = consumeCoachStreamEvents(parsed.events, options.onDelta)
+    const report = consumeCoachStreamEvents(parsed.events, options.onDelta, options.onStage)
     if (report) return report
   }
 
@@ -290,11 +292,23 @@ function hasSseTerminator(buffer: string) {
   return /\r?\n\r?\n$/.test(buffer)
 }
 
-export function consumeCoachStreamEvents(events: Array<{ event: string; data: unknown }>, onDelta: (delta: string) => void): CoachReport | null {
+/** 서버가 알리는 진행 단계(#650). 알 수 없는 값은 무시해 구·신 버전이 섞여도 깨지지 않는다. */
+export type CoachStreamStage = 'generating' | 'saving'
+
+export function consumeCoachStreamEvents(
+  events: Array<{ event: string; data: unknown }>,
+  onDelta: (delta: string) => void,
+  onStage?: (stage: CoachStreamStage, detail: string) => void
+): CoachReport | null {
   for (const event of events) {
     if (event.event === 'delta') {
       const delta = getString(event.data, 'delta')
       if (delta) onDelta(delta)
+      continue
+    }
+    if (event.event === 'stage') {
+      const stage = getString(event.data, 'stage')
+      if (stage === 'generating' || stage === 'saving') onStage?.(stage, getString(event.data, 'detail'))
       continue
     }
     if (event.event === 'done') {

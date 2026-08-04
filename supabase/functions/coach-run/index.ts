@@ -1003,6 +1003,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     { data: memoryItems },
     { data: activeMemoryItems },
     { data: reports },
+    { data: threadReports },
     { data: knowledgeSources },
     { data: trainingMethods },
     { data: prescriptionRules }
@@ -1014,12 +1015,16 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     // 활성 후보: 오래돼도 중요한 기억이 풀 잘림에 안 묻히도록 별도로 중요도순 조회
     admin.from('coach_memory_items').select(memorySelect).eq('user_id', userId).order('importance', { ascending: false }).order('last_referenced_at', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false }).limit(24),
     admin.from('coach_reports').select('selected_run_id, user_note, report, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(80),
+    // 현재 스레드는 **따로** 조회한다. 위 80건은 전역 최근순이라, 다른 스레드(특히 활발한 전역 대화)가
+    // 많아지면 지금 대화의 옛 턴이 조회 범위에서 밀려 문맥이 조용히 끊긴다.
+    threadReportQuery(admin, userId, selectedRunId),
     admin.from('training_knowledge_sources').select('id, title, author, source_type, url, reliability, summary').eq('approved', true),
     admin.from('training_methods').select('id, source_id, name, slug, family, summary, target_distances, suitable_levels, weekly_days_min, weekly_days_max, caution_notes').eq('approved', true),
     admin.from('training_prescription_rules').select('id, method_id, source_id, goal_distance, phase, session_type, rule_type, metric, prescription, raise_condition, lower_condition, contraindications, evidence_summary, priority, protocol, template_slug').eq('approved', true).order('priority')
   ])
   let runRows = (runs ?? []) as RunLogRow[]
   const reportRows = (reports ?? []) as CoachReportRow[]
+  const threadReportRows = (threadReports ?? []) as CoachReportRow[]
   // 최근성 풀 + 활성(중요도순) 후보를 id 기준으로 합친다(중복 제거).
   const memoryRowPool = mergeMemoryRows((memoryItems ?? []) as CoachMemoryItemRow[], (activeMemoryItems ?? []) as CoachMemoryItemRow[])
   const memoryRows = memoryRowPool
@@ -1444,16 +1449,21 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
      * ② `structuredCoachContext` 게이트도 뗐다 — 대화 이력은 '세션 데이터'가 아니라 **대화 그 자체**다.
      *    개념 질문(relevance=general)이라 축약 모드로 떨어져도 직전 문답은 이어져야 한다.
      */
-    coachThread: reportRows
-      .filter((report) => (report.selected_run_id ?? null) === (selectedRunId ?? null))
-      .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
-      .slice(-12)
-      .map((report) => ({
+    coachThread: (() => {
+      const turns = threadReportRows
+        .slice()
+        .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+        .slice(-COACH_THREAD_WINDOW)
+      const fullFrom = Math.max(0, turns.length - COACH_THREAD_FULL_TURNS)
+      return turns.map((report, index) => ({
         userNote: report.user_note,
-        coachAnswer: report.report,
+        // 최근 턴은 원문, 그 앞은 축약(위 COACH_THREAD_* 주석 — 프롬프트 크기와 창 넓이를 동시에 확보).
+        coachAnswer: index >= fullFrom ? report.report : truncateText(report.report, COACH_THREAD_OLD_ANSWER_CHARS),
+        abbreviated: index < fullFrom,
         createdAt: report.created_at,
         createdAtDisplay: formatDateTimeWithWeekday(report.created_at)
-      })),
+      }))
+    })(),
     // 프롬프트용 selectedRun은 자유대화(structuredCoachContext=false)에서 null로 가려 세션 데이터가 새지 않게 한다(#559).
     // 저장 귀속용 run id는 그 게이팅과 분리한다 — 세션을 보며 던진 자유질문도 그 세션 스레드에 남아야 하므로(#563 옵션1).
     selectedRunOwnedId: selectedRun?.id ?? null,
@@ -1788,7 +1798,8 @@ function buildEvidenceInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnT
  */
 function buildCoachThreadInstruction() {
   return [
-    'context.coachThread는 **지금 이 대화의 직전 문답들**이다(세션 대화면 그 세션 스레드, 전역 대화면 전역 스레드). 이 목록이 있으면 이전 답변을 리포트처럼 되풀이하지 말고 사용자의 새 질문/메모에 **이어서** 답한다. 특히 "그거랑 어떻게 달라?", "왜?", "그럼 뭐가 나아?" 처럼 **대상이 생략된 질문은 직전 문답에서 지시 대상을 찾아** 답한다 — 임의로 다른 대상을 골라 비교하지 마라. 직전 맥락으로도 대상이 불확실하면 추측해서 답하지 말고 무엇과 비교할지 한 줄로 되물어라.'
+    'context.coachThread는 **지금 이 대화의 직전 문답들**이다(세션 대화면 그 세션 스레드, 전역 대화면 전역 스레드). 이 목록이 있으면 이전 답변을 리포트처럼 되풀이하지 말고 사용자의 새 질문/메모에 **이어서** 답한다. 특히 "그거랑 어떻게 달라?", "왜?", "그럼 뭐가 나아?" 처럼 **대상이 생략된 질문은 직전 문답에서 지시 대상을 찾아** 답한다 — 임의로 다른 대상을 골라 비교하지 마라. 직전 맥락으로도 대상이 불확실하면 추측해서 답하지 말고 무엇과 비교할지 한 줄로 되물어라.',
+    'coachThread 항목의 abbreviated=true 는 프롬프트 크기 때문에 **답변을 줄여 실은 옛 턴**이라는 뜻이다. 줄어든 대목을 근거로 단정하지 말고 그때 무슨 얘기였는지 맥락 파악용으로만 쓴다. 사용자가 그 옛 턴을 정확히 되짚으면 기억이 흐릿하다고 인정하고 필요한 부분을 다시 확인한다.'
   ]
 }
 
@@ -2339,7 +2350,12 @@ function streamCoachRun(
       }, 15000)
 
       try {
+        // 진행 단계 신호(#650) — 실제 구간 전환에서만 보낸다. 없는 단계를 꾸며내면 진행 표시가 거짓말이 된다.
+        // 컨텍스트 수집(DB 조회)은 이 응답이 열리기 **전에** 이미 끝나므로, 클라이언트에서 "첫 이벤트 도착 전"
+        // 구간이 곧 그 단계다. 그래서 서버가 보낼 전환점은 생성 시작·저장 시작 둘뿐이다.
+        send('stage', { stage: 'generating' })
         const ai = await callCoachLlmStream(provider, context, (delta) => send('delta', { delta }))
+        send('stage', { stage: 'saving' })
         const result = await persistCoachResult(admin, userId, selectedRunId, userNote, context, ai, storedModel)
         clearInterval(heartbeat)
         send('done', result)
@@ -4451,6 +4467,35 @@ type ScoredMemory = {
 }
 
 // 2계층 회수: 활성(보존 점수 상위, 항상 탑재) + 되새김(나머지에서 현재 맥락 관련 시 소환).
+/**
+ * 대화 이력 창 설계(2026-08-04).
+ *
+ * 예전엔 최근 12턴을 **답변 원문 그대로** 실었다. 세션 디브리핑 답변은 분량 상한 대상이 아니라 길어서,
+ * 대화가 쌓일수록 프롬프트가 조용히 커지고 매 턴 전부 재전송돼 비용·지연이 함께 늘었다.
+ *
+ * 그래서 오래된 턴만 압축하고, 그 예산으로 **창을 넓혔다**(12 → 20턴). 이게 "13턴 밖은 절벽" 문제를
+ * 별도 롤링 요약 없이 완화한다 — 요약 레이어를 새로 만들면 장기기억(coach_memory_items)과
+ * 기억 출처가 둘로 갈려 서로 어긋난다(그래서 의도적으로 안 만든다).
+ */
+const COACH_THREAD_WINDOW = 20
+/** 최근 이 턴 수까지는 답변 원문 그대로 — 직전 맥락은 손상 없이 이어져야 한다. */
+const COACH_THREAD_FULL_TURNS = 4
+/** 그보다 오래된 턴의 답변은 이 길이로 줄인다(무슨 얘기였는지 알아볼 정도). */
+const COACH_THREAD_OLD_ANSWER_CHARS = 300
+
+/**
+ * 현재 스레드 전용 조회. 세션 대화면 그 run, 전역 대화(#616)면 `selected_run_id IS NULL`.
+ * 전역 80건 최근순 조회와 분리해, 다른 스레드가 활발해도 지금 대화의 옛 턴이 밀리지 않게 한다.
+ */
+function threadReportQuery(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null) {
+  const base = admin
+    .from('coach_reports')
+    .select('selected_run_id, user_note, report, created_at')
+    .eq('user_id', userId)
+  const scoped = selectedRunId ? base.eq('selected_run_id', selectedRunId) : base.is('selected_run_id', null)
+  return scoped.order('created_at', { ascending: false }).limit(COACH_THREAD_WINDOW)
+}
+
 function buildTieredCoachMemory(
   rows: CoachMemoryItemRow[],
   selectedRun: RunLogRow | null,
