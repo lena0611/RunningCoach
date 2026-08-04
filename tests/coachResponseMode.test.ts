@@ -105,4 +105,35 @@ describe('coach response mode and user note relevance', () => {
     expect(detectUserNoteRunRelevance('Nsm훈련법이 뭐야')).toBe('general')
     expect(detectUserNoteRunRelevance('그냥 잡담인데 오늘 날씨 좋네')).toBe('general')
   })
+
+  // #643: `나|내` 한 글자 패턴의 우연 통과 제거. "두 문장 **이내**로"의 '내'가 분류를 바꿔
+  // #642 원인 규명을 지연시킨 그 케이스들이다.
+  it('one-syllable 나/내 no longer matches inside unrelated words (#643)', () => {
+    expect(detectUserNoteRunRelevance('고마워, 두 문장 이내로 답해줘')).toBe('general')
+    expect(detectUserNoteRunRelevance('안내 좀 해줘')).toBe('general')
+    expect(detectUserNoteRunRelevance('하나만 골라줘')).toBe('general')
+    expect(detectUserNoteRunRelevance('지나는 길에 생각났어')).toBe('general')
+  })
+
+  it('explicit first-person forms still count as personal training (#643 좁힘 후 보존)', () => {
+    expect(detectUserNoteRunRelevance('나는 어때?')).toBe('personal_training')
+    expect(detectUserNoteRunRelevance('내가 뭘 잘못했지')).toBe('personal_training')
+    expect(detectUserNoteRunRelevance('그럼 나한테는 어느 쪽이 나아?')).toBe('personal_training')
+    expect(detectUserNoteRunRelevance('내 장기기억에는 뭐가 저장되어 있어?')).toBe('personal_training')
+    expect(detectUserNoteRunRelevance('나의 누적 데이터로 판단해줘')).toBe('personal_training')
+  })
+
+  // 실코퍼스 114건 전후비교(2026-08-04)에서 나온 회귀 후보들 — 좁힌 뒤에도 새면 안 되는 개인 발화.
+  it('subject-dropped personal running talk stays personal after narrowing (#643 회귀 가드)', () => {
+    expect(detectUserNoteRunRelevance('2달 전에 총 몇 키로 뛰었어?')).toBe('personal_training')
+    expect(detectUserNoteRunRelevance('요즘 꾸준히 잘 뛰고 있어? 주간 거리 어때?')).toBe('personal_training')
+    expect(detectUserNoteRunRelevance('오랜만에 5키로 30분이내에 도전한거야')).toBe('personal_training')
+    // 코퍼스 원문(오타 포함) 그대로 — '심박' 정타면 selected_run 선행 규칙에 걸린다(기존 동작, 범위 밖)
+    expect(detectUserNoteRunRelevance('심뱍우선으로 하면 처방받은 거리를 채우는 게 나을까')).toBe('personal_training')
+    expect(detectUserNoteRunRelevance('발이 아프지만 너무 쉬면 안될 것 같아서 가볍게 뜀')).toBe('personal_training')
+  })
+
+  it('third-party or generic running mentions stay general (#643 과발동 가드)', () => {
+    expect(detectUserNoteRunRelevance('참고로 케냐 선수들은 그렇게 뛴대')).toBe('general')
+  })
 })
