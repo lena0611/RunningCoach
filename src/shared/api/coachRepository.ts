@@ -293,7 +293,7 @@ function hasSseTerminator(buffer: string) {
 }
 
 /** 서버가 알리는 진행 단계(#650). 알 수 없는 값은 무시해 구·신 버전이 섞여도 깨지지 않는다. */
-export type CoachStreamStage = 'generating' | 'saving'
+export type CoachStreamStage = 'generating' | 'querying' | 'saving'
 
 export function consumeCoachStreamEvents(
   events: Array<{ event: string; data: unknown }>,
@@ -308,7 +308,9 @@ export function consumeCoachStreamEvents(
     }
     if (event.event === 'stage') {
       const stage = getString(event.data, 'stage')
-      if (stage === 'generating' || stage === 'saving') onStage?.(stage, getString(event.data, 'detail'))
+      if (stage === 'generating' || stage === 'querying' || stage === 'saving') {
+        onStage?.(stage, getString(event.data, 'detail'))
+      }
       continue
     }
     if (event.event === 'done') {

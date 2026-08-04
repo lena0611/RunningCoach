@@ -206,14 +206,18 @@ const showCoachCommands = computed(() => coachCommandOpen.value || coachNote.val
  */
 const COACH_STAGE_LABEL: Record<CoachStreamStage, string> = {
   generating: '코치가 답을 만드는 중',
+  querying: '기록을 찾아보는 중',
   saving: '정리해서 저장하는 중'
 }
+/** 조회 단계의 조건 문구(#652) — 무엇을 기준으로 찾는지 실시간으로 보여 신뢰 장치를 겸한다. */
+const coachStageDetail = ref('')
 const visibleStreamingCoachText = computed(() => {
   if (streamingCoachText.value) return streamingCoachText.value
   if (!coachLoading.value) return ''
   const label = coachStage.value ? COACH_STAGE_LABEL[coachStage.value] : '내 기록을 불러오는 중'
+  const detail = coachStage.value === 'querying' && coachStageDetail.value ? ` · ${coachStageDetail.value}` : ''
   // 경과 초는 유지한다 — 오래 걸릴 때 "멈춘 게 아니다"를 알려주는 유일한 단서다.
-  return `${label} · ${coachThinkingSeconds.value}초`
+  return `${label}${detail} · ${coachThinkingSeconds.value}초`
 })
 const filteredCoachCommands = computed(() => {
   if (!showCoachCommands.value) return []
@@ -521,6 +525,7 @@ async function sendCoachRequest(note: string) {
   streamingCoachMeta.value = 'AI 코치가 답변 중'
   // 첫 단계 신호가 오기 전 구간 = 서버가 기록·기억·스케줄을 모으는 중(#650).
   coachStage.value = null
+  coachStageDetail.value = ''
   const controller = new AbortController()
   coachAbortController.value = controller
   resetCoachReveal()
@@ -536,8 +541,9 @@ async function sendCoachRequest(note: string) {
     const report = await requestCoachRunStream(targetRunId, note, weatherStore.snapshot, {
       signal: controller.signal,
       onDelta: enqueueCoachReveal,
-      onStage: (stage) => {
+      onStage: (stage, detail) => {
         coachStage.value = stage
+        coachStageDetail.value = detail
         // 본문이 이미 흐르는 중이면 안내 문구가 본문에 가려진다 → 말풍선 아래 메타 라인으로 알린다.
         // 저장 구간은 짧지만 실제로 실패가 나는 자리라(2026-08-04) 감추지 않는다.
         if (stage === 'saving') streamingCoachMeta.value = COACH_STAGE_LABEL.saving
@@ -630,6 +636,7 @@ async function sendCoachRequest(note: string) {
     stopCoachThinkingTimer()
     coachLoading.value = false
     coachStage.value = null
+    coachStageDetail.value = ''
     if (coachAbortController.value === controller) coachAbortController.value = null
   }
 }
