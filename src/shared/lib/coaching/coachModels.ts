@@ -27,8 +27,16 @@ export const COACH_MODELS: readonly CoachModelOption[] = [
   { id: 'z-ai/glm-5.2', label: 'GLM', full: 'GLM-5.2' }
 ]
 
-/** GLM이 현재 NVIDIA 쪽에서 불안정(DEGRADED)해 기본은 DeepSeek. 사용자가 설정에서 전환 가능. */
-export const DEFAULT_COACH_MODEL: CoachModelId = 'deepseek-ai/deepseek-v4-pro'
+/**
+ * 기본은 **GPT(유료 OpenAI)**. NVIDIA 무료 엔드포인트는 초당 3~6자 수준으로 느리고 중간에 수십 초 정체해
+ * 긴 답변이 200~250초에서 스트림째 실패한다(2026-08-04 실측, DeepSeek·GLM 공통). 같은 질문이 GPT 로는
+ * 10초에 완결됐다. 무료는 어차피 개발 한정(Trial ToS)이라 출시 전 유료 복귀가 필요했다.
+ * 무료 모델은 비교·실험용으로 선택지에 남긴다.
+ */
+export const DEFAULT_COACH_MODEL: CoachModelId = 'openai'
+
+/** 무료(NVIDIA) 모델 id — 저장값 일회성 이관 판정에 쓴다(settingsStore). */
+export const FREE_TIER_COACH_MODEL_IDS: readonly CoachModelId[] = ['deepseek-ai/deepseek-v4-pro', 'z-ai/glm-5.2']
 
 export function isCoachModelId(value: unknown): value is CoachModelId {
   return typeof value === 'string' && COACH_MODELS.some((model) => model.id === value)
