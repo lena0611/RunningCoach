@@ -51,6 +51,24 @@ export function resolveCoachResponseMode(userNote: string, answerIntent: CoachAn
   return 'conversational'
 }
 
+/**
+ * 1인칭 신호(#643). 예전엔 `나|내` 한 글자 패턴이라 한국어 어절 경계가 없어 아무 문장에나 걸렸다 —
+ * "두 문장 **이내**로", "하나", "안내" 전부 통과. 이 우연 통과가 #642 원인 규명을 크게 지연시켰다
+ * ("짧게 답하면 카드가 뜬다"는 가짜 패턴의 정체가 '이내'의 '내'였다).
+ *
+ * 구체형으로 좁히되 두 갈래로 받는다:
+ * - 조사 결합형(나는/내가/나한테…)은 **앞 글자가 한글이 아닐 때만** — "지나는 길"의 '나는' 오탐 방지.
+ * - `내 X`는 개인 훈련 명사가 뒤따를 때만.
+ * 실코퍼스 114건(실계정 user_note 전수) 전후비교로 검증했다(2026-08-04).
+ */
+function mentionsFirstPerson(text: string): boolean {
+  if (/(^|[^가-힣])(나는|나도|나를|나만|나랑|나한테|나에게|내가|내게|저는|제가|저도|저한테)/.test(text)) return true
+  if (/나의|제\s*(기록|훈련|몸)/.test(text)) return true
+  return /내\s*(훈련|목표|루틴|몸|상태|기록|페이스|심박|부상|통증|발|무릎|컨디션|데이터|히스토리|장기\s*기억|스케줄|레벨|최장|주간|경우|생각)/.test(
+    text
+  )
+}
+
 export function detectUserNoteRunRelevance(note: string): UserNoteRunRelevance {
   const text = note.trim().toLowerCase()
   if (!text) return 'selected_run'
@@ -65,7 +83,12 @@ export function detectUserNoteRunRelevance(note: string): UserNoteRunRelevance {
 
   if (
     mentionsScheduleChange(text) ||
-    /나|내|나한테|내가|오늘\s*어떻게|다음\s*(훈련|러닝)|뛰어|달려|목표|루틴|스케줄|통증|아파|발바닥|부상|회복|컨디션|피곤|피로/.test(text)
+    mentionsFirstPerson(text) ||
+    // 러닝 행위 어형을 넓게 받는다(뛰었/달렸/뜀…) — 1인칭 대명사를 좁힌 대신, 주어 생략 개인 발화
+    // ("오랜만에 5키로 도전한거야", "가볍게 뜀")가 general 로 새는 회귀를 막는 안전망.
+    // 처방·판정은 "코치가 나에게 내린 것"을 가리키므로 개인 신호다 — 우연 통과가 가리던 케이스
+    // ("처방받은 거리를 채우는 게 나을까", "이번세샨을 lsd로 판정내리지 않은 근거는?")의 명시적 대체.
+    /오늘\s*어떻게|다음\s*(훈련|러닝)|뛰어|뛰었|뛰고|뛰니|뛸|뜀|달려|달렸|달리|도전|목표|루틴|스케줄|통증|아파|아픈|발바닥|부상|회복|컨디션|피곤|피로|처방|판정/.test(text)
   ) {
     return 'personal_training'
   }
