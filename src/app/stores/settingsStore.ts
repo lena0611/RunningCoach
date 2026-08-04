@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { DEFAULT_COACH_MODEL, isCoachModelId, type CoachModelId } from '@/shared/lib/coaching/coachModels'
+import { DEFAULT_COACH_MODEL, FREE_TIER_COACH_MODEL_IDS, isCoachModelId, type CoachModelId } from '@/shared/lib/coaching/coachModels'
 
 export type NotificationSettingKey = 'scheduledWorkout' | 'workoutMorning' | 'healthKitNewRun'
 export type SettingsPanelFocus = 'notifications'
@@ -86,7 +86,9 @@ export const useSettingsStore = defineStore('settingsStore', {
     persist() {
       localStorage.setItem(storageKey, JSON.stringify({
         notificationSettings: this.notificationSettings,
-        coachingModel: this.coachingModel
+        coachingModel: this.coachingModel,
+        // 한 번 저장되면 무료 모델 이관을 다시 적용하지 않는다(위 resolveStoredCoachModel).
+        freeModelMigrated: true
       }))
     }
   }
@@ -104,14 +106,33 @@ function loadSettings(): { notificationSettings: NotificationSettings; coachingM
     return { notificationSettings: defaultNotificationSettings, coachingModel: DEFAULT_COACH_MODEL }
   }
   try {
-    const parsed = JSON.parse(localStorage.getItem(storageKey) || '{}') as { notificationSettings?: Partial<NotificationSettings>; coachingModel?: unknown }
+    const parsed = JSON.parse(localStorage.getItem(storageKey) || '{}') as {
+      notificationSettings?: Partial<NotificationSettings>
+      coachingModel?: unknown
+      freeModelMigrated?: unknown
+    }
     return {
       notificationSettings: normalizeNotificationSettings(parsed.notificationSettings),
-      coachingModel: isCoachModelId(parsed.coachingModel) ? parsed.coachingModel : DEFAULT_COACH_MODEL
+      coachingModel: resolveStoredCoachModel(parsed.coachingModel, parsed.freeModelMigrated === true)
     }
   } catch {
     return { notificationSettings: defaultNotificationSettings, coachingModel: DEFAULT_COACH_MODEL }
   }
+}
+
+/**
+ * 저장된 모델 선택 해석 + **무료 모델 일회성 이관**.
+ *
+ * 기본값만 GPT 로 바꿔도 이미 저장된 값이 이기기 때문에, 기존 설치는 계속 무료 모델로 남아
+ * 대화가 실패한다(무료 엔드포인트는 긴 답변이 200~250초에 스트림째 실패 — 2026-08-04 실측).
+ * 그 저장값들은 사용자가 고른 게 아니라 **옛 기본값이 남은 것**이라 한 번만 GPT 로 옮긴다.
+ * 이관 후에는 `freeModelMigrated` 플래그 때문에 다시 덮지 않는다 — 이후 사용자가 무료 모델을
+ * 일부러 고르면 그 선택이 유지된다.
+ */
+export function resolveStoredCoachModel(stored: unknown, alreadyMigrated: boolean): CoachModelId {
+  if (!isCoachModelId(stored)) return DEFAULT_COACH_MODEL
+  if (!alreadyMigrated && FREE_TIER_COACH_MODEL_IDS.includes(stored)) return DEFAULT_COACH_MODEL
+  return stored
 }
 
 function normalizeNotificationSettings(value: Partial<NotificationSettings> | undefined): NotificationSettings {

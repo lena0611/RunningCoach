@@ -199,10 +199,11 @@ const corsHeaders = {
 }
 
 // 코칭 모델 allowlist(웹 coachModels.ts 미러). 클라이언트가 보낸 body.model은 이 집합일 때만 허용,
-// 그 외에는 env(LLM_MODEL) 또는 기본값으로 폴백. GLM이 NVIDIA에서 DEGRADED라 기본은 DeepSeek.
+// 그 외에는 env(LLM_MODEL) 또는 기본값으로 폴백.
+// 기본은 GPT(유료) — NVIDIA 무료 엔드포인트는 긴 답변이 200~250초에 스트림째 실패한다(2026-08-04 실측).
 const OPENAI_PROVIDER_ID = 'openai'
 const ALLOWED_LLM_MODELS = [OPENAI_PROVIDER_ID, 'deepseek-ai/deepseek-v4-pro', 'z-ai/glm-5.2']
-const DEFAULT_LLM_MODEL = 'deepseek-ai/deepseek-v4-pro'
+const DEFAULT_LLM_MODEL = OPENAI_PROVIDER_ID
 
 /**
  * 모델 선택 → 프로바이더(엔드포인트·키·실제 모델명) 해석.

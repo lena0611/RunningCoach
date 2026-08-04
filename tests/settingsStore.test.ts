@@ -34,7 +34,9 @@ describe('settingsStore', () => {
         scheduledWorkout: false,
         workoutMorning: true
       },
-      coachingModel: DEFAULT_COACH_MODEL
+      coachingModel: DEFAULT_COACH_MODEL,
+      // 무료 모델 일회성 이관 플래그 — 한 번 저장되면 사용자가 고른 무료 모델을 다시 덮지 않는다.
+      freeModelMigrated: true
     })
   })
 
