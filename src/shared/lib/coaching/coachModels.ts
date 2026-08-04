@@ -6,7 +6,7 @@
  * ⚠ NVIDIA 무료 API는 개발 한정(Trial ToS 프로덕션 금지) — 출시 전 유료 프로바이더 복귀 필요.
  * 관련 메모리: nvidia-free-api-dev-only.
  */
-export type CoachModelId = 'deepseek-ai/deepseek-v4-pro' | 'z-ai/glm-5.2'
+export type CoachModelId = 'openai' | 'deepseek-ai/deepseek-v4-pro' | 'z-ai/glm-5.2'
 
 export interface CoachModelOption {
   id: CoachModelId
@@ -16,7 +16,13 @@ export interface CoachModelOption {
   full: string
 }
 
+/**
+ * `openai` 는 **프로바이더 지명 sentinel** 이다 — 구체 모델명은 서버 시크릿(`OPENAI_MODEL`)이 가진다.
+ * 여기에 모델명을 박아두면 OpenAI 쪽 모델이 바뀔 때 웹 배포까지 따라가야 하고, 시크릿과 어긋나면
+ * 런타임에만 터진다. 나머지 두 개는 NVIDIA 무료 엔드포인트의 실제 모델 id 라 그대로 쓴다.
+ */
 export const COACH_MODELS: readonly CoachModelOption[] = [
+  { id: 'openai', label: 'GPT', full: 'GPT (OpenAI)' },
   { id: 'deepseek-ai/deepseek-v4-pro', label: 'DeepSeek', full: 'DeepSeek V4 Pro' },
   { id: 'z-ai/glm-5.2', label: 'GLM', full: 'GLM-5.2' }
 ]
