@@ -276,6 +276,7 @@ onBeforeUnmount(() => {
   stopCoachThinkingTimer()
   coachAbortController.value?.abort()
   resetCoachReveal()
+  stopCoachScrollFollow()
 })
 
 /**
@@ -305,6 +306,7 @@ async function onCoachOpened() {
 
 function onCoachClosed() {
   stopCoachStream()
+  stopCoachScrollFollow()
   coachNote.value = ''
   coachError.value = ''
   coachCommandOpen.value = false
@@ -387,25 +389,95 @@ function resizeCoachNoteInput() {
 }
 
 function onCoachScroll() {
+  // 추종 루프가 움직인 스크롤은 사용자 조작이 아니다. 구분하지 않으면 **아직 덜 따라잡은 상태**를
+  // "사용자가 위로 올려 읽는 중"으로 오판해 추종이 스스로 멈춘다(2026-08-04 계측: 스트리밍 중
+  // 최대 543px 벌어진 뒤 587px 한 번에 점프). 예전 즉시 점프 방식은 항상 하단에 붙어 있어 안 드러났다.
+  if (coachProgrammaticScroll) return
   const nearBottom = isCoachNearBottom()
   showCoachScrollButton.value = !nearBottom
   coachAutoScroll.value = nearBottom
 }
 
+/**
+ * 스트리밍 중 하단 추종(#651).
+ *
+ * 예전엔 매 프레임 `scrollTo({ behavior: 'auto' })` 로 즉시 점프해서, 새 줄이 생길 때마다 화면이 툭툭 끊겼다.
+ * 네이티브 `behavior: 'smooth'` 로 바꾸면 더 나쁘다 — 매 프레임 새 smooth 스크롤이 이전 것을 취소해 되레 덜덜거린다.
+ * 그래서 rAF 한 루프에서 목표 위치로 **감쇠 보간**한다(프레임마다 남은 거리의 일부만 이동).
+ * 글자 단위 증가든 새 줄로 인한 큰 점프든 같은 곡선으로 흘러 부드럽다.
+ */
+const COACH_SCROLL_EASING = 0.22
+/** 이보다 가까우면 붙었다고 보고 루프를 멈춘다(1px 미만에서 무한 rAF 를 돌리지 않는다). */
+const COACH_SCROLL_SNAP_PX = 1.5
+let coachScrollRafId = 0
+/** 추종 루프·명시적 이동이 만든 스크롤 이벤트를 사용자 조작과 구분하는 플래그(onCoachScroll 주석). */
+let coachProgrammaticScroll = false
+
+function withProgrammaticScroll(move: () => void) {
+  coachProgrammaticScroll = true
+  move()
+  // 스크롤 이벤트는 이동 직후 별도 태스크로 온다 — 한 프레임 뒤에 플래그를 내린다.
+  window.requestAnimationFrame(() => {
+    coachProgrammaticScroll = false
+  })
+}
+
 function followCoachStream() {
-  if (coachAutoScroll.value) {
+  if (!coachAutoScroll.value) {
+    showCoachScrollButton.value = true
+    return
+  }
+  if (prefersReducedMotion()) {
     scrollCoachToBottom('auto')
     return
   }
-  showCoachScrollButton.value = true
+  ensureCoachScrollFollow()
+}
+
+function ensureCoachScrollFollow() {
+  if (coachScrollRafId) return
+  coachScrollRafId = window.requestAnimationFrame(pumpCoachScrollFollow)
+}
+
+function pumpCoachScrollFollow() {
+  coachScrollRafId = 0
+  const container = coachScrollContainer.value
+  // 사용자가 위로 올려 읽는 중이면 추종을 멈춘다(스크롤 강탈 금지).
+  if (!container || !coachAutoScroll.value) return
+  const target = container.scrollHeight - container.clientHeight
+  const distance = target - container.scrollTop
+  if (distance <= COACH_SCROLL_SNAP_PX) {
+    withProgrammaticScroll(() => {
+      container.scrollTop = target
+    })
+    return
+  }
+  withProgrammaticScroll(() => {
+    container.scrollTop += distance * COACH_SCROLL_EASING
+  })
+  ensureCoachScrollFollow()
+}
+
+function stopCoachScrollFollow() {
+  if (!coachScrollRafId) return
+  window.cancelAnimationFrame(coachScrollRafId)
+  coachScrollRafId = 0
+}
+
+function prefersReducedMotion() {
+  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
 }
 
 function scrollCoachToBottom(behavior: ScrollBehavior = 'smooth') {
   const container = coachScrollContainer.value
   if (!container) return
-  container.scrollTo({
-    top: container.scrollHeight,
-    behavior
+  // 명시적 이동은 추종 루프와 싸우지 않게 먼저 멈춘다.
+  stopCoachScrollFollow()
+  withProgrammaticScroll(() => {
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior
+    })
   })
   coachAutoScroll.value = true
   showCoachScrollButton.value = false
