@@ -200,8 +200,48 @@ const corsHeaders = {
 
 // 코칭 모델 allowlist(웹 coachModels.ts 미러). 클라이언트가 보낸 body.model은 이 집합일 때만 허용,
 // 그 외에는 env(LLM_MODEL) 또는 기본값으로 폴백. GLM이 NVIDIA에서 DEGRADED라 기본은 DeepSeek.
-const ALLOWED_LLM_MODELS = ['deepseek-ai/deepseek-v4-pro', 'z-ai/glm-5.2']
+const OPENAI_PROVIDER_ID = 'openai'
+const ALLOWED_LLM_MODELS = [OPENAI_PROVIDER_ID, 'deepseek-ai/deepseek-v4-pro', 'z-ai/glm-5.2']
 const DEFAULT_LLM_MODEL = 'deepseek-ai/deepseek-v4-pro'
+
+/**
+ * 모델 선택 → 프로바이더(엔드포인트·키·실제 모델명) 해석.
+ *
+ * `openai` 는 **프로바이더 지명 sentinel** 이고 실제 모델명은 시크릿(`OPENAI_MODEL`)이 가진다 —
+ * 웹에 모델명을 박아두면 OpenAI 쪽이 바뀔 때 웹 배포까지 따라가야 하기 때문(웹 coachModels.ts 주석과 대응).
+ *
+ * 2026-08-04 재도입 배경: NVIDIA 무료 엔드포인트가 초당 3~6자 수준으로 느리고 중간에 수십 초 정체해
+ * 긴 답변이 200~250초에서 스트림째 실패했다(DeepSeek·GLM 공통, 하트비트·분량 상한으로도 못 막음).
+ * 무료는 개발 한정이라 어차피 출시 전 유료 복귀가 필요하다(메모리 nvidia-free-api-dev-only).
+ */
+type LlmProvider = {
+  apiKey: string
+  baseUrl: string
+  model: string
+  /**
+   * 출력 상한 파라미터 이름. **프로바이더마다 다르다** — OpenAI 최신 모델은 `max_tokens` 를 거부하고
+   * `max_completion_tokens` 를 요구한다(실측 400: "Unsupported parameter: 'max_tokens' is not supported
+   * with this model. Use 'max_completion_tokens' instead."). NVIDIA 호환 엔드포인트는 `max_tokens` 를 쓴다.
+   */
+  maxTokensField: 'max_tokens' | 'max_completion_tokens'
+}
+
+function resolveLlmProvider(model: string): LlmProvider {
+  if (model === OPENAI_PROVIDER_ID) {
+    return {
+      apiKey: requiredEnv('OPENAI_API_KEY'),
+      baseUrl: Deno.env.get('OPENAI_BASE_URL') || 'https://api.openai.com/v1',
+      model: Deno.env.get('OPENAI_MODEL') || 'gpt-5.4-mini',
+      maxTokensField: 'max_completion_tokens'
+    }
+  }
+  return {
+    apiKey: requiredEnv('LLM_API_KEY'),
+    baseUrl: Deno.env.get('LLM_BASE_URL') || 'https://integrate.api.nvidia.com/v1',
+    model,
+    maxTokensField: 'max_tokens'
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -210,10 +250,7 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = requiredEnv('SUPABASE_URL')
     const serviceKey = requiredEnv('SUPABASE_SERVICE_ROLE_KEY')
-    // LLM 프로바이더는 env 3종으로 교체 가능(OpenAI 호환 Chat Completions면 무엇이든).
-    // NVIDIA 무료 엔드포인트는 개발 기간 한정 — Trial ToS상 프로덕션 금지, 출시 전 유료 프로바이더로 복귀.
-    const llmApiKey = requiredEnv('LLM_API_KEY')
-    const llmBaseUrl = Deno.env.get('LLM_BASE_URL') || 'https://integrate.api.nvidia.com/v1'
+    // 프로바이더는 선택된 모델로 갈린다(resolveLlmProvider) — 키·엔드포인트를 여기서 미리 고정하지 않는다.
     const envModel = Deno.env.get('LLM_MODEL') || DEFAULT_LLM_MODEL
     const authHeader = req.headers.get('Authorization') ?? ''
     const token = authHeader.replace(/^Bearer\s+/i, '')
@@ -255,7 +292,10 @@ Deno.serve(async (req) => {
     const runnerLevel = normalizeRunnerLevel(body.runnerLevel)
     const responseStyle = normalizeResponseStyle(body.responseStyle, runnerLevel)
     const shouldStream = body.stream === true
+    // 저장·표시에는 **선택값**(sentinel 포함)을 쓴다 — 웹 coachModelLabel 이 이 값으로 "GPT/DeepSeek/GLM" 을 찾는다.
+    // LLM 호출에는 resolveLlmProvider 가 돌려준 실제 모델명을 쓴다.
     const model = typeof body.model === 'string' && ALLOWED_LLM_MODELS.includes(body.model) ? body.model : envModel
+    const provider = resolveLlmProvider(model)
 
     const access = await requireAppSession(admin, req, userId)
     if (!access.ok) return json({ error: access.error }, access.status)
@@ -266,10 +306,10 @@ Deno.serve(async (req) => {
     const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress, sessionEvidence, upcomingSchedule, restState, recentInjuryWindow, marathonFlag, injurySignals)
     const ownedSelectedRunId = context.selectedRunOwnedId ?? context.selectedRun?.id ?? null
     if (shouldStream) {
-      return streamCoachRun(admin, userId, ownedSelectedRunId, userNote, llmApiKey, llmBaseUrl, model, context)
+      return streamCoachRun(admin, userId, ownedSelectedRunId, userNote, provider, context, model)
     }
 
-    const ai = await callCoachLlm(llmApiKey, llmBaseUrl, model, context)
+    const ai = await callCoachLlm(provider, context)
     const result = await persistCoachResult(admin, userId, ownedSelectedRunId, userNote, context, ai, model)
 
     return json(result)
@@ -1554,17 +1594,33 @@ function buildCoachMessages(context: unknown) {
   ]
 }
 
-async function callCoachLlm(apiKey: string, baseUrl: string, model: string, context: unknown): Promise<CoachAiResult> {
-  const response = await fetch(`${baseUrl}/chat/completions`, {
+/**
+ * 출력 토큰 상한. **양쪽에서 조여야 하는 값**이다(2026-08-04 실측).
+ *
+ * - **너무 작으면(미지정=공급자 기본)** 답변이 조용히 잘린다: "Nsm노르웨이 훈련법 설명" 이 **469자**에서
+ *   `*   *쉽게 말해*,` 로 끊기고 직전 회차는 **132자**에서 끊겼다. 잘리는 지점이 매번 다른 건
+ *   사고 토큰(reasoning)이 예산을 먹고 본문이 남는 만큼만 나오기 때문. report 가 JSON 앞쪽 키라
+ *   본문이 잘리면 뒤쪽 키(memoryItems·제안·패치)도 함께 유실된다.
+ * - **너무 크면** 생성이 길어져 Edge Function 실행 시간 한계를 넘고 **통째로 실패**한다.
+ *   8000 으로 올렸을 때 같은 질문이 154초에 죽어 저장조차 안 됐다(그 전 기본값에선 73초에 완료).
+ *
+ * 그래서 "완결되는 최소한"을 노린다. 한국어 설명 답변 2000자 남짓이면 충분하고, 그 정도면 생성이
+ * 시간 한계 안에서 끝난다. 이 값을 올리려면 **반드시 총 소요 시간을 함께 측정**한다.
+ */
+const COACH_MAX_OUTPUT_TOKENS = 1800
+
+async function callCoachLlm(provider: LlmProvider, context: unknown): Promise<CoachAiResult> {
+  const response = await fetch(`${provider.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${provider.apiKey}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model,
+      model: provider.model,
       messages: buildCoachMessages(context),
-      response_format: buildCoachResponseFormat()
+      response_format: buildCoachResponseFormat(),
+      [provider.maxTokensField]: COACH_MAX_OUTPUT_TOKENS
     })
   })
 
@@ -1665,6 +1721,7 @@ function buildFreeConversationInstructions(runnerLevel: RunnerLevel, levelGuide:
     '절대 금지: "## 핵심 지표 / 오늘 해석 / 조심할 점 / 다음 훈련 / 루틴 업데이트 / 한 줄 요약" 같은 코칭 리포트 섹션, 지표 나열, 세션 전체 재분석.',
     'context.responseStyle, context.responseTemplatePolicy, context.coachingDecisionBoard, selectedRun, activeGoal, activeInjuryItem, trustLayerNote가 없다고 보고 답한다. 자유대화에서는 질문 주제 자체만 다룬다.',
     '답변 길이와 형식은 질문에 맞춘다. 짧은 확인 질문이면 짧게, 개념 질문이면 필요한 만큼 설명하되 불필요한 개인화 단락을 붙이지 않는다.',
+    ...buildAnswerLengthCeiling(),
     '마크다운은 필요할 때만 쓴다. 제목이나 목록을 쓰더라도 질문을 더 읽기 쉽게 만드는 목적일 때만 사용한다.',
     '의학적 진단이나 통증 처방을 하지 않는다. 사용자가 통증/부상을 직접 물으면 일반 안전 원칙 수준에서 조심스럽게 말한다.',
     'memoryItems에는 이 대화에서 새로 알게 된 사용자의 안정적인 개인 맥락(목표/욕구/선호/서사)만 0~3개 넣는다. 일회성 잡담이나 단일 세션 수치는 넣지 않는다. 이미 core/coachMemoryItems에 있으면 다시 넣지 않는다.',
@@ -1697,8 +1754,23 @@ function buildEvidenceInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnT
     'trainingMemoryPatch와 injuryUpdateProposal은 명확한 필요가 없으면 null로 둔다.',
     ...buildInternalNamingGuard(),
     ...buildScheduleProposalInstructions(),
+    ...buildAnswerLengthCeiling(),
     '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal, coachScheduleProposal. report에 위 설명 본문을 넣는다.'
   ].join('\n')
+}
+
+/**
+ * 답변 분량 상한(대화·설명 모드 공용).
+ *
+ * 2026-08-04 실측: 이 프로젝트가 쓰는 무료 LLM API 는 초당 3~6자 수준으로 느리고 중간에 수십 초 정체한다.
+ * 긴 설명 답변은 **200~250초에서 스트림이 끊겨 통째로 실패**했다(DeepSeek·GLM 공통, 하트비트로도 못 막음).
+ * 그래서 분량을 "완결 가능한 수준"으로 조인다 — 잘린 장문보다 짧고 완결된 답이 낫다.
+ * 유료 API 로 복귀해 속도가 확보되면 이 상한을 재검토한다.
+ */
+function buildAnswerLengthCeiling() {
+  return [
+    '분량 상한: 답변 본문은 **한국어 700자 이내로 완결**한다. 표를 그리거나 항목을 10개씩 나열하지 말고 핵심 3~5개만 문단으로 말한다. 길이보다 완결성이 우선이다 — 문장 중간에 끊기는 답변이 가장 나쁘다. 더 설명할 게 남았으면 다 쏟지 말고 "더 궁금한 부분을 짚어주면 이어서 설명할게요"로 닫는다.'
+  ]
 }
 
 function buildExplainInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnType<typeof buildRunnerLevelGuide>) {
@@ -1721,6 +1793,7 @@ function buildExplainInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnTy
     'trainingMemoryPatch와 injuryUpdateProposal은 명확한 필요가 없으면 null로 둔다.',
     ...buildInternalNamingGuard(),
     ...buildScheduleProposalInstructions(),
+    ...buildAnswerLengthCeiling(),
     '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal, coachScheduleProposal. report에 설명 본문을 넣는다.'
   ].join('\n')
 }
@@ -2183,25 +2256,67 @@ function streamCoachRun(
   userId: string,
   selectedRunId: string | null,
   userNote: string,
-  apiKey: string,
-  baseUrl: string,
-  model: string,
-  context: CoachContext
+  provider: LlmProvider,
+  context: CoachContext,
+  /** 저장·표시용 선택값(sentinel 포함) — 웹이 라벨을 찾는 키다. */
+  storedModel: string
 ) {
   const encoder = new TextEncoder()
 
+  /**
+   * 클라이언트 연결이 끊겨도 **생성과 저장은 끝까지 간다**.
+   *
+   * 예전엔 `send` 가 곧바로 `controller.enqueue` 를 불렀는데, 연결이 끊긴 뒤 델타를 밀어넣으면
+   * enqueue 가 예외를 던지고 그게 아래 catch 로 잡혀 **persistCoachResult 가 실행되지 않았다** —
+   * 이미 다 만들어진 답변이 통째로 버려지고, 사용자가 대화를 다시 열면 비어 있었다.
+   * (2026-08-04 실기기 제보: 긴 설명 답변이 5G/WKWebView 에서 끊김. 데스크톱은 같은 질문이 73초 걸려 성공,
+   *  즉 총 소요가 길어 중간 홉이 끊는 조건. 재현 실험: 스트림 중 연결 종료 → 100초 후에도 DB 행 없음.)
+   *
+   * 전달만 포기하고 파이프라인은 완주시키므로, 끊긴 회차도 재진입하면 히스토리에 남는다.
+   */
   const stream = new ReadableStream({
     async start(controller) {
+      let clientGone = false
       const send = (event: string, data: unknown) => {
-        controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
+        if (clientGone) return
+        try {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
+        } catch {
+          // 소비자가 사라졌다(모바일 네트워크 단절·WebView 백그라운드·사용자 이탈).
+          clientGone = true
+          console.warn('coach-run stream client gone — 전달만 중단하고 생성·저장은 계속한다')
+        }
+      }
+      const closeQuietly = () => {
+        try {
+          controller.close()
+        } catch {
+          /* 이미 닫힘 */
+        }
       }
 
+      /**
+       * 하트비트(SSE 주석). 무료 LLM API 가 생성 중간에 **수십 초씩 정체**하는 일이 있고
+       * (2026-08-04 실측: 113초 600자 → 200초 649자, 즉 87초 무음), 그 사이 게이트웨이가 유휴 연결을 끊어
+       * `done` 도 `error` 도 못 받은 채 실패했다. 주석 라인은 클라이언트 파서가 `data:` 만 읽으므로 무해하다.
+       */
+      const heartbeat = setInterval(() => {
+        if (clientGone) return
+        try {
+          controller.enqueue(encoder.encode(': keepalive\n\n'))
+        } catch {
+          clientGone = true
+        }
+      }, 15000)
+
       try {
-        const ai = await callCoachLlmStream(apiKey, baseUrl, model, context, (delta) => send('delta', { delta }))
-        const result = await persistCoachResult(admin, userId, selectedRunId, userNote, context, ai, model)
+        const ai = await callCoachLlmStream(provider, context, (delta) => send('delta', { delta }))
+        const result = await persistCoachResult(admin, userId, selectedRunId, userNote, context, ai, storedModel)
+        clearInterval(heartbeat)
         send('done', result)
-        controller.close()
+        closeQuietly()
       } catch (error) {
+        clearInterval(heartbeat)
         console.error('coach-run stream failed', {
           stage: error instanceof CoachPipelineError ? error.stage : undefined,
           message: getErrorMessage(error, 'AI 코칭 스트리밍 실패')
@@ -2210,8 +2325,12 @@ function streamCoachRun(
           error: getErrorMessage(error, 'AI 코칭 스트리밍 실패'),
           stage: error instanceof CoachPipelineError ? error.stage : undefined
         })
-        controller.close()
+        closeQuietly()
       }
+    },
+    // 소비자가 명시적으로 취소한 경우의 정식 신호. enqueue 예외 처리보다 먼저 걸린다.
+    cancel() {
+      console.warn('coach-run stream cancelled by client — 생성·저장은 계속한다')
     }
   })
 
@@ -2226,22 +2345,21 @@ function streamCoachRun(
 }
 
 async function callCoachLlmStream(
-  apiKey: string,
-  baseUrl: string,
-  model: string,
+  provider: LlmProvider,
   context: unknown,
   onReportDelta: (delta: string) => void
 ): Promise<CoachAiResult> {
-  const response = await fetch(`${baseUrl}/chat/completions`, {
+  const response = await fetch(`${provider.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${provider.apiKey}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model,
+      model: provider.model,
       messages: buildCoachMessages(context),
       response_format: buildCoachResponseFormat(),
+      [provider.maxTokensField]: COACH_MAX_OUTPUT_TOKENS,
       stream: true
     })
   })
@@ -2256,8 +2374,10 @@ async function callCoachLlmStream(
   let sseBuffer = ''
   let fullText = ''
   let streamedReport = ''
+  let finishReason = ''
 
   const handleEvent = (event: unknown) => {
+    finishReason = getChatCompletionFinishReason(event) || finishReason
     const delta = getChatCompletionDelta(event)
     if (!delta) return
     fullText += delta
@@ -2283,7 +2403,7 @@ async function callCoachLlmStream(
     parsed.events.forEach(handleEvent)
   }
 
-  const ai = parseCoachAiText(fullText, streamedReport)
+  const ai = parseCoachAiText(fullText, streamedReport, finishReason)
   if (stripSections) {
     const cleaned = stripPastSessionSections(ai.report)
     onReportDelta(cleaned)
@@ -2298,8 +2418,24 @@ async function callCoachLlmStream(
   return ai
 }
 
-function parseCoachAiText(text: string, fallbackReport = ''): CoachAiResult {
+/**
+ * `finishReason === 'length'` 면 출력 상한에 걸려 답변이 잘렸다는 뜻이고,
+ * JSON 파싱이 깨지면 report 만 스트리밍 텍스트로 살아남고 **나머지 키가 전부 조용히 유실된다**
+ * (memoryItems·trainingMemoryPatch·injuryUpdateProposal·coachScheduleProposal).
+ * 사용자 화면엔 답변이 정상처럼 보이므로 로그가 없으면 유실을 알아챌 방법이 없다 — 2026-08-04 실측 교훈.
+ */
+function parseCoachAiText(text: string, fallbackReport = '', finishReason = ''): CoachAiResult {
   const parsed = safeJson(text)
+  if (finishReason === 'length') {
+    console.warn('[coach-run] 출력 상한(length)에 걸려 응답이 잘렸다', { textLength: text.length, tail: text.slice(-160) })
+  }
+  if (Object.keys(parsed).length === 0 && text.trim()) {
+    console.warn('[coach-run] structured output 파싱 실패 — report 만 복구하고 나머지 키(제안·메모리 패치) 유실', {
+      finishReason: finishReason || 'unknown',
+      textLength: text.length,
+      tail: text.slice(-160)
+    })
+  }
   const ai = {
     report: typeof parsed.report === 'string' ? parsed.report : fallbackReport || text,
     memoryItems: Array.isArray(parsed.memoryItems) ? parsed.memoryItems.filter((item: unknown) => typeof item === 'string').slice(0, 8) : [],
@@ -2343,6 +2479,15 @@ function getChatCompletionDelta(event: unknown): string {
   if (!Array.isArray(choices) || choices.length === 0) return ''
   const delta = (choices[0] as { delta?: { content?: unknown } })?.delta
   return typeof delta?.content === 'string' ? delta.content : ''
+}
+
+/** 스트림 청크의 finish_reason. 'length' 면 출력 상한에 걸려 뒷부분이 잘렸다는 뜻이다. */
+function getChatCompletionFinishReason(event: unknown): string {
+  if (!event || typeof event !== 'object') return ''
+  const choices = (event as { choices?: unknown }).choices
+  if (!Array.isArray(choices) || choices.length === 0) return ''
+  const reason = (choices[0] as { finish_reason?: unknown })?.finish_reason
+  return typeof reason === 'string' ? reason : ''
 }
 
 function extractChatCompletionText(payload: unknown): string {
