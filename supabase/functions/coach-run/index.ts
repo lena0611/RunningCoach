@@ -241,6 +241,8 @@ type LlmProvider = {
    * with this model. Use 'max_completion_tokens' instead."). NVIDIA 호환 엔드포인트는 `max_tokens` 를 쓴다.
    */
   maxTokensField: 'max_tokens' | 'max_completion_tokens'
+  /** 스트림 마지막 청크로 토큰 사용량(usage)을 돌려주는가 — 요청당 원가 실측용. */
+  reportsUsage: boolean
 }
 
 function resolveLlmProvider(model: string): LlmProvider {
@@ -249,14 +251,16 @@ function resolveLlmProvider(model: string): LlmProvider {
       apiKey: requiredEnv('OPENAI_API_KEY'),
       baseUrl: Deno.env.get('OPENAI_BASE_URL') || 'https://api.openai.com/v1',
       model: Deno.env.get('OPENAI_MODEL') || 'gpt-5.4-mini',
-      maxTokensField: 'max_completion_tokens'
+      maxTokensField: 'max_completion_tokens',
+      reportsUsage: true
     }
   }
   return {
     apiKey: requiredEnv('LLM_API_KEY'),
     baseUrl: Deno.env.get('LLM_BASE_URL') || 'https://integrate.api.nvidia.com/v1',
     model,
-    maxTokensField: 'max_tokens'
+    maxTokensField: 'max_tokens',
+    reportsUsage: false
   }
 }
 
@@ -2647,7 +2651,7 @@ function streamCoachRun(
             send('stage', { stage: 'generating' })
             return result
           }
-        })
+        }, (usage) => send('usage', usage))
         /**
          * "모른다" 게이트 1단계(#652 PR2): 도구 없이 과거 기간+수치를 말한 문장을 잡는다.
          * **지금은 관측만 한다** — "심박 138 이하로" 같은 정상 처방과의 구분이 완벽하지 않아,
@@ -2713,7 +2717,9 @@ async function callCoachLlmStream(
      * 되는 질문이라 1회 제한이 곧 beyond_tool 실패였다. 상한을 코드가 쥐므로 연쇄 폭주는 없다.
      */
     roundsLeft?: number
-  }
+  },
+  /** 토큰 사용량 관측 콜백(요청당 원가 실측). 라운드마다 호출된다. */
+  onUsage?: (usage: Record<string, unknown>) => void
 ): Promise<CoachAiResult> {
   const messages = toolSupport?.messages ?? buildCoachMessages(context)
   const response = await fetch(`${provider.baseUrl}/chat/completions`, {
@@ -2729,6 +2735,9 @@ async function callCoachLlmStream(
       [provider.maxTokensField]: COACH_MAX_OUTPUT_TOKENS,
       // 2라운드는 tools 를 비워 보낸다 → 빈 배열은 공급자가 거부할 수 있어 키 자체를 뺀다.
       ...(toolSupport?.tools.length ? { tools: toolSupport.tools } : {}),
+      // 단가 관측: 스트림 마지막 청크에 토큰 사용량을 실어달라고 요청한다. 유료 전환 이후 요청당 원가를
+      // 추정이 아니라 실측으로 알아야 가격을 정할 수 있다. OpenAI 계열만 지원하므로 프로바이더로 가른다.
+      ...(provider.reportsUsage ? { stream_options: { include_usage: true } } : {}),
       stream: true
     })
   })
@@ -2749,6 +2758,7 @@ async function callCoachLlmStream(
 
   const handleEvent = (event: unknown) => {
     finishReason = getChatCompletionFinishReason(event) || finishReason
+    reportTokenUsage(event, provider.model, onUsage)
     collectToolCallDeltas(event, toolCallParts)
     const delta = getChatCompletionDelta(event)
     if (!delta) return
@@ -2805,12 +2815,18 @@ async function callCoachLlmStream(
     ]
     // 라운드 상한은 코드가 쥔다. 마지막 라운드엔 tools 를 빼서 모델이 답변으로 수렴하게 강제한다.
     const roundsLeft = (toolSupport.roundsLeft ?? 2) - 1
-    return await callCoachLlmStream(provider, context, onReportDelta, {
-      messages: nextMessages,
-      tools: roundsLeft > 0 ? toolSupport.tools : [],
-      onToolCall: toolSupport.onToolCall,
-      roundsLeft
-    })
+    return await callCoachLlmStream(
+      provider,
+      context,
+      onReportDelta,
+      {
+        messages: nextMessages,
+        tools: roundsLeft > 0 ? toolSupport.tools : [],
+        onToolCall: toolSupport.onToolCall,
+        roundsLeft
+      },
+      onUsage
+    )
   }
 
   const ai = parseCoachAiText(fullText, streamedReport, finishReason)
@@ -2912,6 +2928,35 @@ function collectToolCallDeltas(event: unknown, into: Map<number, { id: string; n
     if (typeof call.function?.arguments === 'string') current.args += call.function.arguments
     into.set(index, current)
   }
+}
+
+/**
+ * 요청당 토큰 사용량 관측. 유료 전환 뒤 **요청당 원가**를 추정이 아니라 실측으로 알아야 가격을 정할 수 있다.
+ * 스트림 마지막 청크(choices 가 빈 청크)에 usage 가 실려 온다. 라운드별로 찍히므로 도구를 쓴 턴은 2줄 남는다.
+ * 캐시 적중분(prompt_tokens_details.cached_tokens)은 단가가 다르므로 따로 남긴다.
+ */
+function reportTokenUsage(event: unknown, model: string, onUsage?: (usage: Record<string, unknown>) => void) {
+  if (!event || typeof event !== 'object') return
+  const usage = (event as { usage?: unknown }).usage
+  if (!usage || typeof usage !== 'object') return
+  const u = usage as {
+    prompt_tokens?: unknown
+    completion_tokens?: unknown
+    total_tokens?: unknown
+    prompt_tokens_details?: { cached_tokens?: unknown }
+    completion_tokens_details?: { reasoning_tokens?: unknown }
+  }
+  const summary = {
+    model: (event as { model?: unknown }).model ?? model,
+    prompt: u.prompt_tokens ?? null,
+    cachedPrompt: u.prompt_tokens_details?.cached_tokens ?? null,
+    completion: u.completion_tokens ?? null,
+    reasoning: u.completion_tokens_details?.reasoning_tokens ?? null,
+    total: u.total_tokens ?? null
+  }
+  console.log('[coach-run] token usage', summary)
+  // 로그를 CLI 로 읽을 수 없어 SSE 로도 올린다. 클라이언트는 모르는 이벤트를 무시하므로 화면엔 영향이 없다.
+  onUsage?.(summary as Record<string, unknown>)
 }
 
 /** 스트림 청크의 finish_reason. 'length' 면 출력 상한에 걸려 뒷부분이 잘렸다는 뜻이다. */
