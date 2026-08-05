@@ -177,6 +177,63 @@ const coachCommandItems = [
 ]
 
 /**
+ * 전역 대화용 추천 질문(#616 후속). 위 프리셋 커맨드는 전부 "이 세션"을 전제한 리포트 커맨드라
+ * 전역방에서는 대상이 없다 — 노출하면 오히려 길을 잘못 안내한다. 전역방에서는 커맨드 대신
+ * **잘 답할 수 있는 질문의 예시**를 보여준다(데이터 질문 #652 · 휴식/일정 상담 #639 가 전역방의 강점).
+ * command 가 없으므로 선택해도 commandId 를 보내지 않는다(리포트 형식 강제 없음, 자유 질문으로 전송).
+ */
+const globalCoachSuggestionItems = [
+  {
+    id: 'ask-volume',
+    command: '',
+    title: '기간 거리 질문',
+    description: '지난달·올해처럼 기간을 정해 횟수/거리 확인',
+    prompt: '지난달에 총 몇 번, 몇 km 뛰었어?',
+    icon: '∑'
+  },
+  {
+    id: 'ask-compare',
+    command: '',
+    title: '기간 비교',
+    description: '두 기간을 비교해 흐름 읽기',
+    prompt: '지난달이랑 이번 달 뛴 거리 비교해줘.',
+    icon: '⇄'
+  },
+  {
+    id: 'ask-trend',
+    command: '',
+    title: '추세 읽기',
+    description: '올해 월별 거리 흐름 진단',
+    prompt: '올해 월별 거리 추세가 어때?',
+    icon: '∿'
+  },
+  {
+    id: 'ask-last-run',
+    command: '',
+    title: '마지막 러닝',
+    description: '마지막으로 뛴 날과 쉰 일수 확인',
+    prompt: '마지막으로 뛴 게 언제야? 며칠 쉬었지?',
+    icon: '◷'
+  },
+  {
+    id: 'ask-condition',
+    command: '',
+    title: '컨디션 상담',
+    description: '요즘 상태 기준으로 이번 주 운영 상의',
+    prompt: '요즘 좀 지치는데 이번 주 훈련 어떻게 가져갈까?',
+    icon: '♡'
+  },
+  {
+    id: 'ask-rest',
+    command: '',
+    title: '쉬고 싶을 때',
+    description: '휴식·일정 조정을 편하게 말하기',
+    prompt: '당분간 좀 쉬고 싶어. 일정 조정해줄 수 있어?',
+    icon: '☾'
+  }
+]
+
+/**
  * 스레드 = 리포트의 귀속 대상(#616). 세션 대화는 그 런의 리포트만, 전역 대화는 런에 매이지 않은
  * 리포트(`selectedRunId === null`)만 모은다. 두 스레드는 섞이지 않는다.
  */
@@ -219,11 +276,13 @@ const visibleStreamingCoachText = computed(() => {
   // 경과 초는 유지한다 — 오래 걸릴 때 "멈춘 게 아니다"를 알려주는 유일한 단서다.
   return `${label}${detail} · ${coachThinkingSeconds.value}초`
 })
+// 세션 대화 = 프리셋 커맨드, 전역 대화 = 추천 질문(#616 후속 — 세션 전제 커맨드는 전역방에서 대상이 없다).
+const activeCoachCommandItems = computed(() => (isGlobalScope.value ? globalCoachSuggestionItems : coachCommandItems))
 const filteredCoachCommands = computed(() => {
   if (!showCoachCommands.value) return []
   const query = coachCommandQuery.value
-  if (!query) return coachCommandItems
-  return coachCommandItems.filter((item) => {
+  if (!query) return activeCoachCommandItems.value
+  return activeCoachCommandItems.value.filter((item) => {
     return [item.command, item.title, item.description].some((value) => value.toLowerCase().includes(query))
   })
 })
@@ -261,7 +320,7 @@ watch(
 watch(coachNote, (value) => {
   // 프리셋 커맨드 텍스트를 사용자가 직접 수정하면 커맨드 신호를 해제한다(자유 입력으로 간주).
   if (selectedCommandId.value) {
-    const matched = coachCommandItems.find((item) => item.id === selectedCommandId.value)
+    const matched = activeCoachCommandItems.value.find((item) => item.id === selectedCommandId.value)
     if (!matched || value !== matched.prompt) selectedCommandId.value = ''
   }
   void nextTick(resizeCoachNoteInput)
@@ -350,9 +409,10 @@ function clearCoachNote() {
   void nextTick(resizeCoachNoteInput)
 }
 
-function selectCoachCommand(item: { id: string; prompt: string }) {
+function selectCoachCommand(item: { id: string; prompt: string; command: string }) {
   coachNote.value = item.prompt
-  selectedCommandId.value = item.id
+  // 추천 질문(command 없음)은 commandId 를 보내지 않는다 — 서버가 리포트 형식을 강제하면 안 된다.
+  selectedCommandId.value = item.command ? item.id : ''
   coachCommandOpen.value = false
   void nextTick(() => {
     resizeCoachNoteInput()
@@ -1218,9 +1278,9 @@ function stopCoachThinkingTimer() {
                 <strong>{{ item.title }}</strong>
                 <small>{{ item.description }}</small>
               </span>
-              <code>{{ item.command }}</code>
+              <code v-if="item.command">{{ item.command }}</code>
             </button>
-            <p v-if="!filteredCoachCommands.length" class="coach-command-empty">맞는 코칭 명령이 없습니다.</p>
+            <p v-if="!filteredCoachCommands.length" class="coach-command-empty">{{ isGlobalScope ? '맞는 추천 질문이 없습니다.' : '맞는 코칭 명령이 없습니다.' }}</p>
           </div>
           <div class="chat-input-wrap">
             <textarea
