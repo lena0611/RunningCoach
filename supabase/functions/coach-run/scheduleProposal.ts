@@ -47,8 +47,15 @@ export type ScheduleProposalGate = {
   responseMode: CoachResponseMode
   /** 웹이 보낸 다가오는 세션들. null/빈 배열이면 세션 액션은 전부 떨군다. */
   upcomingSchedule: ScheduleProposalTarget[] | null
-  /** 이미 선언된 휴식 기간 중인가. */
+  /** 이미 선언된 휴식 기간 중인가(범용 휴식 #473, activeRest). */
   restActive: boolean
+  /**
+   * 활성 부상(status=active)이 있는가(#639 G9). 부상 중의 휴식은 **부상 관리 시스템**(체크인·복귀 게이트·
+   * 전략적 휴식 스케줄)이 소유한다 — 그 위에 "쉬어가기 선언"을 또 제안하면 휴식이 이중 시스템에 걸려
+   * 사용자가 어찌할 바를 모른다(2026-08-05 실사고: 족저근막 부상선언·휴식 중 "11월 목표 걱정" 발화에
+   * 쉬어가기 카드가 떴다 — activeRest 가 없어 G4 를 통과). monitoring(재발 감시)은 정상 훈련 중이라 제외.
+   */
+  injuryActive: boolean
   /** redFlag 발동 또는 고통증(4~5/5) — 상향을 막는다. */
   injuryBlocksIntensify: boolean
   /** 오늘 날짜(YYYY-MM-DD). 휴식 프리셋 상한 계산 기준. */
@@ -98,11 +105,16 @@ export function normalizeCoachScheduleProposal(raw: unknown, gate: SchedulePropo
   if (actionType === 'declare_rest') {
     // G4: 이미 쉬는 중이면 재제안하지 않는다.
     if (gate.restActive) return null
+    const restReason = REST_REASONS.find((reason) => reason === value.restReason) ?? 'other'
+    // G9: 활성 부상 중의 부상성 휴식 제안은 떨군다 — 부상 휴식은 부상 관리가 이미 소유한다(위 injuryActive 주석).
+    //     부상과 무관함이 명시된 사유(개인 일정·날씨)만 통과한다. 'other'는 부상 대화에서 나온 애매한
+    //     휴식 발화일 가능성이 높아 부상 쪽으로 보수 처리한다.
+    if (gate.injuryActive && (restReason === 'injury' || restReason === 'other')) return null
     return {
       actionType,
       targetDate: null,
       suggestedRestUntil: normalizeRestPreset(value.suggestedRestUntil, gate.today),
-      restReason: REST_REASONS.find((reason) => reason === value.restReason) ?? 'other',
+      restReason,
       rationale,
       userApprovalPrompt
     }

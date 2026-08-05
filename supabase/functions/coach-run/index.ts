@@ -390,6 +390,7 @@ async function persistCoachResult(
     // 축약 컨텍스트에서 null 이 되는 context.upcomingSchedule 대신 게이트 전용 원본을 본다(위 scheduleProposalGate 주석).
     upcomingSchedule: context.scheduleProposalGate.upcomingTargets,
     restActive: context.scheduleProposalGate.restActive,
+    injuryActive: context.scheduleProposalGate.injuryActive,
     injuryBlocksIntensify: context.scheduleProposalGate.injuryBlocksIntensify,
     today: new Date().toISOString().slice(0, 10)
   })
@@ -1379,6 +1380,11 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
      */
     scheduleProposalGate: {
       restActive: restState?.active === true,
+      // 활성 부상(G9) — 부상 중의 휴식은 부상 관리가 소유하므로 부상성 쉬어가기 재제안을 막는다.
+      // 서버가 DB 에서 직접 판정한다(웹 injurySignals 는 신호 없으면 null 이라 판정 근거로 불충분).
+      injuryActive:
+        Boolean(activeInjuryItem) &&
+        (activeInjuryItem as { status?: unknown } | null)?.status === 'active',
       // redFlag 발동 또는 고통증(4~5/5) → 상향 제안 차단. 부상 KB §4 게이트가 처방보다 우선.
       injuryBlocksIntensify: injurySignals?.redFlag.tripped === true || (injurySignals?.severity ?? 0) >= 4,
       upcomingTargets: upcomingSchedule
@@ -1927,7 +1933,9 @@ function buildScheduleProposalInstructions() {
     'coachScheduleProposal.actionType은 declare_rest(쉬고 싶다·못 뛴다), ease_session(그날 세션이 버겁다), intensify_session(더 하고 싶다), reschedule_session(그날은 어렵고 다른 날은 된다), skip_session(이번엔 건너뛰겠다) 중 하나다. 전체 일정을 다시 짜는 액션은 없다 — 한 번의 대화로 주기화 골격을 재구축하지 않는다.',
     '세션 액션(declare_rest 외)의 targetDate는 반드시 context.upcomingSchedule에 실제로 있는 날짜여야 한다. 없는 날짜를 지어내면 제안이 폐기된다. intensify_session은 그 세션의 canIntensify가 true일 때만 제안한다.',
     'declare_rest의 suggestedRestUntil은 사용자가 "2주", "이번 주까지"처럼 기간을 명시했을 때만 그 날짜를 넣는다. "당분간", "좀"처럼 기간이 불명확하면 반드시 null로 두어 사용자가 직접 고르게 한다. 쉬는 기간은 코치가 정하는 게 아니라 사용자가 정한다 — report 본문에서도 기간을 단정하지 말고 "기간은 직접 정하시면 돼요"로 안내한다.',
-    '사용자가 완전 휴식을 원하면 존중하되, 통증이 심하거나 안전 신호(redFlag)가 있는 경우가 아니라면 "가벼운 회복주로 대신하는 선택지도 있다"를 report에서 1회만 덧붙인다(강권 금지). 부하가 원인인 부상은 완전 정지보다 낮은 부하 유지가 회복에 유리할 수 있다.'
+    '사용자가 완전 휴식을 원하면 존중하되, 통증이 심하거나 안전 신호(redFlag)가 있는 경우가 아니라면 "가벼운 회복주로 대신하는 선택지도 있다"를 report에서 1회만 덧붙인다(강권 금지). 부하가 원인인 부상은 완전 정지보다 낮은 부하 유지가 회복에 유리할 수 있다.',
+    // #639 G9(2026-08-05 실사고): 부상선언·휴식 중 "목표 걱정" 발화에 쉬어가기 카드가 떠 사용자가 혼란.
+    '활성 부상(context.activeInjuryItem)이 이미 선언되어 있으면 그 부상을 이유로 declare_rest를 제안하지 마라 — 부상 휴식은 이미 부상 관리(전략적 휴식 스케줄·체크인·복귀 게이트)가 맡고 있어 중복 선언이 된다. report 본문에서 "이미 부상 관리로 쉬는 중이니 그대로 가면 된다"고 안심시키는 게 맞다. 부상과 무관한 명시적 사유(출장·날씨 등)일 때만 declare_rest를 쓴다.'
   ]
 }
 

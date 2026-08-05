@@ -15,6 +15,7 @@ function gate(overrides: Partial<ScheduleProposalGate> = {}): ScheduleProposalGa
       { date: '2026-08-02', canIntensify: true }
     ],
     restActive: false,
+    injuryActive: false,
     injuryBlocksIntensify: false,
     today: TODAY,
     ...overrides
@@ -75,6 +76,36 @@ describe('coachScheduleProposal 게이트 (#639)', () => {
   it('G4: 휴식 중이면 declare_rest 만 떨군다', () => {
     expect(normalizeCoachScheduleProposal(REST, gate({ restActive: true }))).toBeNull()
     expect(normalizeCoachScheduleProposal(EASE, gate({ restActive: true }))).not.toBeNull()
+  })
+
+  /**
+   * G9 — 활성 부상 중의 부상성 휴식 제안은 떨군다.
+   * 2026-08-05 실사고: 족저근막 부상선언 후 쉬는 중 "11월 목표가 걱정된다" 발화에 쉬어가기 카드가 떴다.
+   * activeRest 레코드가 없어 G4 를 통과했고, 사용자는 휴식이 이중 시스템에 걸려 어찌할 바를 몰랐다.
+   * 부상 휴식은 부상 관리(전략적 휴식·체크인·복귀 게이트)가 소유한다.
+   */
+  it('G9: 활성 부상 중에는 부상성/모호한 휴식 제안을 떨군다', () => {
+    const injuryRest = { ...REST, restReason: 'injury' }
+    const vagueRest = { ...REST, restReason: 'other' }
+    expect(normalizeCoachScheduleProposal(injuryRest, gate({ injuryActive: true }))).toBeNull()
+    expect(normalizeCoachScheduleProposal(vagueRest, gate({ injuryActive: true }))).toBeNull()
+    // 알 수 없는 restReason 은 'other' 로 떨어지므로 함께 차단된다.
+    expect(normalizeCoachScheduleProposal({ ...REST, restReason: 'ㅁㅁ' }, gate({ injuryActive: true }))).toBeNull()
+  })
+
+  it('G9: 부상과 무관한 명시 사유(개인·날씨)는 활성 부상 중에도 통과시킨다', () => {
+    expect(normalizeCoachScheduleProposal(REST, gate({ injuryActive: true }))?.restReason).toBe('personal')
+    expect(
+      normalizeCoachScheduleProposal({ ...REST, restReason: 'weather' }, gate({ injuryActive: true }))?.restReason
+    ).toBe('weather')
+  })
+
+  it('G9: 세션 액션(하향·조정)은 활성 부상 중에도 막지 않는다 — 회복은 훈련의 일부', () => {
+    expect(normalizeCoachScheduleProposal(EASE, gate({ injuryActive: true }))).not.toBeNull()
+  })
+
+  it('G9: 부상이 없으면 부상성 휴식 제안도 통과시킨다(과발동 가드)', () => {
+    expect(normalizeCoachScheduleProposal({ ...REST, restReason: 'injury' }, gate())?.restReason).toBe('injury')
   })
 
   // G5 — redFlag/고통증이면 상향하지 않는다(하향은 계속 허용 — 회복은 훈련의 일부).
