@@ -372,6 +372,27 @@ function buildInjuryContextSnapshot(
   return { capturedForRunDate, activeInjuryItemId: activeId, items }
 }
 
+/**
+ * "가벼운 회복주 대안"을 이 스레드에서 이미 제시했는지 판정한다(2026-08-05 "1회만").
+ *
+ * 최근 턴만 본다 — 옛 대화에서 한 번 말했다고 영구 봉인하면 상황이 바뀐 뒤(새 휴식 국면) 필요한 안내가 막힌다.
+ * 문구가 고정되어 있지 않으니 "회복주/가벼운 조깅" + "대신·선택지·대체" 동시 등장으로 좁힌다.
+ * (계약 테스트: `tests/coachRestAlternativeOnce.test.ts` — 판정식을 미러하므로 여기 바꾸면 저기도 바꾼다.)
+ */
+const REST_ALTERNATIVE_LOOKBACK_TURNS = 6
+
+function hasOfferedRestAlternative(rows: CoachReportRow[]): boolean {
+  return rows
+    .slice()
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+    .slice(0, REST_ALTERNATIVE_LOOKBACK_TURNS)
+    .some((row) => {
+      const text = row.report ?? ''
+      if (!/회복주|가벼운\s*조깅|가벼운\s*회복/.test(text)) return false
+      return /대신|선택지|대체/.test(text)
+    })
+}
+
 async function persistCoachResult(
   admin: SupabaseAdminClient,
   userId: string,
@@ -1391,6 +1412,12 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     },
     upcomingSchedulePolicy:
       'context.upcomingSchedule는 실제 주기화 스케줄의 다음 세션들(날짜·유형·거리)이다. "## 다음 훈련"은 반드시 이 실제 세션을 기준으로 말하고, weeklyPattern/prescriptionTemplates로 다른 세션(예: 다음이 토요일 LSD인데 화요일 Easy)을 지어내지 마라. 요약 화면(캐러셀)과 어긋나면 안 된다. 부상·회복으로 하향이 필요하면 "그 스케줄 세션(예: 토요일 LSD)을 이렇게 조정/대체하자"처럼 실제 세션을 기준으로 조정한다. upcomingSchedule이 비어있거나 null일 때만 일반 가이드로 답한다.',
+    /**
+     * 이 스레드에서 "가벼운 회복주로 대신하는 선택지" 를 이미 제시했는가(2026-08-05 사용자 지적: "1회만").
+     * 프롬프트의 "1회만"은 한 답변 안으로 읽히기 쉬워 매 턴 반복됐다 — 반복 판정을 **코드가** 한다
+     * ([[coach-always-on-block-deterministic]]). 이미 쉬기로 정한 사람에게 되풀이하면 설득으로 느껴진다.
+     */
+    restAlternativeAlreadyOffered: hasOfferedRestAlternative(threadReportRows),
     restState: structuredCoachContext ? restState : null,
     instructionForRest:
       'context.restState는 사용자가 스스로 선언한 휴식(#473) 상태다(없으면 평소처럼 답한다). active=true면 지금 쉬는 중이다 — "## 다음 훈련"에서 훈련을 재촉하거나 처방을 들이밀지 말고 "푹 쉬세요, 일정은 정리해둘게요. 돌아오면 가볍게 시작해요"처럼 휴식을 존중한다(능동 휴식은 missed가 아니다). 사용자가 먼저 "그래도 뭘 하면 좋을지"를 물을 때만 가벼운 대안(스트레칭·산책, 통제 가능한 휴식이면 가벼운 회복주)을 1회 제안하되 강권하지 않는다. reason이 injury면 통증을 우선하고 무리한 대안을 권하지 않는다. isReturnDay=true이거나 daysUntilReturn이 0~1이면 "놓쳤다"가 아니라 "회복 후 정리" 톤으로 복귀 일정을 안내한다. longLayoff=true(4주 초과)면 복귀를 더 가볍게 시작해야 함과 목표(레이스) 실현가능성 재점검을 정직하게 덧붙인다. active=true면 휴식 존중이 upcomingSchedule 처방보다 우선이다.',
@@ -1933,7 +1960,9 @@ function buildScheduleProposalInstructions() {
     'coachScheduleProposal.actionType은 declare_rest(쉬고 싶다·못 뛴다), ease_session(그날 세션이 버겁다), intensify_session(더 하고 싶다), reschedule_session(그날은 어렵고 다른 날은 된다), skip_session(이번엔 건너뛰겠다) 중 하나다. 전체 일정을 다시 짜는 액션은 없다 — 한 번의 대화로 주기화 골격을 재구축하지 않는다.',
     '세션 액션(declare_rest 외)의 targetDate는 반드시 context.upcomingSchedule에 실제로 있는 날짜여야 한다. 없는 날짜를 지어내면 제안이 폐기된다. intensify_session은 그 세션의 canIntensify가 true일 때만 제안한다.',
     'declare_rest의 suggestedRestUntil은 사용자가 "2주", "이번 주까지"처럼 기간을 명시했을 때만 그 날짜를 넣는다. "당분간", "좀"처럼 기간이 불명확하면 반드시 null로 두어 사용자가 직접 고르게 한다. 쉬는 기간은 코치가 정하는 게 아니라 사용자가 정한다 — report 본문에서도 기간을 단정하지 말고 "기간은 직접 정하시면 돼요"로 안내한다.',
-    '사용자가 완전 휴식을 원하면 존중하되, 통증이 심하거나 안전 신호(redFlag)가 있는 경우가 아니라면 "가벼운 회복주로 대신하는 선택지도 있다"를 report에서 1회만 덧붙인다(강권 금지). 부하가 원인인 부상은 완전 정지보다 낮은 부하 유지가 회복에 유리할 수 있다.',
+    // "1회만"의 범위는 **한 답변 안**이 아니라 **그 대화 스레드 전체**다(2026-08-05 사용자 지적).
+    // 매 턴 반복하면 이미 쉬기로 정한 사람에게 눈치 없는 설득이 된다 — 판정은 코드가 한다(아래 컨텍스트 플래그).
+    '사용자가 완전 휴식을 원하면 존중하되, 통증이 심하거나 안전 신호(redFlag)가 있는 경우가 아니라면 "가벼운 회복주로 대신하는 선택지도 있다"를 **이 대화에서 딱 한 번만** 덧붙인다(강권 금지). 부하가 원인인 부상은 완전 정지보다 낮은 부하 유지가 회복에 유리할 수 있다. context.restAlternativeAlreadyOffered=true 면 **이미 말했다는 뜻이므로 절대 다시 꺼내지 마라** — 사용자가 직접 "대안이 뭐가 있냐"고 물을 때만 예외다.',
     // #639 G9(2026-08-05 실사고): 부상선언·휴식 중 "목표 걱정" 발화에 쉬어가기 카드가 떠 사용자가 혼란.
     '활성 부상(context.activeInjuryItem)이 이미 선언되어 있으면 그 부상을 이유로 declare_rest를 제안하지 마라 — 부상 휴식은 이미 부상 관리(전략적 휴식 스케줄·체크인·복귀 게이트)가 맡고 있어 중복 선언이 된다. report 본문에서 "이미 부상 관리로 쉬는 중이니 그대로 가면 된다"고 안심시키는 게 맞다. 부상과 무관한 명시적 사유(출장·날씨 등)일 때만 declare_rest를 쓴다.'
   ]
