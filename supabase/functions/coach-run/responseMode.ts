@@ -24,6 +24,23 @@ function mentionsScheduleChange(text: string): boolean {
   return /쉬고\s*싶|쉴게|쉬어야|쉬어갈|휴식|건너뛰|스킵|미루|옮기|다른\s*날|버겁|부담|힘들|무리|쉽게|줄이|낮추|가볍게|더\s*세게|더\s*강하게/.test(text)
 }
 
+/**
+ * 승낙-후속 판정(#656). "응 해줘"·"해봐"·"계속" 같은 입력은 **그 자체에 분류 정보가 없다** —
+ * 직전 답변이 제안한 후속에 대한 승낙이다. 이걸 문구로 분류하면 general 로 떨어져 컨텍스트가
+ * 축약되고, 코치가 맥락을 잃은 원론 답변을 시작한다(2026-08-05 00:30 실사고: "올해 추세" →
+ * "3개월 이동 흐름도 읽어드릴까요?" → "응 해줘" → "지금은 일반 개념 질문처럼 들어와서…").
+ * 판정되면 호출부가 **직전 사용자 질문의 분류를 물려받는다**.
+ */
+export function isBareContinuation(note: string): boolean {
+  // 웃음(ㅋㅋ/ㅎㅎ)은 2연속 이상만 지운다 — "ㅇㅋ"의 ㅋ 은 승낙의 일부다.
+  const compact = note.trim().toLowerCase().replace(/[ㅋㅎ]{2,}/g, '').replace(/[\s.,!?~…]+/g, '')
+  if (!compact || compact.length > 12) return false
+  if (/^(응|어|그래|좋아|네|예|웅|ㅇㅋ|ㅇㅇ|ㄱㄱ|고고|오케이|오키|ok|okay|yes)$/.test(compact)) return true
+  return /^(응|어|그래|좋아|좋지|네|예|웅|오케이|ok)?(그렇게)?(해줘|해줘요|해주세요|해봐|해봐요|해라|부탁해|부탁|계속|계속해줘|이어서|이어서해줘|이어가|보여줘|알려줘|읽어줘|정리해줘|가자|고)$/.test(
+    compact
+  )
+}
+
 // userNote 문구로 사용자 의도를 분류한다(서버 권위 분류).
 // 프론트가 보조 힌트를 보내더라도 서버는 항상 여기서 다시 분류한다.
 export function detectCoachAnswerIntent(note: string): CoachAnswerIntent {

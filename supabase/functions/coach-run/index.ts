@@ -20,6 +20,7 @@ import {
   buildUserNoteRelevancePolicy,
   detectCoachAnswerIntent,
   detectUserNoteRunRelevance,
+  isBareContinuation,
   resolveCoachResponseMode,
   shouldAttachInjurySnapshot,
   shouldApplyTrustLayer,
@@ -1205,16 +1206,32 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     isSparse: recent30.length < 4
   }
 
+  /**
+   * 승낙-후속 이어받기(#656). "응 해줘"는 직전 답변이 제안한 후속에 대한 승낙이지 새 질문이 아니다.
+   * 그 문구 자체로 분류하면 general 로 떨어져 컨텍스트가 축약되고 코치가 맥락 잃은 원론을 시작한다.
+   * 그래서 **직전 사용자 질문을 붙여서** 분류한다 — 데이터 질문에 대한 승낙이면 데이터 질문으로,
+   * 개인 훈련 질문에 대한 승낙이면 개인 훈련으로 이어진다.
+   */
+  const previousThreadUserNote = threadReportRows.length
+    ? (threadReportRows
+        .slice()
+        .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0]?.user_note ?? '')
+    : ''
+  const continuesPreviousTurn = isBareContinuation(userNote) && previousThreadUserNote.trim().length > 0
+  const classificationNote = continuesPreviousTurn ? `${previousThreadUserNote} ${userNote}` : userNote
+
   // userNote 의도를 분류해 응답 모드를 나눈다. 빈 입력=report, 잡담=conversational,
   // 설명/분석 요청=explain, 근거/출처 요청=evidence.
-  const answerIntent = detectCoachAnswerIntent(userNote)
+  const answerIntent = detectCoachAnswerIntent(classificationNote)
   // 프리셋 커맨드는 키워드 분류 대신 커맨드 전용 리포트 형식을 강제한다(#237 우선순위 정상화).
   const coachCommandFormat = commandId ? COACH_COMMAND_FORMATS[commandId] ?? null : null
   const coachResponseMode: CoachResponseMode = coachCommandFormat ? 'report' : resolveCoachResponseMode(userNote, answerIntent)
-  const userNoteRunRelevance = detectUserNoteRunRelevance(userNote)
-  const structuredCoachContext = Boolean(coachCommandFormat) || shouldUseStructuredCoachContext(userNote, coachResponseMode)
-  const trustLayerApplies = shouldApplyTrustLayer(userNote, coachResponseMode)
-  const userNoteRelevancePolicy = buildUserNoteRelevancePolicy(userNote, coachResponseMode)
+  const userNoteRunRelevance = detectUserNoteRunRelevance(classificationNote)
+  const structuredCoachContext = Boolean(coachCommandFormat) || shouldUseStructuredCoachContext(classificationNote, coachResponseMode)
+  const trustLayerApplies = shouldApplyTrustLayer(classificationNote, coachResponseMode)
+  const userNoteRelevancePolicy = continuesPreviousTurn
+    ? `사용자의 이번 입력("${userNote.trim()}")은 새 질문이 아니라 **직전 답변에 대한 승낙/계속 요청**이다. 직전 답변 마지막에 네가 제안한 그 후속 작업을 이번 턴에 실제로 수행한다. 데이터 조회가 필요하면 queryRuns 를 호출한다. 승낙을 일반 질문으로 취급해 원론 설명을 새로 시작하지 마라.`
+    : buildUserNoteRelevancePolicy(classificationNote, coachResponseMode)
   return {
     userNote,
     hasUserNote: userNote.trim().length > 0,
@@ -1995,6 +2012,8 @@ function buildDataQuestionInstruction() {
     'error 가 오면(저장하지 않는 항목·형식 오류) 그 이유를 사용자 말로 옮겨 "그 기준으로는 볼 수 없다"고 알린다. 비슷한 다른 항목으로 슬쩍 바꿔 답하지 않는다 — 예: 강수(비) 여부는 저장하지 않으므로 습도로 대체해 "비 온 날"이라 말하면 안 된다. 도구 결과에 guidance 가 있으면 그 지침대로 답한다.',
     '조회는 **최대 두 번**까지다. "부상 전후 비교"·"6월과 7월 비교"처럼 기간을 나누면 되는 질문은 queryRuns 를 두 번 부른다(한 번에 병렬로 불러도 된다). 두 번으로도 안 되는 계산(증가율 추세·상관)은 **머릿속으로 계산하지 말고 reportDataGap 을 부른다**.',
     '답할 수 없는 질문(저장하지 않는 항목·도구로 안 되는 계산·기준이 애매한 질문)은 **추정으로 메꾸지 말고 reportDataGap 을 호출**한다. "모른다"는 실패가 아니라 정직한 1급 응답이다 — 지어낸 숫자가 신뢰를 깬다.',
+    // 2026-08-05 실사고: "마지막 러닝부터 며칠 쉬었는지"를 조회 가능함에도 "원하시면 다시 조회해드릴게요"로 미뤘다.
+    '지금 도구로 답할 수 있는 조회는 **이번 턴에 실행해서 답한다**. "원하시면 조회해드릴게요"라고 다음 턴으로 미루지 마라 — 미룰 이유가 없다. 마지막 러닝 날짜가 필요하면 metrics 에 lastDate 를 넣어 조회한다.',
     // 2026-08-04 실측: "2달 전에 총 몇 키로"를 60일 창(6/04~8/03)으로 읽었다. 조건을 밝혀 거짓은 아니었지만
     // 한국어에서 "N달 전"은 보통 **그 달 자체**를 뜻한다. 기간 해석을 날짜 산수에 맡기지 않고 못박는다.
     '기간 표현은 **월 경계로 읽는다**. "2달 전"·"지난달"·"6월"은 그 달의 1일~말일이다(오늘이 8월이면 "2달 전"=6월 1일~6월 30일). "최근 N일"·"요즘"처럼 명시적으로 창을 말한 경우에만 오늘 기준 N일 창으로 읽는다. 어느 쪽인지 애매하면 월 경계로 조회하고, 답변에 그 범위를 밝혀 사용자가 바로잡을 수 있게 한다.'
@@ -2004,7 +2023,11 @@ function buildDataQuestionInstruction() {
 function buildCoachThreadInstruction() {
   return [
     'context.coachThread는 **지금 이 대화의 직전 문답들**이다(세션 대화면 그 세션 스레드, 전역 대화면 전역 스레드). 이 목록이 있으면 이전 답변을 리포트처럼 되풀이하지 말고 사용자의 새 질문/메모에 **이어서** 답한다. 특히 "그거랑 어떻게 달라?", "왜?", "그럼 뭐가 나아?" 처럼 **대상이 생략된 질문은 직전 문답에서 지시 대상을 찾아** 답한다 — 임의로 다른 대상을 골라 비교하지 마라. 직전 맥락으로도 대상이 불확실하면 추측해서 답하지 말고 무엇과 비교할지 한 줄로 되물어라.',
-    'coachThread 항목의 abbreviated=true 는 프롬프트 크기 때문에 **답변을 줄여 실은 옛 턴**이라는 뜻이다. 줄어든 대목을 근거로 단정하지 말고 그때 무슨 얘기였는지 맥락 파악용으로만 쓴다. 사용자가 그 옛 턴을 정확히 되짚으면 기억이 흐릿하다고 인정하고 필요한 부분을 다시 확인한다.'
+    'coachThread 항목의 abbreviated=true 는 프롬프트 크기 때문에 **답변을 줄여 실은 옛 턴**이라는 뜻이다. 줄어든 대목을 근거로 단정하지 말고 그때 무슨 얘기였는지 맥락 파악용으로만 쓴다. 사용자가 그 옛 턴을 정확히 되짚으면 기억이 흐릿하다고 인정하고 필요한 부분을 다시 확인한다.',
+    // #656: "원하시면 ~해드릴게요"로 끝낸 뒤 사용자가 "응 해줘"라고 하면, 그 후속을 실제로 해야 한다.
+    // 2026-08-05 실사고: 승낙을 새 일반 질문으로 취급해 맥락 잃은 원론 설명을 시작했다.
+    '사용자가 "응", "응 해줘", "해봐", "계속" 처럼 승낙/계속만 보내면 — 직전 답변 마지막에 **네가 제안한 그 후속 작업을 이번 턴에 실제로 수행**한다. 데이터 조회가 필요하면 queryRuns 를 부른다. 승낙을 새 질문으로 취급해 원론 설명을 시작하거나 무엇을 원하는지 되묻지 마라(직전 제안이 곧 요청 내용이다).',
+    '답변을 "원하시면 ~도 해드릴게요"로 맺는 건 **이번 턴에 실제로 해줄 수 있는 것일 때만** 쓴다. 도구로 조회 가능한 것을 다음 턴으로 미루는 용도로 쓰지 마라.'
   ]
 }
 

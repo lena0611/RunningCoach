@@ -3,6 +3,7 @@ import {
   buildUserNoteRelevancePolicy,
   detectCoachAnswerIntent,
   detectUserNoteRunRelevance,
+  isBareContinuation,
   resolveCoachResponseMode,
   shouldAttachInjurySnapshot,
   shouldApplyTrustLayer,
@@ -135,5 +136,27 @@ describe('coach response mode and user note relevance', () => {
 
   it('third-party or generic running mentions stay general (#643 과발동 가드)', () => {
     expect(detectUserNoteRunRelevance('참고로 케냐 선수들은 그렇게 뛴대')).toBe('general')
+  })
+
+  // #656: "응 해줘"는 새 질문이 아니라 직전 제안에 대한 승낙이다.
+  // 2026-08-05 실사고: 승낙이 general 로 분류돼 코치가 맥락 잃은 원론 설명을 시작했다.
+  describe('isBareContinuation — 승낙-후속 판정', () => {
+    it('짧은 승낙/계속 표현을 잡는다', () => {
+      for (const note of ['응 해줘', '응', '해봐', '그래 해줘', '계속', '이어서 해줘', '응 부탁해', 'ㅇㅋ', '좋아, 보여줘', '네 해주세요', '응해봐~']) {
+        expect(isBareContinuation(note), note).toBe(true)
+      }
+    })
+
+    it('내용이 있는 질문·긴 문장은 잡지 않는다', () => {
+      for (const note of [
+        '',
+        '응 근데 심박은 왜 그래?',
+        '6월이랑 7월 비교해줘',
+        '노르웨이식 훈련법 알려줘',
+        '아니 그거 말고 다른 걸 해줘'
+      ]) {
+        expect(isBareContinuation(note), note || '(빈 문자열)').toBe(false)
+      }
+    })
   })
 })
