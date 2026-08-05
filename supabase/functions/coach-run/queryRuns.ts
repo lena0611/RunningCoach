@@ -69,9 +69,15 @@ type Op = (typeof OPS)[number]
 export const QUERY_RUNS_GROUPS = ['none', 'month', 'week', 'weekday', 'type', 'courseType', 'companion'] as const
 type GroupBy = (typeof QUERY_RUNS_GROUPS)[number]
 
-/** 지표: sum/avg/max 는 결측(null)을 **제외**하고 계산하고, 그 표본 수를 함께 돌려준다. */
+/**
+ * 지표: sum/avg/max 는 결측(null)을 **제외**하고 계산하고, 그 표본 수를 함께 돌려준다.
+ * lastDate/firstDate 는 날짜 문자열 최대/최소 — "마지막 러닝이 언제였나 → 며칠 쉬었나" 질문용
+ * (2026-08-05 실사용 실패 로그에서 추가: 조회 수단이 없어 코치가 답을 미뤘다).
+ */
 export const QUERY_RUNS_METRICS = [
   'count',
+  'lastDate',
+  'firstDate',
   'distanceKm',
   'durationSec',
   'avgPaceSec',
@@ -188,6 +194,11 @@ export function runQueryRuns(spec: QueryRunsSpec, rows: QueryRunsRow[]): QueryRu
     for (const metric of spec.metrics) {
       if (metric === 'count') {
         row.count = list.length
+        continue
+      }
+      if (metric === 'lastDate' || metric === 'firstDate') {
+        const dates = list.map((item) => item.date).filter(Boolean).sort()
+        row[metric] = dates.length ? (metric === 'lastDate' ? dates[dates.length - 1] : dates[0]) : null
         continue
       }
       const field = QUERY_RUNS_FIELDS[metric]

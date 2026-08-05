@@ -131,6 +131,18 @@ describe('runQueryRuns — 집계와 신뢰 장치', () => {
     expect(result.caution).toBeNull()
   })
 
+  // 2026-08-05 실사용 실패에서 추가: "마지막 러닝부터 며칠 쉬었나"에 조회 수단이 없어 코치가 답을 미뤘다.
+  it('lastDate/firstDate 로 마지막·첫 러닝 날짜를 조회할 수 있다', () => {
+    const result = runQueryRuns(spec({ metrics: ['count', 'lastDate', 'firstDate'] }), [
+      row({ date: '2026-06-10' }),
+      row({ date: '2026-07-28' }),
+      row({ date: '2026-05-02' }),
+      row({ date: '2026-07-01' })
+    ])
+    expect(result.rows[0].lastDate).toBe('2026-07-28')
+    expect(result.rows[0].firstDate).toBe('2026-05-02')
+  })
+
   it('요일로 묶을 수 있다', () => {
     // 2026-06-08 은 월요일, 2026-06-09 는 화요일
     const result = runQueryRuns(spec({ groupBy: 'weekday', metrics: ['count'] }), [
