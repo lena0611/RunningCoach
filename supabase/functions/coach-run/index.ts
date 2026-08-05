@@ -1954,21 +1954,31 @@ function buildInternalNamingGuard() {
   ]
 }
 
-function buildScheduleProposalInstructions() {
+/**
+ * @param restAlternativeOffered 이 스레드에서 "가벼운 회복주 대안"을 이미 말했는가.
+ *
+ * ⚠ 이 플래그는 **문장을 조건부로 넣거나 빼는** 데 쓴다 — 모델에게 "플래그가 true면 하지 마라"고
+ * 시키는 방식은 실패했다(2026-08-05 실측: 권장 문장과 조건부 금지를 함께 주니 권장을 따라 반복했다).
+ * 권장을 아예 프롬프트에서 제거하는 게 확실하다([[coach-always-on-block-deterministic]]의 역방향 —
+ * "never" 도 코드가 만든다).
+ */
+function buildScheduleProposalInstructions(restAlternativeOffered = false) {
   return [
     'coachScheduleProposal은 사용자가 대화(userNote)에서 휴식·중단·과부하·일정 불가·강도 조정을 직접 표현했을 때만 반환한다(그 외에는 null). 근거 없이 먼저 꺼내지 않고, report 본문에서 이미 사람으로서 대답한 뒤 그 실행 경로로만 덧붙인다. 이것은 스케줄을 바꾸는 명령이 아니라 사용자가 승인해야 적용되는 후보이며, 앱이 기존 화면(휴식 선언 시트·세션 카드)을 열어줄 뿐이다.',
     'coachScheduleProposal.actionType은 declare_rest(쉬고 싶다·못 뛴다), ease_session(그날 세션이 버겁다), intensify_session(더 하고 싶다), reschedule_session(그날은 어렵고 다른 날은 된다), skip_session(이번엔 건너뛰겠다) 중 하나다. 전체 일정을 다시 짜는 액션은 없다 — 한 번의 대화로 주기화 골격을 재구축하지 않는다.',
     '세션 액션(declare_rest 외)의 targetDate는 반드시 context.upcomingSchedule에 실제로 있는 날짜여야 한다. 없는 날짜를 지어내면 제안이 폐기된다. intensify_session은 그 세션의 canIntensify가 true일 때만 제안한다.',
     'declare_rest의 suggestedRestUntil은 사용자가 "2주", "이번 주까지"처럼 기간을 명시했을 때만 그 날짜를 넣는다. "당분간", "좀"처럼 기간이 불명확하면 반드시 null로 두어 사용자가 직접 고르게 한다. 쉬는 기간은 코치가 정하는 게 아니라 사용자가 정한다 — report 본문에서도 기간을 단정하지 말고 "기간은 직접 정하시면 돼요"로 안내한다.',
     // "1회만"의 범위는 **한 답변 안**이 아니라 **그 대화 스레드 전체**다(2026-08-05 사용자 지적).
-    // 매 턴 반복하면 이미 쉬기로 정한 사람에게 눈치 없는 설득이 된다 — 판정은 코드가 한다(아래 컨텍스트 플래그).
-    '사용자가 완전 휴식을 원하면 존중하되, 통증이 심하거나 안전 신호(redFlag)가 있는 경우가 아니라면 "가벼운 회복주로 대신하는 선택지도 있다"를 **이 대화에서 딱 한 번만** 덧붙인다(강권 금지). 부하가 원인인 부상은 완전 정지보다 낮은 부하 유지가 회복에 유리할 수 있다. context.restAlternativeAlreadyOffered=true 면 **이미 말했다는 뜻이므로 절대 다시 꺼내지 마라** — 사용자가 직접 "대안이 뭐가 있냐"고 물을 때만 예외다.',
+    // 이미 말했으면 권장 문장을 통째로 빼고 금지만 남긴다 — 둘을 함께 주면 모델이 권장을 따른다(실측).
+    restAlternativeOffered
+      ? '이 대화에서 "가벼운 회복주로 대신하는 선택지"는 **이미 말했다**. 다시 꺼내지 마라 — 사용자가 직접 "그럼 뭘 할 수 있냐/대안이 있냐"고 물을 때만 답한다. 쉬기로 정한 사람에게 대안을 되풀이하면 안내가 아니라 설득이다. 지금은 휴식 자체를 지지하고 복귀 조건만 말한다.'
+      : '사용자가 완전 휴식을 원하면 존중하되, 통증이 심하거나 안전 신호(redFlag)가 있는 경우가 아니라면 "가벼운 회복주로 대신하는 선택지도 있다"를 **이 대화에서 딱 한 번만** 덧붙인다(강권 금지). 부하가 원인인 부상은 완전 정지보다 낮은 부하 유지가 회복에 유리할 수 있다.',
     // #639 G9(2026-08-05 실사고): 부상선언·휴식 중 "목표 걱정" 발화에 쉬어가기 카드가 떠 사용자가 혼란.
     '활성 부상(context.activeInjuryItem)이 이미 선언되어 있으면 그 부상을 이유로 declare_rest를 제안하지 마라 — 부상 휴식은 이미 부상 관리(전략적 휴식 스케줄·체크인·복귀 게이트)가 맡고 있어 중복 선언이 된다. report 본문에서 "이미 부상 관리로 쉬는 중이니 그대로 가면 된다"고 안심시키는 게 맞다. 부상과 무관한 명시적 사유(출장·날씨 등)일 때만 declare_rest를 쓴다.'
   ]
 }
 
-function buildFreeConversationInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnType<typeof buildRunnerLevelGuide>) {
+function buildFreeConversationInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnType<typeof buildRunnerLevelGuide>, restAlternativeOffered = false) {
   return [
     '너는 한국어로 자연스럽게 답하는 러닝 코치다. 지금은 자유대화다.',
     `이 사용자의 runnerLevel은 ${runnerLevel}이다. 전문 용어 깊이는 ${levelGuide.termDepth}`,
@@ -1984,12 +1994,12 @@ function buildFreeConversationInstructions(runnerLevel: RunnerLevel, levelGuide:
     '의학적 진단이나 통증 처방을 하지 않는다. 사용자가 통증/부상을 직접 물으면 일반 안전 원칙 수준에서 조심스럽게 말한다.',
     'memoryItems에는 이 대화에서 새로 알게 된 사용자의 안정적인 개인 맥락(목표/욕구/선호/서사)만 0~3개 넣는다. 일회성 잡담이나 단일 세션 수치는 넣지 않는다. 이미 core/coachMemoryItems에 있으면 다시 넣지 않는다.',
     ...buildInternalNamingGuard(),
-    ...buildScheduleProposalInstructions(),
+    ...buildScheduleProposalInstructions(restAlternativeOffered),
     '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal, coachScheduleProposal. report에 자유대화 본문을 넣고, trainingMemoryPatch와 injuryUpdateProposal은 null로 둔다.'
   ].join('\n')
 }
 
-function buildEvidenceInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnType<typeof buildRunnerLevelGuide>) {
+function buildEvidenceInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnType<typeof buildRunnerLevelGuide>, restAlternativeOffered = false) {
   return [
     '너는 사용자를 오래 봐온 한국어 러닝 코치다.',
     `이 사용자의 runnerLevel은 ${runnerLevel}이다. ${levelGuide.termDepth} ${levelGuide.tone}`,
@@ -2011,7 +2021,7 @@ function buildEvidenceInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnT
     'memoryItems는 이 대화에서 새로 생긴 안정적인 장기 기억이 있을 때만 0~2개 넣는다. 이미 core/coachMemoryItems에 있으면 다시 넣지 않는다.',
     'trainingMemoryPatch와 injuryUpdateProposal은 명확한 필요가 없으면 null로 둔다.',
     ...buildInternalNamingGuard(),
-    ...buildScheduleProposalInstructions(),
+    ...buildScheduleProposalInstructions(restAlternativeOffered),
     ...buildCoachThreadInstruction(),
     ...buildDataQuestionInstruction(),
     ...buildAnswerLengthCeiling(),
@@ -2077,7 +2087,7 @@ function buildAnswerLengthCeiling() {
   ]
 }
 
-function buildExplainInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnType<typeof buildRunnerLevelGuide>) {
+function buildExplainInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnType<typeof buildRunnerLevelGuide>, restAlternativeOffered = false) {
   return [
     '너는 사용자를 오래 봐온 한국어 러닝 코치다.',
     `이 사용자의 runnerLevel은 ${runnerLevel}이다. ${levelGuide.termDepth} ${levelGuide.tone}`,
@@ -2096,7 +2106,7 @@ function buildExplainInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnTy
     'memoryItems는 안정적인 장기 기억이 생긴 경우만 0~2개 넣는다. 이미 core/coachMemoryItems에 있으면 다시 넣지 않는다.',
     'trainingMemoryPatch와 injuryUpdateProposal은 명확한 필요가 없으면 null로 둔다.',
     ...buildInternalNamingGuard(),
-    ...buildScheduleProposalInstructions(),
+    ...buildScheduleProposalInstructions(restAlternativeOffered),
     ...buildCoachThreadInstruction(),
     ...buildDataQuestionInstruction(),
     ...buildAnswerLengthCeiling(),
@@ -2108,19 +2118,21 @@ function buildCoachInstructions(context: unknown) {
   const ctx = context as Record<string, unknown> | null
   const runnerLevel = normalizeRunnerLevel(ctx?.runnerLevel)
   const levelGuide = buildRunnerLevelGuide(runnerLevel)
+  // "가벼운 회복주 대안"을 이미 말했는지 — 지침 **조립 단계**에서 쓴다(아래 이유 참조).
+  const restAlternativeOffered = ctx?.restAlternativeAlreadyOffered === true
   if (ctx?.structuredCoachContext === false) {
-    return buildFreeConversationInstructions(runnerLevel, levelGuide)
+    return buildFreeConversationInstructions(runnerLevel, levelGuide, restAlternativeOffered)
   }
   // 대화 턴(사용자가 입력함)이면 리포트 지침 세트를 아예 보내지 않고 의도별 전용 지침만 보낸다.
   // (리포트 few-shot 예시/섹션 정책이 함께 가면 모델이 계속 템플릿으로 빠진다.)
   if (ctx?.coachResponseMode === 'evidence') {
-    return buildEvidenceInstructions(runnerLevel, levelGuide)
+    return buildEvidenceInstructions(runnerLevel, levelGuide, restAlternativeOffered)
   }
   if (ctx?.coachResponseMode === 'explain') {
-    return buildExplainInstructions(runnerLevel, levelGuide)
+    return buildExplainInstructions(runnerLevel, levelGuide, restAlternativeOffered)
   }
   if (ctx?.coachResponseMode === 'conversational') {
-    return buildFreeConversationInstructions(runnerLevel, levelGuide)
+    return buildFreeConversationInstructions(runnerLevel, levelGuide, restAlternativeOffered)
   }
   return [
     '너는 사용자를 오래 봐온 한국어 러닝 코치다.',
@@ -2270,7 +2282,7 @@ function buildCoachInstructions(context: unknown) {
     '완치 후보는 단정하지 않는다. 최근 0~1/5가 반복되고 Easy 조깅/일상 보행/강훈련 뒤 반응이 조용할 때만 report에서 앱 확인을 제안하고 injuryUpdateProposal로 사용자 승인 후보를 반환한다.',
     'injuryUpdateProposal은 부상 상태 변경 후보가 있을 때만 반환한다. 사용자가 승인해야 저장되는 제안이며, 치료 진단이나 자동 완치 처리로 표현하지 않는다.',
     ...buildInternalNamingGuard(),
-    ...buildScheduleProposalInstructions(),
+    ...buildScheduleProposalInstructions(restAlternativeOffered),
     '통증/부상 메모가 있어도 의료 진단처럼 말하지 않는다. 통증은 훈련 판단 기준과 관찰 포인트로만 다룬다.',
     '통증 수치가 없으면 단정하지 않는다. 예: "통증 강도가 안 나와 있으니 크게 단정하진 말자. 다만 다음 착지감은 체크하자."',
     '코칭은 해당 러닝 세션 평가에서 끝나지 않는다. 반드시 계정의 목표와 누적 데이터를 보고 현재 weeklyPattern을 유지할지 수정할지 판단한다.',
