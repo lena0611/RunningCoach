@@ -52,6 +52,23 @@ describe('detectUngroundedDataClaims — 도구 없는 과거 수치 주장만 �
     expect(claims).toHaveLength(1)
   })
 
+  /**
+   * 2026-08-07 실사고: 세션 대화에서 "6월은 총 0회·0km, 7월은 총 4회·16.90km"라고 지어냈는데
+   * 게이트가 못 잡았다. `\d{1,2}월` 뒤에 한글을 금지한 가드가 "6월은/7월엔"을 통째로 배제했다.
+   */
+  it('"6월은 / 7월엔" 처럼 조사가 붙은 월 표현을 잡는다 (실측 미탐지 케이스)', () => {
+    const claims = detectUngroundedDataClaims('6월은 총 0회·0km, 7월은 총 4회·16.90km였어요.')
+    expect(claims.length).toBeGreaterThan(0)
+  })
+
+  it('"이번 달" 도 컨텍스트 밖 기간으로 본다', () => {
+    expect(detectUngroundedDataClaims('이번 달에는 3회 42km 뛰었어요.').length).toBeGreaterThan(0)
+  })
+
+  it('요일은 기간 표현이 아니다 (월요일 오탐 가드)', () => {
+    expect(detectUngroundedDataClaims('월요일에 5km 뛰었어요.')).toHaveLength(0)
+  })
+
   it('처방·권유는 잡지 않는다 — 미래형이라 과거 어미가 없다', () => {
     expect(detectUngroundedDataClaims('이번 주는 심박 138bpm 이하로 뛰세요. 30km까지만 갑시다.')).toHaveLength(0)
   })
