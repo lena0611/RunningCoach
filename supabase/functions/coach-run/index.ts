@@ -1843,10 +1843,68 @@ async function executeReportDataGap(admin: SupabaseAdminClient, userId: string, 
   return { acknowledged: true, guidance: buildDataGapDirective(gap.kind, gap.needed || undefined) }
 }
 
+/**
+ * 프롬프트 캐시가 먹는 **안정 프리픽스**에 넣을 컨텍스트 키(#661 원가 절감).
+ *
+ * OpenAI 프롬프트 캐시는 요청의 **앞부분이 바이트 단위로 같을 때만** 적중한다. 그런데 컨텍스트 JSON 의
+ * 첫 키가 `userNote`(매 턴 바뀜)라서, 캐시는 system 메시지(3.7k)에서 끊기고 나머지 ~20k 가 매 턴 정가로
+ * 청구됐다(2026-08-05 실측: prompt 23,472 중 cached 3,712).
+ *
+ * 그래서 **값은 그대로 두고 직렬화 순서만** 바꾼다 — 여기 나열된 키(전부 사용자·시점과 무관한 정적 지식/정책)를
+ * 앞으로 보내 캐시 가능한 구간을 늘린다. JSON 객체라 키 순서는 의미에 영향이 없고, 지침이 참조하는
+ * `context.X` 이름도 그대로다 → **코칭 품질에 영향 0**(내용·문구 변경 없음).
+ *
+ * ⚠ 넣을 수 있는 조건: 사용자/날짜/세션에 따라 **절대 변하지 않는** 값만. 모드 의존(`structuredCoachContext`)
+ * 값은 대화 성격이 바뀌면 달라져 프리픽스를 통째로 깨뜨리므로 **일부러 제외**했다.
+ */
+const CACHE_STABLE_CONTEXT_KEYS = [
+  // 전역 정적 지식(모든 사용자 동일)
+  'trainingMethodology',
+  'adaptiveAlgorithmPolicy',
+  'memorySelectionPolicy',
+  // 정적 정책·지침 문자열
+  'coachResponseModePolicy',
+  'nextTrainingAdvicePolicy',
+  'instructionForDateHandling',
+  'instructionForWeatherHandling',
+  'instructionForAchievements',
+  'instructionForTempoCoaching',
+  'upcomingSchedulePolicy',
+  'instructionForRest',
+  'instructionForInjuryHistory',
+  'instructionForMarathonGoal',
+  'instructionForInjurySignals',
+  'sessionEvidencePolicy',
+  'richAnalysisPolicy',
+  'runningAnalysisEngineInstruction',
+  'chronicLoadTrendInstruction',
+  'coreMemoryItemsInstruction',
+  'prescriptionMemoryInstruction',
+  // 사용자 단위로만 안정(레벨이 바뀌면 그때 한 번 깨진다 — 허용)
+  'runnerLevelGuide'
+] as const
+
+/**
+ * 안정 키를 앞으로 모아 직렬화 순서를 바꾼다. **키·값 집합은 완전히 동일**하다(누락·추가 없음).
+ * 나머지 키는 원래 순서를 유지한다 — 지침이 읽는 순서를 불필요하게 흔들지 않는다.
+ */
+export function orderContextForCache(context: unknown): unknown {
+  if (!context || typeof context !== 'object' || Array.isArray(context)) return context
+  const source = context as Record<string, unknown>
+  const ordered: Record<string, unknown> = {}
+  for (const key of CACHE_STABLE_CONTEXT_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(source, key)) ordered[key] = source[key]
+  }
+  for (const [key, value] of Object.entries(source)) {
+    if (!Object.prototype.hasOwnProperty.call(ordered, key)) ordered[key] = value
+  }
+  return ordered
+}
+
 function buildCoachMessages(context: unknown) {
   return [
     { role: 'system', content: buildCoachInstructions(context) },
-    { role: 'user', content: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(context)}` }
+    { role: 'user', content: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(orderContextForCache(context))}` }
   ]
 }
 
@@ -2637,6 +2695,9 @@ function streamCoachRun(
         // 컨텍스트 수집(DB 조회)은 이 응답이 열리기 **전에** 이미 끝나므로, 클라이언트에서 "첫 이벤트 도착 전"
         // 구간이 곧 그 단계다. 그래서 서버가 보낼 전환점은 생성 시작·저장 시작 둘뿐이다.
         send('stage', { stage: 'generating' })
+        // 원가 관측 2단(#661): 프롬프트 토큰의 대부분은 컨텍스트 JSON 이다. 어느 키가 큰지 모르면
+        // 줄일 대상을 추측하게 된다 — 상위 키의 바이트를 남긴다(usage 로그와 짝).
+        send('contextBytes', summarizeContextBytes(context))
         let toolWasCalled = false
         const ai = await callCoachLlmStream(provider, context, (delta) => send('delta', { delta }), {
           messages: buildCoachMessages(context),
@@ -2928,6 +2989,25 @@ function collectToolCallDeltas(event: unknown, into: Map<number, { id: string; n
     if (typeof call.function?.arguments === 'string') current.args += call.function.arguments
     into.set(index, current)
   }
+}
+
+/**
+ * 컨텍스트 키별 바이트(원가 관측 2단). 프롬프트 토큰의 대부분이 이 JSON 이라 어디가 큰지 알아야
+ * "무엇을 줄일까"와 "무엇을 안정 프리픽스로 옮길까"를 데이터로 정할 수 있다. 상위 18개만 남긴다.
+ */
+function summarizeContextBytes(context: unknown): Record<string, unknown> {
+  if (!context || typeof context !== 'object') return {}
+  const entries = Object.entries(context as Record<string, unknown>)
+    .map(([key, value]) => {
+      const json = JSON.stringify(value ?? null)
+      return { key, bytes: json ? json.length : 0, isStaticText: typeof value === 'string' }
+    })
+    .sort((a, b) => b.bytes - a.bytes)
+  const total = entries.reduce((sum, item) => sum + item.bytes, 0)
+  const staticTextBytes = entries.filter((item) => item.isStaticText).reduce((sum, item) => sum + item.bytes, 0)
+  const summary = { total, staticTextBytes, top: entries.slice(0, 18) }
+  console.log('[coach-run] context bytes', summary)
+  return summary as unknown as Record<string, unknown>
 }
 
 /**

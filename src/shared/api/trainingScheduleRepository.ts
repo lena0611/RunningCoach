@@ -196,6 +196,26 @@ function toInsertRow(draft: ScheduledSessionDraft) {
   }
 }
 
+/**
+ * 오래된 `superseded` 행 삭제(#661 DB 위생). **id 목록으로만** 지운다 — 광범위 WHERE 를 두지 않는 이유는
+ * 실사용자 데이터라서 조건 한 줄 실수가 곧 복구 불가 손실이기 때문이다. 지울 대상 판정은 순수 함수
+ * (`findPrunableSupersededIds`)가 하고, 여기서는 그 결과만 실행한다.
+ *
+ * 안전망 2겹: ① status='superseded' 를 쿼리에도 다시 못박아, 판정이 잘못돼도 활성 세션은 지워지지 않는다.
+ * ② RLS(`training_schedule_delete_own`)로 남의 행은 애초에 대상이 아니다.
+ */
+export async function deleteSupersededSessions(ids: string[]): Promise<number> {
+  if (!ids.length) return 0
+  const { data, error } = await requireSupabase()
+    .from('training_schedule')
+    .delete()
+    .in('id', ids)
+    .eq('status', 'superseded')
+    .select('id')
+  if (error) throw error
+  return (data ?? []).length
+}
+
 function fromRow(row: ScheduledSessionRow): ScheduledSession {
   return {
     id: row.id,
