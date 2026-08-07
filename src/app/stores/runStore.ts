@@ -135,9 +135,14 @@ export const useRunStore = defineStore('runStore', {
     clearInterview() {
       this.pendingInterviewRunId = null
     },
-    async updateRun(run: RunLog) {
+    /**
+     * @param options.includeHeavyData 경로 좌표·구간 샘플·랩을 **함께 저장**할 때만 true.
+     *   기본(false)은 메타만 갱신한다 — 목록이 무거운 데이터를 안 불러오게 되면(지연 로드)
+     *   전체 덮어쓰기가 GPS 경로를 지우기 때문이다(buildRunUpdateRow 주석 참고).
+     */
+    async updateRun(run: RunLog, options?: { includeHeavyData?: boolean }) {
       if (isSupabaseConfigured) {
-        const updated = await updateRunLog(run)
+        const updated = await updateRunLog(run, options)
         const index = this.runs.findIndex((item) => item.id === run.id)
         if (index >= 0) this.runs[index] = updated
         return updated
