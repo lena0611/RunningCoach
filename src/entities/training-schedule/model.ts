@@ -123,9 +123,12 @@ export function isActiveSession(session: ScheduledSession): boolean {
 }
 
 /**
- * 되돌리기 창(일). 이 기간 안의 superseded 행은 **지우지 않는다** — `activeOriginal`(CoachPage)이
- * "원래 제안 · 되돌리기"를 그리는 유일한 재료이기 때문이다. 지난 주 이전 세션의 계획을 되돌리는 건
- * 실사용 시나리오가 아니라 14일로 잡는다.
+ * 최근 변경 보호 창(일). `updatedAt`(= superseded 로 **전환된 시점**)이 이 기간 안이면 지우지 않는다.
+ * 진행 중인 변경·크로스클라이언트 레이스에 대한 안전 여유다.
+ *
+ * ⚠ 축은 `session_date`(훈련 날짜)가 아니라 `updatedAt` 이다. 재정렬은 **미래** 세션을 supersede 하므로
+ * 세션 날짜로 나이를 재면 3개월 전에 폐기된 행도 "미래라서 최신"으로 오판한다(2026-08-07 실측:
+ * session_date 기준으로는 3,698행 중 3,108행이 창 안이라 17행만 지워졌다).
  */
 export const SUPERSEDED_REVERT_WINDOW_DAYS = 14
 
@@ -135,16 +138,23 @@ export const SUPERSEDED_PRUNE_BATCH = 300
 /**
  * 지워도 안전한 `superseded` 행의 id를 고른다(#661 DB 위생).
  *
- * 배경: supersede + insert 패턴의 부산물로 superseded 가 무한 누적된다(실측: 한 사용자 4,028행 중
- * **3,715행이 superseded**). `fetchTrainingSchedule` 은 status 필터 없이 전량을 받아오므로 이 쓰레기가
- * 곧 전송량·메모리이고, 2026-08-03 에는 1000행 상한에 걸려 **미래 세션이 잘려** 코치가
- * "예정된 훈련이 없어요"라고 오답한 사고까지 있었다.
+ * ## 왜 이렇게 쌓이나 (2026-08-07 실측)
+ * 재정렬이 돌 때마다 **같은 미래 날짜**를 다시 supersede 하므로 한 날짜에 폐기본이 층층이 쌓인다 —
+ * 한 사용자에서 superseded 3,698행이 **날짜 169개**에 몰려 있었다(날짜당 중위 23개, 최대 27개).
+ * `fetchTrainingSchedule` 은 status 필터 없이 전량을 받아오므로 이게 곧 전송량·메모리이고,
+ * 2026-08-03 에는 1000행 상한에 걸려 **미래 세션이 잘려** 코치가 "예정된 훈련이 없어요"라고 오답했다.
  *
- * 안전 규칙 3개(감사로 확인된 두 소비처를 정확히 회피한다):
- * 1. **되돌리기 창 보존** — `date >= today - 14일` 인 superseded 는 남긴다(`activeOriginal` 재료).
- * 2. **같은 날 활성 세션이 있으면 남긴다** — 되돌리기는 같은 날짜 원본을 찾으므로 이중 안전.
- * 3. **목표별 최초 날짜 행은 남긴다** — `scheduleStartDate`(useCoachMoments)가 status 무관 최소 날짜라,
- *    가장 오래된 행을 지우면 "플랜 시작일"이 뒤로 밀려 과거 런의 추가런 판정이 바뀐다.
+ * ## 보존 규칙 — 실제 소비처의 판정과 **같게** 맞춘다
+ * 1. **(목표, 날짜)별 `createdAt` 가장 이른 superseded 1건 보존.** `CoachPage.activeOriginal` 이
+ *    "원래 제안 · 되돌리기"를 그릴 때 고르는 행이 정확히 이것이다(createdAt 오름차순 [0]).
+ *    → 되돌리기가 읽는 행 자체를 남기므로 기능이 **바이트 단위로 보존**된다. 같은 날짜의 나머지 22개는
+ *      아무도 읽지 않는 중간 사본이다.
+ * 2. **최근 변경 보호** — `updatedAt >= today - 14일` 은 남긴다(진행 중 변경·레이스 안전 여유).
+ * 3. **목표별 최초 세션 날짜 행 보존** — `useCoachMoments.scheduleStartDate` 가 status 무관 최소 날짜라,
+ *    가장 오래된 행을 지우면 "플랜 시작일"이 밀려 과거 런의 추가런 판정이 바뀐다.
+ *
+ * 규칙 1이 되돌리기를 정확히 보호하므로, 예전의 "같은 날 활성 세션이 있으면 전부 보존" 규칙은 뺐다 —
+ * 실측에서 그 규칙만으로 2,451행이 영구 보존돼 정리가 사실상 동작하지 않았다.
  *
  * 순수 함수다 — 삭제는 호출부가 이 id 목록으로만 한다(광범위 WHERE 금지).
  */
@@ -158,26 +168,31 @@ export function findPrunableSupersededIds(
   const cutoff = shiftIsoDate(today, -windowDays)
   if (!cutoff) return []
 
-  // 규칙 2·3 판정용 인덱스
-  const activeDates = new Set<string>()
   const earliestDateByGoal = new Map<string, string>()
+  /** (목표|날짜) → 그 날짜 폐기본 중 createdAt 가장 이른 행의 id. 되돌리기가 읽는 바로 그 행. */
+  const revertSourceId = new Map<string, { id: string; createdAt: string }>()
   for (const session of sessions) {
-    if (session.status !== 'superseded') activeDates.add(`${session.goalId ?? ''}|${session.date}`)
     const goalKey = session.goalId ?? ''
-    const current = earliestDateByGoal.get(goalKey)
-    if (!current || session.date < current) earliestDateByGoal.set(goalKey, session.date)
+    const earliest = earliestDateByGoal.get(goalKey)
+    if (!earliest || session.date < earliest) earliestDateByGoal.set(goalKey, session.date)
+    if (session.status !== 'superseded') continue
+    const stackKey = `${goalKey}|${session.date}`
+    const current = revertSourceId.get(stackKey)
+    if (!current || session.createdAt < current.createdAt) {
+      revertSourceId.set(stackKey, { id: session.id, createdAt: session.createdAt })
+    }
   }
 
   return sessions
     .filter((session) => {
       if (session.status !== 'superseded') return false
-      if (session.date >= cutoff) return false
       const goalKey = session.goalId ?? ''
-      if (activeDates.has(`${goalKey}|${session.date}`)) return false
+      if (revertSourceId.get(`${goalKey}|${session.date}`)?.id === session.id) return false
+      if ((session.updatedAt ?? '').slice(0, 10) >= cutoff) return false
       if (earliestDateByGoal.get(goalKey) === session.date) return false
       return true
     })
-    .sort((a, b) => a.date.localeCompare(b.date))
+    .sort((a, b) => (a.updatedAt ?? '').localeCompare(b.updatedAt ?? ''))
     .slice(0, limit)
     .map((session) => session.id)
 }
