@@ -3,6 +3,8 @@ import { useAuthStore } from '@/app/stores/authStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
+import { fetchLastRunRouteStart } from '@/shared/api/runRepository'
+import { runDataCount } from '@/entities/run/model'
 import { getCurrentCoords, requestKmaForecast, type Coords } from '@/features/import-kma/kmaWeather'
 import { friendlyErrorMessage } from '@/shared/lib/friendlyError'
 import { requestOpenMeteoForecast } from '@/features/import-open-meteo/openMeteoWeather'
@@ -40,8 +42,15 @@ export const useWeatherStore = defineStore('weatherStore', {
     hourly: (state) => state.snapshot?.hourly ?? [],
     daily: (state) => state.snapshot?.daily ?? [],
     locationName: (state) => state.snapshot?.locationName ?? null,
-    // 마지막 러닝 위치를 쓸 수 있는지(GPS 러닝이 하나라도 있는지)
-    hasLastRunLocation: () => Boolean(getLastRunCoords())
+    // 마지막 러닝 위치를 쓸 수 있는지(GPS 러닝이 하나라도 있는지).
+    // 동기 getter 라 조회하지 않는다 — 목록이 주는 개수(routePointCount)만 본다(#661).
+    hasLastRunLocation: () => {
+      try {
+        return useRunStore().sortedRuns.some((run) => runDataCount(run, 'routePoints') > 0)
+      } catch {
+        return false
+      }
+    }
   },
   actions: {
     init() {
@@ -75,7 +84,7 @@ export const useWeatherStore = defineStore('weatherStore', {
     },
     async resolveCoords(): Promise<Coords> {
       if (this.locationSource === 'last-run') {
-        const lastRun = getLastRunCoords()
+        const lastRun = await getLastRunCoords()
         if (lastRun) return lastRun
         // GPS 러닝이 없으면 현위치로 자연 강등한다.
         this.locationSource = 'current'
@@ -130,9 +139,20 @@ export const useWeatherStore = defineStore('weatherStore', {
   }
 })
 
-// 가장 최근 GPS 러닝의 시작점(routePoints[0])을 마지막 러닝 위치로 본다.
-function getLastRunCoords(): Coords | null {
+/**
+ * 가장 최근 GPS 러닝의 시작점을 마지막 러닝 위치로 본다.
+ *
+ * 목록 조회가 경로 좌표를 더 이상 받아오지 않으므로(#661), 메모리의 런을 훑는 대신 **경로가 있는
+ * 최근 1건만** 전용 조회한다(부분 인덱스). 로컬(Supabase 미설정) 모드는 메모리에 경로가 그대로
+ * 있으니 기존 방식으로 폴백한다.
+ */
+async function getLastRunCoords(): Promise<Coords | null> {
   try {
+    if (isSupabaseConfigured) {
+      const start = await fetchLastRunRouteStart()
+      if (start) return { lat: start.latitude, lon: start.longitude }
+      return null
+    }
     const runStore = useRunStore()
     for (const run of runStore.sortedRuns) {
       const start = run.routePoints?.[0]
@@ -141,7 +161,7 @@ function getLastRunCoords(): Coords | null {
       }
     }
   } catch {
-    // 러닝 스토어 미초기화 등은 현위치 fallback으로 넘긴다.
+    // 러닝 스토어 미초기화·조회 실패는 현위치 fallback으로 넘긴다.
   }
   return null
 }

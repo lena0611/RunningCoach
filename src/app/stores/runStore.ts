@@ -9,7 +9,7 @@ import { useCompetitionStore } from '@/app/stores/competitionStore'
 import { inferRunType } from '@/features/infer-run-type/inferRunType'
 import type { HeartRateModel } from '@/shared/lib/heartRateZones'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
-import { deleteRunLog, fetchRunLogs, insertRunLog, insertRunLogs, updateRunLog } from '@/shared/api/runRepository'
+import { deleteRunLog, fetchRunHeavyData, fetchRunLogs, insertRunLog, insertRunLogs, updateRunLog } from '@/shared/api/runRepository'
 import {
   deleteDeniedExternalId,
   fetchDeniedExternalIds,
@@ -140,6 +140,27 @@ export const useRunStore = defineStore('runStore', {
      *   기본(false)은 메타만 갱신한다 — 목록이 무거운 데이터를 안 불러오게 되면(지연 로드)
      *   전체 덮어쓰기가 GPS 경로를 지우기 때문이다(buildRunUpdateRow 주석 참고).
      */
+    /**
+     * 무거운 데이터(랩·구간 샘플·경로 좌표) 지연 로드(#661).
+     *
+     * 목록 조회는 이 배열들을 받아오지 않는다(앱 오픈 4.7MB → 0.2MB). 세션 상세처럼 실제로 필요한
+     * 화면이 열릴 때 한 번 채우고 메모리에 남긴다(같은 런 재진입은 조회 없음).
+     * 실패는 삼킨다 — 지도·차트가 빈 채로 그려지는 것이 상세 진입 자체가 막히는 것보다 낫다.
+     */
+    async ensureHeavyData(runId: string): Promise<RunLog | null> {
+      const index = this.runs.findIndex((item) => item.id === runId)
+      if (index < 0) return null
+      const current = this.runs[index]
+      if (current.heavyDataLoaded || !isSupabaseConfigured) return current
+      try {
+        const heavy = await fetchRunHeavyData(runId)
+        if (!heavy) return current
+        this.runs[index] = { ...current, ...heavy, heavyDataLoaded: true }
+        return this.runs[index]
+      } catch {
+        return current
+      }
+    },
     async updateRun(run: RunLog, options?: { includeHeavyData?: boolean }) {
       if (isSupabaseConfigured) {
         const updated = await updateRunLog(run, options)
