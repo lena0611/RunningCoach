@@ -159,4 +159,45 @@ describe('coach response mode and user note relevance', () => {
       }
     })
   })
+
+  /**
+   * 2026-08-07 실사고: **세션 대화**에서 "6월이랑 7월 비교"를 물었더니 도구를 부르지 않고
+   * 컨텍스트의 일부 런으로 답해 **6월을 0회·0km 라고 지어냈다**(실제 14회·90.75km).
+   * 원인은 "이 세션"이라는 지시어 때문에 selected_run 으로 분류돼 "선택 세션 데이터를 근거로
+   * 답하라"는 정책이 붙은 것. 기간 집계 질문은 세션 지시어를 이겨야 한다.
+   */
+  describe('기간 집계 질문은 세션 지시어보다 우선한다 (2026-08-07 사고)', () => {
+    it('세션 지시어가 섞여도 기간 집계면 personal_training 으로 간다', () => {
+      expect(detectUserNoteRunRelevance('이 세션 얘기는 잠깐 접고, 6월이랑 7월에 각각 몇 번 몇 km 뛰었는지 비교해줘')).toBe('personal_training')
+      expect(detectUserNoteRunRelevance('이번 세션 말고 지난달 총 몇 km야?')).toBe('personal_training')
+    })
+
+    it('기간 스코프 + 집계 의도 조합을 잡는다', () => {
+      for (const note of [
+        '지난달에 총 몇 번 몇 km 뛰었어?',
+        '올해 월별 거리 추세가 어때?',
+        '이번 달 누적 얼마나 됐어?',
+        '최근 3개월 평균 페이스 알려줘',
+        '전체 기록에서 최장 거리 얼마야?'
+      ]) {
+        expect(detectUserNoteRunRelevance(note), note).toBe('personal_training')
+      }
+    })
+
+    it('세션 자체의 지표 질문은 selected_run 을 유지한다 (반대 방향 회귀 가드)', () => {
+      for (const note of [
+        '이 세션 평균 페이스 어때?',
+        '이번 세션 심박이 왜 높았어?',
+        '오늘 뛴 거 랩 흐름 봐줘',
+        '이 세션 의도 달성했어?'
+      ]) {
+        expect(detectUserNoteRunRelevance(note), note).toBe('selected_run')
+      }
+    })
+
+    it('기간만 있고 집계 의도가 없으면 기존 판정을 바꾸지 않는다', () => {
+      // "지난달에 아팠어" 는 집계 질문이 아니다 — 부상 맥락(personal_training)으로 기존 규칙이 받는다.
+      expect(detectUserNoteRunRelevance('노르웨이식 훈련법이 뭐야')).toBe('general')
+    })
+  })
 })

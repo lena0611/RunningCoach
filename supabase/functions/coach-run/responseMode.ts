@@ -86,11 +86,34 @@ function mentionsFirstPerson(text: string): boolean {
   )
 }
 
+/**
+ * 기간 집계 질문인가 — "지난달 총 몇 km", "6월이랑 7월 비교", "올해 추세" 류.
+ *
+ * 세션 대화에서 이런 질문을 하면 `selected_run` 으로 분류돼 "선택 세션 데이터를 근거로 답하라"는
+ * 정책이 붙고, 모델이 **도구를 부르지 않고 프롬프트에 실린 일부 런으로 추정해 틀린 숫자를 말한다**
+ * (2026-08-07 실측: "6월이랑 7월 비교" → 6월 0회·0km 라고 답했다. 실제 14회·90.75km).
+ *
+ * 그래서 **기간 스코프 + 집계 의도가 함께** 있으면 선택 세션 판정보다 우선한다. 둘을 함께 요구하는
+ * 이유: "이 세션 평균 페이스"처럼 세션 자체의 지표를 묻는 질문을 기간 질문으로 오인하면
+ * 반대 방향 회귀가 난다(세션 지표를 못 쓰게 됨).
+ */
+function asksPeriodAggregate(text: string): boolean {
+  const hasPeriodScope =
+    /지난\s*달|저번\s*달|이번\s*달|\d+\s*(달|개월)\s*전|\d{1,2}\s*월|작년|올해|최근\s*\d+\s*(일|주|달|개월)|전체\s*기록|누적|올타임/.test(
+      text
+    )
+  if (!hasPeriodScope) return false
+  return /몇\s*(km|킬로|번|회|키로)|총\s|합계|평균|비교|추세|얼마나|얼마|며칠|최장|최고|몇\s*일/.test(text)
+}
+
 export function detectUserNoteRunRelevance(note: string): UserNoteRunRelevance {
   const text = note.trim().toLowerCase()
   if (!text) return 'selected_run'
 
   if (asksTrainingConcept(text) && !directlyMentionsSelectedRun(text)) return 'general'
+
+  // 기간 집계 질문은 세션 지시어보다 우선한다(위 asksPeriodAggregate 주석 — 틀린 숫자 사고).
+  if (asksPeriodAggregate(text)) return 'personal_training'
 
   if (directlyMentionsSelectedRun(text)) return 'selected_run'
 
