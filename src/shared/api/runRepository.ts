@@ -75,11 +75,21 @@ export async function insertRunLogs(items: ExtractedRunData[], source: RunLog['s
   return inserted
 }
 
-export async function updateRunLog(run: RunLog): Promise<RunLog> {
+/**
+ * 업데이트 행을 만든다. 무거운 컬럼 = `laps`·`fast_segments`·`metric_samples`·`route_points`
+ * (실측 런당 23KB 중 23KB — route_points 18KB · metric_samples 4KB · laps 1KB). **기본은 무거운 컬럼을 아예 쓰지 않는다**(패치형).
+ *
+ * ⚠️ 왜 이게 안전장치인가: 예전 구현은 메모리의 런 전체를 덮어썼고 `route_points: rest.routePoints ?? []`
+ * 였다. 목록 쿼리가 경로를 안 불러오는 순간(지연 로드) **모든 업데이트가 GPS 경로를 `[]` 로 지운다** —
+ * 그리고 업데이트 호출부 7곳 중 하나는 **앱 로드 시 자동 실행되는 롱런 오분류 자가치유**라서,
+ * 사용자가 아무것도 하지 않아도 경로가 조용히 사라진다. 그래서 지연 로드보다 이 전환이 먼저다.
+ *
+ * 지금은 목록이 경로를 다 불러오므로 기본 동작에 **의미 변화가 없다**(같은 값을 되쓰던 것을 안 쓰는 것뿐).
+ * 무거운 데이터를 실제로 바꾸는 호출부만 `includeHeavyData` 로 명시한다(HealthKit 경로 백필·리프레시 병합).
+ */
+export function buildRunUpdateRow(run: RunLog, options?: { includeHeavyData?: boolean }): Record<string, unknown> {
   const { id: _id, userId: _userId, createdAt: _createdAt, ...rest } = run
-  const { data, error } = await requireSupabase()
-    .from('run_logs')
-    .update({
+  const row: Record<string, unknown> = {
       date: rest.date,
       start_at: rest.startAt,
       end_at: rest.endAt,
@@ -107,14 +117,23 @@ export async function updateRunLog(run: RunLog): Promise<RunLog> {
       stress_level: rest.stressLevel,
       companion: rest.companion,
       memo: rest.memo,
-      laps: rest.laps,
-      fast_segments: rest.fastSegments,
-      metric_samples: rest.metricSamples ?? [],
-      route_points: rest.routePoints ?? [],
       tags: rest.tags,
       source: rest.source,
       updated_at: new Date().toISOString()
-    })
+  }
+  if (options?.includeHeavyData) {
+    row.laps = rest.laps
+    row.fast_segments = rest.fastSegments
+    row.metric_samples = rest.metricSamples ?? []
+    row.route_points = rest.routePoints ?? []
+  }
+  return row
+}
+
+export async function updateRunLog(run: RunLog, options?: { includeHeavyData?: boolean }): Promise<RunLog> {
+  const { data, error } = await requireSupabase()
+    .from('run_logs')
+    .update(buildRunUpdateRow(run, options))
     .eq('id', run.id)
     .select('*')
     .single()

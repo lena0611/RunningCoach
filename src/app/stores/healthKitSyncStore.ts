@@ -289,7 +289,8 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
 
         const memoryStore = useMemoryStore()
         const extracted = toExtractedRunData(candidate, memoryStore.memory.weeklyPattern, buildInferenceHeartRateModel())
-        const updated = await runStore.updateRun(mergeHealthKitRefreshRun(target, extracted))
+        // 리프레시 병합은 랩·구간 샘플·경로를 실제로 채우므로 무거운 데이터를 함께 저장한다.
+        const updated = await runStore.updateRun(mergeHealthKitRefreshRun(target, extracted), { includeHeavyData: true })
         // 상세 오버레이가 이 런을 보고 있으면 갱신본으로 새로고침한다. activeRun은 스냅샷이라,
         // runStore만 갱신하면 route/지도 반영이 재진입 전까지 안 보인다(사용자 리포트).
         const detail = useSessionDetailStore()
@@ -575,7 +576,8 @@ async function repairExistingHealthKitRuns(candidates: HealthKitRunCandidate[], 
       routePoints: extracted.routePoints?.length ? extracted.routePoints : target.routePoints,
       tags: mergeHealthKitRepairTags(target.tags ?? [], candidate.isSelfRace),
       source: 'healthkit'
-    })
+    // repair 는 랩·구간 샘플·경로를 보강하는 경로다(경로 백필 #620 포함) → 무거운 데이터를 함께 저장.
+    }, { includeHeavyData: true })
     repaired.push(updated)
   }
   return repaired
