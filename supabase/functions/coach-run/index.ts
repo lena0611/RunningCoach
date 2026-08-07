@@ -1858,6 +1858,13 @@ async function executeReportDataGap(admin: SupabaseAdminClient, userId: string, 
  * 값은 대화 성격이 바뀌면 달라져 프리픽스를 통째로 깨뜨리므로 **일부러 제외**했다.
  */
 const CACHE_STABLE_CONTEXT_KEYS = [
+  /**
+   * 승인된 훈련 지식(#661 실측 최대 항목 — 컨텍스트 84KB 중 **12.4KB**).
+   * 전역 테이블(training_methods·prescription_rules·knowledge_sources)의 approved 행이라 사용자·시점과
+   * 무관하다. 목표/선택 세션으로 한 번 걸러지므로 **대화 종류별로 프리픽스가 갈릴 뿐**, 한 대화 안에서는
+   * 불변이다(전역 대화는 selectedRun=null 로 완전 고정).
+   */
+  'trainingKnowledge',
   // 전역 정적 지식(모든 사용자 동일)
   'trainingMethodology',
   'adaptiveAlgorithmPolicy',

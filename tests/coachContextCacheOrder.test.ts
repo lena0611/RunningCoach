@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
  * 원본(`orderContextForCache`)을 바꾸면 이 미러도 함께 바꾼다.
  */
 const CACHE_STABLE_CONTEXT_KEYS = [
+  'trainingKnowledge',
   'trainingMethodology',
   'adaptiveAlgorithmPolicy',
   'memorySelectionPolicy',
@@ -48,6 +49,7 @@ function orderContextForCache(context: unknown): unknown {
 
 const CONTEXT = {
   userNote: '오늘 어땠어?',
+  trainingKnowledge: { methods: [{ name: 'Norwegian' }] },
   hasUserNote: true,
   instructionForRest: '휴식 지침',
   selectedRun: { id: 'r1', distanceKm: 5 },
@@ -72,7 +74,7 @@ describe('orderContextForCache — 값 보존이 최우선', () => {
 
   it('안정 키가 앞으로 오고, 매 턴 바뀌는 userNote 는 그 뒤로 밀린다', () => {
     const keys = Object.keys(orderContextForCache(CONTEXT) as Record<string, unknown>)
-    expect(keys.slice(0, 3)).toEqual(['trainingMethodology', 'instructionForRest', 'runnerLevelGuide'])
+    expect(keys.slice(0, 4)).toEqual(['trainingKnowledge', 'trainingMethodology', 'instructionForRest', 'runnerLevelGuide'])
     expect(keys.indexOf('userNote')).toBeGreaterThan(keys.indexOf('runnerLevelGuide'))
   })
 
