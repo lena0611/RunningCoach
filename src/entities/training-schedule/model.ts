@@ -122,6 +122,74 @@ export function isActiveSession(session: ScheduledSession): boolean {
   return session.status === 'planned' || session.status === 'missed'
 }
 
+/**
+ * 되돌리기 창(일). 이 기간 안의 superseded 행은 **지우지 않는다** — `activeOriginal`(CoachPage)이
+ * "원래 제안 · 되돌리기"를 그리는 유일한 재료이기 때문이다. 지난 주 이전 세션의 계획을 되돌리는 건
+ * 실사용 시나리오가 아니라 14일로 잡는다.
+ */
+export const SUPERSEDED_REVERT_WINDOW_DAYS = 14
+
+/** 한 번의 로드에서 지울 상한. 실데이터 삭제라 무제한 벌크를 만들지 않는다(다음 로드에서 이어서 지운다). */
+export const SUPERSEDED_PRUNE_BATCH = 300
+
+/**
+ * 지워도 안전한 `superseded` 행의 id를 고른다(#661 DB 위생).
+ *
+ * 배경: supersede + insert 패턴의 부산물로 superseded 가 무한 누적된다(실측: 한 사용자 4,028행 중
+ * **3,715행이 superseded**). `fetchTrainingSchedule` 은 status 필터 없이 전량을 받아오므로 이 쓰레기가
+ * 곧 전송량·메모리이고, 2026-08-03 에는 1000행 상한에 걸려 **미래 세션이 잘려** 코치가
+ * "예정된 훈련이 없어요"라고 오답한 사고까지 있었다.
+ *
+ * 안전 규칙 3개(감사로 확인된 두 소비처를 정확히 회피한다):
+ * 1. **되돌리기 창 보존** — `date >= today - 14일` 인 superseded 는 남긴다(`activeOriginal` 재료).
+ * 2. **같은 날 활성 세션이 있으면 남긴다** — 되돌리기는 같은 날짜 원본을 찾으므로 이중 안전.
+ * 3. **목표별 최초 날짜 행은 남긴다** — `scheduleStartDate`(useCoachMoments)가 status 무관 최소 날짜라,
+ *    가장 오래된 행을 지우면 "플랜 시작일"이 뒤로 밀려 과거 런의 추가런 판정이 바뀐다.
+ *
+ * 순수 함수다 — 삭제는 호출부가 이 id 목록으로만 한다(광범위 WHERE 금지).
+ */
+export function findPrunableSupersededIds(
+  sessions: ScheduledSession[],
+  today: string,
+  options?: { windowDays?: number; limit?: number }
+): string[] {
+  const windowDays = options?.windowDays ?? SUPERSEDED_REVERT_WINDOW_DAYS
+  const limit = options?.limit ?? SUPERSEDED_PRUNE_BATCH
+  const cutoff = shiftIsoDate(today, -windowDays)
+  if (!cutoff) return []
+
+  // 규칙 2·3 판정용 인덱스
+  const activeDates = new Set<string>()
+  const earliestDateByGoal = new Map<string, string>()
+  for (const session of sessions) {
+    if (session.status !== 'superseded') activeDates.add(`${session.goalId ?? ''}|${session.date}`)
+    const goalKey = session.goalId ?? ''
+    const current = earliestDateByGoal.get(goalKey)
+    if (!current || session.date < current) earliestDateByGoal.set(goalKey, session.date)
+  }
+
+  return sessions
+    .filter((session) => {
+      if (session.status !== 'superseded') return false
+      if (session.date >= cutoff) return false
+      const goalKey = session.goalId ?? ''
+      if (activeDates.has(`${goalKey}|${session.date}`)) return false
+      if (earliestDateByGoal.get(goalKey) === session.date) return false
+      return true
+    })
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(0, limit)
+    .map((session) => session.id)
+}
+
+/** YYYY-MM-DD 를 일 단위로 이동. 로컬/UTC 혼용 없이 문자열 날짜만 다룬다. */
+function shiftIsoDate(date: string, days: number): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
+  const ms = Date.parse(`${date}T00:00:00Z`)
+  if (!Number.isFinite(ms)) return null
+  return new Date(ms + days * 86400000).toISOString().slice(0, 10)
+}
+
 /** 처방 채택 대상 롱런 계열. */
 const LONG_RUN_SESSION_TYPES = new Set(['LSD', 'Steady Long'])
 /** 처방 채택으로 교정 가능한 저강도 추론 라벨(같은 저강도 계열 — 채점 프레임 왜곡 없음). */

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import {
   findDuplicatePlannedClones,
+  findPrunableSupersededIds,
   isActiveSession,
   isPlannedSession,
   selectBetterTypeMatchForRun,
@@ -11,6 +12,7 @@ import {
 } from '@/entities/training-schedule/model'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import {
+  deleteSupersededSessions,
   fetchTrainingSchedule,
   insertTrainingSessions,
   markPastPlannedMissed,
@@ -20,6 +22,12 @@ import {
   updateScheduledSessionSlot,
   updateScheduledSessionStatus
 } from '@/shared/api/trainingScheduleRepository'
+
+/** 오늘(로컬) YYYY-MM-DD. UTC 변환을 쓰면 자정 근처에서 하루 밀린다. */
+function todayIsoDate(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 /**
  * 날짜축 주기화 스케줄 store (#363). F2 생성기·A1 재정렬·A2 작전 바꾸기가 사용한다.
@@ -76,6 +84,21 @@ export const useTrainingScheduleStore = defineStore('trainingScheduleStore', {
           }
         } catch {
           /* noop */
+        }
+        // 오래된 superseded 행 정리(#661). supersede+insert 부산물이 무한 누적돼 전송량·메모리가 되고,
+        // 실제로 1000행 상한에 걸려 미래 세션이 잘린 사고가 있었다(fetchTrainingSchedule 주석).
+        // 되돌리기 창(14일)·같은 날 활성 세션·목표별 최초 날짜는 판정 함수가 보존한다. 실패는 무해하다.
+        try {
+          const prunableIds = findPrunableSupersededIds(this.sessions, todayIsoDate())
+          if (prunableIds.length) {
+            const removed = await deleteSupersededSessions(prunableIds)
+            if (removed) {
+              const removedSet = new Set(prunableIds)
+              this.sessions = this.sessions.filter((s) => !removedSet.has(s.id))
+            }
+          }
+        } catch {
+          /* noop — 다음 로드에서 재시도된다 */
         }
       } catch (err) {
         this.error = err instanceof Error ? err.message : '훈련 스케줄을 불러오지 못했습니다.'
