@@ -1,4 +1,4 @@
-import type { RunLog, RunType } from '@/entities/run/model'
+import { runDataCount, type RunLog, type RunType } from '@/entities/run/model'
 
 export type RunMetaChip = {
   label: string
@@ -63,9 +63,11 @@ export function getRunFilterTags(run: RunLog, weeklyPattern: string[] = []): Run
 
   tags.push({ value: `source:${run.source}`, label: sourceLabels[run.source] ?? run.source, group: 'source' })
 
-  if (run.laps.length) tags.push({ value: 'data:laps', label: '스플릿 있음', group: 'data' })
-  if (run.metricSamples.length) tags.push({ value: 'data:metrics', label: '차트 데이터 있음', group: 'data' })
-  if (run.routePoints.length) tags.push({ value: 'data:route', label: '경로 있음', group: 'data' })
+  // 목록에서 온 런은 무거운 배열을 안 받아온다(#661) → 서버 개수로 판정한다. 배열 길이만 보면
+  // "데이터 있음" 배지가 전부 사라진다(있는데 안 불러온 것을 없는 것으로 오판).
+  if (runDataCount(run, 'laps')) tags.push({ value: 'data:laps', label: '스플릿 있음', group: 'data' })
+  if (runDataCount(run, 'metricSamples')) tags.push({ value: 'data:metrics', label: '차트 데이터 있음', group: 'data' })
+  if (runDataCount(run, 'routePoints')) tags.push({ value: 'data:route', label: '경로 있음', group: 'data' })
 
   if (run.courseType !== 'Unknown') {
     tags.push({ value: `course:${run.courseType}`, label: `코스 ${run.courseType}`, group: 'course' })
