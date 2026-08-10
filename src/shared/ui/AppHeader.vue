@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '@/app/stores/authStore'
+import { PASSWORD_MIN_LENGTH, passwordTooShortMessage, useAuthStore } from '@/app/stores/authStore'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useLevelStore } from '@/app/stores/levelStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
@@ -403,8 +403,8 @@ function openPasswordPanel() {
 
 async function savePassword() {
   passwordNotice.value = ''
-  if (newPassword.value.length < 6) {
-    authStore.error = '비밀번호는 6자 이상으로 만들어주세요.'
+  if (newPassword.value.length < PASSWORD_MIN_LENGTH) {
+    authStore.error = passwordTooShortMessage
     return
   }
   if (newPassword.value !== newPasswordConfirm.value) {
@@ -682,7 +682,7 @@ function openSettingsPanel(focus: SettingsPanelFocus | null = null) {
     <FormGrid as="form" @submit.prevent="savePassword">
       <label class="full">
         새 비밀번호
-        <ClearableField v-model="newPassword" type="password" autocomplete="new-password" placeholder="6자 이상" required />
+        <ClearableField v-model="newPassword" type="password" autocomplete="new-password" :placeholder="`${PASSWORD_MIN_LENGTH}자 이상`" required />
       </label>
       <label class="full">
         새 비밀번호 확인

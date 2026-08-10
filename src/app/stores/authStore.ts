@@ -214,6 +214,21 @@ export const useAuthStore = defineStore('authStore', {
 })
 
 /**
+ * 비밀번호 최소 길이. **여기 하나만 고치면 검사·안내문·에러 메시지가 함께 움직인다.**
+ *
+ * 왜 한곳에 모으나: 예전엔 숫자 6이 검사 1곳·입력창 안내문 2곳·에러 번역문 1곳에 각각 박혀 있었다.
+ * 그 상태에서 서버(Supabase) 설정만 올리면 **앱은 통과시키고 서버는 거부하는데 안내문은 옛 숫자를
+ * 말하는** 상황이 된다("6자 넘게 넣었는데 왜 안 되지?"). 값의 출처를 하나로 둬서 그 어긋남을 없앤다.
+ *
+ * ⚠️ Supabase 대시보드의 최소 길이와 **같은 값**으로 유지한다. 앱이 더 느슨하면 위 혼란이 재발한다.
+ * 로그인에는 적용하지 않는다 — 예전 규칙으로 만든 짧은 비밀번호 계정이 로그인조차 못 하게 되면 안 된다.
+ */
+export const PASSWORD_MIN_LENGTH = 8
+
+/** 길이 미달 안내문(검사·안내문·에러 번역이 같은 문장을 쓰게 한다). */
+export const passwordTooShortMessage = `비밀번호는 ${PASSWORD_MIN_LENGTH}자 이상으로 만들어주세요.`
+
+/**
  * Supabase 인증 에러를 사용자 말로 옮긴다. 원문은 영어이고 "Invalid login credentials" 처럼
  * 무엇을 고쳐야 할지 알려주지 않는다.
  */
@@ -222,7 +237,7 @@ function authErrorMessage(message: string): string {
   if (text.includes('invalid login credentials')) return '이메일 또는 비밀번호가 맞지 않습니다.'
   if (text.includes('email not confirmed')) return '메일함에서 이메일 확인을 먼저 마쳐주세요.'
   if (text.includes('user already registered')) return '이미 가입된 이메일입니다. 로그인해 주세요.'
-  if (text.includes('password should be at least')) return '비밀번호는 6자 이상으로 만들어주세요.'
+  if (text.includes('password should be at least')) return passwordTooShortMessage
   if (text.includes('for security purposes') || text.includes('rate limit')) return '요청이 잠시 몰렸어요. 잠시 후 다시 시도해 주세요.'
   if (text.includes('provider is not enabled')) return '이 로그인 방식은 아직 준비 중입니다.'
   return message

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { enabledAuthProviders, useAuthStore } from '@/app/stores/authStore'
+import { enabledAuthProviders, PASSWORD_MIN_LENGTH, passwordTooShortMessage, useAuthStore } from '@/app/stores/authStore'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import ClearableField from '@/shared/ui/ClearableField.vue'
 import FormGrid from '@/shared/ui/FormGrid.vue'
@@ -53,6 +53,11 @@ async function submitSignIn() {
 }
 
 async function submitSignUp() {
+  // 길이는 서버도 막지만 여기서 먼저 잡는다 — 왕복 한 번을 줄이고, 영어 원문 대신 우리 문장을 보여준다.
+  if (password.value.length < PASSWORD_MIN_LENGTH) {
+    authStore.error = passwordTooShortMessage
+    return
+  }
   if (password.value !== passwordConfirm.value) {
     authStore.error = '비밀번호 확인이 일치하지 않습니다.'
     return
@@ -128,7 +133,7 @@ async function submitOtpVerify() {
         </label>
         <label class="full">
           비밀번호
-          <ClearableField v-model="password" type="password" autocomplete="new-password" placeholder="6자 이상" required />
+          <ClearableField v-model="password" type="password" autocomplete="new-password" :placeholder="`${PASSWORD_MIN_LENGTH}자 이상`" required />
         </label>
         <label class="full">
           비밀번호 확인
