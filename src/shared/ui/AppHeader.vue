@@ -54,7 +54,7 @@ watch(
     glossaryStore.clearPendingOpen()
   }
 )
-const drawerPanel = ref<'account' | 'profile' | 'settings'>('account')
+const drawerPanel = ref<'account' | 'profile' | 'settings' | 'password'>('account')
 watch(
   () => settingsStore.settingsPanelRequestId,
   (requestId) => {
@@ -384,6 +384,40 @@ async function saveProfile() {
   }
 }
 
+/**
+ * 비밀번호 변경(2026-08-10). 로그인한 상태에서 바꿀 수 있는 자리가 없었다 — store 에 updatePassword 는
+ * 있었지만 화면이 없어서, 비밀번호를 바꾸려면 로그아웃하고 재설정 메일을 받는 길밖에 없었다.
+ * 여기서는 현재 비밀번호를 묻지 않는다(Supabase 세션이 이미 본인 증명이고, 되묻는 화면은 마찰만 늘린다).
+ */
+const newPassword = ref('')
+const newPasswordConfirm = ref('')
+const passwordNotice = ref('')
+
+function openPasswordPanel() {
+  newPassword.value = ''
+  newPasswordConfirm.value = ''
+  passwordNotice.value = ''
+  authStore.error = ''
+  drawerPanel.value = 'password'
+}
+
+async function savePassword() {
+  passwordNotice.value = ''
+  if (newPassword.value.length < 6) {
+    authStore.error = '비밀번호는 6자 이상으로 만들어주세요.'
+    return
+  }
+  if (newPassword.value !== newPasswordConfirm.value) {
+    authStore.error = '비밀번호 확인이 일치하지 않습니다.'
+    return
+  }
+  if (await authStore.updatePassword(newPassword.value)) {
+    newPassword.value = ''
+    newPasswordConfirm.value = ''
+    passwordNotice.value = '비밀번호를 바꿨어요. 다음 로그인부터 새 비밀번호를 쓰세요.'
+  }
+}
+
 function signOutAndClose() {
   closeDrawer()
   emit('signOut')
@@ -535,6 +569,7 @@ function openSettingsPanel(focus: SettingsPanelFocus | null = null) {
 
     <ActionGroup class="drawer-actions">
       <button type="button" @click="drawerPanel = 'profile'">정보수정</button>
+      <button class="ghost" type="button" @click="openPasswordPanel">비밀번호 변경</button>
       <button class="ghost" type="button" @click="signOutAndClose">로그아웃</button>
     </ActionGroup>
   </StackPage>
@@ -633,6 +668,32 @@ function openSettingsPanel(focus: SettingsPanelFocus | null = null) {
     </label>
     <button class="full" type="submit" :disabled="saving">{{ saving ? '저장 중' : '저장' }}</button>
   </FormGrid>
+  </StackPage>
+
+  <StackPage
+    :open="drawerOpen && drawerPanel === 'password'"
+    title="비밀번호 변경"
+    back
+    dismiss-label="계정 정보로 돌아가기"
+    layer-class="stack-layer-top"
+    @close="drawerPanel = 'account'"
+  >
+    <p>새 비밀번호만 넣으면 됩니다. 다음 로그인부터 적용돼요.</p>
+    <FormGrid as="form" @submit.prevent="savePassword">
+      <label class="full">
+        새 비밀번호
+        <ClearableField v-model="newPassword" type="password" autocomplete="new-password" placeholder="6자 이상" required />
+      </label>
+      <label class="full">
+        새 비밀번호 확인
+        <ClearableField v-model="newPasswordConfirm" type="password" autocomplete="new-password" placeholder="다시 한 번" required />
+      </label>
+      <ActionGroup full>
+        <button type="submit" :disabled="authStore.loading">{{ authStore.loading ? '변경 중' : '비밀번호 변경' }}</button>
+      </ActionGroup>
+    </FormGrid>
+    <p v-if="passwordNotice" class="helper">{{ passwordNotice }}</p>
+    <p v-if="authStore.error" class="error">{{ authStore.error }}</p>
   </StackPage>
 
   <StackPage
