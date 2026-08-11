@@ -156,3 +156,63 @@ describe('computeDistancePbs', () => {
     expect(pbs.map((p) => p.distanceM)).toEqual([5000, 10000])
   })
 })
+
+/**
+ * previousElapsedSec — **깨뜨린 직전 기록**. 전리품 카드의 달성 근거("직전 기록 28:46보다 14초 단축")가
+ * 여기서 나온다. 근거를 화면에 적는 순간 틀린 값은 그냥 거짓말이 되므로 성질을 못박는다.
+ */
+describe('computeDistancePbs — 깨뜨린 직전 기록', () => {
+  it('첫 기록은 깰 대상이 없으므로 null', () => {
+    const pbs = computeDistancePbs([makeRun({ id: 'r1', distanceKm: 5, durationSec: 1800, date: '2026-01-01' })])
+    expect(pb(pbs, 'training', 5000)?.previousElapsedSec).toBeNull()
+  })
+
+  it('기록을 갱신하면 이전 보유 기록을 남긴다', () => {
+    const pbs = computeDistancePbs([
+      makeRun({ id: 'r1', distanceKm: 5, durationSec: 1800, date: '2026-01-01' }),
+      makeRun({ id: 'r2', distanceKm: 5, durationSec: 1740, date: '2026-02-01' })
+    ])
+    expect(pb(pbs, 'training', 5000)).toMatchObject({ elapsedSec: 1740, previousElapsedSec: 1800 })
+  })
+
+  it('여러 번 갱신하면 가장 최근에 깬 기록을 가리킨다 (최초 기록이 아니다)', () => {
+    const pbs = computeDistancePbs([
+      makeRun({ id: 'r1', distanceKm: 5, durationSec: 1900, date: '2026-01-01' }),
+      makeRun({ id: 'r2', distanceKm: 5, durationSec: 1800, date: '2026-02-01' }),
+      makeRun({ id: 'r3', distanceKm: 5, durationSec: 1740, date: '2026-03-01' })
+    ])
+    expect(pb(pbs, 'training', 5000)?.previousElapsedSec).toBe(1800)
+  })
+
+  /**
+   * 핵심 함정: PB **이후**에 뛴 더 느린 런은 한 번도 기록이었던 적이 없다. "전체 2위"를 근거로 쓰면
+   * 여기서 1760 이 나오면서 "직전 최고보다 20초 단축"이라는 없던 사실이 만들어진다.
+   */
+  it('PB 이후의 느린 런은 직전 기록이 아니다 (2위 기록과 구별한다)', () => {
+    const pbs = computeDistancePbs([
+      makeRun({ id: 'r1', distanceKm: 5, durationSec: 1800, date: '2026-01-01' }),
+      makeRun({ id: 'r2', distanceKm: 5, durationSec: 1740, date: '2026-02-01' }),
+      makeRun({ id: 'r3', distanceKm: 5, durationSec: 1760, date: '2026-03-01' })
+    ])
+    expect(pb(pbs, 'training', 5000)).toMatchObject({ elapsedSec: 1740, previousElapsedSec: 1800 })
+  })
+
+  it('입력 순서가 뒤죽박죽이어도 시간순 체인으로 계산한다', () => {
+    const runs = [
+      makeRun({ id: 'r3', distanceKm: 5, durationSec: 1740, date: '2026-03-01' }),
+      makeRun({ id: 'r1', distanceKm: 5, durationSec: 1900, date: '2026-01-01' }),
+      makeRun({ id: 'r2', distanceKm: 5, durationSec: 1800, date: '2026-02-01' })
+    ]
+    expect(pb(computeDistancePbs(runs), 'training', 5000)?.previousElapsedSec).toBe(1800)
+  })
+
+  it('훈련/레이싱 체인은 서로 섞이지 않는다', () => {
+    const pbs = computeDistancePbs([
+      makeRun({ id: 'r1', distanceKm: 5, durationSec: 1800, date: '2026-01-01' }),
+      makeRun({ id: 'r2', distanceKm: 5, durationSec: 1500, date: '2026-02-01', tags: ['self-race'] }),
+      makeRun({ id: 'r3', distanceKm: 5, durationSec: 1440, date: '2026-03-01', tags: ['self-race'] })
+    ])
+    expect(pb(pbs, 'training', 5000)?.previousElapsedSec).toBeNull()
+    expect(pb(pbs, 'race', 5000)?.previousElapsedSec).toBe(1500)
+  })
+})

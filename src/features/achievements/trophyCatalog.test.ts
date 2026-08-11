@@ -144,3 +144,41 @@ describe('reconcileTrophySeen', () => {
     expect(newIds.has('pb-42195-training')).toBe(false)
   })
 })
+
+/**
+ * 카드에 적히는 **달성 근거**. 전리품 카드는 자랑거리인데, 예전 문구("출발부터 10K 거리까지 도달한
+ * 최고 기록")는 카드의 *정의*라 어떤 카드에 붙여도 참이었다 — 즉 아무 근거도 아니었다.
+ */
+describe('PB 카드 달성 근거', () => {
+  it('기록을 깼으면 깨뜨린 대상과 단축폭을 적는다', () => {
+    const cards = catalogFor([
+      makeRun({ id: 'r1', distanceKm: 5, durationSec: 1800, date: '2026-01-01' }),
+      makeRun({ id: 'r2', distanceKm: 5, durationSec: 1786, date: '2026-02-01' })
+    ])
+    expect(byId(cards, 'pb-5000-training').description).toBe('직전 기록 30:00보다 14초 단축.')
+  })
+
+  it('1분을 넘는 단축은 분·초로 적는다 (74초보다 몸으로 읽힌다)', () => {
+    const cards = catalogFor([
+      makeRun({ id: 'r1', distanceKm: 5, durationSec: 1800, date: '2026-01-01' }),
+      makeRun({ id: 'r2', distanceKm: 5, durationSec: 1726, date: '2026-02-01' })
+    ])
+    expect(byId(cards, 'pb-5000-training').description).toBe('직전 기록 30:00보다 1분 14초 단축.')
+  })
+
+  it('첫 기록은 깰 대상이 없으므로 측정 방식을 근거로 적는다', () => {
+    const cards = catalogFor([makeRun({ id: 'r1', distanceKm: 5, durationSec: 1800, date: '2026-01-01' })])
+    expect(byId(cards, 'pb-5000-training').description).toBe('첫 5K 기록 — 출발부터 5K 지점까지의 시간으로 잡습니다.')
+  })
+
+  it('미획득 카드는 여는 방법을 적는다 (근거 자리를 비우지 않는다)', () => {
+    const cards = catalogFor([makeRun({ id: 'r1', distanceKm: 5, durationSec: 1800, date: '2026-01-01' })])
+    expect(byId(cards, 'pb-42195-training').description).toContain('완주하면')
+  })
+
+  it('모든 카드는 근거 문구를 갖는다 (카드에 빈 줄이 생기지 않는다)', () => {
+    for (const card of catalogFor([makeRun({ id: 'r1', distanceKm: 12, durationSec: 4000, date: '2026-01-01' })])) {
+      expect(card.description.length).toBeGreaterThan(0)
+    }
+  })
+})

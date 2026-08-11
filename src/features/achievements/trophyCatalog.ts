@@ -1,5 +1,6 @@
 import type { RunLog } from '@/entities/run/model'
 import { DISTANCE_MILESTONES_M, type AchievementContext, type AchievementSet } from '@/shared/lib/achievement/achievements'
+import type { DistancePb } from '@/shared/lib/achievement/distancePb'
 import { formatDuration } from '@/shared/lib/format'
 
 /**
@@ -51,6 +52,32 @@ export type TrophyCardItem = {
 export const CANONICAL_DISTANCES_M = DISTANCE_MILESTONES_M
 
 export const CLUB_TARGETS_KM = [100, 500, 1000] as const
+
+/**
+ * PB 카드의 달성 근거 — **무엇을 깨서 받은 카드인지**를 적는다.
+ *
+ * 예전엔 "출발부터 10K 거리까지 도달한 최고 기록"이라고만 적었다. 그건 카드의 *정의*지 근거가 아니다.
+ * 카드가 자랑거리가 되는 건 "직전 기록 28:46보다 14초 단축" 처럼 **깨뜨린 대상**이 보일 때다.
+ *
+ * 첫 기록이면 깰 대상이 없으므로 그 사실 자체가 근거가 된다(측정 방식을 함께 알려준다 —
+ * 긴 런 안의 10K 구간도 PB 로 잡히는 규칙이 여기서만 설명된다).
+ */
+function pbEvidenceText(pb: DistancePb, label: string): string {
+  const previous = pb.previousElapsedSec
+  if (previous == null) return `첫 ${label} 기록 — 출발부터 ${label} 지점까지의 시간으로 잡습니다.`
+  const gain = Math.round(previous) - Math.round(pb.elapsedSec)
+  // 반올림 때문에 0초가 될 수 있다(교체는 됐는데 표시상 동률) — 그때 "0초 단축"은 자랑이 아니라 버그로 읽힌다.
+  if (gain <= 0) return `직전 기록 ${formatDuration(Math.round(previous))}을 넘어선 최고 기록.`
+  return `직전 기록 ${formatDuration(Math.round(previous))}보다 ${formatGain(gain)} 단축.`
+}
+
+/** 단축폭 — 60초를 넘으면 "74초"보다 "1분 14초"가 몸으로 읽힌다. */
+function formatGain(seconds: number): string {
+  if (seconds < 60) return `${seconds}초`
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return s === 0 ? `${m}분` : `${m}분 ${s}초`
+}
 
 /** 스트릭 카드 획득 문턱 — '연속'의 정의상 최소 2일. */
 const STREAK_EARN_DAYS = 2
@@ -131,9 +158,7 @@ export function buildTrophyCatalog(set: AchievementSet, runs: RunLog[], context:
       earned: !!pb,
       valueText: pb ? formatDuration(Math.round(pb.elapsedSec)) : null,
       statLabel: pb ? '신기록 달성' : null,
-      description: pb
-        ? `출발부터 ${label} 거리까지 도달한 최고 기록.`
-        : `${label} 거리를 완주하면 골드 카드가 열립니다.`,
+      description: pb ? pbEvidenceText(pb, label) : `${label} 거리를 완주하면 골드 카드가 열립니다.`,
       achievedAt: pb ? dateOnly(pb.achievedAt) : null,
       progress: pb ? null : distanceProgress(d),
       fingerprint: pb ? `${Math.round(pb.elapsedSec)}@${pb.achievedAt}` : null
