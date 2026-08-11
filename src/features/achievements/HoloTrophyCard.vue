@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 // 웹컴포넌트 <hover-tilt> 등록 (스프링 물리·터치 처리 내장)
 import 'hover-tilt/vue'
 import TrophyIcon from './TrophyIcon.vue'
@@ -67,6 +67,9 @@ const tilts = computed(() => props.size === 'full')
 /** 뒷면 표시 상태. 카드를 누르면 뒤집힌다(상세에서만 — 그리드에선 누름이 '열기'다). */
 const flipped = ref(false)
 
+/** 뒷면 DOM 존재 여부. 처음 뒤집을 때 비로소 만든다 — 이유는 `htc-reveal` 주석 참고. */
+const hasBack = ref(false)
+
 /**
  * 회전 중 여부. **iOS 에서 3D 회전이 심하게 버벅이던 원인이 여기 있다.**
  *
@@ -82,9 +85,15 @@ function endAnimating() {
   animating.value = false
 }
 
-function onCardClick() {
+async function onCardClick() {
   if (canFlip.value) {
     animating.value = true
+    // 뒷면을 먼저 DOM 에 올리고 다음 프레임에 뒤집는다 — 같은 프레임에 만들면서 돌리면
+    // 뒷면이 래스터되기 전에 회전이 시작돼 첫 프레임이 빈 채로 지나간다.
+    if (!hasBack.value) {
+      hasBack.value = true
+      await nextTick()
+    }
     flipped.value = !flipped.value
     return
   }
@@ -156,9 +165,13 @@ const progressPct = computed(() => {
     :exit-delay="tilts ? 150 : undefined"
   >
     <div
-      class="htc-flip"
-      :class="[`flip-${size}`, { 'is-flipped': flipped, 'can-flip': canFlip, 'is-animating': animating }]"
+      class="htc-reveal"
+      :class="{ 'is-revealing': canFlip, 'is-animating': animating }"
       @animationend="endAnimating"
+    >
+    <div
+      class="htc-flip"
+      :class="[`flip-${size}`, { 'is-flipped': flipped }]"
       @transitionend="endAnimating"
     >
     <component
@@ -219,7 +232,7 @@ const progressPct = computed(() => {
     <!-- 뒷면 — 실물 카드 뒷면처럼 로고와 문양만. 정보는 앞면이 다 갖고 있고, 뒷면에 정보를 또
          쌓으면 카드가 아니라 설명서가 된다. -->
     <button
-      v-if="canFlip"
+      v-if="hasBack"
       type="button"
       class="htc htc-face htc-back"
       :class="[`tier-${card.tier}`, `size-${size}`, { locked: !earned }]"
@@ -237,6 +250,7 @@ const progressPct = computed(() => {
 
       <span class="htc-shine" aria-hidden="true" />
     </button>
+    </div>
     </div>
   </component>
 </template>
@@ -298,6 +312,9 @@ const progressPct = computed(() => {
   text-align: left;
   cursor: pointer;
   overflow: hidden;
+  /* 카드 내부의 무효화가 바깥으로 새지 않게 한다 — 회전 중 합성 범위를 카드로 묶는다.
+     카드는 이미 overflow:hidden 이라 페인트 격리로 잘리는 것도 없다. */
+  contain: paint;
 }
 
 .htc.tier-gold {
@@ -758,48 +775,56 @@ const progressPct = computed(() => {
   font-size: 10.5px;
 }
 
-/* ── 3D 플립 + 등장 회전 ────────────────────────────────────────────
-   `full` 카드는 손에 든 실물 카드처럼 뒤집힌다. 앞/뒤가 같은 상자를 공유해야 두께 없이 한 장으로
-   읽히므로, 앞면이 흐름에서 크기를 정하고 뒷면이 그 위에 absolute 로 겹친다. */
-.htc-flip {
+/* ── 등장 회전(평면) + 3D 뒤집기 ────────────────────────────────────
+   **두 회전을 다른 축·다른 레이어로 나눈 이유가 성능이다.**
+
+   처음엔 등장도 Y축 360° 로 돌렸다. 그러면 반 바퀴 동안 카드 **뒷면이 보이므로 앞·뒷면 두 장을
+   동시에 래스터**해야 하고, `preserve-3d` 가 자손 전부를 3D 컨텍스트로 끌어올려 카드가 단일
+   텍스처로 합성되지 못한다. 그래서 iOS 에서 툭툭 끊겼다(2026-08-11 실기기).
+
+   ⚠️ `requestAnimationFrame` 간격으로는 이걸 못 잡는다 — CSS 애니메이션은 컴포지터에서 돌기
+   때문에 래스터가 밀려도 메인 스레드 rAF 는 16.7ms 로 태연히 찍힌다. 실제로 "드롭 0" 이 나왔는데
+   기기에서는 끊겼다. 프레임 판정은 반드시 트레이스(래스터·합성)로 한다.
+
+   그래서 등장은 **평면 회전**(`rotate`, 3D 컨텍스트 없음)으로 바꿨다 — 한 면만 존재하므로 카드가
+   텍스처 한 장으로 승격되고 GPU 가 돌리기만 한다. 뒷면은 **처음 뒤집을 때 비로소 DOM 에 올린다**
+   (등장 중에는 존재조차 하지 않게). 뒤집기만 진짜 두 면이 필요하므로 그때만 `preserve-3d` 를 쓴다. */
+.htc-reveal {
   position: relative;
-  transform-style: preserve-3d;
-  transition: transform 0.62s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
-.htc-flip.is-animating {
+.htc-reveal.is-revealing {
+  /* fill 은 `backwards` — `both`(forwards 포함)면 애니메이션이 끝난 뒤에도 최종 transform 을
+     붙잡고 있어서 안쪽 뒤집기가 애니메이션에 져서 동작하지 않는다(2026-08-11 실측). */
+  animation: htc-reveal 0.78s cubic-bezier(0.16, 0.9, 0.24, 1) backwards;
+}
+.htc-reveal.is-animating {
   /* 합성 레이어로 승격 — 회전 내내 같은 텍스처를 재사용하게 한다. 멈추면 해제한다(계속 걸어두면
      메모리를 잡고 있고, 정지 상태의 카드는 승격이 필요 없다). */
   will-change: transform;
 }
-/* 회전 중에는 블렌드 합성을 전부 끈다 — 이게 프레임 드랍의 원인이었다.
-   특이성(0,3,0)이 원래 규칙(0,1,0)을 이기므로 !important 없이 덮인다. 멈추면 0.3s 로 되돌아온다. */
-.htc-flip.is-animating .htc-etch,
-.htc-flip.is-animating .htc-shine,
-.htc-flip.is-animating .htc-specular,
-.htc-flip.is-animating .htc-art-foil,
-.htc-flip.is-animating .htc-art-shine {
-  opacity: 0;
-}
-.htc-flip.is-animating .htc {
-  /* 큰 blur 그림자도 회전 중엔 매 프레임 다시 계산된다. 도는 동안만 얇게. */
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.4);
-}
-.htc-etch,
-.htc-shine,
-.htc-specular,
-.htc-art-foil,
-.htc-art-shine {
-  transition: opacity 0.3s ease;
+
+@keyframes htc-reveal {
+  from {
+    /* 시작 배율을 0.45 → 0.72 로 좁혔다. 확대 폭이 크면 그만큼 중간 배율마다 다시 래스터될
+       여지가 커진다. 0.72 에서도 "작게 있다가 커진다"는 충분히 읽힌다. */
+    transform: rotate(-360deg) scale(0.72);
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+  to {
+    transform: rotate(0) scale(1);
+    opacity: 1;
+  }
 }
 
-.htc-flip.can-flip {
-  /* 썸네일에서 눌러 열리는 순간 — 한 바퀴 돌면서 커진다. 카드를 뽑아 든 느낼을 내는 게 목적이라
-     회전은 한 바퀴(360°) 꽉 채우고, 크기는 썸네일 즈음(.45)에서 시작한다. */
-  /* fill 은 `backwards` — `both`(forwards 포함)면 애니메이션이 끝난 뒤에도 최종 transform 을
-     붙잡고 있어서 `.is-flipped { transform: rotateY(180deg) }` 가 **애니메이션에 져서 뒤집히지
-     않는다**(2026-08-11 실측: is-flipped 는 붙는데 transform 은 identity). 끝 상태가 자연
-     상태와 같으므로 forwards 는 필요 없고, 시작 상태만 미리 적용하면 된다. */
-  animation: htc-reveal 0.82s cubic-bezier(0.16, 0.9, 0.24, 1) backwards;
+/* 뒤집기 — 여기만 3D. 앞/뒤가 같은 상자를 공유해야 두께 없이 한 장으로 읽히므로,
+   앞면이 흐름에서 크기를 정하고 뒷면이 그 위에 absolute 로 겹친다. */
+.htc-flip {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.62s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 .htc-flip.is-flipped {
   transform: rotateY(180deg);
@@ -817,19 +842,28 @@ const progressPct = computed(() => {
   text-align: center;
 }
 
-@keyframes htc-reveal {
-  from {
-    transform: rotateY(-360deg) scale(0.45);
-    opacity: 0;
-  }
-  55% {
-    opacity: 1;
-  }
-  to {
-    transform: rotateY(0) scale(1);
-    opacity: 1;
-  }
+/* 회전 중에는 프레임마다 다시 그려지는 레이어를 전부 끈다 — 이게 끊김의 실체였다.
+   블렌드(GPU 독립 합성 불가)뿐 아니라 **동심원·격자 같은 radial/repeating 그라디언트**도 포함한다.
+   특이성(0,3,0)이 원래 규칙(0,1,0)을 이기므로 !important 없이 덮인다. 멈추면 0.3s 로 돌아온다. */
+.htc-reveal.is-animating .htc-etch,
+.htc-reveal.is-animating .htc-shine,
+.htc-reveal.is-animating .htc-specular,
+.htc-reveal.is-animating .htc-art-foil,
+.htc-reveal.is-animating .htc-art-shine,
+.htc-reveal.is-animating .htc-art-rings,
+.htc-reveal.is-animating .htc-art-ground,
+.htc-reveal.is-animating .htc-back-guilloche {
+  opacity: 0;
 }
+.htc-reveal.is-animating .htc {
+  /* 큰 blur 그림자도 회전 중엔 매 프레임 다시 계산된다. 도는 동안만 얇게. */
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.4);
+}
+/* ⚠️ 되돌아올 때 **페이드를 걸지 않는다.** 0.3s 페이드를 걸었더니 회전이 끝난 직후 블렌드 레이어
+   8장이 동시에 서서히 합성되면서 **드롭 프레임 10개가 연속으로** 발생했다(트레이스 실측: 회전
+   구간 드롭 0, 종료 직후 1306~1456ms 구간에 10개). 사용자에게는 "회전 끝에 툭툭 끊긴다"로 보인다.
+   한 프레임에 딱 켜면 비싼 합성이 1회로 끝난다 — 이 레이어들은 opacity 0.2 안팎의 은은한
+   오버레이라서 스냅으로 켜도 팝이 눈에 띄지 않는다. */
 
 /* 카드 뒷면 문양 — 지폐/증서 질감. 동심원(앞면 아트창과 같은 어휘) + 45° 격자.
    앞면과 달리 mix-blend-mode 를 쓰지 않는다 — 뒤집기 중에 합성 비용이 그대로 프레임 드랍이 된다. */
@@ -891,7 +925,7 @@ const progressPct = computed(() => {
     transform: none;
   }
   /* 한 바퀴 회전은 어지럼증을 유발할 수 있는 종류의 움직임이다 — 페이드만 남긴다. */
-  .htc-flip.can-flip {
+  .htc-reveal.is-revealing {
     animation: htc-fade 0.24s ease backwards;
   }
   .htc-flip {
