@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import TrophyTile from './TrophyTile.vue'
-import type { TrophyCardItem, TrophyTier } from './trophyCatalog'
+import TrophyGridCard from './TrophyGridCard.vue'
+import type { TrophyCardItem, TrophyKind, TrophyTier } from './trophyCatalog'
 
 /**
- * 전리품 컬렉션 그리드 (리디자인 ② L2 — README §8).
- * 진행 헤더(획득/전체 + 티어별 카운트 + 진행바) → 필터 칩 → 2열 타일 그리드(미획득=잠금+진행바).
- * 타일 탭 → 카드 상세(L3) 는 부모가 select 이벤트로 연다.
+ * 전리품 컬렉션 그리드 (디자인 "Trophy Collection").
+ *
+ * 진행 헤더 → 필터 칩 → **그룹별 카드 그리드**. 예전엔 14장을 한 그리드에 납작한 타일로 늘어놨는데,
+ * 그러면 "PB 4장 · 마일스톤 4장 · …" 같은 **컬렉션의 구조가 안 보인다**. 획득 동기는 "무엇을 모으는
+ * 중인지"에서 나오므로 4개 묶음(자기기록/마일스톤/스트릭/볼륨)으로 나누고 각 묶음에 티어·설명을 단다.
+ *
+ * 필터는 유지한다 — 그룹은 구조를 보여주고, 필터는 "미획득만" 처럼 목적 있는 탐색을 돕는다.
+ * 필터로 비워진 그룹은 헤더까지 감춰 빈 제목만 남지 않게 한다.
  */
 const props = defineProps<{ cards: TrophyCardItem[] }>()
 defineEmits<{ select: [card: TrophyCardItem] }>()
@@ -30,6 +35,32 @@ const visibleCards = computed(() => {
   if (filter.value === 'locked') return props.cards.filter((c) => !c.earned)
   return props.cards.filter((c) => c.tier === filter.value)
 })
+
+/** 컬렉션 묶음 — 카드 kind 를 사용자가 이해하는 4개 축으로 접는다(볼륨은 주간·월간·클럽을 함께). */
+const GROUPS: { key: string; title: string; desc: string; kinds: TrophyKind[] }[] = [
+  { key: 'pb', title: '자기기록 · PB', desc: '개인 최고 기록을 경신할 때', kinds: ['pb'] },
+  { key: 'milestone', title: '마일스톤 · 첫 달성', desc: '처음 해내는 순간', kinds: ['milestone'] },
+  { key: 'streak', title: '스트릭 · 습관', desc: '연속으로 이어갈 때', kinds: ['streak'] },
+  { key: 'volume', title: '볼륨 · 누적', desc: '쌓아 올린 거리', kinds: ['weekly', 'monthly', 'club'] }
+]
+
+/**
+ * 그룹 티어 라벨 — **그룹 전체가 한 티어일 때만** 표시한다.
+ * 볼륨 그룹은 주간·월간(실버) + 클럽(브론즈)이 섞여서, 최고 티어 하나를 적으면 "SILVER" 라고
+ * 써놓고 브론즈 카드를 함께 보여주는 거짓말이 된다(2026-08-11 실측). 섞이면 라벨을 생략한다.
+ */
+const visibleGroups = computed(() =>
+  GROUPS.map((group) => {
+    const cards = visibleCards.value.filter((card) => group.kinds.includes(card.kind))
+    const tiers = new Set<TrophyTier>(cards.map((card) => card.tier))
+    return {
+      ...group,
+      cards,
+      tier: tiers.size === 1 ? [...tiers][0] : null,
+      earned: cards.filter((card) => card.earned).length
+    }
+  }).filter((group) => group.cards.length > 0)
+)
 </script>
 
 <template>
@@ -58,9 +89,18 @@ const visibleCards = computed(() => {
       </button>
     </div>
 
-    <div class="trophy-collection-grid">
-      <TrophyTile v-for="card in visibleCards" :key="card.id" :card="card" show-progress @select="$emit('select', card)" />
-    </div>
+    <section v-for="group in visibleGroups" :key="group.key" class="trophy-group">
+      <header class="trophy-group-head">
+        <span v-if="group.tier" class="trophy-group-dot" :class="`tier-${group.tier}`" aria-hidden="true" />
+        <h3 class="trophy-group-title">{{ group.title }}</h3>
+        <span v-if="group.tier" class="trophy-group-tier">{{ group.tier.toUpperCase() }}</span>
+        <span class="trophy-group-count">{{ group.earned }}/{{ group.cards.length }}</span>
+        <span class="trophy-group-desc">{{ group.desc }}</span>
+      </header>
+      <div class="trophy-collection-grid">
+        <TrophyGridCard v-for="card in group.cards" :key="card.id" :card="card" @select="$emit('select', card)" />
+      </div>
+    </section>
     <p v-if="!visibleCards.length" class="trophy-collection-empty">이 필터에 해당하는 카드가 없어요.</p>
   </div>
 </template>
@@ -142,10 +182,65 @@ const visibleCards = computed(() => {
   font-weight: 700;
 }
 
+/* 그룹 헤더 — 점(티어) · 제목 · 티어 라벨 · 획득수 · 설명 */
+.trophy-group + .trophy-group {
+  margin-top: 22px;
+}
+.trophy-group-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.trophy-group-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+  align-self: center;
+  background: var(--color-border-strong);
+}
+.trophy-group-dot.tier-gold {
+  background: var(--trophy-gold-chip);
+}
+.trophy-group-dot.tier-silver {
+  background: var(--trophy-silver-chip);
+}
+.trophy-group-dot.tier-bronze {
+  background: var(--trophy-bronze-chip);
+}
+.trophy-group-title {
+  margin: 0;
+  font: 800 14px/1.2 var(--font-sans);
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+.trophy-group-tier {
+  font: 600 10px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  color: var(--color-muted-2);
+}
+.trophy-group-count {
+  font: 700 11px/1 var(--font-mono);
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+.trophy-group-desc {
+  font: 500 11px/1.4 var(--font-sans);
+  color: var(--color-muted-2);
+  word-break: keep-all;
+}
+
 .trophy-collection-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 12px;
+}
+/* 카드 정보량이 많아 좁은 화면에선 2열이 빽빽하다 — 아주 좁을 때만 1열로 떨어뜨린다. */
+@media (max-width: 22rem) {
+  .trophy-collection-grid {
+    grid-template-columns: 1fr;
+  }
 }
 .trophy-collection-empty {
   margin: 18px 1px 0;
