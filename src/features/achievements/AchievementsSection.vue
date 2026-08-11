@@ -507,7 +507,8 @@ const cumulative = computed(() => set.value.cumulative)
 .trophy-pop-leave-active {
   transition: opacity 0.22s ease;
 }
-.trophy-pop-enter-active .trophy-detail,
+/* 등장 연출은 카드가 소유한다(HoloTrophyCard 의 한 바퀴 회전). 여기서 scale 을 또 걸면
+   두 transform 이 겹쳐 회전이 튄다 — 레이어는 배경 페이드만 담당한다. */
 .trophy-pop-leave-active .trophy-detail {
   transition: transform 0.22s ease;
 }
@@ -515,7 +516,6 @@ const cumulative = computed(() => set.value.cumulative)
 .trophy-pop-leave-to {
   opacity: 0;
 }
-.trophy-pop-enter-from .trophy-detail,
 .trophy-pop-leave-to .trophy-detail {
   transform: scale(0.94);
 }
