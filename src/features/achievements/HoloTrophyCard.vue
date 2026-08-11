@@ -164,7 +164,7 @@ const progressPct = computed(() => {
   <component
     :is="tilts ? 'hover-tilt' : 'div'"
     class="htc-frame"
-    :tilt-factor="tilts ? (earned ? 0.9 : 0.5) : undefined"
+    :tilt-factor="tilts ? (earned ? -0.9 : -0.5) : undefined"
     :scale-factor="tilts ? (earned ? 1.05 : 1.025) : undefined"
     :glare-intensity="tilts ? 0 : undefined"
     :exit-delay="tilts ? 150 : undefined"
@@ -518,10 +518,13 @@ const progressPct = computed(() => {
   color: var(--ink);
   filter: drop-shadow(0 4px 6px rgba(70, 60, 30, 0.36));
   /* 카드가 기울 때 엠블럼이 안에서 살짝 어긋나 떠 보인다. 기울기만 키우고 이걸 안 키우면
-     카드가 통짜 판자처럼 돈다. hover-tilt 의 tilt-factor(기본 회전 10°의 배수)와 함께 올린다. */
+     카드가 통짜 판자처럼 돈다.
+     부호가 음수인 이유: 누른 쪽이 **들어가는** 방향으로 기울므로(아래 tilt-factor 주석), 떠 있는
+     엠블럼은 앞으로 나온 쪽(= 누른 곳의 반대편)으로 밀려 보여야 한다. 같은 방향으로 움직이면
+     들어간 쪽으로 파고드는 것처럼 보인다. */
   transform: translate(
-    calc((var(--hover-tilt-x, 0.5) - 0.5) * 8px),
-    calc((var(--hover-tilt-y, 0.5) - 0.5) * 8px)
+    calc((0.5 - var(--hover-tilt-x, 0.5)) * 8px),
+    calc((0.5 - var(--hover-tilt-y, 0.5)) * 8px)
   );
 }
 /* 아트는 픽토그램보다 크게 — 아트창을 채우는 주인공이다. */
