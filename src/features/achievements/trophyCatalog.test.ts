@@ -182,3 +182,39 @@ describe('PB 카드 달성 근거', () => {
     }
   })
 })
+
+/**
+ * 탭(훈련/레이싱) 고유 카드와 통합 집계 카드의 구분.
+ *
+ * 꾸준함·클럽 6장은 훈련/레이싱 **통합** 집계라 어느 탭에서도 획득으로 들어온다. 그래서 탭 카운터가
+ * 14장 전부를 세면, 레이싱으로 400m 만 뛴 계정의 레이싱 탭에 `6/14` 가 뜨고 "누적 1000km 클럽 획득"
+ * 으로 보였다(2026-08-11 사용자 지적). 카운터가 세는 모집단이 이 구분에 달려 있으므로 고정한다.
+ */
+describe('scope — 탭 고유 카드 8장 · 통합 집계 6장', () => {
+  const runs = [makeRun({ id: 'r1', distanceKm: 12, durationSec: 4000, date: '2026-01-01' })]
+
+  it('탭 고유(PB·마일스톤) 8장, 통합 집계(스트릭·주간·월간·클럽) 6장', () => {
+    for (const context of ['training', 'race'] as const) {
+      const cards = catalogFor(runs, context)
+      expect(cards.filter((c) => c.scope === 'context')).toHaveLength(8)
+      expect(cards.filter((c) => c.scope === 'global')).toHaveLength(6)
+    }
+  })
+
+  it('탭 고유는 PB·마일스톤뿐이다 (탭을 바꾸면 값이 바뀌는 카드)', () => {
+    const kinds = new Set(catalogFor(runs, 'training').filter((c) => c.scope === 'context').map((c) => c.kind))
+    expect([...kinds].sort()).toEqual(['milestone', 'pb'])
+  })
+
+  it('통합 집계는 꾸준함·볼륨뿐이다 (탭과 무관하게 같은 값)', () => {
+    const kinds = new Set(catalogFor(runs, 'training').filter((c) => c.scope === 'global').map((c) => c.kind))
+    expect([...kinds].sort()).toEqual(['club', 'monthly', 'streak', 'weekly'])
+  })
+
+  /** 레이싱 기록이 없는 계정: 레이싱 탭의 고유 획득은 0이어야 한다(통합 집계가 섞여 들어오면 안 된다). */
+  it('레이싱 기록이 없으면 레이싱 탭 고유 획득은 0', () => {
+    const trainingOnly = [makeRun({ id: 'r1', distanceKm: 12, durationSec: 4000, date: '2026-01-01' })]
+    const racing = catalogFor(trainingOnly, 'race').filter((c) => c.scope === 'context')
+    expect(racing.filter((c) => c.earned)).toHaveLength(0)
+  })
+})

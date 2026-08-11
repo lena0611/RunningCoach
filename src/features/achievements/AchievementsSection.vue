@@ -38,7 +38,13 @@ watch(
   { immediate: true }
 )
 
-const earnedCount = computed(() => cards.value.filter((c) => c.earned).length)
+/**
+ * 스트립 카운터도 **이 탭 고유 카드만** 센다 — 꾸준함·클럽 6장은 훈련/레이싱 통합 집계라 어느 탭에서도
+ * 획득으로 들어오고, 그걸 함께 세면 레이싱 400m 계정의 레이싱 탭이 `6/14` 로 보인다(2026-08-11 지적).
+ * 통합 집계 카드의 존재는 컬렉션 헤더에서 따로 밝힌다.
+ */
+const contextCards = computed(() => cards.value.filter((c) => c.scope === 'context'))
+const earnedCount = computed(() => contextCards.value.filter((c) => c.earned).length)
 
 /** L1 스트립: 최근 획득 2장 + 다음 잠금 1장 + '+N 더 보기'. */
 const stripCards = computed(() => {
@@ -111,7 +117,7 @@ const cumulative = computed(() => set.value.cumulative)
       <div class="ach-sec-head">
         <span>전리품 카드</span>
         <button type="button" class="ach-strip-count" aria-label="전리품 컬렉션 열기" @click="collectionOpen = true">
-          <strong>{{ earnedCount }}</strong><span class="ach-strip-total">/{{ cards.length }}</span> <span class="ach-strip-arrow">→</span>
+          <strong>{{ earnedCount }}</strong><span class="ach-strip-total">/{{ contextCards.length }}</span> <span class="ach-strip-arrow">→</span>
         </button>
       </div>
       <div class="ach-strip">
