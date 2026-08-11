@@ -26,9 +26,22 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'locked', label: '미획득' }
 ]
 
-const earnedCount = computed(() => props.cards.filter((c) => c.earned).length)
+/**
+ * 진행 카운터는 **이 탭 고유 카드(scope='context')만** 센다.
+ *
+ * 예전엔 14장 전부를 셌다. 그런데 꾸준함·클럽 6장은 훈련/레이싱 **통합** 집계라 어느 탭에서도 획득으로
+ * 들어온다. 그래서 레이싱으로 400m 만 뛴 계정의 레이싱 탭에 `6/14` 가 뜨고 "누적 1000km 클럽 획득"
+ * 으로 보였다(2026-08-11 사용자 지적) — 레이싱 고유 카드는 8장 중 0장인데도.
+ * 탭 카운터가 탭의 성취를 말하게 하고, 통합 집계 6장은 아래 줄에서 따로 밝힌다.
+ */
+const contextCards = computed(() => props.cards.filter((c) => c.scope === 'context'))
+const globalCards = computed(() => props.cards.filter((c) => c.scope === 'global'))
+const earnedCount = computed(() => contextCards.value.filter((c) => c.earned).length)
+const globalEarnedCount = computed(() => globalCards.value.filter((c) => c.earned).length)
 const tierCount = (tier: TrophyTier) => props.cards.filter((c) => c.tier === tier && c.earned).length
-const progressPct = computed(() => (props.cards.length ? Math.round((earnedCount.value / props.cards.length) * 100) : 0))
+const progressPct = computed(() =>
+  contextCards.value.length ? Math.round((earnedCount.value / contextCards.value.length) * 100) : 0
+)
 
 const visibleCards = computed(() => {
   if (filter.value === 'all') return props.cards
@@ -57,7 +70,9 @@ const visibleGroups = computed(() =>
       ...group,
       cards,
       tier: tiers.size === 1 ? [...tiers][0] : null,
-      earned: cards.filter((card) => card.earned).length
+      earned: cards.filter((card) => card.earned).length,
+      // 통합 집계 묶음이면 헤더에 밝힌다 — 이 묶음의 획득은 탭(훈련/레이싱)의 성취가 아니다.
+      isGlobal: cards.every((card) => card.scope === 'global')
     }
   }).filter((group) => group.cards.length > 0)
 )
@@ -66,13 +81,16 @@ const visibleGroups = computed(() =>
 <template>
   <div class="trophy-collection">
     <div class="trophy-collection-head">
-      <span class="trophy-collection-count"><strong>{{ earnedCount }}</strong><span class="trophy-collection-total">/{{ cards.length }}</span></span>
+      <span class="trophy-collection-count"><strong>{{ earnedCount }}</strong><span class="trophy-collection-total">/{{ contextCards.length }}</span></span>
       <div class="trophy-collection-track"><div class="trophy-collection-fill" :style="{ width: `${progressPct}%` }" /></div>
       <div class="trophy-collection-tiers">
         <span class="tier-chip tier-chip-gold">골드 {{ tierCount('gold') }}</span>
         <span class="tier-chip tier-chip-silver">실버 {{ tierCount('silver') }}</span>
         <span class="tier-chip tier-chip-bronze">브론즈 {{ tierCount('bronze') }}</span>
       </div>
+      <p v-if="globalCards.length" class="trophy-collection-shared">
+        훈련·레이싱 전체로 집계되는 공용 카드 <strong>{{ globalEarnedCount }}/{{ globalCards.length }}</strong>장이 함께 있어요.
+      </p>
     </div>
 
     <div class="trophy-collection-filters" role="tablist" aria-label="컬렉션 필터">
@@ -94,6 +112,7 @@ const visibleGroups = computed(() =>
         <span v-if="group.tier" class="trophy-group-dot" :class="`tier-${group.tier}`" aria-hidden="true" />
         <h3 class="trophy-group-title">{{ group.title }}</h3>
         <span v-if="group.tier" class="trophy-group-tier">{{ group.tier.toUpperCase() }}</span>
+        <span v-if="group.isGlobal" class="trophy-group-scope">전체</span>
         <span class="trophy-group-count">{{ group.earned }}/{{ group.cards.length }}</span>
         <span class="trophy-group-desc">{{ group.desc }}</span>
       </header>
@@ -158,6 +177,29 @@ const visibleGroups = computed(() =>
   color: var(--trophy-bronze-chip);
   background: color-mix(in srgb, var(--trophy-bronze-chip) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--trophy-bronze-chip) 38%, transparent);
+}
+
+/* 공용 카드 안내 — 카운터가 탭 고유 카드만 세는 이유를 그 자리에서 설명한다. */
+.trophy-collection-shared {
+  grid-column: 1 / -1;
+  margin: 0;
+  font: 500 12px/1.45 var(--font-sans);
+  color: var(--color-muted-2);
+  word-break: keep-all;
+}
+.trophy-collection-shared strong {
+  color: var(--color-text);
+  font-family: var(--font-mono);
+}
+
+/* 통합 집계 묶음 표식 — "이 묶음은 훈련·레이싱 전체를 본다" */
+.trophy-group-scope {
+  font: 700 9px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  color: var(--color-muted-2);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  padding: 3px 5px;
 }
 
 .trophy-collection-filters {
