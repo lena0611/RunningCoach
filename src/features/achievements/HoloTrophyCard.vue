@@ -609,6 +609,21 @@ const progressPct = computed(() => {
   gap: 5px;
   padding: 7px 8px;
 }
+/* 미획득 진행 스탯은 2열 그리드에서 한 줄에 안 들어간다 — `최장 거리` + `16.2 / 42.2km` 는
+   카드 폭(약 150px 내부)보다 길다. 라벨·값 둘 다 nowrap 이라 접히지도 못하고, 그 결과 카드의
+   **min-content 폭이 트랙(1fr)보다 커져 그리드가 5px 넘치고 스택이 좌우로 흔들렸다**
+   (2026-08-11 실기기: 카드 아닌 영역을 좌우로 끌면 화면이 흔들림).
+   글자를 자르거나 폰트를 더 줄이는 대신 **의도적으로 2줄로 쌓는다** — 우연한 줄바꿈과 달리
+   라벨의 뜻이 깨지지 않고 값도 온전하다. 획득 카드는 값이 짧아(`28:57`) 한 줄을 유지한다. */
+.htc.size-grid.locked .htc-stat {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+.htc.size-grid.locked .htc-stat-value {
+  margin-left: 0;
+  text-align: left;
+}
 
 /* 근거 설명 — 2줄로 묶는다. 2열 그리드에선 카드가 좁아 3줄이 되면 푸터를 밀어낸다. */
 .htc-why {

@@ -171,9 +171,21 @@ describe('PB 카드 달성 근거', () => {
     expect(byId(cards, 'pb-5000-training').description).toBe('첫 5K 기록 — 출발부터 5K 지점까지의 시간으로 잡습니다.')
   })
 
-  it('미획득 카드는 여는 방법을 적는다 (근거 자리를 비우지 않는다)', () => {
-    const cards = catalogFor([makeRun({ id: 'r1', distanceKm: 5, durationSec: 1800, date: '2026-01-01' })])
-    expect(byId(cards, 'pb-42195-training').description).toContain('완주하면')
+  /**
+   * 미획득 문구는 **한 줄에 들어가게 짧게** 쓴다(2열 그리드 근거 줄 폭 약 150px). 2줄이 되면 그만큼
+   * 아트창이 눌려 잠금 트로피가 확 작아진다. 그래서 길이 상한까지 함께 고정한다.
+   */
+  it('미획득 카드는 여는 방법을 한 줄로 적는다 (근거 자리를 비우지 않는다)', () => {
+    const card = byId(catalogFor([makeRun({ id: 'r1', distanceKm: 5, durationSec: 1800, date: '2026-01-01' })]), 'pb-42195-training')
+    expect(card.description).toMatch(/열립니다|열려요/)
+    expect(card.description).toContain('풀')
+    expect(card.description.length).toBeLessThanOrEqual(16)
+  })
+
+  it('모든 미획득 문구가 한 줄 길이 안에 있다', () => {
+    const locked = catalogFor([makeRun({ id: 'r1', distanceKm: 5, durationSec: 1800, date: '2026-01-01' })]).filter((c) => !c.earned)
+    expect(locked.length).toBeGreaterThan(0)
+    for (const card of locked) expect(card.description.length).toBeLessThanOrEqual(20)
   })
 
   it('모든 카드는 근거 문구를 갖는다 (카드에 빈 줄이 생기지 않는다)', () => {

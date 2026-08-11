@@ -79,7 +79,14 @@ function formatGain(seconds: number): string {
   return s === 0 ? `${m}분` : `${m}분 ${s}초`
 }
 
-/** 스트릭 카드 획득 문턱 — '연속'의 정의상 최소 2일. */
+/**
+ * ⚠️ 미획득 안내 문구는 **한 줄에 들어가게** 짧게 쓴다.
+ *
+ * 2열 그리드 카드의 근거 줄은 폭이 약 150px 다. 여기서 문구가 2줄이 되면 그만큼 아트창이 눌려
+ * 잠금 카드의 트로피가 획득 카드보다 확 작아진다(카드 높이는 aspect-ratio 로 고정이고 아트창이
+ * 남는 공간을 흡수하기 때문). 티어는 그룹 헤더와 칩이 이미 말해주므로 문구에서 뺐다.
+ *
+ * 스트릭 카드 획득 문턱 — '연속'의 정의상 최소 2일. */
 const STREAK_EARN_DAYS = 2
 
 export function distanceLabel(distanceM: number): string {
@@ -158,7 +165,7 @@ export function buildTrophyCatalog(set: AchievementSet, runs: RunLog[], context:
       earned: !!pb,
       valueText: pb ? formatDuration(Math.round(pb.elapsedSec)) : null,
       statLabel: pb ? '신기록 달성' : null,
-      description: pb ? pbEvidenceText(pb, label) : `${label} 거리를 완주하면 골드 카드가 열립니다.`,
+      description: pb ? pbEvidenceText(pb, label) : `${label} 완주 시 열립니다.`,
       achievedAt: pb ? dateOnly(pb.achievedAt) : null,
       progress: pb ? null : distanceProgress(d),
       fingerprint: pb ? `${Math.round(pb.elapsedSec)}@${pb.achievedAt}` : null
@@ -181,7 +188,7 @@ export function buildTrophyCatalog(set: AchievementSet, runs: RunLog[], context:
       statLabel: ms ? '완주 달성' : null,
       description: ms
         ? `처음으로 ${label} 거리를 완주했습니다.`
-        : `${label} 거리를 완주하면 골드 카드가 열립니다.`,
+        : `${label} 완주 시 열립니다.`,
       achievedAt: ms ? dateOnly(ms.achievedAt) : null,
       progress: ms ? null : distanceProgress(d),
       fingerprint: ms ? ms.achievedAt : null
@@ -203,7 +210,7 @@ export function buildTrophyCatalog(set: AchievementSet, runs: RunLog[], context:
     statLabel: streakEarned ? `${streak!.days}일 무결` : null,
     description: streakEarned
       ? `${streak!.days}일 연속 하루도 거르지 않고 달렸어요.`
-      : '이틀 연속 달리면 실버 카드가 열립니다.',
+      : '이틀 연속 달리면 열려요.',
     achievedAt: streakEarned ? dateOnly(streak!.end) : null,
     progress: streakEarned
       ? null
@@ -226,7 +233,7 @@ export function buildTrophyCatalog(set: AchievementSet, runs: RunLog[], context:
     statLabel: weeklyEarned ? '주간 최다 갱신' : null,
     description: weeklyEarned
       ? `한 주에 ${trimKm(weekly!.distanceKm)}km — 최고 기록 주간.`
-      : '첫 러닝을 기록하면 실버 카드가 열립니다.',
+      : '첫 러닝을 기록하면 열려요.',
     achievedAt: weeklyEarned ? weekly!.periodStart : null,
     progress: null,
     fingerprint: weeklyEarned ? `${weekly!.distanceKm}@${weekly!.periodStart}` : null
@@ -247,7 +254,7 @@ export function buildTrophyCatalog(set: AchievementSet, runs: RunLog[], context:
     statLabel: monthlyEarned ? '월간 최다 갱신' : null,
     description: monthlyEarned
       ? `한 달에 ${trimKm(monthly!.distanceKm)}km — 최고 기록 월간.`
-      : '첫 러닝을 기록하면 실버 카드가 열립니다.',
+      : '첫 러닝을 기록하면 열려요.',
     achievedAt: monthlyEarned ? monthly!.periodStart : null,
     progress: null,
     fingerprint: monthlyEarned ? `${monthly!.distanceKm}@${monthly!.periodStart}` : null
@@ -270,7 +277,7 @@ export function buildTrophyCatalog(set: AchievementSet, runs: RunLog[], context:
       statLabel: earned ? '클럽 가입' : null,
       description: earned
         ? `평생 누적 ${trimKm(lifetimeKm)}km — ${target}km 클럽 멤버.`
-        : `누적 ${target}km를 달리면 브론즈 카드가 열립니다.`,
+        : `누적 ${target}km에서 열립니다.`,
       achievedAt: dateOnly(achievedAt),
       progress: earned
         ? null
