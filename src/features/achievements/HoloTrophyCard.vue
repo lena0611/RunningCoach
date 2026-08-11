@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 // 웹컴포넌트 <hover-tilt> 등록 (스프링 물리·터치 처리 내장)
 import 'hover-tilt/vue'
 import TrophyIcon from './TrophyIcon.vue'
 import { trophyArtFor } from './trophyArt'
-import type { TrophyCardItem } from './trophyCatalog'
+import type { TrophyCardItem, TrophyKind } from './trophyCatalog'
 
 /**
  * 전리품 카드 — **앱에서 전리품 카드가 나오는 모든 자리가 이 컴포넌트 하나다** (디자인 핸드오프
@@ -41,12 +41,43 @@ const props = withDefaults(
     size?: 'thumb' | 'grid' | 'full'
     /** 모달처럼 눌러서 갈 곳이 없는 자리에선 false — 아무 일도 안 하는 버튼을 만들지 않는다. */
     clickable?: boolean
+    /**
+     * 뒤집을 수 있는 카드(뒷면 보유). 기본은 `full` 만 — 실물 카드처럼 뒤집는 건 카드 하나를
+     * 손에 든 상태(상세)에서 의미가 있고, 그리드/스트립에서 카드가 뒤집히면 목록이 소란스러워진다.
+     */
+    flippable?: boolean
   }>(),
-  { size: 'grid', clickable: true }
+  { size: 'grid', clickable: true, flippable: undefined }
 )
-defineEmits<{ select: [] }>()
+const emit = defineEmits<{ select: [] }>()
 
 const earned = computed(() => props.card.earned)
+const canFlip = computed(() => props.flippable ?? props.size === 'full')
+
+/** 뒷면 표시 상태. 카드를 누르면 뒤집힌다(상세에서만 — 그리드에선 누름이 '열기'다). */
+const flipped = ref(false)
+
+/**
+ * 발급 규칙 — "이 카드는 어떻게 나오나". 앞면의 근거(내가 **왜 받았나**)와 다른 정보라서 뒷면에 둔다.
+ * 뒷면이 앞면의 반복이면 뒤집을 이유가 없다.
+ */
+const RULE_BY_KIND: Record<TrophyKind, string> = {
+  pb: '이 거리의 최고 기록을 경신할 때 발급됩니다. 긴 러닝 안의 해당 거리 구간도 기록으로 셉니다.',
+  milestone: '이 거리를 처음 완주하는 순간 한 번만 발급됩니다.',
+  streak: '하루도 거르지 않은 연속 일수가 최고치를 넘을 때 갱신됩니다.',
+  weekly: '한 주 누적 거리가 최고치를 넘을 때 갱신됩니다.',
+  monthly: '한 달 누적 거리가 최고치를 넘을 때 갱신됩니다.',
+  club: '평생 누적 거리가 목표에 도달할 때 발급됩니다.'
+}
+const ruleText = computed(() => RULE_BY_KIND[props.card.kind])
+
+function onCardClick() {
+  if (canFlip.value) {
+    flipped.value = !flipped.value
+    return
+  }
+  if (props.clickable) emit('select')
+}
 const isThumb = computed(() => props.size === 'thumb')
 
 /** 카드 전용 아트(금속 릴리프). 없는 카드는 픽토그램으로 폴백한다 — 수치가 각인돼 돌려 쓸 수 없다. */
@@ -102,18 +133,19 @@ const progressPct = computed(() => {
 <template>
   <hover-tilt
     class="htc-frame"
-    :tilt-factor="earned ? 0.4 : 0.2"
-    :scale-factor="earned ? 1.03 : 1.01"
+    :tilt-factor="earned ? 0.9 : 0.5"
+    :scale-factor="earned ? 1.05 : 1.025"
     :glare-intensity="0"
     :exit-delay="150"
   >
+    <div class="htc-flip" :class="[`flip-${size}`, { 'is-flipped': flipped, 'can-flip': canFlip }]">
     <component
-      :is="clickable ? 'button' : 'div'"
-      :type="clickable ? 'button' : undefined"
-      class="htc"
+      :is="clickable || canFlip ? 'button' : 'div'"
+      :type="clickable || canFlip ? 'button' : undefined"
+      class="htc htc-face htc-front"
       :class="[`tier-${card.tier}`, `size-${size}`, { locked: !earned }]"
-      :aria-label="`${card.title} — ${earned ? '획득' : '미획득'}`"
-      @click="clickable && $emit('select')"
+      :aria-label="canFlip ? `${card.title} — 뒤집어 발급 규칙 보기` : `${card.title} — ${earned ? '획득' : '미획득'}`"
+      @click="onCardClick"
     >
       <span class="htc-etch" aria-hidden="true" />
       <span class="htc-inner-frame" aria-hidden="true" />
@@ -161,6 +193,43 @@ const progressPct = computed(() => {
       <span class="htc-shine" aria-hidden="true" />
       <span class="htc-specular" aria-hidden="true" />
     </component>
+
+    <!-- 뒷면 — 실물 카드처럼 카드지·티어 보더는 같고, 문양과 "이 카드는 어떻게 나오나"가 들어간다. -->
+    <button
+      v-if="canFlip"
+      type="button"
+      class="htc htc-face htc-back"
+      :class="[`tier-${card.tier}`, `size-${size}`, { locked: !earned }]"
+      :aria-label="`${card.title} 뒷면 — 앞면으로 돌리기`"
+      @click="onCardClick"
+    >
+      <span class="htc-etch" aria-hidden="true" />
+      <span class="htc-inner-frame" aria-hidden="true" />
+      <span class="htc-back-guilloche" aria-hidden="true" />
+
+      <span class="htc-back-brand">PACELAB</span>
+      <span class="htc-back-sub">TROPHY COLLECTION</span>
+
+      <span class="htc-back-seal">
+        <span class="htc-back-seal-tier">{{ earned ? card.tier.toUpperCase() : 'LOCKED' }}</span>
+        <span class="htc-back-seal-metric">{{ metric }}</span>
+      </span>
+
+      <span class="htc-back-rule">{{ ruleText }}</span>
+
+      <span class="htc-back-meta">
+        <span>집계 범위</span>
+        <strong>{{ card.scopeLabel }}</strong>
+      </span>
+
+      <span class="htc-foot">
+        <span>{{ dateText }}</span>
+        <span>{{ earned ? 'HOLO' : '잠금' }}</span>
+      </span>
+
+      <span class="htc-shine" aria-hidden="true" />
+    </button>
+    </div>
   </hover-tilt>
 </template>
 
@@ -168,7 +237,11 @@ const progressPct = computed(() => {
 .htc-frame {
   display: block;
   width: 100%;
-  touch-action: none;
+  /* `none` 이면 **카드 위에서 시작한 터치 드래그를 카드가 삼켜** 페이지가 스크롤되지 않는다.
+     컬렉션은 화면 전체가 카드라서 스크롤할 여백이 아예 없었다(2026-08-11 실기기: 컬렉션 스크롤 불가).
+     데스크톱 휠로는 멀쩡히 스크롤돼서 QA에서 안 잡혔다. 세로 팬은 브라우저에 넘기고, 틸트는
+     그 외 포인터 이동으로 계속 동작한다. */
+  touch-action: pan-y;
 }
 
 /* 카드지 팔레트 — 티어별. 밝은 종이 + 어두운 잉크(디자인 "Trophy Collection"). */
@@ -421,9 +494,11 @@ const progressPct = computed(() => {
   z-index: 1;
   color: var(--ink);
   filter: drop-shadow(0 4px 6px rgba(70, 60, 30, 0.36));
+  /* 카드가 기울 때 엠블럼이 안에서 살짝 어긋나 떠 보인다. 기울기만 키우고 이걸 안 키우면
+     카드가 통짜 판자처럼 돈다. hover-tilt 의 tilt-factor(기본 회전 10°의 배수)와 함께 올린다. */
   transform: translate(
-    calc((var(--hover-tilt-x, 0.5) - 0.5) * 5px),
-    calc((var(--hover-tilt-y, 0.5) - 0.5) * 5px)
+    calc((var(--hover-tilt-x, 0.5) - 0.5) * 8px),
+    calc((var(--hover-tilt-y, 0.5) - 0.5) * 8px)
   );
 }
 /* 아트는 픽토그램보다 크게 — 아트창을 채우는 주인공이다. */
@@ -432,6 +507,11 @@ const progressPct = computed(() => {
   height: auto;
   aspect-ratio: 1;
   object-fit: contain;
+  /* 아트창(`overflow:hidden`)보다 커지면 트로피가 위아래로 잘린다 — 잠금 카드에서 스탯 값이 2줄이
+     되며 아트창이 납작해지자 실제로 컵 상단과 받침이 잘려 나갔다(2026-08-11 실기기). 폭 기준
+     정사각이라 창이 짧아지는 순간 반드시 넘친다. 창 높이를 상한으로 걸어 항상 안에 들어오게 한다. */
+  max-height: 100%;
+  max-width: 100%;
 }
 /* 잠금은 채도를 빼 "아직 못 받은 것"으로 읽힌다.
    ⚠️ 선택자를 `img.` 로 좁힌 이유: 아트 <img> 는 클래스가 `htc-emblem htc-emblem-art` 둘 다라서,
@@ -489,9 +569,19 @@ const progressPct = computed(() => {
   font: 800 12px/1 var(--font-mono);
   color: var(--ink);
   font-variant-numeric: tabular-nums;
-  /* 값이 길면 값이 줄바꿈된다 — 라벨을 쪼개는 것보다 낫다(라벨은 뜻이 깨지고, 값은 안 깨진다). */
   text-align: right;
   min-width: 0;
+  /* 값도 접지 않는다 — `16.2 / 21.1km` 이 2줄로 접히면서 스탯 행이 두 배가 되고, 그만큼
+     아트창이 눌려 트로피가 잘렸다(2026-08-11 실기기). 라벨·값 둘 다 한 줄로 두고,
+     2열 그리드에서 둘이 함께 들어갈 만큼만 값을 줄인다. */
+  white-space: nowrap;
+}
+.htc.size-grid .htc-stat-value {
+  font-size: 11px;
+}
+.htc.size-grid .htc-stat {
+  gap: 5px;
+  padding: 7px 8px;
 }
 
 /* 근거 설명 — 2줄로 묶는다. 2열 그리드에선 카드가 좁아 3줄이 되면 푸터를 밀어낸다. */
@@ -661,9 +751,165 @@ const progressPct = computed(() => {
   font-size: 10.5px;
 }
 
+/* ── 3D 플립 + 등장 회전 ────────────────────────────────────────────
+   `full` 카드는 손에 든 실물 카드처럼 뒤집힌다. 앞/뒤가 같은 상자를 공유해야 두께 없이 한 장으로
+   읽히므로, 앞면이 흐름에서 크기를 정하고 뒷면이 그 위에 absolute 로 겹친다. */
+.htc-flip {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.62s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.htc-flip.can-flip {
+  /* 썸네일에서 눌러 열리는 순간 — 한 바퀴 돌면서 커진다. 카드를 뽑아 든 느낼을 내는 게 목적이라
+     회전은 한 바퀴(360°) 꽉 채우고, 크기는 썸네일 즈음(.45)에서 시작한다. */
+  /* fill 은 `backwards` — `both`(forwards 포함)면 애니메이션이 끝난 뒤에도 최종 transform 을
+     붙잡고 있어서 `.is-flipped { transform: rotateY(180deg) }` 가 **애니메이션에 져서 뒤집히지
+     않는다**(2026-08-11 실측: is-flipped 는 붙는데 transform 은 identity). 끝 상태가 자연
+     상태와 같으므로 forwards 는 필요 없고, 시작 상태만 미리 적용하면 된다. */
+  animation: htc-reveal 0.72s cubic-bezier(0.16, 0.9, 0.24, 1) backwards;
+}
+.htc-flip.is-flipped {
+  transform: rotateY(180deg);
+}
+.htc-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.htc-back {
+  position: absolute;
+  inset: 0;
+  transform: rotateY(180deg);
+  /* 뒷면은 아트창이 없어 콘텐츠가 위아래로 흩어진다 — 인쇄물처럼 중앙 정렬로 모은다. */
+  align-items: center;
+  text-align: center;
+}
+
+@keyframes htc-reveal {
+  from {
+    transform: rotateY(-360deg) scale(0.45);
+    opacity: 0;
+  }
+  55% {
+    opacity: 1;
+  }
+  to {
+    transform: rotateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* 길로시 문양 — 지폐/증서의 뒷면 질감. 앞면 아트창의 동심원과 같은 어휘를 쓴다. */
+.htc-back-guilloche {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.55;
+  background:
+    radial-gradient(
+      circle at 50% 46%,
+      transparent 0 26px,
+      var(--ring) 26px 27px,
+      transparent 27px 52px,
+      var(--ring) 52px 53px,
+      transparent 53px 84px,
+      var(--ring) 84px 85px,
+      transparent 85px 122px,
+      var(--ring) 122px 123px,
+      transparent 123px
+    ),
+    repeating-linear-gradient(45deg, transparent 0 9px, var(--ring) 9px 10px, transparent 10px 19px);
+}
+
+.htc-back-brand,
+.htc-back-sub,
+.htc-back-seal,
+.htc-back-rule,
+.htc-back-meta {
+  position: relative;
+  z-index: 4;
+}
+.htc-back-brand {
+  margin-top: 6px;
+  font: 800 15px/1 var(--font-mono);
+  letter-spacing: 0.22em;
+  color: var(--ink);
+}
+.htc-back-sub {
+  margin-top: 5px;
+  font: 600 8.5px/1 var(--font-mono);
+  letter-spacing: 0.24em;
+  color: var(--sub-ink);
+}
+/* 봉인 — 티어와 카드 번호(거리·클럽 값)를 눌러 찍은 자리 */
+.htc-back-seal {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: auto 0;
+  padding: 14px 18px;
+  border: 1.5px var(--frame-style) var(--edge-in);
+  border-radius: 999px;
+  background: var(--stat-bg);
+}
+.htc-back-seal-tier {
+  font: 800 11px/1 var(--font-mono);
+  letter-spacing: 0.16em;
+  color: var(--chip-ink);
+}
+.htc-back-seal-metric {
+  font: 800 17px/1 var(--font-mono);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.htc-back-rule {
+  /* auto 마진을 여기 또 걸면 봉인·규칙·푸터 세 곳이 남는 공간을 나눠 먹어 봉인과 규칙 사이에
+     빈 구멍이 생긴다(2026-08-11 실측). 봉인이 가운데를 잡고, 규칙은 그 바로 아래에 붙는다. */
+  margin-top: 12px;
+  font: 500 11px/1.5 var(--font-sans);
+  color: var(--sub-ink);
+  word-break: keep-all;
+}
+.htc-back-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 10px;
+  padding: 7px 10px;
+  border: 1px solid var(--stat-edge);
+  border-radius: 7px;
+  background: var(--stat-bg);
+  font: 600 10px/1 var(--font-sans);
+  color: var(--sub-ink);
+}
+.htc-back-meta strong {
+  font: 800 10.5px/1 var(--font-mono);
+  color: var(--ink);
+}
+.htc-back .htc-foot {
+  width: 100%;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .htc-emblem {
     transform: none;
+  }
+  /* 한 바퀴 회전은 어지럼증을 유발할 수 있는 종류의 움직임이다 — 페이드만 남긴다. */
+  .htc-flip.can-flip {
+    animation: htc-fade 0.24s ease backwards;
+  }
+  .htc-flip {
+    transition: none;
+  }
+  @keyframes htc-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 }
 </style>

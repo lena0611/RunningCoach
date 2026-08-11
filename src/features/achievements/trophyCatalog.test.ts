@@ -182,3 +182,32 @@ describe('PB 카드 달성 근거', () => {
     }
   })
 })
+
+/**
+ * 집계 범위 라벨 — 카드 뒷면에 적힌다.
+ *
+ * 꾸준함·클럽 카드는 훈련/레이싱 **통합** 집계라 레이싱 탭에서도 획득으로 뜬다. 그래서 레이싱으로
+ * 400m 만 뛴 계정이 "누적 1000km 클럽 획득"으로 보였다(2026-08-11 실기기 지적). 카드가 자기
+ * 집계 범위를 말하면 그 오해가 카드 단위에서 먼저 풀린다.
+ */
+describe('scopeLabel — 카드가 무엇을 집계했는지 말한다', () => {
+  const runs = [makeRun({ id: 'r1', distanceKm: 12, durationSec: 4000, date: '2026-01-01' })]
+
+  it('PB·마일스톤은 탭(훈련/레이싱)을 따라간다', () => {
+    expect(byId(catalogFor(runs, 'training'), 'pb-5000-training').scopeLabel).toBe('훈련 기록')
+    expect(byId(catalogFor(runs, 'race'), 'pb-5000-race').scopeLabel).toBe('레이싱 기록')
+  })
+
+  it('꾸준함·클럽은 탭과 무관하게 전체 집계라고 밝힌다', () => {
+    for (const context of ['training', 'race'] as const) {
+      const cards = catalogFor(runs, context)
+      for (const id of ['streak', 'weekly-volume', 'monthly-volume', 'club-100', 'club-500', 'club-1000']) {
+        expect(byId(cards, id).scopeLabel).toBe('훈련·레이싱 전체')
+      }
+    }
+  })
+
+  it('모든 카드가 집계 범위를 갖는다 (뒷면에 빈칸이 생기지 않는다)', () => {
+    for (const card of catalogFor(runs, 'training')) expect(card.scopeLabel.length).toBeGreaterThan(0)
+  })
+})
