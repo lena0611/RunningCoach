@@ -92,6 +92,9 @@ const progressPct = computed(() => {
       </span>
 
       <span class="tgc-stat">
+        <span v-if="earned" class="tgc-stat-check" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9 17.5 20 6.5" /></svg>
+        </span>
         <span class="tgc-stat-label">{{ statLabel }}</span>
         <span class="tgc-stat-value">{{ statValue }}</span>
       </span>
@@ -99,6 +102,9 @@ const progressPct = computed(() => {
       <span v-if="!earned && card.progress" class="tgc-progress" aria-hidden="true">
         <span class="tgc-progress-fill" :style="{ width: `${progressPct}%` }" />
       </span>
+
+      <!-- 달성 근거 — 획득이면 "무엇으로 받았나", 미획득이면 "어떻게 열리나". 둘 다 카드에 남을 값이다. -->
+      <span v-if="card.description" class="tgc-why">{{ card.description }}</span>
 
       <span class="tgc-foot">
         <span>{{ dateText }}</span>
@@ -146,7 +152,9 @@ const progressPct = computed(() => {
   flex-direction: column;
   gap: 0;
   width: 100%;
-  aspect-ratio: 240 / 290;
+  /* 근거 설명 한 줄이 들어가면서 240/290 에서 높아졌다 — 아트창을 깎는 대신 카드를 키웠다.
+     아트가 이 카드의 주인공이고, 그리드 카드에서 아트가 작아지면 컬렉션의 인상이 무너진다. */
+  aspect-ratio: 240 / 330;
   padding: 12px 12px 11px;
   border: 2px var(--frame-style) var(--edge);
   border-radius: 16px;
@@ -248,6 +256,7 @@ const progressPct = computed(() => {
 .tgc-art,
 .tgc-stat,
 .tgc-progress,
+.tgc-why,
 .tgc-foot {
   position: relative;
   z-index: 4;
@@ -398,6 +407,22 @@ const progressPct = computed(() => {
   border-radius: 7px;
   background: var(--stat-bg);
 }
+/* 체크 — "달성했다"를 아이콘으로 한 번 더 말한다(라벨만으론 상태가 안 읽힌다) */
+.tgc-stat-check {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-edge);
+  color: var(--chip-ink);
+  flex: none;
+}
+.tgc-stat-check svg {
+  width: 9px;
+  height: 9px;
+}
 .tgc-stat-label {
   font: 600 10.5px/1 var(--font-sans);
   color: var(--sub-ink);
@@ -407,6 +432,19 @@ const progressPct = computed(() => {
   font: 800 12px/1 var(--font-mono);
   color: var(--ink);
   font-variant-numeric: tabular-nums;
+}
+
+/* 근거 설명 — 2줄로 묶는다. 2열 그리드에선 카드가 좁아 3줄이 되면 푸터를 밀어낸다. */
+.tgc-why {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  margin-top: 7px;
+  font: 500 9.5px/1.42 var(--font-sans);
+  color: var(--sub-ink);
+  word-break: keep-all;
 }
 
 .tgc-progress {
@@ -428,7 +466,9 @@ const progressPct = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 8px;
+  /* 근거가 1줄이든 2줄이든 푸터는 카드 바닥에 붙는다 — 카드마다 푸터 높이가 다르면 그리드가 어수선하다. */
+  margin-top: auto;
+  padding-top: 8px;
   padding-top: 8px;
   border-top: 1px solid var(--stat-edge);
   font: 600 9px/1 var(--font-mono);

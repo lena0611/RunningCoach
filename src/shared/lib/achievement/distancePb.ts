@@ -24,6 +24,14 @@ export type DistancePb = {
   runId: string
   /** 달성 시각 (run.startAt ?? run.date). 동률 tie-break 및 노출용. */
   achievedAt: string
+  /**
+   * 이 기록이 **깨뜨린 직전 기록** (초). 첫 기록이면 null.
+   *
+   * ⚠️ "전체 2위 기록"이 아니다. PB 이후에 뛴 더 느린 런은 한 번도 기록이었던 적이 없으므로
+   * 2위를 근거로 쓰면 "직전 최고보다 단축"이 거짓이 된다. 그래서 런을 **시간순으로** 훑어
+   * 기록이 실제로 갈아치워지는 순간의 이전 보유 기록만 남긴다.
+   */
+  previousElapsedSec: number | null
 }
 
 const SELF_RACE_TAG = 'self-race'
@@ -54,7 +62,14 @@ export function computeDistancePbs(runs: RunLog[], stepM = 5000, extraDistancesM
 
 function computeForContext(runs: RunLog[], context: PbContext, stepM: number, extraDistancesM: number[]): DistancePb[] {
   const best = new Map<number, DistancePb>()
-  for (const run of runs) {
+  // 시간순 — previousElapsedSec(깨뜨린 직전 기록)이 성립하려면 기록 갱신 체인을 순서대로 밟아야 한다.
+  const ordered = [...runs].sort((a, b) => {
+    const left = a.startAt ?? a.date
+    const right = b.startAt ?? b.date
+    if (left !== right) return left < right ? -1 : 1
+    return a.id < b.id ? -1 : 1
+  })
+  for (const run of ordered) {
     const totalM = (run.distanceKm ?? 0) * 1000
     if (totalM < stepM) continue // 최단 버킷도 못 채우는 거리미달 런은 PB 후보 아님
     const reach = buildReachFn(run, totalM)
@@ -69,7 +84,10 @@ function computeForContext(runs: RunLog[], context: PbContext, stepM: number, ex
       if (sec == null || !Number.isFinite(sec) || sec <= 0) continue
       const cur = best.get(d)
       if (!cur || sec < cur.elapsedSec || (sec === cur.elapsedSec && isEarlier(achievedAt, run.id, cur))) {
-        best.set(d, { context, distanceM: d, elapsedSec: sec, runId: run.id, achievedAt })
+        // 실제로 더 빨라서 밀어낸 경우에만 이전 보유자를 "깨뜨린 기록"으로 승격한다.
+        // 동률 tie-break 교체는 기록이 나아진 게 아니므로 기존 근거를 그대로 물려받는다.
+        const previousElapsedSec = cur ? (sec < cur.elapsedSec ? cur.elapsedSec : cur.previousElapsedSec) : null
+        best.set(d, { context, distanceM: d, elapsedSec: sec, runId: run.id, achievedAt, previousElapsedSec })
       }
     }
   }
