@@ -3,6 +3,7 @@ import { computed } from 'vue'
 // 웹컴포넌트 <hover-tilt> 등록 (TrophySkinCard 와 동일 라이브러리 — 스프링 물리·터치 처리 내장)
 import 'hover-tilt/vue'
 import TrophyIcon from './TrophyIcon.vue'
+import { trophyArtFor } from './trophyArt'
 import type { TrophyCardItem } from './trophyCatalog'
 
 /**
@@ -27,6 +28,9 @@ const props = defineProps<{ card: TrophyCardItem }>()
 defineEmits<{ select: [] }>()
 
 const earned = computed(() => props.card.earned)
+
+/** 카드 전용 아트(금속 릴리프). 없는 카드는 픽토그램으로 폴백한다 — 수치가 각인돼 돌려 쓸 수 없다. */
+const art = computed(() => trophyArtFor(props.card))
 
 /** 우상단 메트릭 — 배지 접두어(PR 등)까지 붙여 카드 종류를 한눈에 읽게. */
 const metric = computed(() => {
@@ -83,7 +87,8 @@ const progressPct = computed(() => {
         <span class="tgc-art-ground" aria-hidden="true" />
         <span class="tgc-art-foil" aria-hidden="true" />
         <span class="tgc-art-shine" aria-hidden="true" />
-        <TrophyIcon class="tgc-emblem" :kind="card.kind" :locked="!earned" :size="72" />
+        <img v-if="art" class="tgc-emblem tgc-emblem-art" :src="art" :alt="card.title" width="96" height="96" loading="lazy" decoding="async" />
+        <TrophyIcon v-else class="tgc-emblem" :kind="card.kind" :locked="!earned" :size="64" />
       </span>
 
       <span class="tgc-stat">
@@ -359,6 +364,23 @@ const progressPct = computed(() => {
     calc((var(--hover-tilt-y, 0.5) - 0.5) * 5px)
   );
 }
+/* 아트는 픽토그램보다 크게 — 아트창을 채우는 주인공이다. */
+.tgc-emblem-art {
+  width: 66%;
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: contain;
+}
+/* 잠금은 채도를 빼 "아직 못 받은 것"으로 읽힌다.
+   ⚠️ 선택자를 `img.` 로 좁힌 이유: 아트 <img> 는 클래스가 `tgc-emblem tgc-emblem-art` 둘 다라서,
+   아래 `.tgc.locked .tgc-emblem { filter: none }`(픽토그램용)과 특이성이 같아 **뒤에 오는 쪽이 이긴다**.
+   그래서 잠금 아트가 컬러 그대로 떴다(2026-08-11 실측). 요소 선택자를 더해 확실히 이기게 한다. */
+.tgc.locked img.tgc-emblem-art {
+  filter: grayscale(1) brightness(0.86);
+  opacity: 0.42;
+  transform: none;
+}
+
 .tgc.locked .tgc-emblem {
   color: var(--sub-ink);
   filter: none;
