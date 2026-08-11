@@ -507,8 +507,9 @@ const cumulative = computed(() => set.value.cumulative)
 .trophy-pop-leave-active {
   transition: opacity 0.22s ease;
 }
-/* 등장 연출은 카드가 소유한다(HoloTrophyCard 의 한 바퀴 회전). 여기서 scale 을 또 걸면
-   두 transform 이 겹쳐 회전이 튄다 — 레이어는 배경 페이드만 담당한다. */
+/* 카드 상세 등장·퇴장 — 페이드 + 살짝 확대. 한 바퀴 도는 연출을 시도했다가 되돌렸다(iOS 에서
+   끝까지 부드럽게 만들지 못했다, 2026-08-11). 단순한 팝은 합성만으로 끝나 어느 기기에서도 안전하다. */
+.trophy-pop-enter-active .trophy-detail,
 .trophy-pop-leave-active .trophy-detail {
   transition: transform 0.22s ease;
 }
@@ -516,6 +517,7 @@ const cumulative = computed(() => set.value.cumulative)
 .trophy-pop-leave-to {
   opacity: 0;
 }
+.trophy-pop-enter-from .trophy-detail,
 .trophy-pop-leave-to .trophy-detail {
   transform: scale(0.94);
 }
