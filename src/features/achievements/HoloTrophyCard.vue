@@ -54,6 +54,16 @@ const emit = defineEmits<{ select: [] }>()
 const earned = computed(() => props.card.earned)
 const canFlip = computed(() => props.flippable ?? props.size === 'full')
 
+/**
+ * 포인터를 따라 기울이는가. **상세(`full`)에서만.**
+ *
+ * 목록에서 카드가 터치를 받으면 그만큼 문서 스크롤이 죽는다 — 컬렉션은 화면이 카드로 가득해서
+ * 스크롤을 시작할 여백이 없었다. 카드 한 장을 손에 든 상태(상세)에서만 반응하게 두고, 목록에서는
+ * 정적 인쇄물처럼 둔다. 틸트가 없으면 `--hover-tilt-*` 변수도 없으므로 포일·시닌은 기본값
+ * (정지 상태)으로 그려진다.
+ */
+const tilts = computed(() => props.size === 'full')
+
 /** 뒷면 표시 상태. 카드를 누르면 뒤집힌다(상세에서만 — 그리드에선 누름이 '열기'다). */
 const flipped = ref(false)
 
@@ -133,12 +143,17 @@ const progressPct = computed(() => {
 </script>
 
 <template>
-  <hover-tilt
+  <!-- 틸트가 필요한 자리(상세)만 <hover-tilt> 로 감싼다. 썸네일·그리드는 정적 div —
+       tilt-factor 를 0 으로 죽이는 것과 다르다: hover-tilt 는 포인터/터치 리스너를 붙이므로,
+       화면이 카드로 가득한 컬렉션에서 **카드가 터치를 받아 문서 스크롤로 넘어가지 않았다**
+       (2026-08-11 사용자 진단). 리스너가 아예 없어야 터치가 그대로 흘러간다. -->
+  <component
+    :is="tilts ? 'hover-tilt' : 'div'"
     class="htc-frame"
-    :tilt-factor="earned ? 0.9 : 0.5"
-    :scale-factor="earned ? 1.05 : 1.025"
-    :glare-intensity="0"
-    :exit-delay="150"
+    :tilt-factor="tilts ? (earned ? 0.9 : 0.5) : undefined"
+    :scale-factor="tilts ? (earned ? 1.05 : 1.025) : undefined"
+    :glare-intensity="tilts ? 0 : undefined"
+    :exit-delay="tilts ? 150 : undefined"
   >
     <div
       class="htc-flip"
@@ -223,17 +238,16 @@ const progressPct = computed(() => {
       <span class="htc-shine" aria-hidden="true" />
     </button>
     </div>
-  </hover-tilt>
+  </component>
 </template>
 
 <style scoped>
 .htc-frame {
   display: block;
   width: 100%;
-  /* `none` 이면 **카드 위에서 시작한 터치 드래그를 카드가 삼켜** 페이지가 스크롤되지 않는다.
-     컬렉션은 화면 전체가 카드라서 스크롤할 여백이 아예 없었다(2026-08-11 실기기: 컬렉션 스크롤 불가).
-     데스크톱 휠로는 멀쩡히 스크롤돼서 QA에서 안 잡혔다. 세로 팬은 브라우저에 넘기고, 틸트는
-     그 외 포인터 이동으로 계속 동작한다. */
+  /* 세로 팬은 항상 브라우저에 넘긴다. 예전엔 `none` 이라 카드 위에서 시작한 드래그를 카드가 삼켜
+     컬렉션이 스크롤되지 않았다(데스크톱 휠로는 멀쩡해 QA에서 안 잡혔다). 목록 카드는 이제
+     hover-tilt 를 아예 붙이지 않지만, 상세에서 틸트할 때도 세로 팬을 막을 이유는 없다. */
   touch-action: pan-y;
 }
 
