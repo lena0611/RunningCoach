@@ -278,6 +278,13 @@ const visibleGroups = computed(() =>
   grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
+/* 구조 가드 — `1fr` 은 `minmax(auto, 1fr)` 이라 트랙이 **카드의 min-content 아래로 못 줄어든다.**
+   카드 안에 줄바꿈 불가 요소가 하나 생기면 그리드가 넓어지고, 그 폭이 스택 스크롤러까지 전파돼
+   화면이 좌우로 흔들린다(2026-08-11 실측 5px). min-width:0 으로 트랙을 컨테이너에 묶어,
+   카드 내부 사정이 페이지 폭을 흔들 수 없게 한다. */
+.trophy-collection-grid > * {
+  min-width: 0;
+}
 /* 카드 정보량이 많아 좁은 화면에선 2열이 빽빽하다 — 아주 좁을 때만 1열로 떨어뜨린다. */
 @media (max-width: 22rem) {
   .trophy-collection-grid {
