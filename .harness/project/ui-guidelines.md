@@ -48,7 +48,12 @@ PaceLAB is a personal running coach app, not an admin dashboard.
 - Account/profile management belongs in the header account drawer, not inside the `Memo` tab.
 - The account drawer opens from right to left. Profile editing is a second right-to-left stack inside the drawer.
 - Achievements (업적) also live in the account drawer as a second-level stack (moved out of the Memory tab in the 2026-07 redesign ①c). Do not reintroduce achievements or runner-profile sections into tab pages.
-- 전리품(트로피) 카드(리디자인 ②): 티어 장식색은 전역 토큰(`--trophy-gold/silver/bronze-*`)만 쓴다 — 컴포넌트에 티어 hex 하드코딩 금지. 홀로그래픽 풀 카드(`TrophyCard`)는 L3 상세 전용, 스트립/그리드는 미니 타일(`TrophyTile`). 포일/시닌은 색상 레이어가 아니라 효과 레이어(rgba 흰색·color-dodge)로 취급한다. NEW 배지는 달성 맥락이므로 celebrate(라임)를 쓰되, 획득 완료(idle) 상태에는 쓰지 않는다.
+- 전리품(트로피) 카드: **카드가 등장하는 모든 자리는 `HoloTrophyCard` 하나다** — `size` prop 으로 `thumb`(업적 홈 스트립 ≈110px) · `grid`(컬렉션 240×330) · `full`(L3 상세 모달 300×420)만 갈아끼운다. 자리별로 다른 컴포넌트를 만들지 않는다: 예전엔 스트립=선 픽토그램 타일(`TrophyTile`) · 컬렉션=밝은 카드지 · 상세=검정+금박 금속 카드(`TrophySkinCard`) 였고, **한 카드의 얼굴이 세 개**여서 홈에서 본 카드와 컬렉션에서 본 카드가 같은 카드로 보이지 않았다(2026-08-11 실기기 지적 → 세 컴포넌트 폐기·통합). 수집이 목적인 기능에서 카드 정체성이 갈리면 컬렉션이 성립하지 않는다.
+  - 표면은 핸드오프 프리셋 `classic-sunbeam` — **밝은 카드지 + 아트창 안 스펙트럼 회절띠 + 얇은 교차광**. 명세에 "다크 금속 카드가 아님"이 못박혀 있다(`trophy-cards.md`). 다크 금속 스킨으로 되돌리지 않는다.
+  - 카드지 팔레트(밝은 종이 + 어두운 잉크)는 `HoloTrophyCard` 에 스코프한다 — 전역 `--trophy-*` 토큰은 **다크 타일용**이라 이름을 공유하면 두 표면이 서로를 오염시킨다. 티어 **보더색**은 전역 토큰(`--trophy-gold/silver/bronze-border`)을 재사용하고, 그 외 티어 hex 하드코딩은 금지.
+  - 카드 아트는 카드별 전용(`trophyArt.ts`, 384² WebP 14종). 수치가 각인돼 있어 **돌려 쓰면 틀린 카드**가 된다(5K 카드에 10K 각인). 아트 없는 카드는 픽토그램 폴백 — 조용히 폴백하므로 빌드·런타임이 통과한다. 카드를 추가하면 `trophyArt.test.ts` 전수 검사가 누락을 잡는다.
+  - 획득/미획득은 **같은 골격**에 점선 보더·무채색 아트·진행바로만 갈린다. 미획득 카드도 근거 자리를 비우지 않는다(획득=무엇으로 받았나, 미획득=어떻게 열리나).
+  - 포일/시닌은 색상 레이어가 아니라 효과 레이어(mix-blend + rgba)로 취급한다. NEW 배지는 달성 맥락이므로 celebrate(라임)를 쓰되, 획득 완료(idle) 상태에는 쓰지 않는다.
 - Account-level settings live in the account drawer as a separate settings stack, opened by an icon-only gear action in the account header. Do not add global settings into tab pages.
 - 테마 설정 UI는 존재하지 않는다(다크 단일). `settingsStore`는 알림 등 나머지 설정을 소유하며, 새 설정은 이 store 또는 형제 settings 도메인으로 확장한다 — 컴포넌트에 localStorage 읽기를 흩뿌리지 않는다.
 

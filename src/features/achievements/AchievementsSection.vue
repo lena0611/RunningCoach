@@ -4,8 +4,7 @@ import type { RunLog } from '@/entities/run/model'
 import { computeAchievements, type AchievementContext } from '@/shared/lib/achievement/achievements'
 import { formatDuration, formatPace } from '@/shared/lib/format'
 import StackPage from '@/shared/ui/StackPage.vue'
-import TrophyTile from './TrophyTile.vue'
-import TrophyCard from './TrophyCard.vue'
+import HoloTrophyCard from './HoloTrophyCard.vue'
 import TrophyCollection from './TrophyCollection.vue'
 import { buildTrophyCatalog, distanceLabel, CANONICAL_DISTANCES_M, type TrophyCardItem } from './trophyCatalog'
 import { loadTrophySeen, reconcileTrophySeen, saveTrophySeen } from './trophySeen'
@@ -116,7 +115,7 @@ const cumulative = computed(() => set.value.cumulative)
         </button>
       </div>
       <div class="ach-strip">
-        <TrophyTile v-for="card in stripCards" :key="card.id" :card="card" @select="onStripSelect(card)" />
+        <HoloTrophyCard v-for="card in stripCards" :key="card.id" :card="card" size="thumb" @select="onStripSelect(card)" />
         <button v-if="stripMoreCount > 0" type="button" class="ach-strip-more" aria-label="전리품 컬렉션 더 보기" @click="collectionOpen = true">
           <strong>+{{ stripMoreCount }}</strong>
           <span>더 보기</span>
@@ -201,7 +200,7 @@ const cumulative = computed(() => set.value.cumulative)
             <button type="button" class="trophy-detail-close" aria-label="닫기" @click="detailCard = null">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
             </button>
-            <TrophyCard :card="detailCard" />
+            <HoloTrophyCard :card="detailCard" size="full" :clickable="false" />
           </div>
         </div>
       </Transition>
@@ -273,12 +272,23 @@ const cumulative = computed(() => set.value.cumulative)
   color: var(--color-primary);
 }
 .ach-strip {
-  display: flex;
+  /* flex 가 아니라 grid — 칸 폭을 컨테이너가 못박는다. flex 로 두면 카드 wrapper(<hover-tilt> 커스텀
+     엘리먼트)의 고유 폭이 분배에 끼어들어 4칸이 101/101/101/139 로 어긋나고, 합이 뷰포트를 넘쳤다
+     (390px 화면 → 468px, 2026-08-11 실측). 1fr 4개면 그런 되먹임이 아예 없다. */
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  align-items: start;
   gap: 9px;
+}
+.ach-strip > * {
+  min-width: 0;
 }
 .ach-strip-more {
   flex: 1;
-  aspect-ratio: 5 / 7;
+  /* 카드 높이를 따라간다 — 자기 aspect-ratio 로 모양을 스스로 정하면 폭까지 되계산해 커지면서
+     스트립을 뷰포트 밖으로 밀어냈다(390px 화면 → 468px, 2026-08-11 실측). 이 타일은 카드가 아니라
+     카드 옆에 서는 안내 칸이므로, 높이는 카드가 정하게 두는 게 맞다. */
+  align-self: stretch;
   border-radius: 10px;
   background: var(--color-bg-soft);
   border: 1.5px dashed var(--color-border-strong);
@@ -476,8 +486,14 @@ const cumulative = computed(() => set.value.cumulative)
   width: min(320px, 86vw);
 }
 .trophy-detail-close {
-  width: 34px;
-  height: 34px;
+  /* 전역 button 은 `padding: 0 18px`·`min-height: 48px` 을 갖는다. width:34px 에 그 좌우 패딩이
+     들어가면 콘텐츠 폭이 음수가 되어 **✕ 아이콘이 폭 0으로 찌그러진다** — 빈 검정 박스만 보이고,
+     카드를 닫을 방법이 배경 탭밖에 남지 않았다(2026-08-11 실기기). 아이콘 버튼은 패딩을 지운다. */
+  padding: 0;
+  min-height: 0;
+  flex: none;
+  width: 38px;
+  height: 38px;
   border-radius: 10px;
   border: 1px solid var(--color-border-strong);
   background: var(--color-surface-2);

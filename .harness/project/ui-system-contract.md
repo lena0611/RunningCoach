@@ -33,7 +33,7 @@ PaceLAB은 외부 UI 라이브러리를 전면 도입하지 않는다. 대신 �
     | `--text-micro-size` | 12 | 앱 폰트 **하한(12px)**. 장식/메타·단순 정보성 마이크로 텍스트(카운트 배지·eyebrow·요일 라벨 등) |
 
   - **폰트 스케일(4단 + 하한):** 12(micro) / 14(caption) / 16(info·body) / 22(title) / display·metric(clamp). 15·13 같은 중간값은 쓰지 않는다.
-  - **앱 전체 폰트 하한 = 12px.** 12px 미만(9/10/10.5/11/13px 등)은 어디에도 쓰지 않는다 — 가장 작은 장식/메타/단순 정보성 텍스트도 `--text-micro-size`(12px)가 바닥이다. **명시된 예외 2가지만 허용**(그 외 예외 없음): ① **SVG 내부 `text{font-size}`**(viewBox userspace 단위, px 아님). ② **트로피/업적 컬렉티블 tile의 극소 마이크로타입**(`TrophyTile`·`TrophyCard`·`AchievementsSection`·`TrophyCollection`의 7~11px 티어칩·NEW배지·진행텍스트·칩·날짜·설명 등) — 작은 컬렉티블 타일 디자인에 밀착된 의도된 예외(사용자 결정 2026-07-08). mono 서체도 유지. 이 두 영역은 하한 감사에서 위반으로 잡지 않는다.
+  - **앱 전체 폰트 하한 = 12px.** 12px 미만(9/10/10.5/11/13px 등)은 어디에도 쓰지 않는다 — 가장 작은 장식/메타/단순 정보성 텍스트도 `--text-micro-size`(12px)가 바닥이다. **명시된 예외 2가지만 허용**(그 외 예외 없음): ① **SVG 내부 `text{font-size}`**(viewBox userspace 단위, px 아님). ② **트로피/업적 컬렉티블 카드의 극소 마이크로타입**(`HoloTrophyCard`·`AchievementsSection`·`TrophyCollection`의 7~12px 티어칩·NEW배지·진행텍스트·칩·날짜·근거설명·thumb 라벨 등) — 작은 컬렉티블 타일 디자인에 밀착된 의도된 예외(사용자 결정 2026-07-08). mono 서체도 유지. 이 두 영역은 하한 감사에서 위반으로 잡지 않는다.
   - **의미 있는 중요 정보는 최소 14px:** 사용자가 읽고 **판단**하는 텍스트(설명·근거·helper·지표 레이블)는 **최소 `--text-caption-size`(14px)**, 코칭 근거·본문류는 **`--text-info-size`·`--text-body-size`(16px)**. 순수 장식/단순 정보성 라벨만 `--text-micro-size`(12px)까지 내릴 수 있다.
   - **경계가 애매하면**(`dt/dl` 라벨, `<small>`) caption으로 낮추지 말고 info/body 쪽으로 기운다.
   - **색×크기 결합:** `--color-muted-2`(#7c879a)는 `--color-surface-2` 위에서 대비 4.42:1로 본문 AA(4.5:1) 미달 → 읽는 텍스트에는 `--color-muted`(#aeb8c6, 7.99:1)를 쓰고, muted-2는 아이콘·구분선·24px 이상 큰 글자에만 쓴다.

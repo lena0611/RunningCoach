@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import TrophyGridCard from './TrophyGridCard.vue'
+import HoloTrophyCard from './HoloTrophyCard.vue'
 import type { TrophyCardItem, TrophyKind, TrophyTier } from './trophyCatalog'
 
 /**
@@ -98,7 +98,7 @@ const visibleGroups = computed(() =>
         <span class="trophy-group-desc">{{ group.desc }}</span>
       </header>
       <div class="trophy-collection-grid">
-        <TrophyGridCard v-for="card in group.cards" :key="card.id" :card="card" @select="$emit('select', card)" />
+        <HoloTrophyCard v-for="card in group.cards" :key="card.id" :card="card" size="grid" @select="$emit('select', card)" />
       </div>
     </section>
     <p v-if="!visibleCards.length" class="trophy-collection-empty">이 필터에 해당하는 카드가 없어요.</p>
