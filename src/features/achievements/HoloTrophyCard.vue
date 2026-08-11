@@ -4,7 +4,7 @@ import { computed, ref } from 'vue'
 import 'hover-tilt/vue'
 import TrophyIcon from './TrophyIcon.vue'
 import { trophyArtFor } from './trophyArt'
-import type { TrophyCardItem, TrophyKind } from './trophyCatalog'
+import type { TrophyCardItem } from './trophyCatalog'
 
 /**
  * 전리품 카드 — **앱에서 전리품 카드가 나오는 모든 자리가 이 컴포넌트 하나다** (디자인 핸드오프
@@ -58,21 +58,23 @@ const canFlip = computed(() => props.flippable ?? props.size === 'full')
 const flipped = ref(false)
 
 /**
- * 발급 규칙 — "이 카드는 어떻게 나오나". 앞면의 근거(내가 **왜 받았나**)와 다른 정보라서 뒷면에 둔다.
- * 뒷면이 앞면의 반복이면 뒤집을 이유가 없다.
+ * 회전 중 여부. **iOS 에서 3D 회전이 심하게 버벅이던 원인이 여기 있다.**
+ *
+ * 카드 안에는 `mix-blend-mode` 레이어가 5장(에치·시닌·스페큘러·아트 포일·아트 시닌) 있다. 블렌드는
+ * GPU 가 레이어를 독립 합성하지 못하게 만들어서, 3D 회전하는 동안 **매 프레임 카드 전체를 다시
+ * 래스터라이즈**한다. 그래서 한 바퀴 도는지도 모를 만큼 끊겼다(2026-08-11 실기기).
+ *
+ * 회전하는 0.8초 동안만 그 레이어들을 끄고, 멈춘 뒤 다시 켠다 — 도는 중에 포일 광택을 볼 사람은 없다.
  */
-const RULE_BY_KIND: Record<TrophyKind, string> = {
-  pb: '이 거리의 최고 기록을 경신할 때 발급됩니다. 긴 러닝 안의 해당 거리 구간도 기록으로 셉니다.',
-  milestone: '이 거리를 처음 완주하는 순간 한 번만 발급됩니다.',
-  streak: '하루도 거르지 않은 연속 일수가 최고치를 넘을 때 갱신됩니다.',
-  weekly: '한 주 누적 거리가 최고치를 넘을 때 갱신됩니다.',
-  monthly: '한 달 누적 거리가 최고치를 넘을 때 갱신됩니다.',
-  club: '평생 누적 거리가 목표에 도달할 때 발급됩니다.'
+const animating = ref(canFlip.value)
+
+function endAnimating() {
+  animating.value = false
 }
-const ruleText = computed(() => RULE_BY_KIND[props.card.kind])
 
 function onCardClick() {
   if (canFlip.value) {
+    animating.value = true
     flipped.value = !flipped.value
     return
   }
@@ -138,7 +140,12 @@ const progressPct = computed(() => {
     :glare-intensity="0"
     :exit-delay="150"
   >
-    <div class="htc-flip" :class="[`flip-${size}`, { 'is-flipped': flipped, 'can-flip': canFlip }]">
+    <div
+      class="htc-flip"
+      :class="[`flip-${size}`, { 'is-flipped': flipped, 'can-flip': canFlip, 'is-animating': animating }]"
+      @animationend="endAnimating"
+      @transitionend="endAnimating"
+    >
     <component
       :is="clickable || canFlip ? 'button' : 'div'"
       :type="clickable || canFlip ? 'button' : undefined"
@@ -194,7 +201,8 @@ const progressPct = computed(() => {
       <span class="htc-specular" aria-hidden="true" />
     </component>
 
-    <!-- 뒷면 — 실물 카드처럼 카드지·티어 보더는 같고, 문양과 "이 카드는 어떻게 나오나"가 들어간다. -->
+    <!-- 뒷면 — 실물 카드 뒷면처럼 로고와 문양만. 정보는 앞면이 다 갖고 있고, 뒷면에 정보를 또
+         쌓으면 카드가 아니라 설명서가 된다. -->
     <button
       v-if="canFlip"
       type="button"
@@ -203,28 +211,13 @@ const progressPct = computed(() => {
       :aria-label="`${card.title} 뒷면 — 앞면으로 돌리기`"
       @click="onCardClick"
     >
-      <span class="htc-etch" aria-hidden="true" />
       <span class="htc-inner-frame" aria-hidden="true" />
       <span class="htc-back-guilloche" aria-hidden="true" />
 
-      <span class="htc-back-brand">PACELAB</span>
-      <span class="htc-back-sub">TROPHY COLLECTION</span>
-
-      <span class="htc-back-seal">
-        <span class="htc-back-seal-tier">{{ earned ? card.tier.toUpperCase() : 'LOCKED' }}</span>
-        <span class="htc-back-seal-metric">{{ metric }}</span>
-      </span>
-
-      <span class="htc-back-rule">{{ ruleText }}</span>
-
-      <span class="htc-back-meta">
-        <span>집계 범위</span>
-        <strong>{{ card.scopeLabel }}</strong>
-      </span>
-
-      <span class="htc-foot">
-        <span>{{ dateText }}</span>
-        <span>{{ earned ? 'HOLO' : '잠금' }}</span>
+      <span class="htc-back-mark">
+        <span class="htc-back-brand">PACELAB</span>
+        <span class="htc-back-rule-line" aria-hidden="true" />
+        <span class="htc-back-sub">TROPHY COLLECTION</span>
       </span>
 
       <span class="htc-shine" aria-hidden="true" />
@@ -759,6 +752,32 @@ const progressPct = computed(() => {
   transform-style: preserve-3d;
   transition: transform 0.62s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
+.htc-flip.is-animating {
+  /* 합성 레이어로 승격 — 회전 내내 같은 텍스처를 재사용하게 한다. 멈추면 해제한다(계속 걸어두면
+     메모리를 잡고 있고, 정지 상태의 카드는 승격이 필요 없다). */
+  will-change: transform;
+}
+/* 회전 중에는 블렌드 합성을 전부 끈다 — 이게 프레임 드랍의 원인이었다.
+   특이성(0,3,0)이 원래 규칙(0,1,0)을 이기므로 !important 없이 덮인다. 멈추면 0.3s 로 되돌아온다. */
+.htc-flip.is-animating .htc-etch,
+.htc-flip.is-animating .htc-shine,
+.htc-flip.is-animating .htc-specular,
+.htc-flip.is-animating .htc-art-foil,
+.htc-flip.is-animating .htc-art-shine {
+  opacity: 0;
+}
+.htc-flip.is-animating .htc {
+  /* 큰 blur 그림자도 회전 중엔 매 프레임 다시 계산된다. 도는 동안만 얇게. */
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.4);
+}
+.htc-etch,
+.htc-shine,
+.htc-specular,
+.htc-art-foil,
+.htc-art-shine {
+  transition: opacity 0.3s ease;
+}
+
 .htc-flip.can-flip {
   /* 썸네일에서 눌러 열리는 순간 — 한 바퀴 돌면서 커진다. 카드를 뽑아 든 느낼을 내는 게 목적이라
      회전은 한 바퀴(360°) 꽉 채우고, 크기는 썸네일 즈음(.45)에서 시작한다. */
@@ -766,7 +785,7 @@ const progressPct = computed(() => {
      붙잡고 있어서 `.is-flipped { transform: rotateY(180deg) }` 가 **애니메이션에 져서 뒤집히지
      않는다**(2026-08-11 실측: is-flipped 는 붙는데 transform 은 identity). 끝 상태가 자연
      상태와 같으므로 forwards 는 필요 없고, 시작 상태만 미리 적용하면 된다. */
-  animation: htc-reveal 0.72s cubic-bezier(0.16, 0.9, 0.24, 1) backwards;
+  animation: htc-reveal 0.82s cubic-bezier(0.16, 0.9, 0.24, 1) backwards;
 }
 .htc-flip.is-flipped {
   transform: rotateY(180deg);
@@ -798,99 +817,60 @@ const progressPct = computed(() => {
   }
 }
 
-/* 길로시 문양 — 지폐/증서의 뒷면 질감. 앞면 아트창의 동심원과 같은 어휘를 쓴다. */
+/* 카드 뒷면 문양 — 지폐/증서 질감. 동심원(앞면 아트창과 같은 어휘) + 45° 격자.
+   앞면과 달리 mix-blend-mode 를 쓰지 않는다 — 뒤집기 중에 합성 비용이 그대로 프레임 드랍이 된다. */
 .htc-back-guilloche {
   position: absolute;
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  opacity: 0.55;
+  opacity: 0.6;
   background:
     radial-gradient(
-      circle at 50% 46%,
-      transparent 0 26px,
-      var(--ring) 26px 27px,
-      transparent 27px 52px,
-      var(--ring) 52px 53px,
-      transparent 53px 84px,
-      var(--ring) 84px 85px,
-      transparent 85px 122px,
-      var(--ring) 122px 123px,
-      transparent 123px
+      circle at 50% 50%,
+      transparent 0 30px,
+      var(--ring) 30px 31px,
+      transparent 31px 60px,
+      var(--ring) 60px 61px,
+      transparent 61px 94px,
+      var(--ring) 94px 95px,
+      transparent 95px 132px,
+      var(--ring) 132px 133px,
+      transparent 133px
     ),
-    repeating-linear-gradient(45deg, transparent 0 9px, var(--ring) 9px 10px, transparent 10px 19px);
+    repeating-linear-gradient(45deg, transparent 0 9px, var(--ring) 9px 10px, transparent 10px 19px),
+    repeating-linear-gradient(-45deg, transparent 0 9px, var(--ring) 9px 10px, transparent 10px 19px);
 }
 
-.htc-back-brand,
-.htc-back-sub,
-.htc-back-seal,
-.htc-back-rule,
-.htc-back-meta {
+/* 워드마크 — 뒷면의 유일한 콘텐츠. 카드 정중앙에 놓는다. */
+.htc-back-mark {
   position: relative;
   z-index: 4;
-}
-.htc-back-brand {
-  margin-top: 6px;
-  font: 800 15px/1 var(--font-mono);
-  letter-spacing: 0.22em;
-  color: var(--ink);
-}
-.htc-back-sub {
-  margin-top: 5px;
-  font: 600 8.5px/1 var(--font-mono);
-  letter-spacing: 0.24em;
-  color: var(--sub-ink);
-}
-/* 봉인 — 티어와 카드 번호(거리·클럽 값)를 눌러 찍은 자리 */
-.htc-back-seal {
+  margin: auto 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  margin: auto 0;
-  padding: 14px 18px;
-  border: 1.5px var(--frame-style) var(--edge-in);
-  border-radius: 999px;
-  background: var(--stat-bg);
+  gap: 9px;
 }
-.htc-back-seal-tier {
-  font: 800 11px/1 var(--font-mono);
-  letter-spacing: 0.16em;
-  color: var(--chip-ink);
-}
-.htc-back-seal-metric {
-  font: 800 17px/1 var(--font-mono);
+.htc-back-brand {
+  font: 800 19px/1 var(--font-mono);
+  letter-spacing: 0.26em;
+  /* 워드마크는 카드지에 눌러 찍힌 듯 — 밝은 하이라이트 + 어두운 그림자 한 줄. */
   color: var(--ink);
-  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
 }
-.htc-back-rule {
-  /* auto 마진을 여기 또 걸면 봉인·규칙·푸터 세 곳이 남는 공간을 나눠 먹어 봉인과 규칙 사이에
-     빈 구멍이 생긴다(2026-08-11 실측). 봉인이 가운데를 잡고, 규칙은 그 바로 아래에 붙는다. */
-  margin-top: 12px;
-  font: 500 11px/1.5 var(--font-sans);
-  color: var(--sub-ink);
-  word-break: keep-all;
+.htc-back-rule-line {
+  width: 64px;
+  height: 1px;
+  background: var(--edge);
+  opacity: 0.7;
 }
-.htc-back-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  margin-top: 10px;
-  padding: 7px 10px;
-  border: 1px solid var(--stat-edge);
-  border-radius: 7px;
-  background: var(--stat-bg);
-  font: 600 10px/1 var(--font-sans);
+.htc-back-sub {
+  font: 600 9px/1 var(--font-mono);
+  letter-spacing: 0.3em;
   color: var(--sub-ink);
 }
-.htc-back-meta strong {
-  font: 800 10.5px/1 var(--font-mono);
-  color: var(--ink);
-}
-.htc-back .htc-foot {
-  width: 100%;
-}
+
 
 @media (prefers-reduced-motion: reduce) {
   .htc-emblem {

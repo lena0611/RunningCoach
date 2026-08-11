@@ -32,14 +32,6 @@ export type TrophyCardItem = {
   kind: TrophyKind
   /** 'context'=훈련/레이싱 분리 트랙, 'global'=전체 통합(꾸준함·클럽). */
   scope: 'context' | 'global'
-  /**
-   * 이 카드가 **무엇을 집계한 것인지** 사람 말로. 카드 뒷면에 적힌다.
-   *
-   * 왜 필요한가: 꾸준함·클럽 카드는 훈련/레이싱 통합 집계라 레이싱 탭에서도 획득으로 뜬다. 그래서
-   * 레이싱으로 400m 만 뛴 계정이 "누적 1000km 클럽 획득"으로 보인다(2026-08-11 실기기 지적).
-   * 카드 자체가 집계 범위를 말하면 그 오해가 카드 단위에서 먼저 풀린다.
-   */
-  scopeLabel: string
   title: string
   /** 우상단 배지(예: 'PR' + '10K'). prefix 없으면 빈 문자열. */
   badgePrefix: string
@@ -141,8 +133,6 @@ function clubAchievedAt(runs: RunLog[], targetKm: number): string | null {
  */
 export function buildTrophyCatalog(set: AchievementSet, runs: RunLog[], context: AchievementContext): TrophyCardItem[] {
   const cards: TrophyCardItem[] = []
-  const contextLabel = context === 'training' ? '훈련 기록' : '레이싱 기록'
-  const globalLabel = '훈련·레이싱 전체'
   const pbAt = new Map(set.distancePbs.filter((p) => p.context === context).map((p) => [p.distanceM, p]))
   const msAt = new Map(set.firstMilestones.filter((m) => m.context === context).map((m) => [m.distanceM, m]))
   const longestKm = set.longestDistance.find((r) => r.context === context)?.distanceKm ?? 0
@@ -162,7 +152,6 @@ export function buildTrophyCatalog(set: AchievementSet, runs: RunLog[], context:
       tier: 'gold',
       kind: 'pb',
       scope: 'context',
-      scopeLabel: contextLabel,
       title: `${label} 자기기록`,
       badgePrefix: 'PR',
       badgeValue: label,
@@ -184,7 +173,6 @@ export function buildTrophyCatalog(set: AchievementSet, runs: RunLog[], context:
       tier: 'gold',
       kind: 'milestone',
       scope: 'context',
-      scopeLabel: contextLabel,
       title: `첫 ${label} 완주`,
       badgePrefix: '첫',
       badgeValue: label,
@@ -207,7 +195,6 @@ export function buildTrophyCatalog(set: AchievementSet, runs: RunLog[], context:
     tier: 'silver',
     kind: 'streak',
     scope: 'global',
-    scopeLabel: globalLabel,
     title: '연속 러닝 스트릭',
     badgePrefix: '',
     badgeValue: streakEarned ? `${streak!.days}일` : '스트릭',
@@ -231,7 +218,6 @@ export function buildTrophyCatalog(set: AchievementSet, runs: RunLog[], context:
     tier: 'silver',
     kind: 'weekly',
     scope: 'global',
-    scopeLabel: globalLabel,
     title: '주간 최다 거리',
     badgePrefix: '주',
     badgeValue: weeklyEarned ? `${trimKm(weekly!.distanceKm)}km` : '최고',
@@ -253,7 +239,6 @@ export function buildTrophyCatalog(set: AchievementSet, runs: RunLog[], context:
     tier: 'silver',
     kind: 'monthly',
     scope: 'global',
-    scopeLabel: globalLabel,
     title: '월간 최다 거리',
     badgePrefix: '월',
     badgeValue: monthlyEarned ? `${trimKm(monthly!.distanceKm)}km` : '최고',
@@ -277,7 +262,6 @@ export function buildTrophyCatalog(set: AchievementSet, runs: RunLog[], context:
       tier: 'bronze',
       kind: 'club',
       scope: 'global',
-      scopeLabel: globalLabel,
       title: `누적 ${target}km 클럽`,
       badgePrefix: '누적',
       badgeValue: `${target}km`,
