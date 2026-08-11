@@ -474,9 +474,9 @@ const cumulative = computed(() => set.value.cumulative)
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(0, 0, 0, 0.62);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
+  /* backdrop-filter 를 뺐다 — 이 레이어 위에서 카드가 3D 회전하면 iOS 가 매 프레임 배경 블러를
+     다시 계산해 회전이 통째로 끊긴다(2026-08-11 실기기). 어둡게 덮는 목적은 불투명도로 충분하다. */
+  background: rgba(0, 0, 0, 0.78);
 }
 .trophy-detail {
   display: flex;
