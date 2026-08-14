@@ -5,7 +5,36 @@
 `project-memory.md`, `.harness/project/workflow-rules.md`, `decision-log.md`를 우선합니다.
 > 상세 인수인계가 있으면 프로젝트 루트 `HANDOFF.md`를 먼저 본다.
 
-## ⭐ 현재 위치 (2026-06-25 후반) — 감별 §5 정밀화 2건 출하: 답변 likelihood 그라데이션(#522) + monitoring 노출 게이트(#525)
+## ⭐ 현재 위치 (2026-08-14) — 부상 부위 선택기(바디맵) 인체 렌더 PNG 기반으로 전면 재작성 **완료**
+
+### 무엇을 고쳤나
+`부상/주의사항 편집`의 `InjuryBodySelector`. 기존 구현의 결함:
+- PNG 스틸컷 24장 + **별도 사각 hit-zone** → 이미지가 `object-fit: contain`으로 레터박싱되는 만큼 **터치 좌표가 밀림**(종횡비가 다른 상체 모델에서 특히 크게)
+- 프레임 자체가 깨짐(`lower-270`은 발이 몸에서 분리, `upper-0`은 정작 허리·골반이 프레임 밖)
+- 각도 9컷(0~360°)+화살표+드래그 3중 중복, 0°와 360°는 같은 화면
+- 3D로 고르면 4탭(그룹→각도→영역→후보)인데 아래에 같은 부위 칩 24개가 또 있어 완전 중복
+
+### 어떻게 바꿨나
+- **인체 렌더 PNG 1장(앞/뒤/발바닥 시트) + SVG 부위 도형.** PNG를 **같은 `<svg>` 안 `<image>`** 로 넣어 viewBox 공유 → 좌표 밀림이 원천적으로 불가능
+- 부위 도형은 기본 투명(`pointer-events: all`), 선택 시 반투명 초록으로 덮어 근육 음영이 비침
+- **도형 좌표는 PNG 알파 마스크에서 추출**(행마다 실루엣 경계 → 폴리곤). 좌우도 미러가 아니라 각각 실측
+- 뷰 3개(앞/뒤/발바닥), 누르면 바로 선택/해제, 선택 칩, `이름으로 찾기` 접힘 폴백, 부위별 통증 슬라이더
+- viewBox는 뷰마다 다름(전신 200×480, 발바닥 200×300) → SVG `<text>` 라벨 크기는 CSS 아닌 뷰별 속성으로
+
+### 파일
+- `src/shared/ui/injuryBodyMap.ts`(신규, 좌표 SSOT) · `injuryBodyMap.test.ts`(카탈로그 21부위 전수 대응 4건)
+- `src/shared/assets/body-models/body-sheet.png`(587KB, 알파 유지) — 옛 프레임 24장(2.4MB) 삭제
+- `InjuryBodySelector.vue` · `styles.css` · `injuryAreas.ts`(`injuryStructureLabels` 추가로 joint/muscle 영어 노출 제거)
+- 계약 문서 갱신: `ui-system-contract.md`(부상 선택 UI 절 전면) · `ui-guidelines.md`
+
+### 다시 손댈 때 주의
+- **그림을 교체하면 좌표를 다시 추출한다.** 눈으로 맞추지 말 것 — 알파 마스크에서 뽑는다
+- PNG를 `<img>`나 CSS background로 옮기면 옛 좌표 밀림 버그가 그대로 재발한다
+- 붙여넣은 이미지로는 투명 여부를 알 수 없다(합성돼 보임). 파일을 받아 canvas 픽셀로 측정한다 — `file://`은 canvas tainted라 로컬 HTTP 필요. [[image-gen-no-alpha-use-chromakey]]
+
+---
+
+## (이전) 2026-06-25 후반 — 감별 §5 정밀화 2건 출하: 답변 likelihood 그라데이션(#522) + monitoring 노출 게이트(#525)
 - **이번 세션 완료(PR #526 머지·트리검증 IDENTICAL, Issue #522·#525 CLOSED):** 부상 감별(§5) 두 증분, 한 PR(squash) — 둘 다 #전문코치리뷰 PASS(must-fix 0).
   - **증분2.1 #522 — 답변 likelihood 그라데이션**: flat +1.5 부스트를 **옵션별 `favorWeight`(0~1)**로 그라데이션. 부스트 = `PROBE_FAVOR_BOOST × favorWeight`. 11개 `favors` 옵션 저작(§1 특이도: pathognomonic 0.9=ITBS '늘 같은 거리'·족저 '아침 첫발'·sprint-pop / 특징적 0.8 / 미특이 0.75=가자미근). `favoredHypothesisWeights`(같은 가설 다수답=max). 미설정 fallback **0.5(보수적 fail-safe**, evaluateRedFlags 철학 정렬 — should-fix 반영). comorbid top-2·§4 redFlag 우선 불변식 보존. 리뷰어 제안 `probeWeights[axis]`는 axis↔키 불일치로 오작동 → per-option 모델로 확장.
   - **#3 #525 — monitoring 프로브 노출 게이트**: 감별=급성기(active) 도구 → **"monitoring이면 중단, 재발 시 재개"(사용자 합의)**. `isInjuryProbeEligible`(model.ts): active=항상 / monitoring=`isInjuryReflaring`(최근14일 flare·악화 체크인·통증 반등)일 때만 / resolved·archived=안함. DashboardPage 스냅샷 게이트 교체. **안전 미감소**: 게이트는 *프로브*에만 — redFlag 게이트·escalation·이미 모은 자가검사 전송은 독립(코치리뷰 코드 근거 확정). 단발 재발신호=의도(안전망 재개; redFlag 진행성 2회연속과 별개, 주석 명시). 탈출구=악화 체크인 시 App.vue `lastFlareDate` 갱신(영구 갇힘 없음).

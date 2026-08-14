@@ -4005,14 +4005,12 @@ button.run-session-row {
   margin-bottom: 6px;
 }
 
-.injury-body-layout {
-  display: grid;
-  grid-template-columns: minmax(150px, 0.9fr) minmax(0, 1.1fr);
-  gap: 14px;
+.injury-selector-head .context-chip {
+  flex: none;
+  white-space: nowrap;
 }
 
-.body-view-card,
-.injury-area-list,
+.body-map-card,
 .injury-pain-panel,
 .strength-plan-card {
   border-radius: 20px;
@@ -4020,203 +4018,114 @@ button.run-session-row {
   padding: 14px;
 }
 
-.body-view-card {
+.body-map-card {
   display: grid;
   gap: 12px;
 }
 
-.body-view-toolbar {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 34px;
-  gap: 8px;
-  align-items: center;
-}
-
-.body-view-toolbar > button {
+.body-map-stage {
   display: grid;
   place-items: center;
-  width: 34px;
-  min-height: 34px;
-  border-radius: 999px;
-  background: var(--color-subtle-2);
-  box-shadow: none;
-}
-
-.body-view-toolbar svg {
-  width: 18px;
-  height: 18px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.4;
-}
-
-.body-view-status {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-  text-align: center;
-}
-
-.body-view-status strong {
-  color: var(--color-text);
-  font-size: var(--text-caption-size);
-  font-weight: 800;
-}
-
-.body-view-status small {
-  overflow: hidden;
-  color: var(--color-muted);
-  font-size: var(--text-caption-size);
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.body-model-stage {
-  position: relative;
-  min-height: 360px;
   overflow: hidden;
   border-radius: 22px;
-  background:
-    radial-gradient(circle at 50% 24%, rgba(74, 222, 128, 0.18), transparent 31%),
-    radial-gradient(circle at 50% 68%, rgba(56, 189, 248, 0.14), transparent 44%),
-    linear-gradient(180deg, var(--color-field), var(--color-surface-2));
+  background: linear-gradient(180deg, var(--color-surface-2), var(--color-surface));
+  padding: 10px 0;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  touch-action: none;
 }
 
-.body-model-image {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  user-select: none;
-  -webkit-user-drag: none;
+.body-map-svg {
+  width: auto;
+  max-width: 100%;
+  height: min(74vh, 640px);
 }
 
-.body-zone-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  width: 100%;
-  height: 100%;
+.body-map-photo {
+  pointer-events: none;
 }
 
-.body-hit-zone {
+.body-map-region {
   cursor: pointer;
   outline: none;
 }
 
-.body-hit-zone rect {
-  fill: rgba(255, 255, 255, 0.001);
-  stroke: rgba(148, 163, 184, 0);
-  stroke-dasharray: 3 2;
-  stroke-width: 0.9;
-  transition: fill 150ms ease, stroke 150ms ease, filter 150ms ease;
+/* 기본은 투명 — 아래 인체 렌더가 그대로 보인다. `pointer-events: all` 이라야 칠하지 않아도 터치가 잡힌다. */
+.body-map-region path {
+  fill: transparent;
+  stroke: transparent;
+  stroke-width: 0;
+  pointer-events: all;
+  transition: fill 140ms ease, stroke 140ms ease;
 }
 
-.body-hit-zone:hover rect,
-.body-hit-zone:focus-visible rect {
-  fill: rgba(56, 189, 248, 0.18);
-  stroke: rgba(125, 211, 252, 0.95);
+.body-map-region:hover path,
+.body-map-region:focus-visible path {
+  fill: rgba(52, 211, 153, 0.24);
 }
 
-.body-hit-zone.active rect {
-  fill: rgba(56, 189, 248, 0.2);
-  stroke: rgba(103, 232, 249, 0.98);
-  filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.35));
+.body-map-region.selected path {
+  fill: rgba(52, 211, 153, 0.52);
+  stroke: var(--color-primary);
+  stroke-width: 1.2;
 }
 
-.body-selected-node circle {
-  fill: var(--color-primary);
-  stroke: rgba(255, 255, 255, 0.92);
-  stroke-width: 1.1;
-  filter: drop-shadow(0 0 8px rgba(74, 222, 128, 0.55));
-}
-
-.body-selected-node text {
-  fill: #07120c;
-  font-size: 3.6px;
-  font-weight: 900;
-  text-anchor: middle;
-  dominant-baseline: middle;
-}
-
-.body-view-label {
-  position: absolute;
-  z-index: 2;
-  right: 12px;
-  bottom: 12px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.28);
-  color: var(--color-text);
-  padding: 5px 10px;
-  font-size: 12px;
+/* font-size 는 뷰마다 viewBox 배율이 달라 컴포넌트가 속성으로 지정한다(CSS 로 박으면 속성을 덮는다).
+   SVG userspace 단위라 앱 폰트 12px 하한 대상이 아니다 — ui-system-contract 의 명시 예외. */
+.body-map-side {
+  fill: var(--color-muted-2);
   font-weight: 800;
+  text-anchor: middle;
 }
 
-.body-zone-detail {
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 18px;
-  background: var(--color-field);
-}
-
-.body-zone-detail > div:first-child {
-  display: grid;
-  gap: 3px;
-}
-
-.body-zone-detail strong {
-  color: var(--color-text);
-  font-size: 14px;
-  font-weight: 850;
-}
-
-.body-zone-detail small {
+.body-map-note {
+  margin: 0;
   color: var(--color-muted);
   font-size: var(--text-caption-size);
   font-weight: 700;
 }
 
-.body-zone-option-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+.body-map-selected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
 }
 
-.body-zone-option-grid button {
-  display: grid;
-  gap: 2px;
-  justify-items: start;
-  min-height: 52px;
-  padding: 10px 12px;
-  border-radius: 15px;
-  background: var(--color-surface-2);
-  color: var(--color-text);
+.body-map-selected-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 7px 10px 7px 13px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: var(--text-caption-size);
+  font-weight: 850;
   box-shadow: none;
 }
 
-.body-zone-option-grid button.selected {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
+.body-map-selected-chip svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 2.4;
 }
 
-.body-zone-option-grid span {
-  font-size: var(--text-caption-size);
-  font-weight: 850;
-}
-
-.injury-area-list {
+.injury-area-finder {
   display: grid;
-  gap: 13px;
-  max-height: 420px;
-  overflow: auto;
+  gap: 12px;
 }
 
-.injury-area-list article {
+.injury-area-finder summary {
+  cursor: pointer;
+  color: var(--color-muted);
+  font-size: var(--text-caption-size);
+  font-weight: 800;
+  list-style: revert;
+}
+
+.injury-area-finder article {
   display: grid;
   gap: 8px;
 }
@@ -4280,63 +4189,6 @@ button.run-session-row {
   gap: 10px;
 }
 
-.selected-injury-list {
-  display: grid;
-  gap: 8px;
-}
-
-.selected-injury-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 34px;
-  gap: 10px;
-  align-items: center;
-  min-width: 0;
-  padding: 10px 12px;
-  border-radius: 16px;
-  background: var(--color-field);
-}
-
-.selected-injury-item > div {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.selected-injury-item span {
-  overflow: hidden;
-  color: var(--color-text);
-  font-size: 14px;
-  font-weight: 850;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.selected-injury-item small {
-  color: var(--color-muted);
-  font-size: var(--text-micro-size);
-  font-weight: 700;
-}
-
-.selected-injury-item button {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  min-height: 34px;
-  border-radius: 999px;
-  background: var(--color-subtle-2);
-  color: var(--color-muted);
-  box-shadow: none;
-}
-
-.selected-injury-item svg {
-  width: 15px;
-  height: 15px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-width: 2.4;
-}
-
 .strength-plan-card {
   display: grid;
   gap: 8px;
@@ -4375,16 +4227,6 @@ button.run-session-row {
   color: var(--color-text);
   font-size: var(--text-info-size);
   line-height: var(--text-info-line);
-}
-
-@media (max-width: 520px) {
-  .injury-body-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .body-model-stage {
-    min-height: 330px;
-  }
 }
 
 .chat-input-wrap .input-clear-button {

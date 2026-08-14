@@ -44,6 +44,16 @@ export type InjuryAreaDefinition = {
   keywords: string[]
 }
 
+export const injuryStructureLabels: Record<InjuryStructureType, string> = {
+  muscle: '근육',
+  tendon: '힘줄',
+  ligament: '인대',
+  fascia: '근막',
+  joint: '관절',
+  bone: '뼈',
+  nerve: '신경'
+}
+
 export const injuryAreaCatalog: InjuryAreaDefinition[] = [
   {
     id: 'lower-back',
