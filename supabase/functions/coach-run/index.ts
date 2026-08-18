@@ -1450,9 +1450,14 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     upcomingSchedule: structuredCoachContext ? upcomingSchedule : null,
     /**
      * 대회 완주자 분포 속 현재 위치. **묻지 않으면 먼저 꺼내지 않는다**(코치는 채점관이 아니다 — 지침은 아래 rules).
-     * 축약 컨텍스트에서는 뺀다: 비교는 사용자가 물었을 때만 필요하고, 매 턴 실려 나가면 입력 토큰만 먹는다.
+     *
+     * **structuredCoachContext 로 가리지 않는다**(restState·scheduleProposalGate 와 같은 이유).
+     * 처음엔 "비교는 물었을 때만 필요하니 축약 모드에서 빼자"로 두었는데, 정작 비교 질문이 general 로
+     * 분류되어(2026-08-18 실사고: "전체 완주자 기준으로 비교해줘" → general) 데이터가 빠졌다. 그러자
+     * 코치는 규칙만 보고 **이미 갖고 있는 대회명·기록을 사용자에게 되물었다**. 700바이트를 아끼려다
+     * 기능이 죽는 거래는 성립하지 않는다 — 문구 분류에 데이터 가용성을 걸지 않는다.
      */
-    raceBenchmark: structuredCoachContext ? raceBenchmark : null,
+    raceBenchmark,
     /**
      * 스케줄 제안 게이트 입력(#639). **structuredCoachContext 로 가리지 않는다** — 컨텍스트 축약 모드에서
      * restState 가 null 이 되면 "쉬는 중인데 또 쉬자고 제안"하는 구멍이 생기기 때문이다.
@@ -2078,7 +2083,7 @@ function buildResponseTemplatePolicy() {
  */
 function buildInternalNamingGuard() {
   return [
-    '⚠️ context 의 필드 이름(upcomingSchedule, restState, adaptiveProgress, injurySignals, goalProjection, tempoCoaching, sessionEvidence, trainingMemory 같은 영문 camelCase 키)을 답변 본문에 절대 쓰지 마라. 내부 데이터 구조 이름이고 사용자는 앱 화면의 우리말 표현만 안다. 예: "upcomingSchedule을 보면"이 아니라 "예정된 훈련을 보면", "restState가 active라서"가 아니라 "지금 쉬는 기간이라서"로 말한다.'
+    '⚠️ context 의 필드 이름(upcomingSchedule, restState, adaptiveProgress, injurySignals, goalProjection, raceBenchmark, tempoCoaching, sessionEvidence, trainingMemory 같은 영문 camelCase 키)을 답변 본문에 절대 쓰지 마라. 내부 데이터 구조 이름이고 사용자는 앱 화면의 우리말 표현만 안다. 예: "upcomingSchedule을 보면"이 아니라 "예정된 훈련을 보면", "restState가 active라서"가 아니라 "지금 쉬는 기간이라서"로 말한다.'
   ]
 }
 
@@ -2183,7 +2188,8 @@ function buildDataQuestionInstruction() {
   return [
     '기록 수치를 말해야 하는 질문(언제 얼마나 뛰었나, 어떤 조건에서 어땠나, 기간 비교)에는 **반드시 queryRuns 를 먼저 호출**한다. 도구를 부르지 않고 거리·횟수·평균 페이스·평균 심박 같은 수치를 말하지 않는다. context 의 recent7/14/30 은 최근 창 합계일 뿐이라 임의 기간의 답이 아니다.',
     // 남과의 비교(#A) — 재료는 주되, 꺼내는 조건과 말하는 방식은 코드가 못박는다.
-    'context.raceBenchmark 는 "내 예상 기록이 대회 완주자들 사이 어디쯤인가"다. **사용자가 비교를 물었을 때만 꺼낸다.** 묻지 않았는데 "당신은 상위 몇 %"를 먼저 말하지 마라 — 너는 채점관이 아니다.',
+    'context.raceBenchmark 는 "내 예상 기록이 대회 완주자들 사이 어디쯤인가"다(이 영문 키 이름을 답변에 쓰지 마라 — "대회 기록 분포" 처럼 우리말로 말한다). **사용자가 비교를 물었을 때만 꺼낸다.** 묻지 않았는데 "당신은 상위 몇 %"를 먼저 말하지 마라 — 너는 채점관이 아니다.',
+    '비교를 물었는데 context.raceBenchmark 가 없으면(null) — 대회명·연도·기록을 **사용자에게 되묻지 마라**. 목표가 설정되지 않아 예상 기록이 없다는 뜻이므로, 목표를 정하면 비교할 수 있다고 안내한다. 있을 때는 이미 대회명·연도·표본 수·백분위가 다 들어 있으니 그것만 인용한다.',
     'raceBenchmark 를 인용할 때는 **그 값이 무엇의 분포인지 반드시 함께 말한다**: raceBenchmark.basis 그대로, 그 대회를 완주한 사람들 기준이다. "한국 남성 평균", "또래 평균", "일반인 중 상위 N%" 처럼 인구 전체로 옮겨 말하는 것은 **거짓이다**(대회 참가자는 스스로 신청한 집단이라 인구보다 훨씬 빠르다). 대회명·연도·표본 수를 함께 밝힌다.',
     '**나이대 비교는 할 수 없다.** raceBenchmark.ageSegment 대로 연령 분포가 없다. "50대 평균과 비교해줘" 같은 질문에는 나이대 데이터가 없다고 먼저 말하고, 원하면 전체/성별 기준으로는 답할 수 있다고 제안한다. 성별 세그먼트를 나이대인 척 돌려 쓰지 마라. 일반 상식으로 "50대 남성 10K 평균은 대략 N분" 같은 숫자를 지어내지도 마라 — 근거가 없으면 reportDataGap 을 부른다.',
     'raceBenchmark.projectedSec 는 **예상치이지 실제 완주 기록이 아니다**. 분포 쪽은 실제 기록이므로, 비교할 때 "지금 페이스가 유지된다면" 같은 전제를 분명히 한다. 그리고 등수는 목적이 아니다 — 비교를 말한 뒤에는 그래서 무엇을 하면 되는지(다음 컷까지 남은 시간 nextCutGapSec 등)로 돌려놓는다.',
