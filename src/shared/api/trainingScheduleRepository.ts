@@ -234,3 +234,25 @@ function fromRow(row: ScheduledSessionRow): ScheduledSession {
     updatedAt: row.updated_at
   }
 }
+
+/**
+ * 특정 목표의 스케줄 행 전체 삭제 — **E2E 픽스처 정리 전용**(#E 2026-08-18).
+ *
+ * 왜 필요한가: `cleanupReturnRamp` 가 훈련 메모리에서 e2e 목표만 지우고 스케줄 행은 남겨서,
+ * 2026-07-04 시드의 행 ~100개가 실계정에 10월까지 남아 있었다. 앱은 `goal_id` 로 필터해 읽으므로
+ * 화면엔 안 보이지만, 실데이터가 오염되고 진단을 오도한다(같은 날 세션이 2개로 보임).
+ *
+ * ⚠ 안전장치: goalId 가 비었으면 던진다. 넓은 WHERE 를 만들지 않기 위해 **정확한 goal_id 일치**만
+ * 허용하고, 호출부는 리터럴 픽스처 id 만 넘긴다(실 목표는 'goal-*' 또는 UUID 라 절대 안 걸린다).
+ */
+export async function deleteSessionsByGoal(goalId: string): Promise<number> {
+  const id = goalId.trim()
+  if (!id) throw new Error('deleteSessionsByGoal: goalId 필수 — 전체 삭제 방지')
+  const { data, error } = await requireSupabase()
+    .from('training_schedule')
+    .delete()
+    .eq('goal_id', id)
+    .select('id')
+  if (error) throw error
+  return (data ?? []).length
+}
