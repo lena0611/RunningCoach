@@ -11,6 +11,7 @@ import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
 import { useCoachActionBridgeStore } from '@/app/stores/coachActionBridgeStore'
 import { buildPeriodizedSchedule } from '@/shared/lib/coaching/periodizedSchedule'
+import { deleteSessionsByGoal } from '@/shared/api/trainingScheduleRepository'
 import type { RunLog, Lap, RunMetricSample } from '@/entities/run/model'
 import type { TrainingGoal, TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
 import type { ScheduledSession } from '@/entities/training-schedule/model'
@@ -262,6 +263,21 @@ export async function cleanupReturnRamp(): Promise<{ ok: boolean; restoredActive
   } catch {
     prev = null
   }
+  /**
+   * 스케줄 행 정리는 **hasSeed 와 무관하게 먼저** 한다(멱등).
+   *
+   * 예전엔 메모리에서 e2e 목표만 지우고 스케줄 행은 남겼다. 그러면 목표가 사라진 뒤엔 hasSeed 가
+   * false 라 이 함수가 즉시 반환해, 남은 행을 **영원히 정리할 수 없다**(2026-08-18 실측: 7/04 시드의
+   * 행 ~100개가 10월까지 실계정에 남아 있었다). 앱은 goal_id 로 필터해 읽어 화면엔 안 보이지만
+   * 실데이터가 오염되고 진단을 오도한다.
+   */
+  try {
+    const removed = await deleteSessionsByGoal(RACE_GOAL_ID)
+    if (removed) console.info(`[e2e] cleanup: ${RACE_GOAL_ID} 스케줄 ${removed}행 삭제`)
+  } catch (error) {
+    console.warn('[e2e] cleanup: 스케줄 행 삭제 실패', error)
+  }
+
   if (!hasSeed) {
     try {
       localStorage.removeItem(PREV_STATE_KEY)
