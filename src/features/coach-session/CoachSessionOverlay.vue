@@ -629,7 +629,9 @@ async function sendCoachRequest(note: string) {
       upcomingSchedule: (() => {
         const today = new Date()
         const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-        return scheduleStore.upcoming(todayStr).slice(0, 3).map((s) => ({
+        // 5개(서버 상한과 동일). 3개면 "이번 주 어떻게 짜여 있어?" 같은 질문에 주 전체를 못 보여준다 —
+        // 코치가 부족한 재료를 weeklyPattern(옛 루틴 메모)으로 메꾸는 게 2026-08-18 실사고의 한 원인이었다.
+        return scheduleStore.upcoming(todayStr).slice(0, 5).map((s) => ({
           date: s.date,
           type: s.sessionType,
           distanceKm: s.prescription.distanceKm ?? null,
