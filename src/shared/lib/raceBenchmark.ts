@@ -1012,3 +1012,85 @@ function emptyDistanceCoverage(): Record<RaceBenchmarkDistanceCategory, RaceBenc
     marathon: { total: 0, domestic: 0, international: 0, latestConfirmed: 0 }
   }
 }
+
+/**
+ * 코치 컨텍스트용 요약 — "내 예상 기록이 대회 완주자들 사이 어디쯤인가".
+ *
+ * 화면(대시보드)에만 있던 비교를 채팅 코치도 쓸 수 있게 주입한다. 계산은 화면과 **같은 함수**를
+ * 거치므로 두 곳이 다른 숫자를 말하지 않는다.
+ *
+ * ## 왜 basis 문구를 코드가 박는가
+ * 이 분포는 **그 대회를 완주한 사람들**의 것이지 일반 인구가 아니다. 대회 참가자는 자기선택 집단이라
+ * 인구 전체보다 한참 빠르다 — "한국 남성 중 상위 30%"로 옮기면 **거짓말**이 된다. 프롬프트 지침
+ * 하나로 매번 지켜지길 기대하지 않고, 페이로드에 문구를 실어 보낸다(dataGap 의 응대 지침과 같은 방식).
+ *
+ * ## 나이대는 없다
+ * 세그먼트는 전체/남/여뿐이다. 수집처에 연령이 없어 보류됐다. "50대 평균과 비교" 같은 질문에는
+ * 나이대 데이터가 없다고 답해야 하며, 성별 세그먼트를 나이대인 것처럼 돌려쓰면 안 된다.
+ */
+export type CoachRaceBenchmarkEntry = {
+  event: string
+  year: number
+  region: RaceBenchmarkRegion
+  /** 이 값이 어느 집단 기준인지(전체/남자/여자). 나이대는 없다. */
+  segment: string
+  sampleSize: number
+  /** 화면과 같은 표기('상위 32%' · '상위 5% 이내' · '상위 92%+'). 꼬리 너머 표기를 지운 클램핑 금지. */
+  percentileText: string
+  percentileRangeText: string
+  /** 다음(더 빠른) 컷까지 남은 초. 목표 제시에 쓴다. */
+  nextCutGapSec: number | null
+}
+
+export type CoachRaceBenchmarkSummary = {
+  distanceKm: number
+  /** 비교에 쓴 값. 실측 완주 기록이 아니라 **예상치**다. */
+  projectedSec: number
+  basis: string
+  ageSegment: string
+  entries: CoachRaceBenchmarkEntry[]
+}
+
+const COACH_BENCHMARK_MAX_ENTRIES = 3
+
+export function summarizeRaceBenchmarkForCoach(
+  projection: RaceProjection | null,
+  sex: 'male' | 'female' | 'other' | 'unknown' | null | undefined
+): CoachRaceBenchmarkSummary | null {
+  const projectedSec = projection?.current?.projectedSec ?? null
+  if (!projection || typeof projectedSec !== 'number' || !Number.isFinite(projectedSec)) return null
+
+  const ready = compareProjectionToRaceBenchmarks(projection).filter((comparison) => comparison.status === 'ready')
+  if (!ready.length) return null
+
+  // 국내 대회를 먼저, 그다음 표본이 큰 순으로. 한국 사용자에게 국내 분포가 더 와닿는다.
+  const ordered = [...ready].sort((a, b) => {
+    if (a.snapshot.region !== b.snapshot.region) return a.snapshot.region === 'domestic' ? -1 : 1
+    return (b.segments[0]?.sampleSize ?? 0) - (a.segments[0]?.sampleSize ?? 0)
+  })
+
+  const preferred: RaceBenchmarkSegmentKey = sex === 'male' ? 'male' : sex === 'female' ? 'female' : 'overall'
+  const entries = ordered.slice(0, COACH_BENCHMARK_MAX_ENTRIES).map((comparison) => {
+    // 성별 세그먼트가 없는 대회(해외 다수)는 전체로 떨어진다 — 라벨이 그 사실을 그대로 말한다.
+    const segment = comparison.segments.find((item) => item.segment === preferred) ?? comparison.segments[0]
+    return {
+      event: comparison.snapshot.eventName,
+      year: comparison.snapshot.year,
+      region: comparison.snapshot.region,
+      segment: formatRaceBenchmarkSegmentLabel(segment.segment),
+      sampleSize: segment.sampleSize,
+      percentileText: formatRaceBenchmarkPercentilePoint(segment.percentile, segment.percentileBound),
+      percentileRangeText: formatRaceBenchmarkPercentileRange(segment.percentileRange, segment.percentileRangeBounds),
+      nextCutGapSec: segment.nextCutGapSec
+    }
+  })
+
+  return {
+    distanceKm: projection.targetDistanceKm,
+    projectedSec,
+    basis:
+      '그 대회를 완주한 사람들의 기록 분포(비식별 집계)다. 일반 인구 평균이 아니다 — 대회 참가자는 스스로 신청한 집단이라 인구 전체보다 훨씬 빠르다.',
+    ageSegment: '나이대별 분포는 없다(수집처에 연령 정보 없음). 나이대 비교를 물으면 없다고 답한다.',
+    entries
+  }
+}

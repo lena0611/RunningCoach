@@ -12,6 +12,7 @@ import {
   raceBenchmarkDistanceCategories,
   raceBenchmarkSnapshots,
   splitRaceBenchmarkComparisons,
+  summarizeRaceBenchmarkForCoach,
   type RaceBenchmarkSnapshot
 } from './raceBenchmark'
 
@@ -301,5 +302,51 @@ describe('raceBenchmark', () => {
     expect(formatRaceBenchmarkSegmentLabel('overall')).toBe('전체')
     expect(formatRaceBenchmarkSegmentLabel('male')).toBe('남자')
     expect(formatRaceBenchmarkSegmentLabel('female')).toBe('여자')
+  })
+})
+
+describe('summarizeRaceBenchmarkForCoach', () => {
+  it('예상 기록이 없으면 주입하지 않는다', () => {
+    const noProjection = { ...projection, current: { ...projection.current, projectedSec: Number.NaN } }
+    expect(summarizeRaceBenchmarkForCoach(noProjection, 'male')).toBeNull()
+    expect(summarizeRaceBenchmarkForCoach(null, 'male')).toBeNull()
+  })
+
+  it('사용자 성별 세그먼트를 고른다', () => {
+    const summary = summarizeRaceBenchmarkForCoach(projection, 'female')
+    expect(summary).not.toBeNull()
+    expect(summary!.entries.length).toBeGreaterThan(0)
+    // 성별 분포가 있는 국내 대회가 먼저 오고, 그 항목은 여자 세그먼트여야 한다.
+    expect(summary!.entries[0].segment).toBe('여자')
+  })
+
+  it('성별을 모르면 전체 세그먼트로 떨어진다', () => {
+    const summary = summarizeRaceBenchmarkForCoach(projection, 'unknown')
+    expect(summary!.entries[0].segment).toBe('전체')
+  })
+
+  it('국내 대회를 먼저 노출한다', () => {
+    const summary = summarizeRaceBenchmarkForCoach(projection, 'male')
+    expect(summary!.entries[0].region).toBe('domestic')
+  })
+
+  it('완주자 기준·나이대 부재를 페이로드가 직접 말한다', () => {
+    const summary = summarizeRaceBenchmarkForCoach(projection, 'male')
+    // 프롬프트 선의가 아니라 데이터가 못박아야 "인구 평균"으로 새지 않는다.
+    expect(summary!.basis).toContain('완주한 사람들')
+    expect(summary!.basis).toContain('일반 인구 평균이 아니다')
+    expect(summary!.ageSegment).toContain('나이대별 분포는 없다')
+  })
+
+  it('꼬리 너머 표기를 클램핑하지 않는다', () => {
+    // 아주 느린 예상 기록 → 가장 느린 컷보다 뒤 → "상위 N%+" 로 정직하게 표기되어야 한다.
+    const slow = { ...projection, current: { ...projection.current, projectedSec: 99999 } }
+    const summary = summarizeRaceBenchmarkForCoach(slow, 'male')
+    expect(summary!.entries[0].percentileText).toContain('+')
+  })
+
+  it('항목 수를 3개로 제한한다(입력 토큰 통제)', () => {
+    const summary = summarizeRaceBenchmarkForCoach(projection, 'male')
+    expect(summary!.entries.length).toBeLessThanOrEqual(3)
   })
 })

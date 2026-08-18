@@ -290,6 +290,7 @@ Deno.serve(async (req) => {
     const achievements = normalizeAchievements(body.achievements)
     const tempoCoaching = normalizeTempoCoaching(body.tempoCoaching)
     const goalProjection = normalizeGoalProjection(body.goalProjection)
+    const raceBenchmark = normalizeRaceBenchmark(body.raceBenchmark)
     const adaptiveProgress = normalizeAdaptiveProgress(body.adaptiveProgress)
     const sessionEvidence = normalizeSessionEvidence(body.sessionEvidence)
     const upcomingSchedule = Array.isArray(body.upcomingSchedule)
@@ -324,7 +325,7 @@ Deno.serve(async (req) => {
     const rateLimit = await consumeRateLimit(admin, userId, 'coach-run')
     if (!rateLimit.ok) return json({ error: rateLimit.error, retryAfterSec: rateLimit.retryAfterSec }, 429)
 
-    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress, sessionEvidence, upcomingSchedule, restState, recentInjuryWindow, marathonFlag, injurySignals)
+    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress, sessionEvidence, upcomingSchedule, restState, recentInjuryWindow, marathonFlag, injurySignals, raceBenchmark)
     const ownedSelectedRunId = context.selectedRunOwnedId ?? context.selectedRun?.id ?? null
     if (shouldStream) {
       return streamCoachRun(admin, userId, ownedSelectedRunId, userNote, provider, context, model)
@@ -885,6 +886,59 @@ function normalizeGoalProjection(value: unknown): CoachGoalProjection | null {
   }
 }
 
+/**
+ * 대회 완주자 분포 속 현재 위치(웹 계산 주입). 대시보드와 **같은 함수**를 거친 값이라 두 화면이 어긋나지 않는다.
+ * `basis`·`ageSegment` 는 웹이 실어 보내는 고정 문구다 — "완주자 분포"를 "인구 평균"으로 옮기면 거짓이 되고,
+ * 나이대 세그먼트는 아예 없다. 이걸 프롬프트 지침 하나에 맡기지 않고 데이터에 박아 보낸다.
+ */
+type CoachRaceBenchmark = {
+  distanceKm: number
+  projectedSec: number
+  basis: string
+  ageSegment: string
+  entries: Array<{
+    event: string
+    year: number
+    region: string
+    segment: string
+    sampleSize: number
+    percentileText: string
+    percentileRangeText: string
+    nextCutGapSec: number | null
+  }>
+}
+
+function normalizeRaceBenchmark(value: unknown): CoachRaceBenchmark | null {
+  if (!value || typeof value !== 'object') return null
+  const v = value as Record<string, unknown>
+  const distanceKm = nullableNumber(v.distanceKm)
+  const projectedSec = nullableNumber(v.projectedSec)
+  if (distanceKm === null || projectedSec === null) return null
+  const rawEntries = Array.isArray(v.entries) ? v.entries : []
+  const entries = rawEntries
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object')
+    .slice(0, 3)
+    .map((entry) => ({
+      event: String(entry.event ?? '').slice(0, 60),
+      year: nullableNumber(entry.year) ?? 0,
+      region: entry.region === 'domestic' ? '국내' : '해외',
+      segment: String(entry.segment ?? '전체').slice(0, 10),
+      sampleSize: nullableNumber(entry.sampleSize) ?? 0,
+      percentileText: String(entry.percentileText ?? '').slice(0, 40),
+      percentileRangeText: String(entry.percentileRangeText ?? '').slice(0, 40),
+      nextCutGapSec: nullableNumber(entry.nextCutGapSec)
+    }))
+    .filter((entry) => entry.event && entry.percentileText)
+  if (!entries.length) return null
+  return {
+    distanceKm,
+    projectedSec,
+    basis: String(v.basis ?? '').slice(0, 300),
+    ageSegment: String(v.ageSegment ?? '').slice(0, 200),
+    entries
+  }
+}
+
 type PhaseName = 'Base' | 'Build' | 'Threshold' | 'Race Specific' | 'Taper' | 'Recovery'
 type CriterionStatusValue = 'ready' | 'watch' | 'blocked'
 
@@ -1037,7 +1091,7 @@ function unifyPerformanceProjection(
   }
 }
 
-async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null, sessionEvidence: CoachSessionEvidence | null = null, upcomingSchedule: { date: string; type: string; distanceKm: number | null; keySession: boolean; canIntensify: boolean }[] | null = null, restState: CoachRestContext | null = null, recentInjuryWindow: CoachRecentInjuryWindow | null = null, marathonFlag = false, injurySignals: CoachInjurySignals | null = null) {
+async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null, sessionEvidence: CoachSessionEvidence | null = null, upcomingSchedule: { date: string; type: string; distanceKm: number | null; keySession: boolean; canIntensify: boolean }[] | null = null, restState: CoachRestContext | null = null, recentInjuryWindow: CoachRecentInjuryWindow | null = null, marathonFlag = false, injurySignals: CoachInjurySignals | null = null, raceBenchmark: CoachRaceBenchmark | null = null) {
   const memorySelect = 'id, content, created_at, importance, last_referenced_at, reference_count'
   const [
     { data: memoryRow },
@@ -1394,6 +1448,11 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     trainingKnowledge,
     adaptiveProgress: structuredCoachContext ? adaptiveProgress : null,
     upcomingSchedule: structuredCoachContext ? upcomingSchedule : null,
+    /**
+     * 대회 완주자 분포 속 현재 위치. **묻지 않으면 먼저 꺼내지 않는다**(코치는 채점관이 아니다 — 지침은 아래 rules).
+     * 축약 컨텍스트에서는 뺀다: 비교는 사용자가 물었을 때만 필요하고, 매 턴 실려 나가면 입력 토큰만 먹는다.
+     */
+    raceBenchmark: structuredCoachContext ? raceBenchmark : null,
     /**
      * 스케줄 제안 게이트 입력(#639). **structuredCoachContext 로 가리지 않는다** — 컨텍스트 축약 모드에서
      * restState 가 null 이 되면 "쉬는 중인데 또 쉬자고 제안"하는 구멍이 생기기 때문이다.
@@ -2123,6 +2182,12 @@ function buildEvidenceInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnT
 function buildDataQuestionInstruction() {
   return [
     '기록 수치를 말해야 하는 질문(언제 얼마나 뛰었나, 어떤 조건에서 어땠나, 기간 비교)에는 **반드시 queryRuns 를 먼저 호출**한다. 도구를 부르지 않고 거리·횟수·평균 페이스·평균 심박 같은 수치를 말하지 않는다. context 의 recent7/14/30 은 최근 창 합계일 뿐이라 임의 기간의 답이 아니다.',
+    // 남과의 비교(#A) — 재료는 주되, 꺼내는 조건과 말하는 방식은 코드가 못박는다.
+    'context.raceBenchmark 는 "내 예상 기록이 대회 완주자들 사이 어디쯤인가"다. **사용자가 비교를 물었을 때만 꺼낸다.** 묻지 않았는데 "당신은 상위 몇 %"를 먼저 말하지 마라 — 너는 채점관이 아니다.',
+    'raceBenchmark 를 인용할 때는 **그 값이 무엇의 분포인지 반드시 함께 말한다**: raceBenchmark.basis 그대로, 그 대회를 완주한 사람들 기준이다. "한국 남성 평균", "또래 평균", "일반인 중 상위 N%" 처럼 인구 전체로 옮겨 말하는 것은 **거짓이다**(대회 참가자는 스스로 신청한 집단이라 인구보다 훨씬 빠르다). 대회명·연도·표본 수를 함께 밝힌다.',
+    '**나이대 비교는 할 수 없다.** raceBenchmark.ageSegment 대로 연령 분포가 없다. "50대 평균과 비교해줘" 같은 질문에는 나이대 데이터가 없다고 먼저 말하고, 원하면 전체/성별 기준으로는 답할 수 있다고 제안한다. 성별 세그먼트를 나이대인 척 돌려 쓰지 마라. 일반 상식으로 "50대 남성 10K 평균은 대략 N분" 같은 숫자를 지어내지도 마라 — 근거가 없으면 reportDataGap 을 부른다.',
+    'raceBenchmark.projectedSec 는 **예상치이지 실제 완주 기록이 아니다**. 분포 쪽은 실제 기록이므로, 비교할 때 "지금 페이스가 유지된다면" 같은 전제를 분명히 한다. 그리고 등수는 목적이 아니다 — 비교를 말한 뒤에는 그래서 무엇을 하면 되는지(다음 컷까지 남은 시간 nextCutGapSec 등)로 돌려놓는다.',
+    '훈련 처방은 분포 위치에서 나오지 않는다. 강도·볼륨은 언제나 **본인 기준**(heartRateModel·paceModel·최근 부하)에서 뽑는다 — 상위 몇 %라는 이유로 더 세게/약하게 처방하지 마라. runnerLevel 이 beginner 면 순위를 앞세우지 말고 **본인의 지난 대비 변화**를 먼저 말한 뒤 비교를 덧붙인다(막지는 않는다 — 물었으면 답한다).',
     '도구 결과를 말할 때 **적용된 조건(appliedFilters)과 표본 수를 함께** 밝힌다. 예: "6월 기준 14회 · 90.75km". 조건과 표본을 감추면 사용자가 검증할 수 없다.',
     'caution 이 있으면 반드시 반영한다. 특히 matchedRuns 가 0 이면 **추정하지 말고 "그 조건에 맞는 기록이 없다"** 고 말하고, 표본이 적으면 경향으로 단정하지 않는다.',
     'error 가 오면(저장하지 않는 항목·형식 오류) 그 이유를 사용자 말로 옮겨 "그 기준으로는 볼 수 없다"고 알린다. 비슷한 다른 항목으로 슬쩍 바꿔 답하지 않는다 — 예: 강수(비) 여부는 저장하지 않으므로 습도로 대체해 "비 온 날"이라 말하면 안 된다. 도구 결과에 guidance 가 있으면 그 지침대로 답한다.',
