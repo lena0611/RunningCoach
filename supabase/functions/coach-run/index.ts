@@ -888,29 +888,47 @@ function normalizeGoalProjection(value: unknown): CoachGoalProjection | null {
 
 /**
  * 대회 완주자 분포 속 현재 위치(웹 계산 주입). 대시보드와 **같은 함수**를 거친 값이라 두 화면이 어긋나지 않는다.
- * `basis`·`ageSegment` 는 웹이 실어 보내는 고정 문구다 — "완주자 분포"를 "인구 평균"으로 옮기면 거짓이 되고,
- * 나이대 세그먼트는 아예 없다. 이걸 프롬프트 지침 하나에 맡기지 않고 데이터에 박아 보낸다.
+ *
+ * `available: false` 일 때도 **사유와 응대 지침을 함께** 받는다. 예전엔 불가를 그냥 null 로 보냈고,
+ * 그러자 코치가 이유를 지어냈다(2026-08-18 실사고: "대회명·연도가 없어서"·"기록을 알려주면" —
+ * 사용자가 줄 수 있는 정보가 아니다). 사유 구분은 코드만 할 수 있으므로 웹이 판정해 보낸다.
+ *
+ * `basis`·`ageSegment` 도 웹이 실어 보내는 고정 문구다 — "완주자 분포"를 "인구 평균"으로 옮기면
+ * 거짓이 되고, 나이대 세그먼트는 아예 없다. 프롬프트 지침 하나에 맡기지 않고 데이터에 박아 보낸다.
  */
-type CoachRaceBenchmark = {
-  distanceKm: number
-  projectedSec: number
-  basis: string
-  ageSegment: string
-  entries: Array<{
-    event: string
-    year: number
-    region: string
-    segment: string
-    sampleSize: number
-    percentileText: string
-    percentileRangeText: string
-    nextCutGapSec: number | null
-  }>
-}
+type CoachRaceBenchmark =
+  | {
+      available: true
+      distanceKm: number
+      projectedSec: number
+      basis: string
+      ageSegment: string
+      entries: Array<{
+        event: string
+        year: number
+        region: string
+        segment: string
+        sampleSize: number
+        percentileText: string
+        percentileRangeText: string
+        nextCutGapSec: number | null
+      }>
+    }
+  | { available: false; reason: string; guidance: string }
+
+const RACE_BENCHMARK_UNAVAILABLE_REASONS = ['no_goal', 'not_enough_runs', 'distance_not_covered']
 
 function normalizeRaceBenchmark(value: unknown): CoachRaceBenchmark | null {
   if (!value || typeof value !== 'object') return null
   const v = value as Record<string, unknown>
+
+  if (v.available === false) {
+    const reason = typeof v.reason === 'string' && RACE_BENCHMARK_UNAVAILABLE_REASONS.includes(v.reason) ? v.reason : ''
+    const guidance = String(v.guidance ?? '').slice(0, 400)
+    if (!reason || !guidance) return null
+    return { available: false, reason, guidance }
+  }
+
   const distanceKm = nullableNumber(v.distanceKm)
   const projectedSec = nullableNumber(v.projectedSec)
   if (distanceKm === null || projectedSec === null) return null
@@ -931,6 +949,7 @@ function normalizeRaceBenchmark(value: unknown): CoachRaceBenchmark | null {
     .filter((entry) => entry.event && entry.percentileText)
   if (!entries.length) return null
   return {
+    available: true,
     distanceKm,
     projectedSec,
     basis: String(v.basis ?? '').slice(0, 300),
@@ -2189,7 +2208,7 @@ function buildDataQuestionInstruction() {
     '기록 수치를 말해야 하는 질문(언제 얼마나 뛰었나, 어떤 조건에서 어땠나, 기간 비교)에는 **반드시 queryRuns 를 먼저 호출**한다. 도구를 부르지 않고 거리·횟수·평균 페이스·평균 심박 같은 수치를 말하지 않는다. context 의 recent7/14/30 은 최근 창 합계일 뿐이라 임의 기간의 답이 아니다.',
     // 남과의 비교(#A) — 재료는 주되, 꺼내는 조건과 말하는 방식은 코드가 못박는다.
     'context.raceBenchmark 는 "내 예상 기록이 대회 완주자들 사이 어디쯤인가"다(이 영문 키 이름을 답변에 쓰지 마라 — "대회 기록 분포" 처럼 우리말로 말한다). **사용자가 비교를 물었을 때만 꺼낸다.** 묻지 않았는데 "당신은 상위 몇 %"를 먼저 말하지 마라 — 너는 채점관이 아니다.',
-    '비교를 물었는데 context.raceBenchmark 가 없으면(null) — 대회명·연도·기록을 **사용자에게 되묻지 마라**. 목표가 설정되지 않아 예상 기록이 없다는 뜻이므로, 목표를 정하면 비교할 수 있다고 안내한다. 있을 때는 이미 대회명·연도·표본 수·백분위가 다 들어 있으니 그것만 인용한다.',
+    '비교를 물었는데 context.raceBenchmark.available 이 false 면 — **guidance 에 적힌 대로 답한다**. 사유(목표 없음·기록 부족·거리 미지원)를 코드가 판정해 지침까지 실어 보내므로 네가 이유를 추측하지 마라. 특히 **대회명·연도·기록을 사용자에게 되묻지 마라** — 사용자가 줄 수 있는 정보가 아니고, 앱이 목표에서 예상 기록을 계산하는 구조다. available 이 true 면 대회명·연도·표본 수·백분위가 이미 다 들어 있으니 그것만 인용한다.',
     'raceBenchmark 를 인용할 때는 **그 값이 무엇의 분포인지 반드시 함께 말한다**: raceBenchmark.basis 그대로, 그 대회를 완주한 사람들 기준이다. "한국 남성 평균", "또래 평균", "일반인 중 상위 N%" 처럼 인구 전체로 옮겨 말하는 것은 **거짓이다**(대회 참가자는 스스로 신청한 집단이라 인구보다 훨씬 빠르다). 대회명·연도·표본 수를 함께 밝힌다.',
     '**나이대 비교는 할 수 없다.** raceBenchmark.ageSegment 대로 연령 분포가 없다. "50대 평균과 비교해줘" 같은 질문에는 나이대 데이터가 없다고 먼저 말하고, 원하면 전체/성별 기준으로는 답할 수 있다고 제안한다. 성별 세그먼트를 나이대인 척 돌려 쓰지 마라. 일반 상식으로 "50대 남성 10K 평균은 대략 N분" 같은 숫자를 지어내지도 마라 — 근거가 없으면 reportDataGap 을 부른다.',
     'raceBenchmark.projectedSec 는 **예상치이지 실제 완주 기록이 아니다**. 분포 쪽은 실제 기록이므로, 비교할 때 "지금 페이스가 유지된다면" 같은 전제를 분명히 한다. 그리고 등수는 목적이 아니다 — 비교를 말한 뒤에는 그래서 무엇을 하면 되는지(다음 컷까지 남은 시간 nextCutGapSec 등)로 돌려놓는다.',
@@ -2216,6 +2235,11 @@ function buildCoachThreadInstruction() {
     // #656: "원하시면 ~해드릴게요"로 끝낸 뒤 사용자가 "응 해줘"라고 하면, 그 후속을 실제로 해야 한다.
     // 2026-08-05 실사고: 승낙을 새 일반 질문으로 취급해 맥락 잃은 원론 설명을 시작했다.
     '사용자가 "응", "응 해줘", "해봐", "계속" 처럼 승낙/계속만 보내면 — 직전 답변 마지막에 **네가 제안한 그 후속 작업을 이번 턴에 실제로 수행**한다. 데이터 조회가 필요하면 queryRuns 를 부른다. 승낙을 새 질문으로 취급해 원론 설명을 시작하거나 무엇을 원하는지 되묻지 마라(직전 제안이 곧 요청 내용이다).',
+    // 기능은 계속 추가된다 — 어제 못 하던 걸 오늘은 할 수 있다. 그런데 스레드에 "그건 못 한다"는 옛 답변이
+    // 쌓여 있으면 모델이 그 스탠스를 유지해, 이번 턴 컨텍스트에 데이터가 **있는데도** 없다고 답한다.
+    // 2026-08-18 실사고: 같은 방에서 raceBenchmark 가 available=true 로 실렸는데도, 직전 턴의 실패 답변을
+    // 이어받아 "대회명과 기록이 없어서 비교할 수 없다"를 반복했다(다른 문구로 물으면 정상 답변).
+    '**과거 답변과의 일관성보다 이번 턴 컨텍스트가 우선이다.** 직전에 "그건 볼 수 없다 / 데이터가 없다"고 답했더라도, 이번 컨텍스트에 그 데이터가 있으면 **있는 대로 답한다**. 앱은 계속 개선되므로 어제 못 했던 것이 오늘 되는 게 정상이다. 옛 답변을 근거로 "여전히 없다"고 말하지 말고, 컨텍스트를 먼저 확인하고 판단한다.',
     '답변을 "원하시면 ~도 해드릴게요"로 맺는 건 **이번 턴에 실제로 해줄 수 있는 것일 때만** 쓴다. 도구로 조회 가능한 것을 다음 턴으로 미루는 용도로 쓰지 마라.'
   ]
 }

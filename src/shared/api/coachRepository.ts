@@ -134,7 +134,7 @@ export async function requestCoachRunStream(
     achievements?: CoachAchievementSummary | null
     tempoCoaching?: TempoCoachingSummary | null
     goalProjection?: CoachGoalProjectionSummary | null
-    /** 예상 기록이 대회 완주자 분포 어디쯤인지(대시보드와 같은 계산). 없으면 주입하지 않는다. */
+    /** 예상 기록이 대회 완주자 분포 어디쯤인지(대시보드와 같은 계산). 불가할 때도 사유·지침을 함께 보낸다. */
     raceBenchmark?: CoachRaceBenchmarkSummary | null
     adaptiveProgress?: CoachAdaptiveProgressSummary | null
     sessionEvidence?: CoachSessionEvidence | null
