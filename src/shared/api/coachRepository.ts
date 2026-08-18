@@ -7,6 +7,7 @@ import type { RunnerLevel } from '@/entities/training-memory/model'
 import type { CoachAchievementSummary } from '@/shared/lib/achievement/achievements'
 import type { TempoCoachingSummary } from '@/shared/lib/coaching/tempoAdaptation'
 import type { CoachGoalProjectionSummary } from '@/shared/lib/performanceProjection'
+import type { CoachRaceBenchmarkSummary } from '@/shared/lib/raceBenchmark'
 import type { CoachAdaptiveProgressSummary } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import type { CoachSessionEvidence } from '@/shared/lib/coaching/sessionQuality'
 
@@ -133,6 +134,8 @@ export async function requestCoachRunStream(
     achievements?: CoachAchievementSummary | null
     tempoCoaching?: TempoCoachingSummary | null
     goalProjection?: CoachGoalProjectionSummary | null
+    /** 예상 기록이 대회 완주자 분포 어디쯤인지(대시보드와 같은 계산). 없으면 주입하지 않는다. */
+    raceBenchmark?: CoachRaceBenchmarkSummary | null
     adaptiveProgress?: CoachAdaptiveProgressSummary | null
     sessionEvidence?: CoachSessionEvidence | null
     /** 실제 주기화 스케줄의 다음 세션들(코치 "다음 훈련"이 weeklyPattern으로 지어내지 않게). */
@@ -177,6 +180,7 @@ export async function requestCoachRunStream(
       achievements: options.achievements ?? null,
       tempoCoaching: options.tempoCoaching ?? null,
       goalProjection: options.goalProjection ?? null,
+      raceBenchmark: options.raceBenchmark ?? null,
       adaptiveProgress: options.adaptiveProgress ?? null,
       sessionEvidence: options.sessionEvidence ?? null,
       upcomingSchedule: options.upcomingSchedule ?? null,

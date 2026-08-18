@@ -30,6 +30,7 @@ import { deriveRestState } from '@/entities/training-memory/restWindow'
 import { getAgeLoadWeight } from '@/shared/lib/runStats'
 import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
 import { getRaceProjection, summarizeGoalProjectionForCoach } from '@/shared/lib/performanceProjection'
+import { summarizeRaceBenchmarkForCoach } from '@/shared/lib/raceBenchmark'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { resolveRunnerLevel } from '@/shared/lib/runnerLevel'
 import { formatDateTimeWithWeekday, formatDateWithWeekday } from '@/shared/lib/format'
@@ -59,18 +60,23 @@ const coachIntentFulfillment = computed(() =>
   coachRun.value && coachIntent.value ? computeIntentFulfillment(coachIntent.value, coachRun.value) : null
 )
 // #312/#98: 대시보드와 동일한 6요소 전망을 coach-run 에 주입해 목표 가능성 불일치를 없앤다.
-const coachGoalProjection = computed(() => {
+// 전망 원본은 목표 전망과 대회 벤치마크 두 곳이 함께 쓰므로 한 번만 계산한다.
+const coachProjection = computed(() => {
   const runs = runStore.sortedRuns
   const memory = memoryStore.memory
   const now = new Date()
   const observedMaxHr = deriveObservedMaxHr(runs.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })), now)
   const hr = deriveHeartRateModel(memory.athleteProfile, now.getFullYear(), observedMaxHr)
-  const projection = getRaceProjection(runs, getActiveGoal(memory), now, getActiveInjuryItem(memory), getAgeLoadWeight(memory.athleteProfile.birthYear, now), {
+  return getRaceProjection(runs, getActiveGoal(memory), now, getActiveInjuryItem(memory), getAgeLoadWeight(memory.athleteProfile.birthYear, now), {
     easyCeilingBpm: hr.easyCeilingBpm,
     tempoCeilingBpm: hr.tempoCeilingBpm
   })
-  return summarizeGoalProjectionForCoach(projection)
 })
+const coachGoalProjection = computed(() => summarizeGoalProjectionForCoach(coachProjection.value))
+// 대시보드에만 있던 "완주자 분포 속 내 위치"를 채팅 코치도 쓰게 한다. 같은 함수를 거치므로 두 화면이 다른 숫자를 말하지 않는다.
+const coachRaceBenchmark = computed(() =>
+  summarizeRaceBenchmarkForCoach(coachProjection.value, memoryStore.memory.athleteProfile.sex)
+)
 const coachNote = ref('')
 // 전송 즉시 입력창을 비우고 질문을 사용자 말풍선으로 낙관적 표시하기 위한 상태(#238).
 const pendingUserNote = ref('')
@@ -613,6 +619,7 @@ async function sendCoachRequest(note: string) {
       achievements: summarizeAchievementsForCoach(runStore.sortedRuns, competitionStore.results),
       tempoCoaching: summarizeTempoCoaching(runStore.sortedRuns, memoryStore.memory),
       goalProjection: coachGoalProjection.value,
+      raceBenchmark: coachRaceBenchmark.value,
       adaptiveProgress: coachAdaptiveProgress,
       // 실제 주기화 스케줄의 다음 세션들 — 코치 "다음 훈련"이 weeklyPattern으로 엉뚱한 세션을 지어내지 않게(요약탭과 일치).
       upcomingSchedule: (() => {

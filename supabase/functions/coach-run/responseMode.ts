@@ -25,6 +25,23 @@ function mentionsScheduleChange(text: string): boolean {
 }
 
 /**
+ * 남과의 비교 질문 — "상위 몇 %", "평균과 비교", "다른 사람들은".
+ *
+ * general 로 떨어지면 컨텍스트가 축약되어 `raceBenchmark` 가 빠지고, 코치는 비교 재료 없이 답한다.
+ * 그 상태에서 모델이 일반 상식으로 숫자를 지어내는 게 최악이라, 개인 훈련 대화로 올린다.
+ * (`mentionsFirstPerson` 은 "내 기록"은 잡지만 "내 **예상**기록"은 못 잡는다 — 사용자가 실제로 쓴 표현이다.)
+ */
+function asksPeerComparison(text: string): boolean {
+  const comparesToOthers =
+    /상위\s*몇|몇\s*(%|퍼센트|프로)|백분위|퍼센타일|등수|순위|또래|남들|다른\s*(사람|러너)|평균\s*(과|이랑|하고|보다|대비)|평균\s*기록|일반\s*(인|사람)|보통\s*(사람|러너)/.test(
+      text
+    )
+  if (!comparesToOthers) return false
+  // 비교 대상이 러닝 기록일 때만. "평균 수면시간" 같은 무관한 평균 질문까지 끌어오지 않는다.
+  return /기록|페이스|완주|대회|마라톤|하프|10\s*k|5\s*k|러너|러닝|달리|뛰|예상|실력|수준/.test(text)
+}
+
+/**
  * 승낙-후속 판정(#656). "응 해줘"·"해봐"·"계속" 같은 입력은 **그 자체에 분류 정보가 없다** —
  * 직전 답변이 제안한 후속에 대한 승낙이다. 이걸 문구로 분류하면 general 로 떨어져 컨텍스트가
  * 축약되고, 코치가 맥락을 잃은 원론 답변을 시작한다(2026-08-05 00:30 실사고: "올해 추세" →
@@ -123,6 +140,7 @@ export function detectUserNoteRunRelevance(note: string): UserNoteRunRelevance {
 
   if (
     mentionsScheduleChange(text) ||
+    asksPeerComparison(text) ||
     mentionsFirstPerson(text) ||
     // 러닝 행위 어형을 넓게 받는다(뛰었/달렸/뜀…) — 1인칭 대명사를 좁힌 대신, 주어 생략 개인 발화
     // ("오랜만에 5키로 도전한거야", "가볍게 뜀")가 general 로 새는 회귀를 막는 안전망.
