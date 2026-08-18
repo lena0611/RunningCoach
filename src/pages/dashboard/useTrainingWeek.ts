@@ -15,6 +15,7 @@ import { getAgeLoadWeight, getChronicLoadTrend, getLongestRunKmWithinDays, getNe
 import { getRaceProjection } from '@/shared/lib/performanceProjection'
 import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
 import { returnRampWindowSessions, returnSessionCapKm } from '@/shared/lib/coaching/returnRamp'
+import { deriveWeeklyVolumeAnchorKm } from '@/shared/lib/coaching/returnAnchor'
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { buildPeriodizedSchedule, buildSteadyWeeklyRhythm, goalArchetype, prescriptionFor, trainingWeekRange, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
 import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
@@ -115,7 +116,15 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
   // #235/§10: 부하·추세는 레이싱을 소비하지 않는다(이중계산·오염 방지) → 훈련용 런만 투입.
   const chronicLoad = computed(() => getChronicLoadTrend(trainingRuns.value, today.value, ageLoadWeight.value))
   // #395 시작 볼륨 앵커: 최근 30일 총거리 → 주간 평균(데이터 없으면 null → 엔진이 보수적 기본값).
-  const currentWeeklyKm = computed(() => (chronicLoad.value.last30Km > 0 ? (chronicLoad.value.last30Km * 7) / 30 : null))
+  /**
+   * 플랜 앵커용 주간 볼륨. **`최근 30일 합 × 7/30` 을 쓰지 않는다** — 공백과 훈련을 한 평균에 섞어
+   * 복귀 러너를 체계적으로 과소평가하고, 그 값이 앵커로 들어가면 플랜이 축소되며 축소된 처방을 뛰면
+   * 다음 평균이 더 작아지는 **양의 피드백 루프**가 된다(2026-08-18 실사고: Easy 처방 0.9km·LSD 1.4km).
+   * `deriveWeeklyVolumeAnchorKm` 가 최근 감당 볼륨과 "공백 직전 × 디트레이닝 계수" 중 큰 쪽을 고른다.
+   * 스케줄 생성과 재정렬 드리프트 판정이 **같은 값**을 봐야 서로 싸우지 않으므로 여기 단일 소스로 둔다.
+   */
+  const volumeAnchor = computed(() => deriveWeeklyVolumeAnchorKm(runs.value, new Date(`${todayDate.value}T12:00:00`)))
+  const currentWeeklyKm = computed(() => (volumeAnchor.value.anchorKm > 0 ? volumeAnchor.value.anchorKm : null))
 
   // 휴식 선언 상태(#473): activeRest + 오늘 기준 파생(active·복귀 D-N·복귀일 등). 차분 배너·복귀 컨트롤이 쓴다.
   const restState = computed(() => deriveRestState(memoryStore.memory.activeRest, todayDate.value))
