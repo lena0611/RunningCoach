@@ -196,6 +196,11 @@ export type AdaptiveTrainingProfile = {
    * 실제 최근 체력이 이 앵커와 ±25% 이상 벌어질 때만 재앵커 → 매 부팅 재정렬·토스트 방지(멱등). null=미초기화.
    */
   scheduleAnchorWeeklyKm: number | null
+  /**
+   * 앵커를 기록한 스케줄 로직의 버전. 앵커 계산식이 바뀌면 옛 기준선은 더 이상 비교 대상이 아니다 —
+   * 버전이 낮으면 1회 재앵커·재정렬해 새 계산식으로 수렴시킨다(고착 자가치유, 2026-08-18).
+   */
+  scheduleAnchorLogicVersion: number | null
 }
 
 /**
@@ -555,7 +560,8 @@ export const initialTrainingMemory: TrainingMemory = {
     compliancePatterns: [],
     sessionGuides: [],
     tempoCeiling: { adoptedBpm: null, baseBpm: null, adoptedAt: null },
-    scheduleAnchorWeeklyKm: null
+    scheduleAnchorWeeklyKm: null,
+    scheduleAnchorLogicVersion: null
   },
   runnerIdentity: {
     strengths: [
@@ -1059,6 +1065,10 @@ function normalizeAdaptiveTrainingProfile(value: unknown): AdaptiveTrainingProfi
     scheduleAnchorWeeklyKm:
       typeof raw.scheduleAnchorWeeklyKm === 'number' && raw.scheduleAnchorWeeklyKm > 0
         ? raw.scheduleAnchorWeeklyKm
+        : null,
+    scheduleAnchorLogicVersion:
+      typeof raw.scheduleAnchorLogicVersion === 'number' && raw.scheduleAnchorLogicVersion > 0
+        ? raw.scheduleAnchorLogicVersion
         : null
   }
 }

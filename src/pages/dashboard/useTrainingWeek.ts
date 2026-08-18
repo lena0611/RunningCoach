@@ -16,6 +16,13 @@ import { getRaceProjection } from '@/shared/lib/performanceProjection'
 import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
 import { returnRampWindowSessions, returnSessionCapKm } from '@/shared/lib/coaching/returnRamp'
 import { deriveWeeklyVolumeAnchorKm } from '@/shared/lib/coaching/returnAnchor'
+
+/**
+ * 스케줄 앵커 계산식 버전. **계산식을 바꾸면 반드시 올린다** — 옛 기준선으로 드리프트를 판정하면
+ * 고착되거나 오발동한다. v2: 앵커를 `최근 30일 평균` 대신 `최근 감당 볼륨 vs 공백 직전×디트레이닝 계수`
+ * 중 큰 쪽으로 계산(2026-08-18, 공백 오염 축소 나선 수정).
+ */
+const SCHEDULE_ANCHOR_LOGIC_VERSION = 2
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { buildPeriodizedSchedule, buildSteadyWeeklyRhythm, goalArchetype, prescriptionFor, trainingWeekRange, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
 import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
@@ -149,12 +156,14 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
   async function persistScheduleAnchor(weeklyKm: number | null) {
     if (weeklyKm == null || weeklyKm <= 0) return
     const memory = memoryStore.memory
-    if (memory.adaptiveTrainingProfile.scheduleAnchorWeeklyKm === weeklyKm) return
+    const profile = memory.adaptiveTrainingProfile
+    if (profile.scheduleAnchorWeeklyKm === weeklyKm && profile.scheduleAnchorLogicVersion === SCHEDULE_ANCHOR_LOGIC_VERSION) return
     await memoryStore.update({
       ...memory,
       adaptiveTrainingProfile: {
-        ...memory.adaptiveTrainingProfile,
+        ...profile,
         scheduleAnchorWeeklyKm: weeklyKm,
+        scheduleAnchorLogicVersion: SCHEDULE_ANCHOR_LOGIC_VERSION,
         updatedAt: new Date().toISOString()
       }
     })
@@ -234,6 +243,35 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
           await scheduleStore.insertMany(drafts)
           await persistScheduleAnchor(currentWeeklyKm.value)
         }
+      } else if (
+        memoryStore.memory.adaptiveTrainingProfile.scheduleAnchorLogicVersion !== SCHEDULE_ANCHOR_LOGIC_VERSION
+      ) {
+        /**
+         * 앵커 계산식이 바뀌었으면 옛 기준선과의 비교는 의미가 없다 → **1회 재빌드**로 새 계산식에 수렴시킨다.
+         *
+         * 이게 없으면 고착된다(2026-08-18 실측). 램프 자연만료 경로가 앵커를 안 남긴 채 자신을
+         * returnRampApplied=true 로 잠그고, 드리프트 판정은 "기준선 vs 현재"만 보므로 우연히 둘이 같아지면
+         * 두 트리거가 동시에 죽어 옛 플랜(Easy 0.9km)이 영구히 남았다. 버전 게이트는 그런 상태를
+         * 코드 배포만으로 풀어준다 — 사용자 데이터를 손으로 고치지 않아도 된다.
+         * 버전을 함께 영속하므로 다음 부팅부터는 이 분기를 타지 않는다(멱등).
+         */
+        const drafts = dropDraftsOnRestedDates(
+          buildPeriodizedSchedule({
+            goal,
+            profile: memoryStore.memory.athleteProfile,
+            today: today.value,
+            currentWeeklyKm: currentWeeklyKm.value,
+            observedEasyPace: observedEasyPace.value,
+            // 휴식 메타가 살아 있으면 캡을 보존한다(램프 창 중 재빌드가 캡을 잃지 않게).
+            returnRamp: (() => {
+              const rest = memoryStore.memory.activeRest
+              return rest ? returnRampPayload(rest) ?? undefined : undefined
+            })()
+          }).map((d) => ({ ...d, source: 'realign' as const })),
+          mine
+        )
+        if (drafts.length) await scheduleStore.realign(goal.id, dateOnly(today.value), drafts)
+        await persistScheduleAnchor(currentWeeklyKm.value)
       } else {
         const rest = memoryStore.memory.activeRest
         const todayIso = dateOnly(today.value)
@@ -332,7 +370,14 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
       observedEasyPace: observedEasyPace.value,
       returnRamp: payload
     }).map((d) => ({ ...d, source: 'realign' as const }))
-    if (drafts.length) await scheduleStore.realign(goal.id, dateOnly(today.value), drafts)
+    if (!drafts.length) return
+    await scheduleStore.realign(goal.id, dateOnly(today.value), drafts)
+    // ⚠ 앵커 영속을 빼먹으면 **교착**이 된다(2026-08-18 실사고). 이 경로는 플랜을 currentWeeklyKm 로
+    // 다시 깔면서 자신을 returnRampApplied=true 로 잠근다. 앵커를 기록하지 않으면 영속 기준선이 이 플랜과
+    // 다른 값으로 남고, 드리프트 판정은 "기준선 vs 현재 체력"만 보므로 둘이 같아지는 순간 재정렬도 죽는다
+    // → 램프 경로도 드리프트 경로도 발동 못 하고 옛 플랜이 영구 고착된다(실측: Easy 0.9km 고착).
+    // persistScheduleAnchor 주석의 불변식 "매 (재)빌드·재앵커·최초 초기화 시 영속"을 이 분기도 지킨다.
+    await persistScheduleAnchor(currentWeeklyKm.value)
   }
 
   // 주 고정 데이-스트립(월~일) ± weekOffset 주. 오늘 중심 롤링이 아니라 "이번 주"를 한눈에 조망·조정(설계 2026-06-19).
