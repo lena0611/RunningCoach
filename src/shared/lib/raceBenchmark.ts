@@ -1024,6 +1024,12 @@ function emptyDistanceCoverage(): Record<RaceBenchmarkDistanceCategory, RaceBenc
  * 인구 전체보다 한참 빠르다 — "한국 남성 중 상위 30%"로 옮기면 **거짓말**이 된다. 프롬프트 지침
  * 하나로 매번 지켜지길 기대하지 않고, 페이로드에 문구를 실어 보낸다(dataGap 의 응대 지침과 같은 방식).
  *
+ * ## 못 할 때는 "왜 못 하는지"까지 코드가 정한다
+ * 예전엔 비교 불가를 그냥 `null` 로 보냈다. 그러자 코치가 이유를 **스스로 지어냈다**
+ * (2026-08-18 실사고: "대회명·연도가 없어서" · "기록을 알려주면" — 사용자가 줄 수 있는 게 아니다).
+ * 불가 사유는 세 갈래(목표 없음 / 기록 부족 / 목표 거리 미지원)이고 코드만 구분할 수 있으므로,
+ * 사유와 **응대 지침을 함께** 보낸다. 코치가 되묻는 대신 실제로 할 수 있는 다음 행동을 말하게 된다.
+ *
  * ## 나이대는 없다
  * 세그먼트는 전체/남/여뿐이다. 수집처에 연령이 없어 보류됐다. "50대 평균과 비교" 같은 질문에는
  * 나이대 데이터가 없다고 답해야 하며, 성별 세그먼트를 나이대인 것처럼 돌려쓰면 안 된다.
@@ -1042,26 +1048,58 @@ export type CoachRaceBenchmarkEntry = {
   nextCutGapSec: number | null
 }
 
-export type CoachRaceBenchmarkSummary = {
-  distanceKm: number
-  /** 비교에 쓴 값. 실측 완주 기록이 아니라 **예상치**다. */
-  projectedSec: number
-  basis: string
-  ageSegment: string
-  entries: CoachRaceBenchmarkEntry[]
-}
+export type CoachRaceBenchmarkUnavailableReason = 'no_goal' | 'not_enough_runs' | 'distance_not_covered'
+
+export type CoachRaceBenchmarkSummary =
+  | {
+      available: true
+      distanceKm: number
+      /** 비교에 쓴 값. 실측 완주 기록이 아니라 **예상치**다. */
+      projectedSec: number
+      basis: string
+      ageSegment: string
+      entries: CoachRaceBenchmarkEntry[]
+    }
+  | {
+      available: false
+      reason: CoachRaceBenchmarkUnavailableReason
+      /** 코치가 그대로 따를 응대 방침. 모델이 이유를 추측하지 않게 코드가 쓴다. */
+      guidance: string
+    }
 
 const COACH_BENCHMARK_MAX_ENTRIES = 3
 
+/** 분포를 보유한 거리 — 사용자에게 그대로 말해도 되는 표현. */
+const COVERED_DISTANCE_LABEL = '10K · 하프 · 풀코스'
+
+const UNAVAILABLE_GUIDANCE: Record<CoachRaceBenchmarkUnavailableReason, string> = {
+  no_goal:
+    '활성 목표가 없어 예상 기록을 낼 수 없다 → 그래서 비교할 수 없다. 목표(거리 + 날짜)를 정하면 바로 비교해줄 수 있다고 안내한다. **대회명이나 기록을 사용자에게 되묻지 마라** — 사용자가 줄 수 있는 정보가 아니고, 앱이 목표에서 예상 기록을 계산하는 구조다.',
+  not_enough_runs:
+    '목표는 있지만 예상 기록을 낼 만한 러닝 기록이 아직 부족하다 → 그래서 비교할 수 없다. 목표 거리의 3분의 1 이상 되는 러닝이 몇 번 쌓이면 비교할 수 있다고 안내한다. 대회명·기록을 되묻지 마라.',
+  distance_not_covered: `목표 거리에 해당하는 완주자 분포 데이터가 없다 → 그래서 비교할 수 없다. 분포를 가진 거리는 ${COVERED_DISTANCE_LABEL} 뿐이라고 밝히고, 그 거리 목표라면 비교할 수 있다고 안내한다. 없는 분포를 추정으로 만들지 마라.`
+}
+
 export function summarizeRaceBenchmarkForCoach(
   projection: RaceProjection | null,
-  sex: 'male' | 'female' | 'other' | 'unknown' | null | undefined
-): CoachRaceBenchmarkSummary | null {
+  sex: 'male' | 'female' | 'other' | 'unknown' | null | undefined,
+  activeGoalDistanceKm: number | null | undefined
+): CoachRaceBenchmarkSummary {
+  const unavailable = (reason: CoachRaceBenchmarkUnavailableReason): CoachRaceBenchmarkSummary => ({
+    available: false,
+    reason,
+    guidance: UNAVAILABLE_GUIDANCE[reason]
+  })
+
   const projectedSec = projection?.current?.projectedSec ?? null
-  if (!projection || typeof projectedSec !== 'number' || !Number.isFinite(projectedSec)) return null
+  if (!projection || typeof projectedSec !== 'number' || !Number.isFinite(projectedSec)) {
+    // 목표가 없으면 예상 기록 계산 자체가 시작되지 않는다 — 기록 부족과 구분해서 알려야 조치가 달라진다.
+    const hasGoal = typeof activeGoalDistanceKm === 'number' && activeGoalDistanceKm > 0
+    return unavailable(hasGoal ? 'not_enough_runs' : 'no_goal')
+  }
 
   const ready = compareProjectionToRaceBenchmarks(projection).filter((comparison) => comparison.status === 'ready')
-  if (!ready.length) return null
+  if (!ready.length) return unavailable('distance_not_covered')
 
   // 국내 대회를 먼저, 그다음 표본이 큰 순으로. 한국 사용자에게 국내 분포가 더 와닿는다.
   const ordered = [...ready].sort((a, b) => {
@@ -1086,6 +1124,7 @@ export function summarizeRaceBenchmarkForCoach(
   })
 
   return {
+    available: true,
     distanceKm: projection.targetDistanceKm,
     projectedSec,
     basis:

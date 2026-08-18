@@ -75,7 +75,11 @@ const coachProjection = computed(() => {
 const coachGoalProjection = computed(() => summarizeGoalProjectionForCoach(coachProjection.value))
 // 대시보드에만 있던 "완주자 분포 속 내 위치"를 채팅 코치도 쓰게 한다. 같은 함수를 거치므로 두 화면이 다른 숫자를 말하지 않는다.
 const coachRaceBenchmark = computed(() =>
-  summarizeRaceBenchmarkForCoach(coachProjection.value, memoryStore.memory.athleteProfile.sex)
+  summarizeRaceBenchmarkForCoach(
+    coachProjection.value,
+    memoryStore.memory.athleteProfile.sex,
+    getActiveGoal(memoryStore.memory)?.distanceKm ?? null
+  )
 )
 const coachNote = ref('')
 // 전송 즉시 입력창을 비우고 질문을 사용자 말풍선으로 낙관적 표시하기 위한 상태(#238).

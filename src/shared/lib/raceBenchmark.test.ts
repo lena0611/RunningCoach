@@ -306,47 +306,65 @@ describe('raceBenchmark', () => {
 })
 
 describe('summarizeRaceBenchmarkForCoach', () => {
-  it('예상 기록이 없으면 주입하지 않는다', () => {
-    const noProjection = { ...projection, current: { ...projection.current, projectedSec: Number.NaN } }
-    expect(summarizeRaceBenchmarkForCoach(noProjection, 'male')).toBeNull()
-    expect(summarizeRaceBenchmarkForCoach(null, 'male')).toBeNull()
+  const avail = (result: ReturnType<typeof summarizeRaceBenchmarkForCoach>) => {
+    if (!result.available) throw new Error(`available 하지 않음: ${result.reason}`)
+    return result
+  }
+
+  it('목표가 없으면 no_goal 사유와 지침을 돌려준다', () => {
+    const result = summarizeRaceBenchmarkForCoach(null, 'male', null)
+    expect(result.available).toBe(false)
+    if (result.available) return
+    expect(result.reason).toBe('no_goal')
+    // 되묻기 금지를 지침이 직접 말해야 한다 — 이게 없으면 코치가 대회명을 되묻는다(2026-08-18 실사고).
+    expect(result.guidance).toContain('되묻지 마라')
+    expect(result.guidance).toContain('목표')
+  })
+
+  it('목표는 있는데 예상 기록이 없으면 not_enough_runs 로 구분한다', () => {
+    const result = summarizeRaceBenchmarkForCoach(null, 'male', 10)
+    expect(result.available).toBe(false)
+    if (result.available) return
+    expect(result.reason).toBe('not_enough_runs')
+    expect(result.guidance).toContain('되묻지 마라')
+  })
+
+  it('분포 없는 거리는 distance_not_covered 로 알린다', () => {
+    // 5km 목표 — 분포는 10K·하프·풀만 있다.
+    const five = { ...projection, targetDistanceKm: 5, current: { ...projection.current, projectedSec: 1500 } }
+    const result = summarizeRaceBenchmarkForCoach(five, 'male', 5)
+    expect(result.available).toBe(false)
+    if (result.available) return
+    expect(result.reason).toBe('distance_not_covered')
+    expect(result.guidance).toContain('10K')
   })
 
   it('사용자 성별 세그먼트를 고른다', () => {
-    const summary = summarizeRaceBenchmarkForCoach(projection, 'female')
-    expect(summary).not.toBeNull()
-    expect(summary!.entries.length).toBeGreaterThan(0)
-    // 성별 분포가 있는 국내 대회가 먼저 오고, 그 항목은 여자 세그먼트여야 한다.
-    expect(summary!.entries[0].segment).toBe('여자')
+    expect(avail(summarizeRaceBenchmarkForCoach(projection, 'female', 10)).entries[0].segment).toBe('여자')
   })
 
   it('성별을 모르면 전체 세그먼트로 떨어진다', () => {
-    const summary = summarizeRaceBenchmarkForCoach(projection, 'unknown')
-    expect(summary!.entries[0].segment).toBe('전체')
+    expect(avail(summarizeRaceBenchmarkForCoach(projection, 'unknown', 10)).entries[0].segment).toBe('전체')
   })
 
   it('국내 대회를 먼저 노출한다', () => {
-    const summary = summarizeRaceBenchmarkForCoach(projection, 'male')
-    expect(summary!.entries[0].region).toBe('domestic')
+    expect(avail(summarizeRaceBenchmarkForCoach(projection, 'male', 10)).entries[0].region).toBe('domestic')
   })
 
   it('완주자 기준·나이대 부재를 페이로드가 직접 말한다', () => {
-    const summary = summarizeRaceBenchmarkForCoach(projection, 'male')
+    const summary = avail(summarizeRaceBenchmarkForCoach(projection, 'male', 10))
     // 프롬프트 선의가 아니라 데이터가 못박아야 "인구 평균"으로 새지 않는다.
-    expect(summary!.basis).toContain('완주한 사람들')
-    expect(summary!.basis).toContain('일반 인구 평균이 아니다')
-    expect(summary!.ageSegment).toContain('나이대별 분포는 없다')
+    expect(summary.basis).toContain('완주한 사람들')
+    expect(summary.basis).toContain('일반 인구 평균이 아니다')
+    expect(summary.ageSegment).toContain('나이대별 분포는 없다')
   })
 
   it('꼬리 너머 표기를 클램핑하지 않는다', () => {
-    // 아주 느린 예상 기록 → 가장 느린 컷보다 뒤 → "상위 N%+" 로 정직하게 표기되어야 한다.
     const slow = { ...projection, current: { ...projection.current, projectedSec: 99999 } }
-    const summary = summarizeRaceBenchmarkForCoach(slow, 'male')
-    expect(summary!.entries[0].percentileText).toContain('+')
+    expect(avail(summarizeRaceBenchmarkForCoach(slow, 'male', 10)).entries[0].percentileText).toContain('+')
   })
 
   it('항목 수를 3개로 제한한다(입력 토큰 통제)', () => {
-    const summary = summarizeRaceBenchmarkForCoach(projection, 'male')
-    expect(summary!.entries.length).toBeLessThanOrEqual(3)
+    expect(avail(summarizeRaceBenchmarkForCoach(projection, 'male', 10)).entries.length).toBeLessThanOrEqual(3)
   })
 })
