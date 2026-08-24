@@ -85,6 +85,14 @@ export type ScheduleProposalGate = {
   /** 오늘 날짜(YYYY-MM-DD). 휴식 프리셋 상한 계산 기준. */
   today: string
   /**
+   * 강도 하향(easeAxis=intensity)을 허용할 안전 맥락인가(#703 3차 교정) — 활성 부상 또는
+   * 최근 12개월 부상 이력(전역 재부상 위험창). 2026-08-24 실측: 복귀 초반에 코치가 "목요일 Tempo 를
+   * Easy 로 낮추자"고 정당하게 권했는데(#695 가 요구하는 바로 그 동작) G10 이 강도 하향을 일괄
+   * 훼손으로 막아 카드가 죽었다. **안전 하향(부상·복귀)** 과 **편의 하향(무맥락 반복)** 을 가른다 —
+   * 전자는 SSOT §휴식과 복귀가 요구하고, 후자만 목표 특이성을 갉아먹는 경로다.
+   */
+  easeIntensityContext?: boolean
+  /**
    * 사용자 발화가 지목한 요일(0=일…6=토), 정확히 하나만 지목했을 때만. `extractSoleWeekday` 산출(#703 G11).
    * 2026-08-24 실측: "목요일 훈련 좀 그런데"에 직전 대화에 앵커링한 **화요일** 카드가 나갔다 —
    * G3 는 "실재하는 날짜냐"만 보므로 못 막았다. 지목 요일과 다른 날짜의 세션 액션은 떨군다.
@@ -229,8 +237,17 @@ export function evaluateCoachScheduleProposal(raw: unknown, gate: SchedulePropos
     easeAxis = EASE_AXES.find((axis) => axis === value.easeAxis) ?? null
     // 축 미표기는 떨군다 — 무엇을 깎는지 모르는 조정 카드는 판정 불가이고, 사용자에게도 불투명하다.
     if (!easeAxis) return { proposal: null, drop: 'G10_axis_missing' }
-    const tolerated = EASE_TOLERANCE_BY_TYPE[target.type ?? ''] ?? EASE_TOLERANCE_UNKNOWN
-    if (!tolerated.includes(easeAxis)) return { proposal: null, drop: 'G10_axis_violates_intent' }
+    if (easeAxis === 'intensity') {
+      // 강도 하향은 부상·복귀 안전 맥락에서만(위 easeIntensityContext 주석). Race/TT 는 맥락이 있어도
+      // 제외 — 강도를 낮춘 타임트라이얼은 타임트라이얼이 아니라서, 그 상황은 연기/휴식이 맞다.
+      const isRace = (target.type ?? '') === 'Race'
+      if (gate.easeIntensityContext !== true || isRace || !target.type) {
+        return { proposal: null, drop: 'G10_intensity_needs_safety_context' }
+      }
+    } else {
+      const tolerated = EASE_TOLERANCE_BY_TYPE[target.type ?? ''] ?? EASE_TOLERANCE_UNKNOWN
+      if (!tolerated.includes(easeAxis)) return { proposal: null, drop: 'G10_axis_violates_intent' }
+    }
   }
 
   return {

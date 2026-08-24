@@ -461,6 +461,7 @@ async function persistCoachResult(
     restActive: context.scheduleProposalGate.restActive,
     injuryActive: context.scheduleProposalGate.injuryActive,
     injuryBlocksIntensify: context.scheduleProposalGate.injuryBlocksIntensify,
+    easeIntensityContext: context.scheduleProposalGate.easeIntensityContext,
     today: new Date().toISOString().slice(0, 10),
     // G11(#703): 발화가 요일 하나를 지목했으면 카드도 그 요일이어야 한다.
     mentionedWeekday: extractSoleWeekday(userNote)
@@ -1562,7 +1563,14 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
         (activeInjuryItem as { status?: unknown } | null)?.status === 'active',
       // redFlag 발동 또는 고통증(4~5/5) → 상향 제안 차단. 부상 KB §4 게이트가 처방보다 우선.
       injuryBlocksIntensify: injurySignals?.redFlag.tripped === true || (injurySignals?.severity ?? 0) >= 4,
-      upcomingTargets: upcomingSchedule
+      upcomingTargets: upcomingSchedule,
+      // 강도 하향 허용 맥락(#703 3차): 활성 부상 또는 최근 12개월 부상 이력. 복귀 초반의
+      // "Tempo 를 Easy 로 낮추자"는 #695 가 요구하는 코치 주도 안전 하향이라 막으면 안 된다.
+      easeIntensityContext:
+        (Boolean(activeInjuryItem) &&
+          (activeInjuryItem as { status?: unknown } | null)?.status !== 'archived') ||
+        recentInjuryWindow?.hasRecentInjury === true ||
+        restState?.active === true
     },
     upcomingSchedulePolicy:
       'context.upcomingSchedule는 실제 주기화 스케줄의 다음 세션들(날짜·유형·거리)이다. "## 다음 훈련"은 반드시 이 실제 세션을 기준으로 말하고, weeklyPattern/prescriptionTemplates로 다른 세션(예: 다음이 토요일 LSD인데 화요일 Easy)을 지어내지 마라. 요약 화면(캐러셀)과 어긋나면 안 된다. 부상·회복으로 하향이 필요하면 "그 스케줄 세션(예: 토요일 LSD)을 이렇게 조정/대체하자"처럼 실제 세션을 기준으로 조정한다. upcomingSchedule이 비어있거나 null일 때만 일반 가이드로 답한다.',
@@ -2220,6 +2228,8 @@ function buildScheduleProposalInstructions(restAlternativeOffered = false) {
     // 2026-08-24 실측: "목요일 훈련 좀 그런데"에 직전 대화(화요일)에 앵커링해 화요일 얘기로 답하고
     // 화요일 카드를 냈다. 서버 게이트(G11)가 카드는 떨구지만, 본문이 딴 날을 말하는 건 지침이 막아야 한다.
     '**이번 턴에 사용자가 지목한 요일/날짜가 직전 대화와 다르면 새 지목이 우선이다.** "목요일 훈련 좀 그런데"라고 하면 목요일 세션(upcomingSchedule에서 그 날짜)을 다룬다 — 직전에 화요일 얘기를 했더라도 화요일로 답하지 마라. 지목한 날짜의 카드만 낸다.',
+    // #703 3차: 강도 하향은 안전 하향(부상·복귀 — 정당)과 편의 하향(무맥락 — 특이성 침식)이 다르다.
+    'easeAxis=intensity(세션을 한 단계 낮추기, 예: Tempo→Easy)는 **부상·복귀·휴식 맥락이 있을 때만** 카드로 낸다 — 그 맥락이면 정당한 코치 조치다(복귀 초반 저강도 원칙). 맥락 없이 단지 힘들다는 이유면 intensity 대신 관용 축(거리·시간·페이스·스트라이드)을 먼저 제안하고, 같은 요구가 반복되면 루틴 자체의 재조정이 필요하다고 말한다.',
     '**깎을 땐 의도를 보존하는 축부터 깎는다.** 세션마다 지켜야 할 핵심이 다르다 — Easy/Recovery는 저강도 유지(거리·페이스는 깎아도 됨), Easy+Strides는 스트라이드부터 덜어낸다(신경근 곁가지), Tempo는 역치 지속시간이 본체(웜업/쿨다운·총거리는 관용), LSD/Steady Long은 발 위 시간이 본체(페이스를 늦추는 건 관용, 시간 단축은 훼손). 핵심 축을 깎는 제안은 폐기된다.',
     '사용자 요청이 핵심 축을 깎자는 것이면(예: "롱런 시간 줄여줘") 그대로 제안하지 말고 **관용 축 대안을 제시**한다: "시간을 줄이면 롱런의 목적이 사라져요 — 대신 페이스를 더 늦춰서 시간을 지키죠." 대안이 받아들여지면 그 축으로 ease_session을 낸다.',
     // 제품 결정(2026-08-24): 되묻기는 불명확할 때만 — 매 요청마다 물으면 닦달이다(§트리아지 과발동 금지).

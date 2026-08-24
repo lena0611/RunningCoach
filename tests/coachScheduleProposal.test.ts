@@ -190,6 +190,26 @@ describe('coachScheduleProposal 게이트 (#639)', () => {
       expect(normalizeCoachScheduleProposal({ ...EASE, easeAxis: 'intensity' }, gate())).toBeNull()
     })
 
+    it('intensity 하향은 안전 맥락에서만 — 부상·복귀는 통과, 무맥락은 차단 (2026-08-24 3차)', () => {
+      const tempoGate = (ctx) => gate({
+        upcomingSchedule: [{ date: '2026-07-31', type: 'Tempo', canIntensify: false }],
+        easeIntensityContext: ctx
+      })
+      // 무맥락 편의 하향 → 차단 (관용 축 대안으로 유도).
+      expect(evaluateCoachScheduleProposal({ ...EASE, easeAxis: 'intensity' }, tempoGate(false)).drop)
+        .toBe('G10_intensity_needs_safety_context')
+      // 부상·복귀 맥락 → 통과. 복귀 초반 "Tempo→Easy" 는 #695 가 요구하는 코치 조치다.
+      expect(evaluateCoachScheduleProposal({ ...EASE, easeAxis: 'intensity' }, tempoGate(true)).proposal?.easeAxis)
+        .toBe('intensity')
+      // Race 는 맥락이 있어도 강등 불가 — 강도 낮춘 TT 는 TT 가 아니다.
+      const raceGate = gate({
+        upcomingSchedule: [{ date: '2026-07-31', type: 'Race', canIntensify: false }],
+        easeIntensityContext: true
+      })
+      expect(evaluateCoachScheduleProposal({ ...EASE, easeAxis: 'intensity' }, raceGate).drop)
+        .toBe('G10_intensity_needs_safety_context')
+    })
+
     it('Easy 계열은 duration 도 관용이다 — 거리와 시간은 같은 dose 손잡이 (2026-08-24 라이브 QA 교정)', () => {
       // 실측: "훈련 좀 그런데"에 모델이 duration 을 골랐다가 게이트에 죽어 카드가 안 떴다.
       // 시간이 본체인 LSD·Tempo 만 막는다(위 테스트).
