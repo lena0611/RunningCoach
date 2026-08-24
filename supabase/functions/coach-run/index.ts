@@ -2176,6 +2176,13 @@ function buildScheduleProposalInstructions(restAlternativeOffered = false) {
     'coachScheduleProposal은 사용자가 대화(userNote)에서 휴식·중단·과부하·일정 불가·강도 조정을 직접 표현했을 때만 반환한다(그 외에는 null). 근거 없이 먼저 꺼내지 않고, report 본문에서 이미 사람으로서 대답한 뒤 그 실행 경로로만 덧붙인다. 이것은 스케줄을 바꾸는 명령이 아니라 사용자가 승인해야 적용되는 후보이며, 앱이 기존 화면(휴식 선언 시트·세션 카드)을 열어줄 뿐이다.',
     'coachScheduleProposal.actionType은 declare_rest(쉬고 싶다·못 뛴다), ease_session(그날 세션이 버겁다), intensify_session(더 하고 싶다), reschedule_session(그날은 어렵고 다른 날은 된다), skip_session(이번엔 건너뛰겠다) 중 하나다. 전체 일정을 다시 짜는 액션은 없다 — 한 번의 대화로 주기화 골격을 재구축하지 않는다.',
     '세션 액션(declare_rest 외)의 targetDate는 반드시 context.upcomingSchedule에 실제로 있는 날짜여야 한다. 없는 날짜를 지어내면 제안이 폐기된다. intensify_session은 그 세션의 canIntensify가 true일 때만 제안한다.',
+    // #703 G10 — 의도 보존 관용 매트릭스(SSOT §세션 변경 요청). 판정은 코드가 최종 강제하지만,
+    // 모델이 처음부터 관용 축을 고르게 해야 대안 제시가 자연스러워진다.
+    'ease_session에는 easeAxis(무엇을 깎는지)를 반드시 넣는다: strides(스트라이드 회수 감소/생략)·warmup_cooldown(웜업/쿨다운 축소)·pace(페이스 늦춤)·distance(거리 축소)·duration(시간 단축)·intensity(강도 하향). 다른 액션에서는 null.',
+    '**깎을 땐 의도를 보존하는 축부터 깎는다.** 세션마다 지켜야 할 핵심이 다르다 — Easy/Recovery는 저강도 유지(거리·페이스는 깎아도 됨), Easy+Strides는 스트라이드부터 덜어낸다(신경근 곁가지), Tempo는 역치 지속시간이 본체(웜업/쿨다운·총거리는 관용), LSD/Steady Long은 발 위 시간이 본체(페이스를 늦추는 건 관용, 시간 단축은 훼손). 핵심 축을 깎는 제안은 폐기된다.',
+    '사용자 요청이 핵심 축을 깎자는 것이면(예: "롱런 시간 줄여줘") 그대로 제안하지 말고 **관용 축 대안을 제시**한다: "시간을 줄이면 롱런의 목적이 사라져요 — 대신 페이스를 더 늦춰서 시간을 지키죠." 대안이 받아들여지면 그 축으로 ease_session을 낸다.',
+    // 제품 결정(2026-08-24): 되묻기는 불명확할 때만 — 매 요청마다 물으면 닦달이다(§트리아지 과발동 금지).
+    '조정 요청의 이유가 불명확하면(시간이 없는 건지·몸이 힘든 건지·훈련이 왜 이만큼인지 몰라 불안한 건지 구분이 안 되면) 제안을 내기 전에 **한 문장으로 한 번만** 묻는다. 이유가 이미 명확하면 묻지 말고 바로 제안한다. 특히 "이게 정석이냐"류 질문과 함께 온 부담 표현은 몸이 힘든 게 아니라 몰라서 불안한 것일 수 있다 — 그 경우는 낮추지 말고 훈련의 목적을 설명해 안심시키는 게 맞다.',
     'declare_rest의 suggestedRestUntil은 사용자가 "2주", "이번 주까지"처럼 기간을 명시했을 때만 그 날짜를 넣는다. "당분간", "좀"처럼 기간이 불명확하면 반드시 null로 두어 사용자가 직접 고르게 한다. 쉬는 기간은 코치가 정하는 게 아니라 사용자가 정한다 — report 본문에서도 기간을 단정하지 말고 "기간은 직접 정하시면 돼요"로 안내한다.',
     // "1회만"의 범위는 **한 답변 안**이 아니라 **그 대화 스레드 전체**다(2026-08-05 사용자 지적).
     // 이미 말했으면 권장 문장을 통째로 빼고 금지만 남긴다 — 둘을 함께 주면 모델이 권장을 따른다(실측).
@@ -2669,7 +2676,7 @@ function buildCoachResponseFormat() {
               {
                 type: 'object',
                 additionalProperties: false,
-                required: ['actionType', 'targetDate', 'suggestedRestUntil', 'restReason', 'rationale', 'userApprovalPrompt'],
+                required: ['actionType', 'targetDate', 'suggestedRestUntil', 'restReason', 'easeAxis', 'rationale', 'userApprovalPrompt'],
                 properties: {
                   actionType: {
                     type: 'string',
@@ -2679,6 +2686,13 @@ function buildCoachResponseFormat() {
                   suggestedRestUntil: { anyOf: [{ type: 'string' }, { type: 'null' }] },
                   restReason: {
                     anyOf: [{ type: 'string', enum: ['injury', 'weather', 'personal', 'other'] }, { type: 'null' }]
+                  },
+                  // #703 G10: ease_session 은 무엇을 깎는지 축을 밝혀야 한다. 다른 액션은 null.
+                  easeAxis: {
+                    anyOf: [
+                      { type: 'string', enum: ['strides', 'warmup_cooldown', 'pace', 'distance', 'duration', 'intensity'] },
+                      { type: 'null' }
+                    ]
                   },
                   rationale: { type: 'string' },
                   userApprovalPrompt: { type: 'string' }

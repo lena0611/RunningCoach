@@ -965,11 +965,24 @@ function getScheduleProposalActionLabel(proposal: CoachScheduleProposal) {
   return SCHEDULE_ACTION_LABEL[proposal.actionType]
 }
 
+/** ease_session 이 깎는 축(#703)의 사람 말. 카드가 "무엇을 어떻게 바꾸자는 건지" 투명해야 승인이 판단이 된다. */
+const EASE_AXIS_LABEL: Record<NonNullable<CoachScheduleProposal['easeAxis']>, string> = {
+  strides: '스트라이드 줄이기',
+  warmup_cooldown: '웜업·쿨다운 줄이기',
+  pace: '페이스 늦추기',
+  distance: '거리 줄이기',
+  duration: '시간 줄이기',
+  intensity: '강도 낮추기'
+}
+
 function getScheduleProposalTargetLabel(proposal: CoachScheduleProposal) {
   if (proposal.actionType === 'declare_rest') {
     return proposal.suggestedRestUntil ? `${formatDateWithWeekday(proposal.suggestedRestUntil)}까지 (조정 가능)` : '기간은 직접 정해요'
   }
-  return proposal.targetDate ? formatDateWithWeekday(proposal.targetDate) : ''
+  const date = proposal.targetDate ? formatDateWithWeekday(proposal.targetDate) : ''
+  // 조정 축을 날짜 옆에 밝힌다 — 구버전 응답(easeAxis 없음)은 날짜만.
+  const axis = proposal.actionType === 'ease_session' && proposal.easeAxis ? EASE_AXIS_LABEL[proposal.easeAxis] : ''
+  return axis && date ? `${date} · ${axis}` : date
 }
 
 /**

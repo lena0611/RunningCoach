@@ -21,6 +21,26 @@ export type CoachScheduleActionType =
 
 export type CoachScheduleRestReason = 'injury' | 'weather' | 'personal' | 'other'
 
+/**
+ * `ease_session` 이 **무엇을 깎는지**(#703). 축을 밝히지 않으면 의도 보존을 판정할 수 없다.
+ *
+ * SSOT §세션 변경 요청 — 의도 보존 관용 매트릭스. 저강도 dose 우선순위
+ * (① 강도 → ② 시간 → ③ 거리 → ④ 페이스)를 뒤집은 것이라, **깎을 땐 아래에서 위로** 간다.
+ */
+export type CoachScheduleEaseAxis =
+  /** 스트라이드 회수 감소·전량 생략. 신경근 자극이라 유산소 dose 가 아니다 → 1순위 관용 축. */
+  | 'strides'
+  /** 웜업/쿨다운 축소. Tempo·Race 에서 본세트에 **더하는** 부속이다(삭제 아닌 축소). */
+  | 'warmup_cooldown'
+  /** 페이스를 늦춘다. 저강도에서 페이스는 타깃이 아니라 결과다. */
+  | 'pace'
+  /** 거리를 줄인다. 저강도에서 거리는 ③ 보조 dose. */
+  | 'distance'
+  /** 시간(time-on-feet)을 줄인다. 저강도·LSD 의 dose 본체라 대개 훼손이다. */
+  | 'duration'
+  /** 강도를 낮춘다. 세션의 정체성이라 항상 훼손이다. */
+  | 'intensity'
+
 export type CoachScheduleProposal = {
   actionType: CoachScheduleActionType
   /** 세션 액션의 대상 날짜(YYYY-MM-DD). declare_rest 면 항상 null. */
@@ -28,6 +48,8 @@ export type CoachScheduleProposal = {
   /** declare_rest 프리셋. 사용자가 발화에서 **명시한** 기간만 담긴다(발명 금지). 없으면 null. */
   suggestedRestUntil: string | null
   restReason: CoachScheduleRestReason | null
+  /** ease_session 이 깎는 축(#703). 다른 액션이면 항상 null. */
+  easeAxis: CoachScheduleEaseAxis | null
   rationale: string
   userApprovalPrompt: string
 }
@@ -35,6 +57,8 @@ export type CoachScheduleProposal = {
 /** 세션 액션의 대상 후보. 웹이 보낸 upcomingSchedule 항목에서 게이트에 필요한 필드만 본다. */
 export type ScheduleProposalTarget = {
   date: string
+  /** 세션 타입(RunType 문자열). G10 관용 매트릭스 판정에 쓴다. 없으면 매트릭스를 못 보므로 보수 통과(아래 주석). */
+  type?: string
   /**
    * 상향(intensify) 적격 — **웹이 산출한다**(client-summary 패턴).
    * 강도 사다리(alternativeSession)와 progressionCriteria 가 웹 SSOT 라 서버에 미러를 두지 않는다.
@@ -71,6 +95,33 @@ const ACTION_TYPES: CoachScheduleActionType[] = [
 ]
 
 const REST_REASONS: CoachScheduleRestReason[] = ['injury', 'weather', 'personal', 'other']
+
+const EASE_AXES: CoachScheduleEaseAxis[] = ['strides', 'warmup_cooldown', 'pace', 'distance', 'duration', 'intensity']
+
+/**
+ * G10 — 의도 보존 관용 매트릭스(#703, SSOT §세션 변경 요청).
+ *
+ * 세션 타입별로 **깎아도 의도가 보존되는 축**만 나열한다. 여기 없는 축을 깎는 제안은 훼손이다 —
+ * 제안을 떨구고, 지침이 모델에게 관용 축 대안을 말하게 한다("시간을 줄이면 롱런이 아니게 됩니다,
+ * 대신 페이스를 늦추죠"). 상향 G7(canIntensify)과 대칭을 이루는 하향 게이트다.
+ *
+ * 키는 웹 RunType 문자열(src/entities/run/model.ts). 서버가 타입 union 을 미러하지 않고 문자열로 본다.
+ */
+const EASE_TOLERANCE_BY_TYPE: Record<string, CoachScheduleEaseAxis[]> = {
+  Easy: ['pace', 'distance'],
+  Recovery: ['pace', 'distance'],
+  'Easy + Strides': ['strides', 'pace', 'distance'],
+  Tempo: ['warmup_cooldown', 'distance'],
+  LSD: ['pace', 'distance'],
+  'Steady Long': ['pace', 'distance'],
+  Race: ['warmup_cooldown']
+}
+
+/**
+ * 타입을 모를 때(구 클라이언트·Unknown) 허용하는 축 — 어떤 세션에서도 정체성(강도)이나
+ * dose 본체(시간)는 아니라서 최악의 오판이 "조금 관대"에 그친다. duration·intensity 는 항상 막는다.
+ */
+const EASE_TOLERANCE_UNKNOWN: CoachScheduleEaseAxis[] = ['strides', 'warmup_cooldown', 'pace', 'distance']
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
@@ -115,6 +166,7 @@ export function normalizeCoachScheduleProposal(raw: unknown, gate: SchedulePropo
       targetDate: null,
       suggestedRestUntil: normalizeRestPreset(value.suggestedRestUntil, gate.today),
       restReason,
+      easeAxis: null,
       rationale,
       userApprovalPrompt
     }
@@ -133,11 +185,23 @@ export function normalizeCoachScheduleProposal(raw: unknown, gate: SchedulePropo
     if (target.canIntensify !== true) return null
   }
 
+  let easeAxis: CoachScheduleEaseAxis | null = null
+  if (actionType === 'ease_session') {
+    // G10: 하향은 의도를 보존하는 축에서만(#703). 상향 G7 과 대칭 — 하향 무게이트면 요청→제안이
+    // 직결되어 반복 하향이 목표 특이성을 갉아먹는다(§루틴 유지 기준 붕괴 경로).
+    easeAxis = EASE_AXES.find((axis) => axis === value.easeAxis) ?? null
+    // 축 미표기는 떨군다 — 무엇을 깎는지 모르는 조정 카드는 판정 불가이고, 사용자에게도 불투명하다.
+    if (!easeAxis) return null
+    const tolerated = EASE_TOLERANCE_BY_TYPE[target.type ?? ''] ?? EASE_TOLERANCE_UNKNOWN
+    if (!tolerated.includes(easeAxis)) return null
+  }
+
   return {
     actionType,
     targetDate,
     suggestedRestUntil: null,
     restReason: null,
+    easeAxis,
     rationale,
     userApprovalPrompt
   }
