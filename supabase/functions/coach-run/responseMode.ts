@@ -127,6 +127,37 @@ function asksPeriodAggregate(text: string): boolean {
   return /몇\s*(km|킬로|번|회|키로)|총\s|합계|평균|비교|추세|얼마나|얼마|며칠|최장|최고|몇\s*일/.test(text)
 }
 
+/**
+ * 부상 상태 변화 발화인가(#697) — "이제 다 나았어", "무릎 이제 0이야", "발바닥 해제해줘" 류.
+ *
+ * 기존 개인 신호 목록은 `통증|아파|아픈|발바닥|부상|회복` 만 받아서, **회복 완료 어형과
+ * 발바닥 외 부위명이 전부 general 로 샜다**. general 이면 `structuredCoachContext=false` 가 되어
+ * 코치는 "activeInjuryItem 이 없다고 보고" 답한다 — 부상이 있는데 없는 것처럼 답하는 상태다.
+ * 2026-08-22 실사용에서 사용자가 같은 요청을 1분 안에 3번 반복한 원인의 한 축이다.
+ *
+ * 넓게 받는다. `[[verify-new-capability-in-polluted-thread]]`·#690 과 같은 이유로 **오분류 손실이
+ * 비대칭**이다 — 부상 맥락을 괜히 실어 보내는 비용은 작고, 빠뜨리면 코치가 부상을 부정한다.
+ * 다만 개념 질문("무릎 부상 예방법")은 `asksTrainingConcept` 가 먼저 general 로 걷어낸다.
+ *
+ * 부위 어휘는 `src/entities/training-memory/injuryAreas.ts` 카탈로그의 어간을 따른다(교차 import
+ * 불가한 Deno 경계라 수동 미러 — 카탈로그에 부위를 추가하면 여기도 함께 본다).
+ */
+export function mentionsInjuryStateChange(text: string): boolean {
+  // 회복·악화 어형. "나았"·"괜찮아졌" 처럼 어절이 뚜렷한 형태만 받아 #643 식 우연 통과를 피한다.
+  if (/나았|나아졌|다\s*나은|괜찮아졌|완치|재발|악화됐|악화되/.test(text)) return true
+  if (/안\s*아파|안\s*아프|통증\s*(이\s*)?(없|줄|사라|가라앉)/.test(text)) return true
+  // 상태 변경 요청. "상태 … 업데이트/해제" 조합만 받는다(단독 '업데이트'는 너무 넓다).
+  if (/상태[^]{0,12}(업데이트|변경|바꿔|바꾸|해제|갱신)/.test(text)) return true
+  if (/부상[^]{0,6}(해제|종료|끝|풀어)/.test(text)) return true
+  // 부위명 — injuryAreas 카탈로그 어간. **단독으로는 받지 않는다**: "무릎 부상 예방법 알려줘",
+  // "족저근막염이 뭐야?" 같은 개념 질문까지 개인 맥락으로 끌어와 general 판정이 뒤집힌다.
+  // 상태를 가리키는 신호(수치·'이제'·해제/업데이트 요청)가 함께 있을 때만 개인 발화로 본다.
+  const mentionsArea = /무릎|아킬레스|정강이|종아리|햄스트링|대퇴사두|고관절|둔근|족저|근막|발목|요추|it\s*밴드/.test(
+    text
+  )
+  return mentionsArea && /\d|이제|해제|업데이트|갱신|상태/.test(text)
+}
+
 export function detectUserNoteRunRelevance(note: string): UserNoteRunRelevance {
   const text = note.trim().toLowerCase()
   if (!text) return 'selected_run'
@@ -150,7 +181,11 @@ export function detectUserNoteRunRelevance(note: string): UserNoteRunRelevance {
     // ("오랜만에 5키로 도전한거야", "가볍게 뜀")가 general 로 새는 회귀를 막는 안전망.
     // 처방·판정은 "코치가 나에게 내린 것"을 가리키므로 개인 신호다 — 우연 통과가 가리던 케이스
     // ("처방받은 거리를 채우는 게 나을까", "이번세샨을 lsd로 판정내리지 않은 근거는?")의 명시적 대체.
-    /오늘\s*어떻게|다음\s*(훈련|러닝)|뛰어|뛰었|뛰고|뛰니|뛸|뜀|달려|달렸|달리|도전|목표|루틴|스케줄|통증|아파|아픈|발바닥|부상|회복|컨디션|피곤|피로|처방|판정/.test(text)
+    /오늘\s*어떻게|다음\s*(훈련|러닝)|뛰어|뛰었|뛰고|뛰니|뛸|뜀|달려|달렸|달리|도전|목표|루틴|스케줄|통증|아파|아픈|발바닥|부상|회복|컨디션|피곤|피로|처방|판정/.test(text) ||
+    // 부상 상태 변화 발화(#697). 기존 목록은 통증·부상·발바닥만 받아서 "이제 다 나았어",
+    // "족저근막염 다 나았어 해제해줘", "무릎 이제 0이야" 가 전부 general 로 새고 있었다
+    // (= 부상 컨텍스트가 아예 안 실려 코치가 "부상 없음"으로 답한다). 회복 어형과 부위명을 받는다.
+    mentionsInjuryStateChange(text)
   ) {
     return 'personal_training'
   }
