@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   evaluateCoachScheduleProposal,
+  extractSoleWeekday,
   normalizeCoachScheduleProposal,
   REST_PRESET_MAX_DAYS,
   type ScheduleProposalGate
@@ -235,6 +236,36 @@ describe('coachScheduleProposal 게이트 (#639)', () => {
       const verdict = evaluateCoachScheduleProposal(EASE, gate())
       expect(verdict.drop).toBeNull()
       expect(verdict.proposal?.easeAxis).toBe('distance')
+    })
+  })
+
+  // G11(#703) — 지목 요일과 다른 날짜의 카드는 떨군다(스레드 앵커링 오발사).
+  describe('G11: 사용자가 지목한 요일과 카드 날짜가 일치해야 한다', () => {
+    it('요일 하나를 지목하면 다른 요일 카드를 떨군다', () => {
+      // 2026-07-31 은 금요일 — "목요일 훈련 좀 그런데" 발화의 목(4)과 불일치.
+      const verdict = evaluateCoachScheduleProposal(EASE, gate({ mentionedWeekday: 4 }))
+      expect(verdict.drop).toBe('G11_weekday_mismatch')
+      // 금요일(5) 지목이면 통과.
+      expect(evaluateCoachScheduleProposal(EASE, gate({ mentionedWeekday: 5 })).drop).toBeNull()
+    })
+    it('요일 미지목(null)이면 기존 동작 그대로', () => {
+      expect(evaluateCoachScheduleProposal(EASE, gate({ mentionedWeekday: null })).drop).toBeNull()
+    })
+  })
+
+  describe('extractSoleWeekday — 정확히 하나 지목했을 때만', () => {
+    it('단일 지목을 요일 인덱스로 돌려준다', () => {
+      expect(extractSoleWeekday('목요일 훈련 좀 그런데')).toBe(4)
+      expect(extractSoleWeekday('화요일 본런이 너무 길게 느껴져')).toBe(2)
+    })
+    it('둘 이상 지목·미지목은 null — 재배치 발화에 요일을 강제하면 오히려 틀린다', () => {
+      expect(extractSoleWeekday('화요일 말고 목요일로 옮길래')).toBeNull()
+      expect(extractSoleWeekday('훈련이 너무 힘들어')).toBeNull()
+      // 같은 요일 반복은 하나로 본다.
+      expect(extractSoleWeekday('토요일, 그러니까 이번 토요일 말인데')).toBe(6)
+    })
+    it('한 글자 요일 표기는 받지 않는다 (#643 우연 통과 방지)', () => {
+      expect(extractSoleWeekday('화, 목 이틀 뛰어')).toBeNull()
     })
   })
 })
