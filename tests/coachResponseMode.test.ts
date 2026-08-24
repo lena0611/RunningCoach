@@ -232,4 +232,40 @@ describe('coach response mode and user note relevance', () => {
       }
     })
   })
+
+  describe('내 플랜의 예정 세션 얘기는 개인 맥락으로 받는다 (#701, 2026-08-24 실사용)', () => {
+    it('요일·세션 구성·플랜 지시어가 general 로 새지 않는다', () => {
+      for (const note of [
+        '지금 화요일에 배정된 이지 스트라이드를 보면 본런 5km이후에 스트라이드를 6회 넣으라고 하는데, 본런안에 섞어하면 안되나? 이지 스트라이드의 정석이 원래 그러한가?',
+        '화요일이 초반 웜업10분에 본런 약 40분에 스트라이드까지하면 한시간이 넘는데 괜찮나',
+        '내말은 화요일 본런이 너무 길지 않냐 이말인데..',
+        '토요일 LSD 8km는 지금 무리인데',
+        '목요일에 잡혀 있는 거 뭐였지'
+      ]) {
+        expect(detectUserNoteRunRelevance(note), note).toBe('personal_training')
+        // general 이면 index.ts:1501 에서 upcomingSchedule 이 null 로 잘려
+        // 모델이 날짜를 못 짚고 ease_session 제안이 불가능해진다.
+        expect(shouldUseStructuredCoachContext(note, 'conversational'), note).toBe(true)
+      }
+    })
+
+    it('내 플랜을 안 가리키는 개념 질문은 general 을 유지한다 (회귀 가드)', () => {
+      for (const note of [
+        '이지 스트라이드가 뭐야',
+        '템포런이랑 인터벌 차이가 뭐야?',
+        'LSD가 무슨 약자야',
+        '노르웨이식 훈련법이 뭔지 짧게 설명해줘',
+        '롱런은 원래 길게 가는게 맞아?'
+      ]) {
+        expect(detectUserNoteRunRelevance(note), note).toBe('general')
+      }
+    })
+
+    it('분량 부담 어휘를 스케줄 변경 의도로 받는다', () => {
+      // 기존 목록은 버겁·부담·힘들·무리 뿐이라 "너무 길지 않냐" 를 놓쳤고,
+      // 그래서 ease_session 이 한 번도 안 나갔다.
+      expect(detectUserNoteRunRelevance('이번 주 훈련이 너무 길어')).toBe('personal_training')
+      expect(detectUserNoteRunRelevance('훈련량이 너무 많지 않아?')).toBe('personal_training')
+    })
+  })
 })
