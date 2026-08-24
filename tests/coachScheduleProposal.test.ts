@@ -11,8 +11,8 @@ function gate(overrides: Partial<ScheduleProposalGate> = {}): ScheduleProposalGa
   return {
     responseMode: 'conversational',
     upcomingSchedule: [
-      { date: '2026-07-31', canIntensify: false },
-      { date: '2026-08-02', canIntensify: true }
+      { date: '2026-07-31', type: 'Easy + Strides', canIntensify: false },
+      { date: '2026-08-02', type: 'LSD', canIntensify: true }
     ],
     restActive: false,
     injuryActive: false,
@@ -36,6 +36,7 @@ const EASE = {
   targetDate: '2026-07-31',
   suggestedRestUntil: null,
   restReason: null,
+  easeAxis: 'distance',
   rationale: '내일 세션이 버겁다고 했다.',
   userApprovalPrompt: '내일 훈련을 조금 가볍게 바꿀까요?'
 }
@@ -167,5 +168,47 @@ describe('coachScheduleProposal 게이트 (#639)', () => {
     const result = normalizeCoachScheduleProposal(noisy, gate())
     expect(result?.suggestedRestUntil).toBeNull()
     expect(result?.restReason).toBeNull()
+  })
+
+  // G10 — 의도 보존 관용 매트릭스(#703). 상향 G7 과 대칭인 하향 게이트.
+  describe('G10: ease_session 은 의도를 보존하는 축에서만 (#703)', () => {
+    it('관용 축은 통과하고 easeAxis 를 남긴다', () => {
+      // Easy + Strides: 스트라이드가 1순위 관용 축(신경근 곁가지).
+      const strides = normalizeCoachScheduleProposal({ ...EASE, easeAxis: 'strides' }, gate())
+      expect(strides?.easeAxis).toBe('strides')
+      // LSD: 페이스 늦추기는 관용(발 위 시간 보존).
+      const pace = normalizeCoachScheduleProposal({ ...EASE, targetDate: '2026-08-02', easeAxis: 'pace' }, gate())
+      expect(pace?.easeAxis).toBe('pace')
+    })
+
+    it('핵심 축을 깎는 제안을 떨군다', () => {
+      // LSD 의 본체는 발 위 시간 — duration 단축은 훼손.
+      expect(normalizeCoachScheduleProposal({ ...EASE, targetDate: '2026-08-02', easeAxis: 'duration' }, gate())).toBeNull()
+      // 강도 하향은 어느 세션에서든 정체성 훼손.
+      expect(normalizeCoachScheduleProposal({ ...EASE, easeAxis: 'intensity' }, gate())).toBeNull()
+    })
+
+    it('Tempo 는 지속시간이 본체다 — 웜업/쿨다운·거리는 관용, duration 은 훼손', () => {
+      const tempoGate = gate({ upcomingSchedule: [{ date: '2026-07-31', type: 'Tempo', canIntensify: false }] })
+      expect(normalizeCoachScheduleProposal({ ...EASE, easeAxis: 'warmup_cooldown' }, tempoGate)?.easeAxis).toBe('warmup_cooldown')
+      expect(normalizeCoachScheduleProposal({ ...EASE, easeAxis: 'duration' }, tempoGate)).toBeNull()
+    })
+
+    it('축 미표기 ease 는 떨군다 — 무엇을 깎는지 모르는 조정은 판정 불가', () => {
+      expect(normalizeCoachScheduleProposal({ ...EASE, easeAxis: null }, gate())).toBeNull()
+      expect(normalizeCoachScheduleProposal({ ...EASE, easeAxis: 'everything' }, gate())).toBeNull()
+    })
+
+    it('타입을 모르면 보수 통과 — duration·intensity 만 막는다', () => {
+      const unknownGate = gate({ upcomingSchedule: [{ date: '2026-07-31', canIntensify: false }] })
+      expect(normalizeCoachScheduleProposal({ ...EASE, easeAxis: 'distance' }, unknownGate)?.easeAxis).toBe('distance')
+      expect(normalizeCoachScheduleProposal({ ...EASE, easeAxis: 'duration' }, unknownGate)).toBeNull()
+    })
+
+    it('다른 액션의 easeAxis 는 null 로 강제된다', () => {
+      const skip = normalizeCoachScheduleProposal({ ...EASE, actionType: 'skip_session', easeAxis: 'distance' }, gate())
+      expect(skip?.actionType).toBe('skip_session')
+      expect(skip?.easeAxis).toBeNull()
+    })
   })
 })

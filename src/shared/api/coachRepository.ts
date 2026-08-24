@@ -59,6 +59,8 @@ export type CoachScheduleProposal = {
   /** 사용자가 발화에서 명시한 기간만 담긴다(없으면 null → 시트 기본값). */
   suggestedRestUntil: string | null
   restReason: 'injury' | 'weather' | 'personal' | 'other' | null
+  /** ease_session 이 깎는 축(#703 G10 관용 매트릭스). 다른 액션·구버전 응답은 null/undefined. */
+  easeAxis?: 'strides' | 'warmup_cooldown' | 'pace' | 'distance' | 'duration' | 'intensity' | null
   rationale: string
   userApprovalPrompt: string
 }
