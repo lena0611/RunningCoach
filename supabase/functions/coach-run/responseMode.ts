@@ -21,7 +21,38 @@ function directlyMentionsSelectedRun(text: string): boolean {
  * 세션 액션 제안이 매번 폐기됐다. 반대로 "두 문장 **이내**로" 처럼 우연히 '내' 가 섞이면 통과했다.
  */
 function mentionsScheduleChange(text: string): boolean {
-  return /쉬고\s*싶|쉴게|쉬어야|쉬어갈|휴식|건너뛰|스킵|미루|옮기|다른\s*날|버겁|부담|힘들|무리|쉽게|줄이|낮추|가볍게|더\s*세게|더\s*강하게/.test(text)
+  return (
+    /쉬고\s*싶|쉴게|쉬어야|쉬어갈|휴식|건너뛰|스킵|미루|옮기|다른\s*날|버겁|부담|힘들|무리|쉽게|줄이|낮추|가볍게|더\s*세게|더\s*강하게/.test(
+      text
+    ) ||
+    // 분량 부담(#701). 기존 목록은 "버겁·부담·힘들·무리" 만 받아 **"너무 길지 않냐"** 를 놓쳤다.
+    // 2026-08-24 실사용: 화요일 세션이 길다고 두 번 말했는데 ease_session 이 한 번도 안 나갔다.
+    /너무\s*길|길지\s*않|길게\s*느|긴\s*거\s*아니|너무\s*많|많지\s*않|과하지|과한\s/.test(text)
+  )
+}
+
+/**
+ * **내 플랜의 특정 세션**을 가리키는 발화인가(#701).
+ *
+ * `directlyMentionsSelectedRun` 은 *이미 뛴* 세션("이 세션·방금·오늘 뛴")을 가리키고, 여기서 잡는 것은
+ * *예정된* 세션("화요일에 배정된 이지 스트라이드", "토요일 LSD")이다. 둘은 다른 대상이다.
+ *
+ * 왜 필요한가: general 로 떨어지면 `index.ts:1501` 에서 `upcomingSchedule` 이 null 로 잘린다.
+ * 모델이 날짜를 볼 수 없으니 #695 가 넣은 "그 세션의 **실제 날짜로** ease_session 을 내라"를
+ * 수행할 방법 자체가 없어진다. 2026-08-24 실사용에서 이 경로로 조정 제안이 통째로 폐기됐다.
+ *
+ * 요일은 반드시 `요일` 까지 붙은 형태만 받는다 — "화"·"토" 같은 한 글자는 아무 데나 걸린다(#643 교훈).
+ */
+function mentionsOwnPlannedSession(text: string): boolean {
+  // `주말`·`평일` 은 넣지 않는다 — "주말에 사람들 보통 얼마나 뛰어?" 같은 일반 질문까지 끌어온다.
+  // 실사용 근거가 있는 건 특정 요일 지시뿐이다.
+  if (/월요일|화요일|수요일|목요일|금요일|토요일|일요일/.test(text)) return true
+  // 세션 구성 어휘 — 코치가 처방으로 쓰는 말이라 사용자가 이걸 쓰면 자기 플랜 얘기다.
+  if (/본런|웜업|워밍업|쿨다운|쿨링\s*다운|마무리\s*조깅/.test(text)) return true
+  // 플랜 지시어. "배정된·예정된·잡혀 있는" 은 코치가 내준 것을 가리킨다.
+  if (/배정|예정|잡혀|잡힌|처방받|시켰|하라고|넣으라/.test(text)) return true
+  // "내말은" — 1인칭 패턴(내가|나는|내 훈련…)이 못 받는 되짚기 어형. 되짚음 자체가 개인 대화 신호다.
+  return /내\s*말은|제\s*말은|내가\s*말한|말한\s*건/.test(text)
 }
 
 /**
@@ -162,7 +193,12 @@ export function detectUserNoteRunRelevance(note: string): UserNoteRunRelevance {
   const text = note.trim().toLowerCase()
   if (!text) return 'selected_run'
 
-  if (asksTrainingConcept(text) && !directlyMentionsSelectedRun(text)) return 'general'
+  // 개념 질문은 general 이 맞다("이지 스트라이드가 뭐야"). 다만 **내 플랜을 가리키면 개념+개인 둘 다**이고,
+  // 지금까지는 개념으로만 처리돼 강등됐다(#701) — "화요일에 배정된 이지 스트라이드… 정석이 원래 그러한가?"
+  // 가 general 로 새서 코치가 내 스케줄을 못 본 채 교과서 답을 했다.
+  if (asksTrainingConcept(text) && !directlyMentionsSelectedRun(text) && !mentionsOwnPlannedSession(text)) {
+    return 'general'
+  }
 
   // 기간 집계 질문은 세션 지시어보다 우선한다(위 asksPeriodAggregate 주석 — 틀린 숫자 사고).
   if (asksPeriodAggregate(text)) return 'personal_training'
@@ -185,7 +221,9 @@ export function detectUserNoteRunRelevance(note: string): UserNoteRunRelevance {
     // 부상 상태 변화 발화(#697). 기존 목록은 통증·부상·발바닥만 받아서 "이제 다 나았어",
     // "족저근막염 다 나았어 해제해줘", "무릎 이제 0이야" 가 전부 general 로 새고 있었다
     // (= 부상 컨텍스트가 아예 안 실려 코치가 "부상 없음"으로 답한다). 회복 어형과 부위명을 받는다.
-    mentionsInjuryStateChange(text)
+    mentionsInjuryStateChange(text) ||
+    // 내 플랜의 예정 세션 얘기(#701) — general 이면 upcomingSchedule 이 잘려 날짜를 못 짚는다.
+    mentionsOwnPlannedSession(text)
   ) {
     return 'personal_training'
   }
