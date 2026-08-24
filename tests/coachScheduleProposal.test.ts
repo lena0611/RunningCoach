@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  evaluateCoachScheduleProposal,
   normalizeCoachScheduleProposal,
   REST_PRESET_MAX_DAYS,
   type ScheduleProposalGate
@@ -209,6 +210,23 @@ describe('coachScheduleProposal 게이트 (#639)', () => {
       const skip = normalizeCoachScheduleProposal({ ...EASE, actionType: 'skip_session', easeAxis: 'distance' }, gate())
       expect(skip?.actionType).toBe('skip_session')
       expect(skip?.easeAxis).toBeNull()
+    })
+  })
+
+  // 관측(#703 후속) — "카드 안 뜸"이 모델 미출력인지 게이트 폐기인지 사유로 구분된다.
+  describe('evaluateCoachScheduleProposal 는 폐기 사유를 돌려준다', () => {
+    it('미출력(null)은 drop 도 null — 게이트 폐기와 구분된다', () => {
+      expect(evaluateCoachScheduleProposal(null, gate())).toEqual({ proposal: null, drop: null })
+    })
+    it('게이트 폐기는 게이트 이름을 남긴다', () => {
+      expect(evaluateCoachScheduleProposal({ ...EASE, easeAxis: null }, gate()).drop).toBe('G10_axis_missing')
+      expect(evaluateCoachScheduleProposal({ ...EASE, targetDate: '2099-01-01' }, gate()).drop).toBe('G3_date_not_in_schedule')
+      expect(evaluateCoachScheduleProposal({ ...EASE, targetDate: '2026-08-02', easeAxis: 'duration' }, gate()).drop).toBe('G10_axis_violates_intent')
+    })
+    it('통과하면 drop 이 null 이고 proposal 이 있다', () => {
+      const verdict = evaluateCoachScheduleProposal(EASE, gate())
+      expect(verdict.drop).toBeNull()
+      expect(verdict.proposal?.easeAxis).toBe('distance')
     })
   })
 })

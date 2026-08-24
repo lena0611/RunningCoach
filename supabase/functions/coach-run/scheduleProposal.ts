@@ -135,54 +135,72 @@ export const REST_PRESET_MAX_DAYS = 28
  * LLM 이 낸 스케줄 제안을 안전한 형태로 강제한다. 하나라도 불변식을 깨면 **제안 전체를 null 로 떨군다**
  * (부분 복구 금지 — 반쯤 맞는 제안이 사용자에게 코치 권위로 보이는 게 더 위험하다).
  */
+/** 게이트 판정 결과 + 폐기 사유(#703 관측). 사유는 data_query_log 에 남아 "모델 미출력 vs 게이트 폐기"를 가른다. */
+export type CoachScheduleProposalVerdict = {
+  proposal: CoachScheduleProposal | null
+  /** 폐기한 게이트 이름. 통과·미출력이면 null. */
+  drop: string | null
+}
+
 export function normalizeCoachScheduleProposal(raw: unknown, gate: ScheduleProposalGate): CoachScheduleProposal | null {
+  return evaluateCoachScheduleProposal(raw, gate).proposal
+}
+
+/**
+ * normalize 와 같되 **왜 떨어졌는지**를 함께 돌려준다(#703 라이브 QA 에서 "카드 안 뜸"의 원인을
+ * 원형 없이 구분할 수 없었다 — #642 는 임시 코드로 원형을 실어 진단했는데, 그걸 영구 관측으로 만든다).
+ */
+export function evaluateCoachScheduleProposal(raw: unknown, gate: ScheduleProposalGate): CoachScheduleProposalVerdict {
   // G2: 단일 객체만 — 배열로 여러 건을 밀어넣지 못한다(1 응답 1 제안).
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { proposal: null, drop: raw == null ? null : 'G2_not_object' }
 
   // G6: 빈 노트 자동 디브리핑에서는 제안하지 않는다. 사용자가 아무 말도 안 했는데 휴식/조정 카드가 뜨면 닦달이다.
   //     능동 넛지의 제도적 자리는 coachMoments 와 SSOT §39 주말 트리아지이지 디브리핑 리포트가 아니다.
-  if (gate.responseMode === 'report') return null
+  if (gate.responseMode === 'report') return { proposal: null, drop: 'G6_report_mode' }
 
   const value = raw as Record<string, unknown>
 
   // G1: 어휘 밖 액션은 없다. realign 류가 애초에 어휘에 없으므로 여기서 자동 차단된다.
   const actionType = ACTION_TYPES.find((type) => type === value.actionType)
-  if (!actionType) return null
+  if (!actionType) return { proposal: null, drop: 'G1_unknown_action' }
 
   const rationale = readText(value.rationale, 500)
   const userApprovalPrompt = readText(value.userApprovalPrompt, 220)
-  if (!rationale || !userApprovalPrompt) return null
+  if (!rationale || !userApprovalPrompt) return { proposal: null, drop: 'missing_text' }
 
   if (actionType === 'declare_rest') {
     // G4: 이미 쉬는 중이면 재제안하지 않는다.
-    if (gate.restActive) return null
+    if (gate.restActive) return { proposal: null, drop: 'G4_rest_active' }
     const restReason = REST_REASONS.find((reason) => reason === value.restReason) ?? 'other'
     // G9: 활성 부상 중의 부상성 휴식 제안은 떨군다 — 부상 휴식은 부상 관리가 이미 소유한다(위 injuryActive 주석).
     //     부상과 무관함이 명시된 사유(개인 일정·날씨)만 통과한다. 'other'는 부상 대화에서 나온 애매한
     //     휴식 발화일 가능성이 높아 부상 쪽으로 보수 처리한다.
-    if (gate.injuryActive && (restReason === 'injury' || restReason === 'other')) return null
+    if (gate.injuryActive && (restReason === 'injury' || restReason === 'other')) return { proposal: null, drop: 'G9_injury_owns_rest' }
     return {
-      actionType,
-      targetDate: null,
-      suggestedRestUntil: normalizeRestPreset(value.suggestedRestUntil, gate.today),
-      restReason,
-      easeAxis: null,
-      rationale,
-      userApprovalPrompt
+      proposal: {
+        actionType,
+        targetDate: null,
+        suggestedRestUntil: normalizeRestPreset(value.suggestedRestUntil, gate.today),
+        restReason,
+        easeAxis: null,
+        rationale,
+        userApprovalPrompt
+      },
+      drop: null
     }
   }
 
   // G3: 세션 액션의 대상은 웹이 보낸 실제 예정 세션이어야 한다. 날짜를 지어내면 떨군다.
   const targetDate = readText(value.targetDate, 10)
-  if (!DATE_PATTERN.test(targetDate)) return null
+  if (!DATE_PATTERN.test(targetDate)) return { proposal: null, drop: 'G3_bad_date' }
   const target = gate.upcomingSchedule?.find((session) => session.date === targetDate)
-  if (!target) return null
+  if (!target) return { proposal: null, drop: 'G3_date_not_in_schedule' }
 
   if (actionType === 'intensify_session') {
     // G5: redFlag/고통증이면 상향하지 않는다 — 부상 KB 게이트가 처방보다 우선.
-    if (gate.injuryBlocksIntensify) return null
+    if (gate.injuryBlocksIntensify) return { proposal: null, drop: 'G5_injury_blocks' }
     // G7: 상향은 품질 게이트를 통과했을 때만. 판정은 웹 소유(canIntensify), 없으면 부적격.
-    if (target.canIntensify !== true) return null
+    if (target.canIntensify !== true) return { proposal: null, drop: 'G7_not_eligible' }
   }
 
   let easeAxis: CoachScheduleEaseAxis | null = null
@@ -191,19 +209,22 @@ export function normalizeCoachScheduleProposal(raw: unknown, gate: SchedulePropo
     // 직결되어 반복 하향이 목표 특이성을 갉아먹는다(§루틴 유지 기준 붕괴 경로).
     easeAxis = EASE_AXES.find((axis) => axis === value.easeAxis) ?? null
     // 축 미표기는 떨군다 — 무엇을 깎는지 모르는 조정 카드는 판정 불가이고, 사용자에게도 불투명하다.
-    if (!easeAxis) return null
+    if (!easeAxis) return { proposal: null, drop: 'G10_axis_missing' }
     const tolerated = EASE_TOLERANCE_BY_TYPE[target.type ?? ''] ?? EASE_TOLERANCE_UNKNOWN
-    if (!tolerated.includes(easeAxis)) return null
+    if (!tolerated.includes(easeAxis)) return { proposal: null, drop: 'G10_axis_violates_intent' }
   }
 
   return {
-    actionType,
-    targetDate,
-    suggestedRestUntil: null,
-    restReason: null,
-    easeAxis,
-    rationale,
-    userApprovalPrompt
+    proposal: {
+      actionType,
+      targetDate,
+      suggestedRestUntil: null,
+      restReason: null,
+      easeAxis,
+      rationale,
+      userApprovalPrompt
+    },
+    drop: null
   }
 }
 

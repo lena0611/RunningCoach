@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { filterInjuryItemsForRunDate, getActiveInjuryItemForRunDate } from './injuryTemporalFilter.ts'
-import { normalizeCoachScheduleProposal } from './scheduleProposal.ts'
+import { evaluateCoachScheduleProposal } from './scheduleProposal.ts'
 import {
   normalizeQueryRunsArgs,
   runQueryRuns,
@@ -425,6 +425,19 @@ type CoachTurnQueryLog = {
   ungroundedClaims: number
   /** 그 주장이 **직전 턴 조회 결과의 재진술**이었나 — 오탐 분리용. 아래 gate 주석 참조. */
   ungroundedThreadGrounded?: boolean
+  /**
+   * 스케줄 제안 관측(#703). "카드 안 뜸"의 원인이 모델 미출력인지 게이트 폐기인지를
+   * 원형 없이 구분할 수 없었다(#642 는 임시 코드로 진단했다 — 이건 영구 관측이다).
+   * emitted=모델이 제안을 출력했나, kept=게이트 통과했나, drop=폐기한 게이트 이름.
+   */
+  proposal?: {
+    emitted: boolean
+    kept: boolean
+    drop: string | null
+    actionType?: string
+    easeAxis?: string | null
+    targetDate?: string | null
+  }
 }
 
 async function persistCoachResult(
@@ -441,7 +454,7 @@ async function persistCoachResult(
   const memoryPatch = normalizeTrainingMemoryPatch(ai.trainingMemoryPatch)
   const injuryUpdateProposal = normalizeInjuryUpdateProposal(ai.injuryUpdateProposal, context.activeInjuryItem)
   // 스케줄 액션 제안(#639) — 승인형 후보. 게이트를 하나라도 못 넘으면 null 로 떨어진다(자동 적용 경로 없음).
-  const coachScheduleProposal = normalizeCoachScheduleProposal(ai.coachScheduleProposal, {
+  const proposalVerdict = evaluateCoachScheduleProposal(ai.coachScheduleProposal, {
     responseMode: context.coachResponseMode,
     // 축약 컨텍스트에서 null 이 되는 context.upcomingSchedule 대신 게이트 전용 원본을 본다(위 scheduleProposalGate 주석).
     upcomingSchedule: context.scheduleProposalGate.upcomingTargets,
@@ -450,6 +463,26 @@ async function persistCoachResult(
     injuryBlocksIntensify: context.scheduleProposalGate.injuryBlocksIntensify,
     today: new Date().toISOString().slice(0, 10)
   })
+  const coachScheduleProposal = proposalVerdict.proposal
+  // 제안 관측(#703) — 원형의 판정 재료만 남긴다(문구 제외). "카드 안 뜸" 진단이 추측이 아니라 조회가 된다.
+  {
+    const rawProposal =
+      ai.coachScheduleProposal && typeof ai.coachScheduleProposal === 'object' && !Array.isArray(ai.coachScheduleProposal)
+        ? (ai.coachScheduleProposal as Record<string, unknown>)
+        : null
+    queryLog.proposal = {
+      emitted: rawProposal !== null,
+      kept: coachScheduleProposal !== null,
+      drop: proposalVerdict.drop,
+      ...(rawProposal
+        ? {
+            actionType: typeof rawProposal.actionType === 'string' ? rawProposal.actionType.slice(0, 30) : undefined,
+            easeAxis: typeof rawProposal.easeAxis === 'string' ? rawProposal.easeAxis.slice(0, 30) : null,
+            targetDate: typeof rawProposal.targetDate === 'string' ? rawProposal.targetDate.slice(0, 10) : null
+          }
+        : {})
+    }
+  }
   const updatedMemory = memoryPatch ? mergeTrainingMemoryPatch(context.trainingMemory, memoryPatch) : null
   const persistenceWarnings: CoachPersistenceWarning[] = []
 
