@@ -46,3 +46,30 @@ describe('conversational 지침이 승인형 제안 통로를 막지 않는다 (
     )
   })
 })
+
+describe('데이터 조회 실측이 턴마다 남는다 (#652 후속)', () => {
+  it('coach_reports insert 에 data_query_log 가 포함된다', () => {
+    // 빠지면 로깅이 조용히 죽는다 — 그리고 그걸 알아채는 유일한 방법이 "몇 주 뒤 로그가 비어 있음"이다.
+    expect(INDEX_SRC).toContain('data_query_log: queryLog')
+  })
+
+  it('도구 호출 결과를 성공·실패 모두 기록한다', () => {
+    // 실패만 기록하던 구조가 누수의 원인이었다. 도구 미호출(빈 toolCalls)도 신호로 남아야 한다.
+    expect(INDEX_SRC).toContain("queryLog.toolCalls.push")
+    expect(INDEX_SRC).toContain("{ name: 'queryRuns', ok: false }")
+    expect(INDEX_SRC).toContain("{ toolCalls: [], ungroundedClaims: 0 }")
+  })
+
+  it('승낙 턴의 수치 재진술은 ungrounded 오탐으로 갈라낸다', () => {
+    // "응 해줘" 가 ungrounded_claim 으로 잡힌 실측(2026-08-24). 이 로그가 차단 승격의 정밀도 근거라
+    // 오탐이 섞이면 판단이 흐려진다. 조건은 좁다 — isBareContinuation AND 직전 턴 queryRuns 성공.
+    expect(INDEX_SRC).toContain('previousTurnQueriedRuns')
+    expect(INDEX_SRC).toContain('queryLog.ungroundedThreadGrounded = threadGrounded')
+    expect(INDEX_SRC).toContain('if (!threadGrounded) {')
+  })
+
+  it('직전 턴 판정은 같은 스레드로 스코프된다', () => {
+    // 다른 스레드의 조회가 근거가 되면 안 된다(전역 대화는 selected_run_id null).
+    expect(INDEX_SRC).toContain("query.eq('selected_run_id', selectedRunId) : query.is('selected_run_id', null)")
+  })
+})
