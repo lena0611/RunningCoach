@@ -84,6 +84,12 @@ export type ScheduleProposalGate = {
   injuryBlocksIntensify: boolean
   /** 오늘 날짜(YYYY-MM-DD). 휴식 프리셋 상한 계산 기준. */
   today: string
+  /**
+   * 사용자 발화가 지목한 요일(0=일…6=토), 정확히 하나만 지목했을 때만. `extractSoleWeekday` 산출(#703 G11).
+   * 2026-08-24 실측: "목요일 훈련 좀 그런데"에 직전 대화에 앵커링한 **화요일** 카드가 나갔다 —
+   * G3 는 "실재하는 날짜냐"만 보므로 못 막았다. 지목 요일과 다른 날짜의 세션 액션은 떨군다.
+   */
+  mentionedWeekday?: number | null
 }
 
 const ACTION_TYPES: CoachScheduleActionType[] = [
@@ -200,6 +206,15 @@ export function evaluateCoachScheduleProposal(raw: unknown, gate: SchedulePropos
   const target = gate.upcomingSchedule?.find((session) => session.date === targetDate)
   if (!target) return { proposal: null, drop: 'G3_date_not_in_schedule' }
 
+  // G11: 사용자가 요일을 하나 지목했으면 카드도 그 요일이어야 한다(#703). 스레드 앵커링으로
+  // 다른 날 카드가 나가면, 사용자는 자기 질문과 무관한 조정을 승인하라는 요구를 받는다.
+  if (gate.mentionedWeekday != null) {
+    const targetWeekday = new Date(`${targetDate}T00:00:00Z`).getUTCDay()
+    if (Number.isFinite(targetWeekday) && targetWeekday !== gate.mentionedWeekday) {
+      return { proposal: null, drop: 'G11_weekday_mismatch' }
+    }
+  }
+
   if (actionType === 'intensify_session') {
     // G5: redFlag/고통증이면 상향하지 않는다 — 부상 KB 게이트가 처방보다 우선.
     if (gate.injuryBlocksIntensify) return { proposal: null, drop: 'G5_injury_blocks' }
@@ -253,4 +268,17 @@ function daysBetween(from: string, to: string): number | null {
 
 function readText(value: unknown, maxLength: number): string {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : ''
+}
+
+const WEEKDAY_BY_CHAR: Record<string, number> = { 일: 0, 월: 1, 화: 2, 수: 3, 목: 4, 금: 5, 토: 6 }
+
+/**
+ * 발화가 지목한 요일 — **정확히 하나일 때만** 돌려준다(G11 입력).
+ * "화요일 말고 목요일로"처럼 둘 이상이면 null(재배치 발화라 요일 강제가 오히려 틀린다).
+ * `X요일` 완전형만 받는다 — 한 글자(화·토)는 아무 데나 걸린다(#643 교훈).
+ */
+export function extractSoleWeekday(note: string): number | null {
+  const matches = [...note.matchAll(/([월화수목금토일])요일/g)].map((m) => WEEKDAY_BY_CHAR[m[1]])
+  const unique = [...new Set(matches)]
+  return unique.length === 1 ? unique[0] : null
 }

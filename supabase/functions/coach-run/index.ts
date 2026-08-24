@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { filterInjuryItemsForRunDate, getActiveInjuryItemForRunDate } from './injuryTemporalFilter.ts'
-import { evaluateCoachScheduleProposal } from './scheduleProposal.ts'
+import { evaluateCoachScheduleProposal, extractSoleWeekday } from './scheduleProposal.ts'
 import {
   normalizeQueryRunsArgs,
   runQueryRuns,
@@ -461,7 +461,9 @@ async function persistCoachResult(
     restActive: context.scheduleProposalGate.restActive,
     injuryActive: context.scheduleProposalGate.injuryActive,
     injuryBlocksIntensify: context.scheduleProposalGate.injuryBlocksIntensify,
-    today: new Date().toISOString().slice(0, 10)
+    today: new Date().toISOString().slice(0, 10),
+    // G11(#703): 발화가 요일 하나를 지목했으면 카드도 그 요일이어야 한다.
+    mentionedWeekday: extractSoleWeekday(userNote)
   })
   const coachScheduleProposal = proposalVerdict.proposal
   // 제안 관측(#703) — 원형의 판정 재료만 남긴다(문구 제외). "카드 안 뜸" 진단이 추측이 아니라 조회가 된다.
@@ -2215,6 +2217,9 @@ function buildScheduleProposalInstructions(restAlternativeOffered = false) {
     // 2026-08-24 라이브 QA: 본문은 "스트라이드 회수부터 줄이자"고 권하면서 easeAxis 는 duration 을 내
     // 게이트에 죽었다 — 말과 카드가 어긋나면 사용자는 카드 없는 조언만 받는다.
     '**easeAxis 는 report 본문에서 권한 바로 그 조정과 일치시켜라.** 본문에서 스트라이드를 줄이자고 했으면 easeAxis 도 strides 다. 본문과 다른 축을 카드로 내지 마라.',
+    // 2026-08-24 실측: "목요일 훈련 좀 그런데"에 직전 대화(화요일)에 앵커링해 화요일 얘기로 답하고
+    // 화요일 카드를 냈다. 서버 게이트(G11)가 카드는 떨구지만, 본문이 딴 날을 말하는 건 지침이 막아야 한다.
+    '**이번 턴에 사용자가 지목한 요일/날짜가 직전 대화와 다르면 새 지목이 우선이다.** "목요일 훈련 좀 그런데"라고 하면 목요일 세션(upcomingSchedule에서 그 날짜)을 다룬다 — 직전에 화요일 얘기를 했더라도 화요일로 답하지 마라. 지목한 날짜의 카드만 낸다.',
     '**깎을 땐 의도를 보존하는 축부터 깎는다.** 세션마다 지켜야 할 핵심이 다르다 — Easy/Recovery는 저강도 유지(거리·페이스는 깎아도 됨), Easy+Strides는 스트라이드부터 덜어낸다(신경근 곁가지), Tempo는 역치 지속시간이 본체(웜업/쿨다운·총거리는 관용), LSD/Steady Long은 발 위 시간이 본체(페이스를 늦추는 건 관용, 시간 단축은 훼손). 핵심 축을 깎는 제안은 폐기된다.',
     '사용자 요청이 핵심 축을 깎자는 것이면(예: "롱런 시간 줄여줘") 그대로 제안하지 말고 **관용 축 대안을 제시**한다: "시간을 줄이면 롱런의 목적이 사라져요 — 대신 페이스를 더 늦춰서 시간을 지키죠." 대안이 받아들여지면 그 축으로 ease_session을 낸다.',
     // 제품 결정(2026-08-24): 되묻기는 불명확할 때만 — 매 요청마다 물으면 닦달이다(§트리아지 과발동 금지).
