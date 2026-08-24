@@ -332,7 +332,11 @@ Deno.serve(async (req) => {
     }
 
     const ai = await callCoachLlm(provider, context)
-    const result = await persistCoachResult(admin, userId, ownedSelectedRunId, userNote, context, ai, model)
+    // 비스트리밍 경로는 도구 루프를 돌지 않는다 — 조회 0건이 사실이므로 빈 로그가 정확하다.
+    const result = await persistCoachResult(admin, userId, ownedSelectedRunId, userNote, context, ai, model, {
+      toolCalls: [],
+      ungroundedClaims: 0
+    })
 
     return json(result)
   } catch (error) {
@@ -398,6 +402,31 @@ function hasOfferedRestAlternative(rows: CoachReportRow[]): boolean {
     })
 }
 
+/**
+ * 이 턴에서 **실제로 어떤 데이터 조회가 일어났는가**(#652 후속).
+ *
+ * `coach_data_gaps` 는 모델이 도구를 먼저 불러야만 기록되는 구조라, 도구 없이 깔끔하게 거절한
+ * 케이스가 통째로 새어나갔다(2026-08-05~24 대화 75건 동안 신규 gap 0건). 실패를 기록하려 하지 말고
+ * **모든 턴에 실측을 남기고** "답 못 준 질문"은 사후 조회로 도출한다 —
+ * 모델의 자발적 협조가 필요 없어진다([[coach-always-on-block-deterministic]] 과 같은 이유).
+ *
+ * 오프라인에서 되살릴 수 없는 것만 담는다. `user_note`·`created_at` 은 같은 행에 이미 있고,
+ * 응답 모드·발화 분류는 `user_note` 로 재계산되므로 저장하지 않는다.
+ */
+type CoachTurnQueryLog = {
+  toolCalls: Array<{
+    name: 'queryRuns' | 'reportDataGap'
+    ok: boolean
+    matchedRuns?: number
+    failureKind?: string | null
+    filters?: string[]
+  }>
+  /** 도구 없이 나온 과거 수치 주장 문장 수(관측 전용 게이트). */
+  ungroundedClaims: number
+  /** 그 주장이 **직전 턴 조회 결과의 재진술**이었나 — 오탐 분리용. 아래 gate 주석 참조. */
+  ungroundedThreadGrounded?: boolean
+}
+
 async function persistCoachResult(
   admin: SupabaseAdminClient,
   userId: string,
@@ -405,7 +434,8 @@ async function persistCoachResult(
   userNote: string,
   context: CoachContext,
   ai: { report: string; memoryItems: string[]; trainingMemoryPatch: TrainingMemoryPatch | null; injuryUpdateProposal: InjuryUpdateProposal | null; coachScheduleProposal?: unknown },
-  model: string
+  model: string,
+  queryLog: CoachTurnQueryLog
 ) {
   const durableMemoryItems = normalizeMemoryItems(ai.memoryItems, [...(context.coreMemoryItems ?? []), ...context.coachMemoryItems])
   const memoryPatch = normalizeTrainingMemoryPatch(ai.trainingMemoryPatch)
@@ -441,6 +471,8 @@ async function persistCoachResult(
       report,
       injury_context_snapshot: injuryContextSnapshot,
       model,
+      // 턴당 1행 실측(#652 후속). 도구를 안 불렀으면 toolCalls 는 빈 배열이고, 그게 곧 신호다.
+      data_query_log: queryLog,
       updated_at: new Date().toISOString()
     })
     .select('id, selected_run_id, user_note, report, created_at, updated_at, injury_context_snapshot, model')
@@ -1909,6 +1941,31 @@ async function executeQueryRuns(admin: SupabaseAdminClient, userId: string, rawA
   return result
 }
 
+/**
+ * 같은 스레드의 **바로 직전 턴**이 queryRuns 를 성공했나(#652 후속).
+ *
+ * ungrounded 게이트가 승낙 발화("응 해줘")를 잡는 오탐을 가르는 데만 쓴다 — 감지된 드문 경우에만
+ * 도는 1행 조회다. `data_query_log` 도입 전 행은 null 이라 false 로 떨어진다(보수적: 기록은 남는다).
+ */
+async function previousTurnQueriedRuns(
+  admin: SupabaseAdminClient,
+  userId: string,
+  selectedRunId: string | null
+): Promise<boolean> {
+  let query = admin
+    .from('coach_reports')
+    .select('data_query_log')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+  // 스레드 구분은 selected_run_id 다(전역 대화는 null). 다른 스레드의 조회가 근거가 되면 안 된다.
+  query = selectedRunId ? query.eq('selected_run_id', selectedRunId) : query.is('selected_run_id', null)
+  const { data, error } = await query
+  if (error || !data?.length) return false
+  const log = (data[0] as { data_query_log?: CoachTurnQueryLog | null }).data_query_log
+  return Boolean(log?.toolCalls?.some((call) => call.name === 'queryRuns' && call.ok))
+}
+
 /** `reportDataGap` 실행 — 선언을 기록하고, 어떻게 답할지 지침을 돌려준다. */
 async function executeReportDataGap(admin: SupabaseAdminClient, userId: string, rawArgs: string, question: string) {
   let parsedArgs: unknown = {}
@@ -2841,16 +2898,33 @@ function streamCoachRun(
         // 줄일 대상을 추측하게 된다 — 상위 키의 바이트를 남긴다(usage 로그와 짝).
         send('contextBytes', summarizeContextBytes(context))
         let toolWasCalled = false
+        // 턴당 1행 실측(#652 후속) — 실패가 아니라 **일어난 일**을 남긴다. 도구 미호출도 기록이다.
+        const queryLog: CoachTurnQueryLog = { toolCalls: [], ungroundedClaims: 0 }
         const ai = await callCoachLlmStream(provider, context, (delta) => send('delta', { delta }), {
           messages: buildCoachMessages(context),
           tools: buildCoachTools(),
           onToolCall: async (name, args) => {
             toolWasCalled = true
-            if (name === 'reportDataGap') return await executeReportDataGap(admin, userId, args, userNote)
+            if (name === 'reportDataGap') {
+              // 종류·needed 는 executeReportDataGap 이 coach_data_gaps 에 이미 남긴다 — 여기선 중복하지 않는다.
+              queryLog.toolCalls.push({ name: 'reportDataGap', ok: true })
+              return await executeReportDataGap(admin, userId, args, userNote)
+            }
             if (name !== 'queryRuns') return { error: `지원하지 않는 도구입니다(${name}).` }
             // 조회 조건을 화면에 그대로 노출한다 — 진행 표시가 신뢰 장치를 겸한다(#650 후속).
             send('stage', { stage: 'querying', detail: summarizeQueryRunsArgsForDisplay(args) })
             const result = await executeQueryRuns(admin, userId, args, userNote)
+            queryLog.toolCalls.push(
+              'error' in result
+                ? { name: 'queryRuns', ok: false }
+                : {
+                    name: 'queryRuns',
+                    ok: true,
+                    matchedRuns: result.matchedRuns,
+                    failureKind: result.failureKind,
+                    filters: result.appliedFilters
+                  }
+            )
             send('stage', { stage: 'generating' })
             return result
           }
@@ -2864,16 +2938,39 @@ function streamCoachRun(
         if (!toolWasCalled && userNote.trim()) {
           const claims = detectUngroundedDataClaims(ai.report)
           if (claims.length) {
-            console.warn('[coach-run] 도구 없이 과거 수치 주장 감지(관측 전용)', { count: claims.length, first: claims[0] })
-            await recordDataGap(admin, userId, {
-              kind: 'ungrounded_claim',
-              question: userNote,
-              detail: claims.map((claim) => claim.sentence).join(' | ').slice(0, 500)
+            queryLog.ungroundedClaims = claims.length
+            /**
+             * 오탐 하나를 갈라낸다(2026-08-24 실측).
+             *
+             * 로그에 쌓인 `ungrounded_claim` 4건 중 1건이 `"응 해줘"` 였다. 승낙 발화는 새 질문이 아니라
+             * **직전 답변에서 코치가 제안한 후속을 수행하라**는 뜻이고(지침도 그렇게 시킨다), 직전 턴이
+             * 조회로 확인한 수치를 다시 말한 것이라면 지어낸 게 아니다.
+             *
+             * 조건을 좁게 잡는다 — `isBareContinuation` **이면서** 바로 앞 턴이 queryRuns 를 성공한 경우만.
+             * "스레드 어딘가에서 조회한 적 있음"까지 넓히면 9번째 턴의 날조를 1번째 조회가 가려준다.
+             *
+             * 갈라내는 이유: 이 로그가 **차단 승격의 정밀도 근거**다. 오탐이 섞이면 승격 판단이 흐려진다.
+             * 잃는 것은 없다 — 걸린 사실 자체는 coach_reports.data_query_log 에 남는다.
+             */
+            const threadGrounded =
+              isBareContinuation(userNote) && (await previousTurnQueriedRuns(admin, userId, selectedRunId))
+            queryLog.ungroundedThreadGrounded = threadGrounded
+            console.warn('[coach-run] 도구 없이 과거 수치 주장 감지(관측 전용)', {
+              count: claims.length,
+              first: claims[0],
+              threadGrounded
             })
+            if (!threadGrounded) {
+              await recordDataGap(admin, userId, {
+                kind: 'ungrounded_claim',
+                question: userNote,
+                detail: claims.map((claim) => claim.sentence).join(' | ').slice(0, 500)
+              })
+            }
           }
         }
         send('stage', { stage: 'saving' })
-        const result = await persistCoachResult(admin, userId, selectedRunId, userNote, context, ai, storedModel)
+        const result = await persistCoachResult(admin, userId, selectedRunId, userNote, context, ai, storedModel, queryLog)
         clearInterval(heartbeat)
         send('done', result)
         closeQuietly()
