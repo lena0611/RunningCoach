@@ -189,6 +189,14 @@ describe('coachScheduleProposal 게이트 (#639)', () => {
       expect(normalizeCoachScheduleProposal({ ...EASE, easeAxis: 'intensity' }, gate())).toBeNull()
     })
 
+    it('Easy 계열은 duration 도 관용이다 — 거리와 시간은 같은 dose 손잡이 (2026-08-24 라이브 QA 교정)', () => {
+      // 실측: "훈련 좀 그런데"에 모델이 duration 을 골랐다가 게이트에 죽어 카드가 안 떴다.
+      // 시간이 본체인 LSD·Tempo 만 막는다(위 테스트).
+      expect(normalizeCoachScheduleProposal({ ...EASE, easeAxis: 'duration' }, gate())?.easeAxis).toBe('duration')
+      const easyGate = gate({ upcomingSchedule: [{ date: '2026-07-31', type: 'Easy', canIntensify: false }] })
+      expect(normalizeCoachScheduleProposal({ ...EASE, easeAxis: 'duration' }, easyGate)?.easeAxis).toBe('duration')
+    })
+
     it('Tempo 는 지속시간이 본체다 — 웜업/쿨다운·거리는 관용, duration 은 훼손', () => {
       const tempoGate = gate({ upcomingSchedule: [{ date: '2026-07-31', type: 'Tempo', canIntensify: false }] })
       expect(normalizeCoachScheduleProposal({ ...EASE, easeAxis: 'warmup_cooldown' }, tempoGate)?.easeAxis).toBe('warmup_cooldown')

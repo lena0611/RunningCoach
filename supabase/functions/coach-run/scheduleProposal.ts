@@ -108,9 +108,13 @@ const EASE_AXES: CoachScheduleEaseAxis[] = ['strides', 'warmup_cooldown', 'pace'
  * 키는 웹 RunType 문자열(src/entities/run/model.ts). 서버가 타입 union 을 미러하지 않고 문자열로 본다.
  */
 const EASE_TOLERANCE_BY_TYPE: Record<string, CoachScheduleEaseAxis[]> = {
-  Easy: ['pace', 'distance'],
-  Recovery: ['pace', 'distance'],
-  'Easy + Strides': ['strides', 'pace', 'distance'],
+  // Easy 계열은 duration 도 관용이다(2026-08-24 라이브 QA 교정): 페이스가 고정이면 거리와 시간은
+  // **같은 dose 손잡이**라, 거리 허용·시간 차단은 비일관이었다(실측: "훈련 좀 그런데"에 모델이
+  // duration 을 골랐다가 게이트에 죽어 카드가 안 떴다). 시간이 세션의 본체인 건 LSD(발 위 시간)와
+  // Tempo(역치 지속시간)뿐이다 — 거기서만 duration 을 훼손으로 막는다.
+  Easy: ['pace', 'distance', 'duration'],
+  Recovery: ['pace', 'distance', 'duration'],
+  'Easy + Strides': ['strides', 'pace', 'distance', 'duration'],
   Tempo: ['warmup_cooldown', 'distance'],
   LSD: ['pace', 'distance'],
   'Steady Long': ['pace', 'distance'],
