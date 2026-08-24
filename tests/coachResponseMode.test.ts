@@ -4,6 +4,7 @@ import {
   detectCoachAnswerIntent,
   detectUserNoteRunRelevance,
   isBareContinuation,
+  mentionsInjuryStateChange,
   resolveCoachResponseMode,
   shouldAttachInjurySnapshot,
   shouldApplyTrustLayer,
@@ -198,6 +199,37 @@ describe('coach response mode and user note relevance', () => {
     it('기간만 있고 집계 의도가 없으면 기존 판정을 바꾸지 않는다', () => {
       // "지난달에 아팠어" 는 집계 질문이 아니다 — 부상 맥락(personal_training)으로 기존 규칙이 받는다.
       expect(detectUserNoteRunRelevance('노르웨이식 훈련법이 뭐야')).toBe('general')
+    })
+  })
+
+  describe('부상 상태 변경 발화는 개인 맥락으로 받는다 (#697, 2026-08-22 실사용)', () => {
+    it('회복·해제·수치 갱신 발화가 general 로 새지 않는다', () => {
+      for (const note of [
+        '발바닷 상태 0이닠가 업데이트해줘',
+        '부상상태 업데이트해줘 이제 발바닥 해제',
+        '이제 다 나았어',
+        '발 괜찮아졌어',
+        '족저근막염 다 나았어 해제해줘',
+        '무릎 이제 0이야',
+        '상태 업데이트 해줘'
+      ]) {
+        expect(detectUserNoteRunRelevance(note), note).toBe('personal_training')
+        // general 이면 structuredCoachContext=false 가 되어 코치가 "부상 없음"으로 답한다.
+        expect(shouldUseStructuredCoachContext(note, 'conversational'), note).toBe(true)
+      }
+    })
+
+    it('부위명만으로는 개인 발화로 보지 않는다 (개념 질문 회귀 가드)', () => {
+      // 상태 신호(수치·이제·해제/업데이트) 없이 부위명만 있으면 개념 질문일 수 있다.
+      expect(mentionsInjuryStateChange('무릎 스트레칭 방법')).toBe(false)
+      expect(mentionsInjuryStateChange('족저근막염이 뭐야')).toBe(false)
+      expect(mentionsInjuryStateChange('아킬레스건 강화 운동')).toBe(false)
+    })
+
+    it('부상과 무관한 해제·나아감 표현을 끌어오지 않는다', () => {
+      for (const note of ['알림 해제해줘', '더 나아가려면 뭐가 필요해?', '고마워 도움이 됐어']) {
+        expect(detectUserNoteRunRelevance(note), note).toBe('general')
+      }
     })
   })
 })

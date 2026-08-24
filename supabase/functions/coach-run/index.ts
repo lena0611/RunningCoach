@@ -2133,14 +2133,32 @@ function buildScheduleProposalInstructions(restAlternativeOffered = false) {
   ]
 }
 
-function buildFreeConversationInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnType<typeof buildRunnerLevelGuide>, restAlternativeOffered = false) {
+/**
+ * 자유대화·conversational 공용 지침.
+ *
+ * ⚠️ 이 빌더는 **두 경우**에 쓰인다(buildCoachInstructions 참조):
+ *   1. `structuredCoachContext === false` — 진짜 자유대화(개인 맥락 없이 주제만 다룬다)
+ *   2. `coachResponseMode === 'conversational'` — 개인 맥락이 실려 온 일반 대화 턴
+ * 둘을 구분하지 않고 "activeInjuryItem 이 없다고 보고 답한다"를 항상 보내면 2번에서 코치가
+ * **있는 부상을 부정**한다(#697). 그래서 `hasStructuredContext` 로 갈라 보낸다.
+ */
+function buildFreeConversationInstructions(
+  runnerLevel: RunnerLevel,
+  levelGuide: ReturnType<typeof buildRunnerLevelGuide>,
+  restAlternativeOffered = false,
+  hasStructuredContext = false
+) {
   return [
     '너는 한국어로 자연스럽게 답하는 러닝 코치다. 지금은 자유대화다.',
     `이 사용자의 runnerLevel은 ${runnerLevel}이다. 전문 용어 깊이는 ${levelGuide.termDepth}`,
     '사용자 질문(context.userNote)에 바로 답한다. 정해진 응답 템플릿, 고정 섹션, 첫 문장 반응 패턴을 쓰지 않는다.',
     '절대 금지: "ㅋㅋ", "좋아", "아," 같은 습관적 시작을 매번 붙이지 않는다. 사용자가 웃으며 말한 경우가 아니면 웃음 표현으로 시작하지 않는다.',
     '절대 금지: "## 핵심 지표 / 오늘 해석 / 조심할 점 / 다음 훈련 / 루틴 업데이트 / 한 줄 요약" 같은 코칭 리포트 섹션, 지표 나열, 세션 전체 재분석.',
-    'context.responseStyle, context.responseTemplatePolicy, context.coachingDecisionBoard, selectedRun, activeGoal, activeInjuryItem, trustLayerNote가 없다고 보고 답한다. 자유대화에서는 질문 주제 자체만 다룬다.',
+    hasStructuredContext
+      ? // 개인 맥락이 실려 온 턴이다. 리포트 템플릿만 억제하고 맥락 자체는 살린다 — 여기서
+        // activeInjuryItem 까지 없다고 치면 "발바닥 다 나았어" 에 부상이 없는 듯 답한다(#697).
+        'context.responseStyle, context.responseTemplatePolicy, context.coachingDecisionBoard, trustLayerNote는 없다고 보고 답한다. selectedRun·activeGoal·activeInjuryItem은 질문이 그것을 가리킬 때만 쓰고, 묻지 않은 지표를 먼저 나열하지 않는다.'
+      : 'context.responseStyle, context.responseTemplatePolicy, context.coachingDecisionBoard, selectedRun, activeGoal, activeInjuryItem, trustLayerNote가 없다고 보고 답한다. 자유대화에서는 질문 주제 자체만 다룬다.',
     '답변 길이와 형식은 질문에 맞춘다. 짧은 확인 질문이면 짧게, 개념 질문이면 필요한 만큼 설명하되 불필요한 개인화 단락을 붙이지 않는다.',
     ...buildCoachThreadInstruction(),
     ...buildDataQuestionInstruction(),
@@ -2150,7 +2168,16 @@ function buildFreeConversationInstructions(runnerLevel: RunnerLevel, levelGuide:
     'memoryItems에는 이 대화에서 새로 알게 된 사용자의 안정적인 개인 맥락(목표/욕구/선호/서사)만 0~3개 넣는다. 일회성 잡담이나 단일 세션 수치는 넣지 않는다. 이미 core/coachMemoryItems에 있으면 다시 넣지 않는다.',
     ...buildInternalNamingGuard(),
     ...buildScheduleProposalInstructions(restAlternativeOffered),
-    '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal, coachScheduleProposal. report에 자유대화 본문을 넣고, trainingMemoryPatch와 injuryUpdateProposal은 null로 둔다.'
+    '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal, coachScheduleProposal. report에 자유대화 본문을 넣는다.',
+    // trainingMemoryPatch 는 **승인 없이 자동 저장**되는 경로다(ai-coaching-goal.md §378,
+    // [[training-memory-lww-clobber-hazard]]). 대화로 루틴을 조용히 덮어쓰지 않는다 — 계속 막는다.
+    'trainingMemoryPatch는 항상 null로 둔다.',
+    // #697: 여기서 injuryUpdateProposal 까지 강제 null 이라 **부상 상태를 대화로 바꾸는 경로가
+    // 통째로 닫혀 있었다**. SSOT(domain-rules.md §164 · ai-coaching-goal.md §378)는 부상 상태 변경을
+    // "AI 는 제안만, 사용자 승인 후 저장"으로 규정하고 그 유일한 통로가 injuryUpdateProposal 이다.
+    hasStructuredContext
+      ? '사용자가 부상 상태 변화를 말하면(다 나았다·통증이 줄었다/늘었다·수치를 불러줌·해제해달라) injuryUpdateProposal로 제안한다. 네가 상태를 바꾸는 게 아니라 사용자가 승인 카드로 확정하는 제안이다. 활성 부상이 없거나 상태 변화 언급이 없으면 null로 둔다. 승인 절차를 건너뛰었다는 식으로 "바꿔뒀다"고 말하지 마라 — "이렇게 바꿀까요?"로 제안하고 사용자가 카드에서 확정한다.'
+      : 'injuryUpdateProposal은 null로 둔다.'
   ].join('\n')
 }
 
@@ -2308,7 +2335,8 @@ function buildCoachInstructions(context: unknown) {
     return buildExplainInstructions(runnerLevel, levelGuide, restAlternativeOffered)
   }
   if (ctx?.coachResponseMode === 'conversational') {
-    return buildFreeConversationInstructions(runnerLevel, levelGuide, restAlternativeOffered)
+    // 위 early return 이 structuredCoachContext===false 를 이미 걸렀으므로 여기는 항상 맥락 있는 턴이다.
+    return buildFreeConversationInstructions(runnerLevel, levelGuide, restAlternativeOffered, true)
   }
   return [
     '너는 사용자를 오래 봐온 한국어 러닝 코치다.',

@@ -57,6 +57,8 @@
 - AI 코칭 Edge Function은 `runningAnalysisEngine`에서 HR drift, 부하 증가율, 회복 상태, 부상 위험, 과훈련 경고, 훈련 적합성 점수를 먼저 계산하고, OpenAI는 이 판단을 설명하는 역할을 맡는다.
 - AI 코칭 Edge Function은 Responses API strict JSON schema를 사용해 `report`, `memoryItems`, `trainingMemoryPatch`, `injuryUpdateProposal` 응답 구조를 강제한다. 프롬프트만으로 JSON을 기대하지 않는다.
 - `coach-run`의 사용자 요청 1회는 OpenAI 모델 호출 1회를 원칙으로 한다. 스트리밍 파서 fallback이나 오류 복구가 두 번째 모델 호출을 만들면 429를 증폭할 수 있으므로, fallback은 같은 응답 payload 안에서만 처리한다.
+- **모드·분류·게이트에 기능 가용성을 걸지 않는다.** `coach-run`은 응답 모드(report/conversational/explain/evidence)와 발화 분류(`detectUserNoteRunRelevance`)에 따라 지침 세트와 컨텍스트를 갈라 보낸다. 여기서 특정 기능(제안·페이로드·도구)을 "이 모드에서는 끈다"고 못 박으면 **그 기능이 필요한 발화가 하필 그 모드로 분류될 때 100% 폐기**된다. 오분류의 손실이 비대칭이라 넓게 켜고 안전 불변식은 정규화 단계에서 강제한다. 실제 사고 3건: #642(G3 게이트가 축약된 `upcomingSchedule`을 봐서 세션 액션 4종 폐기) · #690(벤치마크 페이로드를 `structuredCoachContext` 뒤에 숨겨 비교 질문이 탈락) · #697(conversational 지침이 `injuryUpdateProposal`을 강제 null — 부상 상태를 대화로 바꾸는 유일한 경로가 닫힘). 셋 다 타입·유닛테스트에 안 걸리고 배포 후 실사용에서야 드러났다 → 프롬프트 문자열로 기능을 끄면 **소스 가드 테스트**를 함께 둔다(`tests/coachConversationalProposalGate.test.ts`).
+- 여러 모드가 같은 지침 빌더를 공유하면 **어느 경로로 들어왔는지를 인자로 받아 갈라야 한다.** `buildFreeConversationInstructions`는 진짜 자유대화(`structuredCoachContext === false`)와 맥락 있는 일반 대화 턴(`coachResponseMode === 'conversational'`) 양쪽에 쓰이는데, 구분 없이 "activeInjuryItem이 없다고 보고 답한다"를 보내면 코치가 있는 부상을 부정한다(#697).
 - 장기기억 컨텍스트는 `coach_memory_items` 최근 목록을 그대로 넣지 않고, 선택 세션/메모 태그, activeGoal, activeInjuryItem, runnerIdentity, coachBeliefs, 반복 패턴 키워드, 중요 러닝 맥락, 최근성을 점수화해 최대 소량만 넣는다.
 - 장기 확장: Strava activity fetch -> `RunLog` 후보 생성 -> 사용자 확인/저장
 
