@@ -4112,7 +4112,10 @@ button.run-session-row {
   stroke-width: 2.4;
 }
 
-.injury-area-finder {
+/* <details> 는 [open] 일 때만 grid — 닫힘 숨김은 UA(::details-content content-visibility)에 맡긴다.
+   ⚠ 닫힘 상태에서도 내부 요소의 getBoundingClientRect/offsetParent 는 값이 나온다(스킵된 콘텐츠도
+   지오메트리 API 는 응답, 2026-08-26 실측) — JS 로 접힘 여부를 판정하지 말 것. 판정은 .open/스크린샷. */
+.injury-area-finder[open] {
   display: grid;
   gap: 12px;
 }
@@ -4128,6 +4131,20 @@ button.run-session-row {
 .injury-area-finder article {
   display: grid;
   gap: 8px;
+}
+
+/* 부상 생성 폼의 선택 입력 접기 — summary 스타일은 .injury-area-finder 와 동일 문법 */
+.injury-detail-fold[open] {
+  display: grid;
+  gap: 12px;
+}
+
+.injury-detail-fold summary {
+  cursor: pointer;
+  color: var(--color-muted);
+  font-size: var(--text-caption-size);
+  font-weight: 800;
+  list-style: revert;
 }
 
 .injury-group-head {

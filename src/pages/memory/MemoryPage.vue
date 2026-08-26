@@ -18,6 +18,7 @@ import type { TrainingKnowledgeCatalog, TrainingKnowledgeRequest, TrainingMethod
 import { formatDateWithWeekday } from '@/shared/lib/format'
 import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
+import { useToastStore } from '@/app/stores/toastStore'
 import { createTrainingKnowledgeRequest, fetchTrainingKnowledgeCatalog } from '@/shared/api/trainingKnowledgeRepository'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
@@ -335,7 +336,11 @@ function openGoalNew() {
 
 function addGoal() {
   const title = newGoal.title.trim()
-  if (!title) return
+  if (!title) {
+    // addInjury 와 같은 조용한 무반응 방지 — 같은 화면의 같은 패턴이라 함께 고친다.
+    useToastStore().error('목표명을 입력해주세요', { placement: 'top' })
+    return
+  }
   const now = new Date().toISOString()
   const goal: TrainingGoal = {
     id: crypto.randomUUID(),
@@ -577,7 +582,12 @@ function applyNewInjuryAreas(value: InjuryAreaSelection[]) {
 
 function addInjury() {
   const title = newInjury.title.trim()
-  if (!title) return
+  if (!title) {
+    // 조용한 return 이면 버튼이 고장난 것처럼 보인다(2026-08-25 실사용: 부위·상태를 다 채우고
+    // 생성을 눌렀는데 무반응 — 항목명만 비어 있었다). 왜 안 되는지 말해준다.
+    useToastStore().error('항목명을 입력해주세요', { placement: 'top' })
+    return
+  }
   applyNewInjuryAreas(newInjury.normalizedAreas)
   const now = new Date().toISOString()
   const item: TrainingInjuryItem = {
@@ -927,26 +937,32 @@ async function saveSection(section: MemorySection) {
               </article>
             </div>
           </div>
-          <label class="full">
-            악화 트리거
-            <ClearableField :model-value="join(newInjury.triggers)" as="textarea" rows="3" placeholder="예: 템포 다음날 뻣뻣함&#10;볼륨 급증" @update:model-value="newInjury.triggers = split(String($event ?? ''))" />
-          </label>
-          <label class="full">
-            훈련 제한
-            <ClearableField :model-value="join(newInjury.restrictions)" as="textarea" rows="3" placeholder="예: 통증이 있으면 스트라이드 생략&#10;롱런 후 하루 회복 우선" @update:model-value="newInjury.restrictions = split(String($event ?? ''))" />
-          </label>
-          <label class="full">
-            복귀 기준
-            <ClearableField v-model="newInjury.returnToRunCriteria" as="textarea" rows="3" placeholder="예: 다음날 뻣뻣함 없이 Easy가 편할 때 강도 복귀" />
-          </label>
-          <label class="full">
-            메모
-            <ClearableField v-model="newInjury.notes" as="textarea" rows="3" placeholder="예: 템포 다음날 뻣뻣함 확인 필요" />
-          </label>
-          <label class="full">
-            관리 계획
-            <ClearableField v-model="newInjury.managementPlan" as="textarea" rows="3" placeholder="예: 통증 단정 없이 강훈련 후 반응 확인" />
-          </label>
+          <!-- 상세 텍스트 5종은 전부 선택 입력이라 접는다(2026-08-26 사용자 피드백: "입력창이 너무 많아
+               눈에 안 들어오고 쓸데없이 느껴져"). 생성의 필수 흐름은 항목명·부위·상태·날짜까지다.
+               접기 패턴은 같은 화면의 '이름으로 찾기'(InjuryBodySelector)와 동일한 <details>. -->
+          <details class="injury-detail-fold full">
+            <summary>자세한 관리 메모 (선택)</summary>
+            <label class="full">
+              악화 트리거
+              <ClearableField :model-value="join(newInjury.triggers)" as="textarea" rows="3" placeholder="예: 템포 다음날 뻣뻣함&#10;볼륨 급증" @update:model-value="newInjury.triggers = split(String($event ?? ''))" />
+            </label>
+            <label class="full">
+              훈련 제한
+              <ClearableField :model-value="join(newInjury.restrictions)" as="textarea" rows="3" placeholder="예: 통증이 있으면 스트라이드 생략&#10;롱런 후 하루 회복 우선" @update:model-value="newInjury.restrictions = split(String($event ?? ''))" />
+            </label>
+            <label class="full">
+              복귀 기준
+              <ClearableField v-model="newInjury.returnToRunCriteria" as="textarea" rows="3" placeholder="예: 다음날 뻣뻣함 없이 Easy가 편할 때 강도 복귀" />
+            </label>
+            <label class="full">
+              메모
+              <ClearableField v-model="newInjury.notes" as="textarea" rows="3" placeholder="예: 템포 다음날 뻣뻣함 확인 필요" />
+            </label>
+            <label class="full">
+              관리 계획
+              <ClearableField v-model="newInjury.managementPlan" as="textarea" rows="3" placeholder="예: 통증 단정 없이 강훈련 후 반응 확인" />
+            </label>
+          </details>
           <ActionGroup full>
             <button type="button" @click="addInjury">생성</button>
           </ActionGroup>
