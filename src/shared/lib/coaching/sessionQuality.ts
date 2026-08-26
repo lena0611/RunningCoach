@@ -1,4 +1,5 @@
 import type { Lap, RunLog } from '@/entities/run/model'
+import { assessWeatherStress } from '@/shared/lib/coaching/weatherStress'
 
 /**
  * 세션 분석 고도화 (#354) — "규칙=증거" 신호 함수.
@@ -147,12 +148,18 @@ export type LsdEvaluation = {
   paceDeltaSec: number | null
   /** 후반까지 "오래 편하게"가 유지됐는가(부담 신호 없음). */
   stable: boolean
+  /** 드리프트가 임계를 넘었지만 **더위 교란으로 설명되어** 실패로 보지 않은 경우(#713). */
+  weatherConfounded: boolean
   reasons: string[]
 }
 
 const LSD_PROGRESSIVE_PACE_GAIN = 8 // 후반 8s/km 이상 빨라지면 progressive
 const LSD_RECOVERY_RPE = 3
 const LSD_STRAIN_DRIFT = 12
+/** 더위 교란이어도 후반이 이만큼 무너졌으면 실패 유지(초/km). 열이든 아니든 지속이 안 된 것. */
+const LSD_HEAT_PACE_COLLAPSE = 20
+/** 더위 교란이어도 RPE 가 이 이상이면 실패 유지 — 심박만 오른 게 아니라 체감도 힘들었다. */
+const LSD_HEAT_EFFORT_RPE = 5
 
 /**
  * LSD 세션을 "오래 편하게" 관점으로 복합 평가하고 세분화한다(#354 §5).
@@ -182,16 +189,36 @@ export function evaluateLsd(
 
   // "오래 편하게": 심박 드리프트가 과하지 않으면 안정. progressive는 의도된 페이스업이라 드리프트 허용폭을 조금 넓게.
   const driftCap = kind === 'progressive' ? LSD_STRAIN_DRIFT + 3 : LSD_STRAIN_DRIFT
-  const stable = hrDriftBpm === null ? true : hrDriftBpm < driftCap
+  const driftOver = hrDriftBpm !== null && hrDriftBpm >= driftCap
+
+  /**
+   * 날씨 교란 결합(#713) — SSOT §외부 조건: `LSD_STRAIN_DRIFT` 는 **날씨와 무관한 보편 품질선이
+   * 아니다.** 더운 날엔 이 값을 단독 실패 근거로 쓰지 말고 RPE·페이스 붕괴와 **결합**한다.
+   *
+   * ⚠️ 날씨는 면죄부가 아니다. 아래 둘 중 하나라도 있으면 교란이어도 실패 판정을 유지한다:
+   *   - RPE 가 높다(체감도 힘들었다) — 심박만 오른 게 아니라 실제로 무리했다
+   *   - 후반 페이스가 크게 무너졌다 — 열이든 아니든 지속이 안 됐다
+   * (선례: 롱런 네거티브 스플릿 보정 — **원인이 설명되는 드리프트는 깎지 않는다**.)
+   */
+  const heat = assessWeatherStress(run)
+  const paceCollapsed = paceDeltaSec !== null && paceDeltaSec >= LSD_HEAT_PACE_COLLAPSE
+  const effortHigh = rpe !== null && rpe >= LSD_HEAT_EFFORT_RPE
+  const weatherConfounded = heat.heatConfounded && driftOver && !paceCollapsed && !effortHigh
+  const stable = hrDriftBpm === null ? true : weatherConfounded ? true : !driftOver
 
   const reasons: string[] = []
   if (kind === 'recovery') reasons.push('낮은 강도(RPE/심박) — 회복형 LSD')
   else if (kind === 'progressive') reasons.push(`후반 ${paceGainSec}s/km 페이스업 — 프로그레시브 LSD`)
   else reasons.push('편안한 지속주 — 스탠다드 LSD')
   if (durationMin !== null) reasons.push(`지속 ${durationMin}분`)
-  if (!stable && hrDriftBpm !== null) reasons.push(`후반 심박 드리프트 ${hrDriftBpm}bpm — 다음엔 초반을 더 눌러도 좋음`)
+  if (weatherConfounded && hrDriftBpm !== null) {
+    // 숫자는 정직하게 남기고 해석만 맥락과 함께 준다(SSOT: 관찰 사실로 보여 주되 인과 해석은 보류).
+    reasons.push(`후반 심박 드리프트 ${hrDriftBpm}bpm — 다만 ${heat.note}. 체력 저하로 보지 않는다`)
+  } else if (!stable && hrDriftBpm !== null) {
+    reasons.push(`후반 심박 드리프트 ${hrDriftBpm}bpm — 다음엔 초반을 더 눌러도 좋음`)
+  }
 
-  return { kind, durationMin, rpe, hrDriftBpm, paceDeltaSec, stable, reasons }
+  return { kind, durationMin, rpe, hrDriftBpm, paceDeltaSec, stable, weatherConfounded, reasons }
 }
 
 export const LSD_KIND_LABEL: Record<LsdKind, string> = {
@@ -207,6 +234,8 @@ export type EasyRecoveryEvaluation = {
   overByBpm: number | null
   /** RPE가 낮아 심박 소폭 초과를 회복/이지 유지로 인정했는가. */
   rpeOverride: boolean
+  /** 심박이 상한을 넘었지만 **더위 교란으로 설명되어** 실패로 보지 않은 경우(#713). */
+  weatherConfounded: boolean
   reasons: string[]
 }
 
@@ -218,6 +247,8 @@ const RECOVERY_RPE_LOW = 3
 const EASY_RPE_LOW = 4
 // RPE가 낮아도 이만큼 넘으면 데이터 불일치로 보고 override하지 않는다.
 const RPE_OVERRIDE_CAP_BPM = 15
+/** 더위 교란이어도 RPE 가 이 이상이면 강도 실패 유지 — 날씨는 면죄부가 아니다(SSOT §외부 조건). */
+const EASY_HEAT_EFFORT_RPE = 6
 
 /**
  * Easy/Recovery 강도 유지 판정 (#354 §2).
@@ -248,14 +279,30 @@ export function evaluateEasyRecovery(
           ? '심박 회복 범위 유지'
           : 'Easy 심박 범위 유지'
     )
-    return { intentHeld: true, overByBpm, rpeOverride: false, reasons }
+    return { intentHeld: true, overByBpm, rpeOverride: false, weatherConfounded: false, reasons }
   }
 
   // 초과했지만 RPE가 낮고, 초과 폭이 과하지 않으면 RPE를 우선해 유지로 본다.
   const withinOverrideCap = overByBpm !== null && overByBpm <= RPE_OVERRIDE_CAP_BPM
   if (rpeLow && withinOverrideCap) {
     reasons.push(`심박이 ${overByBpm}bpm 올랐지만 RPE ${run.rpe} — 체감상 ${opts.isRecovery ? '회복' : 'Easy'} 강도 유지로 본다`)
-    return { intentHeld: true, overByBpm, rpeOverride: true, reasons }
+    return { intentHeld: true, overByBpm, rpeOverride: true, weatherConfounded: false, reasons }
+  }
+
+  /**
+   * 날씨 교란 결합(#713) — SSOT §외부 조건: Easy 합격은 RPE·대화 가능성을 우선하고,
+   * 더운 날 **심박 상한 초과만으로 실패시키지 않는다.**
+   *
+   * ⚠️ 날씨는 면죄부가 아니다. RPE 가 함께 높으면(체감도 힘들었다면) 실패를 유지한다 —
+   * SSOT: "심박·RPE·대화가 함께 높으면 강도 실패 판정을 유지한다."
+   * RPE 미입력은 교란으로 넘기되 **판정 보류 성격**임을 문구로 밝힌다(체력 저하로 단정하지 않는다).
+   */
+  const heat = assessWeatherStress(run)
+  const effortHigh = run.rpe !== null && run.rpe >= EASY_HEAT_EFFORT_RPE
+  if (heat.heatConfounded && !effortHigh) {
+    reasons.push(`심박이 상한을 ${overByBpm}bpm 넘었지만 ${heat.note}. 강도 실패로 보지 않는다`)
+    if (run.rpe === null) reasons.push('RPE 미입력 — 체감 강도를 알 수 없어 판정은 보류다(체력 저하로 단정하지 않는다)')
+    return { intentHeld: true, overByBpm, rpeOverride: false, weatherConfounded: true, reasons }
   }
 
   reasons.push(
@@ -263,7 +310,7 @@ export function evaluateEasyRecovery(
       ? `심박이 상한을 ${overByBpm}bpm 초과(RPE 미입력) — 다음엔 조금 더 눌러도 좋다`
       : `심박 ${overByBpm}bpm 초과 + RPE ${run.rpe} — 의도보다 강도가 올라갔다`
   )
-  return { intentHeld: false, overByBpm, rpeOverride: false, reasons }
+  return { intentHeld: false, overByBpm, rpeOverride: false, weatherConfounded: false, reasons }
 }
 
 /** coach-run 주입용 선택 세션 증거(#354). 규칙은 다단계 등급/보정 지표만 주고 AI가 최종 해석한다. */
@@ -276,8 +323,8 @@ export type CoachSessionEvidence = {
     paceDeltaSec: number | null
     efficiencyScore: number | null
   }
-  lsd?: { kind: LsdKind; hrDriftBpm: number | null; paceDeltaSec: number | null; durationMin: number | null; stable: boolean }
-  easyRecovery?: { intentHeld: boolean; overByBpm: number | null; rpeOverride: boolean }
+  lsd?: { kind: LsdKind; hrDriftBpm: number | null; paceDeltaSec: number | null; durationMin: number | null; stable: boolean; weatherConfounded: boolean }
+  easyRecovery?: { intentHeld: boolean; overByBpm: number | null; rpeOverride: boolean; weatherConfounded: boolean }
   reasons: string[]
 }
 
@@ -307,7 +354,7 @@ export function buildCoachSessionEvidence(
     const lsd = evaluateLsd(run, opts)
     return {
       runType: run.type,
-      lsd: { kind: lsd.kind, hrDriftBpm: lsd.hrDriftBpm, paceDeltaSec: lsd.paceDeltaSec, durationMin: lsd.durationMin, stable: lsd.stable },
+      lsd: { kind: lsd.kind, hrDriftBpm: lsd.hrDriftBpm, paceDeltaSec: lsd.paceDeltaSec, durationMin: lsd.durationMin, stable: lsd.stable, weatherConfounded: lsd.weatherConfounded },
       reasons: lsd.reasons
     }
   }
@@ -325,7 +372,7 @@ export function buildCoachSessionEvidence(
       : er.reasons
     return {
       runType: run.type,
-      easyRecovery: { intentHeld: er.intentHeld, overByBpm: er.overByBpm, rpeOverride: er.rpeOverride },
+      easyRecovery: { intentHeld: er.intentHeld, overByBpm: er.overByBpm, rpeOverride: er.rpeOverride, weatherConfounded: er.weatherConfounded },
       reasons
     }
   }
