@@ -112,3 +112,27 @@ describe('getHumidityLoad', () => {
     expect(getHumidityLoad(null)).toBeNull()
   })
 })
+
+describe('환경 안내는 안전을 보증하지 않는다 (#712 SSOT 정합)', () => {
+  it('무난한 조건에서도 "안전/무난합니다" 식 보증 문구를 쓰지 않는다', () => {
+    // 체감온도는 복사열·개인 상태(질환·약물·열순응)를 모른다. "무난합니다"는 안전 보증으로 읽힌다.
+    const safety = getRunningSafety({
+      temperatureC: 15, apparentTemperatureC: 15, humidity: 0.5,
+      windMps: 1, precipitationChance: 0, precipitationAmountMm: 0
+    })
+    expect(safety.level).toBe('good')
+    expect(safety.summary).not.toMatch(/무난합니다|안전합니다|괜찮습니다/)
+    expect(safety.summary).toMatch(/몸 상태/)
+  })
+
+  it('더위 안내는 페이스 저하를 정상으로 말하고 중단 신호를 함께 준다', () => {
+    // SSOT §외부 조건: 심박 상한을 올리지 않고, 페이스는 낮추며, 증상은 숫자보다 우선한다.
+    const safety = getRunningSafety({
+      temperatureC: 31, apparentTemperatureC: 33, humidity: 0.8,
+      windMps: 1, precipitationChance: 0, precipitationAmountMm: 0
+    })
+    expect(safety.kind).toBe('heat')
+    expect(safety.summary).toMatch(/느려지는 게 정상/)
+    expect(safety.bullets.join(' ')).toMatch(/즉시 중단/)
+  })
+})
