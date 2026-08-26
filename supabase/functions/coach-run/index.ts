@@ -1601,6 +1601,11 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       'Steady Long: rawHrDrift가 아니라 adjustedHrDrift(후반 가속 보정)를 우선 본다. grade는 quality/aggressive/strained/failed. 네거티브 스플릿(paceDeltaSec 음수=후반 빨라짐)을 "심박이 따라붙어 실패"로 단정하지 마라 — 보정 드리프트가 낮으면 잘 통제된 것이다. ' +
       'LSD: kind(recovery/standard/progressive)와 stable을 본다. progressive(후반 페이스업)는 의도된 강화일 수 있다. ' +
       'Easy/Recovery/Easy+Strides: 강도는 평균심박(+RPE·드리프트)으로 본다. intentHeld가 true면 잘 지킨 것이고, 최고심박 단발 스파이크(언덕·신호·스트라이드 가속)는 "상한 초과=실패"로 말하지 마라. 처방보다 느린 이지런은 회복이 됐으면 칭찬하고(빠른 이지=회복 손실), 스트라이드는 속도 기준 신경근 자극이라 그 구간 고심박은 정상이다. ' +
+      // #713: 날씨 교란은 웹이 결정론으로 판정해 보낸다. 모델이 임의로 날씨 탓을 하거나, 반대로
+      // 교란인데 체력 저하로 단정하는 양쪽을 다 막는다(SSOT §외부 조건 코칭).
+      '**weatherConfounded=true면 그 지표(심박 드리프트·상한 초과)를 체력 저하나 강도 실패로 말하지 마라.** 더위가 같은 강도의 심박을 올린 것이라 이 세션은 "실패"가 아니다. 숫자는 있는 그대로 말하되("드리프트 16bpm") 해석은 조건과 함께 준다("이 더위에선 정상 범위") — 숫자를 숨기지도, 체력 저하로 단정하지도 않는다. 그리고 페이스가 느린 것도 정상이라고 분명히 말해준다. ' +
+      '**weatherConfounded=false면 날씨를 변명으로 만들지 마라.** 더웠다는 이유만으로 강도 초과·후반 붕괴를 덮지 않는다 — 그 판정은 이미 RPE·페이스 붕괴를 결합해 내려진 것이다. ' +
+      '심박 상한은 더워도 올려주지 않는다. 더운 날 지침은 "상한을 올리자"가 아니라 "페이스를 낮추고 숨 편한지로 보자"다. ' +
       '서술은 reasons를 복붙하지 말고 장점→리스크 순으로 1~2문장에 자연스럽게 녹인다. sessionEvidence가 null이면 이 정책을 적용하지 않는다.',
     sessionScorecard,
     efficiencyVsPast,
