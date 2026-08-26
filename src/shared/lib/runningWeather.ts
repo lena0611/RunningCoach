@@ -96,7 +96,19 @@ export type DerivedHour = {
   precipitationAmountMm: number | null
 }
 
-// 열/한랭/강수/바람 안전등급. 러닝 강도·안전 판단의 단일 출처.
+/**
+ * 열/한랭/강수/바람 **환경 안내(advisory)**. 안전 판정이 아니다.
+ *
+ * ⚠ 이것을 "안전 판단의 단일 출처"로 쓰면 안 된다(2026-08-26 교정). 입력이 체감온도라
+ * 복사열·일사를 포함하지 않아 직사광선의 열부담을 과소평가할 수 있고, 개인의 심부체온·질환·
+ * 약물·열순응 상태를 전혀 모른다. 따라서 **"이 값이면 안전하다"는 보증을 만들지 않는다** —
+ * 문구는 준비 안내에 그치고, 진짜 안전 판정은 증상 기반 중단 규칙이 담당한다.
+ *
+ * SSOT: `.harness/project/running-coaching-standards.md` §외부 조건 코칭
+ *   - 체감온도는 **소통용**이며 WBGT 로 간주하지 않는다
+ *   - WBGT 안전 밴드는 검증된 산출·provenance·결측 정책이 선 뒤에 별도 레이어로 붙인다
+ *   - 증상(어지럼·구역·혼동·호흡곤란 등)은 숫자보다 항상 우선한다
+ */
 export function getRunningSafety(current: DerivedHour | null, upcomingHours: DerivedHour[] = []): RunningSafety {
   if (!current || current.temperatureC === null) {
     return { level: 'unknown', kind: 'unknown', title: '날씨 대기', summary: '위치를 선택하면 기상청 예보로 러닝 준비를 보여줍니다.', bullets: ['체감온도', '강수확률', '바람'] }
@@ -107,7 +119,8 @@ export function getRunningSafety(current: DerivedHour | null, upcomingHours: Der
   const wind = current.windMps ?? 0
 
   if (felt >= 28) {
-    return { level: 'bad', kind: 'heat', title: '더위 주의', summary: `체감 ${Math.round(felt)}도입니다. 페이스보다 심박·체감강도를 먼저 보고 수분을 챙기세요.`, bullets: [`체감 ${Math.round(felt)}도`, '강도훈련은 이른 아침/저녁으로', '수분·전해질 보충'] }
+    // SSOT §외부 조건: 더위엔 페이스를 낮추고 대화 가능 여부로 본다(심박 상한은 올리지 않는다).
+    return { level: 'bad', kind: 'heat', title: '더위 주의', summary: `체감 ${Math.round(felt)}도입니다. 페이스는 평소보다 느려지는 게 정상이니, 숫자보다 숨이 편한지로 보세요.`, bullets: [`체감 ${Math.round(felt)}도`, '강도훈련은 이른 아침/저녁으로', '어지럼·구역·두통이면 즉시 중단'] }
   }
   if (felt <= -8) {
     return { level: 'bad', kind: 'cold', title: '강추위 주의', summary: `체감 ${Math.round(felt)}도입니다. 워밍업을 충분히 하고 초반은 보온하세요.`, bullets: [`체감 ${Math.round(felt)}도`, '워밍업 길게', '노면 결빙 주의'] }
@@ -121,7 +134,8 @@ export function getRunningSafety(current: DerivedHour | null, upcomingHours: Der
   if (felt <= 2) {
     return { level: 'caution', kind: 'cold', title: '초반 보온 필요', summary: `체감 ${Math.round(felt)}도입니다. 초반 10분은 완전 이지로.`, bullets: [`체감 ${Math.round(felt)}도`, '초반 보온', '워밍업 충분히'] }
   }
-  return { level: 'good', kind: 'mild', title: '러닝하기 무난', summary: `체감 ${Math.round(felt)}도 기준으로 무난합니다.`, bullets: [`체감 ${Math.round(felt)}도`, maxRainChance ? `최대 강수확률 ${Math.round(maxRainChance * 100)}%` : '강수확률 낮음', wind ? `풍속 ${Math.round(wind)}m/s` : '바람 약함'] }
+  // "무난합니다"는 안전 보증으로 읽힌다. 우리는 복사열도 개인 상태도 모르므로 조건만 알린다.
+  return { level: 'good', kind: 'mild', title: '무난한 날씨', summary: `체감 ${Math.round(felt)}도입니다. 특별히 조심할 조건은 안 보여요 — 몸 상태를 우선으로 보세요.`, bullets: [`체감 ${Math.round(felt)}도`, maxRainChance ? `최대 강수확률 ${Math.round(maxRainChance * 100)}%` : '강수확률 낮음', wind ? `풍속 ${Math.round(wind)}m/s` : '바람 약함'] }
 }
 
 export type HumidityLoad = { level: 'low' | 'normal' | 'high'; text: string }
