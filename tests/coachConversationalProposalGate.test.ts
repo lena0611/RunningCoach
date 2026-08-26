@@ -73,3 +73,21 @@ describe('데이터 조회 실측이 턴마다 남는다 (#652 후속)', () => {
     expect(INDEX_SRC).toContain("query.eq('selected_run_id', selectedRunId) : query.is('selected_run_id', null)")
   })
 })
+
+describe('세션 타입 자기정합 지침 (#715, 2026-08-26 실사용)', () => {
+  it('coachThread 의 옛 세션 타입을 현재 사실로 쓰지 않게 못박는다', () => {
+    // 실측: 한 답변 안에서 "목요일 템포는 낮추자"(어제 기억) + "목요일은 Easy가 들어가 있고"(실제 플랜).
+    // #695 는 "네/맞아요" 직답만 막았고, 서술하며 옛 타입을 끌어오는 경로는 안 덮였다.
+    expect(INDEX_SRC).toContain('그때의 플랜이지 현재 사실이 아니다')
+    expect(INDEX_SRC).toContain('upcomingSchedule 이 이긴다')
+  })
+
+  it('한 답변 안 같은 날짜의 타입 일치를 요구한다', () => {
+    expect(INDEX_SRC).toContain('같은 날짜의 세션 타입을 두 번 말하면 반드시 같아야 한다')
+  })
+
+  it('이미 그 타입인 세션을 낮추자고 하지 않게 한다', () => {
+    // 목요일이 이미 Easy 인데 "Easy 로 낮추자"는 낮출 게 없는 말이다.
+    expect(INDEX_SRC).toContain('이미 그 타입인 세션을 "낮추자"고 하지 마라')
+  })
+})
