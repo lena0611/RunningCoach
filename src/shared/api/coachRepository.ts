@@ -142,6 +142,12 @@ export async function requestCoachRunStream(
     sessionEvidence?: CoachSessionEvidence | null
     /** 실제 주기화 스케줄의 다음 세션들(코치 "다음 훈련"이 weeklyPattern으로 지어내지 않게). */
     upcomingSchedule?: { date: string; type: string; distanceKm: number | null; keySession: boolean; canIntensify: boolean }[] | null
+    /**
+     * 반복 하향 신호(#703 ①) — 판정은 웹 소유(client-summary 패턴).
+     * 같은 축 하향이 **여러 주에 걸쳐** 반복되면 국소 조정이 아니라 루틴 문제다
+     * (SSOT §세션 변경 요청 4번 → §루틴 변경 기준 승격). 신호가 없으면 null.
+     */
+    downgradeSignal?: { count: number; dates: string[]; shouldPromoteToRoutine: boolean } | null
     /** 활성 휴식 요약(#502) — 휴식 중 코치가 "다음 훈련" 처방을 닦달하지 않고 휴식을 존중하게(currentWeather 패턴). */
     restState?: { active: boolean; reason: string | null; daysUntilReturn: number | null; returnDate: string | null; isReturnDay: boolean; longLayoff: boolean } | null
     /** 최근 12개월 부상 이력 요약(전역 재부상 위험창) — 채팅 코치가 이전 부상 보유자에게 보수화·"저볼륨=안전" 안심 금지(getRecentInjuryHistory). */
@@ -186,6 +192,7 @@ export async function requestCoachRunStream(
       adaptiveProgress: options.adaptiveProgress ?? null,
       sessionEvidence: options.sessionEvidence ?? null,
       upcomingSchedule: options.upcomingSchedule ?? null,
+      downgradeSignal: options.downgradeSignal ?? null,
       restState: options.restState ?? null,
       recentInjuryWindow: options.recentInjuryWindow ?? null,
       marathonFlag: options.marathonFlag ?? null,

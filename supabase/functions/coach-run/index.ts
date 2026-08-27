@@ -309,6 +309,8 @@ Deno.serve(async (req) => {
       : null
     const restState = normalizeRestState(body.restState)
     const recentInjuryWindow = normalizeRecentInjuryWindow(body.recentInjuryWindow)
+    // 반복 하향 신호(#703 ①) — 웹이 판정해 보낸다(client-summary). 서버는 미러하지 않는다.
+    const downgradeSignal = normalizeDowngradeSignal(body.downgradeSignal)
     const marathonFlag = body.marathonFlag === true
     const injurySignals = normalizeInjurySignals(body.injurySignals)
     const runnerLevel = normalizeRunnerLevel(body.runnerLevel)
@@ -325,7 +327,7 @@ Deno.serve(async (req) => {
     const rateLimit = await consumeRateLimit(admin, userId, 'coach-run')
     if (!rateLimit.ok) return json({ error: rateLimit.error, retryAfterSec: rateLimit.retryAfterSec }, 429)
 
-    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress, sessionEvidence, upcomingSchedule, restState, recentInjuryWindow, marathonFlag, injurySignals, raceBenchmark)
+    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress, sessionEvidence, upcomingSchedule, restState, recentInjuryWindow, downgradeSignal, marathonFlag, injurySignals, raceBenchmark)
     const ownedSelectedRunId = context.selectedRunOwnedId ?? context.selectedRun?.id ?? null
     if (shouldStream) {
       return streamCoachRun(admin, userId, ownedSelectedRunId, userNote, provider, context, model)
@@ -679,6 +681,18 @@ function normalizeRestState(value: unknown): CoachRestContext | null {
  * client-summary 로 보낸다(currentWeather 패턴). 이력 없으면 웹이 null 로 보낸다.
  */
 type CoachRecentInjuryWindow = { hasRecentInjury: boolean; mostRecentDaysAgo: number | null; areas: string[] }
+
+/** 반복 하향 신호(#703 ①). 판정은 웹 소유 — 서버는 형태만 강제한다. */
+type CoachDowngradeSignal = { count: number; dates: string[]; shouldPromoteToRoutine: boolean }
+
+function normalizeDowngradeSignal(value: unknown): CoachDowngradeSignal | null {
+  if (!value || typeof value !== 'object') return null
+  const v = value as Record<string, unknown>
+  const count = typeof v.count === 'number' && Number.isFinite(v.count) ? Math.floor(v.count) : 0
+  if (count <= 0) return null
+  const dates = Array.isArray(v.dates) ? v.dates.filter((d): d is string => typeof d === 'string').slice(0, 8) : []
+  return { count, dates, shouldPromoteToRoutine: v.shouldPromoteToRoutine === true }
+}
 function normalizeRecentInjuryWindow(value: unknown): CoachRecentInjuryWindow | null {
   if (!value || typeof value !== 'object') return null
   const v = value as Record<string, unknown>
@@ -1178,7 +1192,7 @@ function unifyPerformanceProjection(
   }
 }
 
-async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null, sessionEvidence: CoachSessionEvidence | null = null, upcomingSchedule: { date: string; type: string; distanceKm: number | null; keySession: boolean; canIntensify: boolean }[] | null = null, restState: CoachRestContext | null = null, recentInjuryWindow: CoachRecentInjuryWindow | null = null, marathonFlag = false, injurySignals: CoachInjurySignals | null = null, raceBenchmark: CoachRaceBenchmark | null = null) {
+async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null, sessionEvidence: CoachSessionEvidence | null = null, upcomingSchedule: { date: string; type: string; distanceKm: number | null; keySession: boolean; canIntensify: boolean }[] | null = null, restState: CoachRestContext | null = null, recentInjuryWindow: CoachRecentInjuryWindow | null = null, downgradeSignal: CoachDowngradeSignal | null = null, marathonFlag = false, injurySignals: CoachInjurySignals | null = null, raceBenchmark: CoachRaceBenchmark | null = null) {
   const memorySelect = 'id, content, created_at, importance, last_referenced_at, reference_count'
   const [
     { data: memoryRow },
@@ -1589,6 +1603,12 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     restState: structuredCoachContext ? restState : null,
     instructionForRest:
       'context.restState는 사용자가 스스로 선언한 휴식(#473) 상태다(없으면 평소처럼 답한다). active=true면 지금 쉬는 중이다 — "## 다음 훈련"에서 훈련을 재촉하거나 처방을 들이밀지 말고 "푹 쉬세요, 일정은 정리해둘게요. 돌아오면 가볍게 시작해요"처럼 휴식을 존중한다(능동 휴식은 missed가 아니다). 사용자가 먼저 "그래도 뭘 하면 좋을지"를 물을 때만 가벼운 대안(스트레칭·산책, 통제 가능한 휴식이면 가벼운 회복주)을 1회 제안하되 강권하지 않는다. reason이 injury면 통증을 우선하고 무리한 대안을 권하지 않는다. isReturnDay=true이거나 daysUntilReturn이 0~1이면 "놓쳤다"가 아니라 "회복 후 정리" 톤으로 복귀 일정을 안내한다. longLayoff=true(4주 초과)면 복귀를 더 가볍게 시작해야 함과 목표(레이스) 실현가능성 재점검을 정직하게 덧붙인다. active=true면 휴식 존중이 upcomingSchedule 처방보다 우선이다.',
+    downgradeSignal: structuredCoachContext ? downgradeSignal : null,
+    instructionForDowngradeSignal:
+      'context.downgradeSignal은 최근 2주 안에 **코치가 낸 세션을 사용자가 더 쉽게 바꾼 횟수**다(웹 판정). 개별 조정은 정당하니 나무라지 마라 — 이건 잘못이 아니라 신호다. ' +
+      'shouldPromoteToRoutine=true(서로 다른 주에 걸쳐 반복)면 국소 조정이 아니라 **루틴 자체가 실제 수행과 어긋난 것**이다. 이때는 그날 세션을 또 낮추자고 하지 말고 "요즘 계속 버거우면 주간 루틴을 한 단계 낮춰서 꾸준히 소화되는 쪽으로 맞추는 게 어떨까요"처럼 **루틴 재조정을 먼저 꺼낸다**(SSOT 루틴 변경 기준: "주간 루틴과 실제 수행이 계속 어긋난다"). ' +
+      'count는 있지만 shouldPromoteToRoutine=false면 아직 한 주 안의 일이다 — 루틴을 건드리지 말고 평소대로 국소 조정으로 돕는다(한 주의 혼잡은 루틴 변경이 아니다). ' +
+      'downgradeSignal이 null이면 이 얘기를 꺼내지 마라(없는 패턴을 지어내지 않는다).',
     recentInjuryWindow: structuredCoachContext ? recentInjuryWindow : null,
     instructionForInjuryHistory:
       'context.recentInjuryWindow는 사용자의 최근 12개월 부상 이력 요약이다(부위 무관 전역 재부상 위험창). 이전 부상은 러닝 부상의 가장 강하고 일관된 예측인자이고, 재부상의 상당수는 같은 부위가 아니라 다른 부위에서 온다. 있으면(hasRecentInjury=true): ① 지금 통증이 없거나 주행거리가 적어도 "이전 부상 이력이 있으니 조금 더 보수적으로, 점진적으로 가자"는 톤을 유지한다. ② 특히 "마일리지가 낮으니 안전하다/괜찮다"는 안심을 주지 마라 — 이전부상군에서는 저볼륨·낮은 ACWR이 신규 부상을 막아주지 못한다(근거 기반). ③ areas는 과거 부위라 모니터링 보조로만 쓰고 "그 부위만 조심하면 된다"고 단정하지 마라(재부상은 다른 부위로도 온다). mostRecentDaysAgo가 작을수록(최근일수록) 더 보수적으로. 단 이는 집단 통계적 연관이지 개인 부상 확정이 아니므로 부상 확률(%)을 단정하지 말고, 겁주거나 닦달하지 말고 안심시키는 코칭으로 전달한다. recentInjuryWindow가 null이면 이 보수화를 적용하지 않는다(과도한 부상 프레이밍 금지). redFlag·통증 안전 신호가 항상 우선이다.',
@@ -2071,6 +2091,7 @@ const CACHE_STABLE_CONTEXT_KEYS = [
   'instructionForAchievements',
   'instructionForTempoCoaching',
   'upcomingSchedulePolicy',
+  'instructionForDowngradeSignal',
   'instructionForRest',
   'instructionForInjuryHistory',
   'instructionForMarathonGoal',
