@@ -5,6 +5,7 @@ import { useCoachStore } from '@/app/stores/coachStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
+import { detectRepeatedDowngrade } from '@/shared/lib/coaching/adjustmentHistory'
 import { useCompetitionStore } from '@/app/stores/competitionStore'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
@@ -639,6 +640,23 @@ async function sendCoachRequest(note: string) {
           // 상향(intensify) 적격 판정은 웹 소유(#639 G7) — 서버는 이 플래그만 보고 상향 제안을 통과/폐기한다.
           canIntensify: canIntensifySession(s.sessionType, coachAdaptiveProgress)
         }))
+      })(),
+      // 반복 하향 신호(#703 ①) — 판정은 웹 소유(client-summary 패턴). 같은 축 하향이 여러 주에 걸쳐
+      // 반복되면 국소 조정이 아니라 루틴 문제다(SSOT §세션 변경 요청 4번 → §루틴 변경 기준 승격).
+      // 신호가 없으면 null 로 보내 코치가 없는 패턴을 지어내지 않게 한다.
+      downgradeSignal: (() => {
+        const today = new Date()
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+        const sig = detectRepeatedDowngrade(
+          scheduleStore.sessions.map((x) => ({
+            id: x.id, date: x.date, sessionType: x.sessionType, status: x.status,
+            source: x.source, goalId: x.goalId, createdAt: x.createdAt,
+            prescription: { distanceKm: x.prescription.distanceKm ?? null }
+          })),
+          todayStr,
+          memoryStore.memory.activeGoalId ?? null
+        )
+        return sig.count > 0 ? { count: sig.count, dates: sig.dates, shouldPromoteToRoutine: sig.shouldPromoteToRoutine } : null
       })(),
       // 활성 휴식(#502) — 휴식 중엔 코치가 "다음 훈련" 처방을 닦달하지 않게. 휴식과 무관하면 null.
       restState: (() => {
