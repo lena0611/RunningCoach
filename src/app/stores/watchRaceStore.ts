@@ -5,12 +5,14 @@ import {
   ackWatchResult,
   hasWatchRaceBridge,
   pushWatchCatalog,
+  pushWatchTraining,
   registerWatchRaceBridge,
   requestQueuedWatchResults,
   unregisterWatchRaceBridge,
   type WatchRaceResultPayload
 } from '@/features/watch-race/watchRaceBridge'
 import { buildWatchRaceCatalog } from '@/features/watch-race/watchRaceCatalog'
+import { buildWatchTrainingPayload, type TrainingPayloadInput } from '@/features/watch-race/watchTrainingPayload'
 
 /**
  * 워치 레이싱 동기화 store (#552 Phase 3).
@@ -69,6 +71,17 @@ export const useWatchRaceStore = defineStore('watchRaceStore', {
       if (!hasWatchRaceBridge()) return
       const runStore = useRunStore()
       pushWatchCatalog(buildWatchRaceCatalog(runStore.runs, new Date().toISOString()))
+      this.lastPushedAt = Date.now()
+    },
+
+    /**
+     * 오늘 본훈련 페이로드를 워치로(#711). 카탈로그와 같은 주기로 민다 —
+     * 워치가 오프라인이어도 마지막 스냅샷으로 집행할 수 있어야 한다(Series 4 는 GPS 모델).
+     * 예정 세션이 없으면 session:null 로 보내 워치가 본훈련 모드를 끈다.
+     */
+    pushTraining(input: Omit<TrainingPayloadInput, 'generatedAt'>) {
+      if (!hasWatchRaceBridge()) return
+      pushWatchTraining(buildWatchTrainingPayload({ ...input, generatedAt: new Date().toISOString() }))
       this.lastPushedAt = Date.now()
     }
   }

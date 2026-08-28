@@ -295,6 +295,11 @@ struct RunContextWebView: UIViewRepresentable {
                 if let catalog = body["catalog"] as? [String: Any] {
                     watchRelay.pushCatalog(catalog)
                 }
+            case "pushTraining":
+                // #711 본훈련 모드 — 오늘 세션·의도·조건·타임라인·가드를 워치로 내린다.
+                if let training = body["training"] as? [String: Any] {
+                    watchRelay.pushTraining(training)
+                }
             case "requestResults":
                 drainWatchResults()
             case "ackResult":

@@ -28,6 +28,8 @@ export type WatchCatalogEntry = {
   } | null
 }
 
+import type { WatchTrainingPayload } from './watchTrainingPayload'
+
 export type WatchRaceCatalogPayload = {
   generatedAt: string
   /** RaceCore AnnounceConfig.parse 가 그대로 읽는 모양(폰 레이스 음성 설정 미러 → 워치 햅틱 주기). */
@@ -85,6 +87,14 @@ export function hasWatchRaceBridge(): boolean {
 /** 카탈로그를 네이티브로 민다(네이티브가 WCSession 으로 워치에 하강). 브리지 없으면 no-op. */
 export function pushWatchCatalog(catalog: WatchRaceCatalogPayload) {
   window.webkit?.messageHandlers?.runContextWatchRace?.postMessage({ type: 'pushCatalog', catalog })
+}
+
+/**
+ * 오늘 본훈련 페이로드를 워치로(#711). 레이싱과 같은 브리지·같은 applicationContext 슬롯을 쓴다
+ * (네이티브 PhoneWatchRelay 가 카탈로그와 합쳐 보낸다 — 단일 슬롯이라 덮어쓰지 않게).
+ */
+export function pushWatchTraining(training: WatchTrainingPayload) {
+  window.webkit?.messageHandlers?.runContextWatchRace?.postMessage({ type: 'pushTraining', training })
 }
 
 /** 네이티브 큐에 쌓인 워치 결과 전송을 요청한다(브리지 등록 직후 pull — 웹뷰 준비 시점 문제 해소). */

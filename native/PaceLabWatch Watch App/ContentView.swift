@@ -81,6 +81,13 @@ private struct StartView: View {
             VStack(spacing: 8) {
                 Text("PaceLAB")
                     .font(.headline)
+
+                // #711 본훈련 모드 — 오늘 예정 세션이 내려와 있으면 먼저 보여준다.
+                // 레이싱은 가끔이고 훈련은 주 3~4회라, 훈련이 있으면 그게 기본 화면이다.
+                if let s = sync.training?.session {
+                    trainingSummary(s)
+                }
+
                 Text("나와의 레이스")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -139,6 +146,40 @@ private struct StartView: View {
                 useGhost = catalog.lastSelection.opponentKind != "none"
             }
         }
+    }
+
+    /// 오늘 훈련 요약(#711). 의도·조건을 **명시**한다 — 침묵이 아니라 명시가 신뢰를 만든다.
+    /// 실제 집행(구간 발화)은 실기기 검증 후 붙인다. 지금은 무엇을 하는 날인지까지 보여준다.
+    @ViewBuilder
+    private func trainingSummary(_ s: WatchSyncManager.Training.Session) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("오늘 훈련")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(s.label)
+                .font(.subheadline)
+            if let km = s.distanceKm {
+                Text(String(format: "%.1fkm", km))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            if let intent = sync.training?.intent, !intent.keyPoint.isEmpty {
+                Text(intent.keyPoint)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+            }
+            // 조건 보정을 밝힌다 — "감안하고 있다"가 보여야 사용자가 의심 없이 훈련에 집중한다.
+            if let c = sync.training?.conditions, c.adjusted {
+                Text(c.note)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.leading)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
     }
 
     /// 거리·상대 선택부 — 카탈로그 유무와 무관하게 항상 노출(없으면 표준 거리 + 자유 측정).
