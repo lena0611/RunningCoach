@@ -25,12 +25,34 @@ final class PhoneWatchRelay: NSObject {
         session.activate()
     }
 
-    // MARK: - 하강 (카탈로그)
+    // MARK: - 하강 (카탈로그 · 본훈련)
+
+    /// 마지막 하강 스냅샷 — applicationContext 가 단일 슬롯이라 합쳐 보내려면 둘 다 들고 있어야 한다.
+    private var lastCatalog: [String: Any]?
+    private var lastTraining: [String: Any]?
+
 
     /// 카탈로그 스냅샷을 워치로. applicationContext 는 최신 1건만 유지 — 스냅샷 의미와 일치.
+    ///
+    /// ⚠️ applicationContext 는 **키 하나짜리 최신 스냅샷**이라 레이싱/훈련을 각각 덮어쓰면
+    /// 나중 것이 앞 것을 지운다. 그래서 두 페이로드를 **한 딕셔너리에 합쳐** 보낸다(#711).
     func pushCatalog(_ catalog: [String: Any]) {
+        lastCatalog = catalog
+        pushCombined()
+    }
+
+    /// 오늘 본훈련 페이로드를 워치로(#711). 세션이 없으면 웹이 session:null 로 보낸다.
+    func pushTraining(_ training: [String: Any]) {
+        lastTraining = training
+        pushCombined()
+    }
+
+    private func pushCombined() {
         guard let session, session.activationState == .activated else { return }
-        try? session.updateApplicationContext(["type": "watchRaceCatalog", "catalog": catalog])
+        var context: [String: Any] = ["type": "watchPayload"]
+        if let lastCatalog { context["catalog"] = lastCatalog }
+        if let lastTraining { context["training"] = lastTraining }
+        try? session.updateApplicationContext(context)
     }
 
     // MARK: - 상승 (결과 큐, UserDefaults 영속)
