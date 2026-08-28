@@ -44,6 +44,10 @@
 ### 남은 것
 - **#711 잔여**: 러닝 중 **구간 발화 실행부**(타임라인을 시계로 돌리며 발화) · 심박 warning 배선 ·
   **실기기 검증**(회사망 DDI 차단 → 개인 맥+집 와이파이). 빌드는 통과, 실렌더는 미확인.
+  ↳ 같이 처리: `WatchSpeech.swift:55` 경고 1건 — `session.activate` 완료 콜백의 `[weak self]` 를
+  안쪽 `Task { @MainActor }` 에서 꺼내 쓴다("Reference to captured var 'self' in concurrently-
+  executing code"). **지금은 경고지만 Swift 6 모드에선 에러.** 기존 빚이고 동작엔 이상 없음.
+  TTS 는 실기기에서만 제대로 검증되니(에어팟 라우팅·ducking·발화 타이밍) 실기기 회차에 함께 고친다.
 - **날씨 2단계**: 검증된 WBGT 산출 파이프라인(Liljegren·provenance·시간정렬·결측정책·reference 검증)
   → 그 뒤에야 3단계 JSPO 밴드 승격.
 - #693 churn 관측 · #652 PR3(근거 없음으로 내림, 실패 로그 축적 시 재판단)
