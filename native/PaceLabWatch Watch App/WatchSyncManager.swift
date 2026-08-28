@@ -57,6 +57,64 @@ final class WatchSyncManager: NSObject, ObservableObject {
     /// 마지막으로 동기화(또는 부팅 시 복원)된 카탈로그. nil = 아직 폰과 한 번도 동기화 전.
     @Published private(set) var catalog: Catalog?
 
+    // MARK: - 본훈련(#711)
+
+    /// 오늘 예정 세션 페이로드. nil = 아직 못 받았거나 예정 세션 없음 → 본훈련 모드 비활성.
+    @Published private(set) var training: Training?
+
+    fileprivate static let trainingKey = "pacelab.watchTraining"
+
+    /// 웹 `WatchTrainingPayload` 미러. 필드가 늘면 웹과 함께 바꾼다.
+    struct Training: Codable {
+        struct Session: Codable {
+            let date: String
+            let type: String
+            let label: String
+            let distanceKm: Double?
+            let durationMin: Double?
+            let keySession: Bool
+        }
+        struct Intent: Codable {
+            let why: String
+            let keyPoint: String
+        }
+        struct Conditions: Codable {
+            let adjusted: Bool
+            let note: String
+        }
+        /// 실행 타임라인 1스텝. 빈 배열이면 집행 모드로 들어가지 않는다.
+        struct Step: Codable {
+            let phase: String
+            let cue: String
+            let durationSec: Double?
+            let distanceKm: Double?
+            let rep: Int?
+            let ofReps: Int?
+        }
+        struct Guards: Codable {
+            let easyCeilingBpm: Double?
+            let hrOverSustainSec: Double
+            let earlyFastPaceSec: Double?
+        }
+        let generatedAt: String
+        let session: Session?
+        let intent: Intent
+        let conditions: Conditions
+        let timeline: [Step]
+        let guards: Guards
+    }
+
+    fileprivate func applyTrainingData(_ data: Data) {
+        guard let decoded = try? JSONDecoder().decode(Training.self, from: data) else { return }
+        training = decoded
+        UserDefaults.standard.set(data, forKey: Self.trainingKey)
+    }
+
+    fileprivate static func loadPersistedTraining() -> Training? {
+        guard let data = UserDefaults.standard.data(forKey: trainingKey) else { return nil }
+        return try? JSONDecoder().decode(Training.self, from: data)
+    }
+
     private static let catalogKey = "pacelab.watchRaceCatalog"
 
     override init() {
@@ -127,63 +185,4 @@ extension WatchSyncManager: WCSessionDelegate {
         }
     }
 
-    // MARK: - 본훈련(#711)
-
-    /// 오늘 예정 세션 페이로드. nil = 아직 못 받았거나 예정 세션 없음 → 본훈련 모드 비활성.
-    @Published private(set) var training: Training?
-
-    private static let trainingKey = "pacelab.watchTraining"
-
-    /// 웹 `WatchTrainingPayload` 미러. 필드가 늘면 웹과 함께 바꾼다.
-    struct Training: Codable {
-        struct Session: Codable {
-            let date: String
-            let type: String
-            let label: String
-            let distanceKm: Double?
-            let durationMin: Double?
-            let keySession: Bool
-        }
-        struct Intent: Codable {
-            let why: String
-            let keyPoint: String
-        }
-        struct Conditions: Codable {
-            let adjusted: Bool
-            let note: String
-        }
-        /// 실행 타임라인 1스텝. 빈 배열이면 집행 모드로 들어가지 않는다.
-        struct Step: Codable {
-            let phase: String
-            let cue: String
-            let durationSec: Double?
-            let distanceKm: Double?
-            let rep: Int?
-            let ofReps: Int?
-        }
-        struct Guards: Codable {
-            let easyCeilingBpm: Double?
-            let hrOverSustainSec: Double
-            let earlyFastPaceSec: Double?
-        }
-        let generatedAt: String
-        let session: Session?
-        let intent: Intent
-        let conditions: Conditions
-        let timeline: [Step]
-        let guards: Guards
-    }
-
-    @MainActor
-    private func applyTrainingData(_ data: Data) {
-        guard let decoded = try? JSONDecoder().decode(Training.self, from: data) else { return }
-        training = decoded
-        UserDefaults.standard.set(data, forKey: Self.trainingKey)
-    }
-
-    @MainActor
-    private static func loadPersistedTraining() -> Training? {
-        guard let data = UserDefaults.standard.data(forKey: trainingKey) else { return nil }
-        return try? JSONDecoder().decode(Training.self, from: data)
-    }
 }
