@@ -46,6 +46,10 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
     lastCompletedAt: 0,
     lastChangedAt: 0,
     syncFeedbackMode: 'toast' as SyncFeedbackMode,
+    /** 동기화를 건너뛴 이유(#718). 비어 있으면 정상 진행했다는 뜻. */
+    skipReason: '',
+    /** 마지막 조회에서 HealthKit 이 돌려준 러닝 후보 수. -1 = 아직 한 번도 응답 못 받음. */
+    lastCandidateCount: -1,
     historicalMigrationRange: null as HistoricalMigrationRange | null,
     vo2MaxRequesting: false,
     lastVo2MaxAt: 0,
@@ -84,7 +88,11 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
       const authStore = useAuthStore()
       if (!authStore.isAuthenticated || !hasNativeBridge()) return
       const now = Date.now()
-      if (this.syncing || now - this.lastRequestedAt < minSyncIntervalMs) return
+      if (this.syncing || now - this.lastRequestedAt < minSyncIntervalMs) {
+        // 쿨다운·중복 실행은 정상 동작이지만, "안 돌았다"와 구분되게 흔적을 남긴다(#718).
+        this.skipReason = this.syncing ? '이미 동기화 중이에요.' : '방금 동기화해서 잠시 후 다시 시도해요.'
+        return
+      }
       await this.requestSync({ feedback: 'changes-only' })
     },
     async syncAfterNativeChange() {
@@ -96,7 +104,19 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
     async requestSync(options: { feedback?: SyncFeedbackMode } = {}) {
       this.init()
       const authStore = useAuthStore()
-      if (!authStore.isAuthenticated || !hasNativeBridge()) return
+      // 조용한 early-return 금지(#718). 예전엔 그냥 return 이라 "왜 안 됐는지" 알 방법이 없었다 —
+      // 2026-08-29 실사고: 러닝이 안 들어왔는데 동기화가 돌았는지조차 구분이 안 됐다.
+      if (!authStore.isAuthenticated) {
+        this.skipReason = '로그인이 풀려 동기화를 못 했어요. 다시 로그인해 주세요.'
+        if (options.feedback === 'toast') showSyncToast('error', this.skipReason, 4200)
+        return
+      }
+      if (!hasNativeBridge()) {
+        this.skipReason = '이 환경엔 HealthKit 브리지가 없어요(웹에서 열면 정상).'
+        if (options.feedback === 'toast') showSyncToast('neutral', this.skipReason, 3200)
+        return
+      }
+      this.skipReason = ''
 
       const requestedAt = Date.now()
       this.syncing = true
@@ -181,6 +201,9 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         await ensureRunStoreLoaded()
 
         const latestDate = getLatestSavedDate()
+        // HealthKit 이 몇 건을 돌려줬는지 남긴다(#718). 0건이면 조회 자체가 못 찾은 것이고,
+        // N건인데 저장이 0이면 중복판정·날짜필터에서 걸린 것이다 — 이 둘을 구분해야 원인이 잡힌다.
+        this.lastCandidateCount = runs.length
         const memoryStore = useMemoryStore()
         const heartRateModel = buildInferenceHeartRateModel()
         const repaired = await repairExistingHealthKitRuns(runs, memoryStore.memory.weeklyPattern, heartRateModel)
@@ -215,8 +238,8 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
           showSyncToast('success', this.status, 3200)
         } else {
           this.status = latestDate
-            ? `HealthKit 변화 없음 · ${latestDate} 이후 새 러닝 없음`
-            : 'HealthKit 변화 없음 · 새 러닝 없음'
+            ? `HealthKit 변화 없음 · ${latestDate} 이후 새 러닝 없음 (조회 ${runs.length}건)`
+            : `HealthKit 변화 없음 · 새 러닝 없음 (조회 ${runs.length}건)`
           if (this.syncFeedbackMode === 'toast') showSyncToast('neutral', this.status, 2600)
         }
         this.error = ''
