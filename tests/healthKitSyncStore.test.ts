@@ -31,7 +31,9 @@ describe('healthKitSyncStore', () => {
 
     await syncStore.handleRuns([])
 
-    expect(syncStore.status).toBe('HealthKit 변화 없음 · 새 러닝 없음')
+    // #718: 조회 건수를 문구에 실어 "조회가 0건"과 "조회는 됐는데 저장 0건"을 화면에서 가른다.
+    expect(syncStore.status).toBe('HealthKit 변화 없음 · 새 러닝 없음 (조회 0건)')
+    expect(syncStore.lastCandidateCount).toBe(0)
     expect(syncStore.lastCompletedAt).toBeGreaterThan(0)
     expect(syncStore.lastChangedAt).toBe(0)
     expect(show).not.toHaveBeenCalled()

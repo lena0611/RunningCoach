@@ -20,6 +20,15 @@ const router = useRouter()
 const runStore = useRunStore()
 const memoryStore = useMemoryStore()
 const healthKitSyncStore = useHealthKitSyncStore()
+
+/**
+ * 수동 동기화(#718). 자동 동기화는 `changes-only` 라 **변화가 없으면 아무 말도 안 한다** —
+ * 그래서 "안 돌았다"와 "돌았는데 0건"이 화면에서 구분되지 않았다(2026-08-29 실사고).
+ * 이 버튼은 `toast` 모드라 변화가 없어도 결과를 말해준다.
+ */
+function syncNow() {
+  void healthKitSyncStore.requestSync({ feedback: 'toast' })
+}
 const uploader = ref<InstanceType<typeof RunImageUploader> | null>(null)
 const file = ref<File | null>(null)
 const form = ref<ExtractedRunData | null>(null)
@@ -88,7 +97,14 @@ async function save() {
       <p v-else class="helper">일반 웹에서는 HealthKit 브리지가 없어 아래 FIT 업로드 또는 수동 입력을 사용합니다.</p>
       <p v-if="healthKitSyncStore.syncing" class="helper">HealthKit 동기화 중입니다.</p>
       <p v-else-if="healthKitSyncStore.status" class="helper">{{ healthKitSyncStore.status }}</p>
+      <!-- 건너뛴 이유를 화면에 노출한다(#718). 예전엔 조용히 return 이라 "왜 안 됐는지" 알 수 없었다. -->
+      <p v-if="healthKitSyncStore.skipReason" class="helper">{{ healthKitSyncStore.skipReason }}</p>
       <p v-if="healthKitSyncStore.error" class="error">{{ healthKitSyncStore.error }}</p>
+      <ActionGroup v-if="hasNativeBridge()">
+        <button class="ghost" type="button" :disabled="healthKitSyncStore.syncing" @click="syncNow">
+          {{ healthKitSyncStore.syncing ? '동기화 중' : '지금 동기화' }}
+        </button>
+      </ActionGroup>
     </SectionGroup>
     <RunImageUploader ref="uploader" @selected="onSelected" @cleared="file = null" />
     <ActionGroup>
