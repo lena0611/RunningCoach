@@ -100,9 +100,23 @@ async function save() {
       <!-- 건너뛴 이유를 화면에 노출한다(#718). 예전엔 조용히 return 이라 "왜 안 됐는지" 알 수 없었다. -->
       <p v-if="healthKitSyncStore.skipReason" class="helper">{{ healthKitSyncStore.skipReason }}</p>
       <p v-if="healthKitSyncStore.error" class="error">{{ healthKitSyncStore.error }}</p>
+      <!-- 읽기 권한 의심(#719): 기존 기록은 있는데 조회가 0건이면 '운동' 읽기가 막힌 것이다.
+           iOS 는 권한이 없어도 에러 대신 빈 결과를 주므로, 사용자가 스스로 알아챌 방법이 없다. -->
+      <p v-if="healthKitSyncStore.readAuthSuspect" class="error">
+        건강 앱에서 <strong>운동</strong> 읽기 권한이 꺼진 것 같아요. 기존 기록이 있는데 조회가 0건입니다.
+        아래 버튼을 누르면 권한을 다시 요청합니다 — 시트가 뜨면 <strong>운동</strong>과 <strong>경로</strong>를 허용해 주세요.
+      </p>
       <ActionGroup v-if="hasNativeBridge()">
         <button class="ghost" type="button" :disabled="healthKitSyncStore.syncing" @click="syncNow">
           {{ healthKitSyncStore.syncing ? '동기화 중' : '지금 동기화' }}
+        </button>
+        <button
+          v-if="healthKitSyncStore.readAuthSuspect"
+          type="button"
+          :disabled="healthKitSyncStore.syncing"
+          @click="healthKitSyncStore.retryReadAuth()"
+        >
+          건강 권한 다시 요청
         </button>
       </ActionGroup>
     </SectionGroup>

@@ -170,6 +170,23 @@ export function requestHealthKitRuns(days = 14) {
   })
 }
 
+/**
+ * 읽기 권한 마커를 초기화하고 재조회한다(#719).
+ *
+ * iOS 는 **읽기 권한 상태를 앱에 알려주지 않는다**(정책). 그래서 "허용됐나?"를 물을 API 가 없고,
+ * 앱의 '이미 물어봤음' 마커가 한 번 켜지면 권한이 꺼져도 시트를 다시 못 띄웠다 — 복구가 앱 삭제뿐.
+ * 2026-08-29 실사고: '운동' 읽기가 허용 목록에서 빠져 조회가 4일간 통째로 0건이었다.
+ *
+ * 대신 **경험적 신호**로 판단한다 — 앱엔 과거 러닝이 있는데 조회가 0건이면 읽기가 막힌 것이다.
+ * 그 판정은 기존 기록 수를 아는 웹이 하고, 네이티브는 마커만 지운 뒤 다시 조회한다.
+ */
+export function resetHealthKitReadAuth(days = 14) {
+  const handler = window.webkit?.messageHandlers?.runContextHealthKit
+  if (!handler) return false
+  handler.postMessage({ type: 'resetHealthReadAuth', days })
+  return true
+}
+
 export function requestHealthKitRunsInRange(range: HealthKitRunRangeRequest) {
   const handler = window.webkit?.messageHandlers?.runContextHealthKit
   if (!handler) {
