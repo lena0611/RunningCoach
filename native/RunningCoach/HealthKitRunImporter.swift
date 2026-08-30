@@ -249,7 +249,21 @@ final class HealthKitRunImporter {
     /// v3: 경로 read 미결정인데 마커만 true로 남아 시트가 영영 안 뜨던 기기 복구(2026-07-16 지도 유실).
     ///     마커는 "시트 완료" 사실만 알 뿐 개별 타입 허용 여부를 모른다 — 미결정 타입이 남은 채
     ///     마킹되면 이 키를 올리는 것 외에 복구 경로가 없으므로, 진단 로그(아래)로 상태를 관측한다.
-    private static let readAuthRequestedKey = "pacelab.healthReadAuthRequested.v3"
+    /// v4: '운동'(workoutType) 읽기가 허용 목록에 없어 조회가 통째로 0건이던 기기 복구
+    ///     (2026-08-29 실사고 — 러닝이 4일간 안 들어옴). v2·v3 와 같은 계열의 세 번째 발생이라,
+    ///     이번엔 키만 올리지 않고 **자가복구 경로**(resetReadAuthMarker)를 함께 만들었다.
+    private static let readAuthRequestedKey = "pacelab.healthReadAuthRequested.v4"
+
+    /// 마커를 지워 다음 동기화에서 권한 시트를 다시 띄운다(#719).
+    ///
+    /// ⚠️ iOS 는 **읽기 권한 상태를 앱에 알려주지 않는다**(정책). 그래서 "허용됐나?"를 물어볼 API 가
+    /// 없고, 마커가 한 번 true 가 되면 권한이 꺼져도 영영 다시 묻지 못했다 — 복구 경로가 앱 삭제뿐.
+    /// 대신 **경험적 신호**로 판단한다: 앱엔 과거 러닝이 있는데 조회가 0건이면 읽기가 막힌 것이다.
+    /// 그 판정은 웹이 하고(기존 기록 수를 아는 쪽), 여기선 마커만 지운다.
+    func resetReadAuthMarker() {
+        UserDefaults.standard.removeObject(forKey: Self.readAuthRequestedKey)
+        NSLog("[PaceLAB][HK] read 권한 마커 초기화 — 다음 동기화에서 시트를 다시 띄운다")
+    }
 
     private func requestAuthorization(completion: @escaping (Result<Void, Error>) -> Void) {
         if UserDefaults.standard.bool(forKey: Self.readAuthRequestedKey) {

@@ -391,6 +391,23 @@ struct RunContextWebView: UIViewRepresentable {
             }
 
             switch type {
+            case "resetHealthReadAuth":
+                // #719: 웹이 "기존 기록은 있는데 조회 0건" 을 감지하면 마커를 지워 시트를 다시 띄운다.
+                // iOS 가 읽기 권한 상태를 안 알려주므로 이 경험적 신호가 유일한 복구 트리거다.
+                print("[RunContext HealthKit] resetHealthReadAuth — 권한 마커 초기화 후 재조회")
+                importer.resetReadAuthMarker()
+                let retryDays = body["days"] as? Int ?? 14
+                importer.fetchRecentRunningWorkouts(days: retryDays) { [weak self] result in
+                    DispatchQueue.main.async {
+                        switch result {
+                        case .success(let candidates):
+                            self?.sendRuns(candidates)
+                        case .failure(let error):
+                            self?.sendError(error.localizedDescription)
+                        }
+                    }
+                }
+
             case "requestRecentRunningWorkouts":
                 let days = body["days"] as? Int ?? 14
                 print("[RunContext HealthKit] requestRecentRunningWorkouts days=\(days)")

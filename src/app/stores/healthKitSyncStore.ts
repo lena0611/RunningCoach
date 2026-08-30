@@ -11,6 +11,7 @@ import type { RunLog } from '@/entities/run/model'
 import {
   registerHealthKitBridge,
   requestHealthKitRuns,
+  resetHealthKitReadAuth,
   requestHealthKitRunsInRange,
   requestHealthKitRunUpdate,
   requestLatestVo2Max,
@@ -50,6 +51,12 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
     skipReason: '',
     /** 마지막 조회에서 HealthKit 이 돌려준 러닝 후보 수. -1 = 아직 한 번도 응답 못 받음. */
     lastCandidateCount: -1,
+    /**
+     * 읽기 권한이 막힌 것으로 의심되는가(#719).
+     * iOS 는 읽기 권한 상태를 안 알려주므로 **경험적 신호**로 본다 — 앱엔 과거 러닝이 있는데
+     * 조회가 0건이면 권한이 꺼진 것이다(조회 창은 마지막 저장일부터라 그 러닝이 반드시 포함된다).
+     */
+    readAuthSuspect: false,
     historicalMigrationRange: null as HistoricalMigrationRange | null,
     vo2MaxRequesting: false,
     lastVo2MaxAt: 0,
@@ -136,6 +143,19 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         this.syncFeedbackMode = 'toast'
       }
     },
+    /**
+     * 읽기 권한을 다시 요청한다(#719). 네이티브가 '이미 물어봤음' 마커를 지우고 재조회한다.
+     * iOS 가 읽기 권한 상태를 안 알려줘서, 이 수동 복구가 앱 삭제 말고 유일한 경로다.
+     */
+    retryReadAuth() {
+      this.init()
+      if (!hasNativeBridge()) return
+      this.skipReason = ''
+      this.status = '건강 접근 권한을 다시 요청하는 중… 시트가 뜨면 "운동"과 "경로"를 허용해 주세요.'
+      this.syncing = true
+      this.syncFeedbackMode = 'toast'
+      resetHealthKitReadAuth(getLookbackDays(getLatestSavedDate()))
+    },
     async requestHistoricalMigration(startDate: string, endDate: string) {
       this.init()
       const authStore = useAuthStore()
@@ -204,6 +224,9 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         // HealthKit 이 몇 건을 돌려줬는지 남긴다(#718). 0건이면 조회 자체가 못 찾은 것이고,
         // N건인데 저장이 0이면 중복판정·날짜필터에서 걸린 것이다 — 이 둘을 구분해야 원인이 잡힌다.
         this.lastCandidateCount = runs.length
+        // 권한 의심 판정(#719): 조회 창은 `latestDate` 부터라 **그 러닝이 반드시 포함**된다.
+        // 그런데 0건이면 읽기가 막힌 것이다 — iOS 는 권한이 없으면 에러 대신 빈 결과를 준다.
+        this.readAuthSuspect = runs.length === 0 && Boolean(latestDate)
         const memoryStore = useMemoryStore()
         const heartRateModel = buildInferenceHeartRateModel()
         const repaired = await repairExistingHealthKitRuns(runs, memoryStore.memory.weeklyPattern, heartRateModel)
