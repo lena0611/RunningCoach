@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { RunLog } from '@/entities/run/model'
 import type { HealthKitRunCandidate } from '@/features/import-healthkit-run/healthKitBridge'
-import { isRouteBackfillTarget } from './healthKitSyncStore'
+import { isRouteAuthSuspectPair, isRouteBackfillTarget } from './healthKitSyncStore'
 
 // (#620) 경로 백필 판정 — 첫 임포트 시점에 routePoints 가 비어 들어온 런(권한 결손·경로 늦은
 // 도착 레이스)을 다음 sync 가 같은 워크아웃(externalId) 후보의 경로로 1회 보강하는 게이트.
@@ -52,5 +52,41 @@ describe('isRouteBackfillTarget (#620)', () => {
 
   it('healthkit 외 소스는 제외(수동/FIT 런의 경로 부재는 사용자 의도일 수 있음)', () => {
     expect(isRouteBackfillTarget(makeRun({ source: 'manual' as RunLog['source'] }), makeCandidate())).toBe(false)
+  })
+})
+
+// (#722) 경로 읽기 권한 차단 판정 — 백필의 거울상. 운동 읽기가 막히면 유입 0건으로 잡히지만,
+// 경로만 막히면 러닝은 들어오고 지도만 조용히 사라진다(2026-07 실사고 #607·#619).
+// 판정 근거는 추론이 아니라 대조다: 우리 DB 에 경로가 있는 그 워크아웃이 0점으로 돌아왔는가.
+describe('isRouteAuthSuspectPair (#722)', () => {
+  it('저장본엔 경로가 있는데 같은 워크아웃 재조회가 0점 → 권한 차단으로 판정', () => {
+    expect(isRouteAuthSuspectPair(makeRun({ routePoints: [point] }), makeCandidate({ routePoints: [] }))).toBe(true)
+  })
+
+  it('후보에 경로가 있으면 정상 — 판정 안 함', () => {
+    expect(isRouteAuthSuspectPair(makeRun({ routePoints: [point] }), makeCandidate())).toBe(false)
+  })
+
+  it('저장본에 경로가 없으면 비교 대상 아님 — 트레드밀·self-race 오탐 구조적 차단', () => {
+    expect(isRouteAuthSuspectPair(makeRun(), makeCandidate({ routePoints: [] }))).toBe(false)
+    expect(isRouteAuthSuspectPair(makeRun({ routePoints: undefined }), makeCandidate({ routePoints: [] }))).toBe(false)
+  })
+
+  it('externalId 불일치·부재 시 제외(다른 워크아웃과 대조하면 안 된다)', () => {
+    expect(isRouteAuthSuspectPair(makeRun({ routePoints: [point], externalId: 'wk-2' }), makeCandidate({ routePoints: [] }))).toBe(false)
+    expect(isRouteAuthSuspectPair(makeRun({ routePoints: [point], externalId: null }), makeCandidate({ routePoints: [] }))).toBe(false)
+  })
+
+  it('healthkit 외 소스는 제외(FIT/수동 런의 경로는 HealthKit 권한과 무관)', () => {
+    expect(isRouteAuthSuspectPair(makeRun({ routePoints: [point], source: 'manual' as RunLog['source'] }), makeCandidate({ routePoints: [] }))).toBe(false)
+  })
+
+  it('백필 대상과 상호배타 — 같은 짝이 둘 다 참일 수 없다', () => {
+    const backfill = { run: makeRun(), candidate: makeCandidate() }
+    const blocked = { run: makeRun({ routePoints: [point] }), candidate: makeCandidate({ routePoints: [] }) }
+    expect(isRouteBackfillTarget(backfill.run, backfill.candidate)).toBe(true)
+    expect(isRouteAuthSuspectPair(backfill.run, backfill.candidate)).toBe(false)
+    expect(isRouteBackfillTarget(blocked.run, blocked.candidate)).toBe(false)
+    expect(isRouteAuthSuspectPair(blocked.run, blocked.candidate)).toBe(true)
   })
 })
