@@ -317,7 +317,12 @@ final class HealthKitRunImporter {
             return
         }
         let shareTypes: Set<HKSampleType> = [workoutType, distanceType]
-        healthStore.requestAuthorization(toShare: shareTypes, read: []) { success, error in
+        // ⚠️ read 를 반드시 함께 싣는다(2026-08-31 실기기 재현 2회). 쓰기 전용 시트(read: [])가
+        // 뜨고 나면 읽기 허용 목록에서 '운동'이 사라졌다 — 읽기가 미결정으로 리셋되는 것으로 보이며,
+        // 그 뒤 조회가 통째로 0건이 된다(#719 의 4일 미유입도 레이싱 진입이 방아쇠였다).
+        // read 를 함께 실으면: 전부 결정 상태면 시트에 읽기 섹션이 아예 안 나오고,
+        // 리셋돼 있으면 같은 시트에서 다시 켤 수 있어 자가치유된다.
+        healthStore.requestAuthorization(toShare: shareTypes, read: Set(healthTypesToRead())) { success, error in
             if let error {
                 print("[RunContext HealthKit] competition write auth failed:", error.localizedDescription)
             }
@@ -343,11 +348,12 @@ final class HealthKitRunImporter {
         // stepCount write 권한도 함께 요청한다(cadence를 걸음수로 저장). 타입 미가용이어도
         // 거리만으로 워크아웃은 성립하므로 optional 로 둔다.
         let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)
-        // write 전용 권한만 추가로 요청한다(read는 기존 흐름이 이미 받음). 이미 허용돼 있으면
-        // 다이얼로그 없이 통과하고, 미허용이면 이 시점에만 쓰기 권한 시트가 뜬다.
+        // 이미 허용돼 있으면 다이얼로그 없이 통과하고, 미허용이면 이 시점에만 권한 시트가 뜬다.
+        // ⚠️ read 를 반드시 함께 싣는다 — 쓰기 전용 요청(read: []) 뒤 읽기 '운동'이 목록에서
+        // 사라지는 실기기 재현이 있다(2026-08-31, 위 requestCompetitionWriteAuthorization 주석 참고).
         var shareTypes: Set<HKSampleType> = [HKObjectType.workoutType(), distanceType]
         if let stepType { shareTypes.insert(stepType) }
-        healthStore.requestAuthorization(toShare: shareTypes, read: []) { [weak self] success, error in
+        healthStore.requestAuthorization(toShare: shareTypes, read: Set(healthTypesToRead())) { [weak self] success, error in
             guard let self else { return }
             if let error {
                 completion(.failure(error))
