@@ -10,6 +10,7 @@ import type { CoachGoalProjectionSummary } from '@/shared/lib/performanceProject
 import type { CoachRaceBenchmarkSummary } from '@/shared/lib/raceBenchmark'
 import type { CoachAdaptiveProgressSummary } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import type { CoachSessionEvidence } from '@/shared/lib/coaching/sessionQuality'
+import type { HeatWindow } from '@/shared/lib/coaching/heatWindow'
 
 export type CoachReport = {
   id: string
@@ -140,6 +141,12 @@ export async function requestCoachRunStream(
     raceBenchmark?: CoachRaceBenchmarkSummary | null
     adaptiveProgress?: CoachAdaptiveProgressSummary | null
     sessionEvidence?: CoachSessionEvidence | null
+    /**
+     * 이 사용자가 보통 뛰는 시각의 더위 조건(#729, `assessHeatWindow`).
+     * `currentWeather` 는 "조회한 순간" 값이라 오후에 열고 저녁에 뛰는 사람에게 안 맞는다.
+     * 습관 시간대를 못 뽑았으면 null — 코치가 시각을 특정해 말하지 않는다.
+     */
+    heatWindow?: HeatWindow | null
     /** 실제 주기화 스케줄의 다음 세션들(코치 "다음 훈련"이 weeklyPattern으로 지어내지 않게). */
     upcomingSchedule?: { date: string; type: string; distanceKm: number | null; keySession: boolean; canIntensify: boolean }[] | null
     /**
@@ -197,6 +204,7 @@ export async function requestCoachRunStream(
       recentInjuryWindow: options.recentInjuryWindow ?? null,
       marathonFlag: options.marathonFlag ?? null,
       injurySignals: options.injurySignals ?? null,
+      heatWindow: options.heatWindow ?? null,
       stream: true,
       commandId: options.commandId ?? null,
       runnerLevel: options.runnerLevel ?? 'beginner',
