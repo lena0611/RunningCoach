@@ -15,6 +15,7 @@ import type { AdaptiveTrainingProfile, TrainingGoal, TrainingInjuryItem } from '
 import type { SessionIntentTargets } from '@/entities/session-intent/model'
 import type { ChronicLoadTrend } from '@/shared/lib/runStats'
 import { shouldPrescribeWalkRun, walkRunExecutionSteps, walkRunCautions, WALK_RUN_KEY_POINT } from './walkRunReturn'
+import type { HeatWindow } from './heatWindow'
 
 /** SessionIntent(의도)에서 가져오는 결정 지원 정보. 브리핑이 흡수해 단일 카드로 보여준다. */
 export type BriefingIntent = {
@@ -392,6 +393,11 @@ export type SessionBriefingContext = {
   easyPaceBasis?: string | null
   /** 비성과 목표(#398)면 goalLine에 주기화 단계('기초기' 등)를 안 붙인다. */
   nonPeriodized?: boolean
+  /**
+   * 오늘 **뛸 시간대**의 더위 조건(#729, `assessHeatWindow`). 하루 대푯값이 아니라 시간대 값이다.
+   * 없으면(예보 없음·비더위) 브리핑은 종전과 동일하다.
+   */
+  heat?: HeatWindow | null
 }
 
 const EASY_PACE_FAMILY: ReadonlySet<RunType> = new Set(['Easy', 'Easy + Strides', 'Recovery', 'LSD', 'Steady Long'])
@@ -420,6 +426,43 @@ function keyPointFor(type: RunType, walkRun: boolean): string {
     default:
       return '편한 대화가 가능한 강도를 유지해요.'
   }
+}
+
+/** 더위에서 목표 강도를 제대로 못 내는 세션 — 강도를 낮춰 어정쩡하게 하느니 옮기거나 미룬다(SSOT §157). */
+const HEAT_SENSITIVE_QUALITY: ReadonlySet<RunType> = new Set(['Tempo', 'Race'])
+
+/**
+ * 더위 조건 안내(#729) — **뛸 시간대 기준**. SSOT §외부 조건 "더운 날 강도 판정"을 그대로 옮긴다.
+ *
+ * 지키는 것 셋:
+ * - **심박 상한을 올리지 않는다**(§152). 여기선 페이스·판정 기준만 말하고 상한은 손대지 않는다.
+ * - **페이스는 낮춘다**(§154). 같은 강도의 내적 부담이 커졌으므로 속도 저하는 정상이라고 먼저 말해준다.
+ * - **품질 세션을 Easy 로 자동 둔갑시키지 않는다**(§157). 이동·연기·대체를 명시할 뿐 처방은 바꾸지 않는다.
+ */
+function heatCautions(type: RunType, heat: HeatWindow | null | undefined): string[] {
+  if (!heat?.hot) return []
+  const felt = Math.round(heat.feltC)
+  const humid = heat.humidity !== null ? `·습도 ${Math.round(heat.humidity)}%` : ''
+  const lines = [`${heat.hour}시 기준 체감 ${felt}도${humid} — 같은 강도라도 심박이 쉽게 오릅니다. 페이스가 느려지는 건 정상이에요.`]
+
+  if (HEAT_SENSITIVE_QUALITY.has(type)) {
+    // 강등이 아니라 이동·연기·대체. "더우니 Easy 로 바꿔뒀어요"는 목표 특이성을 조용히 갉아먹는다.
+    lines.push(
+      heat.better
+        ? `이 더위에선 목표 강도를 제대로 내기 어려워요. 강도를 낮춰 어정쩡하게 하기보다 ${heat.better.hour}시쯤(체감 ${Math.round(heat.better.feltC)}도)으로 옮기거나 하루 미루는 쪽이 낫습니다.`
+        : '이 더위에선 목표 강도를 제대로 내기 어려워요. 강도를 낮춰 어정쩡하게 하기보다 서늘한 시간대로 옮기거나 하루 미루는 쪽이 낫습니다.'
+    )
+  } else {
+    lines.push('숫자보다 대화 가능 여부로 보세요 — 페이스는 평소보다 여유 있게 잡고, 심박 상한을 조금 넘더라도 편하면 괜찮습니다.')
+    if (heat.better) lines.push(`오늘은 ${heat.better.hour}시쯤이 체감 ${Math.round(heat.better.feltC)}도로 가장 낫습니다.`)
+  }
+
+  if (heat.allDayHot) {
+    lines.push('오늘은 시간대를 옮겨도 더워요 — 시간을 줄이거나 실내도 방법입니다.')
+  }
+  // 안전 판정은 숫자가 아니라 증상이 한다(SSOT §증상 기반 즉시 중단).
+  lines.push('어지럼·구역·오한·혼동이 오면 숫자와 상관없이 즉시 멈추세요.')
+  return lines
 }
 
 /** ScheduledSession + 장기맥락 → 4요소 작전 브리핑(결정론). */
@@ -454,7 +497,8 @@ export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBrie
     execution,
     successCriteria: ctx.intent?.successCriteria ?? [],
     targetsLine: targetsLineFrom(ctx.intent?.targets),
-    cautions: caution.lines,
+    // 더위 안내는 부상·부하 주의 뒤에 붙인다 — 안전 게이트가 먼저다.
+    cautions: [...caution.lines, ...heatCautions(session.sessionType, ctx.heat)],
     paceBasis: EASY_PACE_FAMILY.has(session.sessionType) ? ctx.easyPaceBasis ?? '' : '',
     evidence
   }

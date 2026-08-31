@@ -255,3 +255,71 @@ describe('intent.why 부상 심각도 라이브 정합 (2026-07-04)', () => {
     expect(resolved.why).toBe(text)
   })
 })
+
+// (#729) 뛸 시간대 기준 더위 안내. 핵심은 "숫자 한 줄"이 아니라 SSOT §외부 조건이 요구하는
+// 세 가지를 지키는 것 — 심박 상한 불변 · 페이스는 낮춘다 · 품질 세션은 강등이 아니라 이동/연기.
+describe('더위 조건 안내 (#729)', () => {
+  const hot = { hour: 13, feltC: 33, humidity: 80, hot: true, better: { hour: 20, feltC: 27 }, allDayHot: false }
+  const mild = { hour: 7, feltC: 24, humidity: 60, hot: false, better: null, allDayHot: false }
+  const base = { goal, injury: null, chronic: noChronic }
+  const cautions = (b: Briefing) => b.cautions.join(' ')
+
+  it('안 더우면 아무 말도 안 붙는다(평상시 브리핑 오염 금지)', () => {
+    const b = buildSessionBriefing(session({ sessionType: 'Easy' }), { ...base, heat: mild })
+    expect(cautions(b)).not.toContain('체감')
+    const none = buildSessionBriefing(session({ sessionType: 'Easy' }), base)
+    expect(cautions(none)).not.toContain('체감')
+  })
+
+  it('더우면 시각을 명시한다 — 하루 대푯값이 아니라 뛸 시간대 값이다', () => {
+    const b = buildSessionBriefing(session({ sessionType: 'Easy' }), { ...base, heat: hot })
+    expect(cautions(b)).toContain('13시 기준 체감 33도')
+    expect(cautions(b)).toContain('습도 80%')
+  })
+
+  it('Easy 계열: 페이스를 낮추라고 하고 판정 기준을 대화 가능 여부로 옮긴다(SSOT §154·§153)', () => {
+    const b = buildSessionBriefing(session({ sessionType: 'Easy' }), { ...base, heat: hot })
+    expect(cautions(b)).toContain('페이스가 느려지는 건 정상')
+    expect(cautions(b)).toContain('대화 가능 여부')
+  })
+
+  it('심박 상한을 올리라는 말은 절대 하지 않는다(SSOT §152)', () => {
+    const b = buildSessionBriefing(session({ sessionType: 'Easy' }), { ...base, heat: hot })
+    for (const banned of ['상한을 올', '상한 상향', '상한을 높']) {
+      expect(cautions(b)).not.toContain(banned)
+    }
+  })
+
+  it('품질 세션(Tempo)은 Easy 로 둔갑시키지 않고 이동·연기를 명시한다(SSOT §157)', () => {
+    const b = buildSessionBriefing(session({ sessionType: 'Tempo', keySession: true }), { ...base, heat: hot })
+    expect(cautions(b)).toContain('옮기거나 하루 미루')
+    expect(cautions(b)).toContain('20시')
+    // 처방 자체는 그대로 — 카드가 세션을 바꾸지 않는다.
+    expect(b.keyPoint).toContain('편하게 힘든')
+  })
+
+  it('서늘한 대안이 없으면 시간대를 특정하지 않고 말한다', () => {
+    const b = buildSessionBriefing(session({ sessionType: 'Tempo' }), { ...base, heat: { ...hot, better: null } })
+    expect(cautions(b)).toContain('서늘한 시간대로 옮기거나')
+  })
+
+  it('종일 더우면 시간 단축·실내를 제안한다 — 시간 이동으로 풀 문제가 아니다', () => {
+    const b = buildSessionBriefing(session({ sessionType: 'Easy' }), { ...base, heat: { ...hot, better: null, allDayHot: true } })
+    expect(cautions(b)).toContain('시간을 줄이거나 실내')
+  })
+
+  it('안전 판정은 숫자가 아니라 증상이 한다 — 중단 신호를 항상 남긴다', () => {
+    const b = buildSessionBriefing(session({ sessionType: 'Easy' }), { ...base, heat: hot })
+    expect(cautions(b)).toContain('어지럼')
+  })
+
+  it('부상 주의가 더위 안내보다 앞에 온다(안전 게이트 우선)', () => {
+    const b = buildSessionBriefing(session({ sessionType: 'Easy' }), {
+      ...base,
+      injury: injury({ severity: 3, status: 'active' }),
+      heat: hot
+    })
+    const heatIndex = b.cautions.findIndex((line) => line.includes('체감'))
+    expect(heatIndex).toBeGreaterThan(0)
+  })
+})
