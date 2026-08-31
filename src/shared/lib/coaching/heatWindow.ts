@@ -40,7 +40,20 @@ export type HeatHourPoint = {
   time: string
   temperatureC: number | null
   apparentTemperatureC: number | null
+  /** ⚠️ 예보 스냅샷 규약은 **0~1 분수**다(강수확률과 같음). 표시·계산 전에 %로 환산해야 한다. */
   humidity?: number | null
+}
+
+/**
+ * 예보 스냅샷의 습도(0~1)를 **%로 맞춘다**(2026-08-31 라이브에서 실제로 걸린 버그).
+ *
+ * 스냅샷은 습도를 강수확률과 같은 0~1 분수로 담는다(`WeatherHourlyChart` 가 `× 100` 해서 표시).
+ * 그대로 넘기면 브리핑이 "습도 1%"를 찍고, `feltTemperatureC`(RH를 %로 받는 Stull 식)에 0.9 를
+ * 먹여 체감온도를 크게 과소평가한다. 습도 1% 이하인 러닝 환경은 없으므로 `<= 1` 이면 분수로 본다.
+ */
+function humidityPercent(value: number | null | undefined): number | null {
+  if (value === null || value === undefined || !Number.isFinite(value)) return null
+  return value <= 1 ? value * 100 : value
 }
 
 export type HeatWindow = {
@@ -110,7 +123,7 @@ export function assessHeatWindow(
   for (const point of hourly) {
     const hour = new Date(point.time).getHours()
     if (!Number.isFinite(hour) || byHour.has(hour)) continue
-    const humidity = point.humidity ?? null
+    const humidity = humidityPercent(point.humidity)
     const felt = point.apparentTemperatureC ?? feltTemperatureC(point.temperatureC, humidity, null)
     if (felt === null) continue
     byHour.set(hour, { feltC: felt, humidity })

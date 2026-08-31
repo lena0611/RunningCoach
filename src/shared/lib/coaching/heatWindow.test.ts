@@ -119,4 +119,22 @@ describe('assessHeatWindow (#729)', () => {
     expect(at).not.toBeNull()
     expect(at!.hot).toBe(true)
   })
+
+  // 2026-08-31 라이브에서 실제로 걸린 버그: 스냅샷 습도는 0~1 분수(강수확률과 같은 규약)인데
+  // 그대로 쓰면 브리핑이 "습도 1%"를 찍고, 체감온도 공식(RH를 %로 받음)에 0.9를 먹여 크게 과소평가한다.
+  it('0~1 분수 습도를 %로 환산한다', () => {
+    const fraction: HeatHourPoint[] = [{ time: '2026-08-01T20:00:00', temperatureC: 24, apparentTemperatureC: 25.6, humidity: 0.9 }]
+    expect(assessHeatWindow(fraction, 20, 20)!.humidity).toBe(90)
+  })
+
+  it('이미 %로 온 습도는 건드리지 않는다', () => {
+    const percent: HeatHourPoint[] = [{ time: '2026-08-01T20:00:00', temperatureC: 24, apparentTemperatureC: 25.6, humidity: 85 }]
+    expect(assessHeatWindow(percent, 20, 20)!.humidity).toBe(85)
+  })
+
+  it('체감온도가 없을 때 분수 습도로도 더위를 정확히 잡는다(과소평가 회귀)', () => {
+    const fraction: HeatHourPoint[] = [{ time: '2026-08-01T14:00:00', temperatureC: 33, apparentTemperatureC: null, humidity: 0.8 }]
+    const percent: HeatHourPoint[] = [{ time: '2026-08-01T14:00:00', temperatureC: 33, apparentTemperatureC: null, humidity: 80 }]
+    expect(assessHeatWindow(fraction, 14, 14)!.feltC).toBe(assessHeatWindow(percent, 14, 14)!.feltC)
+  })
 })
