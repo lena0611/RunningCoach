@@ -672,6 +672,32 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
     { immediate: true }
   )
 
+  /**
+   * 부상 상태가 바뀌면 오늘 의도 문구(why)를 다시 만든다(#723).
+   *
+   * 의도는 **생성 시점 스냅샷**이라 부상 심각도·상태가 바뀌어도 문장이 그대로 남았다. 표시 계층
+   * 밴드에이드(`sessionBriefing.syncInjurySeverityText`)가 숫자만 치환해 오히려 "통증 1/5라 강한
+   * 신호" 같은 자기모순을 만들었고, 부상이 해소되면 옛 문장이 통째로 남았다(2026-07-04 사용자 보고).
+   *
+   * ⚠️ 지문에 **severity·status 를 함께** 넣는다. 부상 id 만 보는 watch 는 같은 항목의 심각도 변경에
+   * 반응하지 못한다(impact map §4 에 같은 계열 버그가 기록돼 있다). 활성 부상이 사라진 경우(resolved)도
+   * 'none' 으로 바뀌므로 발화한다 — 그게 밴드에이드가 못 고치던 바로 그 경우다.
+   */
+  watch(
+    () => {
+      const item = activeInjury.value
+      return item ? `${item.id}:${item.severity ?? ''}:${item.status}` : 'none'
+    },
+    async (_next, prev) => {
+      // 초기 1회(undefined→값)는 위 loaded-watch 가 이미 의도를 만든다 — 진짜 '변경'만 반응.
+      if (prev === undefined) return
+      if (!runStore.loaded || !memoryStore.loaded) return
+      // 진행 중 ensure 를 비운 뒤 의도를 만든다(스케줄 정산 → 의도 순서 보존, returnFromRestNow 와 같은 패턴).
+      if (ensureInFlight) await ensureInFlight.catch(() => {})
+      await ensureTodayIntent()
+    }
+  )
+
   // 활성 목표가 바뀌면 그 목표의 스케줄로 교체·재생성(수동 새로고침 불필요, #398 증분3).
   // 초기(undefined→id)는 위 loaded-watch가 처리하므로 prev==null은 건너뛴다 — 진짜 '전환'만 반응.
   watch(

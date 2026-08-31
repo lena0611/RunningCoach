@@ -208,9 +208,16 @@ SSOT: [[running-injury-knowledge]] · [[injury-impact-paths]]
       ├─ [경로4 AI코칭] buildInjuryCoachSignals→injurySignals→coach-run §5  injurySignals.ts:143-169 / DashboardPage:133 / coachRepository:107
       ├─ evaluateDoubleEligibility (더블 게이트 — status만 봄)    doubleSession.ts:152-194 (injuryMet :161)
       └─ getRecentInjuryHistory (전역 12개월 재부상 위험창)       model.ts:739-757 → runStats.ts:272 / App.vue:3 / coachRepository:99
+      └─ [경로5 의도 문구 재생성 #723] 부상지문 watch → ensureTodayIntent → ensureIntentFor(why 비교)
+         useTrainingWeek.ts (지문 watch, id:severity:status) → sessionIntentStore.ts:68-88 → session_intents 행 교체
 coach-run 별도 입구(시점필터): getActiveInjuryItemForRunDate     coach-run/index.ts:962-964/1288-1295
 └─ buildInjuryContextSnapshot → coach_reports.injury_context_snapshot (화석화)  coach-run/index.ts:240-296 / 표시 CoachSessionOverlay:654
 ```
+
+**세 번째 라이터(문서 누락 교정 2026-08-31)**: 위 진입점 2개 외에 **코치 대화 승인 경로**가 있다 —
+`CoachSessionOverlay.vue` `approveInjuryProposal`(severity·status 직접 대입 후 `memoryStore.update`).
+SSOT 상 AI 는 제안만 하고 사용자 승인이 유일한 통로다(coach-run `normalizeInjuryUpdateProposal`).
+부상 하류를 건드릴 땐 이 경로도 함께 점검한다.
 
 **핵심 mustCheck:**
 - severity는 areas 편집으로 자동 재파생, status는 수동 → 분리돼 status만 바꿔도 severity가 stale일 수 있음. `deriveInjurySeverity`가 areas 기반 SSOT라 사용자 수동 severity를 정규화에서 덮어쓸 수 있음.
@@ -220,7 +227,8 @@ coach-run 별도 입구(시점필터): getActiveInjuryItemForRunDate     coach-r
 **gotchas:**
 - 시점 경합(라이터 2개): MemoryPage 편집(:649/652)과 App.vue 체크인(:561/567)이 각각 cloneMemory→update로 전체 memory를 덮어씀 → 한쪽 in-flight 중 다른 쪽 저장 시 유실. 편집/체크인 간 공유 가드 없음(onMomentSelect는 probeSaving 가드 있음).
 - status만 바뀜 vs severity만 바뀜: `applyInjuryGate`·`getInjuryRecoveryFactor`는 severity로 가르지만 `evaluateDoubleEligibility`는 severity 무시·status만 봄. severity 4→1로 낮춰도 더블 게이트 안 풀리고, status를 resolved로만 내리면 강도 게이트는 꺼지지만 12개월 위험창·applyPreviousInjuryRisk는 살아남음.
-- watch가 id에만 반응(프로브 재발화 누락): `DashboardPage:148 watch(activeInjury.value?.id)`는 같은 부상의 status active→monitoring 전환·severity 변경엔 재발화 안 함. injuryProbeSnapshot이 stale인 채 게이트와 어긋날 수 있음.
+- watch가 id에만 반응(프로브 재발화 누락): `DashboardPage:148 watch(activeInjury.value?.id)`는 같은 부상의 status active→monitoring 전환·severity 변경엔 재발화 안 함. injuryProbeSnapshot이 stale인 채 게이트와 어긋날 수 있음. ⚠️ **부상 지문 watch를 새로 만들 땐 `id:severity:status` 를 모두 넣는다**(#723 에서 같은 함정을 피한 방식) — id만 보면 심각도 조절에 침묵한다.
+- 의도(SessionIntent) why는 **DB에 UPDATE 경로가 없다**: `sessionIntentRepository`는 status/run_id/matched_at만 갱신하므로 문구 갱신 수단은 `ensureIntentFor`의 supersede→재생성뿐이다(#723). 재생성은 planned만 대상이고 completed/skipped는 소급 변조하지 않는다 — 과거 디브리핑은 당시 처방으로 남는 게 맞다(화석이 아니라 기록).
 - done/resolved 연쇄 토글: active→resolved면 `detectInjuryEscalation`은 꺼지고 `detectPainFollowup` 억제가 풀려 '부상 등록 권유' 모먼트가 정반대로 다시 켜짐.
 - 스냅샷 화석화 vs 라이브: `buildInjuryContextSnapshot`(:240)이 그때 severity/status를 jsonb로 얼려 저장(CoachSessionOverlay '🩹 당시 부상'). 지금 값을 바꿔도 과거 리포트는 당시값 유지 — 표시/마이그레이션 변경 시 라이브+화석 둘 다 점검(배포: 마이그→coach-run→웹).
 - severity null 기본값 차이: `getInjuryRecoveryFactor`는 `severity ?? 2`, `applyInjuryGate`는 `?? 0`, `buildInjuryCoachSignals`는 null 그대로 전달 → null일 때 세 경로 다르게 동작.
