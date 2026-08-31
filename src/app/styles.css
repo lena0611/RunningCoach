@@ -3835,6 +3835,35 @@ button.run-session-row {
   color: var(--color-muted);
 }
 
+/* 대화 턴 삭제(#734) — 평소엔 눈에 안 띄게, 확인 단계에서만 위험을 분명히 말한다. */
+.coach-turn-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: min(520px, 100%);
+  margin: -2px 0 6px;
+}
+.coach-turn-warn {
+  flex: 1 1 100%;
+  font-size: var(--text-micro-size);
+  color: var(--color-danger, #ff6b6b);
+}
+.coach-turn-ghost,
+.coach-turn-danger {
+  padding: 4px 10px;
+  border-radius: var(--radius-pill, 999px);
+  border: 1px solid var(--color-border, rgba(120, 120, 120, 0.3));
+  background: transparent;
+  color: var(--color-muted-2);
+  font-size: var(--text-micro-size);
+  cursor: pointer;
+}
+.coach-turn-danger {
+  border-color: var(--color-danger, #ff6b6b);
+  color: var(--color-danger, #ff6b6b);
+}
+
 /* 코칭 피드백 밑 "제공 모델" 캡션 — 작고 은은하게(내부 스케줄 조정용 메타, 강조 아님). */
 .coach-model-tag {
   display: block;

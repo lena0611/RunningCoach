@@ -16,7 +16,7 @@ import IntentFulfillmentCard from '@/shared/ui/IntentFulfillmentCard.vue'
 import type { RunLog } from '@/entities/run/model'
 import type { TrainingGoal, TrainingInjuryCheckIn, TrainingMemory } from '@/entities/training-memory/model'
 import { detectGoalIntent, type GoalIntentProposal } from '@/features/detect-goal-intent/detectGoalIntent'
-import { fetchCoachReports, requestCoachRunStream, type CoachInjuryUpdateProposal, type CoachReport, type CoachScheduleProposal, type CoachStreamStage } from '@/shared/api/coachRepository'
+import { deleteCoachReport, fetchCoachReports, requestCoachRunStream, type CoachInjuryUpdateProposal, type CoachReport, type CoachScheduleProposal, type CoachStreamStage } from '@/shared/api/coachRepository'
 import { summarizeAchievementsForCoach } from '@/shared/lib/achievement/achievements'
 import { coachModelLabel, COACH_MODELS, isCoachModelId } from '@/shared/lib/coaching/coachModels'
 import { useSettingsStore } from '@/app/stores/settingsStore'
@@ -116,6 +116,9 @@ const coachStage = ref<CoachStreamStage | null>(null)
 const coachThinkingTimer = ref<number | null>(null)
 const coachAbortController = ref<AbortController | null>(null)
 const reports = ref<CoachReport[]>([])
+/** 삭제 확인 중인 턴 id(#734). 되돌릴 수 없어 한 번 더 묻는다. */
+const deleteConfirmId = ref('')
+const deletingReportId = ref('')
 const reportsLoaded = ref(false)
 const reportsLoading = ref(false)
 const pendingGoalProposal = ref<GoalIntentProposal | null>(null)
@@ -409,6 +412,25 @@ async function ensureReportsLoaded() {
   })()
 
   return reportsLoadPromise
+}
+
+/**
+ * 대화 턴 삭제(#734). 되돌릴 수 없고 **그 턴에서 배운 장기기억까지** 함께 사라진다
+ * (DB cascade). 그래서 확인을 받은 뒤에만 부른다.
+ */
+async function confirmDeleteReport(id: string) {
+  if (deletingReportId.value) return
+  deletingReportId.value = id
+  try {
+    coachError.value = ''
+    await deleteCoachReport(id)
+    reports.value = reports.value.filter((item) => item.id !== id)
+    deleteConfirmId.value = ''
+  } catch (err) {
+    coachError.value = err instanceof Error ? err.message : '대화를 지우지 못했습니다.'
+  } finally {
+    deletingReportId.value = ''
+  }
 }
 
 function closeCoach() {
@@ -1258,6 +1280,17 @@ function stopCoachThinkingTimer() {
               <div v-for="report in selectedReports" :key="report.id" class="coach-turn">
                 <CoachMessage v-if="report.userNote" role="user" :text="report.userNote" :meta="formatDateTimeWithWeekday(report.createdAt)" />
                 <CoachMessage role="coach" :text="report.report" :meta="formatDateTimeWithWeekday(report.updatedAt || report.createdAt)" />
+                <!-- 대화 삭제(#734): 되돌릴 수 없고 파생 장기기억까지 사라지므로 2단계 확인. -->
+                <div class="coach-turn-tools">
+                  <template v-if="deleteConfirmId === report.id">
+                    <small class="coach-turn-warn">이 대화와 여기서 배운 내용까지 지워요. 되돌릴 수 없어요.</small>
+                    <button type="button" class="coach-turn-danger" :disabled="deletingReportId === report.id" @click="confirmDeleteReport(report.id)">
+                      {{ deletingReportId === report.id ? '지우는 중' : '지울게요' }}
+                    </button>
+                    <button type="button" class="coach-turn-ghost" :disabled="deletingReportId === report.id" @click="deleteConfirmId = ''">그대로 둘래요</button>
+                  </template>
+                  <button v-else type="button" class="coach-turn-ghost" @click="deleteConfirmId = report.id">이 대화 지우기</button>
+                </div>
                 <small v-if="coachModelLabel(report.model)" class="coach-model-tag">✨ {{ coachModelLabel(report.model) }} 제공</small>
                 <small v-if="reportInjuryContextLabel(report)" class="coach-injury-snapshot">{{ reportInjuryContextLabel(report) }}</small>
                 <article v-if="report.injuryUpdateProposal && shouldShowInjuryProposal(report)" class="coach-injury-proposal-card">
