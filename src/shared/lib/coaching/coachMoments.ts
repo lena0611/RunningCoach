@@ -14,12 +14,12 @@ import type { ChronicLoadTrend } from '@/shared/lib/runStats'
 import { analyzeExtraRunTrend, buildExtraRunInquiry } from '@/shared/lib/coaching/extraRunTrend'
 import { isRunningLoadGroup, PAIN_GROUP_LABEL, type PainGroup } from '@/features/post-run-interview/buildInterviewRunPatch'
 
-export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'pain-probe' | 'injury-escalation' | 'extra-run' | 'goal-progress' | 'goal-feasibility' | 'time-trial' | 'weekend-triage' | 'double-suggest' | 'rest-support' | 'rest-return'
+export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'pain-probe' | 'injury-escalation' | 'injury-worsened' | 'extra-run' | 'goal-progress' | 'goal-feasibility' | 'time-trial' | 'weekend-triage' | 'double-suggest' | 'rest-support' | 'rest-return'
 
 /** 모먼트가 제안하는 행동(전용 시트 열기 등). 트레이니 확인 후 실행. */
 export type CoachMomentAction = {
   label: string
-  kind: 'open-injury-screening' | 'open-weekend-triage' | 'open-doubles-add' | 'open-rest-extend'
+  kind: 'open-injury-screening' | 'open-weekend-triage' | 'open-doubles-add' | 'open-rest-extend' | 'open-rest-for-injury'
 }
 export type CoachMomentSentiment = 'positive' | 'neutral' | 'caution'
 
@@ -177,6 +177,22 @@ export type CoachMomentContext = {
    * 적격 미달·트리아지 오버플로 구간이면 caller 가 null 로 둔다(더블 비제안). 주말 트리아지의 자매 갈래.
    */
   doubleSuggestion?: { backlogLabel: string; amDayLabel: string } | null
+  /**
+   * 부상 심각도가 **올라간** 사실(#727) — `severityRaisedAt` 도장에서 caller 가 파생해 주입.
+   * 메모리엔 현재 심각도만 남아 "나빠졌다"를 알 수 없으므로 라이터 수렴점이 도장을 찍는다.
+   * shared 레이어라 entities 타입을 안 받고 plain 으로 받는다(#397 경계).
+   */
+  injuryWorsened?: {
+    /** 올라간 뒤 심각도(1~5). */
+    severity: number
+    /** 올라가기 직전 심각도. */
+    from: number | null
+    areaLabel: string
+    /** 도장이 찍힌 뒤 지난 일수 — 신선한 신호만 발동시킨다. */
+    daysSinceRaised: number
+    /** 모먼트 키에 섞을 도장 식별자(=severityRaisedAt) — 악화할 때마다 다시 묻게 한다. */
+    stampKey: string
+  } | null
   /**
    * 휴식 선언(#473, SSOT §휴식과 복귀) — deriveRestState 파생을 주입. 있으면:
    *  - active 중엔 닦달성 모먼트를 전면 억제하고 "푹 쉬세요" 지원 모먼트만 노출(능동 휴식 ≠ missed).
@@ -438,6 +454,54 @@ function detectRestSupport(ctx: CoachMomentContext): CoachMoment | null {
   return null
 }
 
+/** 악화 신호의 신선도 — 도장이 이 일수 안이어야 "지금" 반응한다(오래된 악화는 처방 게이트가 이미 반영 중). */
+const INJURY_WORSENED_FRESH_DAYS = 3
+/**
+ * 휴식을 다시 권할 심각도 하한. SSOT §휴식과 복귀 §91 이 "대안 제시를 막는 조건은 부상 유무가 아니라
+ * **redFlag 발동 또는 통증 4~5/5**"라고 정한 그 경계다 — 즉 4~5 는 러닝 강도 처방보다 중단·휴식·
+ * 전문가 상담이 우선인 구간(`running-injury-knowledge.md` §4). 3 이하는 이미 처방 게이트
+ * (applyInjuryGate: 강도 하향·품질세션 차단)가 다루므로 휴식 권유까지 가지 않는다 — 임계를 발명하지 않는다.
+ */
+const INJURY_REST_SUGGEST_SEVERITY = 4
+
+/**
+ * 부상이 나빠졌을 때 휴식을 다시 권한다(#727, SSOT §휴식과 복귀 · 부상 KB §4).
+ *
+ * 사용자가 심각도를 올렸다는 건 **본인이 악화를 보고한 것**이다. 그런데 지금까진 처방 강도만
+ * 조용히 낮아지고 코치는 아무 말도 안 했다 — 특히 복귀 직후 다시 아파진 경우(#725 로 복귀 인사를
+ * 붙인 그 흐름)에 "그럼 좀 더 쉬자"를 말해줄 입이 없었다.
+ *
+ * 이미 쉬는 중이면 발동하지 않는다 — 쉬고 있는 사람에게 쉬라고 하는 건 조언이 아니다.
+ */
+function detectInjuryWorsened(ctx: CoachMomentContext): CoachMoment | null {
+  const worsened = ctx.injuryWorsened
+  if (!worsened || ctx.rest?.active) return null
+  if (worsened.daysSinceRaised < 0 || worsened.daysSinceRaised > INJURY_WORSENED_FRESH_DAYS) return null
+  if (worsened.severity < INJURY_REST_SUGGEST_SEVERITY) return null
+  const from = worsened.from !== null ? `${worsened.from} → ` : ''
+  // severity 5 는 부상 KB §4 의 의뢰 구간과 겹친다 — 휴식만 권하고 끝내지 않는다.
+  const referral =
+    worsened.severity >= 5
+      ? ' 이 정도 통증이 이어지면 러닝 조절만으로 될 일이 아닐 수 있어요 — 전문가 평가도 같이 생각해봐요.'
+      : ''
+  return {
+    key: `injury-worsened:${worsened.stampKey}`,
+    kind: 'injury-worsened',
+    priority: 82,
+    icon: '🩹',
+    message: `${worsened.areaLabel} 통증을 ${from}${worsened.severity}/5 로 올리셨네요. 참고 뛰는 구간이 아니에요 — 며칠 쉬면서 가라앉히는 쪽이 결국 빠릅니다.${referral} 쉬어갈까요?`,
+    options: [
+      {
+        label: '괜찮아요, 지켜볼게요',
+        sentiment: 'caution',
+        response:
+          '알겠어요. 대신 통증이 뛰는 중에 날카로워지거나 다음날 더 아프면 그날은 거기서 멈춰요. 그 신호가 오면 다시 얘기해요.'
+      }
+    ],
+    action: { label: '며칠 쉴게요', kind: 'open-rest-for-injury' }
+  }
+}
+
 /**
  * 휴식이 끝났을 때 "회복 후 정리" 인사 + 복귀 확인(#725, SSOT §휴식과 복귀).
  *
@@ -520,7 +584,8 @@ const DETECTORS: Detector[] = [
   detectExtraRun,
   detectGoalProgress,
   detectRestSupport,
-  detectRestReturn
+  detectRestReturn,
+  detectInjuryWorsened
 ]
 
 /**

@@ -107,10 +107,10 @@ function onDashboardMomentAction(moment: CoachMoment) {
     dismissMoment(moment.key)
     return
   }
-  if (moment.action?.kind === 'open-rest-extend') {
-    // 휴식 연장(#725)은 이 탭이 소유한 시트라 바로 연다. 기간은 프리셋하지 않는다 —
-    // 지난 복귀일을 넣으면 과거 날짜가 되고, 기간은 사용자가 정한다(SSOT §83).
-    restPresetReason.value = restState.value.reason
+  if (moment.action?.kind === 'open-rest-extend' || moment.action?.kind === 'open-rest-for-injury') {
+    // 휴식 시트는 이 탭이 소유해 바로 연다. 기간은 프리셋하지 않는다 — 지난 복귀일을 넣으면
+    // 과거 날짜가 되고, 기간은 사용자가 정한다(SSOT §83).
+    restPresetReason.value = moment.action.kind === 'open-rest-for-injury' ? 'injury' : restState.value.reason
     restPresetUntil.value = null
     restSheetOpen.value = true
     dismissMoment(moment.key)

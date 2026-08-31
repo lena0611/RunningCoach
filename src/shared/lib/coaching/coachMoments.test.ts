@@ -324,6 +324,55 @@ describe('collectCoachMoments', () => {
     expect(after.some((m) => m.kind === 'rest-return')).toBe(true)
   })
 
+  // === 부상 악화 → 휴식 재권유(#727) ===
+  // 사용자가 심각도를 올린 건 "본인이 악화를 보고한 것"인데, 지금까진 처방만 조용히 낮아지고
+  // 코치는 아무 말도 안 했다. 특히 복귀 직후 다시 아파진 경우에 "좀 더 쉬자"를 말할 입이 없었다.
+  const worsened = (over: Partial<NonNullable<CoachMomentContext['injuryWorsened']>> = {}) => ({
+    severity: 4,
+    from: 2,
+    areaLabel: '발바닥',
+    daysSinceRaised: 0,
+    stampKey: '2026-06-20T01:00:00.000Z',
+    ...over
+  })
+
+  it('심각도가 4로 오르면 휴식 재권유 모먼트를 띄운다(SSOT §91 통증 4~5 경계)', () => {
+    const m = collectCoachMoments(ctx({ injuryWorsened: worsened() })).find((x) => x.kind === 'injury-worsened')
+    expect(m).toBeTruthy()
+    expect(m!.message).toContain('발바닥')
+    expect(m!.message).toContain('2 → 4/5')
+    expect(m!.action?.kind).toBe('open-rest-for-injury')
+  })
+
+  it('3 이하는 휴식까지 권하지 않는다 — 처방 게이트(강도 하향)가 이미 다루는 구간', () => {
+    const moments = collectCoachMoments(ctx({ injuryWorsened: worsened({ severity: 3, from: 2 }) }))
+    expect(moments.some((m) => m.kind === 'injury-worsened')).toBe(false)
+  })
+
+  it('5/5 면 전문가 평가도 함께 권한다(부상 KB §4 의뢰 구간)', () => {
+    const m = collectCoachMoments(ctx({ injuryWorsened: worsened({ severity: 5 }) })).find((x) => x.kind === 'injury-worsened')!
+    expect(m.message).toContain('전문가 평가')
+  })
+
+  it('이미 쉬는 중이면 발동하지 않는다 — 쉬는 사람에게 쉬라는 건 조언이 아니다', () => {
+    const moments = collectCoachMoments(ctx({ injuryWorsened: worsened(), rest: restActive() }))
+    expect(moments.some((m) => m.kind === 'injury-worsened')).toBe(false)
+  })
+
+  it('오래된 악화(3일 초과)는 발동하지 않는다 — 신선한 신호만', () => {
+    const moments = collectCoachMoments(ctx({ injuryWorsened: worsened({ daysSinceRaised: 5 }) }))
+    expect(moments.some((m) => m.kind === 'injury-worsened')).toBe(false)
+  })
+
+  it('악화할 때마다 다시 묻는다 — 도장이 다르면 키가 다르다(쿨다운 회피)', () => {
+    const a = collectCoachMoments(ctx({ injuryWorsened: worsened({ stampKey: 'A' }) })).find((x) => x.kind === 'injury-worsened')!
+    const b = collectCoachMoments(ctx({ injuryWorsened: worsened({ stampKey: 'B' }) }), new Set([a.key])).find(
+      (x) => x.kind === 'injury-worsened'
+    )
+    expect(b).toBeTruthy()
+    expect(b!.key).not.toBe(a.key)
+  })
+
   // === 부상 감별 grill 프로브(§5 Phase C) ===
   const painProbe = (): NonNullable<CoachMomentContext['painProbe']> => ({
     injuryItemId: 'i',

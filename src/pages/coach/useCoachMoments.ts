@@ -189,10 +189,25 @@ export function useCoachMoments(week: TrainingWeek) {
     for (const i of sessionIntentStore.intents) if (i.runId) ids.add(i.runId)
     return ids
   })
+  // 부상 악화(#727): 라이터 수렴점이 찍은 severityRaisedAt 도장을 모먼트가 읽을 plain 신호로 편다.
+  // 도장이 없으면 null — "나빠졌다"는 사실은 메모리(현재값만 보관)에서 파생할 수 없어 도장이 유일한 출처다.
+  const injuryWorsenedCtx = computed(() => {
+    const inj = activeInjury.value
+    if (!inj?.severityRaisedAt || inj.severity === null) return null
+    return {
+      severity: inj.severity,
+      from: inj.severityRaisedFrom ?? null,
+      areaLabel: inj.area || inj.title,
+      daysSinceRaised: diffDaysIso(todayDate.value, dateOnly(new Date(inj.severityRaisedAt))),
+      stampKey: inj.severityRaisedAt
+    }
+  })
+
   const coachMoments = computed(() =>
     collectCoachMoments(
       {
         runs: runs.value,
+        injuryWorsened: injuryWorsenedCtx.value,
         attributedRunIds: attributedRunIds.value,
         chronic: chronicLoad.value,
         injury: activeInjury.value,

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import {
   createBlankTrainingMemory,
   normalizeTrainingMemory,
+  stampInjurySeverityEscalation,
   type ActiveRest,
   type TrainingMemory
 } from '@/entities/training-memory/model'
@@ -85,7 +86,15 @@ export const useMemoryStore = defineStore('memoryStore', {
     },
     async update(memory: TrainingMemory) {
       const user = this.selectedUser
-      user.memory = normalizeTrainingMemory(memory)
+      // 악화 도장(#727): 라이터 셋(메모리 편집·부상 체크인·코치 승인)이 모두 지나가는 유일한
+      // 수렴점이라 여기서 한 번만 찍는다. 정규화 **후** 값끼리 비교한다 — severity 는 부위에서
+      // 파생되므로 raw 비교면 부위 편집으로 올라간 경우를 놓친다.
+      const prevItems = user.memory.injuryItems
+      const normalized = normalizeTrainingMemory(memory)
+      user.memory = {
+        ...normalized,
+        injuryItems: stampInjurySeverityEscalation(prevItems, normalized.injuryItems, new Date().toISOString())
+      }
       user.updatedAt = new Date().toISOString()
       if (isSupabaseConfigured) {
         await saveTrainingMemory(user.memory)
