@@ -2290,7 +2290,7 @@ function buildInternalNamingGuard() {
  */
 function buildScheduleProposalInstructions(restAlternativeOffered = false) {
   return [
-    'coachScheduleProposal은 사용자가 대화(userNote)에서 휴식·중단·과부하·일정 불가·강도 조정을 직접 표현했을 때만 반환한다(그 외에는 null). 근거 없이 먼저 꺼내지 않고, report 본문에서 이미 사람으로서 대답한 뒤 그 실행 경로로만 덧붙인다. 이것은 스케줄을 바꾸는 명령이 아니라 사용자가 승인해야 적용되는 후보이며, 앱이 기존 화면(휴식 선언 시트·세션 카드)을 열어줄 뿐이다.',
+    'coachScheduleProposal은 사용자가 대화(userNote)에서 휴식·중단·과부하·일정 불가·강도 조정을 직접 표현했을 때만 반환한다(그 외에는 null). 근거 없이 먼저 꺼내지 않고, report 본문에서 이미 사람으로서 대답한 뒤 그 실행 경로로만 덧붙인다. 이것은 스케줄을 바꾸는 명령이 아니라 사용자가 승인해야 적용되는 후보이며, 앱이 기존 화면(휴식 선언 시트·세션 카드)을 열어줄 뿐이다. **버튼이 하는 일과 본문이 제안한 일이 반드시 같아야 한다** — 5개 액션(휴식 선언·가볍게·강하게·다른 날로·건너뛰기)으로 정확히 표현되지 않는 제안이면 카드를 내지 말고 말로만 안내한다. 특히 **러닝을 자전거·수영 같은 다른 운동으로 대체하자는 제안은 이 앱에 그 기능 자체가 없다**(스케줄은 러닝 세션만 다룬다) — 카드를 내면 사용자가 누른 버튼이 말한 것과 다른 동작을 하게 되므로 절대 내지 않는다.',
     'coachScheduleProposal.actionType은 declare_rest(쉬고 싶다·못 뛴다), ease_session(그날 세션이 버겁다), intensify_session(더 하고 싶다), reschedule_session(그날은 어렵고 다른 날은 된다), skip_session(이번엔 건너뛰겠다) 중 하나다. 전체 일정을 다시 짜는 액션은 없다 — 한 번의 대화로 주기화 골격을 재구축하지 않는다.',
     '세션 액션(declare_rest 외)의 targetDate는 반드시 context.upcomingSchedule에 실제로 있는 날짜여야 한다. 없는 날짜를 지어내면 제안이 폐기된다. intensify_session은 그 세션의 canIntensify가 true일 때만 제안한다.',
     // #703 G10 — 의도 보존 관용 매트릭스(SSOT §세션 변경 요청). 판정은 코드가 최종 강제하지만,

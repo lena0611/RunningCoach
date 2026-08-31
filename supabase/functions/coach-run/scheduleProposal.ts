@@ -223,6 +223,17 @@ export function evaluateCoachScheduleProposal(raw: unknown, gate: SchedulePropos
     }
   }
 
+  // G12: **버튼이 하는 일 = 본문이 제안한 일**이어야 한다(2026-08-31 실사고).
+  // "화요일 러닝을 실내 자전거로 대체할까요?"라는 제안에 `reschedule_session` 이 붙어 나갔고,
+  // 버튼 라벨은 "다른 날로 옮기기"였다 — 누르면 **말한 것과 전혀 다른 동작**(다른 날로 이동)이 일어난다.
+  // 원인은 모델의 실수가 아니라 **표현할 액션이 없어서**다: 5개 액션 중 "러닝을 다른 운동으로
+  // 대체"를 담을 것이 없어 가장 가까워 보이는 것을 골랐다. 그래서 라벨을 고치는 게 아니라
+  // **카드를 내지 않는다** — 코치는 말로 안내하고, 실제 변경은 사용자가 화면에서 한다.
+  // (교차훈련 대체를 제대로 지원하려면 스케줄 모델에 비-러닝 세션 개념이 필요하다 — 별도 과제.)
+  if (mentionsCrossTrainingSwap(`${userApprovalPrompt} ${rationale}`)) {
+    return { proposal: null, drop: 'G12_cross_training_not_expressible' }
+  }
+
   if (actionType === 'intensify_session') {
     // G5: redFlag/고통증이면 상향하지 않는다 — 부상 KB 게이트가 처방보다 우선.
     if (gate.injuryBlocksIntensify) return { proposal: null, drop: 'G5_injury_blocks' }
@@ -268,6 +279,18 @@ export function evaluateCoachScheduleProposal(raw: unknown, gate: SchedulePropos
  * G8: 휴식 프리셋은 **미래의 오늘+28일 이내**만 통과한다. 과거·오늘·형식 오류·상한 초과는 null 로 떨궈
  * 시트의 기존 기본값이 뜨게 한다(SSOT §80 "기간은 사용자가 정한다" — 프리셋은 앵커라서 보수적으로 다룬다).
  */
+/**
+ * 러닝을 **다른 운동으로 대체**하자는 제안인가(G12).
+ *
+ * 판정은 보수적으로 — "대체 운동 이름"과 "바꾼다/대신한다"가 **함께** 나올 때만 잡는다.
+ * 자전거를 단순 언급한 조언("비 오면 자전거도 방법이에요")까지 카드를 막으면 정상 제안이 죽는다.
+ */
+function mentionsCrossTrainingSwap(text: string): boolean {
+  const activity = /(자전거|사이클|스피닝|실내\s*바이크|수영|아쿠아|일립티컬|로잉|등산|웨이트)/
+  const swap = /(대체|대신|바꿔|바꾸|교체|넘기)/
+  return activity.test(text) && swap.test(text)
+}
+
 function normalizeRestPreset(value: unknown, today: string): string | null {
   const text = readText(value, 10)
   if (!DATE_PATTERN.test(text) || !DATE_PATTERN.test(today)) return null
