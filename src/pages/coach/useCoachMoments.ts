@@ -101,6 +101,11 @@ export function useCoachMoments(week: TrainingWeek) {
       reason: s.reason,
       daysUntilReturn: s.daysUntilReturn,
       justDeclared: daysSinceDeclared >= 0 && daysSinceDeclared <= 1,
+      // 복귀 확인 모먼트(#725). 노출 창은 메타 수명과 같다 — expireRestMetaIfOver 가 복귀일+2일에
+      // activeRest 를 지우므로(meta 없으면 여기서 이미 null 반환) 별도 상한이 필요 없다.
+      isOver: s.isOver,
+      durationDays: s.durationDays,
+      windowKey: s.untilDate,
       // 회복주 게이트(이유·공존 부상 severity)는 엔티티 도메인 함수에서 판정해 플래그로 넘긴다(#397 — shared 에 도메인 안 쌓기).
       offerRecoveryRun: shouldOfferRecoveryRun(s.reason, activeInjury.value?.severity ?? null)
     }
