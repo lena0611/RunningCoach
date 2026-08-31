@@ -25,6 +25,7 @@ import { summarizeTempoCoaching } from '@/shared/lib/coaching/tempoAdaptation'
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { canIntensifySession } from '@/shared/lib/coaching/scheduleProposalEligibility'
 import { buildCoachSessionEvidence } from '@/shared/lib/coaching/sessionQuality'
+import { assessHeatWindow, deriveHabitualRunHour } from '@/shared/lib/coaching/heatWindow'
 import { buildInjuryCoachSignals } from '@/entities/training-memory/injurySignals'
 import { getActiveGoal, getActiveInjuryItem, getRecentInjuryHistory, isFullMarathonGoal } from '@/entities/training-memory/model'
 import { deriveRestState } from '@/entities/training-memory/restWindow'
@@ -672,6 +673,16 @@ async function sendCoachRequest(note: string) {
           isReturnDay: rs.isReturnDay,
           longLayoff: (rs.durationDays ?? 0) > 28
         }
+      })(),
+      // 뛸 시간대의 더위 조건(#729) — currentWeather("지금" 값)는 오후에 열고 저녁에 뛰는 사람에게 안 맞는다.
+      // 습관 시간대를 못 뽑으면(표본 부족·시간대 분산) null → 코치가 시각을 특정해 말하지 않는다.
+      heatWindow: (() => {
+        const hourly = weatherStore.hourly
+        if (!hourly.length) return null
+        const habitualHour = deriveHabitualRunHour(runStore.runs)
+        if (habitualHour === null) return null
+        const nowHour = new Date().getHours()
+        return assessHeatWindow(hourly, Math.max(habitualHour, nowHour), nowHour)
       })(),
       // 최근 12개월 부상 이력(전역 재부상 위험창) — 채팅 코치가 이전 부상 보유자에게 보수화·"저볼륨=안전" 안심 금지. 이력 없으면 null.
       recentInjuryWindow: (() => {

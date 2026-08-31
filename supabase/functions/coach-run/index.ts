@@ -287,6 +287,7 @@ Deno.serve(async (req) => {
     const userNote = typeof body.userNote === 'string' ? body.userNote.slice(0, 2000) : ''
     const commandId = typeof body.commandId === 'string' && body.commandId ? body.commandId : null
     const currentWeather = normalizeCurrentWeather(body.currentWeather)
+    const heatWindow = normalizeHeatWindow(body.heatWindow)
     const achievements = normalizeAchievements(body.achievements)
     const tempoCoaching = normalizeTempoCoaching(body.tempoCoaching)
     const goalProjection = normalizeGoalProjection(body.goalProjection)
@@ -327,7 +328,7 @@ Deno.serve(async (req) => {
     const rateLimit = await consumeRateLimit(admin, userId, 'coach-run')
     if (!rateLimit.ok) return json({ error: rateLimit.error, retryAfterSec: rateLimit.retryAfterSec }, 429)
 
-    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress, sessionEvidence, upcomingSchedule, restState, recentInjuryWindow, downgradeSignal, marathonFlag, injurySignals, raceBenchmark)
+    const context = await buildContext(admin, userId, selectedRunId, userNote, responseStyle, currentWeather, runnerLevel, commandId, achievements, tempoCoaching, goalProjection, adaptiveProgress, sessionEvidence, upcomingSchedule, restState, recentInjuryWindow, downgradeSignal, marathonFlag, injurySignals, raceBenchmark, heatWindow)
     const ownedSelectedRunId = context.selectedRunOwnedId ?? context.selectedRun?.id ?? null
     if (shouldStream) {
       return streamCoachRun(admin, userId, ownedSelectedRunId, userNote, provider, context, model)
@@ -649,6 +650,41 @@ function normalizeCurrentWeather(value: unknown): CurrentWeatherContext | null {
         ? next12Hours.rainHours.filter((entry): entry is string => typeof entry === 'string').slice(0, 12)
         : []
     }
+  }
+}
+
+/**
+ * 뛸 시간대의 더위 조건(#729). 웹이 `assessHeatWindow` 로 산출한 결과를 client-summary 로 받는다.
+ *
+ * `currentWeather` 는 **조회한 순간**의 값이라 "오늘 체감 31도"가 아무에게도 안 맞는다 —
+ * 혹서기 하루는 아침 26도에서 오후 34도까지 벌어진다. 이건 그 사람이 **보통 뛰는 시각**의 값이다.
+ * 습관 시간대를 못 뽑았으면(표본 부족·시간대 분산) 웹이 null 을 보낸다 — 그럼 시각을 특정해 말하지 않는다.
+ */
+type CoachHeatWindow = {
+  hour: number
+  feltC: number
+  humidity: number | null
+  hot: boolean
+  better: { hour: number; feltC: number } | null
+  allDayHot: boolean
+}
+
+function normalizeHeatWindow(value: unknown): CoachHeatWindow | null {
+  if (!value || typeof value !== 'object') return null
+  const item = value as Record<string, unknown>
+  const hour = nullableNumber(item.hour)
+  const feltC = nullableNumber(item.feltC)
+  if (hour === null || feltC === null) return null
+  const better = item.better && typeof item.better === 'object' ? (item.better as Record<string, unknown>) : null
+  const betterHour = better ? nullableNumber(better.hour) : null
+  const betterFelt = better ? nullableNumber(better.feltC) : null
+  return {
+    hour,
+    feltC,
+    humidity: nullableNumber(item.humidity),
+    hot: Boolean(item.hot),
+    better: betterHour !== null && betterFelt !== null ? { hour: betterHour, feltC: betterFelt } : null,
+    allDayHot: Boolean(item.allDayHot)
   }
 }
 
@@ -1192,7 +1228,7 @@ function unifyPerformanceProjection(
   }
 }
 
-async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null, sessionEvidence: CoachSessionEvidence | null = null, upcomingSchedule: { date: string; type: string; distanceKm: number | null; keySession: boolean; canIntensify: boolean }[] | null = null, restState: CoachRestContext | null = null, recentInjuryWindow: CoachRecentInjuryWindow | null = null, downgradeSignal: CoachDowngradeSignal | null = null, marathonFlag = false, injurySignals: CoachInjurySignals | null = null, raceBenchmark: CoachRaceBenchmark | null = null) {
+async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null, sessionEvidence: CoachSessionEvidence | null = null, upcomingSchedule: { date: string; type: string; distanceKm: number | null; keySession: boolean; canIntensify: boolean }[] | null = null, restState: CoachRestContext | null = null, recentInjuryWindow: CoachRecentInjuryWindow | null = null, downgradeSignal: CoachDowngradeSignal | null = null, marathonFlag = false, injurySignals: CoachInjurySignals | null = null, raceBenchmark: CoachRaceBenchmark | null = null, heatWindow: CoachHeatWindow | null = null) {
   const memorySelect = 'id, content, created_at, importance, last_referenced_at, reference_count'
   const [
     { data: memoryRow },
@@ -1485,6 +1521,12 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     currentWeather,
     instructionForWeatherHandling:
       'currentWeather는 iOS WeatherKit에서 받은 현재/향후 12시간 날씨이며 다음 세션 준비용이다. selectedRun이 과거 기록이면 currentWeather를 그 과거 훈련 당시 날씨로 착각하지 마라. selectedRun.date가 오늘이거나 사용자가 다음 훈련/오늘 뛸지 묻는 경우에만 체감온도, 강수확률, 강수량, 비 가능 시간대를 짧게 반영한다.',
+    heatWindow,
+    instructionForHeatWindow:
+      'heatWindow는 웹이 시간별 예보로 산출한 **이 사용자가 보통 뛰는 시각**의 더위 조건이다(hour=기준 시각, feltC=그 시각 체감온도, hot=더위 임계 초과 여부, better=의미 있게 서늘한 대안 시간대, allDayHot=남은 시간대가 전부 임계 초과). ' +
+      '**더위 이야기를 할 때는 currentWeather("지금" 값)보다 heatWindow를 우선한다** — "지금 31도"는 오후 2시에 앱을 열고 저녁 7시에 뛰는 사람에게 맞지 않는 숫자다. heatWindow가 null이면 습관 시간대를 못 뽑은 것이니 **시각을 특정해 말하지 마라**(임의의 시각을 지어내지 않는다). ' +
+      'hot=true일 때 규칙(SSOT 외부 조건 코칭): ① **심박 상한을 올려주지 마라** — 열로 오른 심박은 실제 심혈관 부담이고 검증된 "기온 X도 → +N bpm" 공식은 없다. ② **페이스는 낮추라고 말한다** — 같은 강도의 내적 부담이 커졌으니 느려지는 건 정상이라고 먼저 알려준다. ③ Easy/Recovery/LSD는 판정을 RPE·대화 가능 여부로 옮긴다. ④ **Tempo·Race 같은 품질 세션을 "더우니 Easy로 바꾸자"고 강등하지 마라** — 서늘한 시간대로 이동, 연기, 대체로 말한다(강도 낮춘 템포는 템포가 아니다). ⑤ better가 있으면 그 시각을 제안하고, allDayHot이면 시간 단축·실내를 제안한다. ' +
+      '이 판정은 **상대 비교**다("저 시간보다 낫다"). 체감온도는 일사를 포함하지 않아 한낮을 과소평가하므로 **"이 시간이면 안전하다"는 보증을 하지 마라** — 안전은 증상(어지럼·구역·오한·혼동) 기반 중단이 담당한다.',
     achievements: structuredCoachContext ? achievements : null,
     instructionForAchievements:
       'achievements는 웹이 전체 기록에서 산출한 개인 업적이다(거리별 PB·최장 거리/시간·최속 평균 페이스·거리 마일스톤 첫 달성, 훈련/레이싱 컨텍스트 분리). 동기부여·신뢰 강화를 위해 맥락에 맞을 때만 1~2개를 사실 그대로 짧게 인용한다. 매 답변에 기계적으로 나열하지 말고, 수치를 과장하거나 없는 기록을 지어내지 마라. PB/기록 값은 재계산하지 말고 주어진 값을 그대로 쓴다. race가 null이면 아직 레이싱(자기와의 대결) 기록이 없다는 뜻이니 레이싱 업적을 언급하지 않는다. achievements.distancePbs[].elapsedSec는 distanceM 거리(예: 5000=5K)에 실제 도달한 기록이며 performanceProjection(목표 기록·레이스 예측)과는 별개다. 특정 거리(예: 5K) 질문에는 그 거리의 distancePbs 기록으로 답하고, 다른 거리의 예측·목표 시간을 그 거리의 기록인 것처럼 라벨하지 마라(예: 10K 목표/예측 시간을 "5K"라고 말하지 않는다). achievements.cumulative(있으면)는 훈련/레이싱 구분 없는 통합 습관 지표다(longestStreakDays=최장 연속 러닝 일수, bestWeeklyVolumeKm·bestMonthlyVolumeKm=주/월 최다 누적 거리). 꾸준함·볼륨 관련 동기부여 맥락에서만 짧게 인용한다. achievements.recentRacingResults(있으면)는 최근 "나와의 대결"(가상레이싱) 결과다(distanceM=레이싱 거리, resultGapSec 음수=내 베스트보다 빠름·양수=느림, outcome win/lose/tie, isPb=true면 새 PB 달성). 레이싱 동기부여 맥락에서만 1건을 사실 그대로 짧게 인용한다(isPb면 새 기록 축하, 아니면 목표까지 남은 차이를 가볍게). 이는 경쟁 주석일 뿐 훈련 강도·부하 평가에는 쓰지 않는다(레이싱이라고 해당 RunLog 를 Race 강도로 재해석하지 마라).',
@@ -2593,7 +2635,8 @@ function buildCoachInstructions(context: unknown) {
     'coach_reports.created_at이나 최근 코칭 시각을 훈련 날짜로 착각하지 않는다. 마지막 코칭 이후에 뛴 기록이라고 단정하지 않는다.',
     'currentWeather는 현재/다음 세션 준비용 날씨다. 과거 RunLog 평가에서는 해당 과거 훈련의 날씨로 쓰지 않는다.',
     'currentWeather가 있고 사용자가 다음 훈련, 오늘 러닝, 강도 조절을 묻는 경우 체감온도, 강수확률, 강수량, 비 가능 시간대를 짧게 반영한다.',
-    '체감온도 30도 이상이면 더위에서 심박이 잘 오르는 사용자 성향을 감안해 페이스보다 심박/RPE 우선으로 말한다.',
+    // 더위 판정은 heatWindow(뛸 시간대)가 있으면 그쪽을 쓴다 — "지금 30도"는 몇 시간 뒤 뛰는 사람에게 안 맞는다.
+    'heatWindow가 있으면 더위 판정은 heatWindow.hot으로 하고 그 시각·체감온도를 인용한다. heatWindow가 없을 때만 currentWeather 체감온도로 대략 말하되, 그 경우 "지금 기준"임을 밝힌다. 더울 때는 페이스보다 심박/RPE·대화 가능 여부 우선으로 말하고 심박 상한은 올려주지 않는다.',
     '강수확률이 높거나 향후 12시간 강수량이 있으면 미끄러운 노면, 신발 젖음, 세션 강도 조절을 체크포인트로만 말한다.',
     'recent14/recent30은 anchorDateForWindowStats 기준 창이다. selectedRun이 있으면 선택 기록 날짜 기준의 이전 흐름으로 해석한다.',
     'runsAfterSelectedRun은 선택 기록 이후 실제로 저장된 러닝이다. 과거 기록 리뷰에서는 이 목록이 있으면 이후 흐름을 짧게 참고할 수 있지만, 선택 기록 자체 평가와 혼동하지 않는다.',
