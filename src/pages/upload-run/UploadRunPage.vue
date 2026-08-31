@@ -106,12 +106,18 @@ async function save() {
         건강 앱에서 <strong>운동</strong> 읽기 권한이 꺼진 것 같아요. 기존 기록이 있는데 조회가 0건입니다.
         아래 버튼을 누르면 권한을 다시 요청합니다 — 시트가 뜨면 <strong>운동</strong>과 <strong>경로</strong>를 허용해 주세요.
       </p>
+      <!-- 경로만 막힌 경우(#722): 러닝은 들어오는데 지도만 조용히 사라진다. 저장된 경로가 있는
+           워크아웃을 재조회했는데 0점이면 한 번 줬던 걸 이제 안 주는 것이라 판정 근거가 확실하다. -->
+      <p v-if="healthKitSyncStore.routeAuthSuspect" class="error">
+        건강 앱에서 <strong>경로</strong> 읽기 권한이 꺼진 것 같아요. 지도가 있던 러닝을 다시 조회했는데 경로가 0점입니다.
+        아래 버튼을 누르면 권한을 다시 요청합니다 — 시트가 뜨면 <strong>경로</strong>를 허용해 주세요.
+      </p>
       <ActionGroup v-if="hasNativeBridge()">
         <button class="ghost" type="button" :disabled="healthKitSyncStore.syncing" @click="syncNow">
           {{ healthKitSyncStore.syncing ? '동기화 중' : '지금 동기화' }}
         </button>
         <button
-          v-if="healthKitSyncStore.readAuthSuspect"
+          v-if="healthKitSyncStore.readAuthSuspect || healthKitSyncStore.routeAuthSuspect"
           type="button"
           :disabled="healthKitSyncStore.syncing"
           @click="healthKitSyncStore.retryReadAuth()"

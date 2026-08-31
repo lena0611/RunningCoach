@@ -57,6 +57,13 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
      * 조회가 0건이면 권한이 꺼진 것이다(조회 창은 마지막 저장일부터라 그 러닝이 반드시 포함된다).
      */
     readAuthSuspect: false,
+    /**
+     * 경로(workoutRoute) 읽기만 막힌 것으로 보이는가(#722).
+     * 운동 읽기가 막히면 유입이 0건이라 위 신호로 잡히지만, 경로만 막히면 러닝은 정상으로 들어오고
+     * **지도만 조용히 사라진다**(2026-07 실사고). 저장된 경로가 있는 워크아웃을 재조회했는데 0점이면
+     * 한 번 줬던 걸 이제 안 주는 것이다 — 그게 판정 근거다(`isRouteAuthSuspectPair`).
+     */
+    routeAuthSuspect: false,
     historicalMigrationRange: null as HistoricalMigrationRange | null,
     vo2MaxRequesting: false,
     lastVo2MaxAt: 0,
@@ -227,6 +234,13 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         // 권한 의심 판정(#719): 조회 창은 `latestDate` 부터라 **그 러닝이 반드시 포함**된다.
         // 그런데 0건이면 읽기가 막힌 것이다 — iOS 는 권한이 없으면 에러 대신 빈 결과를 준다.
         this.readAuthSuspect = runs.length === 0 && Boolean(latestDate)
+        // 경로만 막힌 경우(#722): 유입은 정상이라 위 신호가 안 켜진다 — 저장된 경로와 대조해 잡는다.
+        // 이 화면에 안 들어와도 알 수 있게, 꺼짐→켜짐 전환에만 토스트를 한 번 띄운다(매 동기화 닦달 금지).
+        const routeSuspectWasOff = !this.routeAuthSuspect
+        this.routeAuthSuspect = detectRouteAuthSuspect(runs)
+        if (this.routeAuthSuspect && routeSuspectWasOff) {
+          showSyncToast('error', '건강 앱에서 "경로" 읽기 권한이 꺼진 것 같아요. 지도가 안 들어옵니다 — 기록 추가 화면에서 권한을 다시 요청해 주세요.', 5200)
+        }
         const memoryStore = useMemoryStore()
         const heartRateModel = buildInferenceHeartRateModel()
         const repaired = await repairExistingHealthKitRuns(runs, memoryStore.memory.weeklyPattern, heartRateModel)
@@ -651,6 +665,34 @@ export function isRouteBackfillTarget(run: RunLog, candidate: HealthKitRunCandid
     run.externalId === candidate.externalId &&
     (run.routePoints?.length ?? 0) === 0 &&
     (candidate.routePoints?.length ?? 0) > 0
+  )
+}
+
+/**
+ * (#722) 경로 읽기 권한이 막힌 것으로 **증명**되는 짝인가 — `isRouteBackfillTarget` 의 거울상.
+ *
+ * 운동(workoutType) 읽기가 막히면 조회가 0건이라 `readAuthSuspect` 로 잡히지만, **경로만** 막히면
+ * 러닝은 정상으로 들어오고 지도만 조용히 사라진다(2026-07 실사고 #607·#619). 그 창은 지금까지
+ * 감지 신호가 없었다.
+ *
+ * 판정 근거는 추론이 아니라 대조다: **우리 DB 에 경로가 저장돼 있는 그 워크아웃**을 다시 조회했는데
+ * 0점이 오면, HealthKit 이 한 번 줬던 걸 이제 안 주는 것이다 — 읽기가 막힌 것. 트레드밀·self-race 처럼
+ * 원래 경로가 없는 런은 저장본도 비어 있어 비교 대상에 아예 안 들어온다(오탐 구조적 차단).
+ */
+export function isRouteAuthSuspectPair(run: RunLog, candidate: HealthKitRunCandidate): boolean {
+  return (
+    run.source === 'healthkit' &&
+    !!run.externalId &&
+    run.externalId === candidate.externalId &&
+    (run.routePoints?.length ?? 0) > 0 &&
+    (candidate.routePoints?.length ?? 0) === 0
+  )
+}
+
+function detectRouteAuthSuspect(candidates: HealthKitRunCandidate[]) {
+  const runStore = useRunStore()
+  return candidates.some((candidate) =>
+    runStore.runs.some((run) => isRouteAuthSuspectPair(run, candidate))
   )
 }
 
