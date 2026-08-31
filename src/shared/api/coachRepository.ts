@@ -284,6 +284,19 @@ export async function fetchCoachReports(): Promise<CoachReport[]> {
   return (data ?? []).map(fromRow)
 }
 
+/**
+ * 코치 대화 턴 1건을 지운다(#734).
+ *
+ * ⚠️ 되돌릴 수 없고, **그 턴에서 배운 장기기억도 함께 사라진다**
+ * (`coach_memory_items.source_report_id` 가 `on delete cascade`). 그게 맞는 의미다 —
+ * "이 대화 없던 일로"인데 파생 기억만 남으면 코치가 지운 내용을 계속 언급한다.
+ * 호출부는 반드시 확인을 받고 부른다.
+ */
+export async function deleteCoachReport(id: string): Promise<void> {
+  const { error } = await requireSupabase().from('coach_reports').delete().eq('id', id)
+  if (error) throw error
+}
+
 export function drainSseBuffer(buffer: string) {
   const events: Array<{ event: string; data: unknown }> = []
   const chunks = buffer.split(/\r?\n\r?\n/)
