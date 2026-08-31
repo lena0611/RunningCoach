@@ -129,6 +129,15 @@ export type TrainingInjuryItem = {
   probeAnswers?: Record<string, string>
   /** grill 로 해소된 아형 id(InjuryHypothesis.subtypeSplit[].id, 예 'insertional'). 가능성 라벨 정밀화에 쓴다. 없으면 null. */
   subtypeResolved?: string | null
+  /**
+   * 심각도가 **올라간** 시각(ISO). 코치가 "다시 쉬자"를 권할지 판정하는 신호다(#727).
+   * 메모리엔 현재 심각도만 남아서 "나빠졌다"를 알 방법이 없었다 — 라이터 수렴점(memoryStore.update)이
+   * 직전 값과 비교해 찍는다. 내려가거나 해소되면 지운다(낡은 도장이 카드를 붙잡지 않게).
+   * 비파괴 — 없으면 undefined.
+   */
+  severityRaisedAt?: string | null
+  /** 올라가기 직전 심각도(예: 2 → 4 의 2). 얼마나 나빠졌는지 말할 때 쓴다. */
+  severityRaisedFrom?: number | null
   createdAt: string
   updatedAt: string
 }
@@ -672,6 +681,40 @@ export function createBlankTrainingMemory(): TrainingMemory {
 
 export function getActiveGoal(memory: TrainingMemory): TrainingGoal {
   return memory.goals.find((goal) => goal.id === memory.activeGoalId) ?? memory.goals[0]
+}
+
+/**
+ * 부상 심각도가 **올라간 순간**을 항목에 도장으로 남긴다(#727).
+ *
+ * 메모리엔 현재 심각도만 남아 "나빠졌다"를 알 수 없었다. 라이터가 셋(메모리 편집·부상 체크인·
+ * 코치 대화 승인)이라 각자 찍게 하면 반드시 드리프트가 생기므로, **셋이 모두 지나가는 유일한
+ * 수렴점**(`memoryStore.update`)에서 직전 값과 대조해 한 번만 찍는다.
+ *
+ * ⚠️ 반드시 **정규화된 값끼리** 비교해야 한다 — severity 는 부위 선택에서 파생되므로(deriveInjurySeverity)
+ * 정규화 전 raw 를 비교하면 부위 편집으로 올라간 경우를 놓친다.
+ *
+ * 내려가거나 해소(resolved/archived)되면 도장을 지운다 — 낡은 도장이 "다시 쉬자" 카드를 붙잡고
+ * 있으면 이미 나아진 사람을 계속 말리게 된다.
+ */
+export function stampInjurySeverityEscalation(
+  prevItems: TrainingInjuryItem[],
+  nextItems: TrainingInjuryItem[],
+  nowIso: string
+): TrainingInjuryItem[] {
+  const prevById = new Map(prevItems.map((item) => [item.id, item]))
+  return nextItems.map((item) => {
+    const prev = prevById.get(item.id)
+    const before = prev?.severity ?? null
+    const after = item.severity ?? null
+    const closed = item.status === 'resolved' || item.status === 'archived'
+    if (!closed && before !== null && after !== null && after > before) {
+      return { ...item, severityRaisedAt: nowIso, severityRaisedFrom: before }
+    }
+    // 유지: 같은 심각도로 다른 필드만 저장한 경우(도장을 지우면 카드가 깜빡인다).
+    if (!closed && before !== null && after !== null && after === before) return item
+    if (!item.severityRaisedAt && !item.severityRaisedFrom) return item
+    return { ...item, severityRaisedAt: null, severityRaisedFrom: null }
+  })
 }
 
 export function getActiveInjuryItem(memory: TrainingMemory): TrainingInjuryItem | null {
@@ -1341,6 +1384,12 @@ function normalizeInjuryItem(item: Partial<TrainingInjuryItem>, index: number, n
     strengthPlanDetails,
     probeAnswers: normalizeProbeAnswers((item as { probeAnswers?: unknown }).probeAnswers),
     subtypeResolved: typeof item.subtypeResolved === 'string' && item.subtypeResolved.trim() ? item.subtypeResolved : null,
+    // 악화 도장(#727)은 정규화가 재구성할 때 유실되지 않게 그대로 통과시킨다(값 판정은 스탬퍼 소관).
+    severityRaisedAt: normalizeNullableDate((item as { severityRaisedAt?: unknown }).severityRaisedAt),
+    severityRaisedFrom:
+      typeof (item as { severityRaisedFrom?: unknown }).severityRaisedFrom === 'number'
+        ? ((item as { severityRaisedFrom: number }).severityRaisedFrom)
+        : null,
     createdAt: typeof item.createdAt === 'string' ? item.createdAt : now,
     updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : now
   }
