@@ -106,6 +106,41 @@ describe('sessionIntentStore.ensureIntentFor', () => {
     expect(s.pendingIntents[0]?.sessionType).toBe('Easy')
   })
 
+  // (#723) 부상 심각도·상태가 바뀌면 타입은 그대로여도 why 문구가 낡는다. DB 에 why UPDATE 경로가
+  // 없으므로 갱신 수단은 supersede→재생성뿐이다.
+  it('supersedes and recreates when only the why text changed (부상 심각도 변경)', async () => {
+    const s = useSessionIntentStore()
+    const stale = await s.ensureIntentFor(draft({ why: '통증 4/5라 회복주나 휴식을 우선합니다.' }))
+    const fresh = await s.ensureIntentFor(draft({ why: '통증 1/5로 가볍게 진행합니다.' }))
+
+    expect(fresh?.id).not.toBe(stale?.id)
+    expect(fresh?.why).toBe('통증 1/5로 가볍게 진행합니다.')
+    expect(s.intents.find((i) => i.id === stale?.id)?.status).toBe('superseded')
+    expect(s.pendingIntents).toHaveLength(1)
+  })
+
+  // 부상이 해소되면 문구가 통째로 사라진다 — 밴드에이드(숫자만 치환)가 못 고치던 바로 그 경우.
+  it('부상 해소로 why 가 비어도 재생성한다', async () => {
+    const s = useSessionIntentStore()
+    const stale = await s.ensureIntentFor(draft({ why: '통증 3/5라 강도를 낮춥니다.' }))
+    const fresh = await s.ensureIntentFor(draft({ why: '오늘 계획된 세션을 수행합니다.' }))
+
+    expect(fresh?.id).not.toBe(stale?.id)
+    expect(s.intents.find((i) => i.id === stale?.id)?.status).toBe('superseded')
+  })
+
+  // 멱등 가드: 재생성 후 같은 draft 로 다시 부르면 행이 늘지 않는다(#693 churn 방지).
+  it('why 재생성은 1회로 수렴한다 — 같은 문구로 다시 부르면 그대로', async () => {
+    const s = useSessionIntentStore()
+    await s.ensureIntentFor(draft({ why: 'A' }))
+    const regenerated = await s.ensureIntentFor(draft({ why: 'B' }))
+    const again = await s.ensureIntentFor(draft({ why: 'B' }))
+
+    expect(again?.id).toBe(regenerated?.id)
+    expect(s.pendingIntents).toHaveLength(1)
+    expect(s.intents).toHaveLength(2)
+  })
+
   // 안전 가드: completed(런 매칭 끝난) 의도는 절대 건드리지 않는다 — 과거 디브리핑 소급 변조 금지.
   it('never touches a completed intent — only planned ones are re-synced', async () => {
     const s = useSessionIntentStore()

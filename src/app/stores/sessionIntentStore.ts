@@ -64,6 +64,12 @@ export const useSessionIntentStore = defineStore('sessionIntentStore', {
      * 안 그러면 램프 전 박제된 "Easy + Strides" 의도가 화석으로 남아 디브리핑이 폐기된 처방으로
      * 채점·표시된다(#473 후속, 라벨 비일관 버그). completed/skipped/superseded 는 절대 건드리지 않아
      * 과거 디브리핑 기록의 소급 변조를 막는다(planned 만 자동 동기화).
+     *
+     * ⚠️ `why` 문구도 같은 이유로 비교한다(#723). 타입만 비교하던 시절엔 부상 심각도·상태가 바뀌어도
+     * 생성 시점 문장이 그대로 남아, 화면엔 "통증 1/5"인데 의도 문구는 "통증 4/5라 회복주를 우선"
+     * 같은 자기모순이 떴다(2026-07-04 사용자 보고). DB 스키마엔 why UPDATE 경로가 없으므로
+     * (`sessionIntentRepository` 는 status/run_id 만 갱신) 갱신 수단은 이 supersede→재생성뿐이다.
+     * 재생성 후엔 why 가 일치하므로 다시 타지 않는다(멱등 — 행 무한 증식 없음).
      */
     async ensureIntentFor(draft: SessionIntentDraft): Promise<SessionIntent | null> {
       if (!isSupabaseConfigured) return null
@@ -72,8 +78,8 @@ export const useSessionIntentStore = defineStore('sessionIntentStore', {
         (item) => item.plannedDate === draft.plannedDate && item.status === 'planned'
       )
       if (existing) {
-        if (existing.sessionType === draft.sessionType) return existing
-        // 타입 불일치 → 옛 planned 의도를 superseded 로 내리고 새 타입으로 재생성(처방↔표시·채점 정합).
+        if (existing.sessionType === draft.sessionType && existing.why === draft.why) return existing
+        // 타입·문구 불일치 → 옛 planned 의도를 superseded 로 내리고 재생성(처방↔표시·채점 정합).
         await this.setStatus(existing.id, 'superseded')
         return this.plan(draft)
       }
