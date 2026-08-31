@@ -47,6 +47,13 @@ describe('deriveHabitualRunHour (#729)', () => {
     expect(deriveHabitualRunHour(bimodal)).toBe(6)
   })
 
+  // 정시 버킷만 세면 "늘 7시쯤 뛰는 사람"이 6시와 7시로 쪼개져 시간대 불명으로 떨어진다.
+  // 실제로는 가장 일정한 러너가 조건 안내를 못 받는 결함이라 ±1시간을 한 덩어리로 센다.
+  it('6:50·7:10 처럼 정시 경계에 걸쳐도 한 시간대로 본다', () => {
+    const runs = [{ startAt: '2026-07-01T06:50:00' }, { startAt: '2026-07-03T07:10:00' }, { startAt: '2026-07-05T06:30:00' }]
+    expect(deriveHabitualRunHour(runs)).toBe(6)
+  })
+
   it('startAt 없는 기록은 건너뛴다', () => {
     const runs = [{ startAt: null }, { startAt: '2026-07-01T07:00:00' }, { startAt: '2026-07-02T07:00:00' }, { startAt: '2026-07-03T07:00:00' }]
     expect(deriveHabitualRunHour(runs)).toBe(7)

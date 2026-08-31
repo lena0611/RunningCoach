@@ -26,6 +26,14 @@ const MEANINGFUL_DROP_C = 3
 /** 습관 시간대로 인정할 최소 표본 수와 점유율 — 근거가 얇으면 추측하지 않고 null 을 낸다. */
 const HABIT_MIN_SAMPLES = 3
 const HABIT_MIN_SHARE = 0.3
+/**
+ * 습관 시간대를 셀 때 인정하는 앞뒤 폭(시간).
+ *
+ * ⚠️ 정시 버킷만 세면 **"늘 7시쯤 뛰는 사람"이 6시와 7시로 쪼개진다**(6:50 → 6시, 7:10 → 7시).
+ * 그러면 실제로는 일정한 사람이 "시간대 불명"으로 떨어져 조건 안내가 통째로 사라진다.
+ * ±1시간을 한 덩어리로 세서 이 인위적 분할을 막는다.
+ */
+const HABIT_WINDOW_HOURS = 1
 
 export type HeatHourPoint = {
   /** ISO 시각. */
@@ -67,16 +75,25 @@ export function deriveHabitualRunHour(runs: { startAt?: string | null }[]): numb
   }
   if (total < HABIT_MIN_SAMPLES) return null
 
+  // ±HABIT_WINDOW_HOURS 를 한 덩어리로 세고, 그 덩어리가 가장 두꺼운 중심 시각을 고른다.
+  // 동률이면 정시 표본이 많은 쪽 — 덩어리 안에서도 실제로 가장 자주 뛴 시각이 중심이 되게.
   let bestHour: number | null = null
-  let bestCount = 0
-  for (const [hour, count] of counts) {
-    if (count > bestCount) {
+  let bestWindowCount = 0
+  let bestExactCount = 0
+  for (const hour of counts.keys()) {
+    let windowCount = 0
+    for (let h = hour - HABIT_WINDOW_HOURS; h <= hour + HABIT_WINDOW_HOURS; h += 1) {
+      windowCount += counts.get(h) ?? 0
+    }
+    const exactCount = counts.get(hour) ?? 0
+    if (windowCount > bestWindowCount || (windowCount === bestWindowCount && exactCount > bestExactCount)) {
       bestHour = hour
-      bestCount = count
+      bestWindowCount = windowCount
+      bestExactCount = exactCount
     }
   }
-  if (bestHour === null || bestCount < HABIT_MIN_SAMPLES) return null
-  return bestCount / total >= HABIT_MIN_SHARE ? bestHour : null
+  if (bestHour === null || bestWindowCount < HABIT_MIN_SAMPLES) return null
+  return bestWindowCount / total >= HABIT_MIN_SHARE ? bestHour : null
 }
 
 /**
