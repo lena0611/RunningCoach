@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useLevelStore } from '@/app/stores/levelStore'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
@@ -47,6 +48,7 @@ import RacePage from '@/pages/race/RacePage.vue'
 import { useTrainingWeek, dateOnly, WEEKDAY_KO } from '@/pages/dashboard/useTrainingWeek'
 import { useCoachMoments } from './useCoachMoments'
 
+const router = useRouter()
 const memoryStore = useMemoryStore()
 const levelStore = useLevelStore()
 const scheduleStore = useTrainingScheduleStore()
@@ -275,6 +277,12 @@ function onMomentAction(moment: { key: string; action?: { kind: string } }) {
   if (moment.action?.kind === 'open-injury-screening') useInjuryFlowStore().requestScreening()
   else if (moment.action?.kind === 'open-weekend-triage') triageOpen.value = true
   else if (moment.action?.kind === 'open-doubles-add') openDoublesAdd(doubleSuggestionData.value?.amSession ?? null)
+  else if (moment.action?.kind === 'open-rest-extend') {
+    // 휴식 연장(#725): 시트는 대시보드 소유라 브리지로 요청하고 그 탭으로 넘긴다(App.vue 부상 체크인과 같은 경로).
+    // 기간은 넘기지 않는다 — 지난 복귀일을 프리셋하면 과거 날짜가 들어가고, 애초에 기간은 사용자가 정한다(SSOT §83).
+    useInjuryFlowStore().requestRestDeclaration(restState.value.reason ?? 'other')
+    router.push('/')
+  }
   dismissMoment(moment.key)
 }
 function onBriefingAck() {

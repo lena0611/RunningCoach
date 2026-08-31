@@ -130,9 +130,13 @@ test.describe('#473 휴식/복귀', () => {
       expect(first?.distanceKm ?? 99).toBeLessThanOrEqual(3.1) // ≤ 직전30일 최장(0)+10% floor 3km
 
       // 자연만료 복귀의 사용자 노출 사실: 💤 휴식 배너가 사라진다(복귀 완료 상태).
-      // '돌아온 걸 환영' 토스트는 명시 '지금 복귀' 경로 전용이고, 복귀 "회복 후 정리" 코치 모먼트는
-      // 미구현(coachMoments.ts doc 주석의 showReturn 계획만 존재) — 구현되면 여기 단언을 되살린다.
+      // '돌아온 걸 환영' 토스트는 여전히 명시 '지금 복귀' 경로 전용이다.
       await expect(page.getByText(/쉬는 중/)).toHaveCount(0)
+
+      // (#725) 자연만료도 이제 말을 건다 — "회복 후 정리" 인사 + 복귀 확인 모먼트.
+      // 예전엔 어느 날 그냥 훈련이 다시 깔려 있었다(코치 발화 0).
+      await expect(page.getByText(/돌아온 걸 환영/)).toBeVisible({ timeout: 15_000 })
+      await expect(page.getByRole('button', { name: '조금 더 쉴래요' })).toBeVisible()
     } finally {
       // 시드 잔재 원복(실계정 보호) — 2026-07-03 사고: 클린업 없이 끝나 실계정 활성 목표가 'E2E'로 남았다.
       const cleaned = await page.evaluate(() =>

@@ -14,12 +14,12 @@ import type { ChronicLoadTrend } from '@/shared/lib/runStats'
 import { analyzeExtraRunTrend, buildExtraRunInquiry } from '@/shared/lib/coaching/extraRunTrend'
 import { isRunningLoadGroup, PAIN_GROUP_LABEL, type PainGroup } from '@/features/post-run-interview/buildInterviewRunPatch'
 
-export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'pain-probe' | 'injury-escalation' | 'extra-run' | 'goal-progress' | 'goal-feasibility' | 'time-trial' | 'weekend-triage' | 'double-suggest' | 'rest-support'
+export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'pain-probe' | 'injury-escalation' | 'extra-run' | 'goal-progress' | 'goal-feasibility' | 'time-trial' | 'weekend-triage' | 'double-suggest' | 'rest-support' | 'rest-return'
 
 /** 모먼트가 제안하는 행동(전용 시트 열기 등). 트레이니 확인 후 실행. */
 export type CoachMomentAction = {
   label: string
-  kind: 'open-injury-screening' | 'open-weekend-triage' | 'open-doubles-add'
+  kind: 'open-injury-screening' | 'open-weekend-triage' | 'open-doubles-add' | 'open-rest-extend'
 }
 export type CoachMomentSentiment = 'positive' | 'neutral' | 'caution'
 
@@ -180,7 +180,7 @@ export type CoachMomentContext = {
   /**
    * 휴식 선언(#473, SSOT §휴식과 복귀) — deriveRestState 파생을 주입. 있으면:
    *  - active 중엔 닦달성 모먼트를 전면 억제하고 "푹 쉬세요" 지원 모먼트만 노출(능동 휴식 ≠ missed).
-   *  - 복귀 전후(showReturn)엔 "회복 후 정리" 모먼트(놓침 프레이밍 금지), 긴 휴식이면 목표 재점검 안내.
+   *  - 휴식이 끝나면(isOver) "회복 후 정리" 인사 + 복귀 확인 모먼트(놓침 프레이밍 금지), 긴 휴식이면 목표 재점검 안내(#725).
    * reason+injury.severity 로 "가벼운 회복주" 대안(1회) 제시 여부를 가른다.
    */
   rest?: {
@@ -189,6 +189,15 @@ export type CoachMomentContext = {
     daysUntilReturn: number | null
     /** 선언 직후(~1일) — "가벼운 회복주" 대안을 1회 제시하는 창. */
     justDeclared: boolean
+    /** 복귀일을 지났는가(휴식 종료). "회복 후 정리" 모먼트의 발동 조건. */
+    isOver: boolean
+    /** 휴식 기간 일수. >28(4주)이면 복귀 시 목표 재점검(SSOT §휴식과 복귀 디트레이닝 4주 경계). */
+    durationDays: number | null
+    /**
+     * 이 휴식 창의 안정 식별자(=untilDate). 모먼트 키에 섞어 **휴식마다 다시 묻게** 한다 —
+     * 고정 키면 dismiss 쿨다운(7일)에 걸려 다음 휴식의 복귀 인사가 통째로 사라진다.
+     */
+    windowKey: string | null
     /**
      * "가벼운 회복주" 대안을 제시해도 되는가(restWindow.shouldOfferRecoveryRun 결과를 caller 가 주입).
      * 도메인 게이트(이유·공존 부상 severity)는 entities 에 두고, shared 인 여기선 플래그만 받는다(#397 경계).
@@ -430,6 +439,45 @@ function detectRestSupport(ctx: CoachMomentContext): CoachMoment | null {
 }
 
 /**
+ * 휴식이 끝났을 때 "회복 후 정리" 인사 + 복귀 확인(#725, SSOT §휴식과 복귀).
+ *
+ * 자연만료 복귀는 지금까지 **사용자에게 아무 말도 안 했다** — 환영 토스트는 명시 '지금 복귀' 버튼
+ * 전용이고, '💤 쉬는 중' 히어로는 만료 즉시 사라진다. 그래서 어느 날 그냥 훈련이 다시 깔려 있었다.
+ *
+ * 톤 규약(SSOT §89): **놓침 프레이밍 금지.** "못 한 훈련"·"밀린" 같은 말을 쓰지 않고 "일정은
+ * 정리해뒀다"로 말한다. 능동 휴식은 결손이 아니다.
+ *
+ * 되묻는 이유: 복귀일은 **선언 시점에 사용자가 고른 날**이라 그날의 몸 상태를 반영하지 못한다.
+ * 그대로 복귀시키면 아직 회복이 덜 된 사람을 훈련으로 떠미는 셈이라, 한 번 확인하고 연장 경로를 연다.
+ * 단 **기간은 코치가 정하지 않는다**(SSOT §83·§90) — 연장은 기존 휴식 선언 시트를 열어 사용자가 고른다.
+ */
+function detectRestReturn(ctx: CoachMomentContext): CoachMoment | null {
+  const rest = ctx.rest
+  if (!rest || rest.active || !rest.isOver) return null
+  // 긴 공백(>4주)은 목표 실현가능성을 다시 볼 자리다(SSOT §85 디트레이닝 경계).
+  const longLayoff = (rest.durationDays ?? 0) > 28
+  const goalNote = longLayoff
+    ? ` ${rest.durationDays}일 쉬었으니 목표 일정도 한 번 같이 점검해봐요.`
+    : ''
+  return {
+    key: `rest-return:${rest.windowKey ?? 'current'}`,
+    kind: 'rest-return',
+    priority: 76,
+    icon: '🌱',
+    message: `돌아온 걸 환영해요. 쉬는 동안 일정은 정리해뒀어요 — 오늘부터 가볍게 다시 시작하면 돼요.${goalNote} 예정대로 복귀할까요?`,
+    options: [
+      {
+        label: '네, 다시 시작할게요',
+        sentiment: 'positive',
+        response:
+          '좋아요. 첫 세션은 짧고 가볍게 잡아뒀어요 — 몸이 무겁게 느껴지면 거기서 더 줄여도 괜찮아요.'
+      }
+    ],
+    action: { label: '조금 더 쉴래요', kind: 'open-rest-extend' }
+  }
+}
+
+/**
  * 장기 부상 escalation(#473 후속, 3.5) — 활성/관리 부상이 >10주(70일) 이어지면
  * 자가관리보다 전문가(의사·물리치료사) 평가를 권유한다. onsetDate(임상 발병일) 우선,
  * 없으면 등록일(createdAt)로 관리 지속 기간을 보수적으로 추정한다.
@@ -471,7 +519,8 @@ const DETECTORS: Detector[] = [
   detectGoalFeasibility,
   detectExtraRun,
   detectGoalProgress,
-  detectRestSupport
+  detectRestSupport,
+  detectRestReturn
 ]
 
 /**

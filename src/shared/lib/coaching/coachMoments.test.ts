@@ -217,8 +217,14 @@ describe('collectCoachMoments', () => {
     daysUntilReturn: 5,
     justDeclared: false,
     offerRecoveryRun: false,
+    isOver: false,
+    durationDays: 7,
+    windowKey: '2026-06-20',
     ...over
   })
+  /** 자연만료 복귀 창(#725): active=false + isOver — 메타는 복귀일+2일까지 살아 있다. */
+  const restReturned = (over: Partial<NonNullable<CoachMomentContext['rest']>> = {}) =>
+    restActive({ active: false, isOver: true, daysUntilReturn: 0, ...over })
 
   it('휴식 중이면 닦달성 모먼트(이탈·트리아지·부하·추가런) 전면 억제 — 지속 휴식 응원은 "쉬는 중" 배너가 담당하므로 상단 모먼트는 없음', () => {
     const moments = collectCoachMoments(
@@ -275,6 +281,47 @@ describe('collectCoachMoments', () => {
   it('rest-support: 선언 직후가 아니면(지속 휴식) 상단 모먼트 없음 — 배너가 담당', () => {
     const moments = collectCoachMoments(ctx({ rest: restActive({ justDeclared: false }) }))
     expect(moments.some((m) => m.kind === 'rest-support')).toBe(false)
+  })
+
+  // === 자연만료 복귀 인사 + 복귀 확인(#725) ===
+  // 지금까지 자연만료 복귀는 사용자에게 아무 말도 안 했다(환영 토스트는 명시 '지금 복귀' 전용,
+  // '쉬는 중' 배너는 만료 즉시 사라짐) — 어느 날 그냥 훈련이 다시 깔려 있었다.
+
+  it('휴식이 끝나면 환영 + 복귀 확인 모먼트를 띄운다', () => {
+    const m = collectCoachMoments(ctx({ rest: restReturned() })).find((x) => x.kind === 'rest-return')
+    expect(m).toBeTruthy()
+    expect(m!.message).toContain('돌아온 걸 환영')
+    expect(m!.options?.[0]?.label).toContain('다시 시작')
+    expect(m!.action?.kind).toBe('open-rest-extend')
+  })
+
+  it('놓침 프레이밍 금지(SSOT §휴식과 복귀) — 결손 어휘를 쓰지 않는다', () => {
+    const m = collectCoachMoments(ctx({ rest: restReturned() })).find((x) => x.kind === 'rest-return')!
+    for (const banned of ['놓친', '놓쳐', '밀린', '결손', '못 한 훈련']) {
+      expect(m.message).not.toContain(banned)
+    }
+    expect(m.message).toContain('일정은 정리해뒀어요')
+  })
+
+  it('휴식 중(active)엔 복귀 모먼트가 안 뜬다 — 아직 쉬는 중이다', () => {
+    const moments = collectCoachMoments(ctx({ rest: restActive() }))
+    expect(moments.some((m) => m.kind === 'rest-return')).toBe(false)
+  })
+
+  it('4주 초과 공백이면 목표 재점검을 덧붙인다(SSOT §85 디트레이닝 경계)', () => {
+    const long = collectCoachMoments(ctx({ rest: restReturned({ durationDays: 35 }) })).find((x) => x.kind === 'rest-return')!
+    expect(long.message).toContain('목표 일정도 한 번 같이 점검')
+    const short = collectCoachMoments(ctx({ rest: restReturned({ durationDays: 10 }) })).find((x) => x.kind === 'rest-return')!
+    expect(short.message).not.toContain('목표 일정도')
+  })
+
+  it('모먼트 키가 휴식 창마다 달라진다 — 고정 키면 dismiss 쿨다운(7일)에 다음 복귀 인사가 먹힌다', () => {
+    const first = collectCoachMoments(ctx({ rest: restReturned({ windowKey: '2026-06-20' }) })).find((x) => x.kind === 'rest-return')!
+    const second = collectCoachMoments(ctx({ rest: restReturned({ windowKey: '2026-07-30' }) })).find((x) => x.kind === 'rest-return')!
+    expect(first.key).not.toBe(second.key)
+    // 이전 창을 닫아둬도 새 창의 인사는 살아 있다.
+    const after = collectCoachMoments(ctx({ rest: restReturned({ windowKey: '2026-07-30' }) }), new Set([first.key]))
+    expect(after.some((m) => m.kind === 'rest-return')).toBe(true)
   })
 
   // === 부상 감별 grill 프로브(§5 Phase C) ===
