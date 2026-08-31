@@ -2,6 +2,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { useWeatherStore } from '@/app/stores/weatherStore'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
@@ -28,6 +29,7 @@ import { buildPeriodizedSchedule, buildSteadyWeeklyRhythm, goalArchetype, prescr
 import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
 import { buildRealignedSchedule, dropDraftsOnRestedDates } from '@/shared/lib/coaching/scheduleRealign'
 import { buildSessionBriefing, sessionTypeLabel, type SessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
+import { assessHeatWindow, deriveHabitualRunHour } from '@/shared/lib/coaching/heatWindow'
 import { resolvePaceModel } from '@/shared/lib/vdotPaces'
 import { buildSessionIntentDraft, type BuildSessionIntentArgs } from '@/features/build-session-intent/buildSessionIntentDraft'
 import { formatDuration } from '@/shared/lib/format'
@@ -88,6 +90,7 @@ export type UseTrainingWeekOptions = {
 export function useTrainingWeek(options: UseTrainingWeekOptions) {
   const runStore = useRunStore()
   const memoryStore = useMemoryStore()
+  const weatherStore = useWeatherStore()
   const scheduleStore = useTrainingScheduleStore()
   const sessionIntentStore = useSessionIntentStore()
   const toastStore = useToastStore()
@@ -518,6 +521,27 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
       : base
   })
 
+  /**
+   * 오늘 **뛸 시간대**의 더위 조건(#729). 하루 대푯값이나 "지금" 값이 아니라, 이 사람이 보통
+   * 뛰는 시각의 예보를 본다 — 혹서기 하루는 아침 26도에서 오후 34도까지 벌어져서 한 숫자로는
+   * 아침 러너에게 겁을 주고 한낮 러너에게 방심을 시킨다.
+   *
+   * 습관 시간대를 못 뽑으면(표본 부족·시간대 분산) 조건 안내를 **하지 않는다** — 임의의 시각을
+   * 골라 말하느니 침묵하는 게 낫다. 오늘 세션이 아닐 때도 안 붙인다(예보는 3일치뿐이고,
+   * 사흘 뒤 날씨로 미리 겁줄 이유가 없다).
+   */
+  const todayHeatWindow = computed(() => {
+    if (activeDay.value?.state !== 'today') return null
+    const hourly = weatherStore.hourly
+    if (!hourly.length) return null
+    const habitualHour = deriveHabitualRunHour(runStore.runs)
+    if (habitualHour === null) return null
+    const nowHour = new Date().getHours()
+    // 습관 시각이 이미 지났으면 지금 이후로 다시 본다 — 지나간 시간을 두고 조언할 수는 없다.
+    const targetHour = Math.max(habitualHour, nowHour)
+    return assessHeatWindow(hourly, targetHour, nowHour)
+  })
+
   const activeBriefing = computed<SessionBriefing | null>(() => {
     const base = activeSession.value
     if (!base || activeDoneRun.value) return null
@@ -547,7 +571,8 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
       easyPaceBasis: observedEasyPace.value
         ? `내 Easy 런 ${observedEasyPace.value.sampleCount}건 기준 (심박 ${heartRateModel.value.easyCeilingBpm ?? '-'} 이하)`
         : 'VDOT 추정 — Easy 심박 이하 런 3건 모이면 내 데이터로 보정돼요',
-      nonPeriodized: !isPerformanceGoal.value
+      nonPeriodized: !isPerformanceGoal.value,
+      heat: todayHeatWindow.value
     })
   })
   const briefingCeilingText = computed(() =>
