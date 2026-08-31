@@ -293,19 +293,32 @@ describe('coachScheduleProposal 게이트 (#639)', () => {
   // 붙어 나갔고 버튼은 "다른 날로 옮기기"였다. 눌러도 대체는 일어나지 않는다(세션 화면만 열린다).
   // 애초에 앱에 러닝 대체재(교차훈련) 개념이 없다 — RunType 은 러닝 종류뿐이고 '대체' 상태도 없다.
   // 그래서 라벨을 고치는 게 아니라 카드를 내지 않는다.
-  describe('G12: 러닝을 다른 운동으로 대체하자는 제안은 카드로 내지 않는다', () => {
-    it('자전거 대체 제안이면 떨군다', () => {
+  describe('G12: 대체 제안은 앱이 실제로 할 수 있는 것(건너뛰기)으로만 낸다', () => {
+    it('자전거 대체인데 "다른 날로 옮기기"면 떨군다 — 버튼이 말한 것과 다른 일을 한다', () => {
       const proposal = {
         ...EASE,
+        actionType: 'reschedule_session',
         userApprovalPrompt: '화요일 예정된 러닝을 실내 자전거로 바꿔도 괜찮으면, 그날은 자전거로 대체하는 쪽으로 잡아둘까요?',
         rationale: '비가 이어지고 습도가 높으면 실외 러닝보다 실내 자전거로 대체하는 쪽이 더 안전합니다.'
       }
-      expect(evaluateCoachScheduleProposal(proposal, gate()).drop).toBe('G12_cross_training_not_expressible')
+      expect(evaluateCoachScheduleProposal(proposal, gate()).drop).toBe('G12_cross_training_needs_skip')
+    })
+
+    it('같은 대체 제안이라도 skip_session 이면 통과한다 — 그날 러닝을 안 하는 건 사실이다', () => {
+      const proposal = {
+        ...EASE,
+        actionType: 'skip_session',
+        userApprovalPrompt: '오늘은 자전거로 대체하시고 이 러닝은 건너뛴 것으로 기록해둘까요? 자전거는 아직 앱에 따로 기록되지 않아요.',
+        rationale: '비가 이어져 실외 러닝보다 실내 자전거로 대신하는 편이 안전합니다.'
+      }
+      const verdict = evaluateCoachScheduleProposal(proposal, gate())
+      expect(verdict.drop).toBeNull()
+      expect(verdict.proposal?.actionType).toBe('skip_session')
     })
 
     it('수영·일립티컬 등 다른 종목도 같게 본다', () => {
-      const swim = { ...EASE, rationale: '발바닥이 아프면 그날은 수영으로 대신하는 게 낫습니다.' }
-      expect(evaluateCoachScheduleProposal(swim, gate()).drop).toBe('G12_cross_training_not_expressible')
+      const swim = { ...EASE, actionType: 'reschedule_session', rationale: '발바닥이 아프면 그날은 수영으로 대신하는 게 낫습니다.' }
+      expect(evaluateCoachScheduleProposal(swim, gate()).drop).toBe('G12_cross_training_needs_skip')
     })
 
     it('대체 운동을 단순 언급만 한 정상 제안은 살린다 — 과잉 차단 금지', () => {

@@ -225,13 +225,14 @@ export function evaluateCoachScheduleProposal(raw: unknown, gate: SchedulePropos
 
   // G12: **버튼이 하는 일 = 본문이 제안한 일**이어야 한다(2026-08-31 실사고).
   // "화요일 러닝을 실내 자전거로 대체할까요?"라는 제안에 `reschedule_session` 이 붙어 나갔고,
-  // 버튼 라벨은 "다른 날로 옮기기"였다 — 누르면 **말한 것과 전혀 다른 동작**(다른 날로 이동)이 일어난다.
-  // 원인은 모델의 실수가 아니라 **표현할 액션이 없어서**다: 5개 액션 중 "러닝을 다른 운동으로
-  // 대체"를 담을 것이 없어 가장 가까워 보이는 것을 골랐다. 그래서 라벨을 고치는 게 아니라
-  // **카드를 내지 않는다** — 코치는 말로 안내하고, 실제 변경은 사용자가 화면에서 한다.
-  // (교차훈련 대체를 제대로 지원하려면 스케줄 모델에 비-러닝 세션 개념이 필요하다 — 별도 과제.)
-  if (mentionsCrossTrainingSwap(`${userApprovalPrompt} ${rationale}`)) {
-    return { proposal: null, drop: 'G12_cross_training_not_expressible' }
+  // 버튼 라벨은 "다른 날로 옮기기"였다 — 누르면 **말한 것과 전혀 다른 동작**이 일어난다.
+  // 원인은 모델 실수가 아니라 **표현할 액션이 없어서**다(앱에 러닝 대체재 개념이 없다).
+  //
+  // 그래도 카드를 통째로 막지는 않는다 — 대체를 하기로 했으면 **그날 러닝을 안 하는 것**은
+  // 사실이고, 그건 `skip_session` 으로 정확히 표현된다. 앱이 할 수 있는 일만 정직하게 제안하게
+  // 하고(자전거 자체는 아직 기록되지 않는다는 사실은 본문이 밝힌다), 다른 액션은 떨군다.
+  if (actionType !== 'skip_session' && mentionsCrossTrainingSwap(`${userApprovalPrompt} ${rationale}`)) {
+    return { proposal: null, drop: 'G12_cross_training_needs_skip' }
   }
 
   if (actionType === 'intensify_session') {
