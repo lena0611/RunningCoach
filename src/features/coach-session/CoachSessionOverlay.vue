@@ -116,8 +116,8 @@ const coachStage = ref<CoachStreamStage | null>(null)
 const coachThinkingTimer = ref<number | null>(null)
 const coachAbortController = ref<AbortController | null>(null)
 const reports = ref<CoachReport[]>([])
-/** 삭제 확인 중인 턴 id(#734). 되돌릴 수 없어 한 번 더 묻는다. */
-const deleteConfirmId = ref('')
+/** 삭제 확인 중인 턴(#734). 되돌릴 수 없어 앱의 기존 삭제 규약대로 확인 시트를 띄운다. */
+const pendingDeleteReport = ref<CoachReport | null>(null)
 const deletingReportId = ref('')
 const reportsLoaded = ref(false)
 const reportsLoading = ref(false)
@@ -139,6 +139,9 @@ const currentRestState = computed(() => deriveRestState(memoryStore.memory.activ
 const savingInjuryProposalId = ref('')
 const schedulingHelpOpen = ref(false)
 const goalSheetDrag = useBottomSheetDrag(closeGoalProposal)
+const deleteSheetDrag = useBottomSheetDrag(() => {
+  if (!deletingReportId.value) pendingDeleteReport.value = null
+})
 
 const coachCommandItems = [
   {
@@ -425,7 +428,7 @@ async function confirmDeleteReport(id: string) {
     coachError.value = ''
     await deleteCoachReport(id)
     reports.value = reports.value.filter((item) => item.id !== id)
-    deleteConfirmId.value = ''
+    pendingDeleteReport.value = null
   } catch (err) {
     coachError.value = err instanceof Error ? err.message : '대화를 지우지 못했습니다.'
   } finally {
@@ -1280,17 +1283,6 @@ function stopCoachThinkingTimer() {
               <div v-for="report in selectedReports" :key="report.id" class="coach-turn">
                 <CoachMessage v-if="report.userNote" role="user" :text="report.userNote" :meta="formatDateTimeWithWeekday(report.createdAt)" />
                 <CoachMessage role="coach" :text="report.report" :meta="formatDateTimeWithWeekday(report.updatedAt || report.createdAt)" />
-                <!-- 대화 삭제(#734): 되돌릴 수 없고 파생 장기기억까지 사라지므로 2단계 확인. -->
-                <div class="coach-turn-tools">
-                  <template v-if="deleteConfirmId === report.id">
-                    <small class="coach-turn-warn">이 대화와 여기서 배운 내용까지 지워요. 되돌릴 수 없어요.</small>
-                    <button type="button" class="coach-turn-danger" :disabled="deletingReportId === report.id" @click="confirmDeleteReport(report.id)">
-                      {{ deletingReportId === report.id ? '지우는 중' : '지울게요' }}
-                    </button>
-                    <button type="button" class="coach-turn-ghost" :disabled="deletingReportId === report.id" @click="deleteConfirmId = ''">그대로 둘래요</button>
-                  </template>
-                  <button v-else type="button" class="coach-turn-ghost" @click="deleteConfirmId = report.id">이 대화 지우기</button>
-                </div>
                 <small v-if="coachModelLabel(report.model)" class="coach-model-tag">✨ {{ coachModelLabel(report.model) }} 제공</small>
                 <small v-if="reportInjuryContextLabel(report)" class="coach-injury-snapshot">{{ reportInjuryContextLabel(report) }}</small>
                 <article v-if="report.injuryUpdateProposal && shouldShowInjuryProposal(report)" class="coach-injury-proposal-card">
@@ -1336,6 +1328,11 @@ function stopCoachThinkingTimer() {
                     <button class="ghost" type="button" @click="dismissScheduleProposal(report)">괜찮아요</button>
                   </div>
                 </article>
+                <!--
+                  대화 삭제(#734). 턴의 **맨 끝**에 은은하게 둔다 — 파괴적 동작이 답변·메타보다 위에 오면
+                  위계가 뒤집힌다. 확인은 앱의 기존 삭제 규약(confirm-sheet + [삭제]/[취소])을 그대로 쓴다.
+                -->
+                <button type="button" class="coach-turn-delete" @click="pendingDeleteReport = report">이 대화 삭제</button>
               </div>
             </template>
             <CoachMessage v-if="pendingUserNote" role="user" :text="pendingUserNote" />
@@ -1416,5 +1413,24 @@ function stopCoachThinkingTimer() {
     </div>
     </Transition>
     <SchedulingHelpSheet :open="schedulingHelpOpen" @close="schedulingHelpOpen = false" />
+  </Teleport>
+
+  <!-- 대화 삭제 확인(#734) — 앱의 기존 파괴적 삭제 규약(SessionDetailOverlay)과 같은 시트·같은 어휘. -->
+  <Teleport to="body">
+    <Transition name="bottom-sheet">
+    <div v-if="pendingDeleteReport" class="bottom-sheet-layer confirm-layer" role="presentation" @click.self="pendingDeleteReport = null">
+      <section class="bottom-sheet confirm-sheet" :class="{ 'bottom-sheet-dragging': deleteSheetDrag.dragging.value }" :style="deleteSheetDrag.sheetStyle.value" role="dialog" aria-modal="true" aria-label="대화 삭제 확인">
+        <div class="bottom-sheet-handle bottom-sheet-drag-zone" @pointerdown="deleteSheetDrag.startDrag" />
+        <h2>이 대화를 삭제할까요?</h2>
+        <p>{{ formatDateTimeWithWeekday(pendingDeleteReport.createdAt) }} 대화와 <strong>여기서 배운 내용</strong>이 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</p>
+        <div class="confirm-actions">
+          <button class="danger" type="button" :disabled="deletingReportId === pendingDeleteReport.id" @click="confirmDeleteReport(pendingDeleteReport.id)">
+            {{ deletingReportId === pendingDeleteReport.id ? '삭제 중' : '삭제' }}
+          </button>
+          <button class="ghost" type="button" :disabled="Boolean(deletingReportId)" @click="pendingDeleteReport = null">취소</button>
+        </div>
+      </section>
+    </div>
+    </Transition>
   </Teleport>
 </template>
