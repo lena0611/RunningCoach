@@ -14,14 +14,24 @@ import { defineStore } from 'pinia'
 export const useCoachActionBridgeStore = defineStore('coachActionBridgeStore', {
   state: () => ({
     /** 코치 탭이 포커스할 세션 날짜(YYYY-MM-DD). null = 요청 없음. */
-    focusDate: null as string | null
+    focusDate: null as string | null,
+    /**
+     * 제안이 요청한 액션 종류(#741). 카드 버튼은 **이동만** 하고 확정은 세션 카드에서 이뤄지는데,
+     * 라벨이 "이번엔 놓아주기"처럼 읽혀 사용자가 이미 처리된 줄 안다(2026-09-01 실사고).
+     *
+     * ⚠️ 라벨이 아니라 **종류**를 넘긴다 — 도착지 버튼 이름이 날짜 상태마다 다르기 때문이다
+     * (오늘은 '건너뛰기', 지난 날은 '놓아주기'). 이름은 코치 탭이 상태를 보고 고른다.
+     */
+    focusAction: null as string | null
   }),
   actions: {
-    focusSession(date: string) {
+    focusSession(date: string, action: string | null = null) {
       this.focusDate = date
+      this.focusAction = action
     },
     clearFocus() {
       this.focusDate = null
+      this.focusAction = null
     }
   }
 })

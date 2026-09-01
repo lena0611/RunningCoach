@@ -3835,6 +3835,14 @@ button.run-session-row {
   color: var(--color-muted);
 }
 
+/* 제안 카드 하단 기대 설정(#741) — 이 버튼들은 이동만 한다는 걸 누르기 전에 밝힌다. */
+.coach-proposal-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: var(--text-micro-size);
+  color: var(--color-muted-2);
+}
+
 /* 러닝 대체 운동 한 줄(#739) — 주간 거리 옆에 나란히. 합산하지 않는다는 걸 캡션으로 못박는다. */
 .cross-training-line {
   display: flex;
