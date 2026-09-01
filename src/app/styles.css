@@ -3835,6 +3835,21 @@ button.run-session-row {
   color: var(--color-muted);
 }
 
+/* 러닝 대체 운동 한 줄(#739) — 주간 거리 옆에 나란히. 합산하지 않는다는 걸 캡션으로 못박는다. */
+.cross-training-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin: -2px 0 var(--space-3, 12px);
+  font-size: var(--text-info-size, 14px);
+  color: var(--color-text);
+}
+.cross-training-line small {
+  font-size: var(--text-micro-size);
+  color: var(--color-muted-2);
+}
+
 /*
   대화 턴 삭제 진입(#734) — 턴 맨 끝에 은은하게. 파괴적 동작이라도 평소엔 조용해야 하고,
   경고와 최종 확인은 앱 공통 confirm-sheet 가 맡는다(SessionDetailOverlay 와 같은 규약).

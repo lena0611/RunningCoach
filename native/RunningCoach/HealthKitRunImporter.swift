@@ -2,6 +2,28 @@ import Foundation
 import HealthKit
 import CoreLocation
 
+/// 러닝 대체 운동 후보(#739). **러닝 후보와 별도 타입**이다 — 거리·페이스를 담지 않는다.
+///
+/// 검증된 "자전거 X분 = 러닝 Y km" 환산 공식은 존재하지 않으므로(리서치 #739) 사실만 싣는다:
+/// 무엇을, 얼마나 오래, 심박·칼로리는 어땠나. 실내 자전거는 GPS 거리가 없어 어차피 거리가 안 나온다.
+///
+/// ⚠️ 새 읽기 권한이 필요 없다 — `HKObjectType.workoutType()` 하나가 러닝·사이클링·수영을 모두
+/// 덮고 이미 요청 중이다. 러닝만 들어오던 건 권한이 아니라 **조회 predicate** 때문이었다.
+struct HealthKitCrossTrainingCandidate: Codable {
+    let externalId: String
+    let sourceName: String?
+    /// 'cycling' | 'swimming' | 'elliptical' | 'aqua_jog' | 'rowing' | 'other'
+    let modality: String
+    let indoor: Bool?
+    let date: String
+    let startAt: String
+    let endAt: String
+    let durationSec: Double?
+    let avgHeartRate: Double?
+    let maxHeartRate: Double?
+    let activeEnergyKcal: Double?
+}
+
 struct HealthKitRunCandidate: Codable {
     let externalId: String
     let sourceName: String?
@@ -530,6 +552,118 @@ final class HealthKitRunImporter {
         }
 
         healthStore.execute(query)
+    }
+
+    /// 러닝 대체 운동(자전거·수영 등) 조회(#739).
+    ///
+    /// 러닝 조회를 그대로 베끼되 predicate 만 바꾼다. **새 권한이 필요 없다** —
+    /// workoutType 하나가 모든 종목을 덮고 이미 요청 중이다(healthTypesToRead).
+    /// 경로·랩·케이던스는 안 모은다(대체 운동엔 의미가 없고, 코칭 입력도 아니다).
+    func fetchRecentCrossTraining(days: Int, completion: @escaping (Result<[HealthKitCrossTrainingCandidate], Error>) -> Void) {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            completion(.failure(HealthKitImportError.healthDataUnavailable))
+            return
+        }
+        requestAuthorization { [weak self] result in
+            switch result {
+            case .success:
+                self?.queryRecentCrossTraining(days: days, completion: completion)
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
+
+    private func queryRecentCrossTraining(days: Int, completion: @escaping (Result<[HealthKitCrossTrainingCandidate], Error>) -> Void) {
+        // 조회창 계산은 러닝과 동일하다(startOfDay 없으면 days=1 에서 창이 붕괴한다 — 위 주석 참고).
+        let lookbackAnchor = Calendar.current.date(byAdding: .day, value: -max(days - 1, 0), to: Date()) ?? Date()
+        let startDate = Calendar.current.startOfDay(for: lookbackAnchor)
+        let datePredicate = HKQuery.predicateForSamples(withStart: startDate, end: Date(), options: [])
+        let activityPredicates = Self.crossTrainingActivityTypes.keys.map {
+            HKQuery.predicateForWorkouts(with: $0)
+        }
+        let predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            datePredicate,
+            NSCompoundPredicate(orPredicateWithSubpredicates: activityPredicates)
+        ])
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
+
+        let query = HKSampleQuery(sampleType: HKObjectType.workoutType(), predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { [weak self] _, samples, error in
+            if let error {
+                completion(.failure(error))
+                return
+            }
+            guard let self else {
+                completion(.success([]))
+                return
+            }
+            let workouts = (samples as? [HKWorkout]) ?? []
+            print("[RunContext HealthKit] cross-training workouts=\(workouts.count)")
+            self.buildCrossTrainingCandidates(from: workouts, completion: completion)
+        }
+
+        healthStore.execute(query)
+    }
+
+    /// 지원 종목 → 웹 계약 문자열. `other` 로 뭉뚱그리지 않는 이유는 러닝 특이성 위계가
+    /// 종목마다 다르기 때문이다(아쿠아조깅 > 일립티컬 > 자전거 > 수영, #739).
+    private static let crossTrainingActivityTypes: [HKWorkoutActivityType: String] = [
+        .cycling: "cycling",
+        .swimming: "swimming",
+        .elliptical: "elliptical",
+        .rowing: "rowing"
+    ]
+
+    private func buildCrossTrainingCandidates(
+        from workouts: [HKWorkout],
+        completion: @escaping (Result<[HealthKitCrossTrainingCandidate], Error>) -> Void
+    ) {
+        guard !workouts.isEmpty else {
+            completion(.success([]))
+            return
+        }
+        let heartType = HKQuantityType.quantityType(forIdentifier: .heartRate)
+        let energyType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)
+        var results = [HealthKitCrossTrainingCandidate?](repeating: nil, count: workouts.count)
+        let group = DispatchGroup()
+
+        for (index, workout) in workouts.enumerated() {
+            let modality = Self.crossTrainingActivityTypes[workout.workoutActivityType] ?? "other"
+            let indoor = workout.metadata?[HKMetadataKeyIndoorWorkout] as? Bool
+            let energy = energyType.flatMap {
+                workout.statistics(for: $0)?.sumQuantity()?.doubleValue(for: .kilocalorie())
+            }
+
+            func finish(avg: Double?, max: Double?) {
+                results[index] = HealthKitCrossTrainingCandidate(
+                    externalId: workout.uuid.uuidString,
+                    sourceName: workout.sourceRevision.source.name,
+                    modality: modality,
+                    indoor: indoor,
+                    date: Self.dayFormatter.string(from: workout.startDate),
+                    startAt: Self.isoFormatter.string(from: workout.startDate),
+                    endAt: Self.isoFormatter.string(from: workout.endDate),
+                    durationSec: workout.duration,
+                    avgHeartRate: avg,
+                    maxHeartRate: max,
+                    activeEnergyKcal: energy
+                )
+            }
+
+            guard let heartType else {
+                finish(avg: nil, max: nil)
+                continue
+            }
+            group.enter()
+            queryHeartRate(for: workout, heartType: heartType) { average, maximum in
+                finish(avg: average, max: maximum)
+                group.leave()
+            }
+        }
+
+        group.notify(queue: .main) {
+            completion(.success(results.compactMap { $0 }))
+        }
     }
 
     private func queryRunningWorkouts(startDate startDateText: String, endDate endDateText: String, completion: @escaping (Result<[HealthKitRunCandidate], Error>) -> Void) {

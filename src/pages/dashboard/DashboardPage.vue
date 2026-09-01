@@ -8,6 +8,8 @@ import { useSessionDetailStore } from '@/app/stores/sessionDetailStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
+import { useCrossTrainingStore } from '@/app/stores/crossTrainingStore'
+import { trainingWeekRange } from '@/shared/lib/coaching/periodizedSchedule'
 import type { RestReason } from '@/entities/training-memory/model'
 import type { RunType } from '@/entities/run/model'
 import { buildInjuryCoachSignals } from '@/entities/training-memory/injurySignals'
@@ -122,6 +124,12 @@ function onDashboardMomentAction(moment: CoachMoment) {
 const runDataLoading = computed(() => runStore.loading || (!runStore.loaded && !runStore.error))
 const memoryDataLoading = computed(() => memoryStore.loading)
 const last7 = computed(() => sumDistance(getRunsWithinDays(runs.value, 7, today.value)))
+// 대체 운동(#739): 훈련 주(월~일) 기준 총 분. 러닝 거리와 **합산하지 않는다** — 검증된 환산이 없다.
+const crossTrainingStore = useCrossTrainingStore()
+const crossTrainingWeekMinutes = computed(() => {
+  const { start, end } = trainingWeekRange(today.value)
+  return crossTrainingStore.totalMinutesBetween(start, end)
+})
 const easyRatio = computed(() => getEasyRatio(getRunsWithinDays(runs.value, 30, today.value)))
 // NumbersGrid 평균 심박: 최근 7일 러닝의 avgHeartRate 단순 평균(표시용 뷰 집계 — getRunsWithinDays 재사용).
 const avgHeartRate7d = computed(() => {
@@ -613,6 +621,15 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
       <StatCard label="강훈련" :value="`${hardSessions}회`" hint="최근 7일" dot tone="warning" :loading="runDataLoading" interactive @click="trendMetric = 'hard'" />
       <StatCard label="평균 심박" :value="avgHeartRate7d ? `${avgHeartRate7d}bpm` : '—'" hint="최근 7일" dot tone="accent" :loading="runDataLoading" :value-kind="avgHeartRate7d ? 'metric' : 'text'" />
     </MetricGrid>
+
+    <!--
+      러닝 대체 운동(#739). 주간 거리 **옆에 나란히** 둔다 — 절대 더하지 않는다.
+      검증된 종목 간 환산 공식이 없어 분(min)으로만 말한다(리서치 ⚠1·⚠2).
+    -->
+    <p v-if="crossTrainingWeekMinutes > 0" class="cross-training-line">
+      🚴 이번 주 대체 운동 <strong>{{ crossTrainingWeekMinutes }}분</strong>
+      <small>러닝 거리와 합산하지 않아요</small>
+    </p>
 
     <!-- CoachInsights(1장): 코치 탭과 같은 모먼트 엔진 top 1 — 시트형 액션은 코치 탭으로 이동 -->
     <CoachMomentCard
