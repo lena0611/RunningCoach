@@ -212,6 +212,10 @@ struct RunContextWebView: UIViewRepresentable {
             window.addEventListener('unhandledrejection', function(event) {
               window.webkit.messageHandlers.runContextLog.postMessage('JS rejection: ' + String(event.reason));
             });
+            // 네이티브 능력 선언(#739). 웹은 자동배포되지만 앱은 수동 설치라, 웹이 먼저 나가면
+            // 구버전 앱이 모르는 브리지 요청을 받고 "지원하지 않는 요청입니다" 를 띄운다(#719 계열).
+            // 새 브리지 요청은 반드시 여기 이름을 확인하고 보낸다. 구버전엔 이 배열이 없다.
+            window.RunContextNativeCapabilities = ['crossTraining'];
             """,
             injectionTime: .atDocumentStart,
             forMainFrameOnly: false
@@ -476,6 +480,23 @@ struct RunContextWebView: UIViewRepresentable {
                         case .failure(let error):
                             print("[RunContext HealthKit] refresh failed:", error.localizedDescription)
                             self?.sendRunUpdateError(externalId: request.externalId, message: error.localizedDescription)
+                        }
+                    }
+                }
+
+            case "requestRecentCrossTraining":
+                // 러닝 대체 운동(#739). 새 권한 없이 같은 workoutType 권한으로 읽는다.
+                let days = body["days"] as? Int ?? 14
+                print("[RunContext HealthKit] requestRecentCrossTraining days=\(days)")
+                importer.fetchRecentCrossTraining(days: days) { [weak self] result in
+                    DispatchQueue.main.async {
+                        switch result {
+                        case .success(let candidates):
+                            print("[RunContext HealthKit] cross-training candidates=\(candidates.count)")
+                            self?.sendCrossTraining(candidates)
+                        case .failure(let error):
+                            print("[RunContext HealthKit] cross-training failed:", error.localizedDescription)
+                            self?.sendError(error.localizedDescription)
                         }
                     }
                 }
@@ -877,6 +898,17 @@ struct RunContextWebView: UIViewRepresentable {
                 webView.evaluateJavaScript("window.RunContextHealthKit?.receiveRuns(\(json));")
             } catch {
                 sendError("HealthKit 응답 직렬화 실패")
+            }
+        }
+
+        private func sendCrossTraining(_ candidates: [HealthKitCrossTrainingCandidate]) {
+            guard let webView else { return }
+            do {
+                let data = try JSONEncoder().encode(candidates)
+                let json = String(data: data, encoding: .utf8) ?? "[]"
+                webView.evaluateJavaScript("window.RunContextHealthKit?.receiveCrossTraining(\(json));")
+            } catch {
+                sendError("교차훈련 응답 직렬화 실패")
             }
         }
 

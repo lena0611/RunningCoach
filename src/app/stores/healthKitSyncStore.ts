@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { useAuthStore } from '@/app/stores/authStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { useCrossTrainingStore } from '@/app/stores/crossTrainingStore'
 import { useSessionDetailStore } from '@/app/stores/sessionDetailStore'
 import { useCompetitionStore } from '@/app/stores/competitionStore'
 import { SELF_RACE_TAG } from '@/entities/competition/model'
@@ -11,6 +12,7 @@ import type { RunLog } from '@/entities/run/model'
 import {
   registerHealthKitBridge,
   requestHealthKitRuns,
+  requestHealthKitCrossTraining,
   resetHealthKitReadAuth,
   requestHealthKitRunsInRange,
   requestHealthKitRunUpdate,
@@ -79,7 +81,9 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         onError: (message) => this.handleError(message),
         onRunUpdateError: (externalId, message) => this.handleRunUpdateError(externalId, message),
         onVo2Max: (sample) => void this.handleVo2Max(sample),
-        onVo2MaxError: (message) => this.handleVo2MaxError(message)
+        onVo2MaxError: (message) => this.handleVo2MaxError(message),
+        // 러닝 대체 운동(#739) — 별도 스토어로만 흘려보낸다. RunLog 로는 절대 들어가지 않는다.
+        onCrossTraining: (sessions) => void useCrossTrainingStore().ingestFromHealthKit(sessions)
       })
       this.initialized = true
     },
@@ -141,7 +145,11 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
 
       try {
         await ensureRunStoreLoaded()
-        requestHealthKitRuns(getLookbackDays(getLatestSavedDate()))
+        const lookbackDays = getLookbackDays(getLatestSavedDate())
+        requestHealthKitRuns(lookbackDays)
+        // 같은 회차에 대체 운동도 훑는다(#739). 새 권한 없이 같은 workoutType 권한으로 읽는다 —
+        // 러닝만 들어오던 건 권한이 아니라 조회 조건 때문이었다. 실패해도 러닝 동기화를 막지 않는다.
+        requestHealthKitCrossTraining(lookbackDays)
       } catch (err) {
         this.syncing = false
         this.status = ''

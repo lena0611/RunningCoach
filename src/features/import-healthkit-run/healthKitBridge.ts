@@ -75,6 +75,26 @@ type HealthKitBridgeHandlers = {
   onRunUpdateError: (externalId: string | null, message: string) => void
   onVo2Max?: (sample: HealthKitVo2MaxSample) => void
   onVo2MaxError?: (message: string) => void
+  /** 러닝 대체 운동(#739). 러닝과 **별도 경로** — RunLog 로 흘러들어가지 않는다. */
+  onCrossTraining?: (sessions: HealthKitCrossTrainingCandidate[]) => void
+}
+
+/**
+ * 러닝 대체 운동 후보(#739). **거리·페이스가 없다** — 검증된 종목 간 환산 공식이 없어서
+ * 사실만 싣는다(무엇을·얼마나 오래·심박·칼로리). 실내 자전거는 GPS 거리 자체가 없다.
+ */
+export type HealthKitCrossTrainingCandidate = {
+  externalId: string
+  sourceName: string | null
+  modality: 'cycling' | 'swimming' | 'elliptical' | 'aqua_jog' | 'rowing' | 'other'
+  indoor: boolean | null
+  date: string
+  startAt: string
+  endAt: string
+  durationSec: number | null
+  avgHeartRate: number | null
+  maxHeartRate: number | null
+  activeEnergyKcal: number | null
 }
 
 declare global {
@@ -87,7 +107,10 @@ declare global {
       receiveRunUpdateError: (externalId: string | null, message: string) => void
       receiveVo2Max: (sample: HealthKitVo2MaxSample) => void
       receiveVo2MaxError: (message: string) => void
+      receiveCrossTraining: (sessions: HealthKitCrossTrainingCandidate[]) => void
     }
+    /** 네이티브가 document-start 에 주입하는 지원 기능 목록(#739). 구버전 앱엔 없다. */
+    RunContextNativeCapabilities?: string[]
     webkit?: {
       messageHandlers?: {
         runContextHealthKit?: {
@@ -141,8 +164,47 @@ export function registerHealthKitBridge(handlers: HealthKitBridgeHandlers) {
     },
     receiveVo2MaxError(message) {
       handlers.onVo2MaxError?.(message || 'HealthKit VO2max 조회 실패')
+    },
+    receiveCrossTraining(sessions) {
+      handlers.onCrossTraining?.((sessions ?? []).map(normalizeCrossTraining))
     }
   }
+}
+
+const CROSS_TRAINING_MODALITIES = new Set(['cycling', 'swimming', 'elliptical', 'aqua_jog', 'rowing', 'other'])
+
+/** 네이티브 응답을 방어적으로 정규화한다(구버전 앱·필드 누락 대비). 모르는 종목은 'other'. */
+function normalizeCrossTraining(raw: HealthKitCrossTrainingCandidate): HealthKitCrossTrainingCandidate {
+  const modality = CROSS_TRAINING_MODALITIES.has(raw?.modality)
+    ? raw.modality
+    : ('other' as HealthKitCrossTrainingCandidate['modality'])
+  return {
+    externalId: typeof raw?.externalId === 'string' ? raw.externalId : '',
+    sourceName: typeof raw?.sourceName === 'string' ? raw.sourceName : null,
+    modality,
+    indoor: typeof raw?.indoor === 'boolean' ? raw.indoor : null,
+    date: typeof raw?.date === 'string' ? raw.date : '',
+    startAt: typeof raw?.startAt === 'string' ? raw.startAt : '',
+    endAt: typeof raw?.endAt === 'string' ? raw.endAt : '',
+    durationSec: normalizeNumber(raw?.durationSec ?? null),
+    avgHeartRate: normalizeNumber(raw?.avgHeartRate ?? null),
+    maxHeartRate: normalizeNumber(raw?.maxHeartRate ?? null),
+    activeEnergyKcal: normalizeNumber(raw?.activeEnergyKcal ?? null)
+  }
+}
+
+/**
+ * 러닝 대체 운동을 조회한다(#739). 새 권한 불필요 — workoutType 하나가 모든 종목을 덮는다.
+ *
+ * ⚠️ **네이티브 능력을 확인하고 보낸다.** 웹은 자동배포되지만 앱은 수동 설치라, 웹이 먼저 나가면
+ * 구버전 앱이 모르는 요청을 받고 "지원하지 않는 HealthKit 요청입니다" 를 띄운다 —
+ * 2026-08-31 에 실제로 겪은 그 오류다(#719/#720 계열). 구버전엔 이 배열이 없으므로 조용히 건너뛴다.
+ */
+export function requestHealthKitCrossTraining(days = 14) {
+  const handler = window.webkit?.messageHandlers?.runContextHealthKit
+  if (!handler) return
+  if (!window.RunContextNativeCapabilities?.includes('crossTraining')) return
+  handler.postMessage({ type: 'requestRecentCrossTraining', days })
 }
 
 function normalizeVo2MaxSample(sample: HealthKitVo2MaxSample | null | undefined): HealthKitVo2MaxSample {

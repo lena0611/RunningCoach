@@ -6,6 +6,7 @@ import { useLevelStore } from '@/app/stores/levelStore'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { useCrossTrainingStore } from '@/app/stores/crossTrainingStore'
 import { getDisabledNotificationItems, useSettingsStore } from '@/app/stores/settingsStore'
 import { useWatchRaceStore } from '@/app/stores/watchRaceStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
@@ -42,6 +43,7 @@ const authStore = useAuthStore()
 const healthKitSyncStore = useHealthKitSyncStore()
 const memoryStore = useMemoryStore()
 const runStore = useRunStore()
+const crossTrainingStore = useCrossTrainingStore()
 const settingsStore = useSettingsStore()
 const weatherStore = useWeatherStore()
 const levelStore = useLevelStore()
@@ -315,7 +317,9 @@ watch(
     if (!isAuthenticated) return
     await Promise.all([
       memoryStore.loading ? Promise.resolve() : memoryStore.load(),
-      runStore.loaded || runStore.loading ? Promise.resolve() : runStore.load()
+      runStore.loaded || runStore.loading ? Promise.resolve() : runStore.load(),
+      // 러닝 대체 운동(#739). 러닝과 **별도 스토어** — 볼륨·VDOT·앵커 계산에는 들어가지 않는다.
+      crossTrainingStore.loaded || crossTrainingStore.loading ? Promise.resolve() : crossTrainingStore.load()
     ])
     await healthKitSyncStore.syncAfterActivation()
     await weatherStore.refreshAfterActivation()
