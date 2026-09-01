@@ -1069,7 +1069,8 @@ function applySessionProposal(report: CoachReport) {
   const proposal = report.coachScheduleProposal
   if (!proposal?.targetDate) return
   dismissScheduleProposal(report)
-  useCoachActionBridgeStore().focusSession(proposal.targetDate)
+  // 도착지에서 눌러야 할 버튼 이름을 함께 넘긴다(#741) — 이 버튼은 이동만 하고 확정은 세션 카드에서 한다.
+  useCoachActionBridgeStore().focusSession(proposal.targetDate, proposal.actionType)
   coachStore.close()
   void router.push('/coach')
 }
@@ -1327,6 +1328,8 @@ function stopCoachThinkingTimer() {
                     </button>
                     <button class="ghost" type="button" @click="dismissScheduleProposal(report)">괜찮아요</button>
                   </div>
+                  <!-- #741: 이 버튼들은 **이동만** 한다. 그걸 안 밝히면 사용자는 이미 처리된 줄 안다(실사고). -->
+                  <small class="coach-proposal-hint">누르면 해당 화면이 열려요 — 최종 확정은 거기서 합니다.</small>
                 </article>
                 <!--
                   대화 삭제(#734). 턴의 **맨 끝**에 은은하게 둔다 — 파괴적 동작이 답변·메타보다 위에 오면

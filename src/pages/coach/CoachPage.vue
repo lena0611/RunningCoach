@@ -11,6 +11,7 @@ import { useWeatherStore } from '@/app/stores/weatherStore'
 import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
 import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
 import { useCoachActionBridgeStore } from '@/app/stores/coachActionBridgeStore'
+import { destinationActionLabel } from '@/pages/coach/proposalDestination'
 import { useCoachStore } from '@/app/stores/coachStore'
 import type { TrainingPhaseName } from '@/entities/training-memory/model'
 import { isActiveSession, type ScheduledSession } from '@/entities/training-schedule/model'
@@ -114,6 +115,9 @@ watch(
       const index = scheduleDays.value.findIndex((day) => day.date === date)
       if (index >= 0) {
         activeDayIndex.value = index
+        // 다음 한 걸음을 말해준다(#741). 이동만 해놓고 침묵하면 사용자는 이미 처리된 줄 알고 홈으로 간다.
+        const label = destinationActionLabel(bridge.focusAction, scheduleDays.value[index]?.state)
+        if (label) toastStore.success(`아직 반영 전이에요. 이 카드에서 '${label}'를 누르면 확정됩니다.`)
         bridge.clearFocus()
         return
       }
