@@ -15,6 +15,7 @@ import { weekEndTriage } from '@/shared/lib/coaching/weeklyTriage'
 import { buildDoubleSuggestion, evaluateDoubleEligibility, type DoubleEligibility } from '@/shared/lib/coaching/doubleSession'
 import type { CriterionStatus } from '@/shared/lib/coaching/progressionCriteria'
 import { sessionTypeLabel } from '@/shared/lib/coaching/sessionBriefing'
+import { isChronicBaselineAfterLayoff } from '@/shared/lib/coaching/returnAnchor'
 import { dateOnly, diffDaysIso, type useTrainingWeek } from '@/pages/dashboard/useTrainingWeek'
 import { loadMomentDismissals, persistMomentDismissal, type MomentDismissalMap } from './momentDismissal'
 
@@ -189,6 +190,15 @@ export function useCoachMoments(week: TrainingWeek) {
     for (const i of sessionIntentStore.intents) if (i.runId) ids.add(i.runId)
     return ids
   })
+  /**
+   * 만성부하 비교 기준선이 공백에 눌렸는가(#743). 최근 60일 안에 유의미한 공백(≥7일 무런)이 있으면
+   * 직전 30일(비교 분모)이 인위적으로 작아져 증가율이 폭증한다 — SSOT 가 말하는 **비율 인공물**이다.
+   * 창을 60일로 잡는 이유: 만성부하가 보는 구간이 최근 60일(최근 30 vs 직전 30)이기 때문이다.
+   */
+  const chronicBaselineAfterLayoff = computed(() =>
+    isChronicBaselineAfterLayoff(runs.value.map((run) => run.date), today.value)
+  )
+
   // 부상 악화(#727): 라이터 수렴점이 찍은 severityRaisedAt 도장을 모먼트가 읽을 plain 신호로 편다.
   // 도장이 없으면 null — "나빠졌다"는 사실은 메모리(현재값만 보관)에서 파생할 수 없어 도장이 유일한 출처다.
   const injuryWorsenedCtx = computed(() => {
@@ -210,6 +220,7 @@ export function useCoachMoments(week: TrainingWeek) {
         injuryWorsened: injuryWorsenedCtx.value,
         attributedRunIds: attributedRunIds.value,
         chronic: chronicLoad.value,
+        chronicBaselineAfterLayoff: chronicBaselineAfterLayoff.value,
         injury: activeInjury.value,
         today: today.value,
         painProbe: painProbeCtx.value,

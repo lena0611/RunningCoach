@@ -3,7 +3,7 @@ import type { RunLog } from '@/entities/run/model'
 import type { TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
 import { getRecentInjuryHistory, isFullMarathonGoal, normalizeTrainingMemory } from '@/entities/training-memory/model'
 import type { TrainingGoal } from '@/entities/training-memory/model'
-import { getAgeLoadWeight, getCadenceTrend, getChronicLoadTrend, getLongestRunKmWithinDays, getNextSessionRecommendation } from './runStats'
+import { getAgeLoadWeight, getCadenceTrend, getChronicLoadTrend, getFatigueWarning, getLongestRunKmWithinDays, getNextSessionRecommendation } from './runStats'
 
 const today = new Date('2026-06-02T00:00:00')
 const dayNames = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
@@ -252,5 +252,42 @@ describe('getCadenceTrend (§2-A 보조 신호 — 오버스트라이드)', () =
   it('이상치(자릿수 다른 per-lap 같은 값)는 sanitizeCadence가 제외 → 유효 케이던스 없으면 unknown', () => {
     const trend = getCadenceTrend([runCad(daysAgo(3), 1500), runCad(daysAgo(10), 12)], today)
     expect(trend.status).toBe('unknown')
+  })
+})
+
+// (#743) 2026-09-02 실사고: 부상으로 쉬고 복귀 중인데 "30일 누적 182% 급증, 회복 주간을 넣으세요"가
+// 떴다. 기준선(직전 30일)이 공백에 눌린 **비율 인공물**이라 복귀자에게 정반대 조언이 된다.
+// SSOT §휴식과 복귀가 이 비율을 복귀 게이트로 쓰지 말라고 명시한다.
+describe('getFatigueWarning 복귀 가드 (#743)', () => {
+  // 직전 30일이 눌리고 최근 30일이 큰, 전형적 복귀 형태
+  const spikeShape = [
+    run(daysAgo(3), 12), run(daysAgo(6), 12), run(daysAgo(10), 12), run(daysAgo(14), 12),
+    run(daysAgo(20), 10), run(daysAgo(40), 10), run(daysAgo(50), 11)
+  ]
+
+  it('공백 뒤 복귀면 30일 비율 경고를 내지 않는다', () => {
+    const warned = getFatigueWarning(spikeShape, today, 0, false)
+    const guarded = getFatigueWarning(spikeShape, today, 0, true)
+    expect(warned.message).toContain('30일')
+    expect(guarded.message).not.toContain('대비')
+    expect(guarded.caution).toBe(false)
+  })
+
+  it('절대량 경고(7일 35km 이상)는 복귀 중에도 살아 있다 — 비율이 아니라 총량이다', () => {
+    const acute = [run(daysAgo(1), 14), run(daysAgo(3), 13), run(daysAgo(5), 13), run(daysAgo(40), 20)]
+    const guarded = getFatigueWarning(acute, today, 0, true)
+    expect(guarded.caution).toBe(true)
+    expect(guarded.message).toContain('볼륨이 높습니다')
+  })
+
+  it('7일 **비율** 경고도 복귀 중엔 막는다 — 이전 7일이 0에 가까워 같은 인공물이다', () => {
+    // 최근 7일 24km / 이전 7일 6km → 비율 4배지만 절대량은 임계 미만
+    const ratioOnly = [run(daysAgo(1), 12), run(daysAgo(4), 12), run(daysAgo(9), 6)]
+    expect(getFatigueWarning(ratioOnly, today, 0, false).message).toContain('이전 7일 대비')
+    expect(getFatigueWarning(ratioOnly, today, 0, true).caution).toBe(false)
+  })
+
+  it('기본값은 종전 동작 — 인자를 안 주면 경고가 그대로 난다(회귀 방지)', () => {
+    expect(getFatigueWarning(spikeShape, today, 0).message).toBe(getFatigueWarning(spikeShape, today, 0, false).message)
   })
 })

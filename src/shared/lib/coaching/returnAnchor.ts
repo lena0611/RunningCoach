@@ -36,7 +36,27 @@ const LAYOFF_LOOKBACK_DAYS = 120
 /** 부상 전 볼륨을 재는 창(일) — 공백 시작 직전 4주. */
 const PRE_LAYOFF_WINDOW_DAYS = 28
 
+/**
+ * 만성부하 비교가 보는 창(일). 최근 30일 vs 직전 30일이므로 60일이다 — 이 안에 공백이 있으면
+ * 분모가 눌려 증가율이 폭증한다(#743).
+ */
+const CHRONIC_BASELINE_WINDOW_DAYS = 60
+
 export type RecentLayoff = { startMs: number; days: number }
+
+/**
+ * 만성부하 비교 기준선(직전 30일)이 **공백에 눌렸는가**(#743).
+ *
+ * SSOT §휴식과 복귀: *"휴식 직후 만성부하(분모)≈0이라 ACWR이 기계적으로 폭증하는 **비율
+ * 인공물**이고, 대형 코호트(BJSM 2025)에선 ACWR 스파이크가 오히려 부상 감소와 연관됐다.
+ * 복귀 게이트로 신뢰 금지."*
+ *
+ * 이게 참이면 "볼륨 급증" 경고를 띄우지 않는다 — 부상으로 쉬고 돌아온 사람에게 다시 쉬라는
+ * 말이 되기 때문이다(2026-09-02 실사고). 복귀기의 진짜 가드레일은 단일 세션 +10% 상한이다.
+ */
+export function isChronicBaselineAfterLayoff(runDates: string[], today: Date): boolean {
+  return Boolean(findRecentLayoff(runDates, today, CHRONIC_BASELINE_WINDOW_DAYS))
+}
 
 /**
  * 되돌아보기 창 안에서 **가장 최근의 유의미한 공백**(≥7일 무런)을 찾는다.

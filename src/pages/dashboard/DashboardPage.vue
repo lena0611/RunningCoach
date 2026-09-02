@@ -10,6 +10,7 @@ import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
 import { useCrossTrainingStore } from '@/app/stores/crossTrainingStore'
 import { trainingWeekRange } from '@/shared/lib/coaching/periodizedSchedule'
+import { isChronicBaselineAfterLayoff } from '@/shared/lib/coaching/returnAnchor'
 import type { RestReason } from '@/entities/training-memory/model'
 import type { RunType } from '@/entities/run/model'
 import { buildInjuryCoachSignals } from '@/entities/training-memory/injurySignals'
@@ -430,7 +431,16 @@ const goalBenchmarkText = computed(() => {
   return `${raceBenchmarkCoverageText.value} · 현재 거리 데이터 없음`
 })
 
-const fatigueWarning = computed(() => getFatigueWarning(runs.value, today.value, ageLoadWeight.value))
+// 복귀 중이면 30일 비율 경고를 내지 않는다(#743) — 공백에 눌린 분모가 만든 비율 인공물이라
+// "회복 주간을 넣으라"가 복귀자에게 정반대 조언이 된다(SSOT §휴식과 복귀).
+const fatigueWarning = computed(() =>
+  getFatigueWarning(
+    runs.value,
+    today.value,
+    ageLoadWeight.value,
+    isChronicBaselineAfterLayoff(runs.value.map((run) => run.date), today.value)
+  )
+)
 const volumeWarning = computed(() => fatigueWarning.value.message)
 const volumeCaution = computed(() => fatigueWarning.value.caution)
 
