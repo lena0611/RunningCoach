@@ -34,7 +34,8 @@ MVP 단계에서는 단순 확인/검토/조사 요청이 아닌 한 중간 확�
 - `supabase/functions/coach-run/injuryTemporalFilter.ts`
 - `src/shared/api/coachRepository.ts`
 - `src/features/generate-ai-context/buildPrompt.ts`
-- `src/features/generate-ai-context/ruleBasedCoach.ts`
+- `src/shared/lib/coaching/sessionBriefing.ts` (결정론 프리런 브리핑 — 옛 ruleBasedCoach.ts 는 호출부 0건·기온→점수 공식 포함으로 #729 에서 삭제)
+- `src/shared/lib/coaching/sessionQuality.ts` (결정론 사후 채점)
 - `src/pages/run-log/RunLogPage.vue`
 
 ## 제외 범위
