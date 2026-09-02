@@ -8,7 +8,7 @@ PaceLAB의 모든 탭·전환 UI 스펙. 콘텐츠 페이지의 탭성 UI(뷰 �
 |---|---|---|
 | `BottomNav` | 하단 글로벌 내비 (5탭) | `<BottomNav :active>` |
 | `SegmentTabs` | 콘텐츠 내 모든 탭/전환 (variant 5종) | `<SegmentTabs :variant :tone :items :active @change>` |
-| `WeekStrip` | 요약 홈 날짜 스트립 | `<WeekStrip :days :today @select>` |
+| `WeekStrip` | 주간 날짜 스트립 (요약·코치 공용) | `<WeekStrip :days :today :active? @select(date)>` |
 
 ---
 
@@ -56,7 +56,7 @@ PaceLAB의 모든 탭·전환 UI 스펙. 콘텐츠 페이지의 탭성 UI(뷰 �
 | 서로 배타적인 2개 모드 | `pill` |
 | 카드 내부 조밀한 전환 (km↔mi, 100/500/1000m) | `group` |
 | 글로벌 화면 이동 | `BottomNav` — 콘텐츠 탭으로 화면 이동 금지 |
-| 날짜 선택 (요약 홈) | `WeekStrip` |
+| 날짜 프리뷰(요약) · 날짜 선택(코치) | `WeekStrip` — `active` 유무로 두 모드 |
 
 **금지**
 - 같은 variant를 한 화면에 계층 구분 없이 중첩
@@ -76,7 +76,8 @@ PaceLAB의 모든 탭·전환 UI 스펙. 콘텐츠 페이지의 탭성 UI(뷰 �
 
 아래는 형태상 탭처럼 보여도 컴포넌트 계약과 달라 이전 시 회귀가 난다. 이전하려면 별도 설계가 먼저다.
 
-- **코치 `WeekTrainingCarousel`**: 요일 스트립 + 슬라이드 좌우 드래그 제스처 + `data-no-swipe`(루트 페이저 분리) + 같은날 더블 `×2` shoulder 배지. WeekStrip의 단순 프리뷰 계약과 다른 인터랙티브 위젯.
+- **코치 `WeekTrainingCarousel`**: 슬라이드 좌우 드래그 제스처 + `data-no-swipe`(루트 페이저 분리) + scoped slot 슬라이드. **위젯 통째 이전은 여전히 금지**다.
+  ↳ 다만 **데이 스트립은 2026-09-02(#745)에 공유했다.** 같은 "한 주"가 탭마다 다른 모양이라 사용자가 다른 것으로 읽었다. `WeekStrip` 에 `active`(선택 날짜)를 주면 선택 위젯이 되고(tablist/tab/aria-selected + 활성 스킨 + `×2` 배지), 안 주면 요약의 프리뷰(role=group)다. 캐러셀은 제스처·슬라이드만 소유한다. 코치 스트립의 세션명 텍스트는 뺐다 — 바로 아래 슬라이드가 전부 보여줘 중복이었다.
 - **`RescheduleSheet` 요일 그리드**: 4열 grid 날짜 피커(바텀시트 내부). 가로 스트립이 아니다.
 - **`TrendsPage` 렌즈 리스트**: 활성 상태 없이 즉시 StackPage 상세로 드릴다운하는 네비게이션 리스트(각 행에 값·설명·chevron). 탭이 아니라 ListRow 계열. `e2e/stackpage-275.spec.ts`가 `.trend-lens-row`를 참조한다.
 
