@@ -8,6 +8,7 @@ import { useSessionDetailStore } from '@/app/stores/sessionDetailStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
+import { useCoachActionBridgeStore } from '@/app/stores/coachActionBridgeStore'
 import { useCrossTrainingStore } from '@/app/stores/crossTrainingStore'
 import { trainingWeekRange } from '@/shared/lib/coaching/periodizedSchedule'
 import { isChronicBaselineAfterLayoff } from '@/shared/lib/coaching/returnAnchor'
@@ -393,6 +394,16 @@ const heroTopic = computed<HeroIllustrationTopic>(() => {
 function goCoachTab() {
   router.push('/coach')
 }
+/**
+ * 요약 주간 스트립에서 고른 날로 코치 탭을 연다(#745).
+ * 예전엔 날짜를 버리고 탭만 넘겨서 3일을 눌러도 오늘이 열렸다 — 고른 날이 조용히 사라졌다.
+ * 이동 브리지(coachActionBridgeStore)는 코치 제안(#639)이 쓰던 것을 그대로 재사용한다.
+ * 액션은 넘기지 않는다 — 단순 조회라 "여기서 확정하세요" 안내가 붙으면 안 된다(#741).
+ */
+function goCoachTabForDate(date: string) {
+  useCoachActionBridgeStore().focusSession(date)
+  goCoachTab()
+}
 
 const goalDdayText = computed(() => {
   const target = activeGoal.value.targetDate
@@ -520,7 +531,7 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
 <template>
   <PageLayout variant="dashboard">
     <!-- 주간 스트립(리디자인 ①b): 월~일 요일 칩 — 오늘 강조·타입 dot·완료 ✓. 탭하면 코치 탭(주간 캐러셀). -->
-    <WeekStrip :days="scheduleDays" :today="todayDate" @select="goCoachTab" />
+    <WeekStrip :days="scheduleDays" :today="todayDate" @select="goCoachTabForDate" />
 
     <!-- 쉬는 중(#473): 복귀 컨트롤 히어로 — 캐러셀(코치 탭) rested 분기에서 이동(오늘 뭐하지 즉답 원칙) -->
     <article v-if="restState.active" class="hero-card rest-hero hero-topic-recovery">
