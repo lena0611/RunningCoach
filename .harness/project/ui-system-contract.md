@@ -127,6 +127,7 @@ PaceLAB은 외부 UI 라이브러리를 전면 도입하지 않는다. 대신 �
 - stack 화면 안에서 지도, 요약 패널, CTA 같은 요소를 `position: sticky`로 고정할 때는 `top: 0`, 헤더 높이, 음수 보정 같은 추정값으로 완료하지 않는다.
 - sticky 기준은 실제 스크롤 컨테이너와 stack header의 관계로 결정한다. 구현 전 해당 요소가 viewport 기준으로 붙는지, stack content 기준으로 붙는지 `getBoundingClientRect()`로 확인한다.
 - stack header 아래에 정확히 맞물려야 하는 sticky 요소는 `header.getBoundingClientRect().bottom - scrollContainer.getBoundingClientRect().top` 같은 실제 렌더링 좌표를 CSS 변수로 반영하는 방식을 우선한다.
+- **전역 `button` base 를 먼저 지우고 커스텀 버튼을 만든다.** `styles.css` 의 `button {}` 이 gradient background · `box-shadow` · `text-shadow` · `min-height: 48px` · `padding: 0 18px` 를 **모든 버튼에** 건다. 투명/텍스트형 버튼을 새로 만들면 배경만 지워지고 **그림자는 남아** "테두리 없이 떠 있는 상자"가 된다(2026-09-02 실측: `rgba(52,211,153,.16) 0 10px 22px`). 커스텀 버튼은 `box-shadow: none`·`text-shadow: none`·`min-height`·`padding` 을 **명시적으로** 재설정하거나, 이미 그 리셋을 담은 `button.ghost`/`SecondaryButton` 을 쓴다. 좌우 패딩 0 은 의도가 아니면 만들지 않는다.
 - `.memory-stack-content`처럼 공통 padding을 가진 컨테이너를 page-specific 화면에서 덮어쓸 때는 CSS 선언 순서와 선택자 특이성을 함께 확인한다. 공통 선언이 뒤에서 다시 이기면 `padding-top: 0` 같은 보정이 적용된 것처럼 보여도 실제 모바일에서는 16px 틈이 남을 수 있다.
 - sticky 요소의 z-index만 올려서 겹침을 숨기는 방식은 최종 해결로 보지 않는다. header bottom과 sticky target top의 실제 좌표 차이가 0px인지 확인한다.
 - 지도와 선택 구간 정보바처럼 하나로 붙어 다녀야 하는 요소는 각각 sticky로 만들지 말고 하나의 sticky group 안에 묶는다. group 내부 gap은 0으로 두고, `overflow: hidden`과 radius를 group에 적용해 뒤 스크롤 콘텐츠가 틈으로 보이지 않게 한다.

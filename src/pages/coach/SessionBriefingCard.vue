@@ -265,17 +265,24 @@ watch(() => props.briefing, () => { detailOpen.value = false })
 .brief-keypoint-text {
   overflow-wrap: anywhere;
 }
+/*
+  ⚠️ 전역 `button` base 가 gradient bg · box-shadow · text-shadow · min-height:48px · padding:0 18px 를
+  모두 강제한다. 커스텀 버튼은 **쓰지 않는 것까지 명시적으로 지워야** 한다 — 안 지우면 투명 배경 위에
+  녹색 그림자만 떠서 "테두리 없는 상자"처럼 보인다(2026-09-02 실측: rgba(52,211,153,.16) 0 10px 22px).
+*/
 .brief-detail-toggle {
   display: inline-block;
   margin-left: 6px;
-  padding: 0;
-  border: none;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border, rgba(120, 120, 120, 0.3));
+  border-radius: var(--radius-pill, 999px);
   background: transparent;
+  box-shadow: none;
+  text-shadow: none;
   color: var(--color-primary);
   font-size: var(--text-micro-size);
   font-weight: 700;
-  text-decoration: underline;
-  text-underline-offset: 3px;
   cursor: pointer;
   white-space: nowrap;
 }

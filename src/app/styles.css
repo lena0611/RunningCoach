@@ -3871,9 +3871,13 @@ button.run-session-row {
 .coach-turn-delete {
   display: block;
   margin: 0 0 10px;
-  padding: 0;
+  /* 전역 button base 의 shadow·min-height 를 지운다 — 안 지우면 투명 배경 위에 그림자만 뜬다(#750). */
+  min-height: 0;
+  padding: 2px 0;
   border: none;
   background: transparent;
+  box-shadow: none;
+  text-shadow: none;
   color: var(--color-muted-2);
   font-size: var(--text-micro-size);
   text-decoration: underline;

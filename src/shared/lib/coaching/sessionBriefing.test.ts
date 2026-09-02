@@ -323,3 +323,20 @@ describe('더위 조건 안내 (#729)', () => {
     expect(heatIndex).toBeGreaterThan(0)
   })
 })
+
+// (#743 후속, 2026-09-02) 30일 비율 경고가 **세 번째 표면**(브리핑 조심할 점)에도 있었다.
+// 모먼트·피로경고만 막고 여기를 놓쳐, 복귀 중인데 "무리한 상향은 미루세요"가 계속 떴다.
+describe('복귀 중 부하 급증 주의 억제 (#743)', () => {
+  const spike: ChronicLoadTrend = { status: 'spike', increasePct: 182, last30Km: 58, prev30Km: 21, spikeThreshold: 50, risingThreshold: 30 }
+  const cautions = (b: ReturnType<typeof buildSessionBriefing>) => b.cautions.join(' ')
+
+  it('복귀 중이면 30일 비율 주의를 내지 않는다', () => {
+    const b = buildSessionBriefing(session({ sessionType: 'Easy' }), { goal, injury: null, chronic: spike, baselineAfterLayoff: true })
+    expect(cautions(b)).not.toContain('급증')
+  })
+
+  it('공백이 없으면 그대로 경고한다 — 진짜 과부하까지 덮지 않는다', () => {
+    const b = buildSessionBriefing(session({ sessionType: 'Easy' }), { goal, injury: null, chronic: spike })
+    expect(cautions(b)).toContain('급증')
+  })
+})
