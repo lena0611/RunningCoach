@@ -2723,6 +2723,12 @@ button.run-session-row {
   box-shadow: none;
 }
 
+/* 코치 주간 네비(#747)도 이 버튼을 공유한다 — 거긴 앞뒤 한계가 있어 비활성 상태가 필요하다. */
+.calendar-arrow-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .calendar-arrow-button svg {
   width: 26px;
   height: 26px;

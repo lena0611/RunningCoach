@@ -634,9 +634,14 @@ async function applyPhaseTransition() {
 
     <!-- 주 단위 네비(월~일 고정 스트립): 지난주·다음주 조망 -->
     <div v-if="hasSchedule" class="week-nav">
-      <button type="button" class="week-nav-btn" :disabled="weekOffset <= -8" aria-label="지난 주" @click="navWeek(-1)">◀</button>
+      <!-- 화살표는 기록 탭 달력과 **같은 전역 클래스·같은 SVG**를 쓴다(#747). 스타일 복사가 아니라 공유다. -->
+      <button class="calendar-arrow-button" type="button" :disabled="weekOffset <= -8" aria-label="지난 주" @click="navWeek(-1)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+      </button>
       <span class="week-nav-label">{{ weekLabel }}</span>
-      <button type="button" class="week-nav-btn" :disabled="weekOffset >= 8" aria-label="다음 주" @click="navWeek(1)">▶</button>
+      <button class="calendar-arrow-button" type="button" :disabled="weekOffset >= 8" aria-label="다음 주" @click="navWeek(1)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+      </button>
     </div>
 
     <!-- 목표 기반 주간 캐러셀 (에픽 #362) -->
@@ -931,22 +936,6 @@ async function applyPhaseTransition() {
   font-size: var(--text-caption-size);
   font-weight: 600;
   color: var(--color-text);
-}
-.week-nav-btn {
-  flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-button, 12px);
-  border: 1px solid var(--color-border, rgba(120, 120, 120, 0.2));
-  background: var(--color-surface-card);
-  color: var(--color-muted);
-  box-shadow: none;
-  cursor: pointer;
-  font-size: 12px;
-}
-.week-nav-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
 }
 
 /* 안 뛴 날/포기 인라인 카드 액션 */
