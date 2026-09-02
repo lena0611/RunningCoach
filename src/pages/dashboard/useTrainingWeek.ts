@@ -30,6 +30,7 @@ import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
 import { buildRealignedSchedule, dropDraftsOnRestedDates } from '@/shared/lib/coaching/scheduleRealign'
 import { buildSessionBriefing, sessionTypeLabel, type SessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
 import { assessHeatWindow, deriveHabitualRunHour } from '@/shared/lib/coaching/heatWindow'
+import { isChronicBaselineAfterLayoff } from '@/shared/lib/coaching/returnAnchor'
 import { resolvePaceModel } from '@/shared/lib/vdotPaces'
 import { buildSessionIntentDraft, type BuildSessionIntentArgs } from '@/features/build-session-intent/buildSessionIntentDraft'
 import { formatDuration } from '@/shared/lib/format'
@@ -572,6 +573,8 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
         ? `내 Easy 런 ${observedEasyPace.value.sampleCount}건 기준 (심박 ${heartRateModel.value.easyCeilingBpm ?? '-'} 이하)`
         : 'VDOT 추정 — Easy 심박 이하 런 3건 모이면 내 데이터로 보정돼요',
       nonPeriodized: !isPerformanceGoal.value,
+      // 복귀 중이면 "30일 부하 급증" 주의를 내지 않는다(#743) — 모먼트·피로경고와 같은 판정을 쓴다.
+      baselineAfterLayoff: isChronicBaselineAfterLayoff(runStore.runs.map((run) => run.date), today.value),
       heat: todayHeatWindow.value
     })
   })

@@ -343,7 +343,9 @@ function cautionsFor(
   session: ScheduledSession,
   injury: TrainingInjuryItem | null,
   chronic: ChronicLoadTrend | null,
-  walkRun: boolean
+  walkRun: boolean,
+  /** 비교 기준선이 공백에 눌렸는가(#743). 참이면 30일 비율 경고를 내지 않는다. */
+  baselineAfterLayoff = false
 ): { lines: string[]; evidence: EvidenceRef | null } {
   const lines: string[] = []
   let evidence: EvidenceRef | null = null
@@ -368,7 +370,10 @@ function cautionsFor(
     }
   }
 
-  if (chronic && (chronic.status === 'spike' || chronic.status === 'rising')) {
+  // 복귀 중이면 이 비율 경고를 내지 않는다(#743 후속 — 2026-09-02 세 번째 표면에서 발견).
+  // 공백에 눌린 분모가 만든 비율 인공물이라 "무리한 상향은 미루세요"가 복귀자에게 정반대 조언이 된다
+  // (SSOT §휴식과 복귀 — 이 비율을 복귀 게이트로 신뢰 금지). 판정은 모먼트·피로경고와 같은 함수를 쓴다.
+  if (!baselineAfterLayoff && chronic && (chronic.status === 'spike' || chronic.status === 'rising')) {
     const verb = chronic.status === 'spike' ? '급증' : '증가'
     lines.push(`최근 30일 부하가 이전 대비 ${chronic.increasePct ?? ''}% ${verb} — 무리한 상향은 미루세요.`)
     evidence = EVIDENCE.progressiveLoad
@@ -393,6 +398,11 @@ export type SessionBriefingContext = {
   easyPaceBasis?: string | null
   /** 비성과 목표(#398)면 goalLine에 주기화 단계('기초기' 등)를 안 붙인다. */
   nonPeriodized?: boolean
+  /**
+   * 비교 기준선(직전 30일)이 공백에 눌렸는가(#743). 참이면 "30일 부하 급증" 주의를 내지 않는다 —
+   * 복귀자에게 "무리한 상향은 미루세요"는 정반대 조언이다. 판정은 `isChronicBaselineAfterLayoff`.
+   */
+  baselineAfterLayoff?: boolean
   /**
    * 오늘 **뛸 시간대**의 더위 조건(#729, `assessHeatWindow`). 하루 대푯값이 아니라 시간대 값이다.
    * 없으면(예보 없음·비더위) 브리핑은 종전과 동일하다.
@@ -478,7 +488,7 @@ export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBrie
   // 급성 통증성 부상 복귀면 저강도 세션의 "어떻게 뛰나"를 걷기-뛰기로 교체(#501, SSOT §3-B).
   const walkRun = shouldPrescribeWalkRun(ctx.injury, session.sessionType)
   const execution = executionFor(session, ctx.vdot ?? null, ctx.injury, prog.status, prog.evidence, tempoCeilingBpm, walkRun)
-  const caution = cautionsFor(session, ctx.injury, ctx.chronic, walkRun)
+  const caution = cautionsFor(session, ctx.injury, ctx.chronic, walkRun, ctx.baselineAfterLayoff ?? false)
 
   const easyFamily = session.sessionType === 'Easy' || session.sessionType === 'Recovery' || session.sessionType === 'Easy + Strides'
   const evidence: EvidenceRef[] = dedupeEvidence([
