@@ -394,6 +394,10 @@ const heroTopic = computed<HeroIllustrationTopic>(() => {
 function goCoachTab() {
   router.push('/coach')
 }
+/** 히어로 수락(#752) — 코치 탭 SessionBriefingCard 의 acknowledge 와 같은 동작·같은 문구. */
+function onHeroAck() {
+  toastStore.success('좋아요, 오늘은 이 훈련에 집중해요.')
+}
 /**
  * 요약 주간 스트립에서 고른 날로 코치 탭을 연다(#745).
  * 예전엔 날짜를 버리고 탭만 넘겨서 3일을 눌러도 오늘이 열렸다 — 고른 날이 조용히 사라졌다.
@@ -574,7 +578,7 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
       <HeroIllustration :topic="heroTopic" />
       <div class="hero-body">
         <section class="day-block">
-          <p class="eyebrow today-hero-eyebrow">오늘의 처방 · {{ formatDateWithWeekday(todayDate) }}</p>
+          <p class="eyebrow today-hero-eyebrow">오늘 · {{ formatDateWithWeekday(todayDate) }}</p>
           <template v-if="hasSchedule">
             <template v-if="activeDoneRun">
               <h2>✅ 오늘 완료</h2>
@@ -622,9 +626,14 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
           {{ heroWeatherLine }} · {{ formatDateWithWeekday(todayDate) }} 기준
         </p>
 
-        <!-- 주 CTA: 상세 브리핑(의도·웜업·단계·성공기준)은 코치 탭 작전 카드가 정본 — 그리로 보낸다. -->
+        <!--
+          CTA(#752, ①b 스펙 복원): 히어로는 "오늘 뭐하지"를 1초에 끝내는 곳이라 **여기서 결정**한다.
+          주 CTA = 수락(코치 탭 primary 와 같은 동작), 보조 = 작전 보기(왜·어떻게는 코치 탭이 정본).
+          예전엔 '상세 브리핑 보기' 링크만 있어 히어로가 코치 카드의 예고편이 됐고, 그게 중복으로 읽혔다.
+        -->
         <div v-if="hasSchedule && todayHero && !activeDoneRun" class="hero-actions">
-          <button type="button" class="hero-action-primary" @click.stop="goCoachTab">상세 브리핑 보기</button>
+          <button type="button" class="hero-action-primary" :disabled="intentBusy" @click.stop="onHeroAck">이 훈련으로 갈게요</button>
+          <button type="button" class="hero-action-secondary" @click.stop="goCoachTab">작전 보기</button>
         </div>
       </div>
       <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
