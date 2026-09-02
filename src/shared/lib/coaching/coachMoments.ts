@@ -178,6 +178,15 @@ export type CoachMomentContext = {
    */
   doubleSuggestion?: { backlogLabel: string; amDayLabel: string } | null
   /**
+   * 만성부하 비교 기준선(직전 30일)이 **공백에 눌려 있는가**(#743).
+   *
+   * 부상·장마로 쉬면 분모가 인위적으로 작아져 비율이 기계적으로 폭증한다 —
+   * SSOT §휴식과 복귀: *"휴식 직후 만성부하(분모)≈0이라 ACWR이 기계적으로 폭증하는 **비율
+   * 인공물**이고, 대형 코호트(BJSM 2025)에선 ACWR 스파이크가 오히려 부상 감소와 연관됐다.
+   * 복귀 게이트로 신뢰 금지."* caller 가 `findRecentLayoff` 로 판정해 넘긴다(#397 경계).
+   */
+  chronicBaselineAfterLayoff?: boolean
+  /**
    * 부상 심각도가 **올라간** 사실(#727) — `severityRaisedAt` 도장에서 caller 가 파생해 주입.
    * 메모리엔 현재 심각도만 남아 "나빠졌다"를 알 수 없으므로 라이터 수렴점이 도장을 찍는다.
    * shared 레이어라 entities 타입을 안 받고 plain 으로 받는다(#397 경계).
@@ -230,6 +239,11 @@ type Detector = (ctx: CoachMomentContext) => CoachMoment | null
 function detectLoadSpike(ctx: CoachMomentContext): CoachMoment | null {
   const c = ctx.chronic
   if (!c || c.status !== 'spike') return null
+  // 복귀 중이면 띄우지 않는다(#743, 2026-09-02 실사고). 부상으로 쉬어 기준선이 눌린 것을 "급증"으로
+  // 읽고 "회복 주간을 넣으라"고 권했다 — **부상으로 쉬고 돌아온 사람에게 다시 쉬라는 말**이다.
+  // SSOT §휴식과 복귀가 이 비율을 복귀 게이트로 쓰지 말라고 명시한다(비율 인공물).
+  // 복귀기의 진짜 가드레일은 이 비율이 아니라 **단일 세션 +10% 상한**이고, 그건 복귀 램프가 이미 건다.
+  if (ctx.chronicBaselineAfterLayoff) return null
   return {
     key: 'load-spike',
     kind: 'load-spike',

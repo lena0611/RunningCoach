@@ -324,6 +324,29 @@ describe('collectCoachMoments', () => {
     expect(after.some((m) => m.kind === 'rest-return')).toBe(true)
   })
 
+  // === 복귀 중 볼륨 급증 경고 억제(#743) ===
+  // 2026-09-02 실사고: 부상으로 쉬고 복귀 중인데 "최근 30일 누적 182% 급증, 회복 주간을 넣으세요"가
+  // 떴다. 기준선(직전 30일)이 공백에 눌린 **비율 인공물**인데 그걸 급증으로 읽은 것 —
+  // 부상으로 쉬고 돌아온 사람에게 다시 쉬라는 말이 된다. SSOT §휴식과 복귀가 명시적으로 경계한다.
+
+  it('공백 뒤 복귀 중이면 볼륨 급증 경고를 띄우지 않는다', () => {
+    const moments = collectCoachMoments(ctx({ chronic: spike, chronicBaselineAfterLayoff: true }))
+    expect(moments.some((m) => m.kind === 'load-spike')).toBe(false)
+  })
+
+  it('공백이 없으면 급증 경고는 그대로 뜬다 — 진짜 과부하까지 덮지 않는다', () => {
+    const moments = collectCoachMoments(ctx({ chronic: spike }))
+    expect(moments.some((m) => m.kind === 'load-spike')).toBe(true)
+    const withFlagFalse = collectCoachMoments(ctx({ chronic: spike, chronicBaselineAfterLayoff: false }))
+    expect(withFlagFalse.some((m) => m.kind === 'load-spike')).toBe(true)
+  })
+
+  it('억제는 급증 경고 한정 — 다른 모먼트는 공백과 무관하게 판정된다', () => {
+    const moments = collectCoachMoments(ctx({ runs: extraRuns, chronic: spike, chronicBaselineAfterLayoff: true }))
+    expect(moments.some((m) => m.kind === 'load-spike')).toBe(false)
+    expect(moments.some((m) => m.kind === 'extra-run')).toBe(true)
+  })
+
   // === 부상 악화 → 휴식 재권유(#727) ===
   // 사용자가 심각도를 올린 건 "본인이 악화를 보고한 것"인데, 지금까진 처방만 조용히 낮아지고
   // 코치는 아무 말도 안 했다. 특히 복귀 직후 다시 아파진 경우에 "좀 더 쉬자"를 말할 입이 없었다.

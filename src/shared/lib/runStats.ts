@@ -83,11 +83,19 @@ export function estimateHeartRateDrift(run: RunLog): string {
   return '경미한 상승'
 }
 
-export function getVolumeWarning(runs: RunLog[], today = new Date()): string {
+export function getVolumeWarning(
+  runs: RunLog[],
+  today = new Date(),
+  /**
+   * 비교 기준선이 공백에 눌렸는가(#743). 참이면 **비율 경고를 건너뛰고 절대량 경고만** 본다 —
+   * 쉬었다 돌아오면 이전 7일이 0에 가까워 비율이 기계적으로 폭증한다(SSOT §휴식과 복귀 비율 인공물).
+   */
+  baselineAfterLayoff = false
+): string {
   const recent7Runs = getRunsWithinDays(runs, 7, today)
   const last7 = sumDistance(recent7Runs)
   const prev7 = sumDistance(getRunsWithinDays(runs, 14, today).filter((run) => !recent7Runs.some((recent) => recent.id === run.id)))
-  if (last7 >= 20 && prev7 > 0 && last7 / prev7 >= 1.35) return '최근 7일 볼륨이 이전 7일 대비 35% 이상 증가했습니다.'
+  if (!baselineAfterLayoff && last7 >= 20 && prev7 > 0 && last7 / prev7 >= 1.35) return '최근 7일 볼륨이 이전 7일 대비 35% 이상 증가했습니다.'
   if (last7 >= 35) return '최근 7일 볼륨이 높습니다. 회복 주간을 고려하세요.'
   return '급격한 볼륨 증가는 보이지 않습니다.'
 }
@@ -189,10 +197,24 @@ export function getCadenceTrend(runs: RunLog[], today = new Date()): CadenceTren
 }
 
 // 7일 급성 경고와 30일 중장기 경고를 합쳐 요약 피로 카드용 한 줄을 만든다.
-export function getFatigueWarning(runs: RunLog[], today = new Date(), ageWeight = 0): { caution: boolean; message: string } {
+export function getFatigueWarning(
+  runs: RunLog[],
+  today = new Date(),
+  ageWeight = 0,
+  /**
+   * 비교 기준선이 공백에 눌렸는가(#743). 참이면 **30일 비율 기반 경고를 내지 않는다** —
+   * 부상·장마로 쉬어 분모가 작아진 비율 인공물이라 "회복 주간을 넣으라"가 복귀자에게
+   * 정반대 조언이 된다(SSOT §휴식과 복귀 — 이 비율을 복귀 게이트로 쓰지 말 것).
+   * 7일 급성 경고는 그대로 남긴다 — 그건 비율이 아니라 절대량이라 복귀 중에도 유효하다.
+   */
+  baselineAfterLayoff = false
+): { caution: boolean; message: string } {
   const chronic = getChronicLoadTrend(runs, today, ageWeight)
-  const acute = getVolumeWarning(runs, today)
+  const acute = getVolumeWarning(runs, today, baselineAfterLayoff)
   const acuteCaution = !acute.startsWith('급격한 볼륨 증가는 보이지 않습니다')
+  if (baselineAfterLayoff) {
+    return acuteCaution ? { caution: true, message: acute } : { caution: false, message: '급격한 볼륨 증가는 보이지 않습니다.' }
+  }
   if (chronic.status === 'spike') {
     return { caution: true, message: `최근 30일 누적 ${chronic.last30Km}km로 이전 30일(${chronic.prev30Km}km) 대비 ${chronic.increasePct}% 증가했습니다. 회복 주간을 고려하세요.` }
   }
