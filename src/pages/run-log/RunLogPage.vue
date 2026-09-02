@@ -155,8 +155,22 @@ watch(openStack, (open) => {
   document.body.classList.toggle('memory-stack-open', open)
 })
 
-watch([filteredRuns, selectedTypes, selectedMetaFilterValues, selectedDate], () => {
+// 필터 '내용'이 바뀌면 첫 페이지(10개)부터. 배열 정체가 아니라 값 서명으로 판정한다 —
+// 상세 열기의 heavy-data 지연 로드(#661)가 runs 의 원소를 교체하면 filteredRuns·selectedMetaFilterValues 의
+// 정체만 바뀌는데, 그걸 필터 변경으로 보고 10개로 접으면 scrollTop 이 줄어든 높이로 클램프돼
+// 깊이 내려간 스크롤이 위로 튀었다(2026-09-03).
+const runFilterKey = computed(() =>
+  [selectedTypes.value.join(','), selectedMetaFilterValues.value.join(','), selectedDate.value ?? ''].join('|'),
+)
+watch(runFilterKey, () => {
   visibleCount.value = 10
+  nextTick(() => {
+    setupObserver()
+    syncRunMonthStickyState()
+  })
+})
+// 데이터 갱신(유입·편집·heavy 로드)은 표시 개수를 유지하고, 목록이 다시 그려졌을 수 있으니 옵저버·sticky 만 다시 맞춘다.
+watch(filteredRuns, () => {
   nextTick(() => {
     setupObserver()
     syncRunMonthStickyState()
