@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { SessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
 import EvidenceSheet from '@/shared/ui/EvidenceSheet.vue'
 
@@ -36,6 +36,17 @@ const emit = defineEmits<{
 
 const evidenceOpen = ref(false)
 const hasEvidence = computed(() => props.briefing.evidence.length > 0)
+/**
+ * 설명 블록 접기(#749). 기본은 닫힘 — 카드가 한 화면에 안 들어와 매번 스크롤해야 했다.
+ * ⚠ 조심할 점은 이 토글 밖이다(안전 내용이라 항상 보인다).
+ */
+const detailOpen = ref(false)
+/** 접을 내용이 하나도 없으면 토글 자체를 안 낸다(누르면 아무것도 안 나오는 버튼 금지). */
+const hasDetails = computed(
+  () => Boolean(props.briefing.why) || Boolean(props.briefing.effect) || props.briefing.execution.length > 0 || props.briefing.successCriteria.length > 0
+)
+// 다른 날로 넘기면 다시 접는다 — 앞 세션에서 펼친 상태가 따라오면 "핵심만" 의도가 깨진다.
+watch(() => props.briefing, () => { detailOpen.value = false })
 </script>
 
 <template>
@@ -58,34 +69,54 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
       <button type="button" class="brief-revert" :disabled="busy" @click="emit('revert')">되돌리기</button>
     </div>
 
-    <p v-if="briefing.keyPoint" class="brief-keypoint"><span class="brief-keypoint-tag">오늘의 핵심</span>{{ briefing.keyPoint }}</p>
-
-    <div v-if="briefing.why" class="brief-block">
-      <span class="brief-label">왜 오늘 이걸</span>
-      <p class="brief-text">{{ briefing.why }}</p>
+    <!--
+      카드는 "한 줄이면 충분한 사람"과 "다 읽고 싶은 사람"을 동시에 만족해야 한다(#749).
+      기본은 핵심 한 줄만 보이고, 설명(왜·효과·어떻게·성공기준)은 자세히 보기 뒤로 접는다.
+      ⚠ 조심할 점은 **접지 않는다** — 부상·더위 중단 신호가 들어 있어 안전 게이트가 먼저다.
+    -->
+    <div v-if="briefing.keyPoint" class="brief-keypoint">
+      <span class="brief-keypoint-tag">오늘의 핵심</span>
+      <span class="brief-keypoint-text">{{ briefing.keyPoint }}</span>
+      <button
+        v-if="hasDetails"
+        type="button"
+        class="brief-detail-toggle"
+        :aria-expanded="detailOpen"
+        aria-controls="brief-details"
+        @click="detailOpen = !detailOpen"
+      >
+        {{ detailOpen ? '접기' : '자세히 보기' }}
+      </button>
     </div>
 
-    <div class="brief-block">
-      <span class="brief-label">훈련 효과</span>
-      <p class="brief-text">{{ briefing.effect }}</p>
-    </div>
+    <div v-show="detailOpen" id="brief-details">
+      <div v-if="briefing.why" class="brief-block">
+        <span class="brief-label">왜 오늘 이걸</span>
+        <p class="brief-text">{{ briefing.why }}</p>
+      </div>
 
-    <div class="brief-block">
-      <span class="brief-label">어떻게 뛰나</span>
-      <ul class="brief-list brief-lifecycle">
-        <li v-for="(step, i) in briefing.execution" :key="i">
-          <span class="brief-step-label">{{ step.label }}</span>
-          <span class="brief-step-detail">{{ step.detail }}</span>
-        </li>
-      </ul>
-      <p v-if="briefing.paceBasis" class="brief-pace-basis">{{ briefing.paceBasis }}</p>
-    </div>
+      <div class="brief-block">
+        <span class="brief-label">훈련 효과</span>
+        <p class="brief-text">{{ briefing.effect }}</p>
+      </div>
 
-    <div v-if="briefing.successCriteria.length" class="brief-block">
-      <span class="brief-label">성공 기준</span>
-      <ul class="brief-list">
-        <li v-for="(c, i) in briefing.successCriteria" :key="i">{{ c }}</li>
-      </ul>
+      <div class="brief-block">
+        <span class="brief-label">어떻게 뛰나</span>
+        <ul class="brief-list brief-lifecycle">
+          <li v-for="(step, i) in briefing.execution" :key="i">
+            <span class="brief-step-label">{{ step.label }}</span>
+            <span class="brief-step-detail">{{ step.detail }}</span>
+          </li>
+        </ul>
+        <p v-if="briefing.paceBasis" class="brief-pace-basis">{{ briefing.paceBasis }}</p>
+      </div>
+
+      <div v-if="briefing.successCriteria.length" class="brief-block">
+        <span class="brief-label">성공 기준</span>
+        <ul class="brief-list">
+          <li v-for="(c, i) in briefing.successCriteria" :key="i">{{ c }}</li>
+        </ul>
+      </div>
     </div>
 
     <div v-if="briefing.cautions.length" class="brief-block brief-caution">
@@ -229,6 +260,24 @@ const hasEvidence = computed(() => props.briefing.evidence.length > 0)
   font-size: var(--text-micro-size);
   font-weight: 700;
   color: var(--color-primary);
+}
+/* 핵심 한 줄과 '자세히 보기'를 한 덩어리로(#749). 토글은 줄 끝에 은은하게 붙는다. */
+.brief-keypoint-text {
+  overflow-wrap: anywhere;
+}
+.brief-detail-toggle {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-primary);
+  font-size: var(--text-micro-size);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
 .brief-block {
