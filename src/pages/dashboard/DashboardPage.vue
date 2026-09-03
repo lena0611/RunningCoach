@@ -761,8 +761,8 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
         :loading="runDataLoading"
       />
       <button type="button" class="stat-card data-card-add" @click="openDataCardComposer">
-        <span class="stat-card-label">➕ 개인화 지표</span>
-        <span class="data-card-add-label">보고 싶은 값을 코치에게 말하기</span>
+        <span class="data-card-add-circle" aria-hidden="true">+</span>
+        <span class="data-card-add-label">개인화 지표 만들기</span>
       </button>
     </MetricGrid>
 
@@ -988,9 +988,9 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
 .data-card-add {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 10px;
   min-height: 0;
   border: 1px dashed var(--color-border, rgba(120, 120, 120, 0.35));
   background: none;
@@ -1005,10 +1005,23 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
   line-height: 1;
   color: var(--color-primary);
 }
+/* 점선 원 + 기호 — 카드 테두리와 같은 언어라 "아직 비어 있고 채울 수 있다"로 읽힌다. */
+.data-card-add-circle {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px dashed var(--color-border, rgba(120, 120, 120, 0.45));
+  border-radius: 50%;
+  color: var(--color-muted);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+}
 .data-card-add-label {
   font-size: var(--text-caption-size);
   font-weight: 600;
-  text-align: left;
+  text-align: center;
   line-height: 1.35;
 }
 
