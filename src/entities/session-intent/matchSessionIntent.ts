@@ -4,7 +4,8 @@
  *
  * 규칙:
  *   - 후보 = isPendingIntent (status 'planned' && runId 없음)
- *   - planned_date 와 run.date 의 일수 차가 윈도우(±1일) 이내만
+ *   - planned_date 가 run.date 와 같거나 **윈도우(1일) 안에서 더 이른** 것만 — 뒤로만(따라잡기).
+ *     예정일 전날 런이 내일 의도를 소거하는 앞당김은 자동 매칭하지 않는다(스케줄 매처와 동일 정책, 2026-09-03).
  *   - 우선순위: 일수 차 작은 순 → planned_date 최근 → createdAt 최근
  *   - sessionType 일치는 강제하지 않는다(계획과 실제가 다를 수 있음).
  */
@@ -26,8 +27,10 @@ export function selectIntentForRun(
 ): SessionIntent | null {
   const scored = intents
     .filter(isPendingIntent)
-    .map((intent) => ({ intent, gap: Math.abs(diffDays(intent.plannedDate, run.date)) }))
-    .filter((entry) => entry.gap <= SESSION_INTENT_MATCH_WINDOW_DAYS)
+    // gap = 예정일 − 런날짜: 0 같은 날, -1 하루 늦게(따라잡기). 양수(앞당김)는 제외.
+    .map((intent) => ({ intent, gap: diffDays(intent.plannedDate, run.date) }))
+    .filter((entry) => entry.gap <= 0 && entry.gap >= -SESSION_INTENT_MATCH_WINDOW_DAYS)
+    .map((entry) => ({ intent: entry.intent, gap: Math.abs(entry.gap) }))
 
   if (!scored.length) return null
 

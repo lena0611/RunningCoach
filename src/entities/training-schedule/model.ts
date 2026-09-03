@@ -270,16 +270,26 @@ export function isRestedSession(session: ScheduledSession): boolean {
   return session.status === 'rested'
 }
 
-/** 런↔세션 매칭 허용 윈도우(일). SessionIntent 매처와 동일(±1) — 하루 늦게/일찍 한 세션도 인정. */
+/**
+ * 런↔세션 매칭 허용 윈도우(일). SessionIntent 매처와 동일 정책.
+ * **뒤로만(따라잡기)**: 어제 놓친 세션을 오늘 뛰면 인정한다(#379 의도). 앞당김(예정일 전날 런이 내일 세션을 소거)은
+ * 자동 크레딧하지 않는다 — 추가런은 예정 세션을 밀어내지 않는다(domain-rules). 앞당김 인정은 코치 모먼트가 묻고
+ * 승인 시에만 연결한다(SSOT §세션 변경 행동 모델, 2026-09-03).
+ */
 export const SCHEDULE_MATCH_WINDOW_DAYS = 1
+
+/** gap = 세션날짜 − 런날짜(일). 0 = 같은 날, 음수 = 런이 세션보다 늦음(따라잡기). 양수(앞당김)는 자동 매칭 대상이 아니다. */
+function isCatchUpGap(gap: number, windowDays: number): boolean {
+  return gap <= 0 && gap >= -windowDays
+}
 
 function diffDays(a: string, b: string): number {
   return Math.round((new Date(`${a}T00:00:00`).getTime() - new Date(`${b}T00:00:00`).getTime()) / (24 * 60 * 60 * 1000))
 }
 
 /**
- * 런을 어느 ScheduledSession 에 귀속할지 고른다(동일 날짜 우선, 없으면 ±윈도우 내 가장 가까운 활성 세션,
- * 동률이면 과거 미수행을 먼저 — "어제 빠진 세션 따라잡기"). 윈도우 밖이면 null = 진짜 엑스트라 런.
+ * 런을 어느 ScheduledSession 에 귀속할지 고른다(동일 날짜 우선, 없으면 뒤로 윈도우 내 가장 가까운 활성 세션 —
+ * "어제 빠진 세션 따라잡기"). 윈도우 밖이거나 미래 세션만 있으면 null = 엑스트라 런(앞당김은 자동 크레딧 금지).
  */
 export function selectSessionForRun(
   sessions: ScheduledSession[],
@@ -289,7 +299,7 @@ export function selectSessionForRun(
   const scored = sessions
     .filter(isActiveSession)
     .map((session) => ({ session, gap: diffDays(session.date, run.date) }))
-    .filter((entry) => Math.abs(entry.gap) <= windowDays)
+    .filter((entry) => isCatchUpGap(entry.gap, windowDays))
   if (!scored.length) return null
   // 같은 날짜에 세션이 여럿(더블)이어도 결정론적으로 고른다.
   // (이전엔 동일날짜 tie 가 배열 순서 의존이라 엉뚱한 세션이 done 되고 실제 수행 세션이 planned 로 남았다.)
@@ -304,8 +314,7 @@ export function selectSessionForRun(
   }
   scored.sort(
     (x, y) =>
-      Math.abs(x.gap) - Math.abs(y.gap) || // 가까운 날짜 우선
-      x.gap - y.gap || // 동률이면 과거(미수행) 먼저
+      Math.abs(x.gap) - Math.abs(y.gap) || // 가까운 날짜 우선(같은 날 > 어제)
       slotRank(x.session) - slotRank(y.session) || // 더블이면 런 시작 시각의 슬롯 우선
       typeRank(x.session) - typeRank(y.session) || // 런 타입과 일치하는 세션 우선
       Number(y.session.keySession) - Number(x.session.keySession) || // 키세션 우선
@@ -332,12 +341,11 @@ export function selectBetterTypeMatchForRun(
     .filter(isActiveSession)
     .filter((session) => session.id !== excludeSessionId && session.sessionType === run.type)
     .map((session) => ({ session, gap: diffDays(session.date, run.date) }))
-    .filter((entry) => Math.abs(entry.gap) <= windowDays)
+    .filter((entry) => isCatchUpGap(entry.gap, windowDays))
   if (!scored.length) return null
   scored.sort(
     (x, y) =>
-      Math.abs(x.gap) - Math.abs(y.gap) || // 가까운 날짜 우선
-      x.gap - y.gap || // 동률이면 과거(미수행) 먼저
+      Math.abs(x.gap) - Math.abs(y.gap) || // 가까운 날짜 우선(같은 날 > 어제)
       Number(y.session.keySession) - Number(x.session.keySession) || // 키세션 우선
       x.session.date.localeCompare(y.session.date)
   )

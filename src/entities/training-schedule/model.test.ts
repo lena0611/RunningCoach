@@ -100,10 +100,16 @@ describe('selectSessionForRun (런↔세션 매칭, 어제 빠진 세션 따라�
     expect(selectSessionForRun(sessions, { date: '2026-06-16' })).toBeNull()
   })
 
-  it('과거 미수행을 미래 세션보다 먼저 따라잡음(동률 시)', () => {
+  it('과거 미수행만 따라잡고 미래 세션엔 붙지 않는다', () => {
     const sessions = [session({ id: 'past', date: '2026-06-16' }), session({ id: 'future', date: '2026-06-18' })]
-    // 6/17 런: past(gap -1)·future(gap +1) 동률 → 과거 먼저
+    // 6/17 런: past(어제 놓침) 따라잡기. future 는 후보가 아니다.
     expect(selectSessionForRun(sessions, { date: '2026-06-17' })?.id).toBe('past')
+  })
+
+  it('하루 앞당겨 뛴 런(휴식일)은 내일 세션을 자동 크레딧하지 않는다 = 추가런(2026-09-03)', () => {
+    // 수(6/17) 휴식, 목(6/18) Easy 예정. 수요일 저녁 Easy 런 → 목요일 세션은 planned 로 남아야 한다.
+    const sessions = [session({ id: 'thu', date: '2026-06-18', sessionType: 'Easy' })]
+    expect(selectSessionForRun(sessions, { date: '2026-06-17', type: 'Easy' })).toBeNull()
   })
 
   it('done/superseded 는 매칭 대상 아님', () => {

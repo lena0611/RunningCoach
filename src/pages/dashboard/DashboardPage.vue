@@ -103,9 +103,21 @@ const {
 } = week
 
 // CoachInsights(1장): 코치 탭과 동일 모먼트 엔진의 top 1 — 두 탭 간 코치 발화 불일치 방지(useCoachMoments 추출).
-const { topCoachMoment, dismissMoment, onMomentSelect } = useCoachMoments(week)
+const { topCoachMoment, dismissMoment, onMomentSelect, earlyRunCreditCandidate } = useCoachMoments(week)
 // 시트(트리아지·더블)는 코치 탭 소유 — 그런 액션은 코치 탭으로 이동만 하고 dismiss 하지 않는다(코치 탭에서 실행).
-function onDashboardMomentAction(moment: CoachMoment) {
+async function onDashboardMomentAction(moment: CoachMoment) {
+  // 갈음 승인은 이 탭에서 바로 처리한다 — 결과(오늘 히어로 완료 전환)가 여기 있어 탭 이동이 무의미하다.
+  if (moment.action?.kind === 'credit-early-run') {
+    const candidate = earlyRunCreditCandidate.value
+    if (candidate) {
+      await runScheduleOp(async () => {
+        await scheduleStore.setStatus(candidate.sessionId, 'done', candidate.runId)
+      })
+      toastStore.success('어제 런으로 갈음했어요. 오늘은 쉬어가요.')
+    }
+    dismissMoment(moment.key)
+    return
+  }
   if (moment.action?.kind === 'open-injury-screening') {
     useInjuryFlowStore().requestScreening()
     dismissMoment(moment.key)
