@@ -50,9 +50,9 @@ PaceLAB의 핵심 데이터/이벤트를 **건드리기 전에** "이걸 바꾸�
 ```
 runStore.addRun() / addRuns()                              src/app/stores/runStore.ts:62/91 (push :87/95/119)
 ├─ matchSessionIntent(run)                                 runStore.ts:298  ← SELF_RACE_TAG 가드 1순위
-│  ├─ sessionIntentStore.matchRun → selectIntentForRun     sessionIntentStore.ts:83 / matchSessionIntent.ts:23 (윈도우 ±1 :14)
+│  ├─ sessionIntentStore.matchRun → selectIntentForRun     sessionIntentStore.ts:83 / matchSessionIntent.ts:23 (윈도우 뒤로 1일만 :14 — 앞당김 자동 크레딧 금지 2026-09-03)
 │  │  └─ 의도 done 소비처 (디브리핑 달성 / MemoryPage)      sessionIntentStore.ts:96 (unmatchRun)
-│  └─ trainingScheduleStore.matchRun → selectSessionForRun trainingScheduleStore.ts:192 / model.ts:133 (윈도우 :122)
+│  └─ trainingScheduleStore.matchRun → selectSessionForRun trainingScheduleStore.ts:192 / model.ts:133 (윈도우 뒤로 1일만 — 앞당김은 코치 모먼트 early-run-credit 승인 시 setStatus done)
 │     └─ settleClosedWeeks (매칭 누락 시 missed 오확정)      trainingScheduleStore.ts:101
 ├─ flagInterviewForImport → pendingInterviewRunId          runStore.ts:125 (state :29)  ← addRuns만, source==='healthkit'만
 │  └─ App.vue PostRunInterviewSheet 발동/제출              App.vue:51/53/887 / buildInterviewRunPatch.ts:47
@@ -85,7 +85,7 @@ runStore.addRun() / addRuns()                              src/app/stores/runSto
 - 다중 유입경로 비대칭: `addRun`(단건)은 인터뷰 미발동. `importCompetitionRun`도 `'healthkit'` source로 `addRuns`를 타므로 레이싱 임포트가 인터뷰를 띄울 수 있음(self-race 필터 부재).
 - 스냅샷 화석화 vs 재추론: 런 type은 임포트 시점 고정. forward 수정만으론 과거 오분류 안 고쳐짐 → 로드타임 `reinferMislabeledLongRuns`(멱등)가 교정, `repointReinferredRuns`가 세션 재연결. 인입 당시 type과 재추론 type이 달라질 수 있음.
 - status만 바뀜: `matchRun`은 status를 planned→done / planned→completed로 바꿀 뿐 행을 안 지움. active 뷰 필터에서 빠져 '오늘 세션 카드'가 사라진 듯 보임(데이터 소실 아님, #235 교훈).
-- 정합 누락→missed 오확정: `addRuns` 시점 `matchRun`은 '그 런 1건·±1일'만 처리. 진짜 일괄 정합은 `doEnsureSchedule.reconcileRuns`. 그게 `settleClosedWeeks` 전에 안 돌면 수행 세션이 missed로 오확정→디브리핑 달성카드 소실(#378). 순서 절대조건: heal→reconcile→repoint→settle.
+- 정합 누락→missed 오확정: `addRuns` 시점 `matchRun`은 '그 런 1건·뒤로 1일'만 처리. 진짜 일괄 정합은 `doEnsureSchedule.reconcileRuns`. 그게 `settleClosedWeeks` 전에 안 돌면 수행 세션이 missed로 오확정→디브리핑 달성카드 소실(#378). 순서 절대조건: heal→reconcile→repoint→settle.
 - 멱등 도돌이(self-race 재부착): `reconcile/repoint` 입력에서 self-race를 안 빼면 heal이 떼어낸 세션을 reconcile이 다시 done으로 붙여 무한 도돌이. 두 곳(trainingRuns computed, doEnsureSchedule 별도 filter)이 같은 `isSelfRaceRun` 규칙 중복 보유.
 - Supabase 미설정 시 무음 no-op: 매칭/정합 액션 전부 `isSupabaseConfigured=false`면 조용히 return. 로컬 모드는 런만 localStorage에 쌓이고 done 표시·디브리핑 없음.
 - best-effort try/catch가 실패를 삼킴: `matchSessionIntent` 두 await 모두 catch 무음 → 매칭이 조용히 실패해도 런은 남고 세션은 planned로. 라이브/렌더 E2E 필요.

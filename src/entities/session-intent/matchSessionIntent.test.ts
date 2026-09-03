@@ -33,15 +33,20 @@ describe('selectIntentForRun', () => {
     expect(selectIntentForRun([a], { date: '2026-06-15' })?.id).toBe('a')
   })
 
-  it('정확히 같은 날짜를 ±1일 후보보다 우선한다', () => {
+  it('정확히 같은 날짜를 어제(따라잡기) 후보보다 우선한다', () => {
     const exact = intent({ id: 'exact', plannedDate: '2026-06-15' })
     const prev = intent({ id: 'prev', plannedDate: '2026-06-14' })
     expect(selectIntentForRun([prev, exact], { date: '2026-06-15' })?.id).toBe('exact')
   })
 
-  it('윈도우(±1일)를 벗어나면 매칭하지 않는다', () => {
+  it('윈도우(뒤로 1일)를 벗어나면 매칭하지 않는다', () => {
     const far = intent({ id: 'far', plannedDate: '2026-06-12' })
     expect(selectIntentForRun([far], { date: '2026-06-15' })).toBeNull()
+  })
+
+  it('하루 앞당겨 뛴 런은 내일 의도에 매칭하지 않는다(앞당김 자동 크레딧 금지, 2026-09-03)', () => {
+    const tomorrow = intent({ id: 'tmr', plannedDate: '2026-06-16' })
+    expect(selectIntentForRun([tomorrow], { date: '2026-06-15' })).toBeNull()
   })
 
   it('이미 매칭됐거나 planned 가 아니면 후보에서 제외', () => {
