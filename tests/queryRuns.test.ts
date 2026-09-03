@@ -159,3 +159,35 @@ describe('runQueryRuns — 집계와 신뢰 장치', () => {
     expect(result.rows[0].group).toBe('혼자')
   })
 })
+
+/**
+ * #767 — 코어를 공용 위치(_shared)로 내렸다. 웹(요약 탭 사용자 카드)이 **같은 파일**을 import 해
+ * 코치 답변과 같은 숫자를 말하는 게 이 분리의 목적이므로, 그 경로가 실제로 물리는지 잠근다.
+ * 미러(두 벌)로 되돌아가면 이 테스트가 먼저 깨진다.
+ */
+describe('#767 계산 코어 공용화', () => {
+  it('_shared 코어를 직접 import 해도 같은 결과를 낸다 — Edge 래퍼는 문구만 얹는다', async () => {
+    const core = await import('../supabase/functions/_shared/queryRunsCore')
+    const rows = [row({ date: '2026-06-01', distance_km: 10 }), row({ date: '2026-06-08', distance_km: 12 })]
+    const spec: QueryRunsSpec = { filters: [], groupBy: 'none', metrics: ['count', 'distanceKm'], limit: 24 }
+
+    const viaCore = core.runQueryRunsCore(spec, rows)
+    const viaEdge = runQueryRuns(spec, rows)
+
+    expect(viaCore.rows).toEqual(viaEdge.rows)
+    expect(viaCore.matchedRuns).toBe(viaEdge.matchedRuns)
+    // 코어는 실패 '종류'만 낸다. 코치 응대 문구(caution)는 Edge 래퍼가 만든다.
+    expect(viaCore).not.toHaveProperty('caution')
+    expect(viaEdge).toHaveProperty('caution')
+  })
+
+  it('실패 상세도 코어가 내고 문구는 래퍼가 만든다 — 표본이 적을 때', async () => {
+    const core = await import('../supabase/functions/_shared/queryRunsCore')
+    const rows = [row({ date: '2026-06-01', distance_km: 10 })]
+    const spec: QueryRunsSpec = { filters: [], groupBy: 'none', metrics: ['count'], limit: 24 }
+
+    expect(core.runQueryRunsCore(spec, rows).failureKind).toBe('low_sample')
+    expect(core.runQueryRunsCore(spec, rows).failureDetail).toBe('1')
+    expect(runQueryRuns(spec, rows).caution).toBeTruthy()
+  })
+})
