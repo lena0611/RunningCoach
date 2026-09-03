@@ -631,10 +631,10 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
               <p class="helper">디브리핑은 코치 탭에서 확인해요.</p>
             </template>
             <template v-else-if="todayHero">
-              <!-- 배지와 한 줄: 타입 칩(무엇) + '오늘 훈련'(언제) — 카드가 무엇을 말하는지 한 줄로 세운다. -->
+              <!-- 한 줄: '오늘 훈련'(언제) + 타입 칩(무엇) — 문장 읽듯 왼쪽에서 오른쪽으로. -->
               <div class="today-hero-badge-row">
-                <RunTypeBadge :type="todayHero.sessionType" class="today-hero-badge" />
                 <span class="today-hero-kicker">오늘 훈련</span>
+                <RunTypeBadge :type="todayHero.sessionType" class="today-hero-badge" />
               </div>
               <h2>
                 {{ todayHero.title
