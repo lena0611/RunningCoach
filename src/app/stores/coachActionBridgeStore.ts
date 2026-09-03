@@ -22,7 +22,12 @@ export const useCoachActionBridgeStore = defineStore('coachActionBridgeStore', {
      * ⚠️ 라벨이 아니라 **종류**를 넘긴다 — 도착지 버튼 이름이 날짜 상태마다 다르기 때문이다
      * (오늘은 '건너뛰기', 지난 날은 '놓아주기'). 이름은 코치 탭이 상태를 보고 고른다.
      */
-    focusAction: null as string | null
+    focusAction: null as string | null,
+    /**
+     * 요약 탭 '+' 카드가 요청한 **데이터 카드 만들기**(#767). 코치방이 열리면서 먼저 묻는다
+     * ("요약에서 뭘 상시로 보고 싶으세요?"). 한 번 소비되면 코치 탭이 내린다.
+     */
+    dataCardComposerRequested: false
   }),
   actions: {
     focusSession(date: string, action: string | null = null) {
@@ -32,6 +37,12 @@ export const useCoachActionBridgeStore = defineStore('coachActionBridgeStore', {
     clearFocus() {
       this.focusDate = null
       this.focusAction = null
+    },
+    requestDataCardComposer() {
+      this.dataCardComposerRequested = true
+    },
+    clearDataCardComposer() {
+      this.dataCardComposerRequested = false
     }
   }
 })
