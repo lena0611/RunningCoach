@@ -503,10 +503,12 @@ async function confirmDeleteDataCard() {
   }
 }
 
-/** + 카드 → 코치방을 열고 카드 만들기 대화를 시작한다. */
+/**
+ * + 카드 → 코치방을 열고 카드 만들기 대화를 시작한다.
+ * 탭을 옮기지 않는다 — 코치 오버레이는 App 레벨이라 요약 위에 그대로 뜨고, 닫으면 요약으로 돌아온다(#616).
+ */
 function openDataCardComposer() {
   useCoachActionBridgeStore().requestDataCardComposer()
-  goCoachTab()
 }
 
 const SHOW_GOAL_SECTION = false

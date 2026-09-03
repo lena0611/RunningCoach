@@ -64,8 +64,10 @@ export function normalizeDataCardProposalArgs(raw: unknown): DataCardProposalRes
  * "비중이 얼마야?" 같은 단순 질문까지 강제하면 대화가 매번 카드 제안으로 끌려간다.
  */
 export function mentionsDataCardIntent(note: string): boolean {
-  const text = (note || '').replace(/\s+/g, ' ')
+  const text = (note || '').replace(/\s+/g, ' ').trim()
   if (!text) return false
+  // 명령으로 온 요청은 의심의 여지가 없다 — 화면이 칩·'+' 카드에서 앞에 박아 보낸다.
+  if (text.startsWith('/카드생성')) return true
   if (/카드/.test(text) && /(만들|추가|해줘|해 줘|등록|보여)/.test(text)) return true
   if (/(요약|홈|메인)/.test(text) && /(띄워|띄우|추가|보이게|올려|상시|늘 ?보)/.test(text)) return true
   return false
