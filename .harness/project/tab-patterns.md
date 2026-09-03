@@ -10,6 +10,18 @@ PaceLAB의 모든 탭·전환 UI 스펙. 콘텐츠 페이지의 탭성 UI(뷰 �
 | `SegmentTabs` | 콘텐츠 내 모든 탭/전환 (variant 5종) | `<SegmentTabs :variant :tone :items :active @change>` |
 | `WeekStrip` | 주간 날짜 스트립 (요약·코치 공용) | `<WeekStrip :days :today :active? @select(date)>` |
 
+**WeekStrip 시각 스펙 (2026-09-03, 애플 날씨식 원형 인디케이터).** 칸은 보더·배경 없는 투명 셀이고, 날짜 숫자를 원(`--weekstrip-disc-size`)이 감싼다. 정보를 **원 하나에** 싣는다 — 예전의 '날짜 아래 마커 줄'(dot/✓/💤)은 없앴다(같은 칸 정보가 두 층으로 흩어졌다).
+
+| 신호 | 표현 |
+|---|---|
+| 오늘 | 원을 `--weekstrip-today-fill`(primary)로 채우고 숫자는 `--weekstrip-today-fill-text` |
+| 선택(코치 `active`) | 원을 `--weekstrip-active-fill`(흰색)로 채움. 오늘이 선택되면 오늘 색이 이긴다 |
+| 예정 세션 | 타입색 옅은 채움(`--weekstrip-type-fill-mix`) + 타입색 숫자 |
+| 완료 | 타입색 링(`--weekstrip-ring`) — 기록 탭 달력의 '수행' 링과 같은 언어 |
+| 선언 휴식 | 중립 채움(`--weekstrip-rest-fill`) |
+
+채움 우선순위는 CSS 선언 순서로 **상태 → 선택/오늘**이다(강한 신호가 뒤). 상태는 색·링으로만 두지 않고 `aria-label`에 '완료/휴식'을 실어 스크린리더에도 남긴다(§5 색만으로 구분 금지).
+
 ---
 
 ## 1. 토큰

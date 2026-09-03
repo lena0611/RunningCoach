@@ -546,13 +546,17 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
   <PageLayout variant="dashboard">
     <!-- 주간 스트립(리디자인 ①b): 월~일 요일 칩 — 오늘 강조·타입 dot·완료 ✓. 탭하면 코치 탭(주간 캐러셀). -->
     <WeekStrip :days="scheduleDays" :today="todayDate" @select="goCoachTabForDate" />
+    <!--
+      날짜 한 줄은 스트립 바로 아래(애플 날씨 배치, 2026-09-03). 예전엔 히어로 카드 안 eyebrow 였는데,
+      스트립이 이미 '어느 날'을 말하고 있어 카드가 같은 말을 반복했다. 카드는 '무엇을'만 남긴다.
+    -->
+    <p class="week-strip-datestamp">오늘 · {{ formatDateWithWeekday(todayDate) }}</p>
 
     <!-- 쉬는 중(#473): 복귀 컨트롤 히어로 — 캐러셀(코치 탭) rested 분기에서 이동(오늘 뭐하지 즉답 원칙) -->
     <article v-if="restState.active" class="hero-card rest-hero hero-topic-recovery">
       <HeroIllustration topic="recovery" />
       <div class="hero-body">
         <section class="day-block">
-          <p class="eyebrow today-hero-eyebrow">오늘 · {{ formatDateWithWeekday(todayDate) }}</p>
           <h2>💤 쉬는 중</h2>
           <p class="helper coach-line">
             <template v-if="restState.daysUntilReturn !== null && restState.daysUntilReturn > 0">
@@ -588,7 +592,6 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
       <HeroIllustration :topic="heroTopic" />
       <div class="hero-body">
         <section class="day-block">
-          <p class="eyebrow today-hero-eyebrow">오늘 · {{ formatDateWithWeekday(todayDate) }}</p>
           <template v-if="hasSchedule">
             <template v-if="activeDoneRun">
               <h2>✅ 오늘 완료</h2>
@@ -604,7 +607,6 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
                 >
               </h2>
               <p v-if="todayHero.metaLine" class="helper today-hero-meta num-mono">{{ todayHero.metaLine }}</p>
-              <p v-if="todayHero.keyPoint" class="helper coach-line">🎯 {{ todayHero.keyPoint }}</p>
             </template>
             <!--
               갈음 상태(2026-09-03): 오늘 세션이 done 인데 그 런은 어제 것. 이 분기가 없으면
@@ -648,14 +650,6 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
           {{ heroWeatherLine }} · {{ formatDateWithWeekday(todayDate) }} 기준
         </p>
 
-        <!--
-          CTA(#752 → 2026-09-03): 주 CTA '이 훈련으로 갈게요'는 **토스트만 띄우고 아무것도 남기지 않는**
-          빈 껍데기였다(수락 상태 미보관). 요약 홈이 행동을 소유하려면 진짜 시작(라이브 트래킹·워치 전송)이어야
-          하는데 워치 쪽이 아직 덜 여물어 보류하고, 그때까지 없는 결정 버튼 대신 '작전 보기'만 둔다.
-        -->
-        <div v-if="hasSchedule && todayHero && !activeDoneRun" class="hero-actions">
-          <button type="button" class="hero-action-secondary hero-action-only" @click.stop="goCoachTab">작전 보기</button>
-        </div>
       </div>
       <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
     </article>
@@ -914,18 +908,30 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
 }
 
 /* 휴식 선언 진입(#473): 차분한 muted 고스트 — 닦달/강조가 아니라 필요할 때 쓰는 조용한 도구. */
+/*
+  휴식 선언 진입은 **텍스트 링크**다(2026-09-03). 점선 박스로 두면 카드처럼 보여
+  '지금 눌러야 할 것' 처럼 읽혔다 — 필요할 때만 쓰는 도구라 조용해야 한다.
+  전역 button 기본값(그라디언트·그림자·min-height 48)을 전부 되돌린다(ui-system-contract 함정).
+*/
 .rest-declare-entry {
-  width: 100%;
-  margin-top: 4px;
-  padding: 10px 12px;
-  border-radius: var(--radius-button, 12px);
-  border: 1px dashed var(--color-border, rgba(120, 120, 120, 0.3));
-  background: transparent;
+  display: block;
+  width: auto;
+  /* 페이지 기본 세로 간격(22px)을 음수 마진으로 당겨 히어로에 붙인다 — 조용한 보조 링크라 덩어리 밖에 뜨면 안 된다. */
+  margin: -15px auto -6px;
+  padding: 2px 6px;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
   color: var(--color-muted);
   font-size: var(--text-caption-size);
   font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--color-muted) 45%, transparent);
   cursor: pointer;
   box-shadow: none;
+  text-shadow: none;
 }
 
 .schedule-loading {
@@ -943,10 +949,22 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
   overflow: hidden;
   display: block;
   min-height: 0;
-  padding: var(--space-4, 16px);
-  border: 1px solid color-mix(in srgb, var(--hero-accent) 30%, var(--color-surface-2));
+  /* 좌우는 넉넉히 — 카드가 커진 게 아니라 글이 가장자리에서 떨어져 숨 쉰다(2026-09-03). */
+  padding: 18px 28px;
+  /*
+    카드 배경을 훈련 유형색으로 물들인다(2026-09-03). 유형색을 그대로 깔면 채도가 높아 글자를 잡아먹으므로
+    ① 중립(muted-2)으로 한 번 죽이고(채도↓) ② 가장 어두운 배경 토큰에 섞어(밝기↓) 은은하게 깐다.
+    글자색은 건드리지 않는다 — 대비는 이 어두운 틴트가 보장한다.
+  */
+  --hero-tint: color-mix(in srgb, var(--hero-accent) 45%, var(--color-muted-2));
+  /* 보더 없음 — 타입 틴트 배경 자체가 카드 경계다(2026-09-03). 선까지 두르면 액자처럼 갇혀 보인다. */
+  border: 0;
   border-radius: var(--radius-card-lg, 16px);
-  background: linear-gradient(150deg, color-mix(in srgb, var(--hero-accent) 13%, transparent), var(--color-surface) 60%);
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--hero-tint) 26%, var(--color-bg)),
+    color-mix(in srgb, var(--hero-tint) 11%, var(--color-bg-soft))
+  );
   box-shadow: none;
 }
 
@@ -968,12 +986,17 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
   --hero-accent: var(--color-race);
 }
 
-.today-hero .today-hero-eyebrow,
-.rest-hero .today-hero-eyebrow {
-  color: color-mix(in srgb, var(--hero-accent) 78%, var(--color-text));
+/*
+  스트립 바로 아래 날짜 한 줄(애플 날씨 배치) — 카드 밖이라 히어로 accent 대신 중립 톤.
+  스트립·히어로와 한 덩어리로 읽혀야 해서 페이지 기본 간격을 음수 마진으로 좁힌다.
+*/
+.week-strip-datestamp {
+  margin: -12px 0 -12px;
+  color: var(--color-muted);
   font-family: var(--font-mono);
-  font-size: var(--text-micro-size);
-  letter-spacing: 0.14em;
+  font-size: var(--text-caption-size);
+  letter-spacing: 0.08em;
+  text-align: center;
 }
 
 .today-hero h2,

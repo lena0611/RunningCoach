@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 /**
- * WeekStrip — 요약 홈 날짜 스트립 (.harness/project/tab-patterns.md).
- * 월~일 7칸 등폭, 오늘 = primary 링, 상태 마커(완료 ✓ / 선언휴식 💤 / 예정 타입 dot).
+ * WeekStrip — 요약·코치 공용 날짜 스트립 (.harness/project/tab-patterns.md).
+ * 월~일 7칸 등폭. 날짜는 **원형 인디케이터**가 감싸고(애플 날씨식), 채움색으로 오늘과 그 외를 가른다:
+ * 오늘 = primary, 오늘이 아닌 선택일 = 흰색.
+ *
+ * 상태는 **원 안팎에 싣는다**(기록 탭 달력과 같은 언어, 2026-09-03): 예정 세션 타입 = 타입색 옅은 채움,
+ * 완료 = 타입색 링, 선언 휴식 = 중립 채움. 예전엔 날짜 아래 별도 줄에 dot/✓/💤 를 찍어
+ * 줄이 하나 더 필요했고, 같은 칸의 정보가 두 층으로 흩어졌다.
  * 지오메트리·색은 --weekstrip-* 토큰만 참조한다.
  * 인터랙션은 최소(YAGNI): 탭하면 select emit (요약 홈에선 코치 탭 이동).
  */
@@ -46,7 +51,17 @@ const selectable = computed(() => props.active !== undefined && props.active !==
 /** 선택 모드면 "고르기", 프리뷰면 "코치 탭에서 보기" — 실제로 일어나는 일을 말한다. */
 function ariaLabelOf(day: WeekStripDay): string {
   const double = day.double ? ' · 같은 날 2세션(오전·오후)' : ''
-  return `${day.label} · ${day.chip}${double}${selectable.value ? '' : ' — 코치 탭에서 보기'}`
+  // 상태를 색/링으로만 두면 스크린리더에 사라진다(tab-patterns §5 — 색만으로 구분 금지).
+  const state = day.state === 'done' ? ' · 완료' : day.state === 'rested' ? ' · 휴식' : ''
+  return `${day.label} · ${day.chip}${state}${double}${selectable.value ? '' : ' — 코치 탭에서 보기'}`
+}
+/**
+ * 원형 채움 대상인가. 선택 모드(코치)면 **고른 날**, 프리뷰(요약)면 **오늘**이 채워진다 —
+ * 요약엔 선택 개념이 없어 오늘을 안 채우면 스트립에 초점이 하나도 없다.
+ * 채움색은 CSS 가 is-today 로 가른다(오늘 primary / 그 외 흰색).
+ */
+function isFilled(day: WeekStripDay): boolean {
+  return selectable.value ? day.date === props.active : day.date === props.today
 }
 /** RunTypeIcon/RunTypeBadge 와 동일 슬러그 규칙 — 전역 run-type-* 색 변수를 재사용한다. */
 function typeSlug(type: string): string {
@@ -69,11 +84,19 @@ function typeSlug(type: string): string {
     >
       <span v-if="day.double" class="week-strip-double" aria-hidden="true">×2</span>
       <span class="week-strip-weekday">{{ weekdayOf(day) }}</span>
-      <span class="week-strip-date num-mono">{{ dayNumOf(day) }}</span>
-      <span class="week-strip-mark" aria-hidden="true">
-        <template v-if="day.state === 'done'">✓</template>
-        <template v-else-if="day.state === 'rested'">💤</template>
-        <i v-else-if="day.type" class="week-strip-dot" :class="`run-type-${typeSlug(day.type)}`" />
+      <span
+        class="week-strip-disc"
+        :class="[
+          {
+            'is-filled': isFilled(day),
+            'is-done': day.state === 'done',
+            'is-rested': day.state === 'rested',
+            'has-session': Boolean(day.type) && day.state !== 'rested'
+          },
+          day.type ? `run-type-${typeSlug(day.type)}` : ''
+        ]"
+      >
+        <span class="week-strip-date num-mono">{{ dayNumOf(day) }}</span>
       </span>
     </button>
   </div>
@@ -92,13 +115,25 @@ function typeSlug(type: string): string {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  /* 요일 글자와 날짜 원 사이 숨 — 붙어 있으면 두 줄이 한 덩어리로 뭉쳐 읽힌다(2026-09-03). */
+  gap: var(--weekstrip-label-gap);
   padding: var(--weekstrip-cell-pad);
-  border: 1px solid var(--tab-inactive-border);
-  border-radius: var(--weekstrip-cell-radius);
-  background: var(--color-surface);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
   cursor: pointer;
+}
+
+/* 날짜를 감싸는 원 — 상태(채움·링)를 여기 싣는다. 비어 있어도 자리를 지켜 줄이 흔들리지 않는다. */
+.week-strip-disc {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--weekstrip-disc-size);
+  height: var(--weekstrip-disc-size);
+  border-radius: 50%;
+  background: transparent;
 }
 
 .week-strip-weekday {
@@ -115,44 +150,53 @@ function typeSlug(type: string): string {
   line-height: 1;
 }
 
-.week-strip-mark {
-  height: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-micro-size);
-  line-height: 1;
+/*
+  상태 스킨(기록 탭 달력과 같은 언어). 전역 run-type-* 클래스가 이 요소에 --run-type-color 를 준다.
+  예정 세션 = 타입색 옅은 채움 / 완료 = 타입색 링 / 선언 휴식 = 중립 채움.
+*/
+.week-strip-disc.has-session {
+  background: color-mix(in srgb, var(--run-type-color, var(--color-primary)) var(--weekstrip-type-fill-mix), transparent);
+}
+.week-strip-disc.has-session .week-strip-date {
+  color: color-mix(in srgb, var(--run-type-color, var(--color-primary)) 85%, var(--color-text));
+}
+.week-strip-disc.is-done {
+  box-shadow: var(--weekstrip-ring);
+}
+.week-strip-disc.is-rested {
+  background: var(--weekstrip-rest-fill);
+}
+
+/* 오늘은 채워지지 않아도 숫자를 primary 로 — 애플 날씨가 '오늘'을 늘 색으로 표시하는 것과 같다. */
+.week-strip-day.is-today .week-strip-disc:not(.is-filled) .week-strip-date {
   color: var(--color-primary);
 }
-
-/* 전역 run-type-* 클래스가 이 요소에 --run-type-color 를 지정한다. 크기 기준 = 완료 도트 토큰 +2px */
-.week-strip-dot {
-  width: calc(var(--weekstrip-done-dot) + 2px);
-  height: calc(var(--weekstrip-done-dot) + 2px);
-  border-radius: 50%;
-  background: var(--run-type-color, var(--color-muted));
+/* 채움: 오늘 = primary, 오늘이 아닌 선택일 = 흰색. 대비색은 각 토큰 짝으로 고정한다. */
+.week-strip-disc.is-filled {
+  background: var(--weekstrip-active-fill);
+}
+.week-strip-disc.is-filled .week-strip-date {
+  color: var(--weekstrip-active-fill-text);
+  font-weight: 800;
+}
+.week-strip-day.is-today .week-strip-disc.is-filled {
+  background: var(--weekstrip-today-fill);
+}
+.week-strip-day.is-today .week-strip-disc.is-filled .week-strip-date {
+  color: var(--weekstrip-today-fill-text);
 }
 
-.week-strip-day.is-today {
-  border: var(--weekstrip-today-border);
-  background: var(--weekstrip-today-bg);
-}
-.week-strip-day.is-today .week-strip-weekday,
-.week-strip-day.is-today .week-strip-date {
+
+.week-strip-day.is-today .week-strip-weekday {
   color: var(--color-primary);
   font-weight: 800;
 }
 /*
-  선택 모드(#745, 코치 탭). 활성은 색+굵기+보더 3중으로 표시한다(tab-patterns §5 — 색만으로 구분 금지).
-  '오늘'과 '선택'은 다른 축이라 함께 붙을 수 있다 — 선택이 더 강한 신호이므로 뒤에 둬 우선한다.
+  선택 모드(#745, 코치 탭). 활성 표시는 색만이 아니라 **채운 원 + 굵기**로 준다(tab-patterns §5).
+  '오늘'과 '선택'은 다른 축이라 함께 붙을 수 있고, 그때는 오늘 색(primary)이 이긴다 — 위 is-today 규칙.
 */
-.week-strip-day.is-active {
-  border-color: var(--tab-ok-border);
-  background: var(--tab-ok-bg);
-}
-.week-strip-day.is-active .week-strip-weekday,
-.week-strip-day.is-active .week-strip-date {
-  color: var(--tab-ok-text);
+.week-strip-day.is-active .week-strip-weekday {
+  color: var(--color-text);
   font-weight: 800;
 }
 /* 같은 날 더블(#455) shoulder 배지 — 칸 우상단에 겹쳐 레이아웃을 밀지 않는다. */
