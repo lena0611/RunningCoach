@@ -94,14 +94,44 @@ export function formatDataCardValue(value: DataCardValue): string {
  */
 export function describeDataCardBasis(value: DataCardValue): string {
   if (value.matchedRuns === 0) return '해당 기록 없음'
+  const requested = describeWindow(value.windowDays)
   const unit = GROUP_UNITS[value.groupBy]
-  if (value.groupCount > 0 && unit) return `최근 ${value.groupCount}${unit} 기준`
+
+  if (value.groupCount > 0 && unit) {
+    /*
+      요청한 창과 실제 평균한 묶음 수는 다를 수 있다 — 안 뛴 주는 분모가 없어 평균에서 빠진다.
+      "최근 3주"만 쓰면 4주를 요청한 사용자에겐 **창이 바뀐 것처럼** 보인다(2026-09-03 지적).
+      그래서 요청을 앞에 두고 실제를 괄호처럼 뒤에 붙인다.
+    */
+    const requestedGroups = expectedGroupCount(value.windowDays, value.groupBy)
+    if (requested && requestedGroups && requestedGroups !== value.groupCount) {
+      return `${requested} 중 ${value.groupCount}${unit} 기준`
+    }
+    return `${requested || `최근 ${value.groupCount}${unit}`} 기준`
+  }
+  if (requested) return `${requested} · 러닝 ${value.matchedRuns}건`
   return `러닝 ${value.matchedRuns}건 기준`
 }
 
 const GROUP_UNITS: Record<string, string> = {
   week: '주',
   month: '개월'
+}
+
+/** 창을 사람 말로. 주·개월로 딱 떨어지면 그렇게 부른다 — "최근 28일"보다 "최근 4주"가 요청한 말에 가깝다. */
+function describeWindow(windowDays: number | null): string {
+  if (!windowDays) return ''
+  if (windowDays % 7 === 0) return `최근 ${windowDays / 7}주`
+  if (windowDays % 30 === 0) return `최근 ${windowDays / 30}개월`
+  return `최근 ${windowDays}일`
+}
+
+/** 요청한 창에 묶음이 몇 개 들어가는지(주/개월). 실제와 다르면 둘 다 보여준다. */
+function expectedGroupCount(windowDays: number | null, groupBy: string): number | null {
+  if (!windowDays) return null
+  if (groupBy === 'week') return Math.round(windowDays / 7)
+  if (groupBy === 'month') return Math.round(windowDays / 30)
+  return null
 }
 
 function numberOrNull(value: number | null | undefined): number | null {

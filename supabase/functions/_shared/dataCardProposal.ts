@@ -25,6 +25,12 @@ export function normalizeDataCardProposalArgs(raw: unknown): DataCardProposalRes
 
   const metric = typeof value.metric === 'string' ? value.metric : ''
   const kind = value.kind === 'ratio' ? 'ratio' : 'single'
+  /*
+    기간은 **오늘 기준 상대값**만 받는다. 절대 날짜를 저장하면 카드가 그 기간에 얼어붙는다
+    (2026-09-03: "최근 4주" 요청이 `2026-08-01~08-31` 로 굳어 8월 카드가 됐다).
+  */
+  const rawWindow = typeof value.windowDays === 'number' ? Math.floor(value.windowDays) : 0
+  const window = rawWindow > 0 ? { lastDays: Math.min(rawWindow, 730) } : null
 
   if (kind === 'single') {
     const query = normalizeQueryRunsArgs(value.query)
@@ -32,7 +38,7 @@ export function normalizeDataCardProposalArgs(raw: unknown): DataCardProposalRes
     if (!query.spec.metrics.includes(metric as never)) {
       return { error: `'${metric || '지표'}'는 이 조회에 없는 지표입니다.` }
     }
-    const spec: DataCardSpec = { kind: 'single', title, query: query.spec, metric: metric as never }
+    const spec: DataCardSpec = { kind: 'single', title, query: query.spec, metric: metric as never, window }
     const verdict = validateDataCardSpec(spec)
     return verdict.ok ? { spec } : { error: verdict.error }
   }
@@ -48,7 +54,8 @@ export function normalizeDataCardProposalArgs(raw: unknown): DataCardProposalRes
     numerator: numerator.spec,
     denominator: denominator.spec,
     metric: metric as never,
-    display: value.display === 'times' ? 'times' : 'percent'
+    display: value.display === 'times' ? 'times' : 'percent',
+    window
   }
   const verdict = validateDataCardSpec(spec)
   return verdict.ok ? { spec } : { error: verdict.error }

@@ -1779,8 +1779,16 @@ button.stat-card {
   color: var(--color-muted);
 }
 
+/*
+  라벨은 화살표(.card-arrow) 자리를 비워 둔다 — 겹치면 글자가 화살표 아래로 들어간다.
+  다만 화살표는 interactive 카드에만 있다. 상세가 없는 카드(사용자 정의 지표 등)에서도 28px 를
+  비우면 제목이 이유 없이 두 줄로 꺾인다(2026-09-03 모바일 실측) — 그래서 여백도 조건부다.
+*/
 .stat-card-label {
   display: block;
+}
+
+.stat-card-interactive .stat-card-label {
   padding-right: 28px;
 }
 

@@ -1981,15 +1981,27 @@ function buildCoachTools() {
         parameters: {
           type: 'object',
           additionalProperties: false,
-          required: ['title', 'kind', 'metric', 'query', 'numerator', 'denominator', 'display'],
+          required: ['title', 'kind', 'metric', 'query', 'numerator', 'denominator', 'display', 'windowDays'],
           properties: {
-            title: { type: 'string', description: '카드 이름(짧게). 사용자 말 그대로가 아니라 지표 이름으로.' },
+            title: {
+              type: 'string',
+              description:
+                '카드 이름. **한글 10자 이내**(영문·숫자·공백은 반 칸으로 센다). 카드가 좁아 넘치면 두 줄로 꺾인다. ' +
+                '사용자 말 그대로가 아니라 짧은 지표 이름으로 — 예: "주간 대비 LSD 비중", "토요일 LSD 누적".'
+            },
             kind: { type: 'string', enum: ['single', 'ratio'] },
             metric: { type: 'string', enum: [...QUERY_RUNS_METRICS] },
             query: { anyOf: [{ type: 'null' }, buildQueryRunsArgSchema()] },
             numerator: { anyOf: [{ type: 'null' }, buildQueryRunsArgSchema()] },
             denominator: { anyOf: [{ type: 'null' }, buildQueryRunsArgSchema()] },
-            display: { anyOf: [{ type: 'null' }, { type: 'string', enum: ['percent', 'times'] }] }
+            display: { anyOf: [{ type: 'null' }, { type: 'string', enum: ['percent', 'times'] }] },
+            windowDays: {
+              anyOf: [{ type: 'null' }, { type: 'integer' }],
+              description:
+                '기간을 **오늘 기준 며칠**로 준다(최근 4주=28, 최근 3개월=90, 올해 같은 고정 구간은 불가). ' +
+                'null 이면 전체 기간. **filters 에 date 를 넣지 마라** — 절대 날짜를 박으면 카드가 그 기간에 얼어붙어 ' +
+                '한 달 뒤에도 옛 숫자를 보여준다. 카드는 매일 보는 물건이라 항상 오늘 기준이어야 한다.'
+            }
           }
         }
       }
