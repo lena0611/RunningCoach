@@ -640,7 +640,8 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
                   }}<small v-if="todayHeroPaceParts.unit" class="today-hero-unit">{{ todayHeroPaceParts.unit }}</small></span
                 >
                 <span v-if="todayHeroHrCap" class="today-hero-meta-item"
-                  ><span class="today-hero-hr-icon" aria-hidden="true">❤️</span> 최대 {{ todayHeroHrCap
+                  ><span class="today-hero-hr-icon" aria-hidden="true">❤️</span
+                  ><span class="today-hero-hr-label"> 최대 </span>{{ todayHeroHrCap
                   }}<small class="today-hero-unit">bpm</small></span
                 >
               </p>
@@ -1030,9 +1031,9 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
 .week-strip-datestamp {
   margin: -12px 0 -12px;
   color: var(--color-muted);
-  font-family: var(--font-mono);
+  /* 시스템 폰트 — 모노는 자간이 성겨 '2026-09-03(목)'이 숫자표처럼 읽혔다. 여긴 읽는 문장이다. */
   font-size: var(--text-caption-size);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.02em;
   text-align: center;
 }
 
@@ -1088,8 +1089,11 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
 
 .today-hero-meta {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
+  /* 페이스와 심박은 **한 줄**이다 — 줄이 갈리면 처방이 두 덩어리로 읽힌다.
+     좁은 폭(375)에서도 우측에 여백이 남도록 본문보다 한 단계 작은 15px + gap 10px 로 맞췄다. */
+  flex-wrap: nowrap;
+  gap: 10px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--color-text);
 }
@@ -1106,6 +1110,10 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
 .today-hero-hr-icon {
   display: inline-block;
   font-size: 0.88em;
+}
+/* '최대'는 값이 아니라 수식어 — 1px 낮춰 숫자에 자리를 내준다. */
+.today-hero-hr-label {
+  font-size: calc(1em - 1px);
 }
 /* 단위는 값보다 작고 연하게 — 숫자가 먼저 읽혀야 한다. */
 .today-hero-unit {
