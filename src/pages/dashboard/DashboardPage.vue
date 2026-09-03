@@ -631,7 +631,11 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
               <p class="helper">디브리핑은 코치 탭에서 확인해요.</p>
             </template>
             <template v-else-if="todayHero">
-              <RunTypeBadge :type="todayHero.sessionType" class="today-hero-badge" />
+              <!-- 배지와 한 줄: 타입 칩(무엇) + '오늘 훈련'(언제) — 카드가 무엇을 말하는지 한 줄로 세운다. -->
+              <div class="today-hero-badge-row">
+                <RunTypeBadge :type="todayHero.sessionType" class="today-hero-badge" />
+                <span class="today-hero-kicker">오늘 훈련</span>
+              </div>
               <h2>
                 {{ todayHero.title
                 }}<span v-if="todayHero.distanceKm" class="today-hero-distance num-mono">
@@ -695,7 +699,7 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
 
     <!-- 휴식 선언 진입(#473): 쉬는 중이 아닐 때만. 닦달이 아니라 "필요하면 쓰는 도구"로 차분히 노출. -->
     <button v-if="hasSchedule && !restState.active" type="button" class="rest-declare-entry" @click="openRestSheet">
-      💤 한동안 쉬어갈까요?
+      한동안 쉬어갈까요?
     </button>
 
     <!-- NumbersGrid(리디자인 ①b): 2×2 — 주간 거리·Easy 비율·강훈련·평균 심박(지표 액센트 dot + 큰 mono 숫자) -->
@@ -989,7 +993,7 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
   display: block;
   min-height: 0;
   /* 좌우는 넉넉히 — 카드가 커진 게 아니라 글이 가장자리에서 떨어져 숨 쉰다(2026-09-03). */
-  padding: 18px 28px;
+  padding: 18px 20px;
   /*
     카드 배경을 훈련 유형색으로 물들인다(2026-09-03). 유형색을 그대로 깔면 채도가 높아 글자를 잡아먹으므로
     ① 중립(muted-2)으로 한 번 죽이고(채도↓) ② 가장 어두운 배경 토큰에 섞어(밝기↓) 은은하게 깐다.
@@ -1044,9 +1048,21 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
   line-height: 1.15;
 }
 
+.today-hero-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
 .today-hero-badge {
   width: fit-content;
-  margin-top: 2px;
+}
+/* '오늘 훈련'은 배지에 딸린 캡션 — 배지보다 조용해야 칩이 먼저 읽힌다. */
+.today-hero-kicker {
+  color: var(--color-muted);
+  font-size: var(--text-caption-size);
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .today-hero-distance {
