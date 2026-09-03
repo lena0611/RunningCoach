@@ -45,9 +45,18 @@ export type QueryRunsRow = {
 
 type FieldKind = 'date' | 'number' | 'text'
 
+/**
+ * 필드 스펙 — 저장된 컬럼이거나, 컬럼에서 **파생**되는 값이다.
+ * 파생을 둔 이유(#767): 사용자가 처음 원한 카드가 "매주 **토요일만** LSD 누적" 이었는데 요일이
+ * 그룹 축에만 있고 필터에는 없어 표현할 수 없었다. 요일은 date 에서 결정론으로 나오므로 컬럼 없이 넓힌다.
+ */
+type FieldSpec = { column: keyof QueryRunsRow; kind: FieldKind } | { derived: 'weekday'; kind: FieldKind }
+
 /** 필터·지표에 쓸 수 있는 필드(카멜 이름 → 행 컬럼·종류). 여기 없는 필드는 존재하지 않는 것으로 답한다. */
-export const QUERY_RUNS_FIELDS: Record<string, { column: keyof QueryRunsRow; kind: FieldKind }> = {
+export const QUERY_RUNS_FIELDS: Record<string, FieldSpec> = {
   date: { column: 'date', kind: 'date' },
+  /** 요일('월'~'일'). groupBy 의 weekday 와 같은 라벨을 쓴다 — 한 어휘로 거르고 묶는다. */
+  weekday: { derived: 'weekday', kind: 'text' },
   type: { column: 'type', kind: 'text' },
   courseType: { column: 'course_type', kind: 'text' },
   companion: { column: 'companion', kind: 'text' },
@@ -98,7 +107,9 @@ export const QUERY_RUNS_METRICS = [
   'stressLevel',
   'temperature'
 ] as const
-type Metric = (typeof QUERY_RUNS_METRICS)[number]
+/** 지표 이름. 카드 스펙(#767)이 같은 어휘를 쓰도록 내보낸다 — 문자열로 받으면 오타가 런타임까지 간다. */
+export type QueryRunsMetric = (typeof QUERY_RUNS_METRICS)[number]
+type Metric = QueryRunsMetric
 
 const SUM_METRICS: Metric[] = ['distanceKm', 'durationSec', 'activeEnergyKcal', 'elevationGainM']
 const MAX_METRICS: Metric[] = ['maxHeartRate']
@@ -208,7 +219,8 @@ export function runQueryRunsCore(spec: QueryRunsSpec, rows: QueryRunsRow[]): Que
         continue
       }
       const field = QUERY_RUNS_FIELDS[metric]
-      if (!field) continue
+      // 파생 필드(요일)는 거르기 전용이다 — 숫자 집계 대상이 아니다.
+      if (!field || !('column' in field)) continue
       const values = list
         .map((item) => item[field.column])
         .filter((item): item is number => typeof item === 'number' && Number.isFinite(item))
@@ -268,7 +280,7 @@ function failureDetail(kind: QueryRunsFailureKind, spec: QueryRunsSpec, matchedR
 function matchesFilter(row: QueryRunsRow, filter: QueryRunsFilter): boolean {
   const spec = QUERY_RUNS_FIELDS[filter.field]
   if (!spec) return false
-  const raw = row[spec.column]
+  const raw = 'column' in spec ? row[spec.column] : weekdayLabel(row.date)
   if (spec.kind === 'number') {
     if (typeof raw !== 'number' || !Number.isFinite(raw)) return false
     const target = Number(filter.value)
@@ -295,14 +307,17 @@ function matchesFilter(row: QueryRunsRow, filter: QueryRunsFilter): boolean {
 
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토']
 
+/** 날짜 → 요일 라벨. 필터(weekday)와 그룹(weekday)이 **같은 어휘**를 쓰도록 한 곳에서 만든다. */
+function weekdayLabel(date: string): string {
+  const day = new Date(`${date}T00:00:00Z`).getUTCDay()
+  return Number.isFinite(day) ? WEEKDAY_LABELS[day] : '알 수 없음'
+}
+
 function groupKey(row: QueryRunsRow, groupBy: GroupBy): string {
   if (groupBy === 'none') return 'all'
   if (groupBy === 'month') return row.date.slice(0, 7)
   if (groupBy === 'week') return isoWeekKey(row.date)
-  if (groupBy === 'weekday') {
-    const day = new Date(`${row.date}T00:00:00Z`).getUTCDay()
-    return Number.isFinite(day) ? WEEKDAY_LABELS[day] : '알 수 없음'
-  }
+  if (groupBy === 'weekday') return weekdayLabel(row.date)
   if (groupBy === 'type') return row.type || '알 수 없음'
   if (groupBy === 'courseType') return row.course_type || '알 수 없음'
   return row.companion || '혼자'
