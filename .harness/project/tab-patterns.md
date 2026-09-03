@@ -15,7 +15,7 @@ PaceLAB의 모든 탭·전환 UI 스펙. 콘텐츠 페이지의 탭성 UI(뷰 �
 | 신호 | 표현 |
 |---|---|
 | 오늘 | 원을 `--weekstrip-today-fill`(primary)로 채우고 숫자는 `--weekstrip-today-fill-text` |
-| 선택(코치 `active`) | 원을 `--weekstrip-active-fill`(흰색)로 채움. 오늘이 선택되면 오늘 색이 이긴다 |
+| 선택(코치 `active`) | 오늘이 아니면 **채우지 않고 테두리**(`--weekstrip-active-ring`) — 채움은 '오늘' 한 자리 전용. 오늘이 선택되면 primary 채움이 이긴다 |
 | 예정 세션 | 타입색 옅은 채움(`--weekstrip-type-fill-mix`) + 타입색 숫자 |
 | 완료 | 타입색 링(`--weekstrip-ring`) — 기록 탭 달력의 '수행' 링과 같은 언어 |
 | 선언 휴식 | 중립 채움(`--weekstrip-rest-fill`) |

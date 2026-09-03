@@ -3,7 +3,7 @@ import { computed } from 'vue'
 /**
  * WeekStrip — 요약·코치 공용 날짜 스트립 (.harness/project/tab-patterns.md).
  * 월~일 7칸 등폭. 날짜는 **원형 인디케이터**가 감싸고(애플 날씨식), 채움색으로 오늘과 그 외를 가른다:
- * 오늘 = primary, 오늘이 아닌 선택일 = 흰색.
+ * 오늘 = primary 채움, 오늘이 아닌 선택일 = **테두리**(채우지 않는다 — 채움은 '오늘' 한 자리에만).
  *
  * 상태는 **원 안팎에 싣는다**(기록 탭 달력과 같은 언어, 2026-09-03): 예정 세션 타입 = 타입색 옅은 채움,
  * 완료 = 타입색 링, 선언 휴식 = 중립 채움. 예전엔 날짜 아래 별도 줄에 dot/✓/💤 를 찍어
@@ -171,15 +171,21 @@ function typeSlug(type: string): string {
 .week-strip-day.is-today .week-strip-disc:not(.is-filled) .week-strip-date {
   color: var(--color-primary);
 }
-/* 채움: 오늘 = primary, 오늘이 아닌 선택일 = 흰색. 대비색은 각 토큰 짝으로 고정한다. */
+/*
+  선택 표시: 오늘 = primary **채움**, 오늘이 아닌 날 = **테두리만**.
+  채움을 오늘 한 자리에만 쓰면 "지금 어디를 보고 있나"와 "오늘이 언제인가"가 한눈에 갈린다.
+  타입 채움(has-session)은 선택 시 걷어낸다 — 테두리 안이 비어야 윤곽이 읽힌다.
+*/
 .week-strip-disc.is-filled {
-  background: var(--weekstrip-active-fill);
+  border: var(--weekstrip-active-ring);
+  background: transparent;
 }
 .week-strip-disc.is-filled .week-strip-date {
-  color: var(--weekstrip-active-fill-text);
+  color: var(--weekstrip-active-text);
   font-weight: 800;
 }
 .week-strip-day.is-today .week-strip-disc.is-filled {
+  border: 0;
   background: var(--weekstrip-today-fill);
 }
 .week-strip-day.is-today .week-strip-disc.is-filled .week-strip-date {

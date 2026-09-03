@@ -199,8 +199,9 @@
   --weekstrip-disc-size: 32px;
   --weekstrip-today-fill: var(--color-primary);
   --weekstrip-today-fill-text: var(--color-on-primary);
-  --weekstrip-active-fill: var(--color-text);
-  --weekstrip-active-fill-text: var(--color-bg);
+  /* 오늘이 아닌 선택일은 **채우지 않고 테두리**로 — 채움은 '오늘' 한 자리에만 쓴다. */
+  --weekstrip-active-ring: 2px solid var(--color-text);
+  --weekstrip-active-text: var(--color-text);
   --weekstrip-day-size: 12px; /* 앱 폰트 하한 12px (기존 9px) */
   --weekstrip-date-size: 12px;
   /* 상태는 원 안(채움)과 원 밖(링)으로 싣는다 — 기록 탭 달력과 같은 언어. */
