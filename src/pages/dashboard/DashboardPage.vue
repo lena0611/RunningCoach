@@ -53,6 +53,7 @@ import HeroIllustration, { type HeroIllustrationTopic } from './HeroIllustration
 import WeekStrip from '@/shared/ui/WeekStrip.vue'
 import { useDataCardStore, valueOfCard } from '@/app/stores/dataCardStore'
 import { describeDataCardBasis, formatDataCardValue } from '@/shared/lib/coaching/dataCardAdapter'
+import { triggerSelectionHaptic } from '@/shared/lib/haptics'
 import SegmentTabs, { type SegmentTabValue } from '@/shared/ui/SegmentTabs.vue'
 import { useTrainingWeek, dayAfterIso } from './useTrainingWeek'
 import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
@@ -442,6 +443,56 @@ const userDataCards = computed(() =>
     }
   })
 )
+/**
+ * 카드 삭제(#767). 되돌릴 수 없어 앱의 기존 파괴적 삭제 규약대로 **확인 시트**를 거친다
+ * (대화 삭제·세션 삭제와 같은 어휘).
+ *
+ * 진입은 **길게 누르기 → 편집 모드**다(아이폰 홈 화면과 같은 관습). ✕ 를 늘 띄우면 지표 칸이
+ * 지우기 버튼으로 뒤덮여, 보라고 만든 카드가 치우라는 카드처럼 보인다. 길게 누른 순간
+ * **짧은 진동**으로 모드 전환을 알린다 — 화면 변화만으로는 눌린 게 맞는지 확신이 안 선다.
+ */
+const dataCardEditMode = ref(false)
+const pendingDeleteCard = ref<{ id: string; title: string } | null>(null)
+const deletingCardId = ref('')
+let longPressTimer = 0
+function startCardLongPress() {
+  window.clearTimeout(longPressTimer)
+  longPressTimer = window.setTimeout(() => {
+    dataCardEditMode.value = true
+    triggerSelectionHaptic()
+  }, 500)
+}
+function cancelCardLongPress() {
+  window.clearTimeout(longPressTimer)
+}
+/** 편집 모드는 바깥을 누르면 닫는다 — 나가는 길이 없으면 갇힌다. */
+function exitCardEditMode() {
+  if (dataCardEditMode.value && !pendingDeleteCard.value) dataCardEditMode.value = false
+}
+watch(dataCardEditMode, (on) => {
+  if (on) window.addEventListener('pointerdown', exitCardEditMode, { capture: true })
+  else window.removeEventListener('pointerdown', exitCardEditMode, { capture: true })
+})
+onBeforeUnmount(() => {
+  window.clearTimeout(longPressTimer)
+  window.removeEventListener('pointerdown', exitCardEditMode, { capture: true })
+})
+async function confirmDeleteDataCard() {
+  const card = pendingDeleteCard.value
+  if (!card || deletingCardId.value) return
+  deletingCardId.value = card.id
+  try {
+    await dataCardStore.remove(card.id)
+    pendingDeleteCard.value = null
+    dataCardEditMode.value = false
+    toastStore.success('카드를 지웠어요.')
+  } catch {
+    toastStore.error('카드를 지우지 못했어요.')
+  } finally {
+    deletingCardId.value = ''
+  }
+}
+
 /** + 카드 → 코치방을 열고 카드 만들기 대화를 시작한다. */
 function openDataCardComposer() {
   useCoachActionBridgeStore().requestDataCardComposer()
@@ -749,16 +800,28 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
         사용자 정의 카드(#767) — 대화로 만들어 승인한 지표. 값 형식이 자유라 valueKind='text' 로 낸다.
         tone 을 주지 않는다: 카드는 수치만 말하고 해석은 사용자 몫이다.
       -->
-      <StatCard
+      <div
         v-for="card in userDataCards"
         :key="card.id"
-        :label="card.title"
-        :value="card.text"
-        :hint="card.hint"
-        dot
-        value-kind="text"
-        :loading="runDataLoading"
-      />
+        class="data-card-slot"
+        :class="{ 'is-editing': dataCardEditMode }"
+        @pointerdown="startCardLongPress"
+        @pointerup="cancelCardLongPress"
+        @pointerleave="cancelCardLongPress"
+        @pointercancel="cancelCardLongPress"
+      >
+        <StatCard :label="card.title" :value="card.text" :hint="card.hint" dot value-kind="text" :loading="runDataLoading" />
+        <button
+          v-if="dataCardEditMode"
+          type="button"
+          class="data-card-remove"
+          :aria-label="`${card.title} 카드 지우기`"
+          @pointerdown.stop
+          @click.stop="pendingDeleteCard = { id: card.id, title: card.title }"
+        >
+          ✕
+        </button>
+      </div>
       <button type="button" class="stat-card data-card-add" @click="openDataCardComposer">
         <span class="data-card-add-circle" aria-hidden="true">+</span>
         <span class="data-card-add-label">개인화 지표 만들기</span>
@@ -785,6 +848,30 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
     />
 
     <!-- 휴식 선언(#473): 기간·이유 선택 → declareRest. 부상·날씨·개인 일정 등 범용. -->
+    <!-- 카드 삭제 확인 — 되돌릴 수 없어 앱의 기존 삭제 규약과 같은 시트·같은 어휘를 쓴다. -->
+    <Teleport to="body">
+      <Transition name="bottom-sheet">
+        <div
+          v-if="pendingDeleteCard"
+          class="bottom-sheet-layer confirm-layer"
+          role="presentation"
+          @click.self="pendingDeleteCard = null"
+        >
+          <section class="bottom-sheet confirm-sheet" role="dialog" aria-modal="true" aria-label="카드 삭제 확인">
+            <div class="bottom-sheet-handle" />
+            <h2>이 카드를 지울까요?</h2>
+            <p><strong>{{ pendingDeleteCard.title }}</strong> 카드가 요약에서 사라집니다. 러닝 기록은 그대로예요.</p>
+            <div class="confirm-actions">
+              <button class="danger" type="button" :disabled="Boolean(deletingCardId)" @click="confirmDeleteDataCard">
+                {{ deletingCardId ? '지우는 중' : '지우기' }}
+              </button>
+              <button class="ghost" type="button" :disabled="Boolean(deletingCardId)" @click="pendingDeleteCard = null">취소</button>
+            </div>
+          </section>
+        </div>
+      </Transition>
+    </Teleport>
+
     <RestDeclarationSheet :open="restSheetOpen" :today="todayDate" :busy="intentBusy" :preset-reason="restPresetReason" :preset-until="restPresetUntil" @declare="onDeclareRest" @close="restSheetOpen = false" />
 
     <SectionGroup v-if="runStore.loading || runStore.error" title="데이터 상태">
@@ -1004,6 +1091,40 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
   line-height: 1;
   color: var(--color-primary);
 }
+/*
+  카드 위 삭제 버튼 — 카드 자체는 눌러도 아무 일이 없어야 하므로(@click.stop) 겹쳐 둔다.
+  전역 button 기본값(그라디언트·그림자·min-height)을 되돌린다(ui-system-contract 함정).
+*/
+.data-card-slot {
+  position: relative;
+  display: grid;
+}
+/* 편집 모드에 들어간 카드는 살짝 눌린 듯이 — 모드가 켜졌다는 걸 배지 말고도 알려준다. */
+.data-card-slot.is-editing {
+  transform: scale(0.98);
+  transition: transform 0.12s ease;
+}
+.data-card-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid var(--color-border, rgba(120, 120, 120, 0.4));
+  border-radius: 50%;
+  background: var(--color-surface-3, #222a35);
+  box-shadow: none;
+  text-shadow: none;
+  color: var(--color-text);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
 /* 점선 원 + 기호 — 카드 테두리와 같은 언어라 "아직 비어 있고 채울 수 있다"로 읽힌다. */
 .data-card-add-circle {
   display: grid;
