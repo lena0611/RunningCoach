@@ -210,7 +210,7 @@ describe('카드 기간은 오늘 기준(상대)', () => {
     kind: 'single',
     title: '최근 거리',
     metric: 'distanceKm',
-    window: { lastDays: 7 },
+    period: { kind: 'rolling', lastDays: 7 },
     query: query()
   }
 
@@ -221,7 +221,7 @@ describe('카드 기간은 오늘 기준(상대)', () => {
   })
 
   it('창을 안 주면 전체 기간', () => {
-    const all: DataCardSpec = { ...spec, window: null }
+    const all: DataCardSpec = { ...spec, period: null }
     expect(computeDataCard(all, rows, new Date('2026-09-03T00:00:00')).value).toBe(60)
   })
 
@@ -238,6 +238,67 @@ describe('카드 기간은 오늘 기준(상대)', () => {
     }
     const verdict = validateDataCardSpec(frozen)
     expect(verdict.ok).toBe(false)
-    if (!verdict.ok) expect(verdict.error).toContain('최근 N일')
+    if (!verdict.ok) expect(verdict.error).toContain('기간 설정으로 지정')
+  })
+})
+
+/**
+ * #767 — 사용자가 말한 방식이 셋으로 갈린다. **뭉치면 반드시 한쪽이 틀린다**:
+ * "최근 한 달"을 이번 달로 굳히면 월초에 값이 사라지고, "8월"을 롤링으로 바꾸면 지난 기록이 흔들린다.
+ */
+describe('기간 3종 — 무엇이 움직이고 무엇이 얼어야 하나', () => {
+  const rows = [
+    row({ date: '2026-09-02', distance_km: 10 }),
+    row({ date: '2026-08-28', distance_km: 20 }),
+    row({ date: '2026-08-05', distance_km: 30 })
+  ]
+  const card = (period: DataCardSpec['period']): DataCardSpec => ({
+    kind: 'single',
+    title: '거리',
+    metric: 'distanceKm',
+    period,
+    query: query()
+  })
+
+  it('rolling 은 매일 창이 밀린다', () => {
+    const spec = card({ kind: 'rolling', lastDays: 7 })
+    // 9/3 기준 7일 = 8/28~9/3 → 9/2(10) + 8/28(20)
+    expect(computeDataCard(spec, rows, new Date('2026-09-03T00:00:00')).value).toBe(30)
+    // 8/30 기준 7일 = 8/24~8/30 → 8/28(20) 만. 창이 밀리며 다른 값이 된다.
+    expect(computeDataCard(spec, rows, new Date('2026-08-30T00:00:00')).value).toBe(20)
+  })
+
+  it('calendar 는 달력 경계부터 오늘까지 — 달이 바뀌면 리셋된다("이번 달 누적"의 뜻)', () => {
+    const spec = card({ kind: 'calendar', unit: 'month' })
+    // 9/3: 9월분만(10). 8/30: 8월분만(20+30).
+    expect(computeDataCard(spec, rows, new Date('2026-09-03T00:00:00')).value).toBe(10)
+    expect(computeDataCard(spec, rows, new Date('2026-08-30T00:00:00')).value).toBe(50)
+  })
+
+  it('fixed 는 언제 열어도 같다 — 지난 기간 기록이 흔들리면 안 된다', () => {
+    const spec = card({ kind: 'fixed', from: '2026-08-01', to: '2026-08-31' })
+    expect(computeDataCard(spec, rows, new Date('2026-09-03T00:00:00')).value).toBe(50)
+    expect(computeDataCard(spec, rows, new Date('2027-01-01T00:00:00')).value).toBe(50)
+  })
+
+  it('"이번 달"과 "최근 한 달"은 다르다 — 월초에 갈린다', () => {
+    const calendar = card({ kind: 'calendar', unit: 'month' })
+    const rolling = card({ kind: 'rolling', lastDays: 30 })
+    const monthStart = new Date('2026-09-01T00:00:00')
+    // 9/1: 이번 달은 9월분이 아직 없어 null. 최근 30일은 8월 러닝을 그대로 포함한다(20+30).
+    // 9/2 러닝은 '오늘(9/1)' 이후라 rolling 상한에 걸려 빠진다 — 그게 "최근 30일"의 뜻이다.
+    expect(computeDataCard(calendar, rows, monthStart).value).toBeNull()
+    expect(computeDataCard(rolling, rows, monthStart).value).toBe(50)
+  })
+
+  it('고정 기간이라도 날짜가 뒤집혔거나 형식이 아니면 거부한다', () => {
+    expect(validateDataCardSpec(card({ kind: 'fixed', from: '2026-08-31', to: '2026-08-01' })).ok).toBe(false)
+    expect(validateDataCardSpec(card({ kind: 'fixed', from: '8월', to: '8월' })).ok).toBe(false)
+    expect(validateDataCardSpec(card({ kind: 'fixed', from: '2026-08-01', to: '2026-08-31' })).ok).toBe(true)
+  })
+
+  it('레거시 window 로 저장된 카드도 계속 돈다', () => {
+    const legacy = { kind: 'single', title: '거리', metric: 'distanceKm', window: { lastDays: 7 }, query: query() } as DataCardSpec
+    expect(computeDataCard(legacy, rows, new Date('2026-09-03T00:00:00')).value).toBe(30)
   })
 })

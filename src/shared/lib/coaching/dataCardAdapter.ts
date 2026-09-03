@@ -94,7 +94,7 @@ export function formatDataCardValue(value: DataCardValue): string {
  */
 export function describeDataCardBasis(value: DataCardValue): string {
   if (value.matchedRuns === 0) return '해당 기록 없음'
-  const requested = describeWindow(value.windowDays)
+  const requested = describeWindow(value)
   const unit = GROUP_UNITS[value.groupBy]
 
   if (value.groupCount > 0 && unit) {
@@ -103,7 +103,7 @@ export function describeDataCardBasis(value: DataCardValue): string {
       "최근 3주"만 쓰면 4주를 요청한 사용자에겐 **창이 바뀐 것처럼** 보인다(2026-09-03 지적).
       그래서 요청을 앞에 두고 실제를 괄호처럼 뒤에 붙인다.
     */
-    const requestedGroups = expectedGroupCount(value.windowDays, value.groupBy)
+    const requestedGroups = value.period?.kind === 'calendar' ? null : expectedGroupCount(value.windowDays, value.groupBy)
     if (requested && requestedGroups && requestedGroups !== value.groupCount) {
       return `${requested} 중 ${value.groupCount}${unit} 기준`
     }
@@ -118,12 +118,27 @@ const GROUP_UNITS: Record<string, string> = {
   month: '개월'
 }
 
-/** 창을 사람 말로. 주·개월로 딱 떨어지면 그렇게 부른다 — "최근 28일"보다 "최근 4주"가 요청한 말에 가깝다. */
-function describeWindow(windowDays: number | null): string {
-  if (!windowDays) return ''
-  if (windowDays % 7 === 0) return `최근 ${windowDays / 7}주`
-  if (windowDays % 30 === 0) return `최근 ${windowDays / 30}개월`
-  return `최근 ${windowDays}일`
+/**
+ * 기간을 사람 말로. **사용자가 말한 방식 그대로** 되돌려준다 — "이번 달"을 "최근 30일"로 바꿔 쓰면
+ * 값이 맞아도 다른 걸 답한 것처럼 읽힌다.
+ */
+function describeWindow(value: DataCardValue): string {
+  const period = value.period ?? (value.windowDays ? ({ kind: 'rolling', lastDays: value.windowDays } as const) : null)
+  if (!period) return ''
+  if (period.kind === 'rolling') {
+    const days = period.lastDays
+    if (days % 7 === 0) return `최근 ${days / 7}주`
+    if (days % 30 === 0) return `최근 ${days / 30}개월`
+    return `최근 ${days}일`
+  }
+  if (period.kind === 'calendar') {
+    return period.unit === 'week' ? '이번 주' : period.unit === 'month' ? '이번 달' : '올해'
+  }
+  // 고정 기간은 같은 달이면 "8월", 아니면 시작~끝. 얼어 있다는 사실이 문구로 드러나야 한다.
+  const [fy, fm] = period.from.split('-')
+  const [ty, tm] = period.to.split('-')
+  if (fy === ty && fm === tm) return `${Number(fm)}월`
+  return `${period.from} ~ ${period.to}`
 }
 
 /** 요청한 창에 묶음이 몇 개 들어가는지(주/개월). 실제와 다르면 둘 다 보여준다. */
