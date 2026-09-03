@@ -34,8 +34,25 @@ import {
  */
 export type DataCardWindow = { lastDays: number } | null
 
+/**
+ * 기간 종류(2026-09-03). 사용자가 말한 방식이 셋으로 갈린다 — **하나로 뭉치면 반드시 한쪽이 틀린다.**
+ *
+ * - `rolling`  "최근 4주", "지난 30일" → 오늘부터 거꾸로 N일. 매일 창이 밀린다.
+ * - `calendar` "이번 달", "올해" → 달력 경계부터 오늘까지. 달이 바뀌면 리셋된다(누적의 의미).
+ * - `fixed`    "8월", "지난 7월" → **일부러 얼린다.** 지난 기간의 기록은 변하면 안 된다.
+ * - null       전체 기간.
+ *
+ * 처음엔 절대 날짜를 전부 금지했는데(카드가 얼어붙은 사고), 그러면 "8월 총 거리"처럼 **정당하게 고정인**
+ * 요청까지 거부한다. 금지할 것은 절대 날짜 자체가 아니라 **의도 없이 굳는 것**이다.
+ */
+export type DataCardPeriod =
+  | { kind: 'rolling'; lastDays: number }
+  | { kind: 'calendar'; unit: 'week' | 'month' | 'year' }
+  | { kind: 'fixed'; from: string; to: string }
+  | null
+
 export type DataCardSpec =
-  | { kind: 'single'; title: string; query: QueryRunsSpec; metric: QueryRunsMetric; window?: DataCardWindow }
+  | { kind: 'single'; title: string; query: QueryRunsSpec; metric: QueryRunsMetric; window?: DataCardWindow; period?: DataCardPeriod }
   | {
       kind: 'ratio'
       title: string
@@ -44,6 +61,7 @@ export type DataCardSpec =
       metric: QueryRunsMetric
       display: 'percent' | 'times'
       window?: DataCardWindow
+      period?: DataCardPeriod
     }
 
 export type DataCardValue = {
@@ -60,8 +78,10 @@ export type DataCardValue = {
   groupCount: number
   /** 묶은 축(week·month 등). 화면이 "주"/"개월" 단위 문구를 고르는 데 쓴다. */
   groupBy: string
-  /** 사용자가 **요청한** 창(일). 실제 값이 있던 묶음 수와 다를 수 있어 둘 다 밝힌다. */
+  /** 사용자가 **요청한** 창(일). rolling 일 때만 값이 있다. 실제 묶음 수와 다를 수 있어 둘 다 밝힌다. */
   windowDays: number | null
+  /** 요청한 기간 그대로. 화면이 "최근 4주"·"이번 달"·"8월"을 골라 쓴다. */
+  period: DataCardPeriod
   /** 계산이 불완전한 이유. 판정이 아니라 사실이다. */
   failureKind: QueryRunsFailureKind | null
 }
@@ -99,13 +119,21 @@ export function dataCardTitleWidth(title: string): number {
 /** 검증 — 닫힌 어휘 밖이면 거부 이유를 돌려준다(조용히 무시하지 않는다). */
 export function validateDataCardSpec(spec: DataCardSpec): { ok: true } | { ok: false; error: string } {
   if (!spec.title.trim()) return { ok: false, error: '카드 이름이 비어 있습니다.' }
-  // 절대 날짜가 박히면 카드가 그 기간에 얼어붙는다 — 기간은 window(오늘 기준)로만 받는다.
+  /*
+    기간은 **period 로만** 받는다. 필터에 직접 박은 날짜는 거부한다 — 의도가 rolling 인지 fixed 인지
+    구분이 안 되고, 그러면 "최근 4주" 요청이 조용히 특정 월로 굳는다(2026-09-03 실사고).
+    고정 기간이 필요하면 period.kind='fixed' 로 **명시**해야 한다.
+  */
   const queries = spec.kind === 'single' ? [spec.query] : [spec.numerator, spec.denominator]
   if (queries.some((q) => q.filters.some((f) => f.field === 'date'))) {
-    return { ok: false, error: '카드 기간은 고정 날짜가 아니라 "최근 N일"로 지정해야 합니다.' }
+    return { ok: false, error: '카드 기간은 필터가 아니라 기간 설정으로 지정해야 합니다.' }
   }
-  if (spec.window && (!Number.isFinite(spec.window.lastDays) || spec.window.lastDays < 1)) {
+  const period = resolvePeriodSpec(spec)
+  if (period?.kind === 'rolling' && (!Number.isFinite(period.lastDays) || period.lastDays < 1)) {
     return { ok: false, error: '카드 기간이 올바르지 않습니다.' }
+  }
+  if (period?.kind === 'fixed' && !(DATE_ONLY.test(period.from) && DATE_ONLY.test(period.to) && period.from <= period.to)) {
+    return { ok: false, error: '고정 기간의 날짜가 올바르지 않습니다(YYYY-MM-DD, 시작 ≤ 끝).' }
   }
   // 길면 카드에서 두 줄로 꺾인다 — 저장 뒤에 발견하면 고칠 방법이 없으므로 제안 단계에서 막는다.
   if (dataCardTitleWidth(spec.title) > DATA_CARD_TITLE_WIDTH_LIMIT) {
@@ -123,15 +151,58 @@ export function validateDataCardSpec(spec: DataCardSpec): { ok: true } | { ok: f
   return { ok: true }
 }
 
-/** 오늘 기준 창을 날짜 필터로 편다. 카드가 "지금"을 따라 움직이는 지점은 여기 하나뿐이다. */
-function withWindow(query: QueryRunsSpec, window: DataCardWindow, today: Date): QueryRunsSpec {
-  if (!window) return query
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
+
+/** 레거시 `window`(rolling 전용)를 period 로 편다 — 이미 저장된 카드가 계속 돌아야 한다. */
+function resolvePeriodSpec(spec: DataCardSpec): DataCardPeriod {
+  if (spec.period !== undefined) return spec.period
+  return spec.window ? { kind: 'rolling', lastDays: spec.window.lastDays } : null
+}
+
+function toDateKey(date: Date): string {
+  const mm = String(date.getMonth() + 1).padStart(2, '0')
+  const dd = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${mm}-${dd}`
+}
+
+/**
+ * 기간을 날짜 필터로 편다. 카드가 "지금"을 따라 움직이는 지점은 여기 하나뿐이다.
+ * fixed 만 오늘을 안 본다 — 지난 기간의 기록은 변하면 안 되기 때문이고, 그건 **의도된** 고정이다.
+ */
+function withPeriod(query: QueryRunsSpec, period: DataCardPeriod, today: Date): QueryRunsSpec {
+  if (!period) return query
+  const add = (filters: QueryRunsSpec['filters']) => ({ ...query, filters: [...query.filters, ...filters] })
+
+  if (period.kind === 'fixed') {
+    return add([
+      { field: 'date', op: 'gte', value: period.from },
+      { field: 'date', op: 'lte', value: period.to }
+    ])
+  }
+  if (period.kind === 'rolling') {
+    const from = new Date(today)
+    from.setDate(from.getDate() - (period.lastDays - 1))
+    // 상한도 닫는다 — "최근 7일"은 **오늘까지**다. 열어 두면 미래 날짜 러닝(시간대 경계·수동 입력)이 섞인다.
+    return add([
+      { field: 'date', op: 'gte', value: toDateKey(from) },
+      { field: 'date', op: 'lte', value: toDateKey(today) }
+    ])
+  }
+  // calendar: 달력 경계부터 오늘까지. 달이 바뀌면 리셋되는 게 "이번 달 누적"의 뜻이다.
   const from = new Date(today)
-  from.setDate(from.getDate() - (window.lastDays - 1))
-  const mm = String(from.getMonth() + 1).padStart(2, '0')
-  const dd = String(from.getDate()).padStart(2, '0')
-  const since = `${from.getFullYear()}-${mm}-${dd}`
-  return { ...query, filters: [...query.filters, { field: 'date', op: 'gte', value: since }] }
+  if (period.unit === 'week') {
+    // 주는 월요일 시작(앱 전역 규칙 — trainingWeekRange 와 같은 경계).
+    const day = from.getDay()
+    from.setDate(from.getDate() - (day === 0 ? 6 : day - 1))
+  } else if (period.unit === 'month') {
+    from.setDate(1)
+  } else {
+    from.setMonth(0, 1)
+  }
+  return add([
+    { field: 'date', op: 'gte', value: toDateKey(from) },
+    { field: 'date', op: 'lte', value: toDateKey(today) }
+  ])
 }
 
 /**
@@ -139,10 +210,10 @@ function withWindow(query: QueryRunsSpec, window: DataCardWindow, today: Date): 
  * 같은 스펙이라도 날이 바뀌면 값이 바뀌어야 맞다(그게 카드를 매일 보는 이유다).
  */
 export function computeDataCard(spec: DataCardSpec, rows: QueryRunsRow[], today: Date = new Date()): DataCardValue {
-  const window = spec.window ?? null
-  const windowDays = window?.lastDays ?? null
+  const period = resolvePeriodSpec(spec)
+  const windowDays = period?.kind === 'rolling' ? period.lastDays : null
   if (spec.kind === 'single') {
-    const result = runQueryRunsCore(withWindow(spec.query, window, today), rows)
+    const result = runQueryRunsCore(withPeriod(spec.query, period, today), rows)
     const first = result.rows[0]
     const raw = first ? first[spec.metric] : null
     return {
@@ -152,12 +223,13 @@ export function computeDataCard(spec: DataCardSpec, rows: QueryRunsRow[], today:
       groupCount: spec.query.groupBy === 'none' ? 0 : result.rows.length,
       groupBy: spec.query.groupBy,
       windowDays,
+      period,
       failureKind: result.failureKind
     }
   }
 
-  const numerator = runQueryRunsCore(withWindow(spec.numerator, window, today), rows)
-  const denominator = runQueryRunsCore(withWindow(spec.denominator, window, today), rows)
+  const numerator = runQueryRunsCore(withPeriod(spec.numerator, period, today), rows)
+  const denominator = runQueryRunsCore(withPeriod(spec.denominator, period, today), rows)
   const unit = spec.display === 'percent' ? '%' : '배'
   const groupBy = spec.denominator.groupBy
   const failureKind = denominator.failureKind ?? numerator.failureKind
@@ -194,6 +266,7 @@ export function computeDataCard(spec: DataCardSpec, rows: QueryRunsRow[], today:
       groupCount: 0,
       groupBy,
       windowDays,
+      period,
       failureKind: failureKind ?? 'no_matching_runs'
     }
   }
@@ -207,6 +280,7 @@ export function computeDataCard(spec: DataCardSpec, rows: QueryRunsRow[], today:
     groupCount: groupBy === 'none' ? 0 : ratios.length,
     groupBy,
     windowDays,
+    period,
     failureKind
   }
 }

@@ -1981,7 +1981,7 @@ function buildCoachTools() {
         parameters: {
           type: 'object',
           additionalProperties: false,
-          required: ['title', 'kind', 'metric', 'query', 'numerator', 'denominator', 'display', 'windowDays'],
+          required: ['title', 'kind', 'metric', 'query', 'numerator', 'denominator', 'display', 'period'],
           properties: {
             title: {
               type: 'string',
@@ -1995,12 +1995,30 @@ function buildCoachTools() {
             numerator: { anyOf: [{ type: 'null' }, buildQueryRunsArgSchema()] },
             denominator: { anyOf: [{ type: 'null' }, buildQueryRunsArgSchema()] },
             display: { anyOf: [{ type: 'null' }, { type: 'string', enum: ['percent', 'times'] }] },
-            windowDays: {
-              anyOf: [{ type: 'null' }, { type: 'integer' }],
+            period: {
+              anyOf: [
+                { type: 'null' },
+                {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['kind', 'lastDays', 'unit', 'from', 'to'],
+                  properties: {
+                    kind: { type: 'string', enum: ['rolling', 'calendar', 'fixed'] },
+                    lastDays: { anyOf: [{ type: 'null' }, { type: 'integer' }] },
+                    unit: { anyOf: [{ type: 'null' }, { type: 'string', enum: ['week', 'month', 'year'] }] },
+                    from: { anyOf: [{ type: 'null' }, { type: 'string' }] },
+                    to: { anyOf: [{ type: 'null' }, { type: 'string' }] }
+                  }
+                }
+              ],
               description:
-                '기간을 **오늘 기준 며칠**로 준다(최근 4주=28, 최근 3개월=90, 올해 같은 고정 구간은 불가). ' +
-                'null 이면 전체 기간. **filters 에 date 를 넣지 마라** — 절대 날짜를 박으면 카드가 그 기간에 얼어붙어 ' +
-                '한 달 뒤에도 옛 숫자를 보여준다. 카드는 매일 보는 물건이라 항상 오늘 기준이어야 한다.'
+                '기간. **사용자가 말한 방식대로** 종류를 고른다 — 뭉치면 반드시 한쪽이 틀린다.\n' +
+                '· rolling: "최근 4주"·"지난 30일"·"요즘" → { kind:"rolling", lastDays:28 }. 매일 창이 밀린다.\n' +
+                '· calendar: "이번 주"·"이번 달"·"올해" → { kind:"calendar", unit:"month" }. 달력 경계부터 오늘까지, 달이 바뀌면 리셋.\n' +
+                '· fixed: "8월"·"지난 7월"처럼 **끝난 특정 기간** → { kind:"fixed", from:"2026-08-01", to:"2026-08-31" }. 일부러 얼린다.\n' +
+                '· null: 전체 기간("통틀어", "누적").\n' +
+                '헷갈리면 rolling 이다. "이번 달"과 "최근 한 달"은 다르다 — 앞은 calendar, 뒤는 rolling.\n' +
+                '**filters 에 date 를 넣지 마라** — 날짜는 코드가 이 기간에서 만든다.'
             }
           }
         }

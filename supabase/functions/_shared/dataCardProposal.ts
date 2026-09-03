@@ -7,7 +7,7 @@
  * 코치가 "그 기준으로는 못 만든다"고 정직하게 말하고 **가장 가까운 대안**을 다시 낼 수 있어야 한다.
  */
 
-import { validateDataCardSpec, type DataCardSpec } from './dataCard.ts'
+import { validateDataCardSpec, type DataCardPeriod, type DataCardSpec } from './dataCard.ts'
 import { normalizeQueryRunsArgs } from './queryRunsCore.ts'
 
 export type DataCardProposalResult =
@@ -25,12 +25,7 @@ export function normalizeDataCardProposalArgs(raw: unknown): DataCardProposalRes
 
   const metric = typeof value.metric === 'string' ? value.metric : ''
   const kind = value.kind === 'ratio' ? 'ratio' : 'single'
-  /*
-    기간은 **오늘 기준 상대값**만 받는다. 절대 날짜를 저장하면 카드가 그 기간에 얼어붙는다
-    (2026-09-03: "최근 4주" 요청이 `2026-08-01~08-31` 로 굳어 8월 카드가 됐다).
-  */
-  const rawWindow = typeof value.windowDays === 'number' ? Math.floor(value.windowDays) : 0
-  const window = rawWindow > 0 ? { lastDays: Math.min(rawWindow, 730) } : null
+  const period = normalizePeriod(value.period)
 
   if (kind === 'single') {
     const query = normalizeQueryRunsArgs(value.query)
@@ -38,7 +33,7 @@ export function normalizeDataCardProposalArgs(raw: unknown): DataCardProposalRes
     if (!query.spec.metrics.includes(metric as never)) {
       return { error: `'${metric || '지표'}'는 이 조회에 없는 지표입니다.` }
     }
-    const spec: DataCardSpec = { kind: 'single', title, query: query.spec, metric: metric as never, window }
+    const spec: DataCardSpec = { kind: 'single', title, query: query.spec, metric: metric as never, period }
     const verdict = validateDataCardSpec(spec)
     return verdict.ok ? { spec } : { error: verdict.error }
   }
@@ -55,7 +50,7 @@ export function normalizeDataCardProposalArgs(raw: unknown): DataCardProposalRes
     denominator: denominator.spec,
     metric: metric as never,
     display: value.display === 'times' ? 'times' : 'percent',
-    window
+    period
   }
   const verdict = validateDataCardSpec(spec)
   return verdict.ok ? { spec } : { error: verdict.error }
@@ -78,4 +73,28 @@ export function mentionsDataCardIntent(note: string): boolean {
   if (/카드/.test(text) && /(만들|추가|해줘|해 줘|등록|보여)/.test(text)) return true
   if (/(요약|홈|메인)/.test(text) && /(띄워|띄우|추가|보이게|올려|상시|늘 ?보)/.test(text)) return true
   return false
+}
+
+/**
+ * 기간 정규화(2026-09-03). 사용자가 말한 방식이 셋으로 갈리므로 **모델이 종류를 고르고 코드가 검증**한다.
+ * 화이트리스트 밖이면 조용히 무시하지 않고 null(전체 기간)로 떨어뜨린다 — 잘못된 기간으로 계산하는 것보다
+ * 전체를 보여주고 사용자가 다시 말하게 하는 편이 낫다.
+ */
+function normalizePeriod(raw: unknown): DataCardPeriod {
+  if (!raw || typeof raw !== 'object') return null
+  const value = raw as Record<string, unknown>
+  if (value.kind === 'rolling') {
+    const days = typeof value.lastDays === 'number' ? Math.floor(value.lastDays) : 0
+    return days > 0 ? { kind: 'rolling', lastDays: Math.min(days, 730) } : null
+  }
+  if (value.kind === 'calendar') {
+    const unit = value.unit
+    return unit === 'week' || unit === 'month' || unit === 'year' ? { kind: 'calendar', unit } : null
+  }
+  if (value.kind === 'fixed') {
+    const from = typeof value.from === 'string' ? value.from : ''
+    const to = typeof value.to === 'string' ? value.to : ''
+    return from && to ? { kind: 'fixed', from, to } : null
+  }
+  return null
 }
