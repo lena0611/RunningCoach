@@ -1996,8 +1996,11 @@ function buildCoachTools() {
             title: {
               type: 'string',
               description:
-                '카드 이름. **한글 10자 이내**(영문·숫자·공백은 반 칸으로 센다). 카드가 좁아 넘치면 두 줄로 꺾인다. ' +
-                '사용자 말 그대로가 아니라 짧은 지표 이름으로 — 예: "주간 대비 LSD 비중", "토요일 LSD 누적".'
+                '카드 이름 — **말이 온전한 짧은 지표 이름**. 예: "평균 케이던스", "주간 대비 LSD 비중", "토요일 LSD 누적".\n' +
+                '· **단어를 자르지 마라.** "4주 평균 케이"·"평균케이" 같은 잘린 이름은 금지다(2026-09-03 실측 2회).\n' +
+                '· 길이는 **한글 8자 정도**가 안전하다. 공백·영문·숫자는 반 칸으로 세니 "평균 케이던스"(온전한 이름)는 넉넉히 들어간다.\n' +
+                '· 넘치면 코드가 알려준다 — 그때 **자르지 말고 더 짧은 다른 표현**으로 바꿔 다시 부르면 된다.\n' +
+                '· 기간은 제목에 넣지 않아도 된다 — 화면이 "최근 4주 기준"을 따로 붙인다.'
             },
             kind: { type: 'string', enum: ['single', 'ratio'] },
             metric: { type: 'string', enum: [...QUERY_RUNS_METRICS] },
@@ -2199,6 +2202,11 @@ async function previousTurnQueriedRuns(
   return Boolean(log?.toolCalls?.some((call) => call.name === 'queryRuns' && call.ok))
 }
 
+/** 성립 여부 판정용 — 기간만 떼어낸 같은 스펙. 기간 탓에 비어 있는 것과 조건이 틀린 것을 가른다. */
+function withoutPeriod(spec: DataCardSpec): DataCardSpec {
+  return { ...spec, period: null }
+}
+
 /**
  * `proposeDataCard` 실행(#767) — 검증하고 **실제 값이 든 미리보기**를 돌려준다.
  *
@@ -2209,7 +2217,9 @@ async function executeProposeDataCard(
   admin: SupabaseAdminClient,
   userId: string,
   rawArgs: string,
-  selectedRunId: string | null
+  selectedRunId: string | null,
+  /** 이번 턴에 이미 시도한 횟수. 같은 실수를 반복하면 무한 재시도 대신 정직하게 접는다. */
+  attempt: number
 ) {
   let parsedArgs: unknown = {}
   try {
@@ -2224,36 +2234,42 @@ async function executeProposeDataCard(
     if (asked >= DATA_CARD_CLARIFY_LIMIT) {
       return {
         error: `되묻기 한도(${DATA_CARD_CLARIFY_LIMIT}회)를 넘었습니다.`,
-        guidance:
-          '**같은 질문을 다시 하지 마라.** 두 갈래로 갈린다. ' +
-          '① 지금 조건이 분명해졌으면 카드를 제안하고, 어떤 해석을 택했는지 한 줄로 밝힌다. ' +
-          '② 아직도 무엇을 원하는지 모르겠으면 **추측해서 만들지 말고**, 못 잡았다고 정직하게 말한 뒤 ' +
-          '"대신 다른 지표를 요청해 주시겠어요?"라고 묻는다. 사용자가 새 요청을 주면 그때 다시 호출한다. ' +
-          '더 말하지 않으면 조르지 않고 마무리한다.'
+        finalReport:
+          '두 번 여쭤봤는데도 어떤 값을 원하시는지 아직 정확히 못 잡았어요. 여기서 추측해 만들면 엉뚱한 카드가 될 것 같아요. ' +
+          '대신 다른 지표를 요청해 주시겠어요?'
       }
     }
     // 되묻는 턴에는 카드를 만들지 않는다. 질문만 던지고 답을 기다린다.
-    return {
-      needsClarification: true,
-      question: normalized.clarify,
-      guidance:
-        '이 질문 하나만 사용자에게 던지고 이번 턴은 거기서 멈춘다. 카드를 만들었다고 말하지 마라. ' +
-        '답을 받으면 그 답을 반영해 proposeDataCard 를 다시 호출한다.'
-    }
+    return { needsClarification: true, question: normalized.clarify, finalReport: normalized.clarify }
   }
   if ('error' in normalized) {
     /*
       정직하게 못 한다고 말하고 **대안을 임의로 만들지 않는다**(2026-09-03 결정).
       예전 지침은 "가장 가까운 대안으로 한 번 더 호출"이었는데, 그러면 사용자가 원한 적 없는 카드를
       추측해 내민다. 한계를 밝히고 **사용자에게 되묻는** 편이 정직하고, 거절도 존중한다.
+      문장은 `finalReport` 로 코드가 낸다 — 아래 forcedReportFromToolResults 주석 참고.
     */
+    /*
+      모델이 조건을 잘못 짠 것(fixable)과 우리가 정말 못 하는 것을 가른다.
+      2026-09-03 실측: 모델이 날짜를 filters 에 박아 보냈고, 그걸 그대로 거절 문장으로 내보내니
+      사용자는 **되는 요청**("요즘 얼마나 뛰는지")을 하고도 "카드 기간은 필터가 아니라…"라는
+      내부 검증 문구를 받았다. 모델 실수를 사용자에게 청구하지 않는다 — 한 번 더 고쳐 부르게 한다.
+      단, 같은 턴에서 두 번째면 접는다(재시도 상한은 코드가 쥔다).
+    */
+    if (normalized.fixable && attempt === 0) {
+      return {
+        error: normalized.error,
+        guidance:
+          '네가 짠 조건이 규칙에 맞지 않는다. **사용자에게 못 만든다고 말하지 마라** — 조건만 고쳐 ' +
+          'proposeDataCard 를 한 번 더 호출한다. 기간은 filters 가 아니라 period 로 넣고, ' +
+          '제목은 한글 10자 이내로 줄인다.'
+      }
+    }
     return {
       error: normalized.error,
-      guidance:
-        '이 조건으로는 카드를 만들 수 없다고 **정직하게** 말한다(무엇이 안 되는지 한 줄로). ' +
-        '그리고 "다른 걸 요청해 주시겠어요?"라고 묻는다 — 대안을 네가 지어내 제안하지 마라. ' +
-        '사용자가 다른 요청을 하면 그때 proposeDataCard 를 다시 호출한다. ' +
-        '사용자가 원치 않거나 더 말하지 않으면 **더 권하지 않고 마무리한다**(재차 조르지 않는다).'
+      finalReport: normalized.fixable
+        ? '카드 조건을 잡는 데 자꾸 걸려서 이대로는 만들기 어렵겠어요. 조금 다르게 말해 주시겠어요?'
+        : `${normalized.error} 이 조건으로는 카드를 만들 수 없어요. 대신 다른 지표를 요청해 주시겠어요?`
     }
   }
 
@@ -2270,7 +2286,24 @@ async function executeProposeDataCard(
     return { error: '기록을 불러오지 못했습니다.' }
   }
 
-  const preview = computeDataCard(normalized.spec, (data ?? []) as QueryRunsRow[])
+  const rows = (data ?? []) as QueryRunsRow[]
+  const preview = computeDataCard(normalized.spec, rows)
+  /*
+    값이 **영영** 안 나오는 카드는 제안하지 않는다(2026-09-03 실측).
+    "왼발 착지 각도를 카드로" 라고 했을 때 모델이 있는 지표에 억지로 매핑해 매칭 0건 스펙을 냈고,
+    검증은 통과해서 화면이 "—" 를 띄운 채 "요약에 둘까요?"라고 물었다. 저장해도 영구 빈칸이다.
+    기간 탓에 아직 비어 있는 것(이번 주 LSD 등)과 조건 자체가 성립하지 않는 것은 다르므로,
+    **기간을 뺀 전체 기록**으로 성립 여부를 판정한다.
+  */
+  const allTime = computeDataCard(withoutPeriod(normalized.spec), rows)
+  if (allTime.matchedRuns === 0) {
+    return {
+      error: '조건에 해당하는 기록이 없습니다.',
+      finalReport:
+        '그 조건에 걸리는 기록이 하나도 없어서, 카드로 만들면 계속 빈칸으로 남아요. ' +
+        '대신 다른 지표를 요청해 주시겠어요?'
+    }
+  }
   return {
     ok: true,
     spec: normalized.spec,
@@ -2559,7 +2592,7 @@ function buildFreeConversationInstructions(
     'memoryItems에는 이 대화에서 새로 알게 된 사용자의 안정적인 개인 맥락(목표/욕구/선호/서사)만 0~3개 넣는다. 일회성 잡담이나 단일 세션 수치는 넣지 않는다. 이미 core/coachMemoryItems에 있으면 다시 넣지 않는다.',
     ...buildInternalNamingGuard(),
     ...buildScheduleProposalInstructions(restAlternativeOffered),
-    '사용자가 "요약에 ~를 띄워줘"·"~를 계속 보고 싶어"처럼 **상시로 볼 지표**를 말하면 proposeDataCard 를 호출한다. 도구가 돌려준 미리보기 숫자를 그대로 인용해 "이대로 추가할까요?"라고 묻는다. 카드는 승인해야 저장되므로 **이미 추가했다고 말하지 않는다.** 조건이 안 되면 거부 이유를 알리고 가장 가까운 대안으로 한 번 더 호출한다. 카드는 수치만 보여주는 것이므로 "위험"·"부족" 같은 판정을 붙이지 않는다.',
+    '사용자가 "요약에 ~를 띄워줘"·"~를 계속 보고 싶어"처럼 **상시로 볼 지표**를 말하면 proposeDataCard 를 호출한다. 도구가 돌려준 미리보기 숫자를 그대로 인용해 "이대로 추가할까요?"라고 묻는다. 카드는 승인해야 저장되므로 **이미 추가했다고 말하지 않는다.** 조건이 애매하면 추측하지 말고 clarify 로 한 가지만 되묻는다(최대 2회, 코드가 센다). 만들 수 없는 조건이면 대안을 지어내지 말고 정직하게 알린다 — 이때 문장은 코드가 낸다. 카드는 수치만 보여주는 것이므로 "위험"·"부족" 같은 판정을 붙이지 않는다.',
     '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal, coachScheduleProposal. report에 자유대화 본문을 넣는다.',
     // trainingMemoryPatch 는 **승인 없이 자동 저장**되는 경로다(ai-coaching-goal.md §378,
     // [[training-memory-lww-clobber-hazard]]). 대화로 루틴을 조용히 덮어쓰지 않는다 — 계속 막는다.
@@ -2619,6 +2652,16 @@ function buildEvidenceInstructions(runnerLevel: RunnerLevel, levelGuide: ReturnT
  * 2026-08-04 실측: 전역 대화에서 지시 대상 생략 질문("이지스트라이드와 어떻게 달라?")이 직전 주제와
  * 이어지지 않고 엉뚱한 대상과 비교됐다.
  */
+/** 도구가 `finalReport` 를 실어 보내면 그 문장이 그대로 이번 턴의 답이 된다(모델 라운드 생략). */
+function forcedReportFromToolResults(results: unknown[]): string | null {
+  for (const result of results) {
+    if (!result || typeof result !== 'object') continue
+    const text = (result as { finalReport?: unknown }).finalReport
+    if (typeof text === 'string' && text.trim()) return text.trim()
+  }
+  return null
+}
+
 /**
  * 데이터 질문 규율(#652, 모든 응답 모드 공용).
  *
@@ -3258,7 +3301,8 @@ function streamCoachRun(
               return await executeReportDataGap(admin, userId, args, userNote)
             }
             if (name === 'proposeDataCard') {
-              const result = await executeProposeDataCard(admin, userId, args, selectedRunId)
+              const attempt = queryLog.toolCalls.filter((call) => call.name === 'proposeDataCard').length
+              const result = await executeProposeDataCard(admin, userId, args, selectedRunId, attempt)
               const ok = 'ok' in result && result.ok === true
               const clarified = 'needsClarification' in result
               // 승인 카드는 화면이 띄운다 — 여기선 마지막 제안만 들고 있다가 done 에 실어 보낸다.
@@ -3479,6 +3523,24 @@ async function callCoachLlmStream(
     const toolResults = await Promise.all(
       toolCalls.map(async (call) => ({ call, result: await toolSupport.onToolCall(call.name, call.args) }))
     )
+    /*
+      되묻기·거절은 **모델에게 맡기지 않는다**(#767, 2026-09-03 실측).
+      clarify 가 정상 작동했는데(로그 card_clarify) 모델은 질문을 옮기지 않고 **직전 턴 답변을
+      그대로 복창**했다. 28K 프롬프트에 리포트 지침까지 얹힌 상태에서 도구 결과 한 줄은 쉽게 묻힌다.
+      이 저장소가 반복해 배운 것: 반드시 나가야 하는 문장은 지침이 아니라 코드로 주입한다
+      (always-on 코칭 블록과 같은 이유). 라운드 2를 건너뛰니 호출 한 번도 아낀다.
+    */
+    const forced = forcedReportFromToolResults(toolResults.map(({ result }) => result))
+    if (forced) {
+      onReportDelta(forced)
+      return {
+        report: forced,
+        memoryItems: [],
+        trainingMemoryPatch: null,
+        injuryUpdateProposal: null,
+        coachScheduleProposal: null
+      }
+    }
     const nextMessages = [
       ...messages,
       {

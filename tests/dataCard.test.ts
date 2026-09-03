@@ -160,7 +160,12 @@ describe('#767 사용자 정의 데이터 카드', () => {
       numerator: query({ groupBy: 'week' }),
       denominator: query({ groupBy: 'month' })
     }
-    expect(validateDataCardSpec(base)).toEqual({ ok: false, error: '비율은 분자와 분모를 같은 기준으로 묶어야 합니다.' })
+    expect(validateDataCardSpec(base)).toEqual({
+      ok: false,
+      error: '비율은 분자와 분모를 같은 기준으로 묶어야 합니다.',
+      // 모델이 조건을 다시 짜면 되는 실수다 — 사용자에게 "못 만든다"고 말하지 않는다(2026-09-03).
+      fixable: true
+    })
 
     const mixed = { ...base, denominator: query({ groupBy: 'week', metrics: ['durationSec'] as const as QueryRunsSpec['metrics'] }) }
     expect(validateDataCardSpec(mixed).ok).toBe(false)
@@ -333,5 +338,73 @@ describe('되묻기 경로', () => {
     })
     expect('spec' in result).toBe(true)
     if ('spec' in result) expect(result.spec.title).toBe('토요일 LSD')
+  })
+})
+
+/**
+ * 모델이 기간을 filters 에 박아 보내는 실수(2026-09-03 실측). period 가 있으면 기간의 출처가
+ * 하나뿐이라 조용히 정리하는 게 맞다 — 그러지 않으면 사용자가 되는 요청을 하고도
+ * "카드 기간은 필터가 아니라…"라는 내부 검증 문구를 받는다.
+ */
+describe('모델이 박은 날짜 필터', () => {
+  it('period 가 있으면 날짜 필터를 버리고 카드를 만든다', () => {
+    const result = normalizeDataCardProposalArgs({
+      clarify: null,
+      title: '최근 거리',
+      kind: 'single',
+      metric: 'distanceKm',
+      query: {
+        filters: [
+          { field: 'date', op: 'gte', value: '2026-08-07' },
+          { field: 'type', op: 'eq', value: 'Easy' }
+        ],
+        groupBy: 'none',
+        metrics: ['distanceKm']
+      },
+      period: { kind: 'rolling', lastDays: 28 }
+    })
+    expect('spec' in result).toBe(true)
+    if ('spec' in result && result.spec.kind === 'single') {
+      expect(result.spec.query.filters).toEqual([{ field: 'type', op: 'eq', value: 'Easy' }])
+    }
+  })
+
+  it('period 가 없으면 손대지 않고 고칠 수 있는 실수로 돌려준다 — rolling 인지 fixed 인지 알 수 없다', () => {
+    const result = normalizeDataCardProposalArgs({
+      clarify: null,
+      title: '8월 거리',
+      kind: 'single',
+      metric: 'distanceKm',
+      query: {
+        filters: [{ field: 'date', op: 'gte', value: '2026-08-01' }],
+        groupBy: 'none',
+        metrics: ['distanceKm']
+      },
+      period: null
+    })
+    expect(result).toEqual({ error: '카드 기간은 필터가 아니라 기간 설정으로 지정해야 합니다.', fixable: true })
+  })
+})
+
+/** 카드에 `159.69spm` 이 떴다(2026-09-03 실측) — 심박·케이던스·횟수는 소수점이 잡음이다. */
+describe('지표별 자리수', () => {
+  it('케이던스·심박은 정수로 반올림한다', () => {
+    const rows = [row({ cadence: 159.4, avg_heart_rate: 130.6 }), row({ cadence: 160, avg_heart_rate: 132 })]
+    const cadence = computeDataCard(
+      { kind: 'single', title: '평균 케이던스', metric: 'cadence', query: query({ metrics: ['cadence'] }) },
+      rows
+    )
+    expect(cadence.value).toBe(160)
+    const hr = computeDataCard(
+      { kind: 'single', title: '평균 심박', metric: 'avgHeartRate', query: query({ metrics: ['avgHeartRate'] }) },
+      rows
+    )
+    // (130.6 + 132) / 2 = 131.3 → 131
+    expect(hr.value).toBe(131)
+  })
+
+  it('거리는 소수 한 자리를 유지한다', () => {
+    const rows = [row({ distance_km: 5.25 }), row({ distance_km: 4.1 })]
+    expect(computeDataCard({ kind: 'single', title: '누적 거리', metric: 'distanceKm', query: query() }, rows).value).toBe(9.4)
   })
 })
