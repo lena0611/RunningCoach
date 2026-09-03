@@ -761,8 +761,8 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
         :loading="runDataLoading"
       />
       <button type="button" class="stat-card data-card-add" @click="openDataCardComposer">
-        <span class="data-card-add-plus" aria-hidden="true">+</span>
-        <span class="data-card-add-label">보고 싶은 지표 추가</span>
+        <span class="stat-card-label">➕ 개인화 지표</span>
+        <span class="data-card-add-label">보고 싶은 값을 코치에게 말하기</span>
       </button>
     </MetricGrid>
 
@@ -988,9 +988,9 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
 .data-card-add {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
   min-height: 0;
   border: 1px dashed var(--color-border, rgba(120, 120, 120, 0.35));
   background: none;
@@ -1000,13 +1000,16 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
   cursor: pointer;
 }
 .data-card-add-plus {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   line-height: 1;
+  color: var(--color-primary);
 }
 .data-card-add-label {
   font-size: var(--text-caption-size);
   font-weight: 600;
+  text-align: left;
+  line-height: 1.35;
 }
 
 /* 부상 카드를 감춘 동안 피로 경고 하나만 남으므로 2열 그리드를 가로로 다 쓴다. */

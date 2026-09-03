@@ -5,6 +5,9 @@ import { useCoachStore } from '@/app/stores/coachStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
+import { useDataCardStore } from '@/app/stores/dataCardStore'
+import { useToastStore } from '@/app/stores/toastStore'
+import type { DataCardSpec } from '@/shared/lib/coaching/dataCardAdapter'
 import { detectRepeatedDowngrade } from '@/shared/lib/coaching/adjustmentHistory'
 import { useCompetitionStore } from '@/app/stores/competitionStore'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
@@ -121,6 +124,13 @@ const pendingDeleteReport = ref<CoachReport | null>(null)
 const deletingReportId = ref('')
 const reportsLoaded = ref(false)
 const reportsLoading = ref(false)
+/**
+ * 데이터 카드 제안(#767) — 코치가 만든 **승인 카드**. 미리보기 숫자는 서버가 같은 계산 코어로 낸 실물이라,
+ * 승인 전에 본 값과 저장 후 카드 값이 같다. 승인해야 저장된다(카드가 직접 만들어지지 않는다).
+ */
+const pendingDataCardProposal = ref<{ spec: DataCardSpec; previewText: string; matchedRuns: number } | null>(null)
+const pendingDataCardRequestText = ref('')
+const savingDataCard = ref(false)
 const pendingGoalProposal = ref<GoalIntentProposal | null>(null)
 const pendingGoalCoachNote = ref('')
 const savingGoalProposal = ref(false)
@@ -638,6 +648,13 @@ async function sendCoachRequest(note: string) {
     const report = await requestCoachRunStream(targetRunId, note, weatherStore.snapshot, {
       signal: controller.signal,
       onDelta: enqueueCoachReveal,
+      onDataCardProposal: (proposal) => {
+        pendingDataCardProposal.value = {
+          spec: proposal.spec as DataCardSpec,
+          previewText: proposal.previewText,
+          matchedRuns: proposal.matchedRuns
+        }
+      },
       onStage: (stage, detail) => {
         coachStage.value = stage
         coachStageDetail.value = detail
@@ -902,6 +919,29 @@ async function skipGoalProposal() {
   const note = pendingGoalCoachNote.value
   closeGoalProposal()
   await sendCoachRequest(note)
+}
+
+async function confirmDataCardProposal() {
+  const proposal = pendingDataCardProposal.value
+  if (!proposal || savingDataCard.value) return
+  savingDataCard.value = true
+  coachError.value = ''
+  try {
+    await useDataCardStore().add({
+      title: proposal.spec.title,
+      requestText: pendingDataCardRequestText.value,
+      spec: proposal.spec
+    })
+    pendingDataCardProposal.value = null
+    useToastStore().success('요약 탭에 카드를 추가했어요.')
+  } catch {
+    coachError.value = '카드를 저장하지 못했어요.'
+  } finally {
+    savingDataCard.value = false
+  }
+}
+function dismissDataCardProposal() {
+  pendingDataCardProposal.value = null
 }
 
 function closeGoalProposal() {
@@ -1395,6 +1435,32 @@ function stopCoachThinkingTimer() {
   </Teleport>
 
   <Teleport to="body">
+    <Transition name="bottom-sheet">
+    <div
+      v-if="pendingDataCardProposal"
+      class="bottom-sheet-layer confirm-layer"
+      role="presentation"
+      @click.self="dismissDataCardProposal"
+    >
+      <section class="bottom-sheet confirm-sheet goal-intent-sheet" role="dialog" aria-modal="true" aria-label="데이터 카드 추가 확인">
+        <div class="bottom-sheet-handle" />
+        <h2>이 카드를 요약에 둘까요?</h2>
+        <p>지금 기록으로 계산한 값이에요. 추가하면 요약 탭에서 계속 보입니다.</p>
+        <!-- 미리보기는 목업이 아니라 실물이다 — 본 것과 저장되는 것이 같다. -->
+        <div class="goal-intent-card">
+          <small>{{ pendingDataCardProposal.spec.title }}</small>
+          <strong>{{ pendingDataCardProposal.previewText }}</strong>
+          <span>{{ pendingDataCardProposal.matchedRuns ? `러닝 ${pendingDataCardProposal.matchedRuns}건 기준` : '해당 기록 없음' }}</span>
+        </div>
+        <div class="confirm-actions">
+          <button type="button" :disabled="savingDataCard" @click="confirmDataCardProposal">
+            {{ savingDataCard ? '추가 중' : '요약에 추가' }}
+          </button>
+          <button class="ghost" type="button" :disabled="savingDataCard" @click="dismissDataCardProposal">그만두기</button>
+        </div>
+      </section>
+    </div>
+    </Transition>
     <Transition name="bottom-sheet">
     <div v-if="pendingGoalProposal" class="bottom-sheet-layer confirm-layer" role="presentation" @click.self="closeGoalProposal">
       <section class="bottom-sheet confirm-sheet goal-intent-sheet" :class="{ 'bottom-sheet-dragging': goalSheetDrag.dragging.value }" :style="goalSheetDrag.sheetStyle.value" role="dialog" aria-modal="true" aria-label="목표 후보 등록 확인">

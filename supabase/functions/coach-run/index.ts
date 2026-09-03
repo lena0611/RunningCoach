@@ -9,6 +9,8 @@ import {
   QUERY_RUNS_METRICS,
   type QueryRunsRow
 } from './queryRuns.ts'
+import { computeDataCard, type DataCardSpec } from '../_shared/dataCard.ts'
+import { normalizeDataCardProposalArgs } from '../_shared/dataCardProposal.ts'
 import {
   buildDataGapDirective,
   normalizeReportDataGapArgs,
@@ -1916,6 +1918,36 @@ async function throwLlmUpstreamError(response: Response, where: string): Promise
  * 모델은 추정으로 답한다 — 실제로 그게 신뢰를 깨는 경로였다. 통로를 열고, 그 선언을 기록으로 남겨
  * 무엇을 확장/저장해야 하는지의 근거로 쓴다.
  */
+/**
+ * queryRuns 인자 스키마 — 조회 도구와 카드 제안 도구가 **같은 어휘**를 쓴다(#767).
+ * 두 벌로 두면 한쪽만 넓어져 "대화에선 되는데 카드로는 안 되는" 상태가 생긴다.
+ */
+function buildQueryRunsArgSchema() {
+  return {
+    type: 'object' as const,
+    additionalProperties: false,
+    required: ['filters', 'groupBy', 'metrics'],
+    properties: {
+      filters: {
+        type: 'array',
+        description: '조건 목록(AND). 기간은 date 필드에 gte/lte 로 준다(YYYY-MM-DD). 요일은 weekday 에 월~일 한 글자.',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['field', 'op', 'value'],
+          properties: {
+            field: { type: 'string', enum: Object.keys(QUERY_RUNS_FIELDS) },
+            op: { type: 'string', enum: ['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'contains'] },
+            value: { type: ['string', 'number'] }
+          }
+        }
+      },
+      groupBy: { type: 'string', enum: [...QUERY_RUNS_GROUPS] },
+      metrics: { type: 'array', items: { type: 'string', enum: [...QUERY_RUNS_METRICS] } }
+    }
+  }
+}
+
 function buildCoachTools() {
   return [
     {
@@ -1931,22 +1963,33 @@ function buildCoachTools() {
           additionalProperties: false,
           required: ['filters', 'groupBy', 'metrics'],
           properties: {
-            filters: {
-              type: 'array',
-              description: '조건 목록(AND). 기간은 date 필드에 gte/lte 로 준다(YYYY-MM-DD).',
-              items: {
-                type: 'object',
-                additionalProperties: false,
-                required: ['field', 'op', 'value'],
-                properties: {
-                  field: { type: 'string', enum: Object.keys(QUERY_RUNS_FIELDS) },
-                  op: { type: 'string', enum: ['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'contains'] },
-                  value: { type: ['string', 'number'] }
-                }
-              }
-            },
-            groupBy: { type: 'string', enum: [...QUERY_RUNS_GROUPS] },
-            metrics: { type: 'array', items: { type: 'string', enum: [...QUERY_RUNS_METRICS] } }
+            ...buildQueryRunsArgSchema().properties
+          }
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'proposeDataCard',
+        description:
+          '사용자가 **요약 화면에서 상시로 보고 싶은 지표**를 말했을 때 호출한다("요약에 ~를 띄워줘", "~를 계속 보고 싶어"). ' +
+          '카드를 직접 만들지 않는다 — 이 도구는 **제안**을 만들고 사용자가 화면에서 승인해야 저장된다. ' +
+          '도구가 실제 값이 든 미리보기를 돌려주니, 그 숫자를 그대로 인용해 "이대로 추가할까요?"라고 묻는다. ' +
+          '조건이 화이트리스트 밖이면 거부 이유가 돌아온다 — 그때는 포기하지 말고 **가장 가까운 대안**으로 다시 호출한다. ' +
+          '비율(kind=ratio)은 분자·분모를 같은 groupBy·같은 지표로 준다. 예: 주간 총 볼륨 대비 LSD 볼륨.',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['title', 'kind', 'metric', 'query', 'numerator', 'denominator', 'display'],
+          properties: {
+            title: { type: 'string', description: '카드 이름(짧게). 사용자 말 그대로가 아니라 지표 이름으로.' },
+            kind: { type: 'string', enum: ['single', 'ratio'] },
+            metric: { type: 'string', enum: [...QUERY_RUNS_METRICS] },
+            query: { anyOf: [{ type: 'null' }, buildQueryRunsArgSchema()] },
+            numerator: { anyOf: [{ type: 'null' }, buildQueryRunsArgSchema()] },
+            denominator: { anyOf: [{ type: 'null' }, buildQueryRunsArgSchema()] },
+            display: { anyOf: [{ type: 'null' }, { type: 'string', enum: ['percent', 'times'] }] }
           }
         }
       }
@@ -2080,6 +2123,55 @@ async function previousTurnQueriedRuns(
   if (error || !data?.length) return false
   const log = (data[0] as { data_query_log?: CoachTurnQueryLog | null }).data_query_log
   return Boolean(log?.toolCalls?.some((call) => call.name === 'queryRuns' && call.ok))
+}
+
+/**
+ * `proposeDataCard` 실행(#767) — 검증하고 **실제 값이 든 미리보기**를 돌려준다.
+ *
+ * 미리보기가 목업이 아니라 실물인 게 핵심이다: 계산이 결정론이라 승인 전에 본 숫자와 저장 후 카드가
+ * 같다. 화면이 "이대로 추가할까요?"라고 물을 때 사용자는 진짜 값을 보고 결정한다.
+ */
+async function executeProposeDataCard(admin: SupabaseAdminClient, userId: string, rawArgs: string) {
+  let parsedArgs: unknown = {}
+  try {
+    parsedArgs = JSON.parse(rawArgs || '{}')
+  } catch {
+    return { error: '카드 조건 형식을 이해하지 못했습니다.' }
+  }
+  const normalized = normalizeDataCardProposalArgs(parsedArgs)
+  if ('error' in normalized) {
+    // 거부로 끝내지 않는다 — 가장 가까운 대안을 다시 내라고 시킨다(#652 "모른다를 1급 응답으로"의 카드 판).
+    return {
+      error: normalized.error,
+      guidance: '이 조건으로는 카드를 만들 수 없다고 사용자에게 알리고, 가장 가까운 대안 조건으로 proposeDataCard 를 한 번 더 호출한다.'
+    }
+  }
+
+  const { data, error } = await admin
+    .from('run_logs')
+    .select(
+      'date, start_at, type, distance_km, duration_sec, avg_pace_sec, avg_heart_rate, max_heart_rate, cadence, active_energy_kcal, temperature, humidity, wind_mps, elevation_gain_m, elevation_loss_m, course_type, rpe, sleep_quality, condition_score, stress_level, companion'
+    )
+    .eq('user_id', userId)
+    .order('date', { ascending: false })
+    .limit(3000)
+  if (error) {
+    console.error('proposeDataCard fetch failed', { message: error.message })
+    return { error: '기록을 불러오지 못했습니다.' }
+  }
+
+  const preview = computeDataCard(normalized.spec, (data ?? []) as QueryRunsRow[])
+  return {
+    ok: true,
+    spec: normalized.spec,
+    title: normalized.spec.title,
+    // 값이 없으면 0 이 아니라 — 로 말한다("없음"과 "0"은 다르다).
+    previewText: preview.value === null ? '—' : `${preview.value}${preview.unit}`,
+    matchedRuns: preview.matchedRuns,
+    guidance:
+      '이 미리보기 숫자를 그대로 인용해 카드 이름과 함께 보여주고 "이대로 추가할까요?"라고 묻는다. ' +
+      '저장은 사용자가 화면에서 승인해야 일어난다 — 이미 추가된 것처럼 말하지 않는다.'
+  }
 }
 
 /** `reportDataGap` 실행 — 선언을 기록하고, 어떻게 답할지 지침을 돌려준다. */
@@ -2357,6 +2449,7 @@ function buildFreeConversationInstructions(
     'memoryItems에는 이 대화에서 새로 알게 된 사용자의 안정적인 개인 맥락(목표/욕구/선호/서사)만 0~3개 넣는다. 일회성 잡담이나 단일 세션 수치는 넣지 않는다. 이미 core/coachMemoryItems에 있으면 다시 넣지 않는다.',
     ...buildInternalNamingGuard(),
     ...buildScheduleProposalInstructions(restAlternativeOffered),
+    '사용자가 "요약에 ~를 띄워줘"·"~를 계속 보고 싶어"처럼 **상시로 볼 지표**를 말하면 proposeDataCard 를 호출한다. 도구가 돌려준 미리보기 숫자를 그대로 인용해 "이대로 추가할까요?"라고 묻는다. 카드는 승인해야 저장되므로 **이미 추가했다고 말하지 않는다.** 조건이 안 되면 거부 이유를 알리고 가장 가까운 대안으로 한 번 더 호출한다. 카드는 수치만 보여주는 것이므로 "위험"·"부족" 같은 판정을 붙이지 않는다.',
     '출력 JSON 키 순서는 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal, coachScheduleProposal. report에 자유대화 본문을 넣는다.',
     // trainingMemoryPatch 는 **승인 없이 자동 저장**되는 경로다(ai-coaching-goal.md §378,
     // [[training-memory-lww-clobber-hazard]]). 대화로 루틴을 조용히 덮어쓰지 않는다 — 계속 막는다.
@@ -3040,6 +3133,8 @@ function streamCoachRun(
         let toolWasCalled = false
         // 턴당 1행 실측(#652 후속) — 실패가 아니라 **일어난 일**을 남긴다. 도구 미호출도 기록이다.
         const queryLog: CoachTurnQueryLog = { toolCalls: [], ungroundedClaims: 0 }
+        /** 이번 턴에 만들어진 카드 제안(#767). DB 에 넣지 않는다 — 승인 전이므로 화면이 들고 있다가 사용자가 저장한다. */
+        let pendingDataCardProposal: { spec: DataCardSpec; previewText: string; matchedRuns: number } | null = null
         const ai = await callCoachLlmStream(provider, context, (delta) => send('delta', { delta }), {
           messages: buildCoachMessages(context),
           tools: buildCoachTools(),
@@ -3049,6 +3144,12 @@ function streamCoachRun(
               // 종류·needed 는 executeReportDataGap 이 coach_data_gaps 에 이미 남긴다 — 여기선 중복하지 않는다.
               queryLog.toolCalls.push({ name: 'reportDataGap', ok: true })
               return await executeReportDataGap(admin, userId, args, userNote)
+            }
+            if (name === 'proposeDataCard') {
+              const result = await executeProposeDataCard(admin, userId, args)
+              // 승인 카드는 화면이 띄운다 — 여기선 마지막 제안만 들고 있다가 done 에 실어 보낸다.
+              if ('ok' in result && result.ok) pendingDataCardProposal = { spec: result.spec, previewText: result.previewText, matchedRuns: result.matchedRuns }
+              return result
             }
             if (name !== 'queryRuns') return { error: `지원하지 않는 도구입니다(${name}).` }
             // 조회 조건을 화면에 그대로 노출한다 — 진행 표시가 신뢰 장치를 겸한다(#650 후속).
@@ -3112,7 +3213,9 @@ function streamCoachRun(
         send('stage', { stage: 'saving' })
         const result = await persistCoachResult(admin, userId, selectedRunId, userNote, context, ai, storedModel, queryLog)
         clearInterval(heartbeat)
-        send('done', result)
+        // 카드 제안은 **승인 전**이라 DB 에 넣지 않는다(injuryUpdateProposal 과 같은 정책) —
+        // 히스토리를 다시 읽어도 철 지난 제안이 되살아나지 않는다.
+        send('done', pendingDataCardProposal ? { ...result, dataCardProposal: pendingDataCardProposal } : result)
         closeQuietly()
       } catch (error) {
         clearInterval(heartbeat)

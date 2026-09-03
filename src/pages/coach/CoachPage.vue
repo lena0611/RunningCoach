@@ -130,6 +130,22 @@ watch(
   { immediate: true }
 )
 
+/**
+ * 요약 '+' 카드에서 넘어온 **개인화 지표 만들기** 요청(#767). 코치방을 열고 먼저 묻는다 —
+ * 빈 입력창을 주면 사용자가 무엇을 말해야 할지 모른다. 질문은 코드가 낸다(LLM 호출 없음).
+ */
+watch(
+  () => useCoachActionBridgeStore().dataCardComposerRequested,
+  (requested) => {
+    if (!requested) return
+    const bridge = useCoachActionBridgeStore()
+    bridge.clearDataCardComposer()
+    useCoachStore().openGlobal()
+    toastStore.success('요약에서 늘 보고 싶은 값을 말해주세요. 예: 토요일 LSD 누적 거리')
+  },
+  { immediate: true }
+)
+
 // 코치 모먼트·주변 신호(리디자인 ①b — useCoachMoments 로 추출, 요약 홈 CoachInsights 와 동일 소스).
 const {
   runnerProgress,
