@@ -5,9 +5,10 @@ import { computed } from 'vue'
  * 월~일 7칸 등폭. 날짜는 **원형 인디케이터**가 감싸고(애플 날씨식), 채움색으로 오늘과 그 외를 가른다:
  * 오늘 = primary 채움, 오늘이 아닌 선택일 = **테두리**(채우지 않는다 — 채움은 '오늘' 한 자리에만).
  *
- * 상태는 **원 안팎에 싣는다**(기록 탭 달력과 같은 언어, 2026-09-03): 예정 세션 타입 = 타입색 옅은 채움,
- * 완료 = 타입색 링, 선언 휴식 = 중립 채움. 예전엔 날짜 아래 별도 줄에 dot/✓/💤 를 찍어
- * 줄이 하나 더 필요했고, 같은 칸의 정보가 두 층으로 흩어졌다.
+ * **채움은 선택된 날 전용**이다(2026-09-03). 다른 날까지 타입색으로 채웠더니 일곱 칸이 전부 색 덩어리가 돼
+ * "지금 보고 있는 날"이 묻혔다. 나머지 상태는 **숫자색과 테두리**로만 말한다:
+ * 예정 세션 = 타입색 숫자, 완료 = 타입색 테두리, 선언 휴식 = 점선 테두리.
+ * 예전엔 날짜 아래 별도 줄에 dot/✓/💤 를 찍어 같은 칸 정보가 두 층으로 흩어졌다.
  * 지오메트리·색은 --weekstrip-* 토큰만 참조한다.
  * 인터랙션은 최소(YAGNI): 탭하면 select emit (요약 홈에선 코치 탭 이동).
  */
@@ -130,6 +131,7 @@ function typeSlug(type: string): string {
   display: flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   width: var(--weekstrip-disc-size);
   height: var(--weekstrip-disc-size);
   border-radius: 50%;
@@ -151,20 +153,17 @@ function typeSlug(type: string): string {
 }
 
 /*
-  상태 스킨(기록 탭 달력과 같은 언어). 전역 run-type-* 클래스가 이 요소에 --run-type-color 를 준다.
-  예정 세션 = 타입색 옅은 채움 / 완료 = 타입색 링 / 선언 휴식 = 중립 채움.
+  상태 스킨 — 채우지 않는다. 전역 run-type-* 클래스가 이 요소에 --run-type-color 를 준다.
+  예정 세션 = 타입색 숫자 / 완료 = 타입색 테두리 / 선언 휴식 = 점선 테두리.
 */
-.week-strip-disc.has-session {
-  background: color-mix(in srgb, var(--run-type-color, var(--color-primary)) var(--weekstrip-type-fill-mix), transparent);
-}
 .week-strip-disc.has-session .week-strip-date {
   color: color-mix(in srgb, var(--run-type-color, var(--color-primary)) 85%, var(--color-text));
 }
 .week-strip-disc.is-done {
-  box-shadow: var(--weekstrip-ring);
+  border: var(--weekstrip-done-ring);
 }
 .week-strip-disc.is-rested {
-  background: var(--weekstrip-rest-fill);
+  border: var(--weekstrip-rest-ring);
 }
 
 /* 오늘은 채워지지 않아도 숫자를 primary 로 — 애플 날씨가 '오늘'을 늘 색으로 표시하는 것과 같다. */
@@ -172,9 +171,8 @@ function typeSlug(type: string): string {
   color: var(--color-primary);
 }
 /*
-  선택 표시: 오늘 = primary **채움**, 오늘이 아닌 날 = **테두리만**.
-  채움을 오늘 한 자리에만 쓰면 "지금 어디를 보고 있나"와 "오늘이 언제인가"가 한눈에 갈린다.
-  타입 채움(has-session)은 선택 시 걷어낸다 — 테두리 안이 비어야 윤곽이 읽힌다.
+  선택 표시 — **채움은 여기서만** 쓴다. 오늘 = primary 채움, 오늘이 아닌 선택일 = 흰 테두리.
+  덕분에 "지금 어디를 보고 있나"와 "오늘이 언제인가"가 한눈에 갈린다.
 */
 .week-strip-disc.is-filled {
   border: var(--weekstrip-active-ring);

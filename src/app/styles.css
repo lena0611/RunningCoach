@@ -204,10 +204,9 @@
   --weekstrip-active-text: var(--color-text);
   --weekstrip-day-size: 12px; /* 앱 폰트 하한 12px (기존 9px) */
   --weekstrip-date-size: 12px;
-  /* 상태는 원 안(채움)과 원 밖(링)으로 싣는다 — 기록 탭 달력과 같은 언어. */
-  --weekstrip-type-fill-mix: 22%;
-  --weekstrip-ring: 0 0 0 2px var(--color-bg), 0 0 0 4px color-mix(in srgb, var(--run-type-color, var(--color-primary)) 55%, transparent);
-  --weekstrip-rest-fill: color-mix(in srgb, var(--color-muted) 18%, transparent);
+  /* 채움은 **선택된 날 전용**이다. 나머지 상태는 숫자색과 테두리로만 말한다. */
+  --weekstrip-done-ring: 2px solid color-mix(in srgb, var(--run-type-color, var(--color-primary)) 70%, transparent);
+  --weekstrip-rest-ring: 1.5px dashed color-mix(in srgb, var(--color-muted) 55%, transparent);
   --run-calendar-count-bg: #000000;
   --run-calendar-count-text: #ffffff;
   --pressable-bg: var(--color-subtle-2);
