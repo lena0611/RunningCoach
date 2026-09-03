@@ -1981,8 +1981,18 @@ function buildCoachTools() {
         parameters: {
           type: 'object',
           additionalProperties: false,
-          required: ['title', 'kind', 'metric', 'query', 'numerator', 'denominator', 'display', 'period'],
+          required: ['clarify', 'title', 'kind', 'metric', 'query', 'numerator', 'denominator', 'display', 'period'],
           properties: {
+            clarify: {
+              anyOf: [{ type: 'null' }, { type: 'string' }],
+              description:
+                '조건이 애매하면 **추측하지 말고 여기에 질문 하나만** 담는다(나머지 필드는 null 로). ' +
+                '예: "주간 볼륨은 거리(km) 기준인가요, 시간 기준인가요?" · "최근 4주는 오늘부터 4주인가요, 지난달인가요?" ' +
+                '한 번에 하나만 묻는다 — 여러 개를 몰아 물으면 사용자가 답을 고르기 어렵다. ' +
+                '답을 받아 조건이 분명해지면 그때 clarify 를 null 로 두고 카드를 제안한다. ' +
+                '되묻기는 **최대 2회**다(코드가 센다). 그 뒤엔 아는 것만으로 제안하거나 정직하게 마무리한다. ' +
+                '이미 분명한 요청에 되묻지 마라 — 물어볼 게 없으면 바로 제안한다.'
+            },
             title: {
               type: 'string',
               description:
@@ -2130,6 +2140,40 @@ async function executeQueryRuns(admin: SupabaseAdminClient, userId: string, rawA
   return result
 }
 
+/** 되묻기 상한(2026-09-03). 하염없이 핑퐁하면 카드 하나 만들려다 대화가 심문이 된다. */
+const DATA_CARD_CLARIFY_LIMIT = 2
+
+/**
+ * 이 스레드에서 **연속으로** 되물은 횟수. 모델에게 세게 하면 못 센다 — 코드가 로그로 센다.
+ * 카드 제안이 한 번 성공하면 그 시점에서 끊는다(새 요청의 되묻기와 섞이지 않게).
+ */
+async function countRecentDataCardClarifications(
+  admin: SupabaseAdminClient,
+  userId: string,
+  selectedRunId: string | null
+): Promise<number> {
+  let query = admin
+    .from('coach_reports')
+    .select('data_query_log')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(6)
+  query = selectedRunId ? query.eq('selected_run_id', selectedRunId) : query.is('selected_run_id', null)
+  const { data, error } = await query
+  if (error || !data?.length) return 0
+
+  let count = 0
+  for (const row of data as Array<{ data_query_log?: CoachTurnQueryLog | null }>) {
+    const calls = row.data_query_log?.toolCalls ?? []
+    const card = calls.find((call) => call.name === 'proposeDataCard')
+    if (!card) continue
+    // 제안이 성공한 턴을 만나면 그 앞은 다른 요청이다 — 여기서 멈춘다.
+    if (card.failureKind !== 'card_clarify') break
+    count += 1
+  }
+  return count
+}
+
 /**
  * 같은 스레드의 **바로 직전 턴**이 queryRuns 를 성공했나(#652 후속).
  *
@@ -2161,7 +2205,12 @@ async function previousTurnQueriedRuns(
  * 미리보기가 목업이 아니라 실물인 게 핵심이다: 계산이 결정론이라 승인 전에 본 숫자와 저장 후 카드가
  * 같다. 화면이 "이대로 추가할까요?"라고 물을 때 사용자는 진짜 값을 보고 결정한다.
  */
-async function executeProposeDataCard(admin: SupabaseAdminClient, userId: string, rawArgs: string) {
+async function executeProposeDataCard(
+  admin: SupabaseAdminClient,
+  userId: string,
+  rawArgs: string,
+  selectedRunId: string | null
+) {
   let parsedArgs: unknown = {}
   try {
     parsedArgs = JSON.parse(rawArgs || '{}')
@@ -2169,11 +2218,42 @@ async function executeProposeDataCard(admin: SupabaseAdminClient, userId: string
     return { error: '카드 조건 형식을 이해하지 못했습니다.' }
   }
   const normalized = normalizeDataCardProposalArgs(parsedArgs)
+  if ('clarify' in normalized) {
+    // 상한을 넘으면 더 묻지 않는다 — 아는 것만으로 만들거나, 못 하겠다고 말하고 끝낸다.
+    const asked = await countRecentDataCardClarifications(admin, userId, selectedRunId)
+    if (asked >= DATA_CARD_CLARIFY_LIMIT) {
+      return {
+        error: `되묻기 한도(${DATA_CARD_CLARIFY_LIMIT}회)를 넘었습니다.`,
+        guidance:
+          '**같은 질문을 다시 하지 마라.** 두 갈래로 갈린다. ' +
+          '① 지금 조건이 분명해졌으면 카드를 제안하고, 어떤 해석을 택했는지 한 줄로 밝힌다. ' +
+          '② 아직도 무엇을 원하는지 모르겠으면 **추측해서 만들지 말고**, 못 잡았다고 정직하게 말한 뒤 ' +
+          '"대신 다른 지표를 요청해 주시겠어요?"라고 묻는다. 사용자가 새 요청을 주면 그때 다시 호출한다. ' +
+          '더 말하지 않으면 조르지 않고 마무리한다.'
+      }
+    }
+    // 되묻는 턴에는 카드를 만들지 않는다. 질문만 던지고 답을 기다린다.
+    return {
+      needsClarification: true,
+      question: normalized.clarify,
+      guidance:
+        '이 질문 하나만 사용자에게 던지고 이번 턴은 거기서 멈춘다. 카드를 만들었다고 말하지 마라. ' +
+        '답을 받으면 그 답을 반영해 proposeDataCard 를 다시 호출한다.'
+    }
+  }
   if ('error' in normalized) {
-    // 거부로 끝내지 않는다 — 가장 가까운 대안을 다시 내라고 시킨다(#652 "모른다를 1급 응답으로"의 카드 판).
+    /*
+      정직하게 못 한다고 말하고 **대안을 임의로 만들지 않는다**(2026-09-03 결정).
+      예전 지침은 "가장 가까운 대안으로 한 번 더 호출"이었는데, 그러면 사용자가 원한 적 없는 카드를
+      추측해 내민다. 한계를 밝히고 **사용자에게 되묻는** 편이 정직하고, 거절도 존중한다.
+    */
     return {
       error: normalized.error,
-      guidance: '이 조건으로는 카드를 만들 수 없다고 사용자에게 알리고, 가장 가까운 대안 조건으로 proposeDataCard 를 한 번 더 호출한다.'
+      guidance:
+        '이 조건으로는 카드를 만들 수 없다고 **정직하게** 말한다(무엇이 안 되는지 한 줄로). ' +
+        '그리고 "다른 걸 요청해 주시겠어요?"라고 묻는다 — 대안을 네가 지어내 제안하지 마라. ' +
+        '사용자가 다른 요청을 하면 그때 proposeDataCard 를 다시 호출한다. ' +
+        '사용자가 원치 않거나 더 말하지 않으면 **더 권하지 않고 마무리한다**(재차 조르지 않는다).'
     }
   }
 
@@ -3178,8 +3258,9 @@ function streamCoachRun(
               return await executeReportDataGap(admin, userId, args, userNote)
             }
             if (name === 'proposeDataCard') {
-              const result = await executeProposeDataCard(admin, userId, args)
+              const result = await executeProposeDataCard(admin, userId, args, selectedRunId)
               const ok = 'ok' in result && result.ok === true
+              const clarified = 'needsClarification' in result
               // 승인 카드는 화면이 띄운다 — 여기선 마지막 제안만 들고 있다가 done 에 실어 보낸다.
               if (ok) pendingDataCardProposal = { spec: result.spec, previewText: result.previewText, matchedRuns: result.matchedRuns }
               /*
@@ -3189,9 +3270,10 @@ function streamCoachRun(
               */
               queryLog.toolCalls.push({
                 name: 'proposeDataCard',
-                ok,
+                ok: ok || clarified,
                 matchedRuns: ok ? result.matchedRuns : undefined,
-                failureKind: ok ? null : 'card_rejected'
+                // 되묻기와 거부를 갈라 남긴다 — "카드가 안 나왔다"의 원인이 셋(미호출·되묻기·거부)이다.
+                failureKind: ok ? null : clarified ? 'card_clarify' : 'card_rejected'
               })
               return result
             }

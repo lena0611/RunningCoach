@@ -16,6 +16,7 @@
         "npm:@vue/test-utils@^2.4.10",
         "npm:echarts@^6.1.0",
         "npm:fit-file-parser@3",
+        "npm:hover-tilt@1",
         "npm:jsdom@^29.1.1",
         "npm:nanoid@^5.1.6",
         "npm:pinia@^3.0.4",

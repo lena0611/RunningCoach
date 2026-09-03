@@ -5,6 +5,7 @@ import {
   validateDataCardSpec,
   type DataCardSpec
 } from '../supabase/functions/_shared/dataCard'
+import { normalizeDataCardProposalArgs } from '../supabase/functions/_shared/dataCardProposal'
 import type { QueryRunsRow, QueryRunsSpec } from '../supabase/functions/_shared/queryRunsCore'
 
 function row(overrides: Partial<QueryRunsRow> = {}): QueryRunsRow {
@@ -300,5 +301,37 @@ describe('기간 3종 — 무엇이 움직이고 무엇이 얼어야 하나', ()
   it('레거시 window 로 저장된 카드도 계속 돈다', () => {
     const legacy = { kind: 'single', title: '거리', metric: 'distanceKm', window: { lastDays: 7 }, query: query() } as DataCardSpec
     expect(computeDataCard(legacy, rows, new Date('2026-09-03T00:00:00')).value).toBe(30)
+  })
+})
+
+/**
+ * #767 — 되묻기 통로(2026-09-03). 도구 호출을 강제한 뒤 코치에게 물어볼 여지가 없어져
+ * **애매하면 되묻는 대신 추측**하게 됐다. 강제는 유지하고 도구 안에 질문 경로를 뒀다.
+ * 되묻는 턴에는 카드를 만들면 안 되고, 그 판단을 프롬프트에 맡기면 샌다 — 그래서 정규화가 먼저 가른다.
+ */
+describe('되묻기 경로', () => {
+  it('clarify 가 있으면 카드를 만들지 않고 질문만 돌려준다', () => {
+    const result = normalizeDataCardProposalArgs({
+      clarify: '주간 볼륨은 거리 기준인가요, 시간 기준인가요?',
+      title: null,
+      kind: null,
+      metric: null,
+      query: null
+    })
+    expect(result).toEqual({ clarify: '주간 볼륨은 거리 기준인가요, 시간 기준인가요?' })
+    expect('spec' in result).toBe(false)
+  })
+
+  it('clarify 가 비어 있으면 평소대로 카드를 만든다 — 물어볼 게 없으면 묻지 않는다', () => {
+    const result = normalizeDataCardProposalArgs({
+      clarify: '   ',
+      title: '토요일 LSD',
+      kind: 'single',
+      metric: 'distanceKm',
+      query: { filters: [{ field: 'weekday', op: 'eq', value: '토' }], groupBy: 'none', metrics: ['distanceKm'] },
+      period: { kind: 'rolling', lastDays: 28 }
+    })
+    expect('spec' in result).toBe(true)
+    if ('spec' in result) expect(result.spec.title).toBe('토요일 LSD')
   })
 })
