@@ -4,6 +4,10 @@
  *
  * 예정일 전날 뛴 런은 자동 크레딧하지 않으므로(SSOT §세션 변경) 코치가 묻는다.
  * 카드로 두면 스크롤해야 보여 놓치기 쉬워 시트로 올린다 — 오늘 하루만 유효한 선택이라 적시 노출이 핵심.
+ *
+ * 닫힘 신호를 둘로 나눈다(2026-09-03): X·배경 탭·쓸어내리기는 **결정이 아니라 '지금은 됐고'**(close)라
+ * 다음에 앱을 열면 다시 묻고, '예정대로 할게요'(decline)만 오늘 하루를 잠근다. 이 시트는 갈음의 유일한
+ * 진입점이라, 배경을 잘못 눌러 닫힌 걸 결정으로 굳히면 오늘 갈음할 방법이 사라진다.
  */
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 import PrimaryButton from './PrimaryButton.vue'
@@ -18,7 +22,10 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
+  /** 결정 없이 닫음(X·배경·드래그) — 저장하지 않는다. */
   close: []
+  /** '예정대로 할게요' — 오늘은 다시 묻지 않는다. */
+  decline: []
   credit: []
 }>()
 
@@ -57,7 +64,7 @@ const drag = useBottomSheetDrag(() => emit('close'))
         </div>
 
         <div class="early-run-credit-actions">
-          <SecondaryButton @click="emit('close')">예정대로 할게요</SecondaryButton>
+          <SecondaryButton @click="emit('decline')">예정대로 할게요</SecondaryButton>
           <PrimaryButton @click="emit('credit')">어제 런으로 갈음</PrimaryButton>
         </div>
       </section>
