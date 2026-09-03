@@ -106,7 +106,9 @@
   --color-perf: #a78bfa;
   --color-race: #ec4899; /* pink — Steady Long · Race (지표 액센트 매핑, 리디자인 ①b) */
   --color-recovery-text: #c4b5fd;
-  --color-surface-card: linear-gradient(180deg, var(--color-surface), var(--color-surface-2));
+  /* 카드 표면은 단색(2026-09-03). 그라디언트의 아래쪽 색으로 평평하게 — 위아래 색이 갈리면
+     카드가 살짝 부풀어 보이고, 카드가 여럿 쌓인 화면에서 그 미묘한 차이가 소음이 된다. */
+  --color-surface-card: var(--color-surface-2);
   --color-surface-panel: linear-gradient(180deg, var(--color-surface-gradient-start), var(--color-surface-gradient-end));
   --color-state-selected: var(--color-primary-soft);
   --space-1: 4px;
