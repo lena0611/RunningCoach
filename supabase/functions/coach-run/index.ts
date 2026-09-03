@@ -420,7 +420,7 @@ function hasOfferedRestAlternative(rows: CoachReportRow[]): boolean {
  */
 type CoachTurnQueryLog = {
   toolCalls: Array<{
-    name: 'queryRuns' | 'reportDataGap'
+    name: 'queryRuns' | 'reportDataGap' | 'proposeDataCard'
     ok: boolean
     matchedRuns?: number
     failureKind?: string | null
@@ -3149,8 +3149,20 @@ function streamCoachRun(
             }
             if (name === 'proposeDataCard') {
               const result = await executeProposeDataCard(admin, userId, args)
+              const ok = 'ok' in result && result.ok === true
               // 승인 카드는 화면이 띄운다 — 여기선 마지막 제안만 들고 있다가 done 에 실어 보낸다.
-              if ('ok' in result && result.ok) pendingDataCardProposal = { spec: result.spec, previewText: result.previewText, matchedRuns: result.matchedRuns }
+              if (ok) pendingDataCardProposal = { spec: result.spec, previewText: result.previewText, matchedRuns: result.matchedRuns }
+              /*
+                관측(#767). 이걸 안 남기면 "카드가 안 만들어졌다"의 원인이 **모델 미호출인지 검증 거부인지**
+                구분되지 않는다 — 2026-09-03 진단 때 실제로 로그가 비어 있어(tools: []) 도구를 부른 턴과
+                안 부른 턴이 똑같아 보였다. 스케줄 제안이 같은 이유로 관측을 붙인 것과 같다(#703).
+              */
+              queryLog.toolCalls.push({
+                name: 'proposeDataCard',
+                ok,
+                matchedRuns: ok ? result.matchedRuns : undefined,
+                failureKind: ok ? null : 'card_rejected'
+              })
               return result
             }
             if (name !== 'queryRuns') return { error: `지원하지 않는 도구입니다(${name}).` }
