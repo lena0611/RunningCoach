@@ -86,6 +86,20 @@ export type DataCardValue = {
   failureKind: QueryRunsFailureKind | null
 }
 
+/**
+ * 소수점 없이 보여줄 지표(2026-09-03 실측). 카드에 `159.69spm` 이 떴다 —
+ * 심박·케이던스·횟수·초 단위는 소수점이 정보가 아니라 잡음이다.
+ */
+const INTEGER_METRICS = new Set<QueryRunsMetric>([
+  'avgHeartRate',
+  'maxHeartRate',
+  'cadence',
+  'count',
+  'avgPaceSec',
+  'durationSec',
+  'elevationGainM'
+])
+
 const METRIC_UNITS: Partial<Record<QueryRunsMetric, string>> = {
   distanceKm: 'km',
   durationSec: '초',
@@ -116,9 +130,18 @@ export function dataCardTitleWidth(title: string): number {
   return width
 }
 
-/** 검증 — 닫힌 어휘 밖이면 거부 이유를 돌려준다(조용히 무시하지 않는다). */
-export function validateDataCardSpec(spec: DataCardSpec): { ok: true } | { ok: false; error: string } {
-  if (!spec.title.trim()) return { ok: false, error: '카드 이름이 비어 있습니다.' }
+/**
+ * 검증 — 닫힌 어휘 밖이면 거부 이유를 돌려준다(조용히 무시하지 않는다).
+ *
+ * `fixable` 은 **모델이 조건을 다시 짜면 되는 실수**라는 뜻이다(2026-09-03). 이 구분이 없으면
+ * 모델이 날짜를 filters 에 박는 실수 하나로 사용자가 "못 만든다"는 답을 받는다 —
+ * 되는 요청을 했는데 모델 실수를 사용자에게 청구하는 셈이다. 우리가 정말 못 하는 것(없는 지표·
+ * 화이트리스트 밖 조회)만 사용자에게 정직하게 말한다.
+ */
+export function validateDataCardSpec(
+  spec: DataCardSpec
+): { ok: true } | { ok: false; error: string; fixable: true } {
+  if (!spec.title.trim()) return { ok: false, error: '카드 이름이 비어 있습니다.', fixable: true }
   /*
     기간은 **period 로만** 받는다. 필터에 직접 박은 날짜는 거부한다 — 의도가 rolling 인지 fixed 인지
     구분이 안 되고, 그러면 "최근 4주" 요청이 조용히 특정 월로 굳는다(2026-09-03 실사고).
@@ -126,27 +149,27 @@ export function validateDataCardSpec(spec: DataCardSpec): { ok: true } | { ok: f
   */
   const queries = spec.kind === 'single' ? [spec.query] : [spec.numerator, spec.denominator]
   if (queries.some((q) => q.filters.some((f) => f.field === 'date'))) {
-    return { ok: false, error: '카드 기간은 필터가 아니라 기간 설정으로 지정해야 합니다.' }
+    return { ok: false, error: '카드 기간은 필터가 아니라 기간 설정으로 지정해야 합니다.', fixable: true }
   }
   const period = resolvePeriodSpec(spec)
   if (period?.kind === 'rolling' && (!Number.isFinite(period.lastDays) || period.lastDays < 1)) {
-    return { ok: false, error: '카드 기간이 올바르지 않습니다.' }
+    return { ok: false, error: '카드 기간이 올바르지 않습니다.', fixable: true }
   }
   if (period?.kind === 'fixed' && !(DATE_ONLY.test(period.from) && DATE_ONLY.test(period.to) && period.from <= period.to)) {
-    return { ok: false, error: '고정 기간의 날짜가 올바르지 않습니다(YYYY-MM-DD, 시작 ≤ 끝).' }
+    return { ok: false, error: '고정 기간의 날짜가 올바르지 않습니다(YYYY-MM-DD, 시작 ≤ 끝).', fixable: true }
   }
   // 길면 카드에서 두 줄로 꺾인다 — 저장 뒤에 발견하면 고칠 방법이 없으므로 제안 단계에서 막는다.
   if (dataCardTitleWidth(spec.title) > DATA_CARD_TITLE_WIDTH_LIMIT) {
-    return { ok: false, error: `카드 이름이 너무 깁니다(한글 ${DATA_CARD_TITLE_WIDTH_LIMIT}자 이내로 줄여주세요).` }
+    return { ok: false, error: `카드 이름이 너무 깁니다(한글 ${DATA_CARD_TITLE_WIDTH_LIMIT}자 이내로 줄여주세요).`, fixable: true }
   }
   if (spec.kind === 'single') return { ok: true }
   // 비율은 같은 축으로 묶여야 비교가 성립한다(주 대 주). 축이 다르면 숫자가 의미를 잃는다.
   if (spec.numerator.groupBy !== spec.denominator.groupBy) {
-    return { ok: false, error: '비율은 분자와 분모를 같은 기준으로 묶어야 합니다.' }
+    return { ok: false, error: '비율은 분자와 분모를 같은 기준으로 묶어야 합니다.', fixable: true }
   }
   // 지표가 섞이면(거리 ÷ 시간) 단위가 사라진다.
   if (!spec.numerator.metrics.includes(spec.metric) || !spec.denominator.metrics.includes(spec.metric)) {
-    return { ok: false, error: '비율의 분자와 분모는 같은 지표여야 합니다.' }
+    return { ok: false, error: '비율의 분자와 분모는 같은 지표여야 합니다.', fixable: true }
   }
   return { ok: true }
 }
@@ -217,7 +240,7 @@ export function computeDataCard(spec: DataCardSpec, rows: QueryRunsRow[], today:
     const first = result.rows[0]
     const raw = first ? first[spec.metric] : null
     return {
-      value: typeof raw === 'number' ? raw : null,
+      value: typeof raw === 'number' ? roundForMetric(spec.metric, raw) : null,
       unit: METRIC_UNITS[spec.metric] ?? '',
       matchedRuns: result.matchedRuns,
       groupCount: spec.query.groupBy === 'none' ? 0 : result.rows.length,
@@ -290,6 +313,10 @@ function groupKeyOf(row: Record<string, string | number | null>, groupBy: string
   if (groupBy === 'none') return 'all'
   const key = row.group
   return typeof key === 'string' ? key : String(key ?? 'all')
+}
+
+function roundForMetric(metric: QueryRunsMetric, value: number): number {
+  return INTEGER_METRICS.has(metric) ? Math.round(value) : round(value)
 }
 
 function round(value: number): number {

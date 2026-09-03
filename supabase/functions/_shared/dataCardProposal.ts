@@ -8,13 +8,14 @@
  */
 
 import { validateDataCardSpec, type DataCardPeriod, type DataCardSpec } from './dataCard.ts'
-import { normalizeQueryRunsArgs } from './queryRunsCore.ts'
+import { normalizeQueryRunsArgs, type QueryRunsSpec } from './queryRunsCore.ts'
 
 export type DataCardProposalResult =
   | { spec: DataCardSpec }
   /** 되묻기(2026-09-03) — 조건이 애매하면 추측하지 않고 한 가지만 묻는다. */
   | { clarify: string }
-  | { error: string }
+  /** `fixable` 이면 모델이 조건을 고쳐 다시 부르면 되는 실수다 — 사용자에게 "못 만든다"고 말하지 않는다. */
+  | { error: string; fixable?: true }
 
 /** 모델이 준 raw 인자 → 검증된 카드 스펙. 실패하면 사람이 읽을 이유만 남는다. */
 export function normalizeDataCardProposalArgs(raw: unknown): DataCardProposalResult {
@@ -44,9 +45,15 @@ export function normalizeDataCardProposalArgs(raw: unknown): DataCardProposalRes
     if (!query.spec.metrics.includes(metric as never)) {
       return { error: `'${metric || '지표'}'는 이 조회에 없는 지표입니다.` }
     }
-    const spec: DataCardSpec = { kind: 'single', title, query: query.spec, metric: metric as never, period }
+    const spec: DataCardSpec = {
+      kind: 'single',
+      title,
+      query: dropDateFiltersWhenPeriodWins(query.spec, period),
+      metric: metric as never,
+      period
+    }
     const verdict = validateDataCardSpec(spec)
-    return verdict.ok ? { spec } : { error: verdict.error }
+    return verdict.ok ? { spec } : { error: verdict.error, fixable: true }
   }
 
   const numerator = normalizeQueryRunsArgs(value.numerator)
@@ -57,14 +64,28 @@ export function normalizeDataCardProposalArgs(raw: unknown): DataCardProposalRes
   const spec: DataCardSpec = {
     kind: 'ratio',
     title,
-    numerator: numerator.spec,
-    denominator: denominator.spec,
+    numerator: dropDateFiltersWhenPeriodWins(numerator.spec, period),
+    denominator: dropDateFiltersWhenPeriodWins(denominator.spec, period),
     metric: metric as never,
     display: value.display === 'times' ? 'times' : 'percent',
     period
   }
   const verdict = validateDataCardSpec(spec)
-  return verdict.ok ? { spec } : { error: verdict.error }
+  return verdict.ok ? { spec } : { error: verdict.error, fixable: true }
+}
+
+/**
+ * 기간이 이미 period 로 왔는데 filters 에도 날짜가 박혀 있으면 **날짜 필터를 버린다**(2026-09-03 실측).
+ *
+ * 지침에 "filters 에 date 를 넣지 마라"가 있는데도 그렇게 온다. 이때 검증이 거부하면 사용자는
+ * 되는 요청을 하고도 "못 만든다"는 답을 받는다 — 모델 실수를 사용자에게 청구하는 셈이다.
+ * period 가 있으면 의도가 모호하지 않으니(기간의 단일 출처가 period) 조용히 정리하는 게 맞다.
+ * period 가 없을 때는 rolling 인지 fixed 인지 알 수 없어 손대지 않는다 — 그건 모델이 고칠 실수다.
+ */
+function dropDateFiltersWhenPeriodWins(spec: QueryRunsSpec, period: DataCardPeriod): QueryRunsSpec {
+  if (!period) return spec
+  const filters = spec.filters.filter((filter) => filter.field !== 'date')
+  return filters.length === spec.filters.length ? spec : { ...spec, filters }
 }
 
 /**
