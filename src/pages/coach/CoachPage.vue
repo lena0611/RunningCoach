@@ -138,7 +138,6 @@ const {
   weekendTriageData,
   doubleEligibility,
   doubleSuggestionData,
-  earlyRunCreditCandidate,
   topCoachMoment,
   dismissMoment,
   onMomentSelect
@@ -278,22 +277,8 @@ const weekMission = computed(() => {
 // 전략적 휴식(#378): 휴식날도 회복·부상관리·근력 보강 안내
 const restGuidance = computed(() => buildRestGuidance(activeInjury.value, chronicLoad.value))
 
-/**
- * 앞당겨 뛴 런 갈음 승인(2026-09-03). 매처는 앞당김을 자동 크레딧하지 않으므로, 여기서만 연결한다 —
- * 오늘 세션을 어제 런으로 done 처리(#379 따라잡기와 같은 setStatus 경로). 되돌리기는 런 삭제/치유 경로가 이미 갖고 있다.
- */
-async function creditEarlyRun() {
-  const candidate = earlyRunCreditCandidate.value
-  if (!candidate) return
-  await runScheduleOp(async () => {
-    await scheduleStore.setStatus(candidate.sessionId, 'done', candidate.runId)
-  })
-  toastStore.success('어제 런으로 갈음했어요. 오늘은 쉬어가요.')
-}
-
 function onMomentAction(moment: { key: string; action?: { kind: string } }) {
-  if (moment.action?.kind === 'credit-early-run') void creditEarlyRun()
-  else if (moment.action?.kind === 'open-injury-screening') useInjuryFlowStore().requestScreening()
+  if (moment.action?.kind === 'open-injury-screening') useInjuryFlowStore().requestScreening()
   else if (moment.action?.kind === 'open-weekend-triage') triageOpen.value = true
   else if (moment.action?.kind === 'open-doubles-add') openDoublesAdd(doubleSuggestionData.value?.amSession ?? null)
   else if (moment.action?.kind === 'open-rest-extend' || moment.action?.kind === 'open-rest-for-injury') {

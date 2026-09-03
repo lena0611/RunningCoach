@@ -16,7 +16,6 @@ import { buildDoubleSuggestion, evaluateDoubleEligibility, type DoubleEligibilit
 import type { CriterionStatus } from '@/shared/lib/coaching/progressionCriteria'
 import { sessionTypeLabel } from '@/shared/lib/coaching/sessionBriefing'
 import { isChronicBaselineAfterLayoff } from '@/shared/lib/coaching/returnAnchor'
-import { findEarlyRunCreditCandidate } from '@/shared/lib/coaching/earlyRunCredit'
 import { dateOnly, diffDaysIso, type useTrainingWeek } from '@/pages/dashboard/useTrainingWeek'
 import { loadMomentDismissals, persistMomentDismissal, type MomentDismissalMap } from './momentDismissal'
 
@@ -196,13 +195,6 @@ export function useCoachMoments(week: TrainingWeek) {
    * 직전 30일(비교 분모)이 인위적으로 작아져 증가율이 폭증한다 — SSOT 가 말하는 **비율 인공물**이다.
    * 창을 60일로 잡는 이유: 만성부하가 보는 구간이 최근 60일(최근 30 vs 직전 30)이기 때문이다.
    */
-  /** 스케줄 세션에 귀속된 런만(의도 매칭 제외) — 갈음 제안 판정용. */
-  const scheduleAttributedRunIds = computed(() => {
-    const ids = new Set<string>()
-    for (const s of scheduleStore.sessions) if (s.runId) ids.add(s.runId)
-    return ids
-  })
-
   const chronicBaselineAfterLayoff = computed(() =>
     isChronicBaselineAfterLayoff(runs.value.map((run) => run.date), today.value)
   )
@@ -221,21 +213,6 @@ export function useCoachMoments(week: TrainingWeek) {
     }
   })
 
-  /**
-   * 앞당겨 뛴 런 갈음 후보(2026-09-03). 매처가 앞당김을 자동 크레딧하지 않으므로 코치가 묻는다.
-   * 승인 처리(세션 done 연결)는 페이지 쪽 onMomentAction 이 이 후보를 읽어 수행한다.
-   */
-  const earlyRunCreditCandidate = computed(() =>
-    findEarlyRunCreditCandidate({
-      sessions: scheduleStore.sessions,
-      runs: runs.value.map((run) => ({ id: run.id, date: run.date, type: run.type, distanceKm: run.distanceKm })),
-      // ⚠ 스케줄 세션 귀속만 본다(의도 매칭 제외). 의도는 같은 날 매칭돼도 **세션은 planned 로 남아** 있을 수 있고,
-      //   갈음 제안의 질문은 "오늘 세션을 어제 런으로 채울까"이므로 판정 축이 세션이다(라이브 검증 2026-09-03).
-      attributedRunIds: scheduleAttributedRunIds.value,
-      today: todayDate.value
-    })
-  )
-
   const coachMoments = computed(() =>
     collectCoachMoments(
       {
@@ -244,13 +221,6 @@ export function useCoachMoments(week: TrainingWeek) {
         attributedRunIds: attributedRunIds.value,
         chronic: chronicLoad.value,
         chronicBaselineAfterLayoff: chronicBaselineAfterLayoff.value,
-        earlyRunCredit: earlyRunCreditCandidate.value
-          ? {
-              sessionLabel: sessionTypeLabel(earlyRunCreditCandidate.value.sessionType as never),
-              runTypeLabel: sessionTypeLabel(earlyRunCreditCandidate.value.runType as never),
-              runKm: earlyRunCreditCandidate.value.runKm
-            }
-          : null,
         injury: activeInjury.value,
         today: today.value,
         painProbe: painProbeCtx.value,
@@ -324,7 +294,6 @@ export function useCoachMoments(week: TrainingWeek) {
     weekendTriageData,
     doubleEligibility,
     doubleSuggestionData,
-    earlyRunCreditCandidate,
     coachMoments,
     topCoachMoment,
     dismissMoment,

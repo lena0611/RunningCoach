@@ -14,12 +14,12 @@ import type { ChronicLoadTrend } from '@/shared/lib/runStats'
 import { analyzeExtraRunTrend, buildExtraRunInquiry } from '@/shared/lib/coaching/extraRunTrend'
 import { isRunningLoadGroup, PAIN_GROUP_LABEL, type PainGroup } from '@/features/post-run-interview/buildInterviewRunPatch'
 
-export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'pain-probe' | 'injury-escalation' | 'injury-worsened' | 'extra-run' | 'goal-progress' | 'goal-feasibility' | 'time-trial' | 'weekend-triage' | 'double-suggest' | 'rest-support' | 'rest-return' | 'early-run-credit'
+export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'pain-probe' | 'injury-escalation' | 'injury-worsened' | 'extra-run' | 'goal-progress' | 'goal-feasibility' | 'time-trial' | 'weekend-triage' | 'double-suggest' | 'rest-support' | 'rest-return'
 
 /** 모먼트가 제안하는 행동(전용 시트 열기 등). 트레이니 확인 후 실행. */
 export type CoachMomentAction = {
   label: string
-  kind: 'open-injury-screening' | 'open-weekend-triage' | 'open-doubles-add' | 'open-rest-extend' | 'open-rest-for-injury' | 'credit-early-run'
+  kind: 'open-injury-screening' | 'open-weekend-triage' | 'open-doubles-add' | 'open-rest-extend' | 'open-rest-for-injury'
 }
 export type CoachMomentSentiment = 'positive' | 'neutral' | 'caution'
 
@@ -186,15 +186,6 @@ export type CoachMomentContext = {
    * 복귀 게이트로 신뢰 금지."* caller 가 `findRecentLayoff` 로 판정해 넘긴다(#397 경계).
    */
   chronicBaselineAfterLayoff?: boolean
-  /**
-   * 앞당겨 뛴 런 갈음 제안(2026-09-03). 매처가 앞당김을 자동 크레딧하지 않으므로 코치가 묻는다.
-   * findEarlyRunCreditCandidate 결과에 표시용 라벨을 얹은 plain — 승인 시 페이지가 세션↔런을 연결한다.
-   */
-  earlyRunCredit?: {
-    sessionLabel: string
-    runTypeLabel: string
-    runKm: number
-  } | null
   /**
    * 부상 심각도가 **올라간** 사실(#727) — `severityRaisedAt` 도장에서 caller 가 파생해 주입.
    * 메모리엔 현재 심각도만 남아 "나빠졌다"를 알 수 없으므로 라이터 수렴점이 도장을 찍는다.
@@ -594,28 +585,7 @@ function detectInjuryEscalation(ctx: CoachMomentContext): CoachMoment | null {
   }
 }
 
-/**
- * 앞당겨 뛴 런 갈음 제안(2026-09-03, SSOT §세션 변경 행동 모델).
- * 어제 예정 밖으로 뛴 런이 오늘 세션과 호환되면 "그걸로 갈음하고 쉴까요?"를 **묻는다**.
- * 자동 크레딧이 아니라 승인형 — 어제 뛴 게 오늘 훈련을 대신하는지는 코치·러너가 정할 일이다.
- */
-function detectEarlyRunCredit(ctx: CoachMomentContext): CoachMoment | null {
-  const c = ctx.earlyRunCredit
-  if (!c) return null
-  const km = Math.round(c.runKm * 10) / 10
-  return {
-    key: `early-run-credit:${c.sessionLabel}:${km}`,
-    kind: 'early-run-credit',
-    priority: 55,
-    icon: '🗓️',
-    // 조사(을/를) 분기를 피하려 '세션을'로 받는다 — 세션 라벨은 '이지·템포'처럼 받침이 갈린다.
-    message: `어제 ${c.runTypeLabel} ${km}km를 이미 뛰었네요. 오늘 ${c.sessionLabel} 세션을 어제 런으로 갈음하고 쉴까요? 예정대로 오늘 또 뛰어도 괜찮아요.`,
-    action: { label: '어제 런으로 갈음', kind: 'credit-early-run' }
-  }
-}
-
 const DETECTORS: Detector[] = [
-  detectEarlyRunCredit,
   detectLoadSpike,
   detectInjuryEscalation,
   detectPainFollowup,

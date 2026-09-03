@@ -27,6 +27,10 @@ import { useSessionDetailStore } from '@/app/stores/sessionDetailStore'
 import InjuryCheckInSheet from '@/shared/ui/InjuryCheckInSheet.vue'
 import InjuryScreeningSheet from '@/shared/ui/InjuryScreeningSheet.vue'
 import NotificationSettingsPromptSheet from '@/shared/ui/NotificationSettingsPromptSheet.vue'
+import EarlyRunCreditSheet from '@/shared/ui/EarlyRunCreditSheet.vue'
+import { findEarlyRunCreditCandidate } from '@/shared/lib/coaching/earlyRunCredit'
+import { sessionTypeLabel } from '@/shared/lib/coaching/sessionBriefing'
+import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import PostRunInterviewSheet from '@/shared/ui/PostRunInterviewSheet.vue'
 import ToastHost from '@/shared/ui/ToastHost.vue'
 import { useToastStore } from '@/app/stores/toastStore'
@@ -40,6 +44,7 @@ import { getThisWeekRuns } from '@/shared/lib/runStats'
 import type { BottomNavItem } from '@/shared/ui/BottomNav.vue'
 
 const authStore = useAuthStore()
+const scheduleStore = useTrainingScheduleStore()
 const healthKitSyncStore = useHealthKitSyncStore()
 const memoryStore = useMemoryStore()
 const runStore = useRunStore()
@@ -247,6 +252,70 @@ const isMainTabRoute = computed(() => currentTabIndex.value !== -1)
 const injuryCheckInItem = computed(() => memoryStore.memory.injuryItems.find((item) => item.id === injuryCheckInItemId.value) ?? null)
 const disabledNotificationItems = computed(() => getDisabledNotificationItems(settingsStore.notificationSettings))
 const notificationPromptSignature = computed(() => disabledNotificationItems.value.map((item) => item.key).join('|'))
+/**
+ * 앞당겨 뛴 런 갈음 제안(2026-09-03). 매처는 앞당김을 자동 크레딧하지 않으므로(SSOT §세션 변경) 코치가 묻는다.
+ * 카드로 두면 스크롤해야 보여 놓치므로 App 레벨 시트로 — 오늘 하루만 유효한 선택이라 적시 노출이 핵심이다.
+ * ⚠ 귀속 판정은 **스케줄 세션**만 본다(세션의도 제외). 의도는 같은 날 매칭돼도 세션은 planned 로 남는다.
+ */
+const earlyRunCreditCandidate = computed(() => {
+  if (!authStore.isAuthenticated) return null
+  const attributed = new Set<string>()
+  for (const s of scheduleStore.sessions) if (s.runId) attributed.add(s.runId)
+  return findEarlyRunCreditCandidate({
+    sessions: scheduleStore.sessions,
+    runs: runStore.runs.map((run) => ({ id: run.id, date: run.date, type: run.type, distanceKm: run.distanceKm })),
+    attributedRunIds: attributed,
+    today: localDateKey(new Date())
+  })
+})
+/** 오늘 한 번 닫으면 다시 묻지 않는다(날짜 키) — 제안은 하루짜리라 세션 저장소로 충분하지 않고 날짜로 못박는다. */
+const earlyRunCreditDismissedDate = ref<string | null>(readEarlyRunCreditDismissed())
+const earlyRunCreditBusy = ref(false)
+const earlyRunCreditSheetOpen = computed(
+  () =>
+    Boolean(earlyRunCreditCandidate.value) &&
+    authStore.isAuthenticated &&
+    route.path !== '/auth' &&
+    route.path !== '/access' &&
+    !showOnboarding.value &&
+    earlyRunCreditDismissedDate.value !== localDateKey(new Date()) &&
+    !injuryCheckInItem.value &&
+    !pendingInterviewRun.value &&
+    !injuryScreeningOpen.value &&
+    !notificationSettingsPromptOpen.value
+)
+function earlyRunCreditDismissKey() {
+  return `pacelab.earlyRunCredit.dismissed.${authStore.user?.id ?? 'anonymous'}`
+}
+function readEarlyRunCreditDismissed(): string | null {
+  try {
+    return localStorage.getItem(earlyRunCreditDismissKey())
+  } catch {
+    return null
+  }
+}
+function dismissEarlyRunCredit() {
+  const today = localDateKey(new Date())
+  earlyRunCreditDismissedDate.value = today
+  try {
+    localStorage.setItem(earlyRunCreditDismissKey(), today)
+  } catch {
+    // 저장 실패는 무시 — 이번 세션 동안만 숨겨진다.
+  }
+}
+async function creditEarlyRun() {
+  const candidate = earlyRunCreditCandidate.value
+  if (!candidate || earlyRunCreditBusy.value) return
+  earlyRunCreditBusy.value = true
+  try {
+    await scheduleStore.setStatus(candidate.sessionId, 'done', candidate.runId)
+    toastStore.success('어제 런으로 갈음했어요. 오늘은 쉬어가요.')
+  } finally {
+    earlyRunCreditBusy.value = false
+    dismissEarlyRunCredit()
+  }
+}
+
 const notificationSettingsPromptOpen = computed(() =>
   notificationPromptReady.value &&
   authStore.isAuthenticated &&
@@ -934,6 +1003,14 @@ function animateTabRelease(targetOffset: number, targetRoute: string | null) {
       @close="injuryScreeningOpen = false"
       @register="openInjuryRegistration"
       @acknowledge="dismissInjuryScreening"
+    />
+    <EarlyRunCreditSheet
+      :open="earlyRunCreditSheetOpen"
+      :session-label="earlyRunCreditCandidate ? sessionTypeLabel(earlyRunCreditCandidate.sessionType as never) : ''"
+      :run-type-label="earlyRunCreditCandidate ? sessionTypeLabel(earlyRunCreditCandidate.runType as never) : ''"
+      :run-km="earlyRunCreditCandidate?.runKm ?? 0"
+      @close="dismissEarlyRunCredit"
+      @credit="creditEarlyRun"
     />
     <NotificationSettingsPromptSheet
       :open="notificationSettingsPromptOpen"

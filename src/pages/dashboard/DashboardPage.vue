@@ -103,21 +103,9 @@ const {
 } = week
 
 // CoachInsights(1장): 코치 탭과 동일 모먼트 엔진의 top 1 — 두 탭 간 코치 발화 불일치 방지(useCoachMoments 추출).
-const { topCoachMoment, dismissMoment, onMomentSelect, earlyRunCreditCandidate } = useCoachMoments(week)
+const { topCoachMoment, dismissMoment, onMomentSelect } = useCoachMoments(week)
 // 시트(트리아지·더블)는 코치 탭 소유 — 그런 액션은 코치 탭으로 이동만 하고 dismiss 하지 않는다(코치 탭에서 실행).
-async function onDashboardMomentAction(moment: CoachMoment) {
-  // 갈음 승인은 이 탭에서 바로 처리한다 — 결과(오늘 히어로 완료 전환)가 여기 있어 탭 이동이 무의미하다.
-  if (moment.action?.kind === 'credit-early-run') {
-    const candidate = earlyRunCreditCandidate.value
-    if (candidate) {
-      await runScheduleOp(async () => {
-        await scheduleStore.setStatus(candidate.sessionId, 'done', candidate.runId)
-      })
-      toastStore.success('어제 런으로 갈음했어요. 오늘은 쉬어가요.')
-    }
-    dismissMoment(moment.key)
-    return
-  }
+function onDashboardMomentAction(moment: CoachMoment) {
   if (moment.action?.kind === 'open-injury-screening') {
     useInjuryFlowStore().requestScreening()
     dismissMoment(moment.key)
@@ -381,6 +369,19 @@ const todayHero = computed(() => {
     keyPoint: activeBriefing.value?.keyPoint ?? ''
   }
 })
+/**
+ * 오늘 세션을 **어제 런으로 갈음**한 상태(2026-09-03). 오늘 뛴 런은 없으므로 activeDoneRun 은 비고,
+ * 세션은 done 이라 todayHero 도 비어 히어로가 "휴식"으로 떨어진다 — 그 사이를 이 분기가 메운다.
+ */
+const creditedFromEarlierRun = computed(() => {
+  if (activeDoneRun.value) return null
+  const doneToday = scheduleStore.sessions.find((s) => s.date === todayDate.value && s.status === 'done' && s.runId)
+  if (!doneToday) return null
+  const run = runs.value.find((item) => item.id === doneToday.runId)
+  if (!run || run.date === todayDate.value) return null
+  return { typeLabel: run.type, km: Math.round(run.distanceKm * 10) / 10, date: run.date }
+})
+
 // 세션 타입 → 히어로 배경 삽화 토픽(디자인 확정 매핑). Steady Long 은 긴 지속주 → lsd(굽은 길+해), 휴식 → recovery(달).
 function heroTopicFor(type: RunType | null | undefined): HeroIllustrationTopic {
   switch (type) {
@@ -407,9 +408,6 @@ function goCoachTab() {
   router.push('/coach')
 }
 /** 히어로 수락(#752) — 코치 탭 SessionBriefingCard 의 acknowledge 와 같은 동작·같은 문구. */
-function onHeroAck() {
-  toastStore.success('좋아요, 오늘은 이 훈련에 집중해요.')
-}
 /**
  * 요약 주간 스트립에서 고른 날로 코치 탭을 연다(#745).
  * 예전엔 날짜를 버리고 탭만 넘겨서 3일을 눌러도 오늘이 열렸다 — 고른 날이 조용히 사라졌다.
@@ -608,6 +606,18 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
               <p v-if="todayHero.metaLine" class="helper today-hero-meta num-mono">{{ todayHero.metaLine }}</p>
               <p v-if="todayHero.keyPoint" class="helper coach-line">🎯 {{ todayHero.keyPoint }}</p>
             </template>
+            <!--
+              갈음 상태(2026-09-03): 오늘 세션이 done 인데 그 런은 어제 것. 이 분기가 없으면
+              "🌙 오늘은 휴식 · 예정 세션이 없어요"로 떨어져 방금 승인한 갈음이 사라진 것처럼 보인다.
+            -->
+            <template v-else-if="creditedFromEarlierRun">
+              <h2>✅ 어제 런으로 갈음했어요</h2>
+              <p class="helper">
+                {{ creditedFromEarlierRun.typeLabel }} {{ creditedFromEarlierRun.km }}km ·
+                {{ formatDateWithWeekday(creditedFromEarlierRun.date) }}
+              </p>
+              <p class="helper">오늘은 쉬어가요.</p>
+            </template>
             <template v-else>
               <h2>🌙 오늘은 휴식</h2>
               <p class="helper">예정 세션이 없어요. 가볍게 풀거나 쉬어가요.</p>
@@ -639,13 +649,12 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
         </p>
 
         <!--
-          CTA(#752, ①b 스펙 복원): 히어로는 "오늘 뭐하지"를 1초에 끝내는 곳이라 **여기서 결정**한다.
-          주 CTA = 수락(코치 탭 primary 와 같은 동작), 보조 = 작전 보기(왜·어떻게는 코치 탭이 정본).
-          예전엔 '상세 브리핑 보기' 링크만 있어 히어로가 코치 카드의 예고편이 됐고, 그게 중복으로 읽혔다.
+          CTA(#752 → 2026-09-03): 주 CTA '이 훈련으로 갈게요'는 **토스트만 띄우고 아무것도 남기지 않는**
+          빈 껍데기였다(수락 상태 미보관). 요약 홈이 행동을 소유하려면 진짜 시작(라이브 트래킹·워치 전송)이어야
+          하는데 워치 쪽이 아직 덜 여물어 보류하고, 그때까지 없는 결정 버튼 대신 '작전 보기'만 둔다.
         -->
         <div v-if="hasSchedule && todayHero && !activeDoneRun" class="hero-actions">
-          <button type="button" class="hero-action-primary" :disabled="intentBusy" @click.stop="onHeroAck">이 훈련으로 갈게요</button>
-          <button type="button" class="hero-action-secondary" @click.stop="goCoachTab">작전 보기</button>
+          <button type="button" class="hero-action-secondary hero-action-only" @click.stop="goCoachTab">작전 보기</button>
         </div>
       </div>
       <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
@@ -1034,6 +1043,12 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
   display: flex;
   gap: 8px;
   margin-top: 4px;
+}
+/* 버튼이 하나만 남을 땐 히어로 폭을 다 먹지 않게 — 삽화를 가리지 않는 선에서 눌리는 크기는 유지. */
+.hero-action-only {
+  flex: 0 1 auto;
+  min-width: 128px;
+  max-width: 60%;
 }
 .hero-action-primary,
 .hero-action-secondary {
