@@ -35,6 +35,13 @@ export type DataCardValue = {
   unit: string
   /** 표본 수(러닝 건수) — 적을 때 사실을 밝히기 위해. */
   matchedRuns: number
+  /**
+   * 평균에 실제로 들어간 묶음 수(주·달 등). 비율을 묶어 계산했을 때 "최근 4주 기준"처럼
+   * **무엇을 평균했는지** 밝히기 위한 값이다. 묶지 않았으면 0.
+   */
+  groupCount: number
+  /** 묶은 축(week·month 등). 화면이 "주"/"개월" 단위 문구를 고르는 데 쓴다. */
+  groupBy: string
   /** 계산이 불완전한 이유. 판정이 아니라 사실이다. */
   failureKind: QueryRunsFailureKind | null
 }
@@ -76,40 +83,70 @@ export function computeDataCard(spec: DataCardSpec, rows: QueryRunsRow[]): DataC
       value: typeof raw === 'number' ? raw : null,
       unit: METRIC_UNITS[spec.metric] ?? '',
       matchedRuns: result.matchedRuns,
+      groupCount: spec.query.groupBy === 'none' ? 0 : result.rows.length,
+      groupBy: spec.query.groupBy,
       failureKind: result.failureKind
     }
   }
 
   const numerator = runQueryRunsCore(spec.numerator, rows)
   const denominator = runQueryRunsCore(spec.denominator, rows)
-  const top = sumMetric(numerator.rows, spec.metric)
-  const bottom = sumMetric(denominator.rows, spec.metric)
+  const unit = spec.display === 'percent' ? '%' : '배'
+  const groupBy = spec.denominator.groupBy
+  const failureKind = denominator.failureKind ?? numerator.failureKind
 
-  // 분모 0 을 0% 로 보여주면 거짓말이 된다 — 계산 불가로 남긴다.
-  if (bottom === null || bottom === 0 || top === null) {
+  /*
+    묶어서 물었으면 **묶음별 비율의 평균**을 낸다(2026-09-03 지적).
+    전체를 합쳐 한 번 나누면(pooled) 볼륨이 큰 주가 결과를 지배한다 —
+    "주간 비중"을 물었는데 사실은 "전체 거리 중 비중"을 답하게 되고, 두 값은 다르다.
+    묶지 않았으면(groupBy=none) 묶음이 하나뿐이라 같은 식이 그대로 pooled 가 된다.
+  */
+  const denominatorByGroup = new Map<string, number>()
+  for (const row of denominator.rows) {
+    const value = row[spec.metric]
+    if (typeof value === 'number' && value > 0) denominatorByGroup.set(groupKeyOf(row, groupBy), value)
+  }
+  const numeratorByGroup = new Map<string, number>()
+  for (const row of numerator.rows) {
+    const value = row[spec.metric]
+    if (typeof value === 'number') numeratorByGroup.set(groupKeyOf(row, groupBy), value)
+  }
+
+  const ratios: number[] = []
+  for (const [key, bottom] of denominatorByGroup) {
+    // 분모가 있는 묶음만 센다. 분자가 없으면 그 묶음은 0 이 맞다(그 주에 LSD 를 안 했다는 사실).
+    ratios.push((numeratorByGroup.get(key) ?? 0) / bottom)
+  }
+
+  if (!ratios.length) {
+    // 분모가 0 이거나 없으면 0% 가 아니라 계산 불가다 — 0 으로 보여주면 거짓말이 된다.
     return {
       value: null,
-      unit: spec.display === 'percent' ? '%' : '배',
+      unit,
       matchedRuns: denominator.matchedRuns,
-      failureKind: denominator.failureKind ?? numerator.failureKind ?? 'no_matching_runs'
+      groupCount: 0,
+      groupBy,
+      failureKind: failureKind ?? 'no_matching_runs'
     }
   }
 
-  const ratio = top / bottom
+  const mean = ratios.reduce((sum, value) => sum + value, 0) / ratios.length
   return {
-    value: round(spec.display === 'percent' ? ratio * 100 : ratio),
-    unit: spec.display === 'percent' ? '%' : '배',
+    value: round(spec.display === 'percent' ? mean * 100 : mean),
+    unit,
     // 표본은 **분모**(전체) 기준이다 — 비율의 신뢰도는 전체 표본이 정한다.
     matchedRuns: denominator.matchedRuns,
-    failureKind: denominator.failureKind ?? numerator.failureKind
+    groupCount: groupBy === 'none' ? 0 : ratios.length,
+    groupBy,
+    failureKind
   }
 }
 
-/** 그룹이 여럿이면 합쳐서 하나로 — 카드는 숫자 한 개다(그룹별 표는 상세 화면 몫). */
-function sumMetric(rows: Array<Record<string, string | number | null>>, metric: QueryRunsMetric): number | null {
-  const values = rows.map((row) => row[metric]).filter((value): value is number => typeof value === 'number')
-  if (!values.length) return null
-  return values.reduce((sum, value) => sum + value, 0)
+/** 묶음 키. runQueryRunsCore 는 묶었을 때만 group 열을 낸다(안 묶었으면 묶음이 하나뿐이다). */
+function groupKeyOf(row: Record<string, string | number | null>, groupBy: string): string {
+  if (groupBy === 'none') return 'all'
+  const key = row.group
+  return typeof key === 'string' ? key : String(key ?? 'all')
 }
 
 function round(value: number): number {

@@ -87,6 +87,23 @@ export function formatDataCardValue(value: DataCardValue): string {
   return `${value.value}${value.unit}`
 }
 
+/**
+ * 카드 아래 한 줄. **무엇을 기준으로 낸 값인지**를 말한다 — 판정이 아니라 사실이다.
+ * 묶어서 평균한 값이면 "최근 4주 기준"처럼 묶음을 밝힌다. 표본 수만 말하면 사용자는
+ * "주간 비중 평균"의 평균 대상이 몇 주인지 알 수 없다(2026-09-03 지적).
+ */
+export function describeDataCardBasis(value: DataCardValue): string {
+  if (value.matchedRuns === 0) return '해당 기록 없음'
+  const unit = GROUP_UNITS[value.groupBy]
+  if (value.groupCount > 0 && unit) return `최근 ${value.groupCount}${unit} 기준`
+  return `러닝 ${value.matchedRuns}건 기준`
+}
+
+const GROUP_UNITS: Record<string, string> = {
+  week: '주',
+  month: '개월'
+}
+
 function numberOrNull(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
