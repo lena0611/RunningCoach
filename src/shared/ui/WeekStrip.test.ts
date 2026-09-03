@@ -40,6 +40,42 @@ describe('WeekStrip (#745)', () => {
     expect(first.classes()).toContain('is-active')
   })
 
+  it('프리뷰(요약)는 오늘 원을 채우고, 선택 모드(코치)는 고른 날을 채운다', () => {
+    const preview = mount(WeekStrip, { props: { days, today: days[0].date } })
+    const previewDiscs = preview.findAll('.week-strip-disc')
+    expect(previewDiscs[0].classes()).toContain('is-filled')
+    expect(previewDiscs[1].classes()).not.toContain('is-filled')
+
+    const selecting = mount(WeekStrip, { props: { days, today: days[0].date, active: days[1].date } })
+    const discs = selecting.findAll('.week-strip-disc')
+    // 오늘이라도 고른 날이 아니면 안 채운다 — 채움은 '지금 보고 있는 날'을 뜻한다.
+    expect(discs[0].classes()).not.toContain('is-filled')
+    expect(discs[1].classes()).toContain('is-filled')
+  })
+
+  it('상태를 원 안팎에 싣는다 — 예정=타입 채움, 완료=링, 휴식=중립 채움(별도 마커 줄 없음)', () => {
+    const w = mount(WeekStrip, {
+      props: {
+        days: [
+          day({ date: '2026-09-01', label: '월 1', state: 'done', type: 'Easy' }),
+          day({ date: '2026-09-02', label: '화 2', state: 'planned', type: 'Tempo' }),
+          day({ date: '2026-09-03', label: '수 3', state: 'rested', type: null })
+        ],
+        today: '2026-09-04'
+      }
+    })
+    const discs = w.findAll('.week-strip-disc')
+    expect(discs[0].classes()).toContain('is-done')
+    expect(discs[0].classes()).toContain('run-type-easy')
+    expect(discs[1].classes()).toContain('has-session')
+    expect(discs[2].classes()).toContain('is-rested')
+    expect(discs[2].classes()).not.toContain('has-session')
+    expect(w.find('.week-strip-mark').exists()).toBe(false)
+    // 색/링만 남기면 스크린리더에서 상태가 사라진다.
+    expect(w.findAll('.week-strip-day')[0].attributes('aria-label')).toContain('완료')
+    expect(w.findAll('.week-strip-day')[2].attributes('aria-label')).toContain('휴식')
+  })
+
   it('같은 날 더블이면 ×2 배지를 단다', () => {
     const w = mount(WeekStrip, { props: { days: [day({ double: true })], today: '2026-09-02' } })
     expect(w.find('.week-strip-double').text()).toBe('×2')

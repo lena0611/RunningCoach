@@ -192,14 +192,21 @@
   --tab-group-radius: 10px;
   --tab-group-pad: 10px 0;
   --tab-group-font-size: 14px;
-  --weekstrip-gap: 6px;
-  --weekstrip-cell-pad: 8px 0;
-  --weekstrip-cell-radius: 9px;
-  --weekstrip-today-border: 1.5px solid var(--color-primary);
-  --weekstrip-today-bg: rgba(52, 211, 153, 0.1);
+  --weekstrip-gap: 2px;
+  --weekstrip-cell-pad: 4px 0;
+  --weekstrip-label-gap: 9px;
+  /* 날짜는 원형 인디케이터가 감싼다(애플 날씨식). 채움 = 오늘(primary) / 그 외 선택일(흰색). */
+  --weekstrip-disc-size: 32px;
+  --weekstrip-today-fill: var(--color-primary);
+  --weekstrip-today-fill-text: var(--color-on-primary);
+  --weekstrip-active-fill: var(--color-text);
+  --weekstrip-active-fill-text: var(--color-bg);
   --weekstrip-day-size: 12px; /* 앱 폰트 하한 12px (기존 9px) */
   --weekstrip-date-size: 12px;
-  --weekstrip-done-dot: 4px;
+  /* 상태는 원 안(채움)과 원 밖(링)으로 싣는다 — 기록 탭 달력과 같은 언어. */
+  --weekstrip-type-fill-mix: 22%;
+  --weekstrip-ring: 0 0 0 2px var(--color-bg), 0 0 0 4px color-mix(in srgb, var(--run-type-color, var(--color-primary)) 55%, transparent);
+  --weekstrip-rest-fill: color-mix(in srgb, var(--color-muted) 18%, transparent);
   --run-calendar-count-bg: #000000;
   --run-calendar-count-text: #ffffff;
   --pressable-bg: var(--color-subtle-2);
