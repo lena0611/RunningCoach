@@ -1981,7 +1981,7 @@ function buildCoachTools() {
         parameters: {
           type: 'object',
           additionalProperties: false,
-          required: ['title', 'kind', 'metric', 'query', 'numerator', 'denominator', 'display'],
+          required: ['title', 'kind', 'metric', 'query', 'numerator', 'denominator', 'display', 'windowDays'],
           properties: {
             title: {
               type: 'string',
@@ -1994,7 +1994,14 @@ function buildCoachTools() {
             query: { anyOf: [{ type: 'null' }, buildQueryRunsArgSchema()] },
             numerator: { anyOf: [{ type: 'null' }, buildQueryRunsArgSchema()] },
             denominator: { anyOf: [{ type: 'null' }, buildQueryRunsArgSchema()] },
-            display: { anyOf: [{ type: 'null' }, { type: 'string', enum: ['percent', 'times'] }] }
+            display: { anyOf: [{ type: 'null' }, { type: 'string', enum: ['percent', 'times'] }] },
+            windowDays: {
+              anyOf: [{ type: 'null' }, { type: 'integer' }],
+              description:
+                '기간을 **오늘 기준 며칠**로 준다(최근 4주=28, 최근 3개월=90, 올해 같은 고정 구간은 불가). ' +
+                'null 이면 전체 기간. **filters 에 date 를 넣지 마라** — 절대 날짜를 박으면 카드가 그 기간에 얼어붙어 ' +
+                '한 달 뒤에도 옛 숫자를 보여준다. 카드는 매일 보는 물건이라 항상 오늘 기준이어야 한다.'
+            }
           }
         }
       }

@@ -24,9 +24,27 @@ import {
  * ratio 를 둔 이유: 사용자가 원한 "주간 총 볼륨 대비 LSD 볼륨" 은 조회 하나로는 안 된다(나눗셈이 없다).
  * 임의 수식을 열지 않고 **합성 한 종류만** 둔다 — 닫힌 어휘를 유지해야 검증이 가능하다.
  */
+/**
+ * 기간은 **오늘 기준 상대값**이다(2026-09-03).
+ *
+ * 처음엔 모델이 준 절대 날짜 필터를 그대로 저장했는데(`date >= 2026-08-01 AND <= 2026-08-31`),
+ * 그러면 카드가 **8월에 얼어붙는다** — 한 달 뒤에도 8월 숫자를 보여준다. 카드는 매일 보는 물건이라
+ * 언제 열어도 "지금 기준"이어야 한다. 그래서 절대 날짜는 카드 스펙에서 금지하고, 창은 여기에만 둔다.
+ * null 이면 전체 기간.
+ */
+export type DataCardWindow = { lastDays: number } | null
+
 export type DataCardSpec =
-  | { kind: 'single'; title: string; query: QueryRunsSpec; metric: QueryRunsMetric }
-  | { kind: 'ratio'; title: string; numerator: QueryRunsSpec; denominator: QueryRunsSpec; metric: QueryRunsMetric; display: 'percent' | 'times' }
+  | { kind: 'single'; title: string; query: QueryRunsSpec; metric: QueryRunsMetric; window?: DataCardWindow }
+  | {
+      kind: 'ratio'
+      title: string
+      numerator: QueryRunsSpec
+      denominator: QueryRunsSpec
+      metric: QueryRunsMetric
+      display: 'percent' | 'times'
+      window?: DataCardWindow
+    }
 
 export type DataCardValue = {
   /** 표시할 값. 계산 불가면 null — 화면은 '—' 로 낸다(0 으로 보여주면 거짓말이 된다). */
@@ -42,6 +60,8 @@ export type DataCardValue = {
   groupCount: number
   /** 묶은 축(week·month 등). 화면이 "주"/"개월" 단위 문구를 고르는 데 쓴다. */
   groupBy: string
+  /** 사용자가 **요청한** 창(일). 실제 값이 있던 묶음 수와 다를 수 있어 둘 다 밝힌다. */
+  windowDays: number | null
   /** 계산이 불완전한 이유. 판정이 아니라 사실이다. */
   failureKind: QueryRunsFailureKind | null
 }
@@ -79,6 +99,14 @@ export function dataCardTitleWidth(title: string): number {
 /** 검증 — 닫힌 어휘 밖이면 거부 이유를 돌려준다(조용히 무시하지 않는다). */
 export function validateDataCardSpec(spec: DataCardSpec): { ok: true } | { ok: false; error: string } {
   if (!spec.title.trim()) return { ok: false, error: '카드 이름이 비어 있습니다.' }
+  // 절대 날짜가 박히면 카드가 그 기간에 얼어붙는다 — 기간은 window(오늘 기준)로만 받는다.
+  const queries = spec.kind === 'single' ? [spec.query] : [spec.numerator, spec.denominator]
+  if (queries.some((q) => q.filters.some((f) => f.field === 'date'))) {
+    return { ok: false, error: '카드 기간은 고정 날짜가 아니라 "최근 N일"로 지정해야 합니다.' }
+  }
+  if (spec.window && (!Number.isFinite(spec.window.lastDays) || spec.window.lastDays < 1)) {
+    return { ok: false, error: '카드 기간이 올바르지 않습니다.' }
+  }
   // 길면 카드에서 두 줄로 꺾인다 — 저장 뒤에 발견하면 고칠 방법이 없으므로 제안 단계에서 막는다.
   if (dataCardTitleWidth(spec.title) > DATA_CARD_TITLE_WIDTH_LIMIT) {
     return { ok: false, error: `카드 이름이 너무 깁니다(한글 ${DATA_CARD_TITLE_WIDTH_LIMIT}자 이내로 줄여주세요).` }
@@ -95,10 +123,26 @@ export function validateDataCardSpec(spec: DataCardSpec): { ok: true } | { ok: f
   return { ok: true }
 }
 
-/** 스펙과 러닝 행으로 카드 값을 만든다. 순수 함수 — 같은 입력이면 언제나 같은 값. */
-export function computeDataCard(spec: DataCardSpec, rows: QueryRunsRow[]): DataCardValue {
+/** 오늘 기준 창을 날짜 필터로 편다. 카드가 "지금"을 따라 움직이는 지점은 여기 하나뿐이다. */
+function withWindow(query: QueryRunsSpec, window: DataCardWindow, today: Date): QueryRunsSpec {
+  if (!window) return query
+  const from = new Date(today)
+  from.setDate(from.getDate() - (window.lastDays - 1))
+  const mm = String(from.getMonth() + 1).padStart(2, '0')
+  const dd = String(from.getDate()).padStart(2, '0')
+  const since = `${from.getFullYear()}-${mm}-${dd}`
+  return { ...query, filters: [...query.filters, { field: 'date', op: 'gte', value: since }] }
+}
+
+/**
+ * 스펙과 러닝 행으로 카드 값을 만든다. 오늘(today)을 받는 이유는 창이 상대값이기 때문이다 —
+ * 같은 스펙이라도 날이 바뀌면 값이 바뀌어야 맞다(그게 카드를 매일 보는 이유다).
+ */
+export function computeDataCard(spec: DataCardSpec, rows: QueryRunsRow[], today: Date = new Date()): DataCardValue {
+  const window = spec.window ?? null
+  const windowDays = window?.lastDays ?? null
   if (spec.kind === 'single') {
-    const result = runQueryRunsCore(spec.query, rows)
+    const result = runQueryRunsCore(withWindow(spec.query, window, today), rows)
     const first = result.rows[0]
     const raw = first ? first[spec.metric] : null
     return {
@@ -107,12 +151,13 @@ export function computeDataCard(spec: DataCardSpec, rows: QueryRunsRow[]): DataC
       matchedRuns: result.matchedRuns,
       groupCount: spec.query.groupBy === 'none' ? 0 : result.rows.length,
       groupBy: spec.query.groupBy,
+      windowDays,
       failureKind: result.failureKind
     }
   }
 
-  const numerator = runQueryRunsCore(spec.numerator, rows)
-  const denominator = runQueryRunsCore(spec.denominator, rows)
+  const numerator = runQueryRunsCore(withWindow(spec.numerator, window, today), rows)
+  const denominator = runQueryRunsCore(withWindow(spec.denominator, window, today), rows)
   const unit = spec.display === 'percent' ? '%' : '배'
   const groupBy = spec.denominator.groupBy
   const failureKind = denominator.failureKind ?? numerator.failureKind
@@ -148,6 +193,7 @@ export function computeDataCard(spec: DataCardSpec, rows: QueryRunsRow[]): DataC
       matchedRuns: denominator.matchedRuns,
       groupCount: 0,
       groupBy,
+      windowDays,
       failureKind: failureKind ?? 'no_matching_runs'
     }
   }
@@ -160,6 +206,7 @@ export function computeDataCard(spec: DataCardSpec, rows: QueryRunsRow[]): DataC
     matchedRuns: denominator.matchedRuns,
     groupCount: groupBy === 'none' ? 0 : ratios.length,
     groupBy,
+    windowDays,
     failureKind
   }
 }

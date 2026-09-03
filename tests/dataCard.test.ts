@@ -194,3 +194,50 @@ describe('카드 제목 길이', () => {
     expect(validateDataCardSpec(spec('가나다라마바사아자차')).ok).toBe(true)
   })
 })
+
+/**
+ * #767 — 카드는 **매일 보는 물건**이라 언제 열어도 "지금 기준"이어야 한다.
+ * 처음엔 모델이 준 절대 날짜(`2026-08-01~08-31`)를 그대로 저장해 카드가 8월에 얼어붙었다
+ * (2026-09-03 실측: "최근 4주" 요청이 8월 카드가 됐다). 이 테스트가 그 회귀를 막는다.
+ */
+describe('카드 기간은 오늘 기준(상대)', () => {
+  const rows = [
+    row({ date: '2026-09-02', distance_km: 10 }),
+    row({ date: '2026-08-20', distance_km: 20 }),
+    row({ date: '2026-07-01', distance_km: 30 })
+  ]
+  const spec: DataCardSpec = {
+    kind: 'single',
+    title: '최근 거리',
+    metric: 'distanceKm',
+    window: { lastDays: 7 },
+    query: query()
+  }
+
+  it('오늘이 바뀌면 값도 바뀐다 — 같은 스펙, 다른 날', () => {
+    expect(computeDataCard(spec, rows, new Date('2026-09-03T00:00:00')).value).toBe(10)
+    // 2주 뒤엔 9/2 러닝도 창 밖이다.
+    expect(computeDataCard(spec, rows, new Date('2026-09-17T00:00:00')).value).toBeNull()
+  })
+
+  it('창을 안 주면 전체 기간', () => {
+    const all: DataCardSpec = { ...spec, window: null }
+    expect(computeDataCard(all, rows, new Date('2026-09-03T00:00:00')).value).toBe(60)
+  })
+
+  it('요청한 창을 결과에 실어 화면이 "최근 N주"라고 말할 수 있게 한다', () => {
+    expect(computeDataCard(spec, rows, new Date('2026-09-03T00:00:00')).windowDays).toBe(7)
+  })
+
+  it('절대 날짜 필터는 거부한다 — 저장되면 그 기간에 얼어붙는다', () => {
+    const frozen: DataCardSpec = {
+      kind: 'single',
+      title: '8월 거리',
+      metric: 'distanceKm',
+      query: query({ filters: [{ field: 'date', op: 'gte', value: '2026-08-01' }] })
+    }
+    const verdict = validateDataCardSpec(frozen)
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) expect(verdict.error).toContain('최근 N일')
+  })
+})
