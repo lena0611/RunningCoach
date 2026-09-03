@@ -347,15 +347,19 @@ const hardSessions = computed(() =>
 )
 // #352: 오늘/다음 폴백 히어로(스케줄 없음) 뷰(결정론, AI 호출 없음)
 const dayView = computed(() => getTrainingDayView(memoryStore.memory, runs.value, today.value))
-const heroWeatherLine = computed(() => {
+/**
+ * 처방 한 줄에 붙는 날씨 칩 — **이모지와 값만**(2026-09-03). 날짜는 스트립 아래 스탬프가 이미 말한다.
+ * 오늘이 아닌 다음 세션 날이면 그날 최고기온, 오늘이면 체감온도를 쓴다(heroWeatherLine 과 같은 규칙).
+ */
+const heroWeatherChip = computed(() => {
   const snapshot = weatherStore.snapshot
   if (!snapshot) return ''
   const target = nextSession.value.plannedDate
   const daily = snapshot.daily.find((day) => day.date === target)
   if (target !== todayDate.value && daily) {
-    return `${weatherSymbolToEmoji(daily.symbolName)} 최고 ${formatWeatherNumber(daily.maxTemperatureC, '°')} · 강수 ${Math.round((daily.precipitationChance ?? 0) * 100)}%`
+    return `${weatherSymbolToEmoji(daily.symbolName)} ${formatWeatherNumber(daily.maxTemperatureC, '°')}`
   }
-  return `${weatherSymbolToEmoji(snapshot.current.symbolName)} 체감 ${formatWeatherNumber(snapshot.current.apparentTemperatureC, '°')}`
+  return `${weatherSymbolToEmoji(snapshot.current.symbolName)} ${formatWeatherNumber(snapshot.current.apparentTemperatureC, '°')}`
 })
 
 // 오늘의 처방 히어로(리디자인 ①b): 스케줄이 있으면 오늘 세션 요약(세션명·얼마나(mono)·페이스 + 핵심 한 줄).
@@ -634,7 +638,7 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
                   {{ todayHero.distanceKm }}<small>km</small></span
                 >
               </h2>
-              <p v-if="todayHero.metaLine || todayHeroHrCap" class="helper today-hero-meta num-mono">
+              <p v-if="todayHeroPaceParts || todayHeroHrCap || heroWeatherChip" class="helper today-hero-meta num-mono">
                 <span v-if="todayHeroPaceParts" class="today-hero-meta-item"
                   ><span class="today-hero-run-icon" aria-hidden="true">🏃</span> {{ todayHeroPaceParts.value
                   }}<small v-if="todayHeroPaceParts.unit" class="today-hero-unit">{{ todayHeroPaceParts.unit }}</small></span
@@ -644,6 +648,7 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
                   ><span class="today-hero-hr-label"> 최대 </span>{{ todayHeroHrCap
                   }}<small class="today-hero-unit">bpm</small></span
                 >
+                <span v-if="heroWeatherChip" class="today-hero-meta-item">{{ heroWeatherChip }}</span>
               </p>
             </template>
             <!--
@@ -683,10 +688,6 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
           <p class="eyebrow">다음 훈련</p>
           <p class="next-line">{{ formatDateWithWeekday(dayView.next.date) }} · {{ dayView.next.title }}</p>
         </section>
-
-        <p v-if="heroWeatherLine" class="helper hero-weather-line">
-          {{ heroWeatherLine }} · {{ formatDateWithWeekday(todayDate) }} 기준
-        </p>
 
       </div>
       <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
@@ -1092,7 +1093,7 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
   /* 페이스와 심박은 **한 줄**이다 — 줄이 갈리면 처방이 두 덩어리로 읽힌다.
      좁은 폭(375)에서도 우측에 여백이 남도록 본문보다 한 단계 작은 15px + gap 10px 로 맞췄다. */
   flex-wrap: nowrap;
-  gap: 10px;
+  gap: 8px;
   font-size: 15px;
   font-weight: 700;
   color: var(--color-text);
