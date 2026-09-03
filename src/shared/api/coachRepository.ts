@@ -132,6 +132,8 @@ export async function requestCoachRunStream(
     onDelta: (delta: string) => void
     /** 진행 단계 전환 알림(#650). 화면이 "지금 무슨 작업 중"인지 정직하게 보여주기 위한 신호. */
     onStage?: (stage: CoachStreamStage, detail: string) => void
+    /** 데이터 카드 제안(#767) — 승인 카드로 띄운다. 사용자가 눌러야 저장된다. */
+    onDataCardProposal?: (proposal: CoachDataCardProposal) => void
     runnerLevel?: RunnerLevel
     commandId?: string | null
     achievements?: CoachAchievementSummary | null
@@ -235,14 +237,14 @@ export async function requestCoachRunStream(
     const parsed = drainSseBuffer(buffer)
     buffer = parsed.rest
 
-    const report = consumeCoachStreamEvents(parsed.events, options.onDelta, options.onStage)
+    const report = consumeCoachStreamEvents(parsed.events, options.onDelta, options.onStage, options.onDataCardProposal)
     if (report) return report
   }
 
   buffer += decoder.decode()
   if (buffer.trim()) {
     const parsed = drainSseBuffer(hasSseTerminator(buffer) ? buffer : `${buffer}\n\n`)
-    const report = consumeCoachStreamEvents(parsed.events, options.onDelta, options.onStage)
+    const report = consumeCoachStreamEvents(parsed.events, options.onDelta, options.onStage, options.onDataCardProposal)
     if (report) return report
   }
 
@@ -329,10 +331,21 @@ function hasSseTerminator(buffer: string) {
 /** 서버가 알리는 진행 단계(#650). 알 수 없는 값은 무시해 구·신 버전이 섞여도 깨지지 않는다. */
 export type CoachStreamStage = 'generating' | 'querying' | 'saving'
 
+/**
+ * 대화로 만든 데이터 카드 제안(#767). **승인 전**이라 DB 에 없고 이 스트림에만 실려 온다 —
+ * 히스토리를 다시 읽어도 철 지난 제안이 되살아나지 않는다(injuryUpdateProposal 과 같은 정책).
+ */
+export type CoachDataCardProposal = {
+  spec: unknown
+  previewText: string
+  matchedRuns: number
+}
+
 export function consumeCoachStreamEvents(
   events: Array<{ event: string; data: unknown }>,
   onDelta: (delta: string) => void,
-  onStage?: (stage: CoachStreamStage, detail: string) => void
+  onStage?: (stage: CoachStreamStage, detail: string) => void,
+  onDataCardProposal?: (proposal: CoachDataCardProposal) => void
 ): CoachReport | null {
   for (const event of events) {
     if (event.event === 'delta') {
@@ -348,6 +361,8 @@ export function consumeCoachStreamEvents(
       continue
     }
     if (event.event === 'done') {
+      const proposal = parseDataCardProposal(event.data)
+      if (proposal) onDataCardProposal?.(proposal)
       const report = parseCoachReport(event.data)
       if (report) return report
       throw new Error('AI 코칭 저장 응답이 비어 있습니다.')
@@ -363,6 +378,20 @@ function formatCoachStreamError(value: unknown) {
   const message = getString(value, 'error') || 'AI 코칭 스트리밍 실패'
   const stage = getString(value, 'stage')
   return stage ? `${message} [${stage}]` : message
+}
+
+function parseDataCardProposal(value: unknown): CoachDataCardProposal | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = (value as { dataCardProposal?: unknown }).dataCardProposal
+  if (!raw || typeof raw !== 'object') return null
+  const spec = (raw as { spec?: unknown }).spec
+  if (!spec || typeof spec !== 'object') return null
+  const matched = (raw as { matchedRuns?: unknown }).matchedRuns
+  return {
+    spec,
+    previewText: getString(raw, 'previewText') || '—',
+    matchedRuns: typeof matched === 'number' ? matched : 0
+  }
 }
 
 function parseCoachReport(value: unknown): CoachReport | null {

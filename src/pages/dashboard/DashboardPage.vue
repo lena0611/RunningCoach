@@ -51,6 +51,8 @@ import { useCoachMoments } from '@/pages/coach/useCoachMoments'
 import type { CoachMoment } from '@/shared/lib/coaching/coachMoments'
 import HeroIllustration, { type HeroIllustrationTopic } from './HeroIllustration.vue'
 import WeekStrip from '@/shared/ui/WeekStrip.vue'
+import { useDataCardStore, valueOfCard } from '@/app/stores/dataCardStore'
+import { formatDataCardValue } from '@/shared/lib/coaching/dataCardAdapter'
 import SegmentTabs, { type SegmentTabValue } from '@/shared/ui/SegmentTabs.vue'
 import { useTrainingWeek, dayAfterIso } from './useTrainingWeek'
 import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
@@ -422,6 +424,31 @@ const todayHeroHrCap = computed<number | null>(() => {
  * 피로 경고는 등가 화면이 없어 남긴다(코치 탭은 같은 데이터를 휴식 가이던스 문구로만 소비).
  * 되돌리려면 이 상수를 true 로.
  */
+/**
+ * 사용자 정의 데이터 카드(#767). 스펙은 스토어가 갖고 **숫자는 여기서** 러닝을 넘겨 뽑는다 —
+ * 코치 답변과 같은 계산 파일을 쓰기 위해서다(미러 두 벌 금지).
+ * ⚠ 카드는 수치만 말한다 — tone(경고색)을 주지 않는다. 색이 곧 판정이다(2026-09-03 결정).
+ */
+const dataCardStore = useDataCardStore()
+const userDataCards = computed(() =>
+  dataCardStore.cards.map((card) => ({
+    id: card.id,
+    title: card.title,
+    text: formatDataCardValue(valueOfCard(card, runs.value)),
+    // 표본은 판정이 아니라 사실이다 — 적을 때 밝히는 게 정직하다.
+    hint: sampleHint(valueOfCard(card, runs.value).matchedRuns)
+  }))
+)
+function sampleHint(matchedRuns: number): string {
+  if (matchedRuns === 0) return '해당 기록 없음'
+  return `러닝 ${matchedRuns}건 기준`
+}
+/** + 카드 → 코치방을 열고 카드 만들기 대화를 시작한다. */
+function openDataCardComposer() {
+  useCoachActionBridgeStore().requestDataCardComposer()
+  goCoachTab()
+}
+
 const SHOW_GOAL_SECTION = false
 const SHOW_INJURY_CARD = false
 
@@ -719,6 +746,24 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
       <StatCard label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 · 랩/페이스 기준" dot :loading="runDataLoading" interactive @click="trendMetric = 'easy'" />
       <StatCard label="강훈련" :value="`${hardSessions}회`" hint="최근 7일" dot tone="warning" :loading="runDataLoading" interactive @click="trendMetric = 'hard'" />
       <StatCard label="평균 심박" :value="avgHeartRate7d ? `${avgHeartRate7d}bpm` : '—'" hint="최근 7일" dot tone="accent" :loading="runDataLoading" :value-kind="avgHeartRate7d ? 'metric' : 'text'" />
+      <!--
+        사용자 정의 카드(#767) — 대화로 만들어 승인한 지표. 값 형식이 자유라 valueKind='text' 로 낸다.
+        tone 을 주지 않는다: 카드는 수치만 말하고 해석은 사용자 몫이다.
+      -->
+      <StatCard
+        v-for="card in userDataCards"
+        :key="card.id"
+        :label="card.title"
+        :value="card.text"
+        :hint="card.hint"
+        dot
+        value-kind="text"
+        :loading="runDataLoading"
+      />
+      <button type="button" class="stat-card data-card-add" @click="openDataCardComposer">
+        <span class="data-card-add-circle" aria-hidden="true">+</span>
+        <span class="data-card-add-label">개인화 지표 만들기</span>
+      </button>
     </MetricGrid>
 
     <!--
@@ -936,6 +981,50 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
 </template>
 
 <style scoped>
+/*
+  + 빈 카드(#767) — 지표 칸의 마지막 자리. 채워진 카드처럼 보이면 안 되므로 점선 윤곽에 투명 배경.
+  전역 button 기본값(그라디언트·그림자·min-height)을 되돌린다(ui-system-contract 함정).
+*/
+.data-card-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 0;
+  border: 1px dashed var(--color-border, rgba(120, 120, 120, 0.35));
+  background: none;
+  box-shadow: none;
+  text-shadow: none;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+.data-card-add-plus {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-primary);
+}
+/* 점선 원 + 기호 — 카드 테두리와 같은 언어라 "아직 비어 있고 채울 수 있다"로 읽힌다. */
+.data-card-add-circle {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px dashed var(--color-border, rgba(120, 120, 120, 0.45));
+  border-radius: 50%;
+  color: var(--color-muted);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+}
+.data-card-add-label {
+  font-size: var(--text-caption-size);
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.35;
+}
+
 /* 부상 카드를 감춘 동안 피로 경고 하나만 남으므로 2열 그리드를 가로로 다 쓴다. */
 .dashboard-context-card:only-child {
   grid-column: 1 / -1;
