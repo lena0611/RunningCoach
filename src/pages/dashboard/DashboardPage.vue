@@ -414,6 +414,17 @@ const todayHeroHrCap = computed<number | null>(() => {
   return model.easyCeilingBpm
 })
 
+/*
+ * 요약 노출 축소(2026-09-03). 같은 정보를 다른 탭에서 이미 볼 수 있는 섹션은 요약에서 감춘다 —
+ * 요약은 "오늘 뭐하지"를 1초에 끝내는 곳이라 중복 카드가 쌓이면 그 1초가 길어진다.
+ *  - 활성 목표: 제목·D-day = 기억 탭 '현재 코칭 기준', 예상·준비도 = 추세 탭 '목표까지' 렌즈(같은 계산 함수).
+ *  - 부상 기준: 기억 탭 랜딩이 더 상세히 보여준다(제약 문구 포함).
+ * 피로 경고는 등가 화면이 없어 남긴다(코치 탭은 같은 데이터를 휴식 가이던스 문구로만 소비).
+ * 되돌리려면 이 상수를 true 로.
+ */
+const SHOW_GOAL_SECTION = false
+const SHOW_INJURY_CARD = false
+
 // 세션 타입 → 히어로 배경 삽화 토픽(디자인 확정 매핑). Steady Long 은 긴 지속주 → lsd(굽은 길+해), 휴식 → recovery(달).
 function heroTopicFor(type: RunType | null | undefined): HeroIllustrationTopic {
   switch (type) {
@@ -742,7 +753,7 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
       <p v-if="runStore.error" class="error">{{ runStore.error }}</p>
     </SectionGroup>
 
-    <SectionGroup title="활성 목표" :surface="false">
+    <SectionGroup v-if="SHOW_GOAL_SECTION" title="활성 목표" :surface="false">
       <button class="stat-card stat-card-interactive dashboard-goal-card" type="button" @click="openGoalCard">
         <div v-if="memoryDataLoading || runDataLoading" class="stat-card-data stat-card-skeleton" aria-hidden="true">
           <span class="skeleton-line skeleton-line-value" />
@@ -763,6 +774,7 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
     <SectionGroup title="몸 상태 신호" :surface="false">
       <MetricGrid>
         <StatCard
+          v-if="SHOW_INJURY_CARD"
           class="dashboard-context-card"
           label="부상 기준"
           :value="activeInjury?.title || '관리 항목 없음'"
@@ -785,7 +797,7 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
         />
       </MetricGrid>
       <p
-        v-if="injuryHypothesisHint"
+        v-if="SHOW_INJURY_CARD && injuryHypothesisHint"
         class="injury-hypothesis-hint"
         :class="{ 'injury-hypothesis-hint-referral': injuryHypothesisHint.referral }"
       >
@@ -924,6 +936,11 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
 </template>
 
 <style scoped>
+/* 부상 카드를 감춘 동안 피로 경고 하나만 남으므로 2열 그리드를 가로로 다 쓴다. */
+.dashboard-context-card:only-child {
+  grid-column: 1 / -1;
+}
+
 /* §5 Phase E: 부상 감별 한 줄 힌트(몸 상태 신호 카드 아래). 진단 아님 — "가능성"만. */
 .injury-hypothesis-hint {
   margin: var(--space-2, 8px) 0 0;
