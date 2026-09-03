@@ -53,3 +53,20 @@ export function normalizeDataCardProposalArgs(raw: unknown): DataCardProposalRes
   const verdict = validateDataCardSpec(spec)
   return verdict.ok ? { spec } : { error: verdict.error }
 }
+
+/**
+ * 카드 만들기 의도 판정(#767). **코드가 판정한다** — 모델이 알아서 도구를 부르길 기대하지 않는다.
+ *
+ * 2026-09-03 실측: 사용자가 네 번 요청하는 동안 모델은 도구를 한 번도 부르지 않고 컨텍스트 숫자로
+ * 어림했다("15~20% 안팎으로 보입니다"). 지침은 이미 있었다 — 프롬프트의 선의에 맡기면 이렇게 샌다.
+ *
+ * 좁게 잡는다: "카드"라는 말이 있거나, 요약/홈에 **띄워·보이게·추가**해 달라는 요청일 때만.
+ * "비중이 얼마야?" 같은 단순 질문까지 강제하면 대화가 매번 카드 제안으로 끌려간다.
+ */
+export function mentionsDataCardIntent(note: string): boolean {
+  const text = (note || '').replace(/\s+/g, ' ')
+  if (!text) return false
+  if (/카드/.test(text) && /(만들|추가|해줘|해 줘|등록|보여)/.test(text)) return true
+  if (/(요약|홈|메인)/.test(text) && /(띄워|띄우|추가|보이게|올려|상시|늘 ?보)/.test(text)) return true
+  return false
+}
