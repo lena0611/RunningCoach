@@ -268,8 +268,13 @@ const earlyRunCreditCandidate = computed(() => {
     today: localDateKey(new Date())
   })
 })
-/** 오늘 한 번 닫으면 다시 묻지 않는다(날짜 키) — 제안은 하루짜리라 세션 저장소로 충분하지 않고 날짜로 못박는다. */
+/**
+ * '예정대로 할게요'(decline)를 고른 날 — 그날은 다시 묻지 않는다(날짜 키 영속).
+ * X·배경 탭·쓸어내리기는 여기 안 들어온다: 결정이 아니라 '지금은 됐고'라 다음 진입에 다시 묻는다.
+ */
 const earlyRunCreditDismissedDate = ref<string | null>(readEarlyRunCreditDismissed())
+/** 이번 노출만 접기(비영속) — 앱을 다시 열거나 재진입하면 초기화된다. */
+const earlyRunCreditSnoozed = ref(false)
 const earlyRunCreditBusy = ref(false)
 const earlyRunCreditSheetOpen = computed(
   () =>
@@ -278,6 +283,7 @@ const earlyRunCreditSheetOpen = computed(
     route.path !== '/auth' &&
     route.path !== '/access' &&
     !showOnboarding.value &&
+    !earlyRunCreditSnoozed.value &&
     earlyRunCreditDismissedDate.value !== localDateKey(new Date()) &&
     !injuryCheckInItem.value &&
     !pendingInterviewRun.value &&
@@ -294,8 +300,14 @@ function readEarlyRunCreditDismissed(): string | null {
     return null
   }
 }
-function dismissEarlyRunCredit() {
+/** X·배경 탭·쓸어내리기 — 결정으로 굳히지 않는다. 다음에 앱을 열면 다시 묻는다. */
+function snoozeEarlyRunCredit() {
+  earlyRunCreditSnoozed.value = true
+}
+/** '예정대로 할게요' — 오늘은 그만 묻는다. */
+function declineEarlyRunCredit() {
   const today = localDateKey(new Date())
+  earlyRunCreditSnoozed.value = true
   earlyRunCreditDismissedDate.value = today
   try {
     localStorage.setItem(earlyRunCreditDismissKey(), today)
@@ -312,7 +324,7 @@ async function creditEarlyRun() {
     toastStore.success('어제 런으로 갈음했어요. 오늘은 쉬어가요.')
   } finally {
     earlyRunCreditBusy.value = false
-    dismissEarlyRunCredit()
+    declineEarlyRunCredit()
   }
 }
 
@@ -512,6 +524,9 @@ function attachActivePanelViewportTracking() {
 
 function attachInjuryCheckInActivationListeners() {
   const request = () => {
+    // 포그라운드 복귀는 "앱을 다시 연" 순간이다 — 결정 없이 접어둔 갈음 제안을 여기서 되살린다.
+    // 네이티브(WKWebView)는 재개해도 리로드되지 않아 이 훅이 없으면 X 로 닫은 게 사실상 하루 잠금이 된다.
+    earlyRunCreditSnoozed.value = false
     window.setTimeout(requestInjuryCheckInPrompt, 350)
   }
   const requestWhenVisible = () => {
@@ -1009,7 +1024,8 @@ function animateTabRelease(targetOffset: number, targetRoute: string | null) {
       :session-label="earlyRunCreditCandidate ? sessionTypeLabel(earlyRunCreditCandidate.sessionType as never) : ''"
       :run-type-label="earlyRunCreditCandidate ? sessionTypeLabel(earlyRunCreditCandidate.runType as never) : ''"
       :run-km="earlyRunCreditCandidate?.runKm ?? 0"
-      @close="dismissEarlyRunCredit"
+      @close="snoozeEarlyRunCredit"
+      @decline="declineEarlyRunCredit"
       @credit="creditEarlyRun"
     />
     <NotificationSettingsPromptSheet
