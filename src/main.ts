@@ -10,6 +10,7 @@ import { useLevelStore } from '@/app/stores/levelStore'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { canUseAppFeatures } from '@/shared/lib/runtime'
 import { syncNativeNotifications } from '@/features/sync-native-notifications/notificationBridge'
+import { watchForNewBuild } from '@/shared/lib/buildVersion'
 import './app/styles.css'
 
 const pinia = createPinia()
@@ -20,6 +21,9 @@ const isE2ERouteSmoke = import.meta.env.DEV && import.meta.env.VITE_E2E_ROUTE_SM
 // WKWebView에서 serviceWorker.getRegistrations()/caches가 멈추면 부팅이 무한정 막혀
 // 스플래시가 영원히 남을 수 있다(타임아웃 없는 await). 2초 가드로 부팅을 보장한다.
 await withTimeout(cleanupLegacyWebCaches(), 2000, '레거시 캐시 정리 시간 초과').catch(() => undefined)
+
+// 새 배포가 있으면 스스로 새로고침한다(#776). 부팅을 막지 않는다 — 실패해도 앱은 그대로 뜬다.
+watchForNewBuild()
 
 const authStore = useAuthStore()
 await withTimeout(authStore.init(), 4000, '인증 초기화 시간이 초과되었습니다.').catch((error) => {
