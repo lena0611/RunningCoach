@@ -12,6 +12,8 @@ import { normalizeQueryRunsArgs } from './queryRunsCore.ts'
 
 export type DataCardProposalResult =
   | { spec: DataCardSpec }
+  /** 되묻기(2026-09-03) — 조건이 애매하면 추측하지 않고 한 가지만 묻는다. */
+  | { clarify: string }
   | { error: string }
 
 /** 모델이 준 raw 인자 → 검증된 카드 스펙. 실패하면 사람이 읽을 이유만 남는다. */
@@ -20,6 +22,15 @@ export function normalizeDataCardProposalArgs(raw: unknown): DataCardProposalRes
     return { error: '카드 조건을 이해하지 못했습니다.' }
   }
   const value = raw as Record<string, unknown>
+
+  /*
+    되묻기가 먼저다(2026-09-03). 도구 호출을 강제한 뒤(#767) 코치에게 물어볼 여지가 없어져
+    **애매하면 되묻는 대신 추측**하게 됐다 — 강제는 유지하되 도구 안에 질문 통로를 둔다.
+    여기서 걸러야 하는 이유: 되묻는 턴에는 카드를 만들면 안 되고, 그 판단을 프롬프트에 맡기면 샌다.
+  */
+  const clarify = typeof value.clarify === 'string' ? value.clarify.trim() : ''
+  if (clarify) return { clarify }
+
   const title = typeof value.title === 'string' ? value.title.trim() : ''
   if (!title) return { error: '카드 이름이 비어 있습니다.' }
 
