@@ -388,6 +388,19 @@ const creditedFromEarlierRun = computed(() => {
  * 처방 한 줄에 페이스와 나란히 둔다. 타입별 천장을 쓴다 — Tempo 는 Z4, Recovery 는 Z1, 그 외 Z2(Easy).
  * 프로필이 부족해 모델이 못 서면 null → 표시하지 않는다(빈 값 자리 만들지 않음).
  */
+/**
+ * 처방 한 줄의 단위를 값에서 떼어낸다 — 단위는 작고 연하게 두고 숫자가 먼저 읽히게 한다.
+ * metaLine 은 "9:55~8:59/km"(페이스) 또는 "약 45분"(시간) 두 형태다.
+ */
+const todayHeroPaceParts = computed<{ value: string; unit: string } | null>(() => {
+  const line = todayHero.value?.metaLine
+  if (!line) return null
+  const paceUnit = ['/km', '/mi'].find((unit) => line.endsWith(unit))
+  if (paceUnit) return { value: line.slice(0, -paceUnit.length), unit: paceUnit }
+  if (line.endsWith('분')) return { value: line.slice(0, -1), unit: '분' }
+  return { value: line, unit: '' }
+})
+
 const todayHeroHrCap = computed<number | null>(() => {
   const type = todayHero.value?.sessionType
   if (!type) return null
@@ -622,10 +635,14 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
                 >
               </h2>
               <p v-if="todayHero.metaLine || todayHeroHrCap" class="helper today-hero-meta num-mono">
-                <span v-if="todayHero.metaLine" class="today-hero-meta-item"
-                  ><span class="today-hero-run-icon" aria-hidden="true">🏃</span> {{ todayHero.metaLine }}</span
+                <span v-if="todayHeroPaceParts" class="today-hero-meta-item"
+                  ><span class="today-hero-run-icon" aria-hidden="true">🏃</span> {{ todayHeroPaceParts.value
+                  }}<small v-if="todayHeroPaceParts.unit" class="today-hero-unit">{{ todayHeroPaceParts.unit }}</small></span
                 >
-                <span v-if="todayHeroHrCap" class="today-hero-meta-item">❤️ 최대 {{ todayHeroHrCap }}</span>
+                <span v-if="todayHeroHrCap" class="today-hero-meta-item"
+                  ><span class="today-hero-hr-icon" aria-hidden="true">❤️</span> 최대 {{ todayHeroHrCap
+                  }}<small class="today-hero-unit">bpm</small></span
+                >
               </p>
             </template>
             <!--
@@ -1084,6 +1101,18 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
 .today-hero-run-icon {
   display: inline-block;
   transform: scaleX(-1);
+}
+/* 하트는 면적이 커 같은 크기여도 러너보다 무겁게 보인다 — 살짝 줄여 균형을 맞춘다. */
+.today-hero-hr-icon {
+  display: inline-block;
+  font-size: 0.88em;
+}
+/* 단위는 값보다 작고 연하게 — 숫자가 먼저 읽혀야 한다. */
+.today-hero-unit {
+  margin-left: 1px;
+  font-size: 0.78em;
+  font-weight: 600;
+  color: var(--color-muted);
 }
 
 .next-line {
