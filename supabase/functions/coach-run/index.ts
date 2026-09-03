@@ -10,7 +10,7 @@ import {
   type QueryRunsRow
 } from './queryRuns.ts'
 import { computeDataCard, type DataCardSpec } from '../_shared/dataCard.ts'
-import { normalizeDataCardProposalArgs } from '../_shared/dataCardProposal.ts'
+import { mentionsDataCardIntent, normalizeDataCardProposalArgs } from '../_shared/dataCardProposal.ts'
 import {
   buildDataGapDirective,
   normalizeReportDataGapArgs,
@@ -3138,6 +3138,8 @@ function streamCoachRun(
         const ai = await callCoachLlmStream(provider, context, (delta) => send('delta', { delta }), {
           messages: buildCoachMessages(context),
           tools: buildCoachTools(),
+          // "카드로 만들어줘"는 되물을 게 없는 발화다 — 도구를 부르는 것 말고 할 일이 없다.
+          forceTool: mentionsDataCardIntent(userNote) ? 'proposeDataCard' : undefined,
           onToolCall: async (name, args) => {
             toolWasCalled = true
             if (name === 'reportDataGap') {
@@ -3260,6 +3262,15 @@ async function callCoachLlmStream(
      * 되는 질문이라 1회 제한이 곧 beyond_tool 실패였다. 상한을 코드가 쥐므로 연쇄 폭주는 없다.
      */
     roundsLeft?: number
+    /**
+     * 이번 라운드에 **반드시 부를 도구**(#767). 지침으로 부탁하지 않고 코드가 강제한다.
+     *
+     * 2026-09-03 실측: 사용자가 "최근 4주 주간볼륨 대비 LSD 비중"·"카드로 만들어준다며"라고 네 번
+     * 말하는 동안 모델은 **도구를 한 번도 부르지 않고** 컨텍스트 숫자로 "15~20% 안팎으로 보입니다"라고
+     * 어림했다. 지침은 이미 있었다 — 프롬프트의 선의에 맡기면 이렇게 샌다(이 저장소가 반복해 배운 것).
+     * 의도가 분명한 발화는 코드가 판정하고 도구를 못 박는다.
+     */
+    forceTool?: string
   },
   /** 토큰 사용량 관측 콜백(요청당 원가 실측). 라운드마다 호출된다. */
   onUsage?: (usage: Record<string, unknown>) => void
@@ -3278,6 +3289,10 @@ async function callCoachLlmStream(
       [provider.maxTokensField]: COACH_MAX_OUTPUT_TOKENS,
       // 2라운드는 tools 를 비워 보낸다 → 빈 배열은 공급자가 거부할 수 있어 키 자체를 뺀다.
       ...(toolSupport?.tools.length ? { tools: toolSupport.tools } : {}),
+      // 의도가 분명한 턴은 도구를 강제한다(#767). 다음 라운드에선 풀어 모델이 답변으로 수렴하게 둔다.
+      ...(toolSupport?.tools.length && toolSupport.forceTool
+        ? { tool_choice: { type: 'function', function: { name: toolSupport.forceTool } } }
+        : {}),
       // 단가 관측: 스트림 마지막 청크에 토큰 사용량을 실어달라고 요청한다. 유료 전환 이후 요청당 원가를
       // 추정이 아니라 실측으로 알아야 가격을 정할 수 있다. OpenAI 계열만 지원하므로 프로바이더로 가른다.
       ...(provider.reportsUsage ? { stream_options: { include_usage: true } } : {}),
@@ -3367,6 +3382,7 @@ async function callCoachLlmStream(
         tools: roundsLeft > 0 ? toolSupport.tools : [],
         onToolCall: toolSupport.onToolCall,
         roundsLeft
+        // forceTool 은 넘기지 않는다 — 한 번 부르고 나면 그 결과로 답해야 한다(무한 재호출 방지).
       },
       onUsage
     )
