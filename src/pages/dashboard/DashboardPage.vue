@@ -802,12 +802,16 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
       한동안 쉬어갈까요?
     </button>
 
-    <!-- NumbersGrid(리디자인 ①b): 2×2 — 주간 거리·Easy 비율·강훈련·평균 심박(지표 액센트 dot + 큰 mono 숫자) -->
+    <!--
+      NumbersGrid(리디자인 ①b): 2×2 — 주간 거리·Easy 비율·강훈련·평균 심박.
+      액센트 dot 은 뺐다(2026-09-03) — 라벨 앞자리를 먹어 제목이 두 줄로 꺾였고(모바일 실측),
+      점 자체는 아무 정보도 주지 않는다. 톤은 값 색으로 이미 구분된다.
+    -->
     <MetricGrid>
-      <StatCard label="주간 거리" :value="`${last7}km`" hint="최근 7일" dot :loading="runDataLoading" interactive @click="trendMetric = 'last7'" />
-      <StatCard label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 · 랩/페이스 기준" dot :loading="runDataLoading" interactive @click="trendMetric = 'easy'" />
-      <StatCard label="강훈련" :value="`${hardSessions}회`" hint="최근 7일" dot tone="warning" :loading="runDataLoading" interactive @click="trendMetric = 'hard'" />
-      <StatCard label="평균 심박" :value="avgHeartRate7d ? `${avgHeartRate7d}bpm` : '—'" hint="최근 7일" dot tone="accent" :loading="runDataLoading" :value-kind="avgHeartRate7d ? 'metric' : 'text'" />
+      <StatCard label="주간 거리" :value="`${last7}km`" hint="최근 7일" :loading="runDataLoading" interactive @click="trendMetric = 'last7'" />
+      <StatCard label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 · 랩/페이스 기준" :loading="runDataLoading" interactive @click="trendMetric = 'easy'" />
+      <StatCard label="강훈련" :value="`${hardSessions}회`" hint="최근 7일" tone="warning" :loading="runDataLoading" interactive @click="trendMetric = 'hard'" />
+      <StatCard label="평균 심박" :value="avgHeartRate7d ? `${avgHeartRate7d}bpm` : '—'" hint="최근 7일" tone="accent" :loading="runDataLoading" :value-kind="avgHeartRate7d ? 'metric' : 'text'" />
       <!--
         사용자 정의 카드(#767) — 대화로 만들어 승인한 지표. 값 형식이 자유라 valueKind='text' 로 낸다.
         tone 을 주지 않는다: 카드는 수치만 말하고 해석은 사용자 몫이다.
@@ -822,7 +826,7 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
         @pointerleave="cancelCardLongPress"
         @pointercancel="cancelCardLongPress"
       >
-        <StatCard :label="card.title" :value="card.text" :hint="card.hint" dot value-kind="text" :loading="runDataLoading" />
+        <StatCard :label="card.title" :value="card.text" :hint="card.hint" value-kind="text" :loading="runDataLoading" />
         <button
           v-if="dataCardEditMode"
           type="button"
