@@ -465,9 +465,19 @@ function startCardLongPress() {
 function cancelCardLongPress() {
   window.clearTimeout(longPressTimer)
 }
-/** 편집 모드는 바깥을 누르면 닫는다 — 나가는 길이 없으면 갇힌다. */
-function exitCardEditMode() {
-  if (dataCardEditMode.value && !pendingDeleteCard.value) dataCardEditMode.value = false
+/**
+ * 편집 모드는 바깥을 누르면 닫는다 — 나가는 길이 없으면 갇힌다.
+ *
+ * ⚠️ 카드/삭제 버튼 안에서 시작한 터치는 "바깥"이 아니다. 이 리스너는 **캡처 단계**라 버튼의
+ * `.stop` 보다 먼저 돌고, 그대로 두면 ✕ 를 누른 순간 편집 모드가 꺼져 버튼이 사라진다 —
+ * 이어질 click 이 갈 곳을 잃어 **삭제가 아예 안 된다**(2026-09-03 실기기 신고).
+ * 합성 click() 으로만 테스트해 이 순서를 놓쳤다: 실기기는 pointerdown → pointerup → click 이다.
+ */
+function exitCardEditMode(event: PointerEvent) {
+  if (!dataCardEditMode.value || pendingDeleteCard.value) return
+  const target = event.target instanceof Element ? event.target : null
+  if (target?.closest('.data-card-slot, .data-card-remove, .confirm-sheet')) return
+  dataCardEditMode.value = false
 }
 watch(dataCardEditMode, (on) => {
   if (on) window.addEventListener('pointerdown', exitCardEditMode, { capture: true })
@@ -819,7 +829,7 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
           @pointerdown.stop
           @click.stop="pendingDeleteCard = { id: card.id, title: card.title }"
         >
-          ✕
+          −
         </button>
       </div>
       <button type="button" class="stat-card data-card-add" @click="openDataCardComposer">
@@ -1099,28 +1109,47 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
   position: relative;
   display: grid;
 }
-/* 편집 모드에 들어간 카드는 살짝 눌린 듯이 — 모드가 켜졌다는 걸 배지 말고도 알려준다. */
-.data-card-slot.is-editing {
-  transform: scale(0.98);
-  transition: transform 0.12s ease;
+/*
+  편집 모드 카드는 살짝 흔들린다 — 배지 하나보다 "지금 지울 수 있는 것들"이 한눈에 들어온다.
+  각도는 0.7도로 아주 작게: 크게 흔들면 글자가 읽히지 않는다.
+*/
+@keyframes data-card-wiggle {
+  0% { transform: rotate(-0.7deg); }
+  50% { transform: rotate(0.7deg); }
+  100% { transform: rotate(-0.7deg); }
 }
+.data-card-slot.is-editing {
+  animation: data-card-wiggle 0.32s ease-in-out infinite;
+}
+/* 카드마다 위상을 어긋내 한 몸처럼 움직이지 않게. */
+.data-card-slot.is-editing:nth-child(even) {
+  animation-delay: -0.16s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .data-card-slot.is-editing {
+    animation: none;
+    transform: scale(0.98);
+  }
+}
+/* 흰 원 + 빨간 마이너스(아이폰 삭제 배지와 같은 언어). 손가락으로 눌러야 하므로 32px. */
 .data-card-remove {
   position: absolute;
-  top: -6px;
-  right: -6px;
+  top: -8px;
+  right: -8px;
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   min-height: 0;
   padding: 0;
-  border: 1px solid var(--color-border, rgba(120, 120, 120, 0.4));
+  border: 0;
   border-radius: 50%;
-  background: var(--color-surface-3, #222a35);
-  box-shadow: none;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
   text-shadow: none;
-  color: var(--color-text);
-  font-size: 12px;
+  color: var(--color-danger, #ef4444);
+  font-size: 22px;
+  font-weight: 700;
   line-height: 1;
   cursor: pointer;
 }
