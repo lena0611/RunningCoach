@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   computeDataCardFromRuns,
+  describeDataCardBasis,
   formatDataCardValue,
   toQueryRunsRow,
   type DataCardRunInput,
@@ -35,7 +36,13 @@ describe('dataCardAdapter (#767)', () => {
   })
 
   it('값이 없으면 0 이 아니라 — 로 낸다', () => {
-    expect(formatDataCardValue({ value: null, unit: '%', matchedRuns: 0, failureKind: 'no_matching_runs' })).toBe('—')
-    expect(formatDataCardValue({ value: 70, unit: '%', matchedRuns: 4, failureKind: null })).toBe('70%')
+    expect(formatDataCardValue({ value: null, unit: '%', matchedRuns: 0, groupCount: 0, groupBy: 'none', failureKind: 'no_matching_runs' })).toBe('—')
+    expect(formatDataCardValue({ value: 70, unit: '%', matchedRuns: 4, groupCount: 0, groupBy: 'none', failureKind: null })).toBe('70%')
+  })
+
+  it('묶어서 평균한 값은 기간으로 기준을 밝힌다 — "러닝 N건"만으론 몇 주를 평균했는지 모른다', () => {
+    expect(describeDataCardBasis({ value: 24, unit: '%', matchedRuns: 13, groupCount: 4, groupBy: 'week', failureKind: null })).toBe('최근 4주 기준')
+    expect(describeDataCardBasis({ value: 30, unit: 'km', matchedRuns: 5, groupCount: 0, groupBy: 'none', failureKind: null })).toBe('러닝 5건 기준')
+    expect(describeDataCardBasis({ value: null, unit: '%', matchedRuns: 0, groupCount: 0, groupBy: 'week', failureKind: 'no_matching_runs' })).toBe('해당 기록 없음')
   })
 })

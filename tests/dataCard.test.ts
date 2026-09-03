@@ -86,12 +86,53 @@ describe('#767 사용자 정의 데이터 카드', () => {
       numerator: query({ groupBy: 'week', filters: [{ field: 'type', op: 'eq', value: 'LSD' }] }),
       denominator: query({ groupBy: 'week' })
     }
-    // LSD 35 / 전체 50 = 70%
+    // 주차별 비율의 평균. 8/1(토) 15 LSD / 15 전체 = 100%, 8/5·8/6·8/8 주: 20 LSD / 35 = 57.1%
     const result = computeDataCard(spec, rows)
-    expect(result.value).toBe(70)
+    expect(result.value).toBe(78.6)
     expect(result.unit).toBe('%')
     // 표본은 분모(전체) 기준 — 비율의 신뢰도는 전체가 정한다.
     expect(result.matchedRuns).toBe(4)
+  })
+
+  it('묶어서 물으면 **묶음별 비율의 평균** — 전체를 합쳐 나누면 큰 주가 결과를 지배한다', () => {
+    // 1주차: LSD 5 / 전체 10 = 50%,  2주차: LSD 10 / 전체 90 = 11.1%
+    // 평균 = 30.6%,  합쳐서 나누면 15/100 = 15% — 두 값은 다르고, "주간 비중"은 앞이 맞다.
+    const twoWeeks = [
+      row({ date: '2026-08-03', type: 'LSD', distance_km: 5 }),
+      row({ date: '2026-08-05', type: 'Easy', distance_km: 5 }),
+      row({ date: '2026-08-10', type: 'LSD', distance_km: 10 }),
+      row({ date: '2026-08-12', type: 'Easy', distance_km: 80 })
+    ]
+    const spec: DataCardSpec = {
+      kind: 'ratio',
+      title: 'LSD 주간 비중 평균',
+      metric: 'distanceKm',
+      display: 'percent',
+      numerator: query({ groupBy: 'week', filters: [{ field: 'type', op: 'eq', value: 'LSD' }] }),
+      denominator: query({ groupBy: 'week' })
+    }
+    const result = computeDataCard(spec, twoWeeks)
+    expect(result.value).toBe(30.6)
+    expect(result.groupCount).toBe(2)
+    expect(result.groupBy).toBe('week')
+  })
+
+  it('LSD 를 안 한 주는 0% 로 센다 — 평균에서 빼면 비중이 부풀려진다', () => {
+    const twoWeeks = [
+      row({ date: '2026-08-03', type: 'LSD', distance_km: 5 }),
+      row({ date: '2026-08-05', type: 'Easy', distance_km: 5 }),
+      row({ date: '2026-08-12', type: 'Easy', distance_km: 10 })
+    ]
+    const spec: DataCardSpec = {
+      kind: 'ratio',
+      title: 'LSD 주간 비중 평균',
+      metric: 'distanceKm',
+      display: 'percent',
+      numerator: query({ groupBy: 'week', filters: [{ field: 'type', op: 'eq', value: 'LSD' }] }),
+      denominator: query({ groupBy: 'week' })
+    }
+    // 1주차 50%, 2주차 0% → 평균 25%. 2주차를 빼면 50% 가 돼 실제보다 부풀려진다.
+    expect(computeDataCard(spec, twoWeeks).value).toBe(25)
   })
 
   it('분모가 0 이면 0% 가 아니라 계산 불가 — 0 으로 보여주면 거짓말이 된다', () => {

@@ -52,7 +52,7 @@ import type { CoachMoment } from '@/shared/lib/coaching/coachMoments'
 import HeroIllustration, { type HeroIllustrationTopic } from './HeroIllustration.vue'
 import WeekStrip from '@/shared/ui/WeekStrip.vue'
 import { useDataCardStore, valueOfCard } from '@/app/stores/dataCardStore'
-import { formatDataCardValue } from '@/shared/lib/coaching/dataCardAdapter'
+import { describeDataCardBasis, formatDataCardValue } from '@/shared/lib/coaching/dataCardAdapter'
 import SegmentTabs, { type SegmentTabValue } from '@/shared/ui/SegmentTabs.vue'
 import { useTrainingWeek, dayAfterIso } from './useTrainingWeek'
 import type { TrendChartPoint } from '@/shared/ui/TrendChart.vue'
@@ -431,18 +431,17 @@ const todayHeroHrCap = computed<number | null>(() => {
  */
 const dataCardStore = useDataCardStore()
 const userDataCards = computed(() =>
-  dataCardStore.cards.map((card) => ({
-    id: card.id,
-    title: card.title,
-    text: formatDataCardValue(valueOfCard(card, runs.value)),
-    // 표본은 판정이 아니라 사실이다 — 적을 때 밝히는 게 정직하다.
-    hint: sampleHint(valueOfCard(card, runs.value).matchedRuns)
-  }))
+  dataCardStore.cards.map((card) => {
+    const value = valueOfCard(card, runs.value)
+    return {
+      id: card.id,
+      title: card.title,
+      text: formatDataCardValue(value),
+      // 기준은 판정이 아니라 사실이다 — 무엇을 평균했는지 밝히는 게 정직하다.
+      hint: describeDataCardBasis(value)
+    }
+  })
 )
-function sampleHint(matchedRuns: number): string {
-  if (matchedRuns === 0) return '해당 기록 없음'
-  return `러닝 ${matchedRuns}건 기준`
-}
 /** + 카드 → 코치방을 열고 카드 만들기 대화를 시작한다. */
 function openDataCardComposer() {
   useCoachActionBridgeStore().requestDataCardComposer()
