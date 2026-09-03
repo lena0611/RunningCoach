@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   computeDataCard,
+  dataCardTitleWidth,
   validateDataCardSpec,
   type DataCardSpec
 } from '../supabase/functions/_shared/dataCard'
@@ -166,5 +167,30 @@ describe('#767 사용자 정의 데이터 카드', () => {
 
   it('카드 이름이 비면 거부한다', () => {
     expect(validateDataCardSpec({ kind: 'single', title: '  ', metric: 'distanceKm', query: query() }).ok).toBe(false)
+  })
+})
+
+/**
+ * #767 — 제목 길이 상한(2026-09-03 모바일 실측: 375px 라벨 132px, 한글 10자=121px, 11자=133px).
+ * **저장 뒤엔 제목을 고칠 방법이 없다**(편집 UI 없음) — 그래서 제안 단계에서 막는다.
+ */
+describe('카드 제목 길이', () => {
+  const spec = (title: string): DataCardSpec => ({ kind: 'single', title, metric: 'distanceKm', query: query() })
+
+  it('글자 수가 아니라 폭으로 센다 — 공백·영문은 반 칸', () => {
+    // 12글자지만 공백 3 + 영문 3 이라 폭은 9칸 → 한 줄에 들어간다.
+    expect(dataCardTitleWidth('주간 대비 LSD 비중')).toBe(9)
+    expect(validateDataCardSpec(spec('주간 대비 LSD 비중')).ok).toBe(true)
+    expect(dataCardTitleWidth('토요일 LSD 누적')).toBe(7.5)
+  })
+
+  it('한글 11자는 거부한다 — 카드에서 두 줄로 꺾인다', () => {
+    const verdict = validateDataCardSpec(spec('가나다라마바사아자차카'))
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) expect(verdict.error).toContain('너무 깁니다')
+  })
+
+  it('한글 10자는 통과한다 — 경계', () => {
+    expect(validateDataCardSpec(spec('가나다라마바사아자차')).ok).toBe(true)
   })
 })

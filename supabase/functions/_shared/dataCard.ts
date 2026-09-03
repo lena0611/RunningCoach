@@ -58,9 +58,31 @@ const METRIC_UNITS: Partial<Record<QueryRunsMetric, string>> = {
   count: '회'
 }
 
+/**
+ * 카드 제목이 한 줄에 들어갈 수 있는 상한(2026-09-03 모바일 실측).
+ * 375px 폭에서 지표 카드 라벨은 132px — 한글 10자(121px)까지 들어가고 11자(133px)면 꺾인다.
+ *
+ * **글자 수가 아니라 폭으로 센다.** "주간 대비 LSD 비중" 은 12글자지만 공백·영문이 좁아 한 줄에 들어간다 —
+ * 순수 글자 수로 자르면 들어가는 제목을 거부한다.
+ */
+export const DATA_CARD_TITLE_WIDTH_LIMIT = 10
+
+/** 제목 폭 점수. 한글·한자·가나·전각은 1칸, 그 밖(영문·숫자·공백·기호)은 0.5칸으로 센다. */
+export function dataCardTitleWidth(title: string): number {
+  let width = 0
+  for (const char of title.trim()) {
+    width += /[\u1100-\u11ff\u3000-\u303f\u3130-\u318f\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uff00-\uff60]/.test(char) ? 1 : 0.5
+  }
+  return width
+}
+
 /** 검증 — 닫힌 어휘 밖이면 거부 이유를 돌려준다(조용히 무시하지 않는다). */
 export function validateDataCardSpec(spec: DataCardSpec): { ok: true } | { ok: false; error: string } {
   if (!spec.title.trim()) return { ok: false, error: '카드 이름이 비어 있습니다.' }
+  // 길면 카드에서 두 줄로 꺾인다 — 저장 뒤에 발견하면 고칠 방법이 없으므로 제안 단계에서 막는다.
+  if (dataCardTitleWidth(spec.title) > DATA_CARD_TITLE_WIDTH_LIMIT) {
+    return { ok: false, error: `카드 이름이 너무 깁니다(한글 ${DATA_CARD_TITLE_WIDTH_LIMIT}자 이내로 줄여주세요).` }
+  }
   if (spec.kind === 'single') return { ok: true }
   // 비율은 같은 축으로 묶여야 비교가 성립한다(주 대 주). 축이 다르면 숫자가 의미를 잃는다.
   if (spec.numerator.groupBy !== spec.denominator.groupBy) {

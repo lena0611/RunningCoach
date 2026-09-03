@@ -826,7 +826,17 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
         @pointerleave="cancelCardLongPress"
         @pointercancel="cancelCardLongPress"
       >
-        <StatCard :label="card.title" :value="card.text" :hint="card.hint" value-kind="text" :loading="runDataLoading" />
+        <!--
+          값이 숫자로 시작하면 지표로 파싱해 **큰 숫자 + 작은 단위**로 낸다(기본 카드와 같은 리듬).
+          '—'(계산 불가)처럼 숫자가 아니면 text 로 — 파서에 넘기면 통째로 큰 글씨가 된다.
+        -->
+        <StatCard
+          :label="card.title"
+          :value="card.text"
+          :hint="card.hint"
+          :value-kind="/^[0-9]/.test(card.text) ? 'metric' : 'text'"
+          :loading="runDataLoading"
+        />
         <button
           v-if="dataCardEditMode"
           type="button"
