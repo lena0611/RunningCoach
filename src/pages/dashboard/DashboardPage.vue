@@ -99,7 +99,8 @@ const {
   activeDoneSummary,
   intentBusy,
   runScheduleOp,
-  returnFromRestNow
+  returnFromRestNow,
+  heartRateModel
 } = week
 
 // CoachInsights(1장): 코치 탭과 동일 모먼트 엔진의 top 1 — 두 탭 간 코치 발화 불일치 방지(useCoachMoments 추출).
@@ -382,6 +383,33 @@ const creditedFromEarlierRun = computed(() => {
   return { typeLabel: run.type, km: Math.round(run.distanceKm * 10) / 10, date: run.date }
 })
 
+/**
+ * 오늘 세션의 심박 상한(bpm). 강도 기준은 페이스가 아니라 **심박 상한**이므로(AppHeader 안내와 동일)
+ * 처방 한 줄에 페이스와 나란히 둔다. 타입별 천장을 쓴다 — Tempo 는 Z4, Recovery 는 Z1, 그 외 Z2(Easy).
+ * 프로필이 부족해 모델이 못 서면 null → 표시하지 않는다(빈 값 자리 만들지 않음).
+ */
+/**
+ * 처방 한 줄의 단위를 값에서 떼어낸다 — 단위는 작고 연하게 두고 숫자가 먼저 읽히게 한다.
+ * metaLine 은 "9:55~8:59/km"(페이스) 또는 "약 45분"(시간) 두 형태다.
+ */
+const todayHeroPaceParts = computed<{ value: string; unit: string } | null>(() => {
+  const line = todayHero.value?.metaLine
+  if (!line) return null
+  const paceUnit = ['/km', '/mi'].find((unit) => line.endsWith(unit))
+  if (paceUnit) return { value: line.slice(0, -paceUnit.length), unit: paceUnit }
+  if (line.endsWith('분')) return { value: line.slice(0, -1), unit: '분' }
+  return { value: line, unit: '' }
+})
+
+const todayHeroHrCap = computed<number | null>(() => {
+  const type = todayHero.value?.sessionType
+  if (!type) return null
+  const model = heartRateModel.value
+  if (type === 'Tempo' || type === 'Race') return model.tempoCeilingBpm
+  if (type === 'Recovery') return model.recoveryCeilingBpm
+  return model.easyCeilingBpm
+})
+
 // 세션 타입 → 히어로 배경 삽화 토픽(디자인 확정 매핑). Steady Long 은 긴 지속주 → lsd(굽은 길+해), 휴식 → recovery(달).
 function heroTopicFor(type: RunType | null | undefined): HeroIllustrationTopic {
   switch (type) {
@@ -606,7 +634,17 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
                   {{ todayHero.distanceKm }}<small>km</small></span
                 >
               </h2>
-              <p v-if="todayHero.metaLine" class="helper today-hero-meta num-mono">{{ todayHero.metaLine }}</p>
+              <p v-if="todayHero.metaLine || todayHeroHrCap" class="helper today-hero-meta num-mono">
+                <span v-if="todayHeroPaceParts" class="today-hero-meta-item"
+                  ><span class="today-hero-run-icon" aria-hidden="true">🏃</span> {{ todayHeroPaceParts.value
+                  }}<small v-if="todayHeroPaceParts.unit" class="today-hero-unit">{{ todayHeroPaceParts.unit }}</small></span
+                >
+                <span v-if="todayHeroHrCap" class="today-hero-meta-item"
+                  ><span class="today-hero-hr-icon" aria-hidden="true">❤️</span
+                  ><span class="today-hero-hr-label"> 최대 </span>{{ todayHeroHrCap
+                  }}<small class="today-hero-unit">bpm</small></span
+                >
+              </p>
             </template>
             <!--
               갈음 상태(2026-09-03): 오늘 세션이 done 인데 그 런은 어제 것. 이 분기가 없으면
@@ -993,9 +1031,9 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
 .week-strip-datestamp {
   margin: -12px 0 -12px;
   color: var(--color-muted);
-  font-family: var(--font-mono);
+  /* 시스템 폰트 — 모노는 자간이 성겨 '2026-09-03(목)'이 숫자표처럼 읽혔다. 여긴 읽는 문장이다. */
   font-size: var(--text-caption-size);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.02em;
   text-align: center;
 }
 
@@ -1050,8 +1088,39 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
 }
 
 .today-hero-meta {
+  display: flex;
+  /* 페이스와 심박은 **한 줄**이다 — 줄이 갈리면 처방이 두 덩어리로 읽힌다.
+     좁은 폭(375)에서도 우측에 여백이 남도록 본문보다 한 단계 작은 15px + gap 10px 로 맞췄다. */
+  flex-wrap: nowrap;
+  gap: 10px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--color-text);
+}
+/* 페이스와 심박 상한은 같은 줄의 형제다 — 좁으면 줄바꿈되되 각 항목은 쪼개지지 않는다. */
+.today-hero-meta-item {
+  white-space: nowrap;
+}
+/* 러너 이모지는 좌우 반전 — 기본 방향이 글을 등지고 달려 시선이 밖으로 빠진다. */
+.today-hero-run-icon {
+  display: inline-block;
+  transform: scaleX(-1);
+}
+/* 하트는 면적이 커 같은 크기여도 러너보다 무겁게 보인다 — 살짝 줄여 균형을 맞춘다. */
+.today-hero-hr-icon {
+  display: inline-block;
+  font-size: 0.88em;
+}
+/* '최대'는 값이 아니라 수식어 — 1px 낮춰 숫자에 자리를 내준다. */
+.today-hero-hr-label {
+  font-size: calc(1em - 1px);
+}
+/* 단위는 값보다 작고 연하게 — 숫자가 먼저 읽혀야 한다. */
+.today-hero-unit {
+  margin-left: 1px;
+  font-size: 0.78em;
+  font-weight: 600;
+  color: var(--color-muted);
 }
 
 .next-line {
