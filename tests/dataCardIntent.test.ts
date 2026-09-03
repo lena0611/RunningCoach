@@ -7,6 +7,11 @@ import { mentionsDataCardIntent } from '../supabase/functions/_shared/dataCardPr
  * 지침은 이미 있었다. 그래서 의도 판정을 코드로 내리고 도구를 강제한다 — 이 표가 그 경계다.
  */
 describe('mentionsDataCardIntent', () => {
+  it('/카드생성 명령은 의심의 여지 없이 강제 대상 — 화면이 앞에 박아 보낸다', () => {
+    expect(mentionsDataCardIntent('/카드생성 최근 4주 주간볼륨 대비 LSD 비중')).toBe(true)
+    expect(mentionsDataCardIntent('/카드생성')).toBe(true)
+  })
+
   it('카드로 만들어 달라는 발화는 강제 대상', () => {
     // 실제 사용자 발화(2026-09-03 15:05)
     expect(mentionsDataCardIntent('카드로 만들어준다며')).toBe(true)

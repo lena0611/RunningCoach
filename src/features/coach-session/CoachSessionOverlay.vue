@@ -211,6 +211,19 @@ const coachCommandItems = [
  * command 가 없으므로 선택해도 commandId 를 보내지 않는다(리포트 형식 강제 없음, 자유 질문으로 전송).
  */
 const globalCoachSuggestionItems = [
+  /**
+   * 개인화 지표 카드 만들기(#767). **명령으로 앞에 세운다** — 자연어 의도에만 기대면 모델이
+   * 도구를 안 부르고 어림해서 답하는 일이 실제로 있었다(2026-09-03, 4턴 연속 도구 호출 0건).
+   * 사용자가 무엇을 요청하는지 문장 첫머리에 못 박히면 서버 판정도, 모델 행동도 흔들리지 않는다.
+   */
+  {
+    id: 'make-card',
+    command: '/카드생성',
+    title: '개인화 지표 카드',
+    description: '요약에서 늘 보고 싶은 값을 카드로',
+    prompt: '/카드생성 ',
+    icon: '＋'
+  },
   {
     id: 'ask-volume',
     command: '',
@@ -455,6 +468,29 @@ function clearCoachNote() {
   coachCommandOpen.value = true
   void nextTick(resizeCoachNoteInput)
 }
+
+/**
+ * 요약 '+' 카드에서 넘어온 요청(#767) — 입력창을 `/카드생성 ` 으로 채우고 커서를 둔다.
+ * 빈 칸을 주면 무엇을 말해야 할지 모르고, 명령이 앞에 박혀 있으면 뒤에 원하는 값만 적으면 된다.
+ */
+watch(
+  () => useCoachActionBridgeStore().dataCardComposerRequested,
+  (requested) => {
+    if (!requested) return
+    const bridge = useCoachActionBridgeStore()
+    bridge.clearDataCardComposer()
+    // 이 오버레이는 App 레벨이라 **항상 마운트돼 있다** — 지연 로드되는 코치 탭보다 플래그를 먼저 본다.
+    // 그래서 여는 것도 여기서 한다(예전엔 코치 탭이 열려고 했는데, 그때는 플래그가 이미 소비돼 안 열렸다).
+    if (!coachStore.isOpen) coachStore.openGlobal()
+    coachNote.value = '/카드생성 '
+    coachCommandOpen.value = false
+    void nextTick(() => {
+      resizeCoachNoteInput()
+      coachNoteInput.value?.focus()
+    })
+  },
+  { immediate: true }
+)
 
 function selectCoachCommand(item: { id: string; prompt: string; command: string }) {
   coachNote.value = item.prompt
