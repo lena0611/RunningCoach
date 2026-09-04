@@ -189,9 +189,15 @@ function isMetric(value: string) {
   font-size: var(--text-body-size);
 }
 
-/* 상세는 카드 하나만 크게 보여준다 — 붙이기 전에 "이게 그 카드다"가 분명해야 한다. */
+/*
+  상세는 카드 하나만 크게 보여준다 — 붙이기 전에 "이게 그 카드다"가 분명해야 한다.
+  ⚠ 스택 본문이 grid 라 폭을 안 주면 카드가 **글자 길이만큼** 쪼그라든다
+  ("강훈련 · 1회" 가 75px 로 찌그러졌다, 2026-09-04 실측). 최소 폭을 못 박는다.
+*/
 .summary-add-preview {
-  max-width: 280px;
+  width: min(280px, 100%);
+  min-width: 220px;
+  justify-self: center;
   margin: 0 auto;
 }
 
