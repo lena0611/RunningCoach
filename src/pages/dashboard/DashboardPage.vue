@@ -513,6 +513,14 @@ function openDataCardComposer() {
 
 const SHOW_GOAL_SECTION = false
 const SHOW_INJURY_CARD = false
+/*
+  평균 심박·강훈련 카드 미노출(2026-09-04). 지우는 게 아니라 **자리를 옮기는 중**이다 —
+  요약탭 맨 아래 '요약 편집' CTA 를 붙이면, 이런 기본 지표도 사용자 정의 카드(#767)처럼
+  직접 골라 추가하는 물건이 된다. 그때 이 플래그들은 편집 목록의 기본값으로 흡수된다.
+  ⚠ 강훈련 카드는 추세 '강훈련' 렌즈의 진입점이기도 하다 — 편집 기능을 붙일 때 같이 살아난다.
+*/
+const SHOW_AVG_HR_CARD = false
+const SHOW_HARD_SESSION_CARD = false
 
 // 세션 타입 → 히어로 배경 삽화 토픽(디자인 확정 매핑). Steady Long 은 긴 지속주 → lsd(굽은 길+해), 휴식 → recovery(달).
 function heroTopicFor(type: RunType | null | undefined): HeroIllustrationTopic {
@@ -803,15 +811,16 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
     </button>
 
     <!--
-      NumbersGrid(리디자인 ①b): 2×2 — 주간 거리·Easy 비율·강훈련·평균 심박.
+      NumbersGrid(리디자인 ①b): 주간 거리·Easy 비율 (+ 사용자 정의 카드).
+      평균 심박·강훈련은 요약 편집으로 옮기는 중이라 감춰 뒀다 — 위 SHOW_* 플래그 참고.
       액센트 dot 은 뺐다(2026-09-03) — 라벨 앞자리를 먹어 제목이 두 줄로 꺾였고(모바일 실측),
       점 자체는 아무 정보도 주지 않는다. 톤은 값 색으로 이미 구분된다.
     -->
     <MetricGrid>
       <StatCard label="주간 거리" :value="`${last7}km`" hint="최근 7일" :loading="runDataLoading" interactive @click="trendMetric = 'last7'" />
       <StatCard label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 · 랩/페이스 기준" :loading="runDataLoading" interactive @click="trendMetric = 'easy'" />
-      <StatCard label="강훈련" :value="`${hardSessions}회`" hint="최근 7일" tone="warning" :loading="runDataLoading" interactive @click="trendMetric = 'hard'" />
-      <StatCard label="평균 심박" :value="avgHeartRate7d ? `${avgHeartRate7d}bpm` : '—'" hint="최근 7일" tone="accent" :loading="runDataLoading" :value-kind="avgHeartRate7d ? 'metric' : 'text'" />
+      <StatCard v-if="SHOW_HARD_SESSION_CARD" label="강훈련" :value="`${hardSessions}회`" hint="최근 7일" tone="warning" :loading="runDataLoading" interactive @click="trendMetric = 'hard'" />
+      <StatCard v-if="SHOW_AVG_HR_CARD" label="평균 심박" :value="avgHeartRate7d ? `${avgHeartRate7d}bpm` : '—'" hint="최근 7일" tone="accent" :loading="runDataLoading" :value-kind="avgHeartRate7d ? 'metric' : 'text'" />
       <!--
         사용자 정의 카드(#767) — 대화로 만들어 승인한 지표. 값 형식이 자유라 valueKind='text' 로 낸다.
         tone 을 주지 않는다: 카드는 수치만 말하고 해석은 사용자 몫이다.
