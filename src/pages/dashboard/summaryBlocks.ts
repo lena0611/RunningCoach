@@ -57,3 +57,13 @@ export function orderSummaryCards(customCardIds: string[], savedOrder: string[])
     .sort((a, b) => a.rank - b.rank || a.index - b.index)
     .map((entry) => entry.id)
 }
+
+/**
+ * 보이는 카드만 끌어 옮겼을 때 **숨긴 카드의 자리는 그대로** 두고 전체 순서를 다시 만든다.
+ * 숨긴 것을 뒤로 밀어내면, 다시 켰을 때 엉뚱한 곳에서 나타난다.
+ */
+export function reorderVisibleCards(fullOrder: string[], visibleNewOrder: string[]): string[] {
+  const visible = new Set(visibleNewOrder)
+  let index = 0
+  return fullOrder.map((id) => (visible.has(id) ? visibleNewOrder[index++] ?? id : id))
+}

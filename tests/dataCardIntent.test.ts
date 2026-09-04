@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { dataCardRequestIsSpecific, dataCardUnsupportedConcept, mentionsDataCardIntent } from '../supabase/functions/_shared/dataCardProposal'
+import { reorderVisibleCards } from '../src/pages/dashboard/summaryBlocks'
 
 /**
  * #767 — 2026-09-03 실측 실패에서 온 테스트.
@@ -79,5 +80,20 @@ describe('dataCardUnsupportedConcept', () => {
     expect(dataCardUnsupportedConcept('/카드생성 최근 4주 평균 페이스')).toBeNull()
     expect(dataCardUnsupportedConcept('/카드생성 최근4주간 주간볼륨 대비 lsd볼륨 비중')).toBeNull()
     expect(dataCardUnsupportedConcept('이번 달 총 거리')).toBeNull()
+  })
+})
+
+/**
+ * 요약 카드 끌어 옮기기(2026-09-04). 보이는 카드만 옮겨도 **숨긴 카드의 자리는 그대로**여야 한다 —
+ * 숨긴 것을 뒤로 밀어내면 다시 켰을 때 엉뚱한 곳에서 나타난다.
+ */
+describe('reorderVisibleCards', () => {
+  it('숨긴 카드 자리는 두고 보이는 것만 다시 배치한다', () => {
+    // 전체: [a, hidden, b, c] / 보이는 것 [a, b, c] → [c, a, b] 로 끌어 옮김
+    expect(reorderVisibleCards(['a', 'hidden', 'b', 'c'], ['c', 'a', 'b'])).toEqual(['c', 'hidden', 'a', 'b'])
+  })
+
+  it('전부 보이면 그대로 새 순서가 된다', () => {
+    expect(reorderVisibleCards(['a', 'b', 'c'], ['b', 'c', 'a'])).toEqual(['b', 'c', 'a'])
   })
 })
