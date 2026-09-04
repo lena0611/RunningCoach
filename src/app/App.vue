@@ -32,6 +32,7 @@ import { findEarlyRunCreditCandidate } from '@/shared/lib/coaching/earlyRunCredi
 import { sessionTypeLabel } from '@/shared/lib/coaching/sessionBriefing'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { useDataCardStore } from '@/app/stores/dataCardStore'
+import { useSummaryLayoutStore } from '@/app/stores/summaryLayoutStore'
 import PostRunInterviewSheet from '@/shared/ui/PostRunInterviewSheet.vue'
 import ToastHost from '@/shared/ui/ToastHost.vue'
 import { useToastStore } from '@/app/stores/toastStore'
@@ -47,6 +48,7 @@ import type { BottomNavItem } from '@/shared/ui/BottomNav.vue'
 const authStore = useAuthStore()
 const scheduleStore = useTrainingScheduleStore()
 const dataCardStore = useDataCardStore()
+const summaryLayoutStore = useSummaryLayoutStore()
 const healthKitSyncStore = useHealthKitSyncStore()
 const memoryStore = useMemoryStore()
 const runStore = useRunStore()
@@ -404,7 +406,8 @@ watch(
       // 러닝 대체 운동(#739). 러닝과 **별도 스토어** — 볼륨·VDOT·앵커 계산에는 들어가지 않는다.
       crossTrainingStore.loaded || crossTrainingStore.loading ? Promise.resolve() : crossTrainingStore.load(),
       // 사용자 정의 데이터 카드(#767) — 요약 탭이 그릴 때 스펙이 이미 있어야 한다.
-      dataCardStore.loaded || dataCardStore.loading ? Promise.resolve() : dataCardStore.load()
+      dataCardStore.loaded || dataCardStore.loading ? Promise.resolve() : dataCardStore.load(),
+      summaryLayoutStore.loaded || summaryLayoutStore.loading ? Promise.resolve() : summaryLayoutStore.load()
     ])
     await healthKitSyncStore.syncAfterActivation()
     await weatherStore.refreshAfterActivation()
