@@ -67,6 +67,11 @@ export type DataCardSpec =
 export type DataCardValue = {
   /** 표시할 값. 계산 불가면 null — 화면은 '—' 로 낸다(0 으로 보여주면 거짓말이 된다). */
   value: number | null
+  /**
+   * 화면에 그대로 쓰는 숫자 문자열. 대부분 `value` 그대로지만 **페이스는 분:초로 바꾼다** —
+   * `565초/km` 는 사람이 못 읽는다(2026-09-04 실측). 계산 불가면 '—'.
+   */
+  display: string
   /** 값에 붙는 단위(km·분·%·배 등). 없으면 빈 문자열. */
   unit: string
   /** 표본 수(러닝 건수) — 적을 때 사실을 밝히기 위해. */
@@ -105,7 +110,7 @@ const METRIC_UNITS: Partial<Record<QueryRunsMetric, string>> = {
   durationSec: '초',
   activeEnergyKcal: 'kcal',
   elevationGainM: 'm',
-  avgPaceSec: '초/km',
+  avgPaceSec: '/km',
   avgHeartRate: 'bpm',
   maxHeartRate: 'bpm',
   cadence: 'spm',
@@ -239,8 +244,10 @@ export function computeDataCard(spec: DataCardSpec, rows: QueryRunsRow[], today:
     const result = runQueryRunsCore(withPeriod(spec.query, period, today), rows)
     const first = result.rows[0]
     const raw = first ? first[spec.metric] : null
+    const value = typeof raw === 'number' ? roundForMetric(spec.metric, raw) : null
     return {
-      value: typeof raw === 'number' ? roundForMetric(spec.metric, raw) : null,
+      value,
+      display: formatDataCardNumber(spec.metric, value),
       unit: METRIC_UNITS[spec.metric] ?? '',
       matchedRuns: result.matchedRuns,
       groupCount: spec.query.groupBy === 'none' ? 0 : result.rows.length,
@@ -284,6 +291,7 @@ export function computeDataCard(spec: DataCardSpec, rows: QueryRunsRow[], today:
     // 분모가 0 이거나 없으면 0% 가 아니라 계산 불가다 — 0 으로 보여주면 거짓말이 된다.
     return {
       value: null,
+      display: '—',
       unit,
       matchedRuns: denominator.matchedRuns,
       groupCount: 0,
@@ -297,6 +305,7 @@ export function computeDataCard(spec: DataCardSpec, rows: QueryRunsRow[], today:
   const mean = ratios.reduce((sum, value) => sum + value, 0) / ratios.length
   return {
     value: round(spec.display === 'percent' ? mean * 100 : mean),
+    display: String(round(spec.display === 'percent' ? mean * 100 : mean)),
     unit,
     // 표본은 **분모**(전체) 기준이다 — 비율의 신뢰도는 전체 표본이 정한다.
     matchedRuns: denominator.matchedRuns,
@@ -313,6 +322,14 @@ function groupKeyOf(row: Record<string, string | number | null>, groupBy: string
   if (groupBy === 'none') return 'all'
   const key = row.group
   return typeof key === 'string' ? key : String(key ?? 'all')
+}
+
+/** 페이스만 분:초로 읽는다. 나머지는 숫자 그대로 — 단위는 화면이 따로 작게 붙인다. */
+export function formatDataCardNumber(metric: QueryRunsMetric, value: number | null): string {
+  if (value === null) return '—'
+  if (metric !== 'avgPaceSec') return String(value)
+  const total = Math.round(value)
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
 }
 
 function roundForMetric(metric: QueryRunsMetric, value: number): number {

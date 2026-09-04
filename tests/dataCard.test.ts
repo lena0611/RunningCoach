@@ -408,3 +408,17 @@ describe('지표별 자리수', () => {
     expect(computeDataCard({ kind: 'single', title: '누적 거리', metric: 'distanceKm', query: query() }, rows).value).toBe(9.4)
   })
 })
+
+/** 페이스 카드에 `565초/km` 가 떴다(2026-09-04 실측) — 사람이 읽는 단위는 분:초다. */
+describe('페이스 표시', () => {
+  it('평균 페이스는 분:초와 /km 로 낸다', () => {
+    const rows = [row({ avg_pace_sec: 560 }), row({ avg_pace_sec: 570 })]
+    const result = computeDataCard(
+      { kind: 'single', title: '평균 페이스', metric: 'avgPaceSec', query: query({ metrics: ['avgPaceSec'] }) },
+      rows
+    )
+    expect(result.value).toBe(565)
+    expect(result.display).toBe('9:25')
+    expect(result.unit).toBe('/km')
+  })
+})

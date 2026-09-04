@@ -84,7 +84,8 @@ export function computeDataCardFromRuns(spec: DataCardSpec, runs: DataCardRunInp
  */
 export function formatDataCardValue(value: DataCardValue): string {
   if (value.value === null) return '—'
-  return `${value.value}${value.unit}`
+  // display 는 계산 쪽이 만든다 — 페이스는 분:초다(`565초/km` 는 사람이 못 읽는다).
+  return `${value.display}${value.unit}`
 }
 
 /**
