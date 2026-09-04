@@ -20,7 +20,8 @@ const emit = defineEmits<{ click: [] }>()
 const parsedValue = computed(() => {
   if (props.valueKind === 'text') return { amount: props.value, unit: '' }
   if (props.unit !== undefined) return { amount: props.value, unit: props.unit }
-  const match = props.value.match(/^([+-]?[0-9.,]+)(.*)$/)
+  // `9:25`(페이스)도 하나의 숫자로 본다 — 콜론에서 잘리면 "9" 만 커지고 ":25/km" 가 단위가 된다.
+  const match = props.value.match(/^([+-]?[0-9.,]+(?::[0-9]{2})?)(.*)$/)
   if (!match) return { amount: props.value, unit: '' }
   return {
     amount: match[1],

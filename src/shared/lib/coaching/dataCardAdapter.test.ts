@@ -36,12 +36,14 @@ describe('dataCardAdapter (#767)', () => {
   })
 
   it('값이 없으면 0 이 아니라 — 로 낸다', () => {
-    expect(formatDataCardValue({ value: null, unit: '%', matchedRuns: 0, groupCount: 0, groupBy: 'none', windowDays: null, period: null, failureKind: 'no_matching_runs' })).toBe('—')
-    expect(formatDataCardValue({ value: 70, unit: '%', matchedRuns: 4, groupCount: 0, groupBy: 'none', windowDays: null, period: null, failureKind: null })).toBe('70%')
+    expect(formatDataCardValue({ value: null, display: '—', unit: '%', matchedRuns: 0, groupCount: 0, groupBy: 'none', windowDays: null, period: null, failureKind: 'no_matching_runs' })).toBe('—')
+    expect(formatDataCardValue({ value: 70, display: '70', unit: '%', matchedRuns: 4, groupCount: 0, groupBy: 'none', windowDays: null, period: null, failureKind: null })).toBe('70%')
+    // 페이스는 초가 아니라 분:초로 읽는다 — `565초/km` 는 사람이 못 읽는다(2026-09-04 실측).
+    expect(formatDataCardValue({ value: 565, display: '9:25', unit: '/km', matchedRuns: 14, groupCount: 0, groupBy: 'none', windowDays: null, period: null, failureKind: null })).toBe('9:25/km')
   })
 
   it('기간 종류를 사용자가 말한 방식 그대로 되돌려준다 — 뭉치면 다른 걸 답한 것처럼 읽힌다', () => {
-    const base = { value: 24, unit: '%', matchedRuns: 13, groupCount: 4, groupBy: 'week', windowDays: null } as const
+    const base = { value: 24, display: '24', unit: '%', matchedRuns: 13, groupCount: 4, groupBy: 'week', windowDays: null } as const
     expect(describeDataCardBasis({ ...base, period: { kind: 'rolling', lastDays: 28 }, windowDays: 28, failureKind: null })).toBe('최근 4주 기준')
     expect(describeDataCardBasis({ ...base, period: { kind: 'calendar', unit: 'month' }, failureKind: null })).toBe('이번 달 기준')
     expect(describeDataCardBasis({ ...base, period: { kind: 'calendar', unit: 'year' }, failureKind: null })).toBe('올해 기준')
@@ -51,10 +53,10 @@ describe('dataCardAdapter (#767)', () => {
 
   it('묶어서 평균한 값은 기간으로 기준을 밝힌다 — "러닝 N건"만으론 몇 주를 평균했는지 모른다', () => {
     // 요청한 창(4주)과 실제 평균한 묶음(4주)이 같으면 요청대로 말한다.
-    expect(describeDataCardBasis({ value: 24, unit: '%', matchedRuns: 13, groupCount: 4, groupBy: 'week', windowDays: 28, period: { kind: 'rolling', lastDays: 28 }, failureKind: null })).toBe('최근 4주 기준')
+    expect(describeDataCardBasis({ value: 24, display: '24', unit: '%', matchedRuns: 13, groupCount: 4, groupBy: 'week', windowDays: 28, period: { kind: 'rolling', lastDays: 28 }, failureKind: null })).toBe('최근 4주 기준')
     // 안 뛴 주가 있어 3주만 평균했으면 **둘 다** 밝힌다 — "최근 3주"만 쓰면 창이 바뀐 줄 안다.
-    expect(describeDataCardBasis({ value: 24, unit: '%', matchedRuns: 9, groupCount: 3, groupBy: 'week', windowDays: 28, period: { kind: 'rolling', lastDays: 28 }, failureKind: null })).toBe('최근 4주 중 3주 기준')
-    expect(describeDataCardBasis({ value: 30, unit: 'km', matchedRuns: 5, groupCount: 0, groupBy: 'none', windowDays: null, period: null, failureKind: null })).toBe('러닝 5건 기준')
-    expect(describeDataCardBasis({ value: null, unit: '%', matchedRuns: 0, groupCount: 0, groupBy: 'week', windowDays: 28, period: { kind: 'rolling', lastDays: 28 }, failureKind: 'no_matching_runs' })).toBe('해당 기록 없음')
+    expect(describeDataCardBasis({ value: 24, display: '24', unit: '%', matchedRuns: 9, groupCount: 3, groupBy: 'week', windowDays: 28, period: { kind: 'rolling', lastDays: 28 }, failureKind: null })).toBe('최근 4주 중 3주 기준')
+    expect(describeDataCardBasis({ value: 30, display: '30', unit: 'km', matchedRuns: 5, groupCount: 0, groupBy: 'none', windowDays: null, period: null, failureKind: null })).toBe('러닝 5건 기준')
+    expect(describeDataCardBasis({ value: null, display: '—', unit: '%', matchedRuns: 0, groupCount: 0, groupBy: 'week', windowDays: 28, period: { kind: 'rolling', lastDays: 28 }, failureKind: 'no_matching_runs' })).toBe('해당 기록 없음')
   })
 })

@@ -10,7 +10,7 @@ import {
   type QueryRunsRow
 } from './queryRuns.ts'
 import { computeDataCard, type DataCardSpec } from '../_shared/dataCard.ts'
-import { mentionsDataCardIntent, normalizeDataCardProposalArgs } from '../_shared/dataCardProposal.ts'
+import { dataCardRequestIsSpecific, dataCardUnsupportedConcept, mentionsDataCardIntent, normalizeDataCardProposalArgs } from '../_shared/dataCardProposal.ts'
 import {
   buildDataGapDirective,
   normalizeReportDataGapArgs,
@@ -2219,7 +2219,9 @@ async function executeProposeDataCard(
   rawArgs: string,
   selectedRunId: string | null,
   /** 이번 턴에 이미 시도한 횟수. 같은 실수를 반복하면 무한 재시도 대신 정직하게 접는다. */
-  attempt: number
+  attempt: number,
+  /** 사용자 발화 원문 — 되묻기가 정말 필요한 요청인지 코드가 판정한다. */
+  userNote: string
 ) {
   let parsedArgs: unknown = {}
   try {
@@ -2227,8 +2229,33 @@ async function executeProposeDataCard(
   } catch {
     return { error: '카드 조건 형식을 이해하지 못했습니다.' }
   }
+  /*
+    못 만드는 개념은 **되묻기보다 먼저** 걸러낸다(2026-09-04 실사용).
+    "나의 vo2Max" 에 코치가 "VO2Max 자체? 추정 기록?"이라고 되물었다 — 둘 다 못 만드는데
+    고르라고 물은 셈이다. 그리고 "10km 예상시간"은 매칭 0건으로 떨어져 "기록이 하나도 없어서"라는
+    **틀린 이유**로 거절됐다(기록은 14건 있었다). 이유가 틀리면 정직한 거절이 아니다.
+  */
+  const unsupported = dataCardUnsupportedConcept(userNote)
+  if (unsupported) {
+    return { unsupportedConcept: true, error: unsupported, finalReport: `${unsupported} 대신 다른 지표를 요청해 주시겠어요?` }
+  }
   const normalized = normalizeDataCardProposalArgs(parsedArgs)
   if ('clarify' in normalized) {
+    /*
+      이미 다 말한 요청에는 **되묻기를 아예 막는다**(2026-09-04 사용자 지시).
+      상한 2회는 핑퐁의 길이를 줄일 뿐 "물어볼 게 없는데 묻는 첫 질문"은 못 막는다.
+      지표와 기간이 둘 다 발화에 있으면 되물을 게 없다 — 조건을 그대로 써서 제안하게 한다.
+    */
+    if (dataCardRequestIsSpecific(userNote)) {
+      return {
+        clarifyBlocked: true,
+        error: '되물을 필요가 없는 요청입니다.',
+        guidance:
+          '사용자는 이미 지표와 기간을 말했다. **되묻지 마라** — 말한 그대로 조건을 만들어 ' +
+          'proposeDataCard 를 지금 다시 호출한다. 애매한 부분이 남으면 가장 자연스러운 해석을 택하고, ' +
+          '무엇으로 해석했는지 답변에서 한 줄로 밝힌다.'
+      }
+    }
     // 상한을 넘으면 더 묻지 않는다 — 아는 것만으로 만들거나, 못 하겠다고 말하고 끝낸다.
     const asked = await countRecentDataCardClarifications(admin, userId, selectedRunId)
     if (asked >= DATA_CARD_CLARIFY_LIMIT) {
@@ -2309,7 +2336,7 @@ async function executeProposeDataCard(
     spec: normalized.spec,
     title: normalized.spec.title,
     // 값이 없으면 0 이 아니라 — 로 말한다("없음"과 "0"은 다르다).
-    previewText: preview.value === null ? '—' : `${preview.value}${preview.unit}`,
+    previewText: preview.value === null ? '—' : `${preview.display}${preview.unit}`,
     matchedRuns: preview.matchedRuns,
     guidance:
       '이 미리보기 숫자를 그대로 인용해 카드 이름과 함께 보여주고 "이대로 추가할까요?"라고 묻는다. ' +
@@ -3302,9 +3329,11 @@ function streamCoachRun(
             }
             if (name === 'proposeDataCard') {
               const attempt = queryLog.toolCalls.filter((call) => call.name === 'proposeDataCard').length
-              const result = await executeProposeDataCard(admin, userId, args, selectedRunId, attempt)
+              const result = await executeProposeDataCard(admin, userId, args, selectedRunId, attempt, userNote)
               const ok = 'ok' in result && result.ok === true
               const clarified = 'needsClarification' in result
+              const clarifyBlocked = 'clarifyBlocked' in result
+              const unsupported = 'unsupportedConcept' in result
               // 승인 카드는 화면이 띄운다 — 여기선 마지막 제안만 들고 있다가 done 에 실어 보낸다.
               if (ok) pendingDataCardProposal = { spec: result.spec, previewText: result.previewText, matchedRuns: result.matchedRuns }
               /*
@@ -3316,8 +3345,17 @@ function streamCoachRun(
                 name: 'proposeDataCard',
                 ok: ok || clarified,
                 matchedRuns: ok ? result.matchedRuns : undefined,
-                // 되묻기와 거부를 갈라 남긴다 — "카드가 안 나왔다"의 원인이 셋(미호출·되묻기·거부)이다.
-                failureKind: ok ? null : clarified ? 'card_clarify' : 'card_rejected'
+                // 되묻기와 거부를 갈라 남긴다 — "카드가 안 나왔다"의 원인이 넷(미호출·되묻기·게이트·거부)이다.
+                // card_clarify_blocked 는 게이트가 과했는지 나중에 세어보기 위한 관측이다.
+                failureKind: ok
+                  ? null
+                  : clarified
+                    ? 'card_clarify'
+                    : clarifyBlocked
+                      ? 'card_clarify_blocked'
+                      : unsupported
+                        ? 'card_unsupported'
+                        : 'card_rejected'
               })
               return result
             }
