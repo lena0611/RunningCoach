@@ -51,6 +51,17 @@ defineEmits<{ remove: [] }>()
 
 .editable-block.is-editing {
   animation: editable-block-wiggle 0.32s ease-in-out infinite;
+  /* 끌어 옮기려면 브라우저 기본 팬을 꺼야 한다 — 안 그러면 스크롤이 드래그를 먹는다. */
+  touch-action: none;
+}
+
+/* 끌리는 카드는 흔들림을 멈추고 살짝 떠오른다 — 지금 손에 잡힌 게 무엇인지 분명해야 한다. */
+.editable-block.is-dragging {
+  animation: none;
+  transform: scale(1.04);
+  box-shadow: var(--shadow-float);
+  opacity: 0.92;
+  z-index: 2;
 }
 
 /* 이웃과 위상을 어긋내 한 몸처럼 움직이지 않게. */

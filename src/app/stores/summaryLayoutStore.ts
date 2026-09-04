@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { fetchSummaryLayout, saveSummaryLayout } from '@/shared/api/summaryLayoutRepository'
-import { orderSummaryCards, SUMMARY_DEFAULT_HIDDEN } from '@/pages/dashboard/summaryBlocks'
+import { orderSummaryCards, reorderVisibleCards, SUMMARY_DEFAULT_HIDDEN } from '@/pages/dashboard/summaryBlocks'
 
 /**
  * 요약 탭 구성(#767 후속) — 무엇을 보이고 어떤 순서로 둘지.
@@ -61,6 +61,12 @@ export const useSummaryLayoutStore = defineStore('summaryLayoutStore', {
       const before = [...this.hidden]
       this.hidden = this.hidden.includes(id) ? this.hidden.filter((item) => item !== id) : [...this.hidden, id]
       if (!(await this.persist())) this.hidden = before
+    },
+    /** 끌어 옮긴 결과를 저장한다. 보이는 것만 옮겨도 숨긴 카드의 자리는 유지된다. */
+    async applyVisibleOrder(visibleNewOrder: string[], customCardIds: string[]) {
+      const before = [...this.cardOrder]
+      this.cardOrder = reorderVisibleCards(this.orderedCardIds(customCardIds), visibleNewOrder)
+      if (!(await this.persist())) this.cardOrder = before
     },
     async persist(): Promise<boolean> {
       if (!isSupabaseConfigured) return true

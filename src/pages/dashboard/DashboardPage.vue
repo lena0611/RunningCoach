@@ -718,6 +718,60 @@ function enterSummaryEditMode() {
   })
 }
 
+/*
+  카드 끌어 옮기기(2026-09-04). 편집 모드에서만 산다.
+
+  라이브러리를 붙이지 않는다 — 필요한 건 "누른 카드가 지나간 자리로 이웃이 밀린다" 하나다.
+  포인터가 지나는 카드를 hit-test 해서 **끌리는 동안 목록을 바로 바꾸고**, 손을 떼면 저장한다.
+  ⚠ 탭 페이저가 가로 팬을 소유하므로 그리드에 data-no-swipe 를 달아야 한다(안 그러면 탭이 넘어간다).
+*/
+const draggingCardId = ref('')
+const dragOrder = ref<string[] | null>(null)
+/** 화면이 그리는 순서 — 끄는 중에는 임시 순서, 아니면 저장된 순서. */
+const renderedCardIds = computed(() => dragOrder.value ?? visibleSummaryCardIds.value)
+
+function startCardDrag(event: PointerEvent, id: string) {
+  if (!summaryEditMode.value) return
+  draggingCardId.value = id
+  dragOrder.value = [...visibleSummaryCardIds.value]
+  /*
+    캡처해 두면 손가락이 카드 밖으로 나가도 move/up 이 계속 온다.
+    합성 이벤트(테스트)나 이미 놓친 포인터에선 던지므로 감싼다 — 드래그 자체는 캡처 없이도 돈다.
+  */
+  try {
+    ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
+  } catch {
+    // 캡처 불가 — 무시하고 진행한다.
+  }
+  triggerSelectionHaptic()
+}
+
+function moveCardDrag(event: PointerEvent) {
+  if (!draggingCardId.value || !dragOrder.value) return
+  event.preventDefault()
+  /*
+    포인터를 캡처한 동안에도 "지금 손가락 밑에 무엇이 있나"는 elementFromPoint 로 물어야 한다.
+    포인터 이벤트의 target 은 캡처한 카드로 고정돼 있어서, 그것만 보면 영원히 제자리다.
+  */
+  const under = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-summary-card]')
+  const overId = under?.getAttribute('data-summary-card')
+  if (!overId || overId === draggingCardId.value) return
+  const next = [...dragOrder.value]
+  const from = next.indexOf(draggingCardId.value)
+  const to = next.indexOf(overId)
+  if (from < 0 || to < 0) return
+  next.splice(to, 0, ...next.splice(from, 1))
+  dragOrder.value = next
+}
+
+function endCardDrag() {
+  if (!draggingCardId.value) return
+  const next = dragOrder.value
+  draggingCardId.value = ''
+  dragOrder.value = null
+  if (next) void summaryLayout.applyVisibleOrder(next, dataCardStore.cards.map((card) => card.id))
+}
+
 function addSummaryBlock(id: string) {
   void summaryLayout.show(id, dataCardStore.cards.map((card) => card.id))
   summaryAddOpen.value = false
@@ -881,20 +935,23 @@ function createCardFromEditor() {
       액센트 dot 은 뺐다(2026-09-03) — 라벨 앞자리를 먹어 제목이 두 줄로 꺾였고(모바일 실측),
       점 자체는 아무 정보도 주지 않는다. 톤은 값 색으로 이미 구분된다.
     -->
-    <MetricGrid>
+    <MetricGrid :data-no-swipe="summaryEditMode ? '' : undefined">
       <EditableBlock
-        v-for="cardId in visibleSummaryCardIds"
+        v-for="cardId in renderedCardIds"
         :key="cardId"
         :editing="summaryEditMode"
         :label="summaryBlockLabel(cardId)"
+        :data-summary-card="cardId"
+        :class="{ 'is-dragging': draggingCardId === cardId }"
         @remove="summaryLayout.toggle(cardId)"
       >
         <div
           class="data-card-slot"
-          @pointerdown="startCardLongPress"
-          @pointerup="cancelCardLongPress"
+          @pointerdown="summaryEditMode ? startCardDrag($event, cardId) : startCardLongPress()"
+          @pointermove="moveCardDrag"
+          @pointerup="summaryEditMode ? endCardDrag() : cancelCardLongPress()"
           @pointerleave="cancelCardLongPress"
-          @pointercancel="cancelCardLongPress"
+          @pointercancel="summaryEditMode ? endCardDrag() : cancelCardLongPress()"
         >
           <StatCard v-if="cardId === 'last7'" label="주간 거리" :value="`${last7}km`" hint="최근 7일" :loading="runDataLoading" :interactive="!summaryEditMode" @click="!summaryEditMode && (trendMetric = 'last7')" />
           <StatCard v-else-if="cardId === 'easy'" label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 · 랩/페이스 기준" :loading="runDataLoading" :interactive="!summaryEditMode" @click="!summaryEditMode && (trendMetric = 'easy')" />
