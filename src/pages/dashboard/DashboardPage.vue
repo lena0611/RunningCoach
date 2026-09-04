@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
@@ -52,6 +52,10 @@ import type { CoachMoment } from '@/shared/lib/coaching/coachMoments'
 import HeroIllustration, { type HeroIllustrationTopic } from './HeroIllustration.vue'
 import WeekStrip from '@/shared/ui/WeekStrip.vue'
 import { useDataCardStore, valueOfCard } from '@/app/stores/dataCardStore'
+import { useSummaryLayoutStore } from '@/app/stores/summaryLayoutStore'
+import EditableBlock from './EditableBlock.vue'
+import SummaryAddCardSheet, { type SummaryAddItem } from './SummaryAddCardSheet.vue'
+import { SUMMARY_BLOCK_BY_ID, SUMMARY_SECTION_BLOCKS } from './summaryBlocks'
 import { describeDataCardBasis, formatDataCardValue } from '@/shared/lib/coaching/dataCardAdapter'
 import { triggerSelectionHaptic } from '@/shared/lib/haptics'
 import SegmentTabs, { type SegmentTabValue } from '@/shared/ui/SegmentTabs.vue'
@@ -447,45 +451,27 @@ const userDataCards = computed(() =>
  * 카드 삭제(#767). 되돌릴 수 없어 앱의 기존 파괴적 삭제 규약대로 **확인 시트**를 거친다
  * (대화 삭제·세션 삭제와 같은 어휘).
  *
- * 진입은 **길게 누르기 → 편집 모드**다(아이폰 홈 화면과 같은 관습). ✕ 를 늘 띄우면 지표 칸이
- * 지우기 버튼으로 뒤덮여, 보라고 만든 카드가 치우라는 카드처럼 보인다. 길게 누른 순간
- * **짧은 진동**으로 모드 전환을 알린다 — 화면 변화만으로는 눌린 게 맞는지 확신이 안 선다.
+ * 진입은 두 갈래다: 맨 아래 '요약 편집' CTA, 그리고 **카드 길게 누르기**(아이폰 홈 화면과 같은 관습).
+ * 둘 다 같은 모드로 들어온다. ⊖ 를 늘 띄우면 지표 칸이 지우기 버튼으로 뒤덮여, 보라고 만든 카드가
+ * 치우라는 카드처럼 보인다. 길게 누른 순간 **짧은 진동**으로 모드 전환을 알린다.
  */
-const dataCardEditMode = ref(false)
 const pendingDeleteCard = ref<{ id: string; title: string } | null>(null)
 const deletingCardId = ref('')
 let longPressTimer = 0
 function startCardLongPress() {
   window.clearTimeout(longPressTimer)
-  longPressTimer = window.setTimeout(() => {
-    dataCardEditMode.value = true
-    triggerSelectionHaptic()
-  }, 500)
+  longPressTimer = window.setTimeout(() => enterSummaryEditMode(), 500)
 }
 function cancelCardLongPress() {
   window.clearTimeout(longPressTimer)
 }
-/**
- * 편집 모드는 바깥을 누르면 닫는다 — 나가는 길이 없으면 갇힌다.
- *
- * ⚠️ 카드/삭제 버튼 안에서 시작한 터치는 "바깥"이 아니다. 이 리스너는 **캡처 단계**라 버튼의
- * `.stop` 보다 먼저 돌고, 그대로 두면 ✕ 를 누른 순간 편집 모드가 꺼져 버튼이 사라진다 —
- * 이어질 click 이 갈 곳을 잃어 **삭제가 아예 안 된다**(2026-09-03 실기기 신고).
- * 합성 click() 으로만 테스트해 이 순서를 놓쳤다: 실기기는 pointerdown → pointerup → click 이다.
- */
-function exitCardEditMode(event: PointerEvent) {
-  if (!dataCardEditMode.value || pendingDeleteCard.value) return
-  const target = event.target instanceof Element ? event.target : null
-  if (target?.closest('.data-card-slot, .data-card-remove, .confirm-sheet')) return
-  dataCardEditMode.value = false
-}
-watch(dataCardEditMode, (on) => {
-  if (on) window.addEventListener('pointerdown', exitCardEditMode, { capture: true })
-  else window.removeEventListener('pointerdown', exitCardEditMode, { capture: true })
-})
+/*
+  나가는 길은 **'완료' 버튼 하나**다(2026-09-04). 예전엔 바깥을 누르면 닫았는데,
+  그 리스너가 캡처 단계라 ⊖ 의 click 보다 먼저 돌아 버튼을 지워 버렸다(실기기 신고).
+  편집 바가 늘 보이므로 명시적 종료가 더 분명하고, 순서 함정도 없다.
+*/
 onBeforeUnmount(() => {
   window.clearTimeout(longPressTimer)
-  window.removeEventListener('pointerdown', exitCardEditMode, { capture: true })
 })
 async function confirmDeleteDataCard() {
   const card = pendingDeleteCard.value
@@ -494,7 +480,6 @@ async function confirmDeleteDataCard() {
   try {
     await dataCardStore.remove(card.id)
     pendingDeleteCard.value = null
-    dataCardEditMode.value = false
     toastStore.success('카드를 지웠어요.')
   } catch {
     toastStore.error('카드를 지우지 못했어요.')
@@ -511,16 +496,6 @@ function openDataCardComposer() {
   useCoachActionBridgeStore().requestDataCardComposer()
 }
 
-const SHOW_GOAL_SECTION = false
-const SHOW_INJURY_CARD = false
-/*
-  평균 심박·강훈련 카드 미노출(2026-09-04). 지우는 게 아니라 **자리를 옮기는 중**이다 —
-  요약탭 맨 아래 '요약 편집' CTA 를 붙이면, 이런 기본 지표도 사용자 정의 카드(#767)처럼
-  직접 골라 추가하는 물건이 된다. 그때 이 플래그들은 편집 목록의 기본값으로 흡수된다.
-  ⚠ 강훈련 카드는 추세 '강훈련' 렌즈의 진입점이기도 하다 — 편집 기능을 붙일 때 같이 살아난다.
-*/
-const SHOW_AVG_HR_CARD = false
-const SHOW_HARD_SESSION_CARD = false
 
 // 세션 타입 → 히어로 배경 삽화 토픽(디자인 확정 매핑). Steady Long 은 긴 지속주 → lsd(굽은 길+해), 휴식 → recovery(달).
 function heroTopicFor(type: RunType | null | undefined): HeroIllustrationTopic {
@@ -680,11 +655,101 @@ function openGoalCard() {
 function openMemoryPanel(panel: 'goals' | 'injuries') {
   router.push({ path: '/memory', query: { panel } })
 }
+/*
+  요약 구성(#767 후속). 감춰뒀던 카드들은 플래그가 아니라 **사용자가 켜고 끄는 목록**이 됐다 —
+  기본 지표 카드와 대화로 만든 카드가 한 목록에서 같은 지위를 갖는다. 기본값은 summaryBlocks.ts.
+*/
+const summaryLayout = useSummaryLayoutStore()
+/** 제자리 편집 모드(#767 후속). 롱탭도, '요약 편집' CTA 도 이 하나의 모드로 들어온다. */
+const summaryEditMode = ref(false)
+const summaryAddOpen = ref(false)
+
+/** 지표 카드 렌더 순서 — 기본 카드와 사용자 카드를 섞어 저장된 순서대로 낸다. */
+const summaryCardIds = computed(() => summaryLayout.orderedCardIds(dataCardStore.cards.map((card) => card.id)))
+const visibleSummaryCardIds = computed(() => summaryCardIds.value.filter((id) => summaryLayout.isVisible(id)))
+
+/** 값 미리보기. 이름만 보고 뭘 붙이는지 모르면 추가가 아니라 도박이 된다. */
+const summaryCardPreviews = computed<Record<string, { value: string; hint: string }>>(() => ({
+  last7: { value: `${last7.value}km`, hint: '최근 7일' },
+  easy: { value: `${easyRatio.value}%`, hint: '최근 30일 · 랩/페이스 기준' },
+  hard: { value: `${hardSessions.value}회`, hint: '최근 7일' },
+  avgHr: { value: avgHeartRate7d.value ? `${avgHeartRate7d.value}bpm` : '—', hint: '최근 7일' },
+  goal: { value: activeGoal.value.title, hint: goalMetaText.value || '' },
+  injury: { value: activeInjury.value?.title || '관리 항목 없음', hint: activeInjury.value ? activeInjury.value.status : '코칭 제한 없음' },
+  fatigue: { value: volumeCaution.value ? '주의' : '안정', hint: volumeWarning.value },
+  recent: { value: `${runs.value.length}건`, hint: '최근 러닝' },
+  ...Object.fromEntries(userDataCards.value.map((card) => [card.id, { value: card.text, hint: card.hint }]))
+}))
+
+/** id → 카드 뷰모델. 한 목록 렌더에서 순서만 보고 꺼내 쓴다. */
+const userDataCardById = computed(() => Object.fromEntries(userDataCards.value.map((card) => [card.id, card])))
+
+function summaryBlockLabel(id: string): string {
+  return userDataCardById.value[id]?.title ?? SUMMARY_BLOCK_BY_ID[id]?.label ?? id
+}
+
+/** '카드 추가' 목록 = 지금 요약에서 빠져 있는 것들. 카드와 섹션을 한 목록에 둔다(지위가 같다). */
+const summaryAddItems = computed<SummaryAddItem[]>(() =>
+  [...summaryCardIds.value, ...SUMMARY_SECTION_BLOCKS.map((block) => block.id)]
+    .filter((id) => !summaryLayout.isVisible(id))
+    .map((id) => {
+      const custom = userDataCardById.value[id]
+      const preview = summaryCardPreviews.value[id]
+      return {
+        id,
+        label: summaryBlockLabel(id),
+        valueText: preview?.value ?? '—',
+        hint: preview?.hint ?? '',
+        description: custom
+          ? dataCardStore.cards.find((item) => item.id === id)?.requestText || '대화로 만든 지표'
+          : SUMMARY_BLOCK_BY_ID[id]?.description ?? '',
+        custom: Boolean(custom)
+      }
+    })
+)
+
+function enterSummaryEditMode() {
+  summaryEditMode.value = true
+  triggerSelectionHaptic()
+  // 편집은 맨 위 카드부터 본다 — 스크롤 중간에서 흔들리기 시작하면 무엇이 바뀐 건지 모른다.
+  void nextTick(() => {
+    // 요약은 탭 패널이 스크롤러다(페이저 계약) — window 를 굴리면 아무 일도 안 일어난다.
+    document.querySelector('.tab-swipe-panel:not([aria-hidden="true"])')?.scrollTo({ top: 0, behavior: 'smooth' })
+  })
+}
+
+function addSummaryBlock(id: string) {
+  void summaryLayout.show(id, dataCardStore.cards.map((card) => card.id))
+  summaryAddOpen.value = false
+}
+
+function requestDeleteFromAddSheet(id: string) {
+  const card = dataCardStore.cards.find((item) => item.id === id)
+  if (card) pendingDeleteCard.value = { id: card.id, title: card.title }
+}
+
+function createCardFromEditor() {
+  summaryAddOpen.value = false
+  summaryEditMode.value = false
+  openDataCardComposer()
+}
+
 </script>
 
 <template>
   <PageLayout variant="dashboard">
     <!-- 주간 스트립(리디자인 ①b): 월~일 요일 칩 — 오늘 강조·타입 dot·완료 ✓. 탭하면 코치 탭(주간 캐러셀). -->
+    <!--
+      편집 바(#767 후속) — 아이폰 건강 앱과 같은 언어: 좌측 '＋ 카드 추가', 우측 '완료'.
+      편집 중에만 나타나고 요약 맨 위에 붙는다. 나가는 길이 화면에 늘 보여야 갇히지 않는다.
+    -->
+    <div v-if="summaryEditMode" class="summary-edit-bar">
+      <button type="button" class="summary-edit-bar-add" @click="summaryAddOpen = true">
+        <span aria-hidden="true">＋</span> 카드 추가
+      </button>
+      <button type="button" class="summary-edit-bar-done" @click="summaryEditMode = false">완료</button>
+    </div>
+
     <WeekStrip :days="scheduleDays" :today="todayDate" @select="goCoachTabForDate" />
     <!--
       날짜 한 줄은 스트립 바로 아래(애플 날씨 배치, 2026-09-03). 예전엔 히어로 카드 안 eyebrow 였는데,
@@ -811,56 +876,44 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
     </button>
 
     <!--
-      NumbersGrid(리디자인 ①b): 주간 거리·Easy 비율 (+ 사용자 정의 카드).
-      평균 심박·강훈련은 요약 편집으로 옮기는 중이라 감춰 뒀다 — 위 SHOW_* 플래그 참고.
+      NumbersGrid(리디자인 ①b): 기본 지표 카드와 사용자 정의 카드를 **한 목록**으로 낸다(#767 후속).
+      무엇을 보이고 어떤 순서로 둘지는 요약 편집이 정한다 — 화면은 그 목록을 그대로 그린다.
       액센트 dot 은 뺐다(2026-09-03) — 라벨 앞자리를 먹어 제목이 두 줄로 꺾였고(모바일 실측),
       점 자체는 아무 정보도 주지 않는다. 톤은 값 색으로 이미 구분된다.
     -->
     <MetricGrid>
-      <StatCard label="주간 거리" :value="`${last7}km`" hint="최근 7일" :loading="runDataLoading" interactive @click="trendMetric = 'last7'" />
-      <StatCard label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 · 랩/페이스 기준" :loading="runDataLoading" interactive @click="trendMetric = 'easy'" />
-      <StatCard v-if="SHOW_HARD_SESSION_CARD" label="강훈련" :value="`${hardSessions}회`" hint="최근 7일" tone="warning" :loading="runDataLoading" interactive @click="trendMetric = 'hard'" />
-      <StatCard v-if="SHOW_AVG_HR_CARD" label="평균 심박" :value="avgHeartRate7d ? `${avgHeartRate7d}bpm` : '—'" hint="최근 7일" tone="accent" :loading="runDataLoading" :value-kind="avgHeartRate7d ? 'metric' : 'text'" />
-      <!--
-        사용자 정의 카드(#767) — 대화로 만들어 승인한 지표. 값 형식이 자유라 valueKind='text' 로 낸다.
-        tone 을 주지 않는다: 카드는 수치만 말하고 해석은 사용자 몫이다.
-      -->
-      <div
-        v-for="card in userDataCards"
-        :key="card.id"
-        class="data-card-slot"
-        :class="{ 'is-editing': dataCardEditMode }"
-        @pointerdown="startCardLongPress"
-        @pointerup="cancelCardLongPress"
-        @pointerleave="cancelCardLongPress"
-        @pointercancel="cancelCardLongPress"
+      <EditableBlock
+        v-for="cardId in visibleSummaryCardIds"
+        :key="cardId"
+        :editing="summaryEditMode"
+        :label="summaryBlockLabel(cardId)"
+        @remove="summaryLayout.toggle(cardId)"
       >
-        <!--
-          값이 숫자로 시작하면 지표로 파싱해 **큰 숫자 + 작은 단위**로 낸다(기본 카드와 같은 리듬).
-          '—'(계산 불가)처럼 숫자가 아니면 text 로 — 파서에 넘기면 통째로 큰 글씨가 된다.
-        -->
-        <StatCard
-          :label="card.title"
-          :value="card.text"
-          :hint="card.hint"
-          :value-kind="/^[0-9]/.test(card.text) ? 'metric' : 'text'"
-          :loading="runDataLoading"
-        />
-        <button
-          v-if="dataCardEditMode"
-          type="button"
-          class="data-card-remove"
-          :aria-label="`${card.title} 카드 지우기`"
-          @pointerdown.stop
-          @click.stop="pendingDeleteCard = { id: card.id, title: card.title }"
+        <div
+          class="data-card-slot"
+          @pointerdown="startCardLongPress"
+          @pointerup="cancelCardLongPress"
+          @pointerleave="cancelCardLongPress"
+          @pointercancel="cancelCardLongPress"
         >
-          −
-        </button>
-      </div>
-      <button type="button" class="stat-card data-card-add" @click="openDataCardComposer">
-        <span class="data-card-add-circle" aria-hidden="true">+</span>
-        <span class="data-card-add-label">개인화 지표 만들기</span>
-      </button>
+          <StatCard v-if="cardId === 'last7'" label="주간 거리" :value="`${last7}km`" hint="최근 7일" :loading="runDataLoading" :interactive="!summaryEditMode" @click="!summaryEditMode && (trendMetric = 'last7')" />
+          <StatCard v-else-if="cardId === 'easy'" label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 · 랩/페이스 기준" :loading="runDataLoading" :interactive="!summaryEditMode" @click="!summaryEditMode && (trendMetric = 'easy')" />
+          <StatCard v-else-if="cardId === 'hard'" label="강훈련" :value="`${hardSessions}회`" hint="최근 7일" tone="warning" :loading="runDataLoading" :interactive="!summaryEditMode" @click="!summaryEditMode && (trendMetric = 'hard')" />
+          <StatCard v-else-if="cardId === 'avgHr'" label="평균 심박" :value="avgHeartRate7d ? `${avgHeartRate7d}bpm` : '—'" hint="최근 7일" tone="accent" :loading="runDataLoading" :value-kind="avgHeartRate7d ? 'metric' : 'text'" />
+          <!--
+            사용자 정의 카드(#767) — 대화로 만들어 승인한 지표. 값 형식이 자유라 valueKind='text' 로 낸다.
+            tone 을 주지 않는다: 카드는 수치만 말하고 해석은 사용자 몫이다.
+          -->
+          <StatCard
+            v-else-if="userDataCardById[cardId]"
+            :label="userDataCardById[cardId].title"
+            :value="userDataCardById[cardId].text"
+            :hint="userDataCardById[cardId].hint"
+            :value-kind="/^[0-9]/.test(userDataCardById[cardId].text) ? 'metric' : 'text'"
+            :loading="runDataLoading"
+          />
+        </div>
+      </EditableBlock>
     </MetricGrid>
 
     <!--
@@ -919,7 +972,8 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
       <p v-if="runStore.error" class="error">{{ runStore.error }}</p>
     </SectionGroup>
 
-    <SectionGroup v-if="SHOW_GOAL_SECTION" title="활성 목표" :surface="false">
+    <EditableBlock v-if="summaryLayout.isVisible('goal')" :editing="summaryEditMode" label="활성 목표" @remove="summaryLayout.toggle('goal')">
+    <SectionGroup title="활성 목표" :surface="false">
       <button class="stat-card stat-card-interactive dashboard-goal-card" type="button" @click="openGoalCard">
         <div v-if="memoryDataLoading || runDataLoading" class="stat-card-data stat-card-skeleton" aria-hidden="true">
           <span class="skeleton-line skeleton-line-value" />
@@ -936,20 +990,28 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
         <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
       </button>
     </SectionGroup>
+    </EditableBlock>
 
-    <SectionGroup title="몸 상태 신호" :surface="false">
+    <!-- 안에 보이는 카드가 없으면 헤더째 감춘다 — 빈 섹션 제목만 남는 건 화면이 고장난 것처럼 보인다. -->
+    <SectionGroup
+      v-if="summaryLayout.isVisible('injury') || summaryLayout.isVisible('fatigue')"
+      title="몸 상태 신호"
+      :surface="false"
+    >
       <MetricGrid>
+        <EditableBlock v-if="summaryLayout.isVisible('injury')" :editing="summaryEditMode" label="부상 기준" @remove="summaryLayout.toggle('injury')">
         <StatCard
-          v-if="SHOW_INJURY_CARD"
           class="dashboard-context-card"
           label="부상 기준"
           :value="activeInjury?.title || '관리 항목 없음'"
           :hint="activeInjury ? `${activeInjury.status}${activeInjury.severity ? ` · ${activeInjury.severity}/5` : ''}` : '코칭 제한 없음'"
           value-kind="text"
           :loading="memoryDataLoading"
-          interactive
-          @click="openMemoryPanel('injuries')"
+          :interactive="!summaryEditMode"
+          @click="!summaryEditMode && openMemoryPanel('injuries')"
         />
+        </EditableBlock>
+        <EditableBlock v-if="summaryLayout.isVisible('fatigue')" :editing="summaryEditMode" label="피로 경고" @remove="summaryLayout.toggle('fatigue')">
         <StatCard
           class="dashboard-context-card"
           label="피로 경고"
@@ -958,12 +1020,13 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
           value-kind="text"
           :tone="volumeCaution ? 'warning' : undefined"
           :loading="runDataLoading"
-          interactive
-          @click="trendMetric = 'last7'"
+          :interactive="!summaryEditMode"
+          @click="!summaryEditMode && (trendMetric = 'last7')"
         />
+        </EditableBlock>
       </MetricGrid>
       <p
-        v-if="SHOW_INJURY_CARD && injuryHypothesisHint"
+        v-if="summaryLayout.isVisible('injury') && injuryHypothesisHint"
         class="injury-hypothesis-hint"
         :class="{ 'injury-hypothesis-hint-referral': injuryHypothesisHint.referral }"
       >
@@ -973,7 +1036,27 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
       </p>
     </SectionGroup>
 
-    <RecentRuns :runs="runs.slice(0, 5)" :weekly-pattern="memoryStore.memory.weeklyPattern" @show-all="router.push('/runs')" @select="sessionDetailStore.open" />
+    <EditableBlock v-if="summaryLayout.isVisible('recent')" :editing="summaryEditMode" label="최근 세션" @remove="summaryLayout.toggle('recent')">
+      <RecentRuns :runs="runs.slice(0, 5)" :weekly-pattern="memoryStore.memory.weeklyPattern" @show-all="router.push('/runs')" @select="sessionDetailStore.open" />
+    </EditableBlock>
+
+    <!--
+      요약 편집 진입(#767 후속). **맨 아래**에 둔다 — 매일 보는 값이 먼저고, 구성 바꾸기는 가끔 하는 일이다.
+      누르면 별도 화면이 아니라 **제자리에서** 편집 모드로 들어간다(맨 위로 올라가며 카드가 흔들린다).
+    -->
+    <button v-if="!summaryEditMode" type="button" class="summary-edit-entry" @click="enterSummaryEditMode">
+      <span aria-hidden="true">✎</span> 요약 편집
+    </button>
+
+    <SummaryAddCardSheet
+      :open="summaryAddOpen"
+      :items="summaryAddItems"
+      @close="summaryAddOpen = false"
+      @add="addSummaryBlock"
+      @remove="requestDeleteFromAddSheet"
+      @create="createCardFromEditor"
+    />
+
 
 
     <StackPage :open="!!trendMetric" :title="trendTitle" @close="closeTrend">
@@ -1106,6 +1189,41 @@ function openMemoryPanel(panel: 'goals' | 'injuries') {
   + 빈 카드(#767) — 지표 칸의 마지막 자리. 채워진 카드처럼 보이면 안 되므로 점선 윤곽에 투명 배경.
   전역 button 기본값(그라디언트·그림자·min-height)을 되돌린다(ui-system-contract 함정).
 */
+/* 편집 바 — 요약 맨 위. 좌측 추가, 우측 완료(아이폰 건강 앱과 같은 배치). */
+.summary-edit-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+.summary-edit-bar-add,
+.summary-edit-bar-done {
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-caption-size);
+  font-weight: var(--font-weight-semibold);
+}
+.summary-edit-bar-add {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+.summary-edit-bar-done {
+  background: var(--color-primary);
+  color: var(--color-on-primary, #06281c);
+}
+
+.summary-edit-entry {
+  width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: transparent;
+  color: var(--color-muted);
+  font-size: var(--text-body-size);
+}
+
 .data-card-add {
   display: flex;
   flex-direction: column;
