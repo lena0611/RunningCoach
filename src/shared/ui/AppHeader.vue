@@ -123,6 +123,11 @@ const headerRunnerProgress = computed(() =>
   })
 )
 const headerLevelLabel = computed(() => runnerProgressLabel(headerRunnerProgress.value))
+/*
+  헤더 레벨 칩("10K 러너 · 브론즈") 일단 감춤(2026-09-04 사용자 요청).
+  요약탭 미노출 섹션들과 같은 방식 — 계산·화면은 그대로 두고 진입점만 닫는다(코치 탭에 있다).
+*/
+const SHOW_HEADER_LEVEL_CHIP = false
 function goCoachLevel() {
   router.push('/coach')
 }
@@ -484,7 +489,13 @@ function openSettingsPanel(focus: SettingsPanelFocus | null = null) {
       </button>
     </div>
     <div v-if="isAuthenticated" class="app-header-side">
-      <button class="header-level-chip" type="button" aria-label="내 레벨 — 코치 탭에서 보기" @click="goCoachLevel">
+      <button
+        v-if="SHOW_HEADER_LEVEL_CHIP"
+        class="header-level-chip"
+        type="button"
+        aria-label="내 레벨 — 코치 탭에서 보기"
+        @click="goCoachLevel"
+      >
         {{ headerLevelLabel }}
       </button>
       <button class="account-menu-button" type="button" aria-label="계정 메뉴 열기" @click="openDrawer">
