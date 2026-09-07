@@ -18,6 +18,7 @@ import {
   type DataGapKind
 } from './dataGap.ts'
 import { detectUngroundedDataClaims } from './ungroundedClaim.ts'
+import { buildExecutionGuideTail } from '../_shared/executionGuideTail.ts'
 import {
   buildUserNoteRelevancePolicy,
   detectCoachAnswerIntent,
@@ -307,7 +308,18 @@ Deno.serve(async (req) => {
             keySession: s.keySession === true,
             // 상향(intensify) 적격 — 강도 사다리·품질 게이트가 웹 SSOT 라 판정을 웹이 보낸다(#639 G7).
             // 값이 없으면 부적격(fail-safe deny).
-            canIntensify: s.canIntensify === true
+            canIntensify: s.canIntensify === true,
+            // "어떻게 뛰나" 정본(#795) — 웹 sessionBriefing 이 만든 실행 지침. 서버는 미러하지 않는다
+            // (client-summary 패턴). 프롬프트 크기 방어로 단계·길이를 여기서 한 번 더 자른다.
+            execution: Array.isArray(s.execution)
+              ? (s.execution as Record<string, unknown>[])
+                  .filter((step) => step && typeof step.label === 'string' && typeof step.detail === 'string')
+                  .slice(0, 8)
+                  .map((step) => ({
+                    label: String(step.label).slice(0, 20),
+                    detail: String(step.detail).slice(0, 300)
+                  }))
+              : null
           }))
       : null
     const restState = normalizeRestState(body.restState)
@@ -1230,7 +1242,7 @@ function unifyPerformanceProjection(
   }
 }
 
-async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null, sessionEvidence: CoachSessionEvidence | null = null, upcomingSchedule: { date: string; type: string; distanceKm: number | null; keySession: boolean; canIntensify: boolean }[] | null = null, restState: CoachRestContext | null = null, recentInjuryWindow: CoachRecentInjuryWindow | null = null, downgradeSignal: CoachDowngradeSignal | null = null, marathonFlag = false, injurySignals: CoachInjurySignals | null = null, raceBenchmark: CoachRaceBenchmark | null = null, heatWindow: CoachHeatWindow | null = null) {
+async function buildContext(admin: SupabaseAdminClient, userId: string, selectedRunId: string | null, userNote: string, responseStyle: ResponseStyle, currentWeather: CurrentWeatherContext | null, runnerLevel: RunnerLevel = 'beginner', commandId: string | null = null, achievements: CoachAchievementContext | null = null, tempoCoaching: CoachTempoCoaching | null = null, goalProjection: CoachGoalProjection | null = null, adaptiveProgress: CoachAdaptiveProgress | null = null, sessionEvidence: CoachSessionEvidence | null = null, upcomingSchedule: { date: string; type: string; distanceKm: number | null; keySession: boolean; canIntensify: boolean; execution: { label: string; detail: string }[] | null }[] | null = null, restState: CoachRestContext | null = null, recentInjuryWindow: CoachRecentInjuryWindow | null = null, downgradeSignal: CoachDowngradeSignal | null = null, marathonFlag = false, injurySignals: CoachInjurySignals | null = null, raceBenchmark: CoachRaceBenchmark | null = null, heatWindow: CoachHeatWindow | null = null) {
   const memorySelect = 'id, content, created_at, importance, last_referenced_at, reference_count'
   const [
     { data: memoryRow },
@@ -1631,13 +1643,18 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
         restState?.active === true
     },
     upcomingSchedulePolicy:
-      'context.upcomingSchedule는 실제 주기화 스케줄의 다음 세션들(날짜·유형·거리)이다. "## 다음 훈련"은 반드시 이 실제 세션을 기준으로 말하고, 다른 세션(예: 다음이 토요일 LSD인데 화요일 Easy)을 지어내지 마라. 요약 화면(캐러셀)과 어긋나면 안 된다. 부상·회복으로 하향이 필요하면 "그 스케줄 세션(예: 토요일 LSD)을 이렇게 조정/대체하자"처럼 실제 세션을 기준으로 조정한다. upcomingSchedule이 비어있거나 null일 때만 일반 가이드로 답한다. ' +
+      'context.upcomingSchedule는 실제 주기화 스케줄의 다음 세션들(날짜·유형·거리, 앞쪽 세션은 실행 지침 execution 까지)이다. "## 다음 훈련"은 반드시 이 실제 세션을 기준으로 말하고, 다른 세션(예: 다음이 토요일 LSD인데 화요일 Easy)을 지어내지 마라. 요약 화면(캐러셀)과 어긋나면 안 된다. 부상·회복으로 하향이 필요하면 "그 스케줄 세션(예: 토요일 LSD)을 이렇게 조정/대체하자"처럼 실제 세션을 기준으로 조정한다. upcomingSchedule이 비어있거나 null일 때만 일반 가이드로 답한다. ' +
       // 2026-08-26 실사용: 한 답변 안에서 "목요일 템포는 낮추자"(어제 스레드 기억)와 "목요일은 Easy가
       // 들어가 있고"(실제 플랜)를 동시에 말했다. #695 는 "네/맞아요" 직답을 막았지만, 코치가 **서술하며**
       // 옛 타입을 끌어오는 경로는 안 덮였다.
       '**coachThread(이전 대화)에 나온 세션 타입·거리는 그때의 플랜이지 현재 사실이 아니다.** 플랜은 재정렬로 바뀐다 — 어제 목요일이 Tempo 였어도 오늘 upcomingSchedule 이 Easy 면 **지금은 Easy 다.** 매 턴 upcomingSchedule 로 다시 확인하고, 기억과 다르면 **upcomingSchedule 이 이긴다.** ' +
       '**한 답변 안에서 같은 날짜의 세션 타입을 두 번 말하면 반드시 같아야 한다.** 앞에서 "목요일 템포"라 하고 뒤에서 "목요일은 Easy"라고 하면 사용자는 무엇을 믿을지 모른다 — 쓰기 전에 그 날짜를 upcomingSchedule 에서 한 번 더 확인한다. ' +
-      '**이미 그 타입인 세션을 "낮추자"고 하지 마라.** 목요일이 이미 Easy 인데 "Easy 로 낮추자"는 말이 안 된다 — 낮출 게 없으면 "지금 구성 그대로 가면 된다"고 말하고, 정말 더 줄여야 하면 거리·시간·스트라이드 같은 실제 축을 지목한다.',
+      '**이미 그 타입인 세션을 "낮추자"고 하지 마라.** 목요일이 이미 Easy 인데 "Easy 로 낮추자"는 말이 안 된다 — 낮출 게 없으면 "지금 구성 그대로 가면 된다"고 말하고, 정말 더 줄여야 하면 거리·시간·스트라이드 같은 실제 축을 지목한다. ' +
+      // 2026-09-07 실사고: 실행 지침을 안 보내던 동안 코치가 옛 처방 템플릿 숫자
+      // ("워밍업 10분 → 20초 가속/1분40초 회복 x8 → 쿨다운 15분")를 세 턴 연속 되풀이했고
+      // "앱 기준으로는"이라며 **틀린 출처까지** 붙였다. 데이터는 이미 컨텍스트에서 제거됐고
+      // (코치 스스로 "없음" 확인) 출처는 스레드 기억이었다. 이제 정본을 실어 보낸다(#795).
+      '**세션의 실행 수치(웜업/쿨다운 시간, 반복수, 구간 길이·개수, 회복 시간)는 그 세션의 execution 만 인용한다.** execution 은 사용자 화면(프리런 브리핑)에 그대로 떠 있는 값이라, 다른 숫자를 말하면 화면과 어긋나 바로 들킨다. 스레드 기억이나 일반 상식에서 숫자를 가져오지 마라 — 반복수·거리는 단계·VDOT·부상·적응 게이트로 **매번 다시 산출**되므로 옛 턴의 숫자는 이미 틀렸을 수 있다. execution 이 null 인 세션(먼 미래)은 **숫자를 말하지 말고** 유형·거리와 "무엇을 보고 정하는지"로 답한다. execution 의 label(웜업/본런/스트라이드/쿨다운/강도/주의)은 그대로 옮기지 말고 사람 말로 풀어서 전한다.',
     /**
      * 이 스레드에서 "가벼운 회복주로 대신하는 선택지" 를 이미 제시했는가(2026-08-05 사용자 지적: "1회만").
      * 프롬프트의 "1회만"은 한 답변 안으로 읽히기 쉬워 매 턴 반복됐다 — 반복 판정을 **코드가** 한다
@@ -2416,7 +2433,18 @@ export function orderContextForCache(context: unknown): unknown {
 function buildCoachMessages(context: unknown) {
   return [
     { role: 'system', content: buildCoachInstructions(context) },
-    { role: 'user', content: `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(orderContextForCache(context))}` }
+    {
+      role: 'user',
+      content:
+        `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(orderContextForCache(context))}` +
+        // 원본(scheduleProposalGate.upcomingTargets)을 넘긴다 — context.upcomingSchedule 은 축약 모드에서
+        // null 이 되어 꼬리표가 사라진다(#795 실측, _shared/executionGuideTail.ts 주석 참고).
+        buildExecutionGuideTail(
+          (context as { scheduleProposalGate?: { upcomingTargets?: unknown }; upcomingSchedule?: unknown } | null)
+            ?.scheduleProposalGate?.upcomingTargets ??
+            (context as { upcomingSchedule?: unknown } | null)?.upcomingSchedule
+        )
+    }
   ]
 }
 

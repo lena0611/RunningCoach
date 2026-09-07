@@ -37,3 +37,20 @@ describe('coach-run 레거시 메모리 키 차단', () => {
     }
   })
 })
+
+/*
+  #795 실측 함정: 꼬리표가 `context.upcomingSchedule`(structuredCoachContext 로 가려지는 필드)을 읽으면
+  general 분류 턴에서 통째로 사라진다 — 같은 질문을 "다시 물어볼게"로 감싸자 분류가 갈려 옛 숫자로
+  되돌아갔다. 세션 액션 4종이 같은 함정으로 구조적으로 폐기됐던 전례가 있다.
+*/
+describe('실행 지침 꼬리표는 축약되지 않은 원본을 본다 (#795)', () => {
+  it('scheduleProposalGate.upcomingTargets 를 먼저 넘긴다', () => {
+    const call = coachRunSource.slice(
+      coachRunSource.indexOf('buildExecutionGuideTail('),
+      coachRunSource.indexOf('buildExecutionGuideTail(') + 400
+    )
+    expect(call).toContain('scheduleProposalGate?.upcomingTargets')
+    // 가려지는 필드를 유일한 출처로 쓰면 안 된다(폴백으로만 허용).
+    expect(call.indexOf('scheduleProposalGate?.upcomingTargets')).toBeLessThan(call.indexOf('?.upcomingSchedule'))
+  })
+})

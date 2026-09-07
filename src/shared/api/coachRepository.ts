@@ -150,7 +150,18 @@ export async function requestCoachRunStream(
      */
     heatWindow?: HeatWindow | null
     /** 실제 주기화 스케줄의 다음 세션들(코치 "다음 훈련"이 weeklyPattern으로 지어내지 않게). */
-    upcomingSchedule?: { date: string; type: string; distanceKm: number | null; keySession: boolean; canIntensify: boolean }[] | null
+    /**
+     * 예정 세션. `execution` 은 "어떻게 뛰나" 정본(#795) — 화면 브리핑과 같은 함수(`buildSessionExecution`)가
+     * 만든 값이라 코치 답변과 화면이 어긋날 수 없다. null 이면 코치는 그 세션의 실행 수치를 말하지 않는다.
+     */
+    upcomingSchedule?: {
+      date: string
+      type: string
+      distanceKm: number | null
+      keySession: boolean
+      canIntensify: boolean
+      execution?: { label: string; detail: string }[] | null
+    }[] | null
     /**
      * 반복 하향 신호(#703 ①) — 판정은 웹 소유(client-summary 패턴).
      * 같은 축 하향이 **여러 주에 걸쳐** 반복되면 국소 조정이 아니라 루틴 문제다

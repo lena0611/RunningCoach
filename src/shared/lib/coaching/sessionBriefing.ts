@@ -476,6 +476,29 @@ function heatCautions(type: RunType, heat: HeatWindow | null | undefined): strin
 }
 
 /** ScheduledSession + 장기맥락 → 4요소 작전 브리핑(결정론). */
+/**
+ * "어떻게 뛰나"만 따로 만든다 — 브리핑 전체(목표·효과·주의·근거)가 필요 없는 호출부용.
+ *
+ * 코치(coach-run)에게 예정 세션의 실행 지침을 실어 보낼 때 쓴다. 화면 브리핑과 **같은 함수**를
+ * 지나므로 두 값이 어긋날 수 없다. 이걸 따로 만들지 않고 코치에게 날짜·유형·거리만 보냈던 동안,
+ * 코치는 실행 수치의 정본이 없어 옛 기억으로 메꿨다(#795 · SSOT §세션 실행 라이프사이클).
+ */
+export function buildSessionExecution(
+  session: ScheduledSession,
+  ctx: Pick<SessionBriefingContext, 'injury' | 'vdot' | 'adaptiveProfile' | 'progression'>
+): BriefingStep[] {
+  const prog = resolveProgression(session.sessionType, ctx.progression, ctx.adaptiveProfile)
+  return executionFor(
+    session,
+    ctx.vdot ?? null,
+    ctx.injury,
+    prog.status,
+    prog.evidence,
+    ctx.adaptiveProfile?.tempoCeiling?.adoptedBpm ?? null,
+    shouldPrescribeWalkRun(ctx.injury, session.sessionType)
+  )
+}
+
 export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBriefingContext): SessionBriefing {
   const goalLabel = ctx.goal?.title ? `'${ctx.goal.title}' ` : ''
   // 비성과는 주기화 단계가 없으므로 goalLine에서 단계 라벨을 뺀다(#398).
@@ -483,11 +506,10 @@ export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBrie
   const goalLine = `${goalLabel}${phaseLabel}— ${sessionTypeLabel(session.sessionType)}`
 
   const prog = resolveProgression(session.sessionType, ctx.progression, ctx.adaptiveProfile)
-  const tempoCeilingBpm = ctx.adaptiveProfile?.tempoCeiling?.adoptedBpm ?? null
   const effect = effectFor(session.sessionType)
   // 급성 통증성 부상 복귀면 저강도 세션의 "어떻게 뛰나"를 걷기-뛰기로 교체(#501, SSOT §3-B).
   const walkRun = shouldPrescribeWalkRun(ctx.injury, session.sessionType)
-  const execution = executionFor(session, ctx.vdot ?? null, ctx.injury, prog.status, prog.evidence, tempoCeilingBpm, walkRun)
+  const execution = buildSessionExecution(session, ctx)
   const caution = cautionsFor(session, ctx.injury, ctx.chronic, walkRun, ctx.baselineAfterLayoff ?? false)
 
   const easyFamily = session.sessionType === 'Easy' || session.sessionType === 'Recovery' || session.sessionType === 'Easy + Strides'
