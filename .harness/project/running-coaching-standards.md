@@ -353,6 +353,13 @@ PaceLAB 코칭 알고리즘은 다섯 겹으로 동작한다.
    - `trainingMemory.runnerIdentity`는 strengths, weaknesses, riskFactors, coachingStyle로 장기 특성을 구조화한다.
    - `trainingMemory.coachBeliefs`는 반복 확인된 패턴 가설을 confidence/supportCount/evidenceRunIds와 함께 저장한다.
    - 단일 세션은 candidate 근거까지만 만들고, 여러 번 확인되거나 사용자 피드백이 있을 때 confirmed로 승격한다.
+   - ⚠ **실측(2026-09-07): 이 두 필드는 한 번도 채워진 적이 없다**(runnerIdentity·coachBeliefs·compliancePatterns·sessionGuides 전부 0). 대화 턴은 `trainingMemoryPatch`를 의도적으로 막고(LWW 덮어쓰기 방지), 리포트 턴은 "확실할 때만"이라 실질적으로 아무도 안 쓴다. 실제로 도는 장기기억은 `coach_memory_items`(서사 기억)이고, 승급 게이트·처방 경계는 매 턴 **라이브 산출**된다(coachAdaptiveProgress·sessionBriefing 실행 지침·tempoCeiling). 이 층에 새 쓰기 경로를 만들기 전에 **서사 기억과 라이브 산출로 이미 덮이는지** 먼저 확인한다 — 두 번째 진실을 만드는 함정이다.
+
+6. 서사 기억 중복 관리 (#796)
+   - `coach_memory_items`는 "이미 있으면 다시 넣지 마라"는 프롬프트 지침으로는 지켜지지 않는다. 모델은 **이번 턴 프롬프트에 오른 기억만** 알기 때문이다(활성 6 + 되새김 10). 실측: 204건 중 85건이 같은 사실의 재서술이었고 한 사실은 **13번** 저장돼 있었다.
+   - 중복 판정은 코드가 한다(`_shared/memoryDedupe.ts`) — 조사·어미·좌우 수식어·활용형을 걷어낸 토큰 집합 유사도. 쓰기는 **코퍼스 전체**와 대조하고, 읽기는 활성/되새김 선정 뒤 근사 중복을 접는다(저장 행은 지우지 않는 자가 치유).
+   - **중복이 활성 칸을 잡아먹는 것이 실제 해악이다.** 프롬프트에 오르는 활성 기억은 6칸뿐이라, 같은 말 3개가 실리면 다른 기억이 밀려난다.
+   - 임계값은 실측 코퍼스로 정한다(현재 0.4). 더 내리면 주제만 겹치는 다른 사실이 섞인다 — 회귀 테스트가 그 경계를 잡는다.
 
 ## 개인화 진화 규칙
 

@@ -19,6 +19,7 @@ import {
 } from './dataGap.ts'
 import { detectUngroundedDataClaims } from './ungroundedClaim.ts'
 import { buildExecutionGuideTail } from '../_shared/executionGuideTail.ts'
+import { collapseNearDuplicateFacts, isKnownFact, isNearDuplicateFact } from '../_shared/memoryDedupe.ts'
 import {
   buildUserNoteRelevancePolicy,
   detectCoachAnswerIntent,
@@ -467,7 +468,12 @@ async function persistCoachResult(
   model: string,
   queryLog: CoachTurnQueryLog
 ) {
-  const durableMemoryItems = normalizeMemoryItems(ai.memoryItems, [...(context.coreMemoryItems ?? []), ...context.coachMemoryItems])
+  // 코퍼스 전체(memoryCorpus)와 대조한다 — 프롬프트 선별본만 보면 안 오른 기억과 중복된다(#796).
+  const durableMemoryItems = normalizeMemoryItems(ai.memoryItems, [
+    ...(context.memoryCorpus ?? []),
+    ...(context.coreMemoryItems ?? []),
+    ...context.coachMemoryItems
+  ])
   const memoryPatch = normalizeTrainingMemoryPatch(ai.trainingMemoryPatch)
   const injuryUpdateProposal = normalizeInjuryUpdateProposal(ai.injuryUpdateProposal, context.activeInjuryItem)
   // 스케줄 액션 제안(#639) — 승인형 후보. 게이트를 하나라도 못 넘으면 null 로 떨어진다(자동 적용 경로 없음).
@@ -1747,6 +1753,11 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     injuryTemporalPolicy: selectedRun
       ? 'injuryItems와 activeInjuryItem은 selectedRun.date 이전 또는 당일에 이미 발생/등록된 항목만 포함한다. 여기에 없는 현재 active 부상은 선택 세션 당시에는 아직 발생하지 않은 것으로 보고 언급하지 마라.'
       : '현재 흐름 코칭이므로 현재 active/monitoring 부상 항목을 사용할 수 있다.',
+    /**
+     * 장기기억 **전체 본문**(프롬프트 비탑재, NON_PROMPT_CONTEXT_KEYS). 저장 직전 중복 판정에만 쓴다 —
+     * 프롬프트 선별본만 대조하면 안 오른 기억과 중복돼 같은 사실이 계속 쌓인다(#796 실측 203건 중 다수).
+     */
+    memoryCorpus: memoryRows.map((row) => truncateText(row.content, 260)).filter(Boolean),
     coreMemoryItems: tieredMemory.coreMemoryItems,
     coreMemoryItemsInstruction:
       'coreMemoryItems는 이 사용자를 대할 때 항상 안고 가는 활성 핵심 기억이다(사람으로 치면 늘 떠올리는 그 사람의 주요 서사·목표·동기·정체성·중요 제약). 매 답변의 기본 전제로 삼아 일관되게 사용자를 대한다. 사용자의 want to/하고 싶다/원한다 같은 욕구와 목표 서사를 특히 잊지 말고, 관련될 때 자연스럽게 이어 말해 신뢰를 쌓는다. 단 매번 통째로 나열하지 말고 맥락에 맞게 녹인다.',
@@ -2414,7 +2425,17 @@ const CACHE_STABLE_CONTEXT_KEYS = [
 ] as const
 
 /**
- * 안정 키를 앞으로 모아 직렬화 순서를 바꾼다. **키·값 집합은 완전히 동일**하다(누락·추가 없음).
+ * 서버 내부에서만 쓰고 **프롬프트에는 싣지 않는** 컨텍스트 키.
+ *
+ * `memoryCorpus`(장기기억 전체 본문)는 저장 시 중복 판정용이다(#796). 프롬프트에 실으면
+ * 200건 넘는 문장이 매 턴 정가로 청구된다 — 입력이 비용의 95%다([[monetization-pricing-decisions]]).
+ * 선별본(coreMemoryItems·coachMemoryItems)만 모델이 본다.
+ */
+const NON_PROMPT_CONTEXT_KEYS: readonly string[] = ['memoryCorpus']
+
+/**
+ * 안정 키를 앞으로 모아 직렬화 순서를 바꾼다. 값은 그대로 유지하고,
+ * 프롬프트에 실으면 안 되는 내부 키(NON_PROMPT_CONTEXT_KEYS)만 뺀다.
  * 나머지 키는 원래 순서를 유지한다 — 지침이 읽는 순서를 불필요하게 흔들지 않는다.
  */
 export function orderContextForCache(context: unknown): unknown {
@@ -2422,9 +2443,11 @@ export function orderContextForCache(context: unknown): unknown {
   const source = context as Record<string, unknown>
   const ordered: Record<string, unknown> = {}
   for (const key of CACHE_STABLE_CONTEXT_KEYS) {
+    if (NON_PROMPT_CONTEXT_KEYS.includes(key)) continue
     if (Object.prototype.hasOwnProperty.call(source, key)) ordered[key] = source[key]
   }
   for (const [key, value] of Object.entries(source)) {
+    if (NON_PROMPT_CONTEXT_KEYS.includes(key)) continue
     if (!Object.prototype.hasOwnProperty.call(ordered, key)) ordered[key] = value
   }
   return ordered
@@ -5650,45 +5673,60 @@ function buildTieredCoachMemory(
     items.push({ row, content, key, importance, ageDays, retention: memoryRetentionScore(importance, ageDays) })
   }
 
-  // 활성: 보존 점수 임계 이상 중 상위 6개(항상 탑재).
-  const active = items
-    .filter((x) => x.retention >= 6)
-    .sort((a, b) => b.retention - a.retention)
-    .slice(0, 6)
+  /**
+   * 활성: 보존 점수 임계 이상 중 상위 6개(항상 탑재).
+   *
+   * **정렬 뒤에 근사 중복을 접는다**(#796). normalizeMemoryKey 는 한국어 변형을 못 잡아서
+   * 실측 상위 12칸에 실제 사실이 8개뿐이었다 — 같은 사실의 어미·좌우 변형이 3칸씩 차지하고
+   * 다른 기억을 밀어냈다. 저장된 행은 지우지 않고 읽는 쪽에서 자가 치유한다(보존 점수 높은 변형이 남는다).
+   */
+  const active = collapseNearDuplicateFacts(
+    items.filter((x) => x.retention >= 6).sort((a, b) => b.retention - a.retention),
+    (x) => x.content
+  ).slice(0, 6)
   const activeKeys = new Set(active.map((x) => x.key))
+  const activeContents = active.map((x) => x.content)
 
   // 되새김: 활성 제외 + 아직 잊히지 않은(retention>0) 것 중 현재 맥락 관련도 높은 것만 소환.
+  // 활성에 접힌 변형이 되새김으로 다시 올라오면 같은 말이 두 번 실린다 — 여기서도 근사 중복을 뺀다.
   const contextTags = collectMemoryContextTags(selectedRun, userNote, options)
   const recalled = items
-    .filter((x) => !activeKeys.has(x.key) && x.retention > 0)
+    .filter((x) => !activeKeys.has(x.key) && !activeContents.some((kept) => isNearDuplicateFact(kept, x.content)))
+    .filter((x) => x.retention > 0)
     .map((x, index) => ({ x, rel: scoreMemoryItem(x.content, String(x.row.created_at), contextTags, index) }))
     .filter((e) => e.rel >= 8)
     .sort((a, b) => b.rel - a.rel)
-    .slice(0, 10)
+  const recalledUnique = collapseNearDuplicateFacts(recalled, (e) => e.x.content).slice(0, 10)
 
   const referencedIds = [
     ...active.map((x) => x.row.id),
-    ...recalled.map((e) => e.x.row.id)
+    ...recalledUnique.map((e) => e.x.row.id)
   ].filter((id): id is string => Boolean(id))
 
   return {
     coreMemoryItems: active.map((x) => x.content),
-    coachMemoryItems: recalled.map((e) => e.x.content),
+    coachMemoryItems: recalledUnique.map((e) => e.x.content),
     referencedIds
   }
 }
 
-function normalizeMemoryItems(items: string[], existingItems: string[]) {
-  const existingKeys = new Set(existingItems.map(normalizeMemoryKey))
-  const nextKeys = new Set<string>()
+/**
+ * 새 장기기억을 정리한다. 중복 판정은 **코퍼스 전체**를 기준으로 한다(#796).
+ *
+ * 예전엔 이번 턴 프롬프트에 오른 기억(활성 6 + 되새김 10)만 대조했다. 그런데 저장본은 203건이라
+ * 프롬프트에 안 오른 187건과의 중복은 그대로 통과했다 — "이미 있으면 다시 넣지 마라"는 프롬프트
+ * 지침은 지켜지지 않았고(모델은 자기가 방금 본 것만 안다), 같은 사실이 최대 5번 쌓였다.
+ * 지침이 아니라 코드가 판정한다([[coach-always-on-block-deterministic]]).
+ */
+function normalizeMemoryItems(items: string[], corpus: string[]) {
   const normalized: string[] = []
 
   for (const raw of items) {
     const content = truncateText(raw, 260)
-    const key = normalizeMemoryKey(content)
-    if (!content || nextKeys.has(key) || existingKeys.has(key)) continue
+    if (!content) continue
     if (!looksLikeDurableMemory(content)) continue
-    nextKeys.add(key)
+    if (isKnownFact(content, corpus)) continue
+    if (isKnownFact(content, normalized)) continue
     normalized.push(content)
     if (normalized.length >= 3) break
   }
