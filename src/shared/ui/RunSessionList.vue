@@ -10,6 +10,8 @@ defineProps<{
   runs: RunLog[]
   interactive?: boolean
   weeklyPattern?: string[]
+  /** 예정 세션에 귀속된 런 id — '스케줄/추가' 칩의 정본. */
+  scheduledRunIds?: ReadonlySet<string>
 }>()
 
 const emit = defineEmits<{ select: [run: RunLog] }>()
@@ -29,7 +31,7 @@ const emit = defineEmits<{ select: [run: RunLog] }>()
       <div class="run-session-main">
         <div class="run-session-chip-row">
           <RunTypeBadge :type="run.type" />
-          <RunMetaChips :run="run" :weekly-pattern="weeklyPattern" />
+          <RunMetaChips :run="run" :weekly-pattern="weeklyPattern" :scheduled-run-ids="scheduledRunIds" />
         </div>
         <div class="run-session-bottom">
           <strong class="run-session-distance"><UnitValue :amount="run.distanceKm" unit="km" /></strong>

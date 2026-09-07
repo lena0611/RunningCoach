@@ -142,3 +142,24 @@ function createRun(input: Partial<RunLog>): RunLog {
     ...input
   }
 }
+
+/*
+  2026-09-07 실사고: `weeklyPattern`(옛 루틴 메모)이 비어 있어 **모든 런이 '추가'** 로 뒤집혔다.
+  귀속(training_schedule.run_id)은 멀쩡했는데 칩만 엉뚱한 곳을 물어봤다.
+*/
+describe('스케줄/추가 판정은 실제 귀속이 정본', () => {
+  const run = createRun({ id: 'r1', date: '2026-09-05', type: 'LSD' })
+
+  it('예정 세션에 귀속됐으면 weeklyPattern 이 비어도 스케줄이다', () => {
+    expect(getRunMetaChips(run, [], new Set(['r1']))[0]).toEqual({ label: '스케줄', tone: 'schedule' })
+    expect(getRunFilterTags(run, [], new Set(['r1']))[0].value).toBe('schedule:scheduled')
+  })
+
+  it('귀속이 없으면 추가다 — 요일이 우연히 맞아도 귀속이 우선은 아니다(폴백만)', () => {
+    expect(getRunMetaChips(run, [], new Set())[0]).toEqual({ label: '추가', tone: 'extra' })
+  })
+
+  it('귀속 정보가 없을 때만 옛 weeklyPattern 매칭으로 폴백한다', () => {
+    expect(getRunMetaChips(run, ['토요일: LSD'])[0]).toEqual({ label: '스케줄', tone: 'schedule' })
+  })
+})
