@@ -253,7 +253,6 @@ function executionFor(
   const dur = prescription.durationMin ? `${prescription.durationMin}분` : ''
   const amount = [dist, dur].filter(Boolean).join(' · ')
   const pace = prescription.paceRange
-  const withAmount = amount ? `, ${amount}` : ''
 
   // 저강도(Easy/Recovery/LSD/Steady Long) 본세트 지문: 시간·강도 우선 → 거리는 가이드 → 페이스는 결과(목표 아님).
   // 거리·시간·페이스를 동시 타깃으로 던지면 사용자가 헷갈린다. dose는 시간, 강도는 심박/RPE/대화가 정본.
@@ -270,7 +269,8 @@ function executionFor(
   switch (sessionType) {
     case 'Easy + Strides': {
       steps.push({ label: '웜업', detail: EASE_IN_WARMUP })
-      steps.push({ label: '본런', detail: `편한 대화 페이스${pace ? ` ${pace}` : ''}${withAmount}` })
+      // 본런은 다른 저강도와 같은 지문을 쓴다 — 스트라이드가 붙어도 본런의 dose 는 시간이고 페이스는 결과다.
+      steps.push({ label: '본런', detail: lowIntensityMainSet('편한 대화 가능 강도') })
       const s = computeStrides(phase, vdot, injury, progression)
       if (s.hold) steps.push({ label: '스트라이드', detail: s.holdReason })
       else
@@ -328,7 +328,7 @@ function executionFor(
       break
     default:
       steps.push({ label: '웜업', detail: '처음 5~10분은 더 느리게 시작해 몸을 풀어요' })
-      steps.push({ label: '본런', detail: `편한 대화 가능 페이스${pace ? ` ${pace}` : ''}${withAmount}` })
+      steps.push({ label: '본런', detail: lowIntensityMainSet('편한 대화 가능 강도') })
       steps.push({ label: '쿨다운', detail: EASE_OUT_COOLDOWN })
   }
   // 누적 수행 이력(#336 라이브 평가)이 상향/보수 신호일 때 그 근거를 투명하게 노출.
