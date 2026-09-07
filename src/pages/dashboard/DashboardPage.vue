@@ -1094,7 +1094,7 @@ function createCardFromEditor() {
     </SectionGroup>
 
     <EditableBlock v-if="summaryLayout.isVisible('recent')" :editing="summaryEditMode" label="최근 세션" @remove="summaryLayout.toggle('recent')">
-      <RecentRuns :runs="runs.slice(0, 5)" :weekly-pattern="memoryStore.memory.weeklyPattern" :scheduled-run-ids="scheduleStore.scheduledRunIds" @show-all="router.push('/runs')" @select="sessionDetailStore.open" />
+      <RecentRuns :runs="runs.slice(0, 5)" :scheduled-run-ids="scheduleStore.scheduledRunIds" @show-all="router.push('/runs')" @select="sessionDetailStore.open" />
     </EditableBlock>
 
     <!--
@@ -1125,7 +1125,7 @@ function createCardFromEditor() {
         <EmptyState v-else title="표시할 기록이 없습니다." description="해당 기간의 러닝 기록이 아직 부족합니다." />
       </SectionGroup>
       <SectionGroup v-if="trendRuns.length" title="세션" :surface="false">
-        <RunSessionList :runs="trendRuns" :weekly-pattern="memoryStore.memory.weeklyPattern" :scheduled-run-ids="scheduleStore.scheduledRunIds" interactive @select="(run) => sessionDetailStore.open(run, { nested: true })" />
+        <RunSessionList :runs="trendRuns" :scheduled-run-ids="scheduleStore.scheduledRunIds" interactive @select="(run) => sessionDetailStore.open(run, { nested: true })" />
       </SectionGroup>
     </StackPage>
 

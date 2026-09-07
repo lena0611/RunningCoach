@@ -23,18 +23,6 @@ export type AdaptiveMetric = {
   adoptedAt: string | null
 }
 
-export type WeeklyPatternDerivedFrom = 'onboarding' | 'ai_evolution' | 'manual'
-export type WeeklyPatternStatus = 'active' | 'retired'
-
-export type WeeklyPatternRecord = {
-  version: number
-  weeklyPattern: string[]
-  derivedFrom: WeeklyPatternDerivedFrom
-  status: WeeklyPatternStatus
-  createdAt: string | null
-  retiredAt: string | null
-}
-
 export type PhaseHistoryRecord = {
   phaseName: TrainingPhaseName
   startedAt: string | null
@@ -51,15 +39,6 @@ export type AdaptiveMetricRow = {
   evidence_run_ids?: unknown
   status?: unknown
   adopted_at?: unknown
-}
-
-export type WeeklyPatternRow = {
-  version?: unknown
-  weekly_pattern?: unknown
-  derived_from?: unknown
-  status?: unknown
-  created_at?: unknown
-  retired_at?: unknown
 }
 
 export type PhaseHistoryRow = {
@@ -124,22 +103,6 @@ export function toAdaptiveMetricUpsert(metric: AdaptiveMetric, userId: string) {
     status: metric.status,
     adopted_at: metric.adoptedAt,
     updated_at: new Date().toISOString()
-  }
-}
-
-export function normalizeWeeklyPatternDerivedFrom(value: unknown): WeeklyPatternDerivedFrom {
-  return value === 'onboarding' || value === 'ai_evolution' ? value : 'manual'
-}
-
-export function mapWeeklyPatternRow(row: WeeklyPatternRow): WeeklyPatternRecord {
-  const version = toNumberOrNull(row.version)
-  return {
-    version: version && version > 0 ? Math.round(version) : 1,
-    weeklyPattern: toStringArray(row.weekly_pattern),
-    derivedFrom: normalizeWeeklyPatternDerivedFrom(row.derived_from),
-    status: row.status === 'retired' ? 'retired' : 'active',
-    createdAt: toStringOrNull(row.created_at),
-    retiredAt: toStringOrNull(row.retired_at)
   }
 }
 

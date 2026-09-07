@@ -1,10 +1,11 @@
 import { defaultPrescriptionTemplates, type PrescriptionTemplate } from '@/entities/training-memory/model'
 
 /**
- * 온보딩 초기 weeklyPattern 룰 엔진 (#329).
+ * 온보딩 초기 루틴 슬롯 룰 엔진 (#329).
  *
- * 주간 가용 횟수 × 목표 거리 × 러너 레벨(+선호 롱런 요일·부상)으로 초기 주간 루틴 슬롯을 추천한다.
- * 결과 슬롯은 사용자가 인라인 편집(요일 이동/처방 교체/추가·삭제)한 뒤 weekly_patterns(#328)에 저장한다.
+ * 주간 가용 횟수 × 목표 거리 × 러너 레벨(+선호 롱런 요일·부상)으로 초기 주간 슬롯을 추천한다.
+ * 슬롯은 온보딩 화면에서 **처방 템플릿 선택**에만 쓴다 — 루틴 메모로 저장하지 않는다(2026-09-07 제거).
+ * 실제 주간 루틴은 목표에서 생성되는 주기화 플랜(training_schedule)이 갖는다.
  * 처방은 defaultPrescriptionTemplates(#327) id로 매핑한다.
  */
 
@@ -120,10 +121,3 @@ export function buildInitialWeeklyPattern(input: BuildWeeklyPatternInput): Routi
   })
 }
 
-/** RoutineSlot[] → weeklyPattern 문자열 배열(기존 TrainingMemory.weeklyPattern 포맷). */
-export function slotsToWeeklyPattern(slots: RoutineSlot[]): string[] {
-  return slots.map((slot) => {
-    const template = TEMPLATE_BY_ID.get(slot.templateId)
-    return `${slot.day}요일: ${template?.name ?? slot.sessionType}`
-  })
-}

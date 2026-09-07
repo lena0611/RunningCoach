@@ -8,7 +8,6 @@ describe('createSessionTitle', () => {
         date: '2026-05-26',
         startAt: '2026-05-26T21:30:00+09:00',
         type: 'Easy + Strides',
-        weeklyPattern: ['화요일: Easy + Strides']
       })
     ).toBe('화요일 밤 러닝')
   })
@@ -19,7 +18,6 @@ describe('createSessionTitle', () => {
         date: '2026-05-25',
         startAt: '2026-05-25T07:30:00+09:00',
         type: 'Easy',
-        weeklyPattern: ['화요일: Easy + Strides']
       })
     ).toBe('월요일 아침 러닝')
   })

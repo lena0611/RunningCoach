@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   buildInitialWeeklyPattern,
   prescriptionTemplateById,
-  slotsToWeeklyPattern
 } from '@/shared/lib/coaching/initialWeeklyPattern'
 
 describe('buildInitialWeeklyPattern (#329)', () => {
@@ -48,10 +47,4 @@ describe('buildInitialWeeklyPattern (#329)', () => {
     }
   })
 
-  it('slotsToWeeklyPattern은 요일+처방명 문자열을 만든다', () => {
-    const slots = buildInitialWeeklyPattern({ weeklyDays: 3, goal: '5k', level: 'novice' })
-    const lines = slotsToWeeklyPattern(slots)
-    expect(lines).toHaveLength(3)
-    expect(lines[0]).toMatch(/요일:/)
-  })
 })

@@ -26,7 +26,6 @@ function run(date: string, distanceKm: number): RunLog {
 
 function buildMemory(injury?: Partial<TrainingInjuryItem>): TrainingMemory {
   return normalizeTrainingMemory({
-    weeklyPattern: ['월요일: Easy'],
     athleteProfile: {} as TrainingMemory['athleteProfile'],
     injuryItems: injury ? [{ title: '테스트 부상', status: 'active', ...injury } as TrainingInjuryItem] : []
   })
@@ -60,7 +59,6 @@ describe('buildInjuryDataSignals (§2-A 결정론 신호)', () => {
 
   it('같은 부위 다른 에피소드가 있으면 recurrence', () => {
     const memory = normalizeTrainingMemory({
-      weeklyPattern: ['월요일: Easy'],
       athleteProfile: {} as TrainingMemory['athleteProfile'],
       injuryItems: [
         { title: '현재 무릎', status: 'active', normalizedAreas: [{ areaId: 'left-knee', painLevel: 3 }] } as TrainingInjuryItem,

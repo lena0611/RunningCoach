@@ -11,7 +11,7 @@ describe('getRunMetaChips', () => {
       temperature: 23
     })
 
-    expect(getRunMetaChips(run, ['화요일: Easy + Strides'])).toEqual([
+    expect(getRunMetaChips(run, new Set([run.id]))).toEqual([
       { label: '스케줄', tone: 'schedule' },
       { label: '밤', tone: 'period' },
       { label: '기온 23°', tone: 'weather' }
@@ -30,7 +30,8 @@ describe('getRunMetaChips', () => {
       type: 'Easy'
     })
 
-    expect(getRunMetaChips(run, ['화요일: Easy + Strides'])).toEqual([
+    // 귀속된 예정 세션이 없다 = 추가런.
+    expect(getRunMetaChips(run, new Set())).toEqual([
       { label: '추가', tone: 'extra' },
       { label: '아침', tone: 'period' }
     ])
@@ -45,14 +46,14 @@ describe('getRunMetaChips', () => {
     })
 
     // 스케줄 매칭이 되는 날이어도 레이스는 훈련 플랜 문맥이 아니다 — 레이스 칩이 대체한다.
-    expect(getRunMetaChips(run, ['화요일: Easy + Strides'])).toEqual([
+    expect(getRunMetaChips(run, new Set([run.id]))).toEqual([
       { label: '🏁 레이스', tone: 'race' },
       { label: '오후', tone: 'period' }
     ])
 
     // 필터 파셋은 칩과 달리 '대체'가 아니라 추가형이다(의도): 스케줄 파셋은 유지되고
     // 레이스는 tag:self-race 로 별도 필터 가능. 이 비대칭이 회귀로 뒤집히지 않게 고정한다.
-    const filterValues = getRunFilterTags(run, ['화요일: Easy + Strides']).map((tag) => tag.value)
+    const filterValues = getRunFilterTags(run, new Set([run.id])).map((tag) => tag.value)
     expect(filterValues).toContain('schedule:scheduled')
     expect(filterValues).toContain('tag:self-race')
   })
@@ -73,7 +74,7 @@ describe('getRunFilterTags', () => {
       tags: ['와이프 동반주']
     })
 
-    expect(getRunFilterTags(run, ['화요일: Easy + Strides']).map((tag) => tag.value)).toEqual([
+    expect(getRunFilterTags(run, new Set([run.id])).map((tag) => tag.value)).toEqual([
       'schedule:scheduled',
       'period:밤',
       'weather:present',
@@ -94,7 +95,7 @@ describe('getRunFilterTags', () => {
       source: 'healthkit'
     })
 
-    expect(hasRunFilterTag(run, 'schedule:extra', ['화요일: Easy + Strides'])).toBe(true)
+    expect(hasRunFilterTag(run, 'schedule:extra')).toBe(true)
     expect(hasRunFilterTag(run, 'source:healthkit')).toBe(true)
     expect(hasRunFilterTag(run, 'weather:present')).toBe(false)
   })
@@ -150,16 +151,13 @@ function createRun(input: Partial<RunLog>): RunLog {
 describe('스케줄/추가 판정은 실제 귀속이 정본', () => {
   const run = createRun({ id: 'r1', date: '2026-09-05', type: 'LSD' })
 
-  it('예정 세션에 귀속됐으면 weeklyPattern 이 비어도 스케줄이다', () => {
-    expect(getRunMetaChips(run, [], new Set(['r1']))[0]).toEqual({ label: '스케줄', tone: 'schedule' })
-    expect(getRunFilterTags(run, [], new Set(['r1']))[0].value).toBe('schedule:scheduled')
+  it('예정 세션에 귀속됐으면 스케줄이다 — 요일·타입 매칭이 아니라 연결이 기준', () => {
+    expect(getRunMetaChips(run, new Set(['r1']))[0]).toEqual({ label: '스케줄', tone: 'schedule' })
+    expect(getRunFilterTags(run, new Set(['r1']))[0].value).toBe('schedule:scheduled')
   })
 
-  it('귀속이 없으면 추가다 — 요일이 우연히 맞아도 귀속이 우선은 아니다(폴백만)', () => {
-    expect(getRunMetaChips(run, [], new Set())[0]).toEqual({ label: '추가', tone: 'extra' })
+  it('귀속이 없으면 추가다 — 요일이 우연히 맞아도 스케줄이 아니다', () => {
+    expect(getRunMetaChips(run, new Set())[0]).toEqual({ label: '추가', tone: 'extra' })
   })
 
-  it('귀속 정보가 없을 때만 옛 weeklyPattern 매칭으로 폴백한다', () => {
-    expect(getRunMetaChips(run, ['토요일: LSD'])[0]).toEqual({ label: '스케줄', tone: 'schedule' })
-  })
 })

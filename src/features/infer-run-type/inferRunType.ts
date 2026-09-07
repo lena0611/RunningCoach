@@ -15,7 +15,6 @@ type InferRunTypeInput = {
   fastSegments: FastSegment[]
   metricSamples?: RunMetricSample[]
   routePoints?: RunRoutePoint[]
-  weeklyPattern?: string[]
   // 개인 심박 모델. 자동 유형 판정의 HR 기준은 상수 대신 이 모델에서 파생한다.
   // 미제공/근거부족(zones 비어있음)이면 HR 기반 분기를 건너뛰고 페이스/거리/스트라이드 패턴으로만 판정한다.
   heartRateModel?: HeartRateModel | null
@@ -63,7 +62,6 @@ export function inferRunType(input: InferRunTypeInput): RunType {
   const hasStrideSplitsPattern = hasStrideLapPattern(input.laps, hr)
   const tempoDistanceKm = getSustainedTempoDistance(input.laps, distanceKm, avgPaceSec)
   const isSaturday = getWeekday(input.date) === 6
-  const scheduledWorkout = getScheduledWorkout(input.date, input.weeklyPattern ?? [])
 
   if (distanceKm <= 0) return 'Unknown'
 
@@ -79,7 +77,7 @@ export function inferRunType(input: InferRunTypeInput): RunType {
     }
   }
 
-  if (distanceKm <= 10 && easyRatio >= 0.45 && (hasStridesPattern || hasMetricStridesPattern || hasStrideSplitsPattern || (fastSegmentCount >= 4 && isScheduledStrides(scheduledWorkout)))) {
+  if (distanceKm <= 10 && easyRatio >= 0.45 && (hasStridesPattern || hasMetricStridesPattern || hasStrideSplitsPattern)) {
     return 'Easy + Strides'
   }
 
@@ -447,16 +445,4 @@ function getWeekday(date: string) {
   return Number.isNaN(parsed.getTime()) ? null : parsed.getDay()
 }
 
-function getScheduledWorkout(date: string, weeklyPattern: string[]) {
-  const weekdays = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
-  const weekday = getWeekday(date)
-  if (weekday === null) return ''
-  const dayName = weekdays[weekday]
-  const pattern = weeklyPattern.find((item) => item.trim().toLowerCase().startsWith(dayName.toLowerCase()))
-  return pattern?.toLowerCase() ?? ''
-}
 
-function isScheduledStrides(value: string | undefined) {
-  if (!value) return false
-  return value.includes('strides') || value.includes('스트라이드')
-}

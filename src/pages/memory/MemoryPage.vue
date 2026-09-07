@@ -168,10 +168,6 @@ const routineHeartRateModel = computed(() => {
   const observed = deriveObservedMaxHr(runStore.sortedRuns.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })))
   return deriveHeartRateModel(draft.athleteProfile, new Date().getFullYear(), observed)
 })
-const weeklyRoutineGuides = computed(() => draft.weeklyPattern.map((item) => ({
-  item,
-  ...getWeeklyRoutineGuide(item, routineHeartRateModel.value)
-})))
 const trainingPhase = computed(() => draft.adaptiveTrainingProfile.trainingPhase)
 const progressionCriteria = computed(() => draft.adaptiveTrainingProfile.progressionCriteria)
 const prescriptionTemplates = computed(() => draft.adaptiveTrainingProfile.prescriptionTemplates)
@@ -198,7 +194,7 @@ const basisConstraintMeta = computed(() => {
 const hasInjuryAlert = computed(() => draft.injuryItems.some((item) => item.status === 'active'))
 const goalsNavMeta = computed(() => `${activeGoal.value ? '활성 1개' : '활성 없음'} · 보조 ${secondaryGoals.value.length}개`)
 const injuriesNavMeta = computed(() => (managedInjuries.value.length ? `관리 중 ${managedInjuries.value.length}건` : '관리 항목 없음'))
-const trainingNavMeta = computed(() => `${trainingPhase.value.currentPhase} · 주간 루틴 ${draft.weeklyPattern.length}회`)
+const trainingNavMeta = computed(() => trainingPhase.value.currentPhase)
 const aiNavMeta = computed(() => `장기 메모 ${aiMemoryCount.value}개`)
 
 // ── 항목별 저장(리디자인 ①c): 전역 저장 제거 — 패널 그룹별 dirty 판정·부분 커밋 ──
@@ -1039,21 +1035,6 @@ async function saveSection(section: MemorySection) {
                 </label>
               </div>
 
-              <div class="memory-subsection">
-                <strong>주간 루틴</strong>
-                <ul class="routine-guide-list">
-                  <li v-for="guide in weeklyRoutineGuides" :key="guide.item">
-                    <div class="routine-guide-head">
-                      <strong>{{ guide.item }}</strong>
-                      <span>{{ guide.metric }}</span>
-                    </div>
-                    <small>{{ guide.title }}</small>
-                    <ul>
-                      <li v-for="detail in guide.details" :key="detail">{{ detail }}</li>
-                    </ul>
-                  </li>
-                </ul>
-              </div>
             </div>
 
             <div v-else-if="panel === 'ai-memory'" class="memory-stack">

@@ -204,7 +204,6 @@ export const useRunStore = defineStore('runStore', {
           fastSegments: run.fastSegments,
           metricSamples: run.metricSamples,
           routePoints: run.routePoints,
-          weeklyPattern: [],
           heartRateModel
         })
         if (inferred !== 'LSD' && inferred !== 'Steady Long') continue

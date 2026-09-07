@@ -15,7 +15,6 @@ import UnitValue from '@/shared/ui/UnitValue.vue'
 
 const props = defineProps<{
   run: RunLog
-  weeklyPattern?: string[]
   /** 예정 세션에 귀속된 런 id — '스케줄/추가' 칩의 정본. */
   scheduledRunIds?: ReadonlySet<string>
 }>()
@@ -121,7 +120,7 @@ function syncRouteStickyOffset() {
           <h2>{{ run.sessionTitle || run.type }}</h2>
           <div class="run-session-chip-row">
             <RunTypeBadge :type="run.type" />
-            <RunMetaChips :run="run" :weekly-pattern="weeklyPattern ?? []" :scheduled-run-ids="scheduledRunIds" />
+            <RunMetaChips :run="run" :scheduled-run-ids="scheduledRunIds" />
           </div>
         </div>
       </div>

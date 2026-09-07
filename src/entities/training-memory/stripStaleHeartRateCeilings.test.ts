@@ -18,7 +18,6 @@ describe('stripStaleHeartRateCeilings', () => {
 
   it('normalizeTrainingMemory가 저장된 처방 템플릿/주간 루틴의 stale 165를 정리한다', () => {
     const normalized = normalizeTrainingMemory({
-      weeklyPattern: ['목요일: Tempo, max 165bpm 넘기지 않기'],
       adaptiveTrainingProfile: {
         methodologyVersion: 'x',
         updatedAt: null,
@@ -37,7 +36,6 @@ describe('stripStaleHeartRateCeilings', () => {
         ]
       }
     } as never)
-    expect(normalized.weeklyPattern[0]).not.toMatch(/165/)
     const tpl = normalized.adaptiveTrainingProfile.prescriptionTemplates.find((t) => t.sessionType === 'Tempo')
     expect(tpl?.workout.join(' ')).not.toMatch(/165/)
     expect(tpl?.avoidWhen.join(' ')).not.toMatch(/165/)

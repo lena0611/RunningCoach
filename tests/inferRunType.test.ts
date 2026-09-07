@@ -51,8 +51,7 @@ describe('inferRunType', () => {
         { index: 5, distanceKm: 1, paceSec: 475, avgHeartRate: 134, cadence: 164 },
         { index: 6, distanceKm: 1.2, paceSec: 485, avgHeartRate: 130, cadence: 162 }
       ],
-      fastSegments,
-      weeklyPattern: ['화요일: Easy + Strides', '목요일: Tempo', '토요일: LSD 또는 Steady Long']
+      fastSegments
     })).toBe('Easy + Strides')
   })
 
@@ -75,8 +74,7 @@ describe('inferRunType', () => {
         { index: 3, distanceKm: 1, paceSec: 455, avgHeartRate: 138, cadence: 168 },
         { index: 4, distanceKm: 1, paceSec: 485, avgHeartRate: 132, cadence: 163 }
       ],
-      fastSegments,
-      weeklyPattern: ['화요일: Easy + 스트라이드', '목요일: Tempo']
+      fastSegments
     })).toBe('Easy + Strides')
   })
 
@@ -102,8 +100,7 @@ describe('inferRunType', () => {
         { index: 4, distanceKm: 1, paceSec: 482, avgHeartRate: 135, cadence: 163 },
         { index: 5, distanceKm: 1.2, paceSec: 492, avgHeartRate: 131, cadence: 162 }
       ],
-      fastSegments,
-      weeklyPattern: ['화요일: Easy + Strides', '목요일: Tempo', '토요일: LSD 또는 Steady Long']
+      fastSegments
     })).toBe('Easy + Strides')
   })
 
@@ -120,8 +117,7 @@ describe('inferRunType', () => {
         { index: 4, distanceKm: 1, paceSec: 482, avgHeartRate: 135, cadence: 163 },
         { index: 5, distanceKm: 1.2, paceSec: 492, avgHeartRate: 131, cadence: 162 }
       ],
-      fastSegments: [],
-      weeklyPattern: ['화요일: Easy + Strides', '목요일: Tempo', '토요일: LSD 또는 Steady Long']
+      fastSegments: []
     })).toBe('Easy')
   })
 
@@ -152,8 +148,7 @@ describe('inferRunType', () => {
       avgPaceSec: 470,
       avgHeartRate: 136,
       laps,
-      fastSegments: [],
-      weeklyPattern: ['화요일: Easy + Strides', '목요일: Tempo', '토요일: LSD 또는 Steady Long']
+      fastSegments: []
     })).toBe('Easy + Strides')
   })
 
@@ -171,8 +166,7 @@ describe('inferRunType', () => {
         { index: 5, distanceKm: 1.37, paceSec: 492, avgHeartRate: 131, cadence: 162 }
       ],
       fastSegments: [],
-      routePoints: buildRoutePointsWithStrides(),
-      weeklyPattern: ['화요일: Easy + Strides', '목요일: Tempo', '토요일: LSD 또는 Steady Long']
+      routePoints: buildRoutePointsWithStrides()
     })).toBe('Easy + Strides')
   })
 
@@ -184,8 +178,7 @@ describe('inferRunType', () => {
       avgHeartRate: 136,
       laps: [],
       fastSegments: [],
-      routePoints: buildSteadyRoutePoints(),
-      weeklyPattern: ['화요일: Easy + Strides', '목요일: Tempo']
+      routePoints: buildSteadyRoutePoints()
     })).toBe('Easy')
   })
 })

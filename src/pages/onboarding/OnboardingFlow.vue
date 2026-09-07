@@ -8,14 +8,12 @@ import { distanceClassFromMeters, gradeBandFromVdot, nextDistanceClass } from '@
 import {
   buildInitialWeeklyPattern,
   prescriptionTemplateById,
-  slotsToWeeklyPattern,
   WEEK_DAYS,
   type RoutineGoalKey,
   type RoutineSlot,
   type RunnerLevelKey,
   type WeekDay
 } from '@/shared/lib/coaching/initialWeeklyPattern'
-import { saveWeeklyPattern } from '@/shared/api/adaptiveTrainingRepository'
 
 const memoryStore = useMemoryStore()
 const levelStore = useLevelStore()
@@ -199,10 +197,10 @@ async function persist(placed: boolean) {
       }
       memory.goal = `${GOAL_LABEL[form.goalKey]} 목표`
 
-      // #329/#330: 온보딩 루틴 → weeklyPattern + 선택 처방 템플릿(중복 제거)
+      // #329/#330: 온보딩 루틴 → 선택 처방 템플릿(중복 제거). 루틴 메모는 더 이상 저장하지 않는다 —
+      // 주간 루틴의 정본은 목표로 생성되는 주기화 플랜(training_schedule)이다(2026-09-07).
       const slots = routineSlots.value
       if (slots.length) {
-        memory.weeklyPattern = slotsToWeeklyPattern(slots)
         const chosenIds = [...new Set(slots.map((slot) => slot.templateId))]
         const chosenTemplates = chosenIds
           .map((id) => templateOf(id))
@@ -218,14 +216,6 @@ async function persist(placed: boolean) {
       }
 
       await memoryStore.update(memory)
-      // #328: weekly_patterns 이력 저장(실패해도 온보딩 완료는 막지 않는다)
-      if (slots.length) {
-        try {
-          await saveWeeklyPattern(memory.weeklyPattern, 'onboarding')
-        } catch {
-          /* 이력 저장 실패는 치명적이지 않음 */
-        }
-      }
     }
     await levelStore.complete({
       self_reported_max_distance_m: placed ? selfMaxDistanceM.value || null : null,

@@ -134,7 +134,7 @@ async function confirmRemove() {
     layer-class="session-overlay-layer"
     @close="closeDetail"
   >
-    <RunDetailContent v-if="detailRun" :run="detailRun" :weekly-pattern="memoryStore.memory.weeklyPattern" :scheduled-run-ids="scheduleStore.scheduledRunIds">
+    <RunDetailContent v-if="detailRun" :run="detailRun" :scheduled-run-ids="scheduleStore.scheduledRunIds">
       <template #actions>
         <div class="run-detail-actions" aria-label="세션 관리">
           <button

@@ -18,7 +18,6 @@ describe('inferRunType', () => {
       laps: [],
       fastSegments: [],
       metricSamples,
-      weeklyPattern: ['화요일: Easy + Strides'],
       heartRateModel: hrModel
     })).toBe('Easy + Strides')
   })
@@ -39,7 +38,6 @@ describe('inferRunType', () => {
       laps: [],
       fastSegments: [],
       metricSamples,
-      weeklyPattern: ['화요일: Easy + Strides'],
       heartRateModel: hrModel
     })).toBe('Easy')
   })
@@ -63,7 +61,6 @@ describe('inferRunType', () => {
       laps: [],
       fastSegments: [],
       metricSamples,
-      weeklyPattern: ['화요일: Easy + Strides'],
       heartRateModel: hrModel
     })).toBe('Easy')
   })
@@ -87,7 +84,6 @@ describe('inferRunType', () => {
       laps: [],
       fastSegments: [],
       metricSamples,
-      weeklyPattern: ['화요일: Easy + Strides'],
       heartRateModel: hrModel
     })).toBe('Easy')
   })
@@ -115,7 +111,6 @@ describe('inferRunType', () => {
       ]),
       fastSegments: [],
       metricSamples: [],
-      weeklyPattern: ['토요일: LSD 또는 Steady Long'],
       heartRateModel: hrModel
     })).toBe('LSD')
   })
@@ -142,7 +137,6 @@ describe('inferRunType', () => {
       ]),
       fastSegments: [],
       metricSamples: [],
-      weeklyPattern: ['토요일: LSD 또는 Steady Long'],
       heartRateModel: hrModel
     })).toBe('Steady Long')
   })
@@ -170,7 +164,6 @@ describe('inferRunType', () => {
       ]),
       fastSegments: [],
       metricSamples: [],
-      weeklyPattern: ['일요일: LSD'],
       heartRateModel: hrModel
     })).toBe('LSD')
   })
@@ -185,7 +178,6 @@ describe('inferRunType', () => {
       laps: [],
       fastSegments: [],
       metricSamples: [],
-      weeklyPattern: ['월요일: Easy'],
       heartRateModel: hrModel
     })).toBe('Easy')
   })

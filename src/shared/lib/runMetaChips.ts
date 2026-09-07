@@ -1,4 +1,4 @@
-import { runDataCount, type RunLog, type RunType } from '@/entities/run/model'
+import { runDataCount, type RunLog } from '@/entities/run/model'
 
 export type RunMetaChip = {
   label: string
@@ -16,8 +16,6 @@ export type RunFilterTag = {
   group: 'schedule' | 'period' | 'weather' | 'source' | 'data' | 'course' | 'custom'
 }
 
-const weekdays = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
-const weekdayShort = ['일', '월', '화', '수', '목', '금', '토']
 const dayPeriods = ['새벽', '아침', '오전', '오후', '저녁', '밤']
 const sourceLabels: Record<RunLog['source'], string> = {
   file_import: 'FIT 업로드',
@@ -27,28 +25,21 @@ const sourceLabels: Record<RunLog['source'], string> = {
 }
 
 /**
- * "스케줄 vs 추가" 판정(2026-09-07 교정).
- *
- * 정본은 **실제 귀속**이다 — 그 런에 연결된 예정 세션이 있으면 스케줄이다(요일·타입 무관, 옮긴 세션도 잡힘).
- * `weeklyPattern` 문자열 매칭은 플랜(training_schedule)이 생기기 전의 옛 루틴 메모라 **폴백**으로만 둔다:
- * 사용자가 그 메모를 비우면(실제로 비어 있었다) **모든 런이 '추가'로 뒤집혔다**. 귀속은 멀쩡했는데
- * 칩만 엉뚱한 곳을 물어본 것이다. 코치가 weeklyPattern 으로 실제 플랜을 대신 메꾸다 난 사고(2026-08-18)와 같은 부류.
+ * "스케줄 vs 추가" 판정 — 정본은 **실제 귀속**이다(2026-09-07).
+ * 그 런에 연결된 예정 세션이 있으면 스케줄이다(요일·타입 무관, 옮긴 세션도 잡힘).
+ * 옛 루틴 메모(weeklyPattern) 문자열 매칭은 걷어냈다 — 메모가 비면 모든 런이 '추가'로 뒤집혔고,
+ * 플랜의 정본은 training_schedule 이다.
  */
-function runIsScheduled(run: RunLog, weeklyPattern: string[], scheduledRunIds?: ReadonlySet<string>): boolean {
-  if (scheduledRunIds?.has(run.id)) return true
-  return isScheduledSession(run.date, run.type, weeklyPattern)
+function runIsScheduled(run: RunLog, scheduledRunIds?: ReadonlySet<string>): boolean {
+  return scheduledRunIds?.has(run.id) ?? false
 }
 
-export function getRunMetaChips(
-  run: RunLog,
-  weeklyPattern: string[] = [],
-  scheduledRunIds?: ReadonlySet<string>
-): RunMetaChip[] {
+export function getRunMetaChips(run: RunLog, scheduledRunIds?: ReadonlySet<string>): RunMetaChip[] {
   // 레이스는 훈련 플랜 문맥(스케줄/추가) 밖의 별도 컨텍스트 — 첫 칩이 정체를 밝힌다(#552 워치 유입 포함).
   const chips: RunMetaChip[] = [
     run.tags.includes(SELF_RACE_TAG)
       ? { label: '🏁 레이스', tone: 'race' }
-      : runIsScheduled(run, weeklyPattern, scheduledRunIds)
+      : runIsScheduled(run, scheduledRunIds)
         ? { label: '스케줄', tone: 'schedule' }
         : { label: '추가', tone: 'extra' }
   ]
@@ -61,13 +52,9 @@ export function getRunMetaChips(
   return chips
 }
 
-export function getRunFilterTags(
-  run: RunLog,
-  weeklyPattern: string[] = [],
-  scheduledRunIds?: ReadonlySet<string>
-): RunFilterTag[] {
+export function getRunFilterTags(run: RunLog, scheduledRunIds?: ReadonlySet<string>): RunFilterTag[] {
   const tags: RunFilterTag[] = []
-  const scheduled = runIsScheduled(run, weeklyPattern, scheduledRunIds)
+  const scheduled = runIsScheduled(run, scheduledRunIds)
   tags.push({
     value: scheduled ? 'schedule:scheduled' : 'schedule:extra',
     label: scheduled ? '스케줄' : '추가',
@@ -102,29 +89,9 @@ export function getRunFilterTags(
   return uniqueTags(tags)
 }
 
-export function hasRunFilterTag(
-  run: RunLog,
-  tagValue: string,
-  weeklyPattern: string[] = [],
-  scheduledRunIds?: ReadonlySet<string>
-) {
+export function hasRunFilterTag(run: RunLog, tagValue: string, scheduledRunIds?: ReadonlySet<string>) {
   if (tagValue === 'All') return true
-  return getRunFilterTags(run, weeklyPattern, scheduledRunIds).some((tag) => tag.value === tagValue)
-}
-
-export function isScheduledSession(dateText: string, type: RunType, weeklyPattern: string[]) {
-  const weekdayIndex = getWeekday(dateText)
-  if (weekdayIndex === null || type === 'Unknown') return false
-  const weekday = weekdays[weekdayIndex]
-  const short = weekdayShort[weekdayIndex]
-
-  return weeklyPattern.some((item) => {
-    const normalized = item.toLowerCase()
-    return (
-      (item.includes(weekday) || item.includes(`${short}요일`)) &&
-      (normalized.includes(type.toLowerCase()) || isLongRunMatch(type, normalized))
-    )
-  })
+  return getRunFilterTags(run, scheduledRunIds).some((tag) => tag.value === tagValue)
 }
 
 function getRunPeriod(run: RunLog) {
@@ -153,17 +120,4 @@ function uniqueTags(tags: RunFilterTag[]) {
     seen.add(tag.value)
     return true
   })
-}
-
-function isLongRunMatch(type: RunType, pattern: string) {
-  if (type !== 'LSD' && type !== 'Steady Long') return false
-  return pattern.includes('lsd') || pattern.includes('long') || pattern.includes('롱런') || pattern.includes('장거리')
-}
-
-function getWeekday(value: string) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
-  if (!match) return null
-  const [, yearText, monthText, dayText] = match
-  const date = new Date(Number(yearText), Number(monthText) - 1, Number(dayText))
-  return Number.isFinite(date.getTime()) ? date.getDay() : null
 }

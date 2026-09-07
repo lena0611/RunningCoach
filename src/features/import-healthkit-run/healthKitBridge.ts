@@ -294,7 +294,6 @@ export function isHealthKitBridgeAvailable(): boolean {
 
 export function toExtractedRunData(
   candidate: HealthKitRunCandidate,
-  weeklyPattern: string[] = [],
   heartRateModel: HeartRateModel | null = null
 ): ExtractedRunData {
   const distanceKm = candidate.distanceKm ?? 0
@@ -307,7 +306,6 @@ export function toExtractedRunData(
     fastSegments: candidate.fastSegments ?? [],
     metricSamples: candidate.metricSamples ?? [],
     routePoints: candidate.routePoints ?? [],
-    weeklyPattern,
     heartRateModel,
     date: candidate.date
   })
@@ -318,8 +316,7 @@ export function toExtractedRunData(
     sessionTitle: createSessionTitle({
       date: candidate.date || new Date().toISOString().slice(0, 10),
       startAt: candidate.startAt,
-      type,
-      weeklyPattern
+      type
     }),
     date: candidate.date || new Date().toISOString().slice(0, 10),
     startAt: candidate.startAt || null,

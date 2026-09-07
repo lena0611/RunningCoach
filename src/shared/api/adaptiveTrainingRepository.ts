@@ -2,15 +2,11 @@
 import {
   mapAdaptiveMetricRow,
   mapPhaseHistoryRow,
-  mapWeeklyPatternRow,
   toAdaptiveMetricUpsert,
   type AdaptiveMetric,
   type AdaptiveMetricRow,
   type PhaseHistoryRecord,
-  type PhaseHistoryRow,
-  type WeeklyPatternDerivedFrom,
-  type WeeklyPatternRecord,
-  type WeeklyPatternRow
+  type PhaseHistoryRow
 } from '@/entities/training-memory/adaptivePersistence'
 import type { TrainingPhaseName } from '@/entities/training-memory/model'
 import { requireSupabase } from '@/shared/api/supabase'
@@ -20,55 +16,6 @@ async function requireUserId(): Promise<string> {
   const { data, error } = await supabase.auth.getUser()
   if (error || !data.user) throw error ?? new Error('로그인이 필요합니다.')
   return data.user.id
-}
-
-export async function fetchActiveWeeklyPattern(): Promise<WeeklyPatternRecord | null> {
-  const supabase = requireSupabase()
-  const userId = await requireUserId()
-  const { data, error } = await supabase
-    .from('weekly_patterns')
-    .select('version, weekly_pattern, derived_from, status, created_at, retired_at')
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .order('version', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  if (error) throw error
-  return data ? mapWeeklyPatternRow(data as WeeklyPatternRow) : null
-}
-
-/** 새 weeklyPattern 버전을 활성으로 저장하고 기존 활성 행은 retired 처리한다. */
-export async function saveWeeklyPattern(
-  weeklyPattern: string[],
-  derivedFrom: WeeklyPatternDerivedFrom
-): Promise<WeeklyPatternRecord> {
-  const supabase = requireSupabase()
-  const userId = await requireUserId()
-  const current = await fetchActiveWeeklyPattern()
-  const nextVersion = current ? current.version + 1 : 1
-
-  if (current) {
-    const { error: retireError } = await supabase
-      .from('weekly_patterns')
-      .update({ status: 'retired', retired_at: new Date().toISOString() })
-      .eq('user_id', userId)
-      .eq('status', 'active')
-    if (retireError) throw retireError
-  }
-
-  const { data, error } = await supabase
-    .from('weekly_patterns')
-    .insert({
-      user_id: userId,
-      version: nextVersion,
-      weekly_pattern: weeklyPattern,
-      derived_from: derivedFrom,
-      status: 'active'
-    })
-    .select('version, weekly_pattern, derived_from, status, created_at, retired_at')
-    .single()
-  if (error) throw error
-  return mapWeeklyPatternRow(data as WeeklyPatternRow)
 }
 
 export async function fetchAdaptiveMetrics(): Promise<AdaptiveMetric[]> {

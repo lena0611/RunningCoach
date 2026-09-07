@@ -249,7 +249,7 @@ export function getNextSessionRecommendation(memory: TrainingMemory, runs: RunLo
   const ranToday = runs.some((run) => run.date === formatDateOnly(today))
   const upcoming = getNextPlannedWorkout(memory, today, { excludeToday: ranToday })
   const lastRun = sorted[0] ?? null
-  const lastRunSchedule = lastRun ? getPlannedWorkoutOnDate(memory, lastRun.date) : null
+  const lastRunSchedule = lastRun ? getPlannedWorkoutOnDate() : null
 
   let base: NextSessionRecommendation
   if (upcoming.dayName === memory.athleteProfile.preferredLongRunDay || upcoming.pattern.includes('LSD') || upcoming.pattern.includes('Long')) {
@@ -336,7 +336,7 @@ function summarizeRunShort(run: RunLog): string {
  */
 export function getTrainingDayView(memory: TrainingMemory, runs: RunLog[], today: Date = new Date()): TrainingDayView {
   const todayStr = formatDateOnly(today)
-  const planned = getPlannedWorkoutOnDate(memory, todayStr)
+  const planned = getPlannedWorkoutOnDate()
   const todayRun = runs
     .filter((run) => run.date === todayStr)
     .sort((a, b) => (b.distanceKm ?? 0) - (a.distanceKm ?? 0))[0] ?? null
@@ -466,52 +466,24 @@ function getNextPlannedWorkout(
   today: Date,
   opts: { excludeToday?: boolean } = {}
 ): { dayName: string; workout: string; pattern: string; date: string } {
-  const days = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일']
-  const todayIndex = today.getDay()
-  const patterns = memory.weeklyPattern
-    .map((pattern) => {
-      const [rawDay, ...rest] = pattern.split(':')
-      const dayName = rawDay.trim()
-      const dayIndex = days.indexOf(dayName)
-      return {
-        dayName,
-        dayIndex,
-        workout: rest.join(':').trim(),
-        pattern
-      }
-    })
-    .filter((item) => item.dayIndex >= 0)
-
-  const next = patterns
-    .map((item) => {
-      const rawOffset = (item.dayIndex - todayIndex + 7) % 7
-      // 오늘 이미 수행했으면 오늘 슬롯(offset 0)을 다음 주기로 밀어 다음 예정일을 고른다.
-      const offset = opts.excludeToday && rawOffset === 0 ? 7 : rawOffset
-      return { ...item, offset }
-    })
-    .sort((a, b) => a.offset - b.offset)[0]
-
-  if (next) return { ...next, date: formatDateOnly(addDays(today, next.offset)) }
+  /*
+    주간 루틴 메모(weeklyPattern)를 걷어냈다(2026-09-07). 루틴의 정본은 목표로 생성되는
+    주기화 플랜(training_schedule)이고, 이 경로는 **플랜이 없을 때만** 도는 폴백이다 —
+    메모는 이미 비어 있어 여기로 떨어지고 있었으니 동작은 그대로다.
+  */
+  void opts
+  const longRunDay = memory.athleteProfile.preferredLongRunDay || '토요일'
   return {
-    dayName: memory.athleteProfile.preferredLongRunDay || '토요일',
+    dayName: longRunDay,
     workout: 'LSD 또는 Steady Long',
-    pattern: `${memory.athleteProfile.preferredLongRunDay || '토요일'}: LSD 또는 Steady Long`,
+    pattern: `${longRunDay}: LSD 또는 Steady Long`,
     date: formatDateOnly(today)
   }
 }
 
-function getPlannedWorkoutOnDate(memory: TrainingMemory, dateText: string): { dayName: string; workout: string; pattern: string } | null {
-  const date = new Date(`${dateText}T00:00:00`)
-  if (!Number.isFinite(date.getTime())) return null
-  const dayName = getDayName(date)
-  const pattern = memory.weeklyPattern.find((item) => item.trim().startsWith(dayName))
-  if (!pattern) return null
-  const [, ...rest] = pattern.split(':')
-  return {
-    dayName,
-    workout: rest.join(':').trim(),
-    pattern
-  }
+/** 플랜 없는 폴백 경로에는 "오늘 예정"이 없다 — 주간 루틴 메모를 걷어낸 뒤로 항상 null(2026-09-07). */
+function getPlannedWorkoutOnDate(): { dayName: string; workout: string; pattern: string } | null {
+  return null
 }
 
 function getLastRunContextText(lastRun: RunLog | null, schedule: { pattern: string } | null): string {

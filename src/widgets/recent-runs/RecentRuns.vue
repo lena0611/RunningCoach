@@ -4,7 +4,7 @@ import EmptyState from '@/shared/ui/EmptyState.vue'
 import RunSessionList from '@/shared/ui/RunSessionList.vue'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
 
-defineProps<{ runs: RunLog[]; weeklyPattern?: string[]; scheduledRunIds?: ReadonlySet<string> }>()
+defineProps<{ runs: RunLog[]; scheduledRunIds?: ReadonlySet<string> }>()
 defineEmits<{ showAll: [], select: [run: RunLog] }>()
 </script>
 
@@ -15,7 +15,7 @@ defineEmits<{ showAll: [], select: [run: RunLog] }>()
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
       </button>
     </template>
-    <RunSessionList v-if="runs.length" :runs="runs" :weekly-pattern="weeklyPattern" :scheduled-run-ids="scheduledRunIds" interactive @select="$emit('select', $event)" />
+    <RunSessionList v-if="runs.length" :runs="runs" :scheduled-run-ids="scheduledRunIds" interactive @select="$emit('select', $event)" />
     <EmptyState v-else title="아직 저장된 러닝 기록이 없습니다." description="HealthKit 또는 FIT 파일로 첫 기록을 추가하세요." />
   </SectionGroup>
 </template>
