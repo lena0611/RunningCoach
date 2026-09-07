@@ -343,7 +343,7 @@ PaceLAB 코칭 알고리즘은 다섯 겹으로 동작한다.
    - MAF, Daniels, Hanson 같은 훈련법은 원문이 아니라 적용 조건/처방 규칙/주의 조건으로 구조화한다.
    - 사용자 지식화 검토 요청은 비용 없는 backlog insert다. OpenAI를 써서 조사/요약/규칙화하는 작업은 별도 검토 단계에서만 수행한다.
 4. 개인화 적응 프로필
-   - `trainingMemory.adaptiveTrainingProfile`에 훈련 단계, 승급 조건, 처방 템플릿, 반복 패턴, 세션별 보정 가이드를 저장한다.
+   - `trainingMemory.adaptiveTrainingProfile`에 훈련 단계, 승급 조건, 반복 패턴, 세션별 보정 가이드를 저장한다.
    - 소스 코드가 스스로 바뀌는 구조가 아니다. 누적 데이터와 사용자 피드백으로 검증된 개인화 기준만 저장된다.
 5. 러너 정체성/코치 믿음
    - `trainingMemory.runnerIdentity`는 strengths, weaknesses, riskFactors, coachingStyle로 장기 특성을 구조화한다.
@@ -352,11 +352,11 @@ PaceLAB 코칭 알고리즘은 다섯 겹으로 동작한다.
 
 ## 개인화 진화 규칙
 
-- 업데이트 대상은 `adaptiveTrainingProfile.trainingPhase`, `adaptiveTrainingProfile.progressionCriteria`, `adaptiveTrainingProfile.prescriptionTemplates`, `adaptiveTrainingProfile.compliancePatterns`, `adaptiveTrainingProfile.sessionGuides`다.
+- 업데이트 대상은 `adaptiveTrainingProfile.trainingPhase`, `adaptiveTrainingProfile.progressionCriteria`, `adaptiveTrainingProfile.compliancePatterns`, `adaptiveTrainingProfile.sessionGuides`다.
 - `trainingPhase`는 Base/Build/Threshold/Race Specific/Taper/Recovery 중 하나로 현재 훈련 블록을 나타낸다.
 - `progressionCriteria`는 Easy 심박 안정, Tempo 상한 준수, Long Run 지속성, 부상/회복 게이트처럼 승급/유지/하향 판단 기준을 구조화한다.
 - Tempo 평가는 단순 성공/실패가 아니라 A/B/C/D 등급(자극 확보 × 처방 준수)으로 본다(#301). Tempo 심박 상한은 고정 추정값이 아니라 실제 수행으로 검증해 상향만 적응하며(채택값은 `adaptiveTrainingProfile.tempoCeiling`에 영속), 추정 base 미만으로는 내리지 않는다. 상세는 `ai-coaching-goal.md §적응형 알고리즘 기억`.
-- `prescriptionTemplates`는 Easy, Recovery, Easy + Strides, Tempo, LSD, Steady Long, TT, interval 같은 실행 가능한 훈련 처방을 저장한다.
+- **세션 실행 지침을 메모리에 따로 저장하지 않는다.** 무엇을 어떻게 뛰는지의 정본은 주기화 플랜(`training_schedule`)과 그 세션을 풀어주는 `sessionBriefing`이다. 코칭 기억에 처방을 복사해 두면 두 번째 진실이 되어 어긋난다 — 옛 `prescriptionTemplates`가 실제로 그렇게 어긋나(스트라이드 고정 8회 인터벌 = §Easy + Strides 위배) 2026-09-07 제거했다.
 - 같은 세션 유형에서 최근 2~3회 이상 같은 준수/이탈 패턴이 반복될 때만 갱신한다.
 - 사용자가 “너무 쉽다”, “다음날 피로가 크다”, “발바닥이 조용했다”, “템포가 버거웠다”처럼 명시 피드백을 주면 갱신 근거로 쓴다.
 - 날씨, 동반주, 과거 기록 리뷰, 데이터 부족처럼 일시적 요인이 크면 `watch`로 두고 갱신하지 않는다.

@@ -169,8 +169,7 @@ const routineHeartRateModel = computed(() => {
 })
 const trainingPhase = computed(() => draft.adaptiveTrainingProfile.trainingPhase)
 const progressionCriteria = computed(() => draft.adaptiveTrainingProfile.progressionCriteria)
-const prescriptionTemplates = computed(() => draft.adaptiveTrainingProfile.prescriptionTemplates)
-const aiMemoryCount = computed(() => draft.knownIssues.length + draft.runningStyle.length + draft.heatStrategy.length + draft.aiNotes.length)
+const aiMemoryCount = computed(() => draft.aiNotes.length)
 
 // ── 현재 코칭 기준 요약 카드 + 관리 nav (리디자인 ①c) ─────────────────
 const basisGoalMeta = computed(() => {
@@ -197,19 +196,18 @@ const trainingNavMeta = computed(() => trainingPhase.value.currentPhase)
 const aiNavMeta = computed(() => `장기 메모 ${aiMemoryCount.value}개`)
 
 // ── 항목별 저장(리디자인 ①c): 전역 저장 제거 — 패널 그룹별 dirty 판정·부분 커밋 ──
-type MemorySection = 'goals' | 'injuries' | 'training' | 'ai'
+// AI 기억 패널은 코치가 쓰고 사람은 읽는 화면이라 저장 섹션이 없다(2026-09-07).
+type MemorySection = 'goals' | 'injuries' | 'training'
 const SECTION_KEYS: Record<MemorySection, (keyof TrainingMemory)[]> = {
   goals: ['goals', 'activeGoalId', 'goal'],
   injuries: ['injuryItems', 'activeInjuryItemId'],
-  training: ['longRunStrategy', 'currentVolumeNote'],
-  ai: ['knownIssues', 'runningStyle', 'heatStrategy', 'aiNotes']
+  training: ['longRunStrategy', 'currentVolumeNote']
 }
 const snapshotMemory = computed<TrainingMemory>(() => JSON.parse(memorySnapshot.value))
 const panelSection = computed<MemorySection | null>(() => {
   if (panel.value.startsWith('goal')) return 'goals'
   if (panel.value.startsWith('injur')) return 'injuries'
   if (panel.value === 'training') return 'training'
-  if (panel.value === 'ai-memory') return 'ai'
   return null
 })
 const isSectionDirty = computed(() => {
@@ -262,7 +260,7 @@ function syncDraftFromStore() {
  * 예전엔 "아무 키라도 수정 중이면(isDirty) 재동기화를 통째로 건너뛴다"였다. 그래서 로드 전(빈 값)에
  * 화면이 뜨고 어딘가 한 글자만 건드리면 draft 가 **영구히 빈 상태로 고정**됐고, 그 뒤 섹션 저장이
  * 그 섹션 키를 통째로 빈 값으로 덮었다 — 실사고: 코칭 메모·러닝 스타일·여름 전략·기타 주의사항과
- * 장거리 전략·볼륨 노트가 한꺼번에 지워졌다(지워진 키 = 'ai'·'training' 섹션 키와 정확히 일치).
+ * 장거리 전략·볼륨 노트가 한꺼번에 지워졌다(지워진 키 = AI·훈련 섹션 키와 정확히 일치).
  * 키 단위로 보면 편집 중인 칸은 지키면서 나머지는 최신 값을 받는다.
  */
 function mergeStoreIntoDraft() {
@@ -1076,37 +1074,13 @@ async function saveSection(section: MemorySection) {
               </div>
 
               <div class="memory-subsection">
-                <strong>처방 템플릿</strong>
-                <div class="prescription-template-list">
-                  <article v-for="template in prescriptionTemplates.slice(0, 4)" :key="template.id">
-                    <span class="context-chip">{{ template.phase }}</span>
-                    <strong>{{ template.name }}</strong>
-                    <small>{{ template.sessionType }} · {{ template.purpose }}</small>
-                    <ul>
-                      <li v-for="step in template.workout.slice(0, 3)" :key="step">{{ step }}</li>
-                    </ul>
-                  </article>
-                </div>
+                <strong>코칭 메모</strong>
+                <small>코치가 장기적으로 기억할 계획 변경 근거를 스스로 남기는 칸이에요. 직접 쓰는 칸이 아니에요.</small>
+                <ul v-if="draft.aiNotes.length" class="ai-note-list">
+                  <li v-for="note in draft.aiNotes" :key="note">{{ note }}</li>
+                </ul>
+                <p v-else class="helper">아직 남긴 메모가 없어요.</p>
               </div>
-
-              <FormGrid class="memory-ai-fields">
-                <label class="full">
-                  기타 주의사항
-                  <ClearableField :model-value="join(draft.knownIssues)" as="textarea" rows="5" @update:model-value="draft.knownIssues = split(String($event ?? ''))" />
-                </label>
-                <label class="full">
-                  러닝 스타일
-                  <ClearableField :model-value="join(draft.runningStyle)" as="textarea" rows="6" @update:model-value="draft.runningStyle = split(String($event ?? ''))" />
-                </label>
-                <label class="full">
-                  여름 전략
-                  <ClearableField :model-value="join(draft.heatStrategy)" as="textarea" rows="5" @update:model-value="draft.heatStrategy = split(String($event ?? ''))" />
-                </label>
-                <label class="full">
-                  코칭 메모
-                  <ClearableField :model-value="join(draft.aiNotes)" as="textarea" rows="5" @update:model-value="draft.aiNotes = split(String($event ?? ''))" />
-                </label>
-              </FormGrid>
             </div>
 
             <div v-else-if="panel === 'knowledge'" class="memory-stack">

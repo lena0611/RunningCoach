@@ -1631,7 +1631,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
         restState?.active === true
     },
     upcomingSchedulePolicy:
-      'context.upcomingSchedule는 실제 주기화 스케줄의 다음 세션들(날짜·유형·거리)이다. "## 다음 훈련"은 반드시 이 실제 세션을 기준으로 말하고, prescriptionTemplates 로 다른 세션(예: 다음이 토요일 LSD인데 화요일 Easy)을 지어내지 마라. 요약 화면(캐러셀)과 어긋나면 안 된다. 부상·회복으로 하향이 필요하면 "그 스케줄 세션(예: 토요일 LSD)을 이렇게 조정/대체하자"처럼 실제 세션을 기준으로 조정한다. upcomingSchedule이 비어있거나 null일 때만 일반 가이드로 답한다. ' +
+      'context.upcomingSchedule는 실제 주기화 스케줄의 다음 세션들(날짜·유형·거리)이다. "## 다음 훈련"은 반드시 이 실제 세션을 기준으로 말하고, 다른 세션(예: 다음이 토요일 LSD인데 화요일 Easy)을 지어내지 마라. 요약 화면(캐러셀)과 어긋나면 안 된다. 부상·회복으로 하향이 필요하면 "그 스케줄 세션(예: 토요일 LSD)을 이렇게 조정/대체하자"처럼 실제 세션을 기준으로 조정한다. upcomingSchedule이 비어있거나 null일 때만 일반 가이드로 답한다. ' +
       // 2026-08-26 실사용: 한 답변 안에서 "목요일 템포는 낮추자"(어제 스레드 기억)와 "목요일은 Easy가
       // 들어가 있고"(실제 플랜)를 동시에 말했다. #695 는 "네/맞아요" 직답을 막았지만, 코치가 **서술하며**
       // 옛 타입을 끌어오는 경로는 안 덮였다.
@@ -1821,7 +1821,6 @@ type AdaptiveTrainingProfilePatch = {
   updatedAt?: string
   trainingPhase?: TrainingPhasePatch
   progressionCriteria?: ProgressionCriterionPatch[]
-  prescriptionTemplates?: PrescriptionTemplatePatch[]
   compliancePatterns?: string[]
   sessionGuides?: AdaptiveSessionGuidePatch[]
 }
@@ -1841,18 +1840,6 @@ type ProgressionCriterionPatch = {
   status?: 'ready' | 'watch' | 'blocked'
   evidence?: string
   action?: string
-}
-
-type PrescriptionTemplatePatch = {
-  id?: string
-  name?: string
-  phase?: 'Any' | 'Base' | 'Build' | 'Threshold' | 'Race Specific' | 'Taper' | 'Recovery'
-  sessionType?: string
-  purpose?: string
-  workout?: string[]
-  useWhen?: string[]
-  avoidWhen?: string[]
-  progressionTrigger?: string
 }
 
 type AdaptiveSessionGuidePatch = {
@@ -2738,7 +2725,12 @@ function buildCoachThreadInstruction() {
     // 2026-08-18 실사고: 같은 방에서 raceBenchmark 가 available=true 로 실렸는데도, 직전 턴의 실패 답변을
     // 이어받아 "대회명과 기록이 없어서 비교할 수 없다"를 반복했다(다른 문구로 물으면 정상 답변).
     '**과거 답변과의 일관성보다 이번 턴 컨텍스트가 우선이다.** 직전에 "그건 볼 수 없다 / 데이터가 없다"고 답했더라도, 이번 컨텍스트에 그 데이터가 있으면 **있는 대로 답한다**. 앱은 계속 개선되므로 어제 못 했던 것이 오늘 되는 게 정상이다. 옛 답변을 근거로 "여전히 없다"고 말하지 말고, 컨텍스트를 먼저 확인하고 판단한다.',
-    '답변을 "원하시면 ~도 해드릴게요"로 맺는 건 **이번 턴에 실제로 해줄 수 있는 것일 때만** 쓴다. 도구로 조회 가능한 것을 다음 턴으로 미루는 용도로 쓰지 마라.'
+    '답변을 "원하시면 ~도 해드릴게요"로 맺는 건 **이번 턴에 실제로 해줄 수 있는 것일 때만** 쓴다. 도구로 조회 가능한 것을 다음 턴으로 미루는 용도로 쓰지 마라.',
+    // 2026-09-07 실사고: 옛 처방 템플릿(워밍업 10분 · 20초 가속 x 8 · 회복 1분40초)을 컨텍스트에서
+    // 걷어낸 **뒤에도** 코치가 같은 숫자를 두 턴 연속 되풀이했다. 데이터는 이미 없었고 출처는 스레드
+    // 기억이었다("context에 그 배열 있어?" → "없음"). 실행 수치는 앱 화면과 어긋나면 바로 들키는
+    // 값이라, 기억으로 인용하면 안 된다.
+    '**세션 실행 수치(웜업/쿨다운 시간, 반복수, 구간 길이, 회복 시간)는 스레드 기억에서 인용하지 마라.** 이 값들은 단계·VDOT·부상·적응 게이트로 매번 산출되므로 옛 턴의 숫자는 이미 틀렸을 수 있다. 이번 턴 컨텍스트의 세션 실행 지침(selectedRunExecutionGuide·upcomingSchedule의 지침)에 있는 값만 쓰고, 거기 없으면 숫자를 말하지 말고 무엇을 보고 정하는지로 답한다. 사용자가 "앱에 적힌 그대로"를 물으면 특히 그렇다 — 화면과 다른 숫자를 말하면 그게 곧 오답이다.'
   ]
 }
 
@@ -2858,7 +2850,7 @@ function buildCoachInstructions(context: unknown) {
     '현재 처방 숫자는 영구 고정값이 아니다. 사용자가 실행 가능한 Workoutdoors 세팅 기준으로 제시하되, 누적 데이터와 회복 반응이 충분하면 AI가 먼저 숫자/구성 변경을 제안한다.',
     'Tempo에서는 selectedRunExecutionGuide.boundaries.heartRateCeilingBpm(=heartRateModel.tempoCeilingBpm)을 상한으로 쓴다. maxHeartRate가 그 상한을 넘으면 몇 번째 구간부터 넘었는지 짧게 말하고, 없으면 "상한을 넘기지 않았다"처럼 품질 근거로 쓴다. 본문 숫자는 그 상한 값을 쓴다(165 고정 아님). 단 Race/Time Trial/한계시험은 심박 상한이 없다 — 전력 측정이 목적이므로 높은 심박·페이스를 "상한 초과"로 처벌하지 말고, 균등 페이스(초반 절제·후반 유지)와 결과(현재 체력 갱신)로 평가한다.',
     'Easy/Recovery/Easy + Strides 강도 판정은 평균심박(+RPE·드리프트)을 1차로 본다. 최고심박(maxHeartRate) 단발 스파이크는 언덕·신호 대기·스트라이드 가속처럼 자연스러운 것이므로 그것만으로 "이지 상한을 넘겼다/강도 초과"라고 처벌하지 마라. 평균심박이 이지 상한 + 약간의 여유까지 안정적이면 본런 강도를 잘 지킨 것이다. 진짜 과강 Easy(평균심박 자체가 상한을 뚜렷이 초과)일 때만 "다음엔 초반을 더 눌러보자"처럼 부드럽게 짚는다.',
-    'context.upcomingSchedule가 있으면 "## 다음 훈련"은 그 실제 주기화 스케줄의 다음 세션(날짜·유형·거리)을 기준으로 말한다 — prescriptionTemplates 보다 우선이고 요약 화면(캐러셀)과 반드시 일치시킨다. 예: 다음이 토요일 LSD면 "화요일 Easy"라고 지어내지 말고 "토요일 LSD(약 N km)"를 기준으로 처방·조정한다. 부상/회복으로 낮춰야 하면 그 스케줄 세션을 어떻게 조정/대체할지로 말한다. 다음 훈련을 제안할 때는 세션명만 말하지 말고 사용자가 Workoutdoors에 바로 세팅할 수 있는 세부 지침을 준다. 심박 숫자는 heartRateModel의 개인 상한 값만 쓰고(예: Easy는 easyCeilingBpm 넘기지 말기, Tempo는 max tempoCeilingBpm 넘기지 말기), 상한이 null이면 심박 숫자 대신 페이스/RPE로 안내한다. Easy + Strides는 "이지 본런 + 본런 끝 스트라이드 몇 회(짧고 빠르게, 속도 기준, 사이 완전 회복)".',
+    'context.upcomingSchedule가 있으면 "## 다음 훈련"은 그 실제 주기화 스케줄의 다음 세션(날짜·유형·거리)을 기준으로 말한다 — 요약 화면(캐러셀)과 반드시 일치시킨다. 예: 다음이 토요일 LSD면 "화요일 Easy"라고 지어내지 말고 "토요일 LSD(약 N km)"를 기준으로 처방·조정한다. 부상/회복으로 낮춰야 하면 그 스케줄 세션을 어떻게 조정/대체할지로 말한다. 다음 훈련을 제안할 때는 세션명만 말하지 말고 사용자가 Workoutdoors에 바로 세팅할 수 있는 세부 지침을 준다. 심박 숫자는 heartRateModel의 개인 상한 값만 쓰고(예: Easy는 easyCeilingBpm 넘기지 말기, Tempo는 max tempoCeilingBpm 넘기지 말기), 상한이 null이면 심박 숫자 대신 페이스/RPE로 안내한다. Easy + Strides는 "이지 본런 + 본런 끝 스트라이드 몇 회(짧고 빠르게, 속도 기준, 사이 완전 회복)".',
     'context.restState.active가 true면 사용자가 선언한 휴식 기간이다 — "## 다음 훈련"에서 훈련 처방·재촉을 하지 말고 휴식을 존중한다("푹 쉬세요, 돌아오면 가볍게"). 이때 휴식 존중이 upcomingSchedule 처방보다 우선이다. 복귀일이거나 복귀가 임박했으면 "놓침"이 아니라 "회복 후 정리" 톤으로 안내한다. 자세한 분기는 context.instructionForRest를 따른다.',
     'context.injurySignals가 있으면 활성 부상의 "가능성 있는 원인 가설"과 조절 레버다 — 의료 진단이 아니라 "가능성"으로만 말하고(확률% 금지, 의사 흉내 금지), redFlag.tripped=true면 가설·처방을 멈추고 전문가 평가 의뢰를 최우선으로 안내한다(escape hatch). 레버는 다음 훈련 조정에 핵심 하나만 부드럽게 녹인다. 자세한 분기는 context.instructionForInjurySignals를 따른다.',
     '세션 유형별 구간당 페이스/심박 경계 가이드가 현재 사용자에게 맞지 않아 보이면 "## 루틴 업데이트"에서 유지/조정 여부를 말한다. 조정이 필요할 때는 trainingMemoryPatch.activeGoalStrategyNotes 또는 aiNotes에 새 기준을 저장한다.',
@@ -2870,9 +2862,11 @@ function buildCoachInstructions(context: unknown) {
     'context.adaptiveTrainingProfile은 사용자 데이터와 대화로 누적된 개인화 레이어다. 문헌 기준선 위에 얹는 보정값이며, 단일 세션을 보고 즉흥적으로 덮어쓰지 않는다.',
     'adaptiveTrainingProfile.trainingPhase는 현재 훈련 블록이다. Base/Build/Threshold/Race Specific/Taper/Recovery 중 하나로 보고, activeGoal까지 남은 기간과 최근 수행 품질에 맞춰 다음 단계 후보를 판단한다.',
     'adaptiveTrainingProfile.progressionCriteria는 승급 조건이다. Easy 심박 안정, Tempo 상한 준수, Long Run 지속성, 부상/회복 게이트 같은 조건을 보고 유지/상향/하향/보류를 결정한다.',
-    'adaptiveTrainingProfile.prescriptionTemplates는 사용자가 Workoutdoors에 옮겨 실행할 수 있는 처방 템플릿이다. 다음 훈련을 제안할 때 이 템플릿의 구조(세션 유형, 패턴, 진행 조건)를 우선 보고, 조건이 맞지 않으면 새 훈련을 즉흥적으로 만들지 않는다. 단, 심박 상한 숫자는 템플릿/progressionCriteria 텍스트에 적힌 값이 아니라 항상 heartRateModel(tempoCeilingBpm/easyCeilingBpm/recoveryCeilingBpm)에서 가져온다. 저장 텍스트에 과거 숫자가 남아 있어도 무시하고 heartRateModel 값으로 말하고 처방한다. heartRateModel.source가 insufficient이면 심박 상한을 말하지 말고 페이스/RPE로 처방한다.',
+    // 세션 실행 지침의 정본은 웹 sessionBriefing 이다(context.upcomingSchedule·selectedRunExecutionGuide 로 들어온다).
+    // 저장된 처방 템플릿을 별도 후보 풀로 두던 경로는 SSOT 와 어긋나 제거했다(2026-09-07).
+    '심박 상한 숫자는 progressionCriteria 같은 저장 텍스트에 적힌 값이 아니라 항상 heartRateModel(tempoCeilingBpm/easyCeilingBpm/recoveryCeilingBpm)에서 가져온다. 저장 텍스트에 과거 숫자가 남아 있어도 무시하고 heartRateModel 값으로 말하고 처방한다. heartRateModel.source가 insufficient이면 심박 상한을 말하지 말고 페이스/RPE로 처방한다.',
     '5km TT, 10km TT, 진짜 인터벌/크루즈 인터벌 같은 상위 품질 훈련은 progressionCriteria가 ready이고 부상/회복 게이트가 막히지 않을 때만 제안한다.',
-    '훈련 단계, 승급 조건, 처방 템플릿을 바꿔야 하면 trainingMemoryPatch.adaptiveTrainingProfile.trainingPhase/progressionCriteria/prescriptionTemplates에 전체 구조를 반환한다. 단일 세션만 보고 바꾸지 말고 반복 근거가 있을 때만 한다.',
+    '훈련 단계나 승급 조건을 바꿔야 하면 trainingMemoryPatch.adaptiveTrainingProfile.trainingPhase/progressionCriteria에 전체 구조를 반환한다. 단일 세션만 보고 바꾸지 말고 반복 근거가 있을 때만 한다.',
     '알고리즘이 스스로 더 나아진다는 뜻은 소스 코드가 바뀐다는 뜻이 아니다. 반복되는 수행 패턴, 처방 준수율, 사용자 피드백을 trainingMemory.adaptiveTrainingProfile에 저장해 다음 판단에 반영한다는 뜻이다.',
     'adaptiveTrainingProfile을 업데이트할 때는 최근 2~3회 이상 같은 세션 유형에서 같은 준수/이탈 패턴이 반복되거나, 사용자가 강도/회복/통증에 대해 명시 피드백을 준 경우만 사용한다.',
     '날씨, 동반주, 과거 기록 리뷰, 데이터 부족처럼 일시적 이유로 설명되는 결과는 adaptiveTrainingProfile을 바꾸지 않는다.',
@@ -2936,7 +2930,6 @@ function buildCoachInstructions(context: unknown) {
     '작은 단계 목표 예: "2주간 Easy 볼륨 안정화", "Tempo에서 템포 상한을 넘기지 않고 지속 시간 확보", "토요일 Long Run을 12~15km로 안정화", "목표 10km 전 5km 테스트로 현재 위치 확인".',
     '단계 목표를 새로 잡거나 바꿔야 하면 report의 루틴 업데이트 섹션에 짧게 말하고, trainingMemoryPatch.activeGoalStrategyNotes에 큰 목표와 단계 목표가 함께 보이도록 반영한다.',
     '다른 목표는 보조 관점으로만 활용하고, activeGoal과 충돌하면 activeGoal을 우선한다.',
-    '부상관리는 knownIssues 자유 텍스트보다 injuryItems와 activeInjuryItem을 우선한다.',
     'injuryItems의 normalizedAreas는 정규화된 부상 부위와 부위별 painLevel이다. area 자유 텍스트보다 normalizedAreas, severity, strengthPlan을 우선한다.',
     'painLevel은 0~5 훈련 부하 조절 신호다. 0~1은 루틴 유지 가능, 2는 강훈련 전 체크포인트, 3은 Tempo/Strides/Steady Long 상향 보류, 4~5는 러닝 강도 하향 또는 중단/전문가 상담 안내를 우선한다.',
     'strengthPlan은 러닝 보강운동 처방의 보수적 기본값이다. strengthPlanDetails가 있으면 instruction, useWhen, stopWhen, sources의 짧은 근거를 우선한다. 의료 처방처럼 말하지 말고, 통증 0~2/5에서만 수행하고 악화 시 중단/축소하는 회복 보조 운동으로 설명한다.',
@@ -3109,7 +3102,7 @@ function buildAdaptiveTrainingProfileSchema(): Record<string, unknown> {
       {
         type: 'object',
         additionalProperties: false,
-        required: ['methodologyVersion', 'updatedAt', 'trainingPhase', 'progressionCriteria', 'prescriptionTemplates', 'compliancePatterns', 'sessionGuides'],
+        required: ['methodologyVersion', 'updatedAt', 'trainingPhase', 'progressionCriteria', 'compliancePatterns', 'sessionGuides'],
         properties: {
           methodologyVersion: { anyOf: [{ type: 'string' }, { type: 'null' }] },
           updatedAt: { anyOf: [{ type: 'string' }, { type: 'null' }] },
@@ -3143,25 +3136,6 @@ function buildAdaptiveTrainingProfileSchema(): Record<string, unknown> {
                 status: { anyOf: [{ type: 'string', enum: ['ready', 'watch', 'blocked'] }, { type: 'null' }] },
                 evidence: { anyOf: [{ type: 'string' }, { type: 'null' }] },
                 action: { anyOf: [{ type: 'string' }, { type: 'null' }] }
-              }
-            }
-          },
-          prescriptionTemplates: {
-            type: 'array',
-            items: {
-              type: 'object',
-              additionalProperties: false,
-              required: ['id', 'name', 'phase', 'sessionType', 'purpose', 'workout', 'useWhen', 'avoidWhen', 'progressionTrigger'],
-              properties: {
-                id: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-                name: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-                phase: { anyOf: [{ type: 'string', enum: ['Any', 'Base', 'Build', 'Threshold', 'Race Specific', 'Taper', 'Recovery'] }, { type: 'null' }] },
-                sessionType: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-                purpose: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-                workout: { type: 'array', items: { type: 'string' } },
-                useWhen: { type: 'array', items: { type: 'string' } },
-                avoidWhen: { type: 'array', items: { type: 'string' } },
-                progressionTrigger: { anyOf: [{ type: 'string' }, { type: 'null' }] }
               }
             }
           },
@@ -4037,7 +4011,6 @@ function normalizeAdaptiveTrainingProfile(value: unknown) {
     updatedAt: typeof raw.updatedAt === 'string' && raw.updatedAt.trim() ? raw.updatedAt.trim().slice(0, 80) : null,
     trainingPhase: normalizeTrainingPhase(raw.trainingPhase),
     progressionCriteria: normalizeProgressionCriteria(raw.progressionCriteria),
-    prescriptionTemplates: normalizePrescriptionTemplates(raw.prescriptionTemplates),
     compliancePatterns: normalizeStringArray(raw.compliancePatterns, 20, 240),
     sessionGuides: normalizeAdaptiveSessionGuides(raw.sessionGuides),
     // #301: Tempo 적응 상한 영속 상태. AI patch는 이 필드를 설정하지 않으므로 항상 보존만 한다.
@@ -4100,66 +4073,6 @@ function defaultProgressionCriteria(): Required<ProgressionCriterionPatch>[] {
   ]
 }
 
-function defaultPrescriptionTemplates(): Required<PrescriptionTemplatePatch>[] {
-  return [
-    {
-      id: 'easy-base',
-      name: 'Easy 기반주',
-      phase: 'Any',
-      sessionType: 'Easy',
-      purpose: '유산소 기반 유지와 회복 가능한 볼륨 확보',
-      workout: ['대화 가능한 강도', '심박 easyCeilingBpm(이지 상한) 이하 우선', '페이스는 컨디션과 날씨에 맡김'],
-      useWhen: ['주간 루틴의 기본 볼륨일 때', '강훈련 전후 연결 조깅이 필요할 때'],
-      avoidWhen: ['통증이 뛰면서 커질 때', '더위로 심박이 쉽게 튈 때는 거리보다 시간으로 축소'],
-      progressionTrigger: '심박이 이지 상한 이하로 2~3회 안정되고 다음날 피로가 낮으면 거리나 시간을 소폭 증가'
-    },
-    {
-      id: 'easy-strides-8x',
-      name: 'Easy + Strides',
-      phase: 'Base',
-      sessionType: 'Easy + Strides',
-      purpose: '낮은 심박 기반에 짧은 신경근 자극 추가',
-      workout: ['워밍업 10분', '20초 가속 + 1분40초 회복 x 8', '쿨다운 15분'],
-      useWhen: ['화요일 루틴', 'Easy 기반은 유지하면서 다리 회전을 깨우고 싶을 때'],
-      avoidWhen: ['햄스트링/발바닥 신호가 active일 때', '가속 회복 구간에서 호흡이 내려오지 않을 때'],
-      progressionTrigger: '이지 본런이 낮은 심박으로 안정되게 눌리고 회복이 좋으면, 스트라이드 횟수를 소폭 늘리거나 Tempo 품질로 연결한다(스트라이드 선명도로 채점하지 않는다)'
-    },
-    {
-      id: 'tempo-ceiling',
-      name: 'Tempo 상한주',
-      phase: 'Build',
-      sessionType: 'Tempo',
-      purpose: '10km 목표를 위한 역치 지속력 확보',
-      workout: ['워밍업 후 Tempo', '최대 심박이 tempoCeilingBpm(템포 상한) 넘기지 않기', '후반 페이스 급락 없이 마무리'],
-      useWhen: ['목요일 루틴', '최근 Easy/Long Run 회복이 안정적일 때'],
-      avoidWhen: ['최근 7일 강훈련이 많을 때', 'Tempo 중반 전에 템포 상한을 넘길 때', '통증 신호가 있을 때'],
-      progressionTrigger: '2회 이상 템포 상한 이하로 안정되면 Tempo 지속 시간을 소폭 늘리거나 구간형 Tempo 검토'
-    },
-    {
-      id: 'steady-long',
-      name: 'Steady Long',
-      phase: 'Build',
-      sessionType: 'Steady Long',
-      purpose: '롱런 안에서 목표 지속력과 후반 효율 확보',
-      workout: ['초반 Easy', '후반 자연스러운 Steady', '무리한 레이스 페이스 금지'],
-      useWhen: ['토요일 Steady Long 주차', 'LSD와 회복이 안정된 뒤'],
-      avoidWhen: ['최근 Tempo가 흔들렸을 때', '회복/부상 게이트가 watch 이상일 때'],
-      progressionTrigger: '후반 효율과 다음날 회복이 안정되면 Steady 구간을 아주 조금 확장'
-    },
-    {
-      id: '5k-check',
-      name: '5km TT 체크',
-      phase: 'Threshold',
-      sessionType: 'Race',
-      purpose: '10km 예측과 훈련 단계 점검',
-      workout: ['충분한 워밍업', '5km 지속 가능한 최고 노력', '회복 주간 안에서 배치'],
-      useWhen: ['2~3주 이상 루틴 소화와 회복이 안정적일 때', '목표 예상 업데이트 근거가 필요할 때'],
-      avoidWhen: ['통증/피로 신호가 있을 때', '최근 강훈련이 누적됐을 때'],
-      progressionTrigger: '예상 기록과 회복 반응을 보고 Tempo/Long Run 처방을 재조정'
-    }
-  ]
-}
-
 function normalizeTrainingPhase(value: unknown): Required<TrainingPhasePatch> {
   const base = defaultTrainingPhase()
   const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {}
@@ -4208,39 +4121,6 @@ function normalizeProgressionStatus(value: unknown): Required<ProgressionCriteri
   return value === 'ready' || value === 'blocked' || value === 'watch' ? value : 'watch'
 }
 
-function normalizePrescriptionTemplates(value: unknown): Required<PrescriptionTemplatePatch>[] {
-  if (!Array.isArray(value)) return defaultPrescriptionTemplates()
-  const items = value
-    .map((item, index) => normalizePrescriptionTemplate(item, index))
-    .filter((item): item is Required<PrescriptionTemplatePatch> => Boolean(item))
-    .slice(0, 20)
-  return items.length ? items : defaultPrescriptionTemplates()
-}
-
-function normalizePrescriptionTemplate(value: unknown, index: number): Required<PrescriptionTemplatePatch> | null {
-  if (!value || typeof value !== 'object') return null
-  const raw = value as Record<string, unknown>
-  const name = typeof raw.name === 'string' ? raw.name.trim().slice(0, 80) : ''
-  const sessionType = typeof raw.sessionType === 'string' ? raw.sessionType.trim().slice(0, 40) : ''
-  const purpose = typeof raw.purpose === 'string' ? raw.purpose.trim().slice(0, 240) : ''
-  if (!name || !sessionType || !purpose) return null
-  return {
-    id: typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim().slice(0, 80) : `template-${index + 1}`,
-    name,
-    phase: normalizePrescriptionTemplatePhase(raw.phase),
-    sessionType,
-    purpose,
-    workout: normalizeStringArray(raw.workout, 8, 160),
-    useWhen: normalizeStringArray(raw.useWhen, 8, 160),
-    avoidWhen: normalizeStringArray(raw.avoidWhen, 8, 160),
-    progressionTrigger: typeof raw.progressionTrigger === 'string' ? raw.progressionTrigger.trim().slice(0, 240) : ''
-  }
-}
-
-function normalizePrescriptionTemplatePhase(value: unknown): Required<PrescriptionTemplatePatch>['phase'] {
-  return value === 'Any' ? value : normalizeTrainingPhaseName(value, 'Base') ?? 'Base'
-}
-
 function normalizeAdaptiveSessionGuides(value: unknown) {
   if (!Array.isArray(value)) return []
   return value
@@ -4265,9 +4145,6 @@ function normalizeAdaptiveTrainingProfilePatch(value: unknown): AdaptiveTraining
   }
   if (raw.progressionCriteria) {
     normalized.progressionCriteria = normalizeProgressionCriteria(raw.progressionCriteria)
-  }
-  if (raw.prescriptionTemplates) {
-    normalized.prescriptionTemplates = normalizePrescriptionTemplates(raw.prescriptionTemplates)
   }
 
   const compliancePatterns = normalizeStringArray(raw.compliancePatterns, 8, 240)
@@ -5329,7 +5206,6 @@ function mergeAdaptiveTrainingProfile(current: unknown, patch: AdaptiveTrainingP
     updatedAt: patch.updatedAt ?? new Date().toISOString(),
     trainingPhase: patch.trainingPhase ? normalizeTrainingPhase(patch.trainingPhase) : base.trainingPhase,
     progressionCriteria: patch.progressionCriteria ? normalizeProgressionCriteria(patch.progressionCriteria) : base.progressionCriteria,
-    prescriptionTemplates: patch.prescriptionTemplates ? normalizePrescriptionTemplates(patch.prescriptionTemplates) : base.prescriptionTemplates,
     compliancePatterns: mergeStringLists(patch.compliancePatterns ?? [], base.compliancePatterns, 20),
     sessionGuides: [...patchGuides, ...[...guidesByType.values()].filter((guide) => !patchGuides.some((next) => next.type === guide.type))].slice(0, 12),
     // #301: AI patch는 tempoCeiling을 다루지 않는다 — 웹이 영속한 채택값을 그대로 보존한다.
@@ -5367,15 +5243,13 @@ function getRunnerIdentity(memory: unknown) {
     riskFactors: [],
     coachingStyle: []
   }
-  const knownIssues = normalizeStringArray(current.knownIssues, 8, 160).map((label) => makeIdentityTrait(label, 'user', 0.68))
-  const runningStyle = normalizeStringArray(current.runningStyle, 8, 160).map((label) => makeIdentityTrait(label, 'user', 0.7))
-  const heatStrategy = normalizeStringArray(current.heatStrategy, 6, 160)
-
+  // 레거시 자유 텍스트(knownIssues·runningStyle·heatStrategy)를 정체성으로 승격하던 경로는
+  // 그 필드들과 함께 제거했다(2026-09-07). 부상은 injuryItems, 더위는 날씨 코칭이 정본이다.
   return {
-    strengths: mergeIdentityTraits(identity.strengths ?? [], runningStyle, 10),
+    strengths: identity.strengths ?? [],
     weaknesses: identity.weaknesses ?? [],
-    riskFactors: mergeIdentityTraits(identity.riskFactors ?? [], knownIssues, 10),
-    coachingStyle: mergeStringLists(identity.coachingStyle ?? [], heatStrategy, 12)
+    riskFactors: identity.riskFactors ?? [],
+    coachingStyle: identity.coachingStyle ?? []
   }
 }
 
@@ -6038,25 +5912,21 @@ function stripStaleHrCeilings(text: unknown): string {
 function stripStaleHrList(value: unknown): unknown {
   return Array.isArray(value) ? value.map((item) => (typeof item === 'string' ? stripStaleHrCeilings(item) : item)) : value
 }
-// 컨텍스트로 AI에 보내기 전, 저장된 처방/루틴 텍스트의 stale 심박 숫자를 제거해 165 잔재가 코칭에 재등장하지 않게 한다.
+/**
+ * 컨텍스트로 AI에 보내기 전 정리한다.
+ *
+ * ① 저장된 텍스트의 stale 심박 숫자 제거(165 잔재가 코칭에 재등장하지 않게).
+ * ② **제거된 레거시 키를 블롭에서 떼어낸다** — context.trainingMemory 는 저장 블롭을 통째로
+ *    실어 보내므로, 여기서 지우지 않으면 화면·스키마에서 없앤 값이 프롬프트로는 계속 흘러간다
+ *    (2026-09-07: 옛 처방 템플릿의 고정 8회 스트라이드가 SSOT 와 어긋난 채 코치에게 전달되고 있었다).
+ */
 function sanitizeMemoryHeartRateCeilings(memory: unknown): unknown {
   if (!memory || typeof memory !== 'object') return memory
   const mem = memory as Record<string, unknown>
+  for (const legacyKey of ['knownIssues', 'runningStyle', 'heatStrategy']) delete mem[legacyKey]
   const atp = mem.adaptiveTrainingProfile as Record<string, unknown> | undefined
   if (atp && typeof atp === 'object') {
-    if (Array.isArray(atp.prescriptionTemplates)) {
-      atp.prescriptionTemplates = atp.prescriptionTemplates.map((tpl) => {
-        if (!tpl || typeof tpl !== 'object') return tpl
-        const t = tpl as Record<string, unknown>
-        return {
-          ...t,
-          purpose: stripStaleHrCeilings(t.purpose),
-          workout: stripStaleHrList(t.workout),
-          avoidWhen: stripStaleHrList(t.avoidWhen),
-          progressionTrigger: stripStaleHrCeilings(t.progressionTrigger)
-        }
-      })
-    }
+    delete atp.prescriptionTemplates
     if (Array.isArray(atp.progressionCriteria)) {
       atp.progressionCriteria = atp.progressionCriteria.map((crit) => {
         if (!crit || typeof crit !== 'object') return crit

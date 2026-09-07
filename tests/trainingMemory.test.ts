@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { normalizeTrainingMemory } from '@/entities/training-memory/model'
 
 describe('normalizeTrainingMemory', () => {
-  it('fills adaptive training phase, progression criteria, and prescription templates', () => {
+  it('fills adaptive training phase and progression criteria', () => {
     const memory = normalizeTrainingMemory({
       goal: '10km 60분 달성',
       adaptiveTrainingProfile: {
@@ -15,8 +15,6 @@ describe('normalizeTrainingMemory', () => {
 
     expect(memory.adaptiveTrainingProfile.trainingPhase.currentPhase).toBe('Base')
     expect(memory.adaptiveTrainingProfile.progressionCriteria.length).toBeGreaterThan(0)
-    expect(memory.adaptiveTrainingProfile.prescriptionTemplates.length).toBeGreaterThan(0)
-    expect(memory.adaptiveTrainingProfile.prescriptionTemplates.some((template) => template.sessionType === 'Easy + Strides')).toBe(true)
   })
 
   it('keeps valid personalized adaptive training fields', () => {
@@ -42,19 +40,6 @@ describe('normalizeTrainingMemory', () => {
             action: '지속 시간 소폭 증가'
           }
         ],
-        prescriptionTemplates: [
-          {
-            id: 'custom-tempo',
-            name: '구간형 템포',
-            phase: 'Threshold',
-            sessionType: 'Tempo',
-            purpose: '역치 지속력',
-            workout: ['10분 워밍업', '8분 x 3'],
-            useWhen: ['회복 안정'],
-            avoidWhen: ['통증 active'],
-            progressionTrigger: '2회 안정'
-          }
-        ],
         compliancePatterns: [],
         sessionGuides: []
       }
@@ -62,6 +47,5 @@ describe('normalizeTrainingMemory', () => {
 
     expect(memory.adaptiveTrainingProfile.trainingPhase.currentPhase).toBe('Threshold')
     expect(memory.adaptiveTrainingProfile.progressionCriteria[0].status).toBe('ready')
-    expect(memory.adaptiveTrainingProfile.prescriptionTemplates[0].name).toBe('구간형 템포')
   })
 })

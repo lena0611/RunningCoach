@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildInitialWeeklyPattern,
-  prescriptionTemplateById,
+  routineTemplateById,
 } from '@/shared/lib/coaching/initialWeeklyPattern'
 
 describe('buildInitialWeeklyPattern (#329)', () => {
@@ -40,10 +40,10 @@ describe('buildInitialWeeklyPattern (#329)', () => {
     expect(slots.some((s) => s.templateId === 'easy-strides-8x')).toBe(false)
   })
 
-  it('모든 슬롯의 templateId가 실제 처방 템플릿과 매핑된다', () => {
+  it('모든 슬롯의 templateId가 루틴 카탈로그와 매핑된다', () => {
     const slots = buildInitialWeeklyPattern({ weeklyDays: 7, goal: 'full', level: 'advanced' })
     for (const slot of slots) {
-      expect(prescriptionTemplateById(slot.templateId)).not.toBeNull()
+      expect(routineTemplateById(slot.templateId)).not.toBeNull()
     }
   })
 

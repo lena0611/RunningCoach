@@ -7,14 +7,13 @@ describe('createBlankTrainingMemory (#332)', () => {
     expect(memory.injuryItems).toEqual([])
     expect(getActiveInjuryItem(memory)).toBeNull()
     expect(memory.goal).not.toContain('10km 60분')
-    expect(memory.knownIssues).toEqual([])
     expect(memory.longRunStrategy).toBe('')
   })
 
-  it('구조 기본값(처방 템플릿·단계)은 유지한다', () => {
+  it('구조 기본값(훈련 단계·승급 조건)은 유지한다', () => {
     const memory = createBlankTrainingMemory()
-    expect(memory.adaptiveTrainingProfile.prescriptionTemplates.length).toBeGreaterThan(0)
     expect(memory.adaptiveTrainingProfile.trainingPhase.currentPhase).toBe('Base')
+    expect(memory.adaptiveTrainingProfile.progressionCriteria.length).toBeGreaterThan(0)
   })
 
   it('중립 활성 목표 1개를 가진다(빈 goals 재시드 방지)', () => {

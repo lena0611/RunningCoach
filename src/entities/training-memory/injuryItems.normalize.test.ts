@@ -8,8 +8,9 @@ describe('normalizeTrainingMemory injuryItems (#303)', () => {
     expect(normalizeTrainingMemory({ injuryItems: [] }).injuryItems).toEqual([])
   })
 
+  // knownIssues 는 2026-09-07에 제거된 레거시 필드다 — 저장된 옛 JSON 을 흉내내려 as never 로 넣는다.
   it('빈 injuryItems면 knownIssues에 부상 텍스트가 있어도 재합성하지 않는다(삭제 우선)', () => {
-    const result = normalizeTrainingMemory({ injuryItems: [], knownIssues: ['좌측 근위부 햄스트링 이슈'] })
+    const result = normalizeTrainingMemory({ injuryItems: [], knownIssues: ['좌측 근위부 햄스트링 이슈'] } as never)
     expect(result.injuryItems).toEqual([])
   })
 
@@ -20,7 +21,7 @@ describe('normalizeTrainingMemory injuryItems (#303)', () => {
   })
 
   it('injuryItems 키 부재 + knownIssues 부상 텍스트 → 레거시 1회 동기화', () => {
-    const result = normalizeTrainingMemory({ knownIssues: ['좌측 근위부 햄스트링 이슈'] })
+    const result = normalizeTrainingMemory({ knownIssues: ['좌측 근위부 햄스트링 이슈'] } as never)
     expect(result.injuryItems.length).toBeGreaterThan(0)
     expect(result.injuryItems[0].title).toContain('햄스트링')
   })
