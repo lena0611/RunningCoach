@@ -128,7 +128,6 @@ const secondaryGoals = computed(() => draft.goals
 const managedInjuries = computed(() => draft.injuryItems.filter((item) => item.status === 'active' || item.status === 'monitoring'))
 const panel = computed<MemoryPanel>(() => stack.value.at(-1) ?? 'overview')
 const isStackOpen = computed(() => panel.value !== 'overview')
-const isDirty = computed(() => JSON.stringify(draft) !== memorySnapshot.value)
 const stackTitle = computed(() => {
   switch (panel.value) {
     case 'goals':
@@ -231,10 +230,7 @@ watch(
 
 watch(
   () => memoryStore.selectedUser.updatedAt,
-  () => {
-    if (isDirty.value) return
-    syncDraftFromStore()
-  }
+  () => mergeStoreIntoDraft()
 )
 
 watch(
@@ -258,6 +254,28 @@ function join(items: string[]) {
 function syncDraftFromStore() {
   Object.assign(draft, JSON.parse(JSON.stringify(memoryStore.memory)))
   memorySnapshot.value = JSON.stringify(draft)
+}
+
+/**
+ * 스토어가 새 값을 들고 오면 **사용자가 손대지 않은 키만** 갈아끼운다(2026-09-07 데이터 유실 교정).
+ *
+ * 예전엔 "아무 키라도 수정 중이면(isDirty) 재동기화를 통째로 건너뛴다"였다. 그래서 로드 전(빈 값)에
+ * 화면이 뜨고 어딘가 한 글자만 건드리면 draft 가 **영구히 빈 상태로 고정**됐고, 그 뒤 섹션 저장이
+ * 그 섹션 키를 통째로 빈 값으로 덮었다 — 실사고: 코칭 메모·러닝 스타일·여름 전략·기타 주의사항과
+ * 장거리 전략·볼륨 노트가 한꺼번에 지워졌다(지워진 키 = 'ai'·'training' 섹션 키와 정확히 일치).
+ * 키 단위로 보면 편집 중인 칸은 지키면서 나머지는 최신 값을 받는다.
+ */
+function mergeStoreIntoDraft() {
+  const fresh = JSON.parse(JSON.stringify(memoryStore.memory)) as TrainingMemory
+  const snapshot = JSON.parse(memorySnapshot.value) as TrainingMemory
+  const nextSnapshot = { ...snapshot } as Record<string, unknown>
+  for (const key of Object.keys(fresh) as (keyof TrainingMemory)[]) {
+    const untouched = JSON.stringify(draft[key]) === JSON.stringify(snapshot[key])
+    if (!untouched) continue
+    ;(draft as Record<string, unknown>)[key] = JSON.parse(JSON.stringify(fresh[key]))
+    nextSnapshot[key] = fresh[key]
+  }
+  memorySnapshot.value = JSON.stringify(nextSnapshot)
 }
 
 function injuryStatusLabel(status: TrainingInjuryItem['status']) {
@@ -1171,7 +1189,8 @@ async function saveSection(section: MemorySection) {
       </main>
       <!-- 항목별 저장(리디자인 ①c): 열린 패널 그룹만 저장 — knowledge 계열은 자체 저장이라 footer 없음 -->
       <template v-if="panelSection" #footer>
-        <button type="button" :disabled="saving || !isSectionDirty" @click="panelSection && saveSection(panelSection)">
+        <!-- 로드 전에는 저장하지 않는다 — 아직 안 받은 값을 빈 값으로 덮는 사고(2026-09-07)의 두 번째 자물쇠. -->
+        <button type="button" :disabled="saving || !isSectionDirty || !memoryStore.loaded" @click="panelSection && saveSection(panelSection)">
           {{ saving ? '저장 중' : isSectionDirty ? '변경사항 저장' : '저장됨' }}
         </button>
       </template>
