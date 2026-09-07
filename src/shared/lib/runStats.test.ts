@@ -12,7 +12,6 @@ const longRunDay = todayDayName === '토요일' ? '일요일' : '토요일'
 
 function buildMemory(injury?: Partial<TrainingInjuryItem>, birthYear: number | null = null): TrainingMemory {
   return normalizeTrainingMemory({
-    weeklyPattern: [`${todayDayName}: Tempo`],
     athleteProfile: { preferredLongRunDay: longRunDay, birthYear } as TrainingMemory['athleteProfile'],
     injuryItems: injury ? [{ title: '테스트 부상', status: 'active', normalizedAreas: [], ...injury } as TrainingInjuryItem] : []
   })
@@ -57,22 +56,27 @@ describe('getLongestRunKmWithinDays (#473 복귀 램프 입력)', () => {
   })
 })
 
+/*
+  주간 루틴 메모를 걷어낸 뒤(2026-09-07) 이 경로는 **플랜 없는 폴백**만 남는다 —
+  기본 추천은 선호 롱런 요일의 LSD 다. 부상 게이트 자체(severity 별 하향·카우션)가 이 describe 의 대상이라
+  기대값의 세션명만 폴백 기준으로 옮긴다.
+*/
 describe('getNextSessionRecommendation injury gate', () => {
   it('keeps the quality session when there is no injury', () => {
     const rec = getNextSessionRecommendation(buildMemory(), runs, today)
-    expect(rec.title).toBe('Tempo')
+    expect(rec.title).toBe('토요일 LSD')
     expect(rec.injuryAdjusted).toBe(false)
   })
 
   it('keeps the recommendation for severity 0-1', () => {
     const rec = getNextSessionRecommendation(buildMemory({ severity: 1 }), runs, today)
-    expect(rec.title).toBe('Tempo')
+    expect(rec.title).toBe('토요일 LSD')
     expect(rec.injuryAdjusted).toBe(false)
   })
 
   it('adds a checkpoint note but keeps the session for severity 2', () => {
     const rec = getNextSessionRecommendation(buildMemory({ severity: 2 }), runs, today)
-    expect(rec.title).toBe('Tempo')
+    expect(rec.title).toBe('토요일 LSD')
     expect(rec.injuryAdjusted).toBe(true)
     expect(rec.injuryNote).toContain('체크포인트')
   })
@@ -92,7 +96,7 @@ describe('getNextSessionRecommendation injury gate', () => {
 
   it('does not gate when the injury is resolved', () => {
     const rec = getNextSessionRecommendation(buildMemory({ status: 'resolved', severity: 5 }), runs, today)
-    expect(rec.title).toBe('Tempo')
+    expect(rec.title).toBe('토요일 LSD')
     expect(rec.injuryAdjusted).toBe(false)
   })
 })
@@ -137,7 +141,8 @@ describe('getNextSessionRecommendation chronic load', () => {
   it('adds a load caution note on chronic spike without forcing downgrade', () => {
     const loaded = [run(daysAgo(3), 30), run(daysAgo(10), 30), run(daysAgo(40), 20), run(daysAgo(50), 20)]
     const rec = getNextSessionRecommendation(buildMemory(), loaded, today)
-    expect(rec.title).toBe('Tempo')
+    // 최근 롱런 이력에 따라 LSD/Steady Long 을 번갈아 고른다(chooseNextLongRunType) — 이 픽스처는 Steady Long.
+    expect(rec.title).toBe('토요일 Steady Long')
     expect(rec.loadCaution).toBe(true)
     expect(rec.loadNote).toContain('30일')
   })
@@ -193,7 +198,6 @@ describe('isFullMarathonGoal (3.2 풀마라톤만, 하프 제외)', () => {
 describe('getNextSessionRecommendation 이전부상 보수화(3.1/3.3)', () => {
   function buildResolvedInjuryMemory(): TrainingMemory {
     return normalizeTrainingMemory({
-      weeklyPattern: [`${todayDayName}: Tempo`],
       athleteProfile: { preferredLongRunDay: longRunDay } as TrainingMemory['athleteProfile'],
       injuryItems: [
         injuryFixture({ title: 'PF', status: 'resolved', area: '오른발', onsetDate: daysAgo(120), resolvedAt: daysAgo(90) })
@@ -206,12 +210,11 @@ describe('getNextSessionRecommendation 이전부상 보수화(3.1/3.3)', () => {
     expect(rec.loadCaution).toBe(true)
     expect(rec.loadNote).toContain('다른 부위')
     expect(rec.injuryAdjusted).toBe(false) // resolved라 통증 게이트는 작동하지 않음
-    expect(rec.title).toBe('Tempo') // 세션 자체는 강등하지 않음
+    expect(rec.title).toBe('토요일 LSD') // 세션 자체는 강등하지 않음
   })
 
   it('부상 이력이 없으면 안정 부하에서 보수화 카우션 없음', () => {
     const memory = normalizeTrainingMemory({
-      weeklyPattern: [`${todayDayName}: Tempo`],
       athleteProfile: { preferredLongRunDay: longRunDay } as TrainingMemory['athleteProfile'],
       injuryItems: []
     })

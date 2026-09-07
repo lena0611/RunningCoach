@@ -4,7 +4,6 @@ import { createBlankTrainingMemory, getActiveInjuryItem } from '@/entities/train
 describe('createBlankTrainingMemory (#332)', () => {
   it('개발자 예시 루틴/부상/목표를 담지 않는다', () => {
     const memory = createBlankTrainingMemory()
-    expect(memory.weeklyPattern).toEqual([])
     expect(memory.injuryItems).toEqual([])
     expect(getActiveInjuryItem(memory)).toBeNull()
     expect(memory.goal).not.toContain('10km 60분')

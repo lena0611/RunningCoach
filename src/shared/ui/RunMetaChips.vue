@@ -5,14 +5,13 @@ import { getRunMetaChips } from '@/shared/lib/runMetaChips'
 
 const props = defineProps<{
   run: RunLog
-  weeklyPattern?: string[]
-  /** 예정 세션에 귀속된 런 id — '스케줄/추가' 판정의 정본(weeklyPattern 은 폴백). */
+  /** 예정 세션에 귀속된 런 id — '스케줄/추가' 판정의 정본. */
   scheduledRunIds?: ReadonlySet<string>
   limit?: number
 }>()
 
 const chips = computed(() => {
-  const items = getRunMetaChips(props.run, props.weeklyPattern ?? [], props.scheduledRunIds)
+  const items = getRunMetaChips(props.run, props.scheduledRunIds)
   return props.limit ? items.slice(0, props.limit) : items
 })
 </script>

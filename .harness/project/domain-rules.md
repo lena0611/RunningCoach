@@ -26,7 +26,7 @@
 - `FastSegment`: route/speed 샘플에서 계산한 짧은 고속 구간 요약이다. 시작 시각, 지속 시간, 거리, 평균/최고 페이스를 가진다.
 - `RunMetricSample`: HealthKit/FIT에서 받은 심박, 페이스, 케이던스의 시간축 downsample 데이터다. Apple Fitness형 세부 차트와 코칭의 중간 과정 분석에 사용한다.
 - `RunRoutePoint`: 원본 route 전체가 아니라 표시를 위해 downsample한 좌표 샘플이다. 세션 상세 지도형 경로, 시작/종료 노드, 선택 구간 표시 용도다.
-- `TrainingMemory`: legacy `goal`, `goals`, `activeGoalId`, `injuryItems`, `activeInjuryItemId`, AthleteProfile, RunnerIdentity, CoachBeliefs, 주간 루틴, 장거리 전략, 현재 볼륨 노트, known issues, running style, heat strategy, ai notes를 가진다. `goal`은 기존 호환용이며 활성 목표 제목과 동기화한다.
+- `TrainingMemory`: legacy `goal`, `goals`, `activeGoalId`, `injuryItems`, `activeInjuryItemId`, AthleteProfile, RunnerIdentity, CoachBeliefs, 장거리 전략, 현재 볼륨 노트, known issues, running style, heat strategy, ai notes를 가진다. **주간 루틴 메모는 없다**(2026-09-07 제거 — 루틴의 정본은 `training_schedule`). `goal`은 기존 호환용이며 활성 목표 제목과 동기화한다.
 - `AdaptiveTrainingProfile`: `methodologyVersion`, `updatedAt`, `compliancePatterns`, `sessionGuides`를 가진다. AI 코칭이 반복 근거를 찾았을 때만 갱신하며, 소스 코드나 원본 RunLog를 바꾸는 용도가 아니다.
 - `TrainingKnowledgeSource`: 훈련 지식의 출처 메타데이터다. 저자, URL, 신뢰도, 라이선스 주의, 요약을 가진다.
 - `TrainingMethod`: MAF, Daniels, Hanson 같은 훈련법 단위다. 적용 거리, 러너 수준, 주간 훈련 가능 횟수, 주의사항을 가진다.
@@ -116,15 +116,14 @@ PaceLAB를 성장형 RPG로 재구성하는 레벨 도메인. 거리 클래스 �
 - `Easy` 자동 추론은 페이스보다 심박을 우선한다. 평균/랩 심박이 낮고 안정적이면 평균 페이스가 빠르더라도 Tempo로 단정하지 않고 Easy 가능성을 먼저 본다.
 - `Easy + Strides` 자동 추론은 요일 루틴과 route 기반 `fastSegments`를 함께 본다. 현재 기본 루틴은 10분 워밍업 + 8개의 스트라이드 가속 인터벌(20초 가속 + 1분40초 회복) + 15분 쿨다운이다. 단, HealthKit/GPS 샘플은 타이트하게 들어오지 않으므로 20초/100초를 기계적으로 요구하지 않는다. 6~45초 정도의 짧은 고속 구간이 4개 이상 반복되고 시작 간격이 대략 1~3.5분이면 Easy + Strides 패턴으로 관용적으로 본다.
 - 2026-05-26 DB 기록은 Easy + Strides 판독의 대표 샘플이다. HealthKit에서는 lap이 1km 단위로 뭉개질 수 있으므로 route 기반 `fastSegments`를 우선 보고, Workoutdoors FIT처럼 잘게 쪼개진 가속/회복 split이 들어오면 그 split도 강한 근거로 본다. 화요일 루틴, 쉬운 심박/랩 흐름, 반복되는 짧은 가속 구간이 함께 보이면 이 패턴을 회귀 테스트 기준으로 삼는다.
-- Dashboard의 다음 추천 세션은 단순 최근 강훈련 여부만으로 정하지 않는다. `TrainingMemory.weeklyPattern`, 선호 롱런 요일, 최근 실제 RunLog 날짜, 최근 토요일 10km+ 기록의 평균 페이스를 함께 본다.
-- Dashboard의 다음 추천 세션은 주간 훈련 스케줄 안내다. 항상 오늘 날짜/요일을 먼저 확인하고, 오늘 요일에 해당하는 `TrainingMemory.weeklyPattern`이 있으면 그 세션을 우선한다.
-- 최근 데이터가 주간 루틴 외 추가 Easy/Recovery라면 다음 추천 세션 산정에서 제외한다. 추가런은 맥락 문구로만 보여주고, 오늘의 Easy + Strides/Tempo 같은 예정 세션을 밀어내지 않는다.
+- Dashboard의 오늘/다음 세션은 **주기화 플랜(`training_schedule`)** 이 정본이다. 플랜이 없을 때만 폴백으로 선호 롱런 요일·최근 RunLog·최근 토요일 10km+ 평균 페이스를 본다.
+- 최근 데이터가 플랜 외 추가 Easy/Recovery라면 다음 추천 세션 산정에서 제외한다. 추가런은 맥락 문구로만 보여주고, 오늘의 Easy + Strides/Tempo 같은 예정 세션을 밀어내지 않는다.
 - Dashboard의 다음 추천 세션은 추천 날짜와 요일을 명시한다. 다음 세션 날씨는 별도 카드가 아니라 다음 훈련 Hero의 한 줄 요약과 Hero에서 여는 다음 훈련 상세 스택 안에 포함하고, 추천 세션 날짜 기준 예보를 보여준다.
 - Dashboard/요약 페이지는 앱을 오래 켜둔 상태에서도 진입, 포커스 복귀, visibility 복귀 시 항상 오늘 날짜를 다시 계산한다. 주간/월간/최근 7일/최근 30일/다음 추천 세션/날씨 타겟은 이 갱신된 날짜 기준으로 계산해야 한다.
 - Dashboard의 다음 세션 준비에는 날씨가 있으면 체감온도, 강수확률, 강수량, 강수시간을 함께 보여준다. 30도 이상 체감온도나 높은 강수확률은 페이스/강도 조절 근거로만 쓰고 안전을 보장하지 않는다.
-- `TrainingMemory.weeklyPattern`은 사용자가 직접 세우는 정적 루틴이 아니다. AI 코칭이 계정 목표와 누적 RunLog를 보고 유지/수정하는 훈련 계획이며, 사용자는 목표/프로필/개인 맥락을 제공한다.
-- `AthleteProfile.weeklyRunDaysTarget`은 사용자가 실제로 달릴 수 있는 **주간 가용 일수 제약**이다(데이터로 도출 불가한 생활 제약이라 사용자 입력 유지). AI는 weeklyPattern의 러닝 세션 수가 이 값을 넘지 않도록 처방·조정하고(초과 시 우선순위 낮은 추가 Easy부터 축소), 목표상 더 필요해도 가용 한도 내에서만 배치한다. 미입력(null)이면 제약 없이 목표·회복 기준으로 과훈련을 피해 처방한다. coach-run은 이를 `weeklyAvailability` 컨텍스트로 전달한다.
-- AI 코칭은 세션 평가와 동시에 주간 루틴 유지/수정 필요성을 판단한다. 루틴 변경이 필요하면 Edge Function이 `training_memory.memory.weeklyPattern` 전체를 갱신하고, 변경 근거를 report와 `aiNotes`에 짧게 남긴다.
+- **주간 루틴 메모(`TrainingMemory.weeklyPattern`)는 제거했다**(2026-09-07). 루틴의 정본은 목표에서 생성되는 주기화 플랜(`training_schedule`)이고, 사용자는 목표/프로필/개인 맥락을 제공한다. "스케줄/추가" 판정·훈련 알림·다음 세션은 모두 이 플랜(런 귀속 `run_id` 포함)에서 나온다.
+- `AthleteProfile.weeklyRunDaysTarget`은 사용자가 실제로 달릴 수 있는 **주간 가용 일수 제약**이다(데이터로 도출 불가한 생활 제약이라 사용자 입력 유지). AI는 주간 플랜의 러닝 일수가 이 값을 넘지 않도록 처방·조정하고(초과 시 우선순위 낮은 추가 Easy부터 축소), 목표상 더 필요해도 가용 한도 내에서만 배치한다. 미입력(null)이면 제약 없이 목표·회복 기준으로 과훈련을 피해 처방한다. coach-run은 이를 `weeklyAvailability` 컨텍스트로 전달한다.
+- AI 코칭은 세션 평가와 동시에 주간 플랜 유지/조정 필요성을 판단한다. 조정이 필요하면 기준 변화를 `activeGoalStrategyNotes`·`aiNotes`에 남기고 개별 세션은 `coachScheduleProposal`(승인형)로 제안한다. 코치가 루틴 텍스트를 저장하지는 않는다.
 - AI가 제안한 세션은 사용자가 믿고 따른 훈련 처방이다. 이후 저장된 `RunLog`는 “사용자가 임의로 한 운동”이 아니라 직전 목표/스케줄/코칭 처방을 실행한 결과일 수 있으므로, 코칭은 해당 세션이 계획 의도에 맞게 수행됐는지 먼저 평가하고 다음 처방을 조정한다.
 - 세션별 처방 숫자는 영구 고정값이 아니다. Easy 145bpm, Tempo max 165bpm, Easy + Strides 구조는 현재 사용자 확인 기준이며, AI 코칭은 누적 수행 품질과 회복 반응을 보고 사용자가 Workoutdoors에 바로 세팅할 새 기준을 주도적으로 제안할 수 있다.
 - 심박 존은 개인 최대심박/역치심박이 입력되기 전까지 현재 사용자 확인 기준을 기본값으로 쓴다. Z0 비훈련/매우 낮음은 99bpm 이하, Z1 회복은 100~130bpm, Z2 이지는 131~145bpm, Z3 이지 상단/스테디 초입은 146~155bpm, Z4 템포는 156~165bpm, Z5 고강도는 166bpm 이상이다. 개인 max HR, threshold HR, lactate threshold 같은 기준값이 생기면 이 기본값보다 개인화 존을 우선한다.

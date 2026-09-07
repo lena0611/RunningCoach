@@ -251,14 +251,14 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         }
         const memoryStore = useMemoryStore()
         const heartRateModel = buildInferenceHeartRateModel()
-        const repaired = await repairExistingHealthKitRuns(runs, memoryStore.memory.weeklyPattern, heartRateModel)
+        const repaired = await repairExistingHealthKitRuns(runs, heartRateModel)
         const newRuns = runs
           .filter((candidate) => isAfterLatestSaved(candidate, latestDate))
           .filter((candidate) => !isAlreadySaved(candidate))
           .sort((a, b) => a.date.localeCompare(b.date) || a.startAt.localeCompare(b.startAt))
 
         if (newRuns.length) {
-          const inserted = await runStore.addRuns(newRuns.map((candidate) => toExtractedRunData(candidate, memoryStore.memory.weeklyPattern, heartRateModel)), 'healthkit')
+          const inserted = await runStore.addRuns(newRuns.map((candidate) => toExtractedRunData(candidate, heartRateModel)), 'healthkit')
           const insertedCount = inserted.length
           notifyHealthKitNewRuns(useSettingsStore().notificationSettings, insertedCount)
           const skipped = newRuns.length - insertedCount
@@ -312,10 +312,10 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         // (#235 후속 G3) 과거 마이그레이션은 "사용자가 기간을 직접 골라 다시 부른" 의사 → deny-list 를 무시·해제한다
         // ("자동 재유입은 막되, 직접 다시 부르면 허용"). 범위 내 deny 된 externalId 를 풀어 재유입을 허용한다.
         await releaseDeniedForCandidates(rangeRuns)
-        const repaired = await repairExistingHealthKitRuns(rangeRuns, memoryStore.memory.weeklyPattern, heartRateModel)
+        const repaired = await repairExistingHealthKitRuns(rangeRuns, heartRateModel)
         const newRuns = rangeRuns.filter((candidate) => !isAlreadySaved(candidate))
 
-        const inserted = await runStore.addRuns(newRuns.map((candidate) => toExtractedRunData(candidate, memoryStore.memory.weeklyPattern, heartRateModel)), 'healthkit')
+        const inserted = await runStore.addRuns(newRuns.map((candidate) => toExtractedRunData(candidate, heartRateModel)), 'healthkit')
         const skipped = Math.max(0, rangeRuns.length - inserted.length - repaired.length)
         const outsideRange = Math.max(0, runs.length - rangeRuns.length)
         const parts = [
@@ -356,7 +356,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         if (!target) throw new Error('갱신할 RunLog를 찾지 못했습니다.')
 
         const memoryStore = useMemoryStore()
-        const extracted = toExtractedRunData(candidate, memoryStore.memory.weeklyPattern, buildInferenceHeartRateModel())
+        const extracted = toExtractedRunData(candidate, buildInferenceHeartRateModel())
         // 리프레시 병합은 랩·구간 샘플·경로를 실제로 채우므로 무거운 데이터를 함께 저장한다.
         const updated = await runStore.updateRun(mergeHealthKitRefreshRun(target, extracted), { includeHeavyData: true })
         // 상세 오버레이가 이 런을 보고 있으면 갱신본으로 새로고침한다. activeRun은 스냅샷이라,
@@ -431,7 +431,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
           useRunStore().deniedExternalIds.includes(candidate.externalId)
         if (!alreadyImported) {
           const memoryStore = useMemoryStore()
-          const extracted = toExtractedRunData(candidate, memoryStore.memory.weeklyPattern, buildInferenceHeartRateModel())
+          const extracted = toExtractedRunData(candidate, buildInferenceHeartRateModel())
           // #235/§10: 레이싱 런은 '생성 시점부터' self-race 태그를 달아, 저장 직후 matchSessionIntent의
           // 세션·의도 매칭에서 제외되게 한다. (태그를 linkSelfRaceResults에서 뒤늦게 붙이면 이미 처방
           // 세션을 '완료'로 소비한 뒤라 늦음 — 레이싱이 부상복귀 Easy 처방을 먹어버리던 버그.)
@@ -615,13 +615,13 @@ function buildInferenceHeartRateModel(): HeartRateModel {
   return deriveHeartRateModel(memoryStore.memory.athleteProfile, new Date().getFullYear(), observed)
 }
 
-async function repairExistingHealthKitRuns(candidates: HealthKitRunCandidate[], weeklyPattern: string[], heartRateModel: HeartRateModel | null = null) {
+async function repairExistingHealthKitRuns(candidates: HealthKitRunCandidate[], heartRateModel: HeartRateModel | null = null) {
   const runStore = useRunStore()
   const repaired: RunLog[] = []
   for (const candidate of candidates) {
     const target = findRepairableHealthKitRun(candidate)
     if (!target) continue
-    const extracted = toExtractedRunData(candidate, weeklyPattern, heartRateModel)
+    const extracted = toExtractedRunData(candidate, heartRateModel)
     const updated = await runStore.updateRun({
       ...target,
       externalId: extracted.externalId ?? target.externalId,

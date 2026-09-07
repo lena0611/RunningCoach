@@ -10,7 +10,7 @@ import { runTypes, type RunLog, type RunType } from '@/entities/run/model'
 import UploadRunPage from '@/pages/upload-run/UploadRunPage.vue'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { formatDateWithWeekday, formatDuration, formatInteger, formatNumberWithCommas, formatPace } from '@/shared/lib/format'
-import { getRunFilterTags, hasRunFilterTag, isScheduledSession, type RunFilterTag } from '@/shared/lib/runMetaChips'
+import { getRunFilterTags, hasRunFilterTag, type RunFilterTag } from '@/shared/lib/runMetaChips'
 import { buildVisibleRunGroups, groupRunsByMonth, type RunMonthGroup, type RunMonthSummary } from '@/pages/run-log/runLogSummary'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import EmptyState from '@/shared/ui/EmptyState.vue'
@@ -67,7 +67,7 @@ const filterOptions = computed(() => [
 const metaFilterOptions = computed(() => {
   const tagMap = new Map<string, { value: string; label: string; description?: string }>()
   for (const run of runStore.sortedRuns) {
-    for (const tag of getRunFilterTags(run, memoryStore.memory.weeklyPattern, scheduleStore.scheduledRunIds)) {
+    for (const tag of getRunFilterTags(run, scheduleStore.scheduledRunIds)) {
       tagMap.set(tag.value, {
         value: tag.value,
         label: tag.label,
@@ -100,7 +100,7 @@ const filteredRuns = computed(() => {
   const activeMetaTags = selectedMetaFilterValues.value
   const byMeta = activeMetaTags.length === metaFilterValues.value.length
     ? byType
-    : byType.filter((run) => activeMetaTags.some((tag) => hasRunFilterTag(run, tag, memoryStore.memory.weeklyPattern, scheduleStore.scheduledRunIds)))
+    : byType.filter((run) => activeMetaTags.some((tag) => hasRunFilterTag(run, tag, scheduleStore.scheduledRunIds)))
   return selectedDate.value ? byMeta.filter((run) => run.date === selectedDate.value) : byMeta
 })
 
@@ -401,7 +401,7 @@ function shiftMonth(monthKey: string, offset: number) {
 // 달력 "예정 세션 수행" 링: 그 런에 연결된 예정 세션이 있으면 ON(요일·source 무관 — 이동/요일 변경 세션도
 // 잡힘). 판정 Set 은 스토어 게터가 단일 출처다(칩·필터·조기수행 후보가 각자 만들던 걸 합쳤다).
 function runIsScheduled(run: RunLog): boolean {
-  return scheduleStore.scheduledRunIds.has(run.id) || isScheduledSession(run.date, run.type, memoryStore.memory.weeklyPattern)
+  return scheduleStore.scheduledRunIds.has(run.id)
 }
 
 function buildCalendarCells(monthKey: string, map: Map<string, RunLog[]>): CalendarCell[] {
@@ -535,7 +535,7 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
         <RunSessionList
           v-if="selectedDate"
           :runs="visibleRuns"
-          :weekly-pattern="memoryStore.memory.weeklyPattern"
+         
           :scheduled-run-ids="scheduleStore.scheduledRunIds"
           interactive
           @select="sessionDetailStore.open"
@@ -565,7 +565,7 @@ function getMetaFilterGroupLabel(group: RunFilterTag['group']) {
                 </dd>
               </div>
             </dl>
-            <RunSessionList :runs="group.runs" :weekly-pattern="memoryStore.memory.weeklyPattern" :scheduled-run-ids="scheduleStore.scheduledRunIds" interactive @select="sessionDetailStore.open" />
+            <RunSessionList :runs="group.runs" :scheduled-run-ids="scheduleStore.scheduledRunIds" interactive @select="sessionDetailStore.open" />
           </section>
         </div>
       </template>

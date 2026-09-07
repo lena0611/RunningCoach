@@ -1478,11 +1478,11 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     dataAvailability,
     weeklyAvailability: {
       targetRunDays: getWeeklyRunDaysTarget(trainingMemory),
-      currentWeeklyPatternDays: Array.isArray((trainingMemory as Record<string, unknown> | null)?.weeklyPattern)
-        ? ((trainingMemory as Record<string, unknown>).weeklyPattern as unknown[]).length
+      currentWeeklyPatternDays: Array.isArray(upcomingSchedule)
+        ? new Set((upcomingSchedule as Array<{ date?: string }>).slice(0, 7).map((s) => s.date)).size
         : 0,
       policy:
-        'targetRunDays는 사용자가 실제로 달릴 수 있는 주간 가용 일수 제약이다(데이터로 도출 불가한 생활 제약). weeklyPattern(주간 루틴)의 러닝 세션 수가 이 값을 넘지 않도록 처방·조정한다. currentWeeklyPatternDays가 targetRunDays보다 많으면 세션 수를 줄여 맞추고(우선순위 낮은 추가 Easy부터 축소), 적으면 목표에 필요할 때만 가용 한도 내에서 늘린다. targetRunDays가 null(미입력)이면 제약 없이 목표와 회복을 보고 과훈련을 피하는 선에서 처방한다.',
+        'targetRunDays는 사용자가 실제로 달릴 수 있는 주간 가용 일수 제약이다(데이터로 도출 불가한 생활 제약). 주간 플랜의 러닝 일수가 이 값을 넘지 않도록 처방·조정한다. currentWeeklyPatternDays(다음 7일 플랜의 러닝 일수)가 targetRunDays보다 많으면 세션 수를 줄여 맞추고(우선순위 낮은 추가 Easy부터 축소), 적으면 목표에 필요할 때만 가용 한도 내에서 늘린다. targetRunDays가 null(미입력)이면 제약 없이 목표와 회복을 보고 과훈련을 피하는 선에서 처방한다.',
     },
     heartRateModel: structuredCoachContext ? {
       tempoCeilingBpm: coachHeartRateModel.tempoCeilingBpm,
@@ -1553,7 +1553,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
         '2순위: 선택 세션의 실제 수행 데이터(distance, duration, pace, HR, cadence, laps, fast_segments, RPE, memo)',
         '2.5순위: selectedRunExecutionGuide 대비 실제 수행 일치도. 처방된 심박/페이스/패턴 경계를 지켰는지, 경계를 넘었다면 어느 구간부터 왜 넘었는지',
         '3순위: 최근 7/14/30일 누적 거리, Easy 비율, 강훈련 빈도, Long Run/Tempo 수행 여부',
-        '4순위: weeklyPattern 대비 실제 소화율과 누락/대체/추가런 패턴',
+        '4순위: 플랜 대비 실제 소화율과 누락/대체/추가런 패턴',
         '5순위: activeInjuryItem, pain_note, workout_feeling, 회복 신호',
         '6순위: 더위/비/바람 같은 날씨와 사용자의 더위 심박 상승 성향',
         '7순위: 충분한 근거가 있을 때만 PB/Race/Tempo/긴 지속주 기반 예상 기록'
@@ -1582,7 +1582,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       racePredictionPolicy:
         '레이스 예상시간은 PB, 최근 Tempo/Race/긴 지속주가 충분할 때만 보조 근거로 언급한다. 데이터가 부족하면 예상시간을 단정하지 않는다. 루틴 변경은 예상시간 하나가 아니라 최근 14/30일 수행, 회복, 부상, 목표일까지 남은 기간을 함께 보고 결정한다.',
       patchPolicy:
-        '변경 필요성이 명확할 때만 trainingMemoryPatch.weeklyPattern 전체와 activeGoalStrategyNotes를 반환한다. 유지가 맞으면 report의 루틴 업데이트 섹션에는 유지 근거와 다음 상향 조건을 짧게 쓰고 trainingMemoryPatch는 null로 둔다. 처방 경계 자체를 조정해야 하면 activeGoalStrategyNotes 또는 aiNotes에 새 기준을 명확히 남긴다.',
+        '루틴은 플랜(training_schedule)이 갖는다 — 코치가 텍스트로 루틴을 저장하지 않는다. 변경이 필요하면 activeGoalStrategyNotes(또는 aiNotes)에 새 기준을 남기고, 개별 세션 조정은 coachScheduleProposal(승인형 제안)로 낸다. 유지가 맞으면 report의 루틴 업데이트 섹션에 유지 근거와 다음 상향 조건을 짧게 쓴다.',
       adaptiveProgressPolicy:
         'context.adaptiveProgress는 웹이 결정적으로 산출한 진행 평가다(#336~#338): progressionCriteria 4기준 status(ready/watch/blocked), 현재 phase, phaseProposal(다음 단계 전환 제안과 blockers), 적응값(Easy 상한/Long Run 드리프트 허용/회복 휴식일). 이것이 있으면 루틴 진화·단계 판단의 1차 근거로 쓴다. ' +
         '루틴 진화 트리거: 해당 기준이 ready로 안정됐을 때만 한 번에 한 요소를 소폭 올린다(예: Tempo 상한 준수 ready 2주 → Tempo 지속 +1세트, Long Run 지속성 ready → Long 거리 소폭↑). watch면 유지하며 관찰, blocked면 낮추거나 회복을 우선한다. ' +
@@ -1631,7 +1631,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
         restState?.active === true
     },
     upcomingSchedulePolicy:
-      'context.upcomingSchedule는 실제 주기화 스케줄의 다음 세션들(날짜·유형·거리)이다. "## 다음 훈련"은 반드시 이 실제 세션을 기준으로 말하고, weeklyPattern/prescriptionTemplates로 다른 세션(예: 다음이 토요일 LSD인데 화요일 Easy)을 지어내지 마라. 요약 화면(캐러셀)과 어긋나면 안 된다. 부상·회복으로 하향이 필요하면 "그 스케줄 세션(예: 토요일 LSD)을 이렇게 조정/대체하자"처럼 실제 세션을 기준으로 조정한다. upcomingSchedule이 비어있거나 null일 때만 일반 가이드로 답한다. ' +
+      'context.upcomingSchedule는 실제 주기화 스케줄의 다음 세션들(날짜·유형·거리)이다. "## 다음 훈련"은 반드시 이 실제 세션을 기준으로 말하고, prescriptionTemplates 로 다른 세션(예: 다음이 토요일 LSD인데 화요일 Easy)을 지어내지 마라. 요약 화면(캐러셀)과 어긋나면 안 된다. 부상·회복으로 하향이 필요하면 "그 스케줄 세션(예: 토요일 LSD)을 이렇게 조정/대체하자"처럼 실제 세션을 기준으로 조정한다. upcomingSchedule이 비어있거나 null일 때만 일반 가이드로 답한다. ' +
       // 2026-08-26 실사용: 한 답변 안에서 "목요일 템포는 낮추자"(어제 스레드 기억)와 "목요일은 Easy가
       // 들어가 있고"(실제 플랜)를 동시에 말했다. #695 는 "네/맞아요" 직답을 막았지만, 코치가 **서술하며**
       // 옛 타입을 끌어오는 경로는 안 덮였다.
@@ -1797,7 +1797,6 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
 type CoachContext = Awaited<ReturnType<typeof buildContext>>
 
 type TrainingMemoryPatch = {
-  weeklyPattern?: string[]
   longRunStrategy?: string
   currentVolumeNote?: string
   activeGoalStrategyNotes?: string
@@ -2698,10 +2697,10 @@ function forcedReportFromToolResults(results: unknown[]): string | null {
 function buildDataQuestionInstruction() {
   return [
     // A(2026-08-18 실사고): 사용자가 "내 스케줄이 그렇게 되어 있나"라고 **직접 물었을 때** 코치가
-    // weeklyPattern(옛 루틴 메모)을 읽고 "네, 그렇게 잡혀 있어요"라고 답했다. 실제 플랜과 달랐다
+    // 옛 루틴 메모를 읽고 "네, 그렇게 잡혀 있어요"라고 답했다. 실제 플랜과 달랐다(메모는 2026-09-07 제거)
     // (답변: 화 Easy+Strides·목 Tempo·토 LSD / 실제: 목 Easy, Tempo는 다음 주). 위 "## 다음 훈련"
     // 규칙은 그 섹션만 덮어서 직접 질문에는 적용되지 않았다 — 질문 형태와 무관하게 못박는다.
-    '**스케줄에 대한 모든 발화의 사실 출처는 context.upcomingSchedule 하나다.** "내 훈련이 어떻게 짜여 있어?", "그렇게 되어 있나?", "내 플랜에 템포가 있어?" 처럼 직접 묻는 경우에도 마찬가지다. context.trainingMemory.weeklyPattern 은 사용자가 예전에 적어둔 **루틴 메모**이고 현재 플랜이 아니다 — 그걸 읽고 스케줄을 설명하지 마라.',
+    '**스케줄에 대한 모든 발화의 사실 출처는 context.upcomingSchedule 하나다.** "내 훈련이 어떻게 짜여 있어?", "그렇게 되어 있나?", "내 플랜에 템포가 있어?" 처럼 직접 묻는 경우에도 마찬가지다. 처방 템플릿·전략 메모는 플랜이 아니다 — 그걸 읽고 스케줄을 설명하지 마라.',
     '**"네/맞아요"로 시작하기 전에 upcomingSchedule 과 대조하라.** 네 조언과 실제 플랜이 다르면 긍정하지 말고 **다르다는 사실을 먼저 말한다**: "아니요, 지금 플랜은 아직 그렇지 않아요 — 토요일에 LSD 6.7km 가 잡혀 있어요." 사용자가 확인을 구하는 질문에 습관적으로 긍정하면, 사용자는 자기 플랜을 잘못 알고 훈련하게 된다.',
     '사용자가 **같은 것을 두 번 이상 되짚으면**(예: "존2로만 하라며?", "템포가 있다는 게 맞아?") 네 앞선 답이 그의 질문과 어긋났다는 신호다. 같은 설명을 반복하지 말고 **무엇이 어긋났는지 짚고 바로잡아라.**',
     '기록 수치를 말해야 하는 질문(언제 얼마나 뛰었나, 어떤 조건에서 어땠나, 기간 비교)에는 **반드시 queryRuns 를 먼저 호출**한다. 도구를 부르지 않고 거리·횟수·평균 페이스·평균 심박 같은 수치를 말하지 않는다. context 의 recent7/14/30 은 최근 창 합계일 뿐이라 임의 기간의 답이 아니다.',
@@ -2859,7 +2858,7 @@ function buildCoachInstructions(context: unknown) {
     '현재 처방 숫자는 영구 고정값이 아니다. 사용자가 실행 가능한 Workoutdoors 세팅 기준으로 제시하되, 누적 데이터와 회복 반응이 충분하면 AI가 먼저 숫자/구성 변경을 제안한다.',
     'Tempo에서는 selectedRunExecutionGuide.boundaries.heartRateCeilingBpm(=heartRateModel.tempoCeilingBpm)을 상한으로 쓴다. maxHeartRate가 그 상한을 넘으면 몇 번째 구간부터 넘었는지 짧게 말하고, 없으면 "상한을 넘기지 않았다"처럼 품질 근거로 쓴다. 본문 숫자는 그 상한 값을 쓴다(165 고정 아님). 단 Race/Time Trial/한계시험은 심박 상한이 없다 — 전력 측정이 목적이므로 높은 심박·페이스를 "상한 초과"로 처벌하지 말고, 균등 페이스(초반 절제·후반 유지)와 결과(현재 체력 갱신)로 평가한다.',
     'Easy/Recovery/Easy + Strides 강도 판정은 평균심박(+RPE·드리프트)을 1차로 본다. 최고심박(maxHeartRate) 단발 스파이크는 언덕·신호 대기·스트라이드 가속처럼 자연스러운 것이므로 그것만으로 "이지 상한을 넘겼다/강도 초과"라고 처벌하지 마라. 평균심박이 이지 상한 + 약간의 여유까지 안정적이면 본런 강도를 잘 지킨 것이다. 진짜 과강 Easy(평균심박 자체가 상한을 뚜렷이 초과)일 때만 "다음엔 초반을 더 눌러보자"처럼 부드럽게 짚는다.',
-    'context.upcomingSchedule가 있으면 "## 다음 훈련"은 그 실제 주기화 스케줄의 다음 세션(날짜·유형·거리)을 기준으로 말한다 — weeklyPattern/prescriptionTemplates보다 우선이고 요약 화면(캐러셀)과 반드시 일치시킨다. 예: 다음이 토요일 LSD면 "화요일 Easy"라고 지어내지 말고 "토요일 LSD(약 N km)"를 기준으로 처방·조정한다. 부상/회복으로 낮춰야 하면 그 스케줄 세션을 어떻게 조정/대체할지로 말한다. 다음 훈련을 제안할 때는 세션명만 말하지 말고 사용자가 Workoutdoors에 바로 세팅할 수 있는 세부 지침을 준다. 심박 숫자는 heartRateModel의 개인 상한 값만 쓰고(예: Easy는 easyCeilingBpm 넘기지 말기, Tempo는 max tempoCeilingBpm 넘기지 말기), 상한이 null이면 심박 숫자 대신 페이스/RPE로 안내한다. Easy + Strides는 "이지 본런 + 본런 끝 스트라이드 몇 회(짧고 빠르게, 속도 기준, 사이 완전 회복)".',
+    'context.upcomingSchedule가 있으면 "## 다음 훈련"은 그 실제 주기화 스케줄의 다음 세션(날짜·유형·거리)을 기준으로 말한다 — prescriptionTemplates 보다 우선이고 요약 화면(캐러셀)과 반드시 일치시킨다. 예: 다음이 토요일 LSD면 "화요일 Easy"라고 지어내지 말고 "토요일 LSD(약 N km)"를 기준으로 처방·조정한다. 부상/회복으로 낮춰야 하면 그 스케줄 세션을 어떻게 조정/대체할지로 말한다. 다음 훈련을 제안할 때는 세션명만 말하지 말고 사용자가 Workoutdoors에 바로 세팅할 수 있는 세부 지침을 준다. 심박 숫자는 heartRateModel의 개인 상한 값만 쓰고(예: Easy는 easyCeilingBpm 넘기지 말기, Tempo는 max tempoCeilingBpm 넘기지 말기), 상한이 null이면 심박 숫자 대신 페이스/RPE로 안내한다. Easy + Strides는 "이지 본런 + 본런 끝 스트라이드 몇 회(짧고 빠르게, 속도 기준, 사이 완전 회복)".',
     'context.restState.active가 true면 사용자가 선언한 휴식 기간이다 — "## 다음 훈련"에서 훈련 처방·재촉을 하지 말고 휴식을 존중한다("푹 쉬세요, 돌아오면 가볍게"). 이때 휴식 존중이 upcomingSchedule 처방보다 우선이다. 복귀일이거나 복귀가 임박했으면 "놓침"이 아니라 "회복 후 정리" 톤으로 안내한다. 자세한 분기는 context.instructionForRest를 따른다.',
     'context.injurySignals가 있으면 활성 부상의 "가능성 있는 원인 가설"과 조절 레버다 — 의료 진단이 아니라 "가능성"으로만 말하고(확률% 금지, 의사 흉내 금지), redFlag.tripped=true면 가설·처방을 멈추고 전문가 평가 의뢰를 최우선으로 안내한다(escape hatch). 레버는 다음 훈련 조정에 핵심 하나만 부드럽게 녹인다. 자세한 분기는 context.instructionForInjurySignals를 따른다.',
     '세션 유형별 구간당 페이스/심박 경계 가이드가 현재 사용자에게 맞지 않아 보이면 "## 루틴 업데이트"에서 유지/조정 여부를 말한다. 조정이 필요할 때는 trainingMemoryPatch.activeGoalStrategyNotes 또는 aiNotes에 새 기준을 저장한다.',
@@ -2871,7 +2870,7 @@ function buildCoachInstructions(context: unknown) {
     'context.adaptiveTrainingProfile은 사용자 데이터와 대화로 누적된 개인화 레이어다. 문헌 기준선 위에 얹는 보정값이며, 단일 세션을 보고 즉흥적으로 덮어쓰지 않는다.',
     'adaptiveTrainingProfile.trainingPhase는 현재 훈련 블록이다. Base/Build/Threshold/Race Specific/Taper/Recovery 중 하나로 보고, activeGoal까지 남은 기간과 최근 수행 품질에 맞춰 다음 단계 후보를 판단한다.',
     'adaptiveTrainingProfile.progressionCriteria는 승급 조건이다. Easy 심박 안정, Tempo 상한 준수, Long Run 지속성, 부상/회복 게이트 같은 조건을 보고 유지/상향/하향/보류를 결정한다.',
-    'adaptiveTrainingProfile.prescriptionTemplates는 사용자가 Workoutdoors에 옮겨 실행할 수 있는 처방 템플릿이다. 다음 훈련을 제안할 때 이 템플릿의 구조(세션 유형, 패턴, 진행 조건)를 우선 보고, 조건이 맞지 않으면 새 훈련을 즉흥적으로 만들지 않는다. 단, 심박 상한 숫자는 템플릿/weeklyPattern/progressionCriteria 텍스트에 적힌 값이 아니라 항상 heartRateModel(tempoCeilingBpm/easyCeilingBpm/recoveryCeilingBpm)에서 가져온다. 저장 텍스트에 과거 숫자가 남아 있어도 무시하고 heartRateModel 값으로 말하고 처방한다. heartRateModel.source가 insufficient이면 심박 상한을 말하지 말고 페이스/RPE로 처방한다.',
+    'adaptiveTrainingProfile.prescriptionTemplates는 사용자가 Workoutdoors에 옮겨 실행할 수 있는 처방 템플릿이다. 다음 훈련을 제안할 때 이 템플릿의 구조(세션 유형, 패턴, 진행 조건)를 우선 보고, 조건이 맞지 않으면 새 훈련을 즉흥적으로 만들지 않는다. 단, 심박 상한 숫자는 템플릿/progressionCriteria 텍스트에 적힌 값이 아니라 항상 heartRateModel(tempoCeilingBpm/easyCeilingBpm/recoveryCeilingBpm)에서 가져온다. 저장 텍스트에 과거 숫자가 남아 있어도 무시하고 heartRateModel 값으로 말하고 처방한다. heartRateModel.source가 insufficient이면 심박 상한을 말하지 말고 페이스/RPE로 처방한다.',
     '5km TT, 10km TT, 진짜 인터벌/크루즈 인터벌 같은 상위 품질 훈련은 progressionCriteria가 ready이고 부상/회복 게이트가 막히지 않을 때만 제안한다.',
     '훈련 단계, 승급 조건, 처방 템플릿을 바꿔야 하면 trainingMemoryPatch.adaptiveTrainingProfile.trainingPhase/progressionCriteria/prescriptionTemplates에 전체 구조를 반환한다. 단일 세션만 보고 바꾸지 말고 반복 근거가 있을 때만 한다.',
     '알고리즘이 스스로 더 나아진다는 뜻은 소스 코드가 바뀐다는 뜻이 아니다. 반복되는 수행 패턴, 처방 준수율, 사용자 피드백을 trainingMemory.adaptiveTrainingProfile에 저장해 다음 판단에 반영한다는 뜻이다.',
@@ -2952,9 +2951,9 @@ function buildCoachInstructions(context: unknown) {
     ...buildScheduleProposalInstructions(restAlternativeOffered),
     '통증/부상 메모가 있어도 의료 진단처럼 말하지 않는다. 통증은 훈련 판단 기준과 관찰 포인트로만 다룬다.',
     '통증 수치가 없으면 단정하지 않는다. 예: "통증 강도가 안 나와 있으니 크게 단정하진 말자. 다만 다음 착지감은 체크하자."',
-    '코칭은 해당 러닝 세션 평가에서 끝나지 않는다. 반드시 계정의 목표와 누적 데이터를 보고 현재 weeklyPattern을 유지할지 수정할지 판단한다.',
-    'weeklyPattern은 사용자가 직접 세우는 고정 루틴이 아니라 AI가 목표, 최근 14/30일 누적, 강훈련 빈도, 롱런 상태, Easy + Strides 수행 여부, 회복 신호를 보고 관리하는 훈련 계획이다.',
-    'weeklyPattern의 주간 러닝 세션 수는 weeklyAvailability.targetRunDays(사용자 가용 일수 제약)를 넘지 않는다. 초과하면 우선순위 낮은 추가 Easy부터 줄여 한도에 맞추고, 목표상 더 필요해도 가용 한도 내에서만 배치한다. targetRunDays가 null이면 제약 없이 목표·회복 기준으로 과훈련을 피해 처방한다. 가용 일수는 생활 제약이므로 임의로 늘리라고 강요하지 않는다.',
+    '코칭은 해당 러닝 세션 평가에서 끝나지 않는다. 반드시 계정의 목표와 누적 데이터를 보고 현재 주간 플랜을 유지할지 조정할지 판단한다.',
+    '주간 루틴의 정본은 목표에서 생성된 주기화 플랜(context.upcomingSchedule)이다. 사용자가 적어둔 루틴 메모는 더 이상 없다 — 목표, 최근 14/30일 누적, 강훈련 빈도, 롱런 상태, 회복 신호를 보고 그 플랜을 유지·조정한다.',
+    '주간 플랜의 러닝 일수는 weeklyAvailability.targetRunDays(사용자 가용 일수 제약)를 넘지 않는다. 초과하면 우선순위 낮은 추가 Easy부터 줄여 한도에 맞추고, 목표상 더 필요해도 가용 한도 내에서만 배치한다. targetRunDays가 null이면 제약 없이 목표·회복 기준으로 과훈련을 피해 처방한다. 가용 일수는 생활 제약이므로 임의로 늘리라고 강요하지 않는다.',
     'AI가 제안한 세션은 사용자가 믿고 따른 처방일 수 있다. selectedRun은 단순 기록이 아니라 직전 목표/스케줄/코칭 처방의 실행 결과일 수 있으므로, 계획 의도에 맞게 수행됐는지 먼저 보고 다음 처방을 조정한다.',
     '루틴 업데이트 판단은 context.routineUpdatePolicy를 기준으로 한다. 단일 세션 하나만으로 루틴을 자주 바꾸지 말고, 최근 7/14/30일 흐름과 목표일까지 남은 기간, 회복/부상 신호, 핵심 세션 수행 여부를 함께 본다.',
     '스케줄 처방은 반드시 context.routineUpdatePolicy.coachingDecisionBasis의 우선순위에 근거한다. 단순히 "느낌상" 또는 일반론으로 루틴을 바꾸지 않는다.',
@@ -2972,15 +2971,15 @@ function buildCoachInstructions(context: unknown) {
     '사용자가 잘 수행했는데도 루틴이 그대로라면 "아직 유지"가 아니라 "왜 아직 유지가 더 좋은지" 또는 "다음 상향 조건이 무엇인지"를 루틴 업데이트 섹션에 말한다.',
     'report의 "## 루틴 업데이트" 섹션에는 유지/변경 결론만 쓰지 말고, 근거를 1~3개 짧게 붙인다. 예: "루틴은 유지. 최근 Easy 기반은 살아 있고, 이번 세션도 강도 과부하 신호는 없다."',
     '근거가 부족하면 루틴을 바꾸지 않는다. 대신 "아직 루틴을 바꿀 근거는 부족하다. 다음 Tempo/Long Run 반응까지 보고 조정하자"처럼 말한다.',
-    '레이스 예상시간 시뮬레이션은 충분한 PB/Tempo/Race/긴 지속주 데이터가 있을 때만 보조 근거로 사용한다. 예상시간 하나만으로 weeklyPattern을 바꾸지 않는다.',
+    '레이스 예상시간 시뮬레이션은 충분한 PB/Tempo/Race/긴 지속주 데이터가 있을 때만 보조 근거로 사용한다. 예상시간 하나만으로 플랜을 바꾸지 않는다.',
     '매 코칭 요청마다 스케줄 업데이트 필요성은 속으로 진단하되, "## 루틴 업데이트" 섹션은 context.responseTemplatePolicy 기준으로만 넣는다. nextTrainingAdviceRelevant=true이고 routineUpdateCheck에 유지가 아닌 변화나 명확한 상향 조건이 있을 때만 상세히 쓰고, 넣을 때는 "## 한 줄 요약" 바로 앞에 둔다. 변화 근거가 없으면 한 줄로 줄이거나 생략한다.',
     '루틴 업데이트 섹션에서는 이대로 activeGoal을 향해 가도 되는지, 주간 루틴을 유지할지, 변경이 필요한 시점인지 한두 문장으로 말한다.',
-    '유지가 맞으면 "루틴은 유지"라고 짧게 말하고 trainingMemoryPatch는 null로 둔다. 조정이 필요하면 weeklyPattern 전체를 업데이트한다.',
+    '유지가 맞으면 "루틴은 유지"라고 짧게 말하고 trainingMemoryPatch는 null로 둔다. 조정이 필요하면 그 근거를 activeGoalStrategyNotes 에 남기고, 개별 세션은 coachScheduleProposal 로 제안한다.',
     '매 코칭 요청마다 부상/주의 상태도 확인한다. pain_note, activeInjuryItem, 최근 강훈련/롱런 이후 회복 반응을 보고 다음 세션 강도에 반영하되 의료 진단처럼 말하지 않는다.',
     '신뢰 레이어(#313): context.trustLayerApplies=true이고 context.trustLayerNote가 비어있지 않으면(=부상 active/monitoring), 그 내용을 반드시 자연스럽게 포함한다. 사용자가 "이렇게 보수적으로 가도 목표를 달성할 수 있나?"라는 의문을 갖는다고 가정하고, 강도를 줄이는 것은 목표 포기가 아니라 목표 보호이며 현재 전망과 복귀 기간을 함께 말한다. 과장하거나 달성을 확정 단언하지 말고, 의료 진단은 하지 않는다.',
     'chronicLoadTrend.ageWeight가 1 이상이면 나이대를 고려해 회복을 더 보수적으로 본다(40대 1, 50대 2, 60대+ 3). 나이가 많을수록 같은 부하 증가에도 회복 여유를 더 주고 강도 상향을 천천히 권한다. 단 나이를 이유로 단정적으로 제한하지 말고 회복 보수성 근거로만 쓴다.',
     '루틴 변경이 필요 없으면 trainingMemoryPatch는 null로 둔다.',
-    '루틴 변경이 필요하면 trainingMemoryPatch.weeklyPattern에 새 주간 루틴을 전체 배열로 넣는다. 일부만 넣지 말고 전체 주간 패턴을 반환한다.',
+    '루틴 자체(요일 뼈대)는 코치가 텍스트로 저장하지 않는다 — 플랜 생성기가 목표에서 만든다. 코치는 기준 변화를 activeGoalStrategyNotes 에 남기고 개별 세션 조정만 coachScheduleProposal 로 제안한다.',
     '루틴 변경이 activeGoal의 목표관리에도 반영되어야 하면 trainingMemoryPatch.activeGoalStrategyNotes에 활성 목표의 새 strategyNotes 문장을 넣는다. 이 값은 activeGoal.strategyNotes에 저장된다.',
     '롱런 전략이나 현재 볼륨 노트도 바뀌어야 하면 trainingMemoryPatch.longRunStrategy, trainingMemoryPatch.currentVolumeNote에 반영한다.',
     '사용자의 장기 정체성이 반복 근거로 보강되면 trainingMemoryPatch.runnerIdentity에 strengths/weaknesses/riskFactors/coachingStyle을 반환한다. 단일 세션만으로 "이 사람은 항상"이라고 단정하지 않는다.',
@@ -3028,7 +3027,6 @@ function buildCoachResponseFormat() {
                 type: 'object',
                 additionalProperties: false,
                 required: [
-                  'weeklyPattern',
                   'longRunStrategy',
                   'currentVolumeNote',
                   'activeGoalStrategyNotes',
@@ -3038,7 +3036,6 @@ function buildCoachResponseFormat() {
                   'coachBeliefs'
                 ],
                 properties: {
-                  weeklyPattern: { type: 'array', items: { type: 'string' } },
                   longRunStrategy: { anyOf: [{ type: 'string' }, { type: 'null' }] },
                   currentVolumeNote: { anyOf: [{ type: 'string' }, { type: 'null' }] },
                   activeGoalStrategyNotes: { anyOf: [{ type: 'string' }, { type: 'null' }] },
@@ -5228,10 +5225,6 @@ function normalizeTrainingMemoryPatch(patch: TrainingMemoryPatch | null): Traini
   if (!patch || typeof patch !== 'object') return null
   const normalized: TrainingMemoryPatch = {}
 
-  if (Array.isArray(patch.weeklyPattern)) {
-    const weeklyPattern = patch.weeklyPattern.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim()).slice(0, 10)
-    if (weeklyPattern.length) normalized.weeklyPattern = weeklyPattern
-  }
   if (typeof patch.longRunStrategy === 'string' && patch.longRunStrategy.trim()) {
     normalized.longRunStrategy = patch.longRunStrategy.trim().slice(0, 1000)
   }
@@ -5313,7 +5306,6 @@ function mergeTrainingMemoryPatch(memory: CoachContext['trainingMemory'], patch:
   return {
     ...current,
     ...(patch.activeGoalStrategyNotes && patchedGoals.length ? { goals: patchedGoals } : {}),
-    ...(patch.weeklyPattern ? { weeklyPattern: patch.weeklyPattern } : {}),
     ...(patch.longRunStrategy ? { longRunStrategy: patch.longRunStrategy } : {}),
     ...(patch.currentVolumeNote ? { currentVolumeNote: patch.currentVolumeNote } : {}),
     ...(patch.aiNotes ? { aiNotes: mergeAiNotes(current.aiNotes, patch.aiNotes) } : {}),
@@ -6050,7 +6042,6 @@ function stripStaleHrList(value: unknown): unknown {
 function sanitizeMemoryHeartRateCeilings(memory: unknown): unknown {
   if (!memory || typeof memory !== 'object') return memory
   const mem = memory as Record<string, unknown>
-  if (Array.isArray(mem.weeklyPattern)) mem.weeklyPattern = stripStaleHrList(mem.weeklyPattern)
   const atp = mem.adaptiveTrainingProfile as Record<string, unknown> | undefined
   if (atp && typeof atp === 'object') {
     if (Array.isArray(atp.prescriptionTemplates)) {

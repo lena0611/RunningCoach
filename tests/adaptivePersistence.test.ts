@@ -5,7 +5,6 @@ import {
   adaptiveMetricTypes,
   mapAdaptiveMetricRow,
   mapPhaseHistoryRow,
-  mapWeeklyPatternRow,
   toAdaptiveMetricUpsert,
   type AdaptiveMetric
 } from '@/entities/training-memory/adaptivePersistence'
@@ -75,31 +74,6 @@ describe('toAdaptiveMetricUpsert (#328)', () => {
     expect(payload.adopted_value).toBe(3)
     expect(payload.unit).toBe('days')
     expect(typeof payload.updated_at).toBe('string')
-  })
-})
-
-describe('mapWeeklyPatternRow (#328)', () => {
-  it('정상 row를 매핑하고 derived_from을 정규화한다', () => {
-    const record = mapWeeklyPatternRow({
-      version: 3,
-      weekly_pattern: ['화: Easy', '목: Tempo'],
-      derived_from: 'onboarding',
-      status: 'active',
-      created_at: '2026-06-10T00:00:00Z',
-      retired_at: null
-    })
-    expect(record.version).toBe(3)
-    expect(record.weeklyPattern).toEqual(['화: Easy', '목: Tempo'])
-    expect(record.derivedFrom).toBe('onboarding')
-    expect(record.status).toBe('active')
-  })
-
-  it('잘못된 version/derived_from/status는 기본값으로 떨어진다', () => {
-    const record = mapWeeklyPatternRow({ version: 0, derived_from: 'aliens', status: 'paused' })
-    expect(record.version).toBe(1)
-    expect(record.derivedFrom).toBe('manual')
-    expect(record.status).toBe('active')
-    expect(record.weeklyPattern).toEqual([])
   })
 })
 

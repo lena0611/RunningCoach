@@ -22,7 +22,6 @@ export type TrainingMemory = {
   adaptiveTrainingProfile: AdaptiveTrainingProfile
   runnerIdentity: RunnerIdentity
   coachBeliefs: CoachBelief[]
-  weeklyPattern: string[]
   longRunStrategy: string
   currentVolumeNote: string
   knownIssues: string[]
@@ -603,12 +602,6 @@ export const initialTrainingMemory: TrainingMemory = {
     coachingStyle: ['부상 예방 우선', '장기 성장 중심', '페이스보다 심박/RPE 우선']
   },
   coachBeliefs: [],
-  weeklyPattern: [
-    '화요일: Easy + Strides',
-    '목요일: Tempo',
-    '토요일: LSD 또는 Steady Long',
-    '필요 시 5km Easy 추가'
-  ],
   longRunStrategy: '토요일 롱런은 격주로 Easy LSD와 Steady Long을 번갈아 수행한다.',
   currentVolumeNote: '최근 반달 114km 누적. 대부분 5km Easy.',
   knownIssues: [
@@ -638,7 +631,7 @@ export const initialTrainingMemory: TrainingMemory = {
 /**
  * 신규/온보딩 미완 사용자용 중립 메모리 (#332).
  * initialTrainingMemory(개발자 예시 루틴/부상/목표)를 신규 사용자에게 주입하지 않기 위해
- * 개인 서사(weeklyPattern/처방 외 부상·목표·루틴 텍스트)를 비운 상태로 만든다.
+ * 개인 서사(처방 외 부상·목표·루틴 텍스트)를 비운 상태로 만든다.
  * 구조 기본값(adaptiveTrainingProfile·8종 처방 템플릿)은 유지한다. 온보딩이 실제 값으로 채운다.
  * - injuryItems: [] 명시 → normalize가 존중(#303), 햄스트링 재시드 안 됨.
  * - goals: 중립 활성 목표 1개(title 필수) → '10km 60분' 기본값 대체.
@@ -668,7 +661,6 @@ export function createBlankTrainingMemory(): TrainingMemory {
       }
     ],
     injuryItems: [],
-    weeklyPattern: [],
     longRunStrategy: '',
     currentVolumeNote: '',
     knownIssues: [],
@@ -851,7 +843,6 @@ export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null |
 
   return {
     ...merged,
-    weeklyPattern: stripStaleHeartRateCeilingsList(merged.weeklyPattern ?? []),
     goals,
     activeGoalId,
     injuryItems,
