@@ -384,3 +384,35 @@ describe('buildWeekSummary — rested 제외 (#473)', () => {
     expect(summary!.keyCount).toBe(0) // rested 핵심 2개 제외
   })
 })
+
+/**
+ * 위크 요약이 **보고 있는 주**를 따라간다(2026-09-07). 바가 주 넘기기 화살표 바로 위라
+ * 다음주를 보는데 이번 주 볼륨이 떠 있으면 그대로 오독한다(실측으로 확인된 사고).
+ */
+describe('buildWeekSummary — 보는 주(weekAnchor)', () => {
+  const today = new Date('2026-01-15T00:00:00') // 목, 이번 주 = 01-12~01-18
+  const nextWeek = new Date('2026-01-22T00:00:00') // 다음 주 = 01-19~01-25
+  const rx = (km: number) => ({ distanceKm: km, durationMin: null, paceRange: '', note: '' })
+  const sessions = [
+    session({ date: '2026-01-13', sessionType: 'Easy', prescription: rx(6) }),
+    session({ date: '2026-01-21', sessionType: 'Easy', prescription: rx(4), phase: 'Build' }),
+    session({ date: '2026-01-24', sessionType: 'Tempo', keySession: true, prescription: rx(9), phase: 'Build' })
+  ]
+
+  it('앵커를 주면 그 주의 볼륨·핵심·단계를 낸다', () => {
+    const summary = buildWeekSummary(sessions, today, '2026-03-01', 'performance', nextWeek)
+    expect(summary!.weekKm).toBe(13) // 4 + 9 (이번 주 6km 아님)
+    expect(summary!.keyCount).toBe(1)
+    expect(summary!.phaseLabel).toBe('발전기')
+  })
+
+  it('D-day 는 어느 주를 보든 **오늘** 기준이다 — 대회까지 남은 날은 변하지 않는다', () => {
+    const thisWeek = buildWeekSummary(sessions, today, '2026-03-01', 'performance')
+    const viewed = buildWeekSummary(sessions, today, '2026-03-01', 'performance', nextWeek)
+    expect(viewed!.dDayText).toBe(thisWeek!.dDayText)
+  })
+
+  it('앵커를 안 주면 예전처럼 오늘 주를 요약한다', () => {
+    expect(buildWeekSummary(sessions, today, null, 'performance')!.weekKm).toBe(6)
+  })
+})

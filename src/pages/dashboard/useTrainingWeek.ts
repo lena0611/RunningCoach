@@ -25,7 +25,7 @@ import { deriveWeeklyVolumeAnchorKm } from '@/shared/lib/coaching/returnAnchor'
  */
 const SCHEDULE_ANCHOR_LOGIC_VERSION = 2
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
-import { buildPeriodizedSchedule, buildSteadyWeeklyRhythm, goalArchetype, prescriptionFor, trainingWeekRange, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
+import { buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, prescriptionFor, trainingWeekRange, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
 import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
 import { buildRealignedSchedule, dropDraftsOnRestedDates } from '@/shared/lib/coaching/scheduleRealign'
 import { buildSessionBriefing, sessionTypeLabel, type SessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
@@ -437,6 +437,22 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
     if (weekOffset.value === 1) return `다음주 · ${range}`
     return range
   })
+  /**
+   * **보고 있는 주**의 요약(2026-09-07). 바가 주 넘기기 화살표 바로 위에 붙어 있어서 예전엔
+   * 다음주를 보면서 이번 주 볼륨을 읽었다(실측: 다음주로 넘겨도 '핵심 1 · 약 20.1km' 그대로).
+   * D-day 는 오늘 기준으로 둔다 — 대회까지 남은 날은 어느 주를 보든 같다.
+   */
+  const viewedWeekSummary = computed(() => {
+    const anchor = new Date(today.value)
+    anchor.setDate(anchor.getDate() + weekOffset.value * 7)
+    return buildWeekSummary(
+      scheduleStore.sessions,
+      today.value,
+      activeGoal.value?.targetDate ?? null,
+      activeGoal.value ? goalArchetype(activeGoal.value.category) : 'performance',
+      anchor
+    )
+  })
   function navWeek(delta: number) {
     weekOffset.value = Math.max(-8, Math.min(8, weekOffset.value + delta))
   }
@@ -825,6 +841,7 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
     // 주간 스트립·세션 상태
     weekOffset,
     weekLabel,
+    viewedWeekSummary,
     navWeek,
     scheduleDays,
     hasSchedule,

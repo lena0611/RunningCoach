@@ -647,10 +647,15 @@ export function buildWeekSummary(
   today: Date,
   targetDate: string | null,
   /** 목표 아키타입(#398). 비성과는 단계/D-day 대신 유형 라벨, 마감 없음. */
-  archetype: GoalArchetype = 'performance'
+  archetype: GoalArchetype = 'performance',
+  /**
+   * 요약할 주(2026-09-07). 기본은 오늘 주 — 주 넘기기로 **보고 있는 주**를 요약할 때만 다르게 준다.
+   * D-day 는 언제나 오늘 기준이다: 다음주를 보는 동안에도 대회까지 남은 날은 그대로여야 한다.
+   */
+  weekAnchor: Date = today
 ): WeekSummary | null {
   const start = startOfDay(today)
-  const { start: startStr, end: endStr } = trainingWeekRange(today)
+  const { start: startStr, end: endStr } = trainingWeekRange(weekAnchor)
 
   // rested(선언한 휴식, #473) 제외 — 안 그러면 휴식 주의 처방 km/핵심 세션이 주간 요약 헤더에 잡혀
   // weekMission(isActiveSession 기반)과 같은 주의 볼륨이 어긋나고, 쉬는 주를 "약 N km" 로 닦달한다.
@@ -664,7 +669,7 @@ export function buildWeekSummary(
   )
   if (!week.length) return null
 
-  // 단계: 오늘 세션 우선, 없으면 이번 주 최빈 단계.
+  // 단계: (보는 주가 오늘 주면) 오늘 세션 우선, 없으면 그 주 최빈 단계.
   const todayStr = formatDateOnly(start)
   const todaySession = week.find((s) => s.date === todayStr)
   const phase = todaySession?.phase ?? mostCommonPhase(week)
