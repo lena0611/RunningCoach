@@ -79,6 +79,7 @@ const {
   adaptiveProgress,
   weekOffset,
   weekLabel,
+  viewedWeekSummary,
   navWeek,
   scheduleDays,
   hasSchedule,
@@ -626,10 +627,14 @@ async function applyPhaseTransition() {
     <CoachMomentCard v-if="topCoachMoment" :key="topCoachMoment.key" :moment="topCoachMoment" @dismiss="dismissMoment" @action="onMomentAction" @select="onMomentSelect" />
 
     <!-- 위크 요약(#362): 이번 주가 뭘 위한 주인지 — 단계·포커스·핵심·볼륨·D-day -->
-    <div v-if="hasSchedule && weekSummary" class="week-summary-bar">
-      <span class="week-summary-phase">{{ weekSummary.phaseLabel }}</span>
-      <span class="week-summary-focus">{{ weekSummary.focusLine }}</span>
-      <span class="week-summary-meta"><template v-if="isPerformanceGoal">핵심 {{ weekSummary.keyCount }} · </template>약 {{ weekSummary.weekKm }}km<template v-if="weekSummary.dDayText"> · {{ weekSummary.dDayText }}</template></span>
+    <!--
+      위크 요약 — **보고 있는 주**를 따라간다(2026-09-07). 바로 아래 주 넘기기 화살표와 짝이라
+      다음주를 보는데 이번 주 볼륨이 떠 있으면 그대로 오독한다. D-day 는 오늘 기준(대회까지 남은 날).
+    -->
+    <div v-if="hasSchedule && viewedWeekSummary" class="week-summary-bar">
+      <span class="week-summary-phase">{{ viewedWeekSummary.phaseLabel }}</span>
+      <span class="week-summary-focus">{{ viewedWeekSummary.focusLine }}</span>
+      <span class="week-summary-meta"><template v-if="isPerformanceGoal">핵심 {{ viewedWeekSummary.keyCount }} · </template>약 {{ viewedWeekSummary.weekKm }}km<template v-if="viewedWeekSummary.dDayText"> · {{ viewedWeekSummary.dDayText }}</template></span>
     </div>
 
     <!-- 주 단위 네비(월~일 고정 스트립): 지난주·다음주 조망 -->
