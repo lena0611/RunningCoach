@@ -190,6 +190,23 @@ describe('buildSessionBriefing', () => {
     expect(easy.execution.find((s) => s.label === '본런')?.detail ?? '').toContain('35분 동안')
   })
 
+  /*
+    저강도 6경로 중 Easy + Strides 와 fallback 만 옛 지문("편한 대화 페이스 {페이스}, {거리}·{시간}")에
+    남아 있었다(2026-09-07 사용자 발견 — 화요일 세션이 하필 이 타입이었다).
+    SSOT §저강도 처방 변수 우선순위가 금지하는 "거리·시간·페이스 동시 타깃" 그대로였다.
+  */
+  it('Easy + Strides 본런도 같은 저강도 프레이밍을 쓴다 — 페이스를 앞세우지 않는다', () => {
+    const b = buildSessionBriefing(session({ sessionType: 'Easy + Strides' }), { goal, injury: null, chronic: noChronic })
+    const main = b.execution.find((s) => s.label === '본런')?.detail ?? ''
+    expect(main).toContain('35분 동안')
+    expect(main).toContain('거리는 약 6km 기준')
+    expect(main).toContain('목표가 아니라 결과')
+    // 옛 지문은 페이스로 시작했다 — 그 형태로 돌아가면 실패한다.
+    expect(main.startsWith('편한 대화 페이스')).toBe(false)
+    // 스트라이드 단계는 그대로 남는다(본런 지문만 바뀐 것).
+    expect(b.execution.some((s) => s.label === '스트라이드')).toBe(true)
+  })
+
   it('SessionIntent 흡수: 의도(why)·성공기준·타겟 한 카드로 (수락 결정 지원)', () => {
     const b = buildSessionBriefing(session({ sessionType: 'Easy + Strides' }), {
       goal,
