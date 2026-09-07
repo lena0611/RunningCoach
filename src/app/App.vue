@@ -263,12 +263,11 @@ const notificationPromptSignature = computed(() => disabledNotificationItems.val
  */
 const earlyRunCreditCandidate = computed(() => {
   if (!authStore.isAuthenticated) return null
-  const attributed = new Set<string>()
-  for (const s of scheduleStore.sessions) if (s.runId) attributed.add(s.runId)
   return findEarlyRunCreditCandidate({
     sessions: scheduleStore.sessions,
     runs: runStore.runs.map((run) => ({ id: run.id, date: run.date, type: run.type, distanceKm: run.distanceKm })),
-    attributedRunIds: attributed,
+    // 귀속 Set 은 스토어 게터가 단일 출처다(칩·필터·달력 링이 같은 걸 본다).
+    attributedRunIds: scheduleStore.scheduledRunIds,
     today: localDateKey(new Date())
   })
 })

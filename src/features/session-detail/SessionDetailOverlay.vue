@@ -5,6 +5,7 @@ import { useSessionDetailStore } from '@/app/stores/sessionDetailStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useCoachStore } from '@/app/stores/coachStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
+import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
@@ -24,6 +25,7 @@ const sessionDetailStore = useSessionDetailStore()
 const runStore = useRunStore()
 const coachStore = useCoachStore()
 const memoryStore = useMemoryStore()
+const scheduleStore = useTrainingScheduleStore()
 const toastStore = useToastStore()
 const healthKitSyncStore = useHealthKitSyncStore()
 
@@ -132,7 +134,7 @@ async function confirmRemove() {
     layer-class="session-overlay-layer"
     @close="closeDetail"
   >
-    <RunDetailContent v-if="detailRun" :run="detailRun" :weekly-pattern="memoryStore.memory.weeklyPattern">
+    <RunDetailContent v-if="detailRun" :run="detailRun" :weekly-pattern="memoryStore.memory.weeklyPattern" :scheduled-run-ids="scheduleStore.scheduledRunIds">
       <template #actions>
         <div class="run-detail-actions" aria-label="세션 관리">
           <button

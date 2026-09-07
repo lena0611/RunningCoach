@@ -43,6 +43,15 @@ export const useTrainingScheduleStore = defineStore('trainingScheduleStore', {
     loadedGoalId: null as string | null | undefined
   }),
   getters: {
+    /**
+     * 실제로 **예정 세션에 귀속된 런 id** — "스케줄 vs 추가" 판정의 단일 출처.
+     * 세 곳(기록 탭 달력·메타 칩·조기수행 후보)이 각자 같은 Set 을 만들고 있었다.
+     */
+    scheduledRunIds(state): Set<string> {
+      const ids = new Set<string>()
+      for (const session of state.sessions) if (session.runId) ids.add(session.runId)
+      return ids
+    },
     /** 날짜별 활성(planned/missed) 세션 전부(AM→PM→단일 정렬). 같은 날 더블(#455) 표시·충돌 판정에 쓴다. */
     sessionsOnDate(state) {
       const slotRank = (s: ScheduledSession) => (s.slot === 'AM' ? 0 : s.slot === 'PM' ? 1 : 2)

@@ -26,12 +26,29 @@ const sourceLabels: Record<RunLog['source'], string> = {
   image_extracted: '이미지 추출'
 }
 
-export function getRunMetaChips(run: RunLog, weeklyPattern: string[] = []): RunMetaChip[] {
+/**
+ * "스케줄 vs 추가" 판정(2026-09-07 교정).
+ *
+ * 정본은 **실제 귀속**이다 — 그 런에 연결된 예정 세션이 있으면 스케줄이다(요일·타입 무관, 옮긴 세션도 잡힘).
+ * `weeklyPattern` 문자열 매칭은 플랜(training_schedule)이 생기기 전의 옛 루틴 메모라 **폴백**으로만 둔다:
+ * 사용자가 그 메모를 비우면(실제로 비어 있었다) **모든 런이 '추가'로 뒤집혔다**. 귀속은 멀쩡했는데
+ * 칩만 엉뚱한 곳을 물어본 것이다. 코치가 weeklyPattern 으로 실제 플랜을 대신 메꾸다 난 사고(2026-08-18)와 같은 부류.
+ */
+function runIsScheduled(run: RunLog, weeklyPattern: string[], scheduledRunIds?: ReadonlySet<string>): boolean {
+  if (scheduledRunIds?.has(run.id)) return true
+  return isScheduledSession(run.date, run.type, weeklyPattern)
+}
+
+export function getRunMetaChips(
+  run: RunLog,
+  weeklyPattern: string[] = [],
+  scheduledRunIds?: ReadonlySet<string>
+): RunMetaChip[] {
   // 레이스는 훈련 플랜 문맥(스케줄/추가) 밖의 별도 컨텍스트 — 첫 칩이 정체를 밝힌다(#552 워치 유입 포함).
   const chips: RunMetaChip[] = [
     run.tags.includes(SELF_RACE_TAG)
       ? { label: '🏁 레이스', tone: 'race' }
-      : isScheduledSession(run.date, run.type, weeklyPattern)
+      : runIsScheduled(run, weeklyPattern, scheduledRunIds)
         ? { label: '스케줄', tone: 'schedule' }
         : { label: '추가', tone: 'extra' }
   ]
@@ -44,9 +61,13 @@ export function getRunMetaChips(run: RunLog, weeklyPattern: string[] = []): RunM
   return chips
 }
 
-export function getRunFilterTags(run: RunLog, weeklyPattern: string[] = []): RunFilterTag[] {
+export function getRunFilterTags(
+  run: RunLog,
+  weeklyPattern: string[] = [],
+  scheduledRunIds?: ReadonlySet<string>
+): RunFilterTag[] {
   const tags: RunFilterTag[] = []
-  const scheduled = isScheduledSession(run.date, run.type, weeklyPattern)
+  const scheduled = runIsScheduled(run, weeklyPattern, scheduledRunIds)
   tags.push({
     value: scheduled ? 'schedule:scheduled' : 'schedule:extra',
     label: scheduled ? '스케줄' : '추가',
@@ -81,9 +102,14 @@ export function getRunFilterTags(run: RunLog, weeklyPattern: string[] = []): Run
   return uniqueTags(tags)
 }
 
-export function hasRunFilterTag(run: RunLog, tagValue: string, weeklyPattern: string[] = []) {
+export function hasRunFilterTag(
+  run: RunLog,
+  tagValue: string,
+  weeklyPattern: string[] = [],
+  scheduledRunIds?: ReadonlySet<string>
+) {
   if (tagValue === 'All') return true
-  return getRunFilterTags(run, weeklyPattern).some((tag) => tag.value === tagValue)
+  return getRunFilterTags(run, weeklyPattern, scheduledRunIds).some((tag) => tag.value === tagValue)
 }
 
 export function isScheduledSession(dateText: string, type: RunType, weeklyPattern: string[]) {
