@@ -52,6 +52,17 @@ export const useTrainingScheduleStore = defineStore('trainingScheduleStore', {
       for (const session of state.sessions) if (session.runId) ids.add(session.runId)
       return ids
     },
+    /**
+     * 훈련 알림용 예정 세션(오늘 이후 활성 세션만). 화면과 **같은 플랜**을 본다 —
+     * 예전엔 알림만 옛 루틴 메모를 파싱해서, 메모가 비면 알림이 0건이 됐다(2026-09-07).
+     */
+    notificationSessions(state): Array<{ date: string; title: string }> {
+      const todayKey = new Date().toLocaleDateString('sv-SE')
+      return state.sessions
+        .filter((s) => s.date >= todayKey && isActiveSession(s))
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((s) => ({ date: s.date, title: s.sessionType }))
+    },
     /** 날짜별 활성(planned/missed) 세션 전부(AM→PM→단일 정렬). 같은 날 더블(#455) 표시·충돌 판정에 쓴다. */
     sessionsOnDate(state) {
       const slotRank = (s: ScheduledSession) => (s.slot === 'AM' ? 0 : s.slot === 'PM' ? 1 : 2)

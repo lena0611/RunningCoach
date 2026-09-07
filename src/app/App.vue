@@ -32,6 +32,7 @@ import { findEarlyRunCreditCandidate } from '@/shared/lib/coaching/earlyRunCredi
 import { sessionTypeLabel } from '@/shared/lib/coaching/sessionBriefing'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { useDataCardStore } from '@/app/stores/dataCardStore'
+import { syncNativeNotifications } from '@/features/sync-native-notifications/notificationBridge'
 import { useSummaryLayoutStore } from '@/app/stores/summaryLayoutStore'
 import PostRunInterviewSheet from '@/shared/ui/PostRunInterviewSheet.vue'
 import ToastHost from '@/shared/ui/ToastHost.vue'
@@ -64,6 +65,21 @@ const watchRaceStore = useWatchRaceStore()
 
 // 업적 스택(리디자인 ①c): 계정 드로어에서 열리는 App 레벨 오버레이 — #397 래칫상 shared(AppHeader)가 도메인 컴포넌트를 직접 들지 않는다.
 const achievementsOpen = ref(false)
+
+/*
+  훈련 알림을 **실제 플랜**과 동기화한다(2026-09-07).
+  예전엔 부팅 시 한 번, 그것도 옛 루틴 메모를 파싱했다 — 메모가 비면 알림 0건이었고,
+  플랜이 바뀌어도(날짜 이동·휴식 선언) 다음 실행까지 옛 알림이 남았다.
+  스케줄이 도착하거나 바뀔 때마다 다시 내려보내면 둘 다 해결된다(네이티브가 없으면 no-op).
+*/
+watch(
+  () => [scheduleStore.notificationSessions, settingsStore.notificationSettings] as const,
+  ([sessions]) => {
+    if (!sessions.length) return
+    syncNativeNotifications(settingsStore.notificationSettings, sessions)
+  },
+  { deep: true, immediate: true }
+)
 
 // #552 Phase 3: runs 변동 → 워치 고스트 카탈로그 재하강(디바운스). PB 갱신·삭제가 워치 상대에 반영된다.
 let watchCatalogPushTimer: number | null = null

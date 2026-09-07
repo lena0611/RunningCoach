@@ -5,6 +5,7 @@ import { PASSWORD_MIN_LENGTH, passwordTooShortMessage, useAuthStore } from '@/ap
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useLevelStore } from '@/app/stores/levelStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
+import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { notificationSettingRows, useSettingsStore, type NotificationSettingKey, type NotificationSettings, type SettingsPanelFocus } from '@/app/stores/settingsStore'
 import { COACH_MODELS, isCoachModelId } from '@/shared/lib/coaching/coachModels'
@@ -35,6 +36,7 @@ const authStore = useAuthStore()
 const healthKitSyncStore = useHealthKitSyncStore()
 const levelStore = useLevelStore()
 const memoryStore = useMemoryStore()
+const scheduleStore = useTrainingScheduleStore()
 const runStore = useRunStore()
 const settingsStore = useSettingsStore()
 const router = useRouter()
@@ -445,7 +447,7 @@ function setNotification(key: NotificationSettingKey, enabled: boolean) {
 }
 
 function syncNotifications(settings: NotificationSettings = settingsStore.notificationSettings) {
-  syncNativeNotifications(settings, memoryStore.memory.weeklyPattern)
+  syncNativeNotifications(settings, scheduleStore.notificationSessions)
 }
 
 function goDashboard() {

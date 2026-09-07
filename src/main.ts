@@ -3,13 +3,11 @@ import { createPinia } from 'pinia'
 import App from './app/App.vue'
 import { router } from './app/router'
 import { useAuthStore } from '@/app/stores/authStore'
-import { useSettingsStore } from '@/app/stores/settingsStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useLevelStore } from '@/app/stores/levelStore'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { canUseAppFeatures } from '@/shared/lib/runtime'
-import { syncNativeNotifications } from '@/features/sync-native-notifications/notificationBridge'
 import { watchForNewBuild } from '@/shared/lib/buildVersion'
 import './app/styles.css'
 
@@ -63,10 +61,6 @@ if (!isSupabaseConfigured || authStore.isAuthenticated) {
   void useLevelStore().load()
   Promise.all([useMemoryStore().load(), useRunStore().load()]).catch(() => {
     // 화면 mount를 막지 않는다. 각 store가 자체 error 상태를 표시한다.
-  }).finally(() => {
-    const settingsStore = useSettingsStore()
-    const memoryStore = useMemoryStore()
-    syncNativeNotifications(settingsStore.notificationSettings, memoryStore.memory.weeklyPattern)
   })
 }
 
