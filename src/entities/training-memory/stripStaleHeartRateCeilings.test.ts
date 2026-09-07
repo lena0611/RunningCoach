@@ -16,29 +16,26 @@ describe('stripStaleHeartRateCeilings', () => {
     expect(stripStaleHeartRateCeilings('평균 150bpm 유지')).toBe('평균 150bpm 유지') // 130/145/165/168 외 숫자는 유지
   })
 
-  it('normalizeTrainingMemory가 저장된 처방 템플릿/주간 루틴의 stale 165를 정리한다', () => {
+  // 처방 템플릿은 제거됐다(2026-09-07) — stale 숫자 정리는 남아 있는 저장 텍스트에 계속 적용돼야 한다.
+  it('normalizeTrainingMemory가 저장된 준수 패턴·세션 가이드의 stale 165를 정리한다', () => {
     const normalized = normalizeTrainingMemory({
       adaptiveTrainingProfile: {
         methodologyVersion: 'x',
         updatedAt: null,
-        prescriptionTemplates: [
+        compliancePatterns: ['Tempo 심박 165bpm 경계를 자주 넘긴다'],
+        sessionGuides: [
           {
-            id: 'tempo-ceiling-165',
-            name: 'Tempo 상한주',
-            phase: 'Build',
-            sessionType: 'Tempo',
-            purpose: '역치 지속력',
-            workout: ['워밍업 후 Tempo', '최대 심박 165bpm 넘기지 않기'],
-            useWhen: ['목요일'],
-            avoidWhen: ['Tempo 중반 전에 165를 넘길 때'],
-            progressionTrigger: '2회 이상 165 이하로 안정되면 상향'
+            type: 'Tempo',
+            boundary: '최대 심박 165bpm 넘기지 않기',
+            adjustment: 'maintain',
+            evidence: '2회 이상 165 이하로 안정',
+            nextCheck: '다음 Tempo에서 165bpm 확인'
           }
         ]
       }
     } as never)
-    const tpl = normalized.adaptiveTrainingProfile.prescriptionTemplates.find((t) => t.sessionType === 'Tempo')
-    expect(tpl?.workout.join(' ')).not.toMatch(/165/)
-    expect(tpl?.avoidWhen.join(' ')).not.toMatch(/165/)
-    expect(tpl?.progressionTrigger).not.toMatch(/165/)
+    expect(normalized.adaptiveTrainingProfile.compliancePatterns.join(' ')).not.toMatch(/165/)
+    const guide = normalized.adaptiveTrainingProfile.sessionGuides[0]
+    expect(`${guide.boundary} ${guide.evidence} ${guide.nextCheck}`).not.toMatch(/165/)
   })
 })

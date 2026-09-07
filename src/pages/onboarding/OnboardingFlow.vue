@@ -2,15 +2,17 @@
 import { computed, reactive, ref } from 'vue'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useLevelStore } from '@/app/stores/levelStore'
-import { defaultPrescriptionTemplates, type PrescriptionTemplate, type TrainingInjuryItem, type TrainingMemory } from '@/entities/training-memory/model'
+import { type TrainingInjuryItem, type TrainingMemory } from '@/entities/training-memory/model'
 import { vdotFromPerformance, vdotFromVo2Max } from '@/shared/lib/vdotPaces'
 import { distanceClassFromMeters, gradeBandFromVdot, nextDistanceClass } from '@/shared/lib/level/levelModel'
 import {
   buildInitialWeeklyPattern,
-  prescriptionTemplateById,
+  routineTemplateById,
+  ROUTINE_TEMPLATES,
   WEEK_DAYS,
   type RoutineGoalKey,
   type RoutineSlot,
+  type RoutineTemplate,
   type RunnerLevelKey,
   type WeekDay
 } from '@/shared/lib/coaching/initialWeeklyPattern'
@@ -34,7 +36,7 @@ const GOAL_LABEL: Record<GoalKey, string> = { '5k': '5K', '10k': '10K', half: '�
 const INJURY_AREAS = ['햄스트링', '무릎', '족저/발바닥', '아킬레스', '장경인대(IT밴드)', '정강이', '발목', '고관절/엉덩이', '허리', '기타'] as const
 const SEVERITY_LABEL: Record<number, string> = { 1: '자각 정도', 2: '러닝 후 통증', 3: '러닝 중 통증', 4: '러닝 어려움' }
 // 처방 교체 시 순환할 템플릿 순서.
-const TEMPLATE_CYCLE = defaultPrescriptionTemplates.map((template) => template.id)
+const TEMPLATE_CYCLE = ROUTINE_TEMPLATES.map((template) => template.id)
 
 const form = reactive({
   birthYear: null as number | null,
@@ -86,8 +88,8 @@ const levelKey = computed<RunnerLevelKey>(() => {
   return 'advanced'
 })
 
-function templateOf(id: string): PrescriptionTemplate | null {
-  return prescriptionTemplateById(id)
+function templateOf(id: string): RoutineTemplate | null {
+  return routineTemplateById(id)
 }
 function templateName(id: string): string {
   return templateOf(id)?.name ?? id
@@ -197,18 +199,9 @@ async function persist(placed: boolean) {
       }
       memory.goal = `${GOAL_LABEL[form.goalKey]} 목표`
 
-      // #329/#330: 온보딩 루틴 → 선택 처방 템플릿(중복 제거). 루틴 메모는 더 이상 저장하지 않는다 —
-      // 주간 루틴의 정본은 목표로 생성되는 주기화 플랜(training_schedule)이다(2026-09-07).
-      const slots = routineSlots.value
-      if (slots.length) {
-        const chosenIds = [...new Set(slots.map((slot) => slot.templateId))]
-        const chosenTemplates = chosenIds
-          .map((id) => templateOf(id))
-          .filter((template): template is PrescriptionTemplate => Boolean(template))
-        if (chosenTemplates.length) {
-          memory.adaptiveTrainingProfile.prescriptionTemplates = JSON.parse(JSON.stringify(chosenTemplates))
-        }
-      }
+      // 온보딩 루틴 슬롯은 "이런 주로 시작해요" 미리보기다 — 메모리에 저장하지 않는다.
+      // 주간 루틴의 정본은 목표로 생성되는 주기화 플랜(training_schedule), 세션별 실행 지침은
+      // sessionBriefing 이 갖는다. 여기서 처방을 따로 영속하면 그 둘과 어긋난다(2026-09-07).
 
       // #331: 부상 심화 입력 → 구조화 TrainingInjuryItem
       if (form.hasInjury) {
@@ -368,7 +361,7 @@ async function persist(placed: boolean) {
       <!-- 5: 처방 매핑 확정 (#330) -->
       <section v-else-if="step === 5" class="onboarding-step">
         <h2>처방 확인</h2>
-        <p class="onboarding-help">각 세션의 강도 기준이에요. ‘다른 처방’으로 바꿀 수 있어요.</p>
+        <p class="onboarding-help">각 세션이 무엇을 위한 건지예요. ‘다른 처방’으로 바꿀 수 있어요. 웜업·반복수 같은 세부 실행 지침은 목표로 플랜이 만들어진 뒤 세션마다 계산돼요.</p>
         <ul class="rx-list">
           <li v-for="(slot, index) in routineSlots" :key="index" class="rx-row">
             <div class="rx-head">
@@ -377,7 +370,6 @@ async function persist(placed: boolean) {
               <button type="button" class="rx-swap" @click="swapPrescription(index)">다른 처방</button>
             </div>
             <p class="rx-purpose">{{ templateOf(slot.templateId)?.purpose }}</p>
-            <p class="rx-workout">{{ (templateOf(slot.templateId)?.workout ?? []).join(' · ') }}</p>
           </li>
         </ul>
       </section>
@@ -672,11 +664,6 @@ async function persist(placed: boolean) {
   margin: 0;
 }
 
-.rx-workout {
-  font-size: var(--text-caption-size);
-  color: var(--color-muted);
-  margin: 0;
-}
 
 .onboarding-reveal {
   align-items: center;

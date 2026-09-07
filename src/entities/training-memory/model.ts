@@ -24,9 +24,12 @@ export type TrainingMemory = {
   coachBeliefs: CoachBelief[]
   longRunStrategy: string
   currentVolumeNote: string
-  knownIssues: string[]
-  runningStyle: string[]
-  heatStrategy: string[]
+  /**
+   * 코치가 장기적으로 기억할 계획 변경 근거. **코치가 쓰는 칸이고 사람이 쓰는 칸이 아니다** —
+   * 기억 탭에서는 읽기 전용으로 보여준다(2026-09-07).
+   * 함께 있던 사람 입력용 자유 텍스트(knownIssues·runningStyle·heatStrategy)는 후속 구조화 필드
+   * (injuryItems · runnerIdentity · 날씨 코칭 SSOT)로 대체돼 제거했다.
+   */
   aiNotes: string[]
   /**
    * 현재 진행 중인 휴식 선언(#473). 한 번에 하나만(다중/이력은 Phase 3). null = 휴식 아님.
@@ -194,7 +197,6 @@ export type AdaptiveTrainingProfile = {
   updatedAt: string | null
   trainingPhase: TrainingPhasePlan
   progressionCriteria: ProgressionCriterion[]
-  prescriptionTemplates: PrescriptionTemplate[]
   compliancePatterns: string[]
   sessionGuides: AdaptiveSessionGuide[]
   /** Tempo 심박 상한 적응 영속 상태(#301). 검증으로 채택한 상한을 저장해 재앵커링·다단계 상향한다. */
@@ -247,57 +249,6 @@ export type ProgressionCriterion = {
  * 워크아웃 한 구간. `detail`은 사람이 읽는 문장(=기존 workout 배열 원소)이고,
  * 나머지는 파싱 가능한 구조화 필드다(#327). 구조화 필드가 없으면 detail만으로 해석한다.
  */
-export type WorkoutSegmentKind = 'warmup' | 'main' | 'interval' | 'cooldown' | 'note'
-
-export type WorkoutSegment = {
-  kind: WorkoutSegmentKind
-  detail: string
-  durationMin?: number | null
-  reps?: number | null
-  onText?: string | null
-  offText?: string | null
-  intensity?: string | null
-}
-
-/** 처방 템플릿의 구조화된 워크아웃 프로토콜. `workout: string[]`의 정규화 버전. */
-export type WorkoutProtocol = {
-  segments: WorkoutSegment[]
-}
-
-export type PrescriptionTemplate = {
-  id: string
-  name: string
-  phase: TrainingPhaseName | 'Any'
-  sessionType: string
-  purpose: string
-  /** 사람이 읽는 워크아웃 줄. `protocol.segments[].detail`과 동일 순서로 일치해야 한다(deriveWorkoutLines). */
-  workout: string[]
-  /** 구조화된 워크아웃 프로토콜(#327). workout의 단일 진실 출처. */
-  protocol: WorkoutProtocol
-  useWhen: string[]
-  avoidWhen: string[]
-  progressionTrigger: string
-}
-
-/** protocol에서 사람이 읽는 워크아웃 줄을 파생한다. workout 배열과 항상 일치해야 한다. */
-export function deriveWorkoutLines(protocol: WorkoutProtocol): string[] {
-  return protocol.segments.map((segment) => segment.detail)
-}
-
-/** 코드 기본 처방 템플릿의 canonical slug 집합. DB 시드(training_prescription_rules.template_slug)와 동기화 기준. */
-export const prescriptionTemplateSlugs = [
-  'easy-base',
-  'recovery-reset',
-  'easy-strides-8x',
-  'tempo-ceiling-165',
-  'lsd-easy-long',
-  'steady-long',
-  '5k-check',
-  'cruise-interval'
-] as const
-
-export type PrescriptionTemplateSlug = (typeof prescriptionTemplateSlugs)[number]
-
 export type AdaptiveSessionGuide = {
   type: string
   boundary: string
@@ -346,153 +297,6 @@ export const defaultProgressionCriteria: ProgressionCriterion[] = [
     status: 'watch',
     evidence: 'active 또는 monitoring 부상, 통증 메모, 피로 반응이 있으면 승급을 보류한다.',
     action: '착지감과 다음날 반응이 조용할 때만 강도나 거리 상향을 검토한다.'
-  }
-]
-
-export const defaultPrescriptionTemplates: PrescriptionTemplate[] = [
-  {
-    id: 'easy-base',
-    name: 'Easy 기반주',
-    phase: 'Any',
-    sessionType: 'Easy',
-    purpose: '유산소 기반 유지와 회복 가능한 볼륨 확보',
-    workout: ['대화 가능한 강도', '심박 145bpm 이하 우선', '페이스는 컨디션과 날씨에 맡김'],
-    protocol: {
-      segments: [
-        { kind: 'main', detail: '대화 가능한 강도', intensity: 'Easy / 대화 가능' },
-        { kind: 'note', detail: '심박 145bpm 이하 우선' },
-        { kind: 'note', detail: '페이스는 컨디션과 날씨에 맡김' }
-      ]
-    },
-    useWhen: ['주간 루틴의 기본 볼륨일 때', '강훈련 전후 연결 조깅이 필요할 때'],
-    avoidWhen: ['통증이 뛰면서 커질 때', '더위로 심박이 쉽게 튈 때는 거리보다 시간으로 축소'],
-    progressionTrigger: '심박 145 이하로 2~3회 안정되고 다음날 피로가 낮으면 거리나 시간을 소폭 증가'
-  },
-  {
-    id: 'recovery-reset',
-    name: 'Recovery 회복주',
-    phase: 'Any',
-    sessionType: 'Recovery',
-    purpose: '롱런/템포 다음날 혈류 회복과 피로 확인',
-    workout: ['심박 130bpm 전후', 'RPE 1~2', '거리 욕심 없이 착지감 확인'],
-    protocol: {
-      segments: [
-        { kind: 'main', detail: '심박 130bpm 전후', intensity: 'Recovery / 심박 130 전후' },
-        { kind: 'note', detail: 'RPE 1~2' },
-        { kind: 'note', detail: '거리 욕심 없이 착지감 확인' }
-      ]
-    },
-    useWhen: ['롱런 또는 템포 다음날', '부상/피로 신호를 확인해야 할 때'],
-    avoidWhen: ['통증이 달리며 커질 때', '회복주가 Easy 강도로 올라갈 때'],
-    progressionTrigger: '반복적으로 회복주 심박이 낮고 통증이 없으면 다음 핵심 세션 정상 진행'
-  },
-  {
-    id: 'easy-strides-8x',
-    name: 'Easy + Strides',
-    phase: 'Base',
-    sessionType: 'Easy + Strides',
-    purpose: '낮은 심박 기반에 짧은 신경근 자극 추가',
-    workout: ['워밍업 10분', '20초 가속 + 1분40초 회복 x 8', '쿨다운 15분'],
-    protocol: {
-      segments: [
-        { kind: 'warmup', detail: '워밍업 10분', durationMin: 10 },
-        { kind: 'interval', detail: '20초 가속 + 1분40초 회복 x 8', reps: 8, onText: '20초 가속', offText: '1분40초 회복' },
-        { kind: 'cooldown', detail: '쿨다운 15분', durationMin: 15 }
-      ]
-    },
-    useWhen: ['화요일 루틴', 'Easy 기반은 유지하면서 다리 회전을 깨우고 싶을 때'],
-    avoidWhen: ['햄스트링/발바닥 신호가 active일 때', '가속 회복 구간에서 호흡이 내려오지 않을 때'],
-    progressionTrigger: '가속이 선명하고 회복 구간 심박이 안정되면 횟수보다 질을 유지하고 Tempo 품질로 연결'
-  },
-  {
-    id: 'tempo-ceiling-165',
-    name: 'Tempo 상한주',
-    phase: 'Build',
-    sessionType: 'Tempo',
-    purpose: '10km 목표를 위한 역치 지속력 확보',
-    workout: ['워밍업 후 Tempo', '최대 심박 165bpm 넘기지 않기', '후반 페이스 급락 없이 마무리'],
-    protocol: {
-      segments: [
-        { kind: 'warmup', detail: '워밍업 후 Tempo' },
-        { kind: 'main', detail: '최대 심박 165bpm 넘기지 않기', intensity: 'Tempo / max 165bpm 이내' },
-        { kind: 'note', detail: '후반 페이스 급락 없이 마무리' }
-      ]
-    },
-    useWhen: ['목요일 루틴', '최근 Easy/Long Run 회복이 안정적일 때'],
-    avoidWhen: ['최근 7일 강훈련이 많을 때', 'Tempo 중반 전에 165를 넘길 때', '통증 신호가 있을 때'],
-    progressionTrigger: '2회 이상 165 이하로 안정되면 Tempo 지속 시간을 소폭 늘리거나 구간형 Tempo 검토'
-  },
-  {
-    id: 'lsd-easy-long',
-    name: 'Easy LSD',
-    phase: 'Base',
-    sessionType: 'LSD',
-    purpose: '긴 시간 움직이는 기반과 지방대사/지속성 확보',
-    workout: ['초반 억제', '대화 가능한 강도', '후반 심박 드리프트 관찰'],
-    protocol: {
-      segments: [
-        { kind: 'main', detail: '초반 억제', intensity: 'LSD / 초반 억제' },
-        { kind: 'main', detail: '대화 가능한 강도', intensity: '대화 가능' },
-        { kind: 'note', detail: '후반 심박 드리프트 관찰' }
-      ]
-    },
-    useWhen: ['토요일 Easy LSD 주차', '최근 강훈련 뒤 회복이 필요할 때'],
-    avoidWhen: ['전날/당일 통증 신호', '더위로 심박이 쉽게 오를 때'],
-    progressionTrigger: '후반 급락 없이 마치고 다음날 회복주가 잘 눌리면 거리 소폭 증가'
-  },
-  {
-    id: 'steady-long',
-    name: 'Steady Long',
-    phase: 'Build',
-    sessionType: 'Steady Long',
-    purpose: '롱런 안에서 목표 지속력과 후반 효율 확보',
-    workout: ['초반 Easy', '후반 자연스러운 Steady', '무리한 레이스 페이스 금지'],
-    protocol: {
-      segments: [
-        { kind: 'main', detail: '초반 Easy', intensity: 'Easy' },
-        { kind: 'main', detail: '후반 자연스러운 Steady', intensity: 'Steady' },
-        { kind: 'note', detail: '무리한 레이스 페이스 금지' }
-      ]
-    },
-    useWhen: ['토요일 Steady Long 주차', 'LSD와 회복이 안정된 뒤'],
-    avoidWhen: ['최근 Tempo가 흔들렸을 때', '회복/부상 게이트가 watch 이상일 때'],
-    progressionTrigger: '후반 효율과 다음날 회복이 안정되면 Steady 구간을 아주 조금 확장'
-  },
-  {
-    id: '5k-check',
-    name: '5km TT 체크',
-    phase: 'Threshold',
-    sessionType: 'Race',
-    purpose: '10km 예측과 훈련 단계 점검',
-    workout: ['충분한 워밍업', '5km 지속 가능한 최고 노력', '회복 주간 안에서 배치'],
-    protocol: {
-      segments: [
-        { kind: 'warmup', detail: '충분한 워밍업' },
-        { kind: 'main', detail: '5km 지속 가능한 최고 노력', intensity: 'Race / 5km TT' },
-        { kind: 'note', detail: '회복 주간 안에서 배치' }
-      ]
-    },
-    useWhen: ['2~3주 이상 루틴 소화와 회복이 안정적일 때', '목표 예상 업데이트 근거가 필요할 때'],
-    avoidWhen: ['통증/피로 신호가 있을 때', '최근 강훈련이 누적됐을 때'],
-    progressionTrigger: '예상 기록과 회복 반응을 보고 Tempo/Long Run 처방을 재조정'
-  },
-  {
-    id: 'cruise-interval',
-    name: 'Cruise Interval',
-    phase: 'Threshold',
-    sessionType: 'Tempo',
-    purpose: '연속 Tempo 전 단계 또는 Tempo 품질 상향',
-    workout: ['짧은 Tempo 반복', '반복 사이 짧은 회복', '심박 상한 165 유지'],
-    protocol: {
-      segments: [
-        { kind: 'interval', detail: '짧은 Tempo 반복', onText: '짧은 Tempo 반복', intensity: 'Tempo' },
-        { kind: 'interval', detail: '반복 사이 짧은 회복', offText: '짧은 회복' },
-        { kind: 'note', detail: '심박 상한 165 유지' }
-      ]
-    },
-    useWhen: ['연속 Tempo가 안정됐지만 더 긴 지속주가 부담될 때'],
-    avoidWhen: ['초반부터 심박이 튈 때', '회복이 충분하지 않을 때'],
-    progressionTrigger: '반복별 심박 상한과 페이스 안정성이 확인되면 연속 Tempo 지속 시간으로 연결'
   }
 ]
 
@@ -564,7 +368,6 @@ export const initialTrainingMemory: TrainingMemory = {
     updatedAt: null,
     trainingPhase: defaultTrainingPhase,
     progressionCriteria: defaultProgressionCriteria,
-    prescriptionTemplates: defaultPrescriptionTemplates,
     compliancePatterns: [],
     sessionGuides: [],
     tempoCeiling: { adoptedBpm: null, baseBpm: null, adoptedAt: null },
@@ -593,7 +396,7 @@ export const initialTrainingMemory: TrainingMemory = {
     riskFactors: [
       {
         label: '더위에서 심박이 쉽게 오를 수 있음',
-        evidence: ['knownIssues와 heatStrategy에 더위 대응 기준이 있음'],
+        evidence: ['더위에서 같은 페이스라도 심박이 더 붙는다고 사용자가 알려줌'],
         confidence: 0.7,
         source: 'user',
         updatedAt: null
@@ -604,23 +407,6 @@ export const initialTrainingMemory: TrainingMemory = {
   coachBeliefs: [],
   longRunStrategy: '토요일 롱런은 격주로 Easy LSD와 Steady Long을 번갈아 수행한다.',
   currentVolumeNote: '최근 반달 114km 누적. 대부분 5km Easy.',
-  knownIssues: [
-    '과거 좌측 근위부 햄스트링 이슈',
-    '더위에서 심박 상승',
-    '30도 이상 낮 러닝은 위험도가 높음'
-  ],
-  runningStyle: [
-    '케이던스를 억지로 맞추면 호흡이 불편함',
-    '케이던스 신경을 줄이면 복식호흡이 편함',
-    '느린 페이스에서는 165~170spm 정도',
-    '5분 초반 페이스에서는 180spm이 자연스럽게 나옴',
-    '스트라이드형 성향 가능성'
-  ],
-  heatStrategy: [
-    '30도 이상 낮 러닝은 피한다',
-    '여름에는 페이스보다 체감강도와 심박 상한을 우선한다',
-    '여름은 기록 시즌이 아니라 버티기와 기반 유지 시즌으로 본다'
-  ],
   aiNotes: [
     '코칭은 단일 기록보다 최근 훈련 흐름과 격주 롱런 패턴을 함께 봐야 한다',
     '다음 훈련 추천은 피로도, 최근 14일 기록, 장거리 주차 여부를 함께 반영한다'
@@ -631,8 +417,8 @@ export const initialTrainingMemory: TrainingMemory = {
 /**
  * 신규/온보딩 미완 사용자용 중립 메모리 (#332).
  * initialTrainingMemory(개발자 예시 루틴/부상/목표)를 신규 사용자에게 주입하지 않기 위해
- * 개인 서사(처방 외 부상·목표·루틴 텍스트)를 비운 상태로 만든다.
- * 구조 기본값(adaptiveTrainingProfile·8종 처방 템플릿)은 유지한다. 온보딩이 실제 값으로 채운다.
+ * 개인 서사(부상·목표·루틴 텍스트)를 비운 상태로 만든다.
+ * 구조 기본값(adaptiveTrainingProfile 등)은 유지한다. 온보딩이 실제 값으로 채운다.
  * - injuryItems: [] 명시 → normalize가 존중(#303), 햄스트링 재시드 안 됨.
  * - goals: 중립 활성 목표 1개(title 필수) → '10km 60분' 기본값 대체.
  * initialTrainingMemory는 예시/테스트 fixture·normalize fallback으로 그대로 보존한다.
@@ -663,9 +449,6 @@ export function createBlankTrainingMemory(): TrainingMemory {
     injuryItems: [],
     longRunStrategy: '',
     currentVolumeNote: '',
-    knownIssues: [],
-    runningStyle: [],
-    heatStrategy: [],
     aiNotes: [],
     runnerIdentity: { strengths: [], weaknesses: [], riskFactors: [], coachingStyle: [] }
   } as Partial<TrainingMemory>)
@@ -829,7 +612,7 @@ export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null |
       vo2MaxSource: normalizeVo2MaxSource(memory?.athleteProfile?.vo2MaxSource)
     },
     adaptiveTrainingProfile: normalizeAdaptiveTrainingProfile(memory?.adaptiveTrainingProfile),
-    runnerIdentity: normalizeRunnerIdentity(memory?.runnerIdentity ?? base.runnerIdentity, memory ?? base),
+    runnerIdentity: normalizeRunnerIdentity(memory?.runnerIdentity ?? base.runnerIdentity),
     coachBeliefs: normalizeCoachBeliefs(memory?.coachBeliefs ?? base.coachBeliefs)
   }
 
@@ -935,22 +718,13 @@ function normalizeIsoDateOrNull(value: unknown): string | null {
   return Number.isNaN(t) ? null : value
 }
 
-function normalizeRunnerIdentity(value: unknown, memory: Partial<TrainingMemory> | null | undefined): RunnerIdentity {
+function normalizeRunnerIdentity(value: unknown): RunnerIdentity {
   const raw = value && typeof value === 'object' ? value as Partial<RunnerIdentity> : {}
-  const strengths = normalizeRunnerIdentityTraits(raw.strengths, 10)
-  const weaknesses = normalizeRunnerIdentityTraits(raw.weaknesses, 10)
-  const riskFactors = normalizeRunnerIdentityTraits(raw.riskFactors, 10)
-  const legacyRisks = normalizeStringArray(memory?.knownIssues)
-    .map((label) => createRunnerIdentityTrait(label, 'user', 0.68))
-  const legacyStyles = normalizeStringArray(memory?.runningStyle)
-    .map((label) => createRunnerIdentityTrait(label, 'user', 0.66))
-  const heatStyle = normalizeStringArray(memory?.heatStrategy)
-
   return {
-    strengths: mergeRunnerIdentityTraits(strengths, legacyStyles, 10),
-    weaknesses,
-    riskFactors: mergeRunnerIdentityTraits(riskFactors, legacyRisks, 10),
-    coachingStyle: mergeUniqueStrings(normalizeStringArray(raw.coachingStyle), heatStyle, 12)
+    strengths: normalizeRunnerIdentityTraits(raw.strengths, 10),
+    weaknesses: normalizeRunnerIdentityTraits(raw.weaknesses, 10),
+    riskFactors: normalizeRunnerIdentityTraits(raw.riskFactors, 10),
+    coachingStyle: normalizeStringArray(raw.coachingStyle).slice(0, 12)
   }
 }
 
@@ -1090,7 +864,6 @@ function normalizeAdaptiveTrainingProfile(value: unknown): AdaptiveTrainingProfi
     updatedAt: typeof raw.updatedAt === 'string' && raw.updatedAt ? raw.updatedAt : null,
     trainingPhase: normalizeTrainingPhase(raw.trainingPhase),
     progressionCriteria: normalizeProgressionCriteria(raw.progressionCriteria),
-    prescriptionTemplates: normalizePrescriptionTemplates(raw.prescriptionTemplates),
     compliancePatterns: Array.isArray(raw.compliancePatterns)
       ? raw.compliancePatterns.filter((item) => typeof item === 'string' && item.trim()).map((item) => stripStaleHeartRateCeilings(item.trim())).slice(0, 20)
       : [],
@@ -1162,89 +935,6 @@ function normalizeProgressionCriterion(value: Partial<ProgressionCriterion>, ind
 
 function normalizeProgressionStatus(value: unknown): ProgressionCriterion['status'] {
   return value === 'ready' || value === 'blocked' || value === 'watch' ? value : 'watch'
-}
-
-function normalizePrescriptionTemplates(value: unknown): PrescriptionTemplate[] {
-  if (!Array.isArray(value)) return cloneMemory(defaultPrescriptionTemplates)
-  const items = value
-    .map((item, index) => normalizePrescriptionTemplate(item as Partial<PrescriptionTemplate>, index))
-    .filter((item): item is PrescriptionTemplate => Boolean(item))
-    .slice(0, 20)
-  return items.length ? items : cloneMemory(defaultPrescriptionTemplates)
-}
-
-function normalizePrescriptionTemplate(value: Partial<PrescriptionTemplate>, index: number): PrescriptionTemplate | null {
-  const name = typeof value.name === 'string' ? value.name.trim() : ''
-  const sessionType = typeof value.sessionType === 'string' ? value.sessionType.trim() : ''
-  const purpose = typeof value.purpose === 'string' ? value.purpose.trim() : ''
-  if (!name || !sessionType || !purpose) return null
-  // protocol을 단일 진실 출처로 두고, workout 줄은 protocol에서 파생해 항상 일치시킨다(#327).
-  const protocol = normalizeWorkoutProtocol(value.protocol, normalizeStringArray(value.workout))
-  return {
-    id: typeof value.id === 'string' && value.id.trim() ? value.id.trim() : `template-${index + 1}`,
-    name,
-    phase: normalizePrescriptionTemplatePhase(value.phase),
-    sessionType,
-    purpose: stripStaleHeartRateCeilings(purpose),
-    workout: deriveWorkoutLines(protocol),
-    protocol,
-    useWhen: normalizeStringArray(value.useWhen).slice(0, 8),
-    avoidWhen: stripStaleHeartRateCeilingsList(normalizeStringArray(value.avoidWhen).slice(0, 8)),
-    progressionTrigger: stripStaleHeartRateCeilings(typeof value.progressionTrigger === 'string' ? value.progressionTrigger.trim() : '')
-  }
-}
-
-function normalizePrescriptionTemplatePhase(value: unknown): PrescriptionTemplate['phase'] {
-  return value === 'Any' ? value : normalizeTrainingPhaseName(value, 'Base') ?? 'Base'
-}
-
-function normalizeWorkoutSegmentKind(value: unknown): WorkoutSegmentKind {
-  return value === 'warmup' || value === 'main' || value === 'interval' || value === 'cooldown' || value === 'note'
-    ? value
-    : 'note'
-}
-
-function normalizeWorkoutSegment(value: unknown): WorkoutSegment | null {
-  if (!value || typeof value !== 'object') return null
-  const raw = value as Record<string, unknown>
-  const detail = stripStaleHeartRateCeilings(typeof raw.detail === 'string' ? raw.detail.trim() : '')
-  if (!detail) return null
-  const segment: WorkoutSegment = { kind: normalizeWorkoutSegmentKind(raw.kind), detail }
-  if (typeof raw.durationMin === 'number' && Number.isFinite(raw.durationMin) && raw.durationMin > 0) {
-    segment.durationMin = raw.durationMin
-  }
-  if (typeof raw.reps === 'number' && Number.isFinite(raw.reps) && raw.reps > 0) {
-    segment.reps = Math.round(raw.reps)
-  }
-  if (typeof raw.onText === 'string' && raw.onText.trim()) segment.onText = raw.onText.trim()
-  if (typeof raw.offText === 'string' && raw.offText.trim()) segment.offText = raw.offText.trim()
-  if (typeof raw.intensity === 'string' && raw.intensity.trim()) {
-    segment.intensity = stripStaleHeartRateCeilings(raw.intensity.trim())
-  }
-  return segment
-}
-
-/**
- * 구조화 워크아웃 프로토콜을 정규화한다. protocol.segments가 있으면 그걸 쓰고,
- * 없으면(legacy 저장본) workout 줄을 note 세그먼트로 변환해 호환성을 유지한다.
- */
-function normalizeWorkoutProtocol(value: unknown, fallbackWorkout: string[]): WorkoutProtocol {
-  const rawSegments =
-    value && typeof value === 'object' && Array.isArray((value as { segments?: unknown }).segments)
-      ? ((value as { segments: unknown[] }).segments)
-      : null
-  if (rawSegments && rawSegments.length) {
-    const segments = rawSegments
-      .map((segment) => normalizeWorkoutSegment(segment))
-      .filter((segment): segment is WorkoutSegment => Boolean(segment))
-      .slice(0, 8)
-    if (segments.length) return { segments }
-  }
-  const segments = stripStaleHeartRateCeilingsList(fallbackWorkout.slice(0, 8)).map<WorkoutSegment>((detail) => ({
-    kind: 'note',
-    detail
-  }))
-  return { segments }
 }
 
 function normalizeAdaptiveSessionGuide(value: Partial<AdaptiveSessionGuide>): AdaptiveSessionGuide | null {
@@ -1329,7 +1019,10 @@ function normalizeInjuryItems(memory: Partial<TrainingMemory> | null | undefined
       .filter((item): item is TrainingInjuryItem => Boolean(item))
   }
 
-  const legacyItems = (memory?.knownIssues ?? [])
+  // knownIssues 는 제거된 레거시 필드다(2026-09-07). 저장된 옛 JSON 에는 남아 있을 수 있어
+  // 최초 1회 부상 항목 복원용으로만 raw 로 읽는다 — 타입에 되살리지 않는다.
+  const legacyKnownIssues = normalizeStringArray((memory as Record<string, unknown> | null | undefined)?.knownIssues)
+  const legacyItems = legacyKnownIssues
     .filter((issue) => /햄스트링|통증|부상|이슈|무릎|발목|족저|아킬레스|정강|고관절/.test(issue))
     .map((issue, index) => normalizeInjuryItem({ title: issue, notes: issue, status: 'monitoring' }, index, now))
     .filter((item): item is TrainingInjuryItem => Boolean(item))

@@ -1,12 +1,12 @@
-import { defaultPrescriptionTemplates, type PrescriptionTemplate } from '@/entities/training-memory/model'
-
 /**
  * 온보딩 초기 루틴 슬롯 룰 엔진 (#329).
  *
  * 주간 가용 횟수 × 목표 거리 × 러너 레벨(+선호 롱런 요일·부상)으로 초기 주간 슬롯을 추천한다.
- * 슬롯은 온보딩 화면에서 **처방 템플릿 선택**에만 쓴다 — 루틴 메모로 저장하지 않는다(2026-09-07 제거).
- * 실제 주간 루틴은 목표에서 생성되는 주기화 플랜(training_schedule)이 갖는다.
- * 처방은 defaultPrescriptionTemplates(#327) id로 매핑한다.
+ * 슬롯은 온보딩에서 **"이런 주로 시작해요" 미리보기**에만 쓴다 — 메모리에 저장하지 않는다.
+ * 실제 주간 루틴은 목표에서 생성되는 주기화 플랜(training_schedule)이, 세션별 실행 지침은
+ * sessionBriefing 이 갖는다. 여기 카탈로그는 세션의 **이름과 목적**까지만 안다 —
+ * 워밍업·반복수·쿨다운 같은 실행 수치를 여기 적으면 그 두 곳과 어긋나는 두 번째 진실이 된다
+ * (2026-09-07: 옛 처방 템플릿이 실제로 그렇게 어긋나 제거됨).
  */
 
 export type RoutineGoalKey = '5k' | '10k' | 'half' | 'full' | 'health'
@@ -17,15 +17,39 @@ export const WEEK_DAYS: WeekDay[] = ['월', '화', '수', '목', '금', '토', '
 
 export type RoutineSlot = {
   day: WeekDay
-  /** defaultPrescriptionTemplates의 id. */
+  /** RoutineTemplate의 id. */
   templateId: string
   /** 표시용 세션 타입(템플릿 sessionType). */
   sessionType: string
 }
 
-const TEMPLATE_BY_ID = new Map(defaultPrescriptionTemplates.map((template) => [template.id, template]))
+/** 온보딩 루틴 미리보기용 세션 카탈로그. 실행 수치는 담지 않는다(위 주석). */
+export type RoutineTemplate = {
+  id: string
+  name: string
+  sessionType: string
+  purpose: string
+}
 
-export function prescriptionTemplateById(id: string): PrescriptionTemplate | null {
+/**
+ * canonical slug 집합이기도 하다 — DB 시드(`training_prescription_rules.template_slug`)와 같은 값이라
+ * **id를 바꾸면 안 된다.** `easy-strides-8x`·`tempo-ceiling-165`의 숫자는 옛 고정값의 흔적일 뿐
+ * 현재 처방과 무관하다(반복수·심박 상한은 단계·VDOT·부상·heartRateModel로 산출).
+ */
+export const ROUTINE_TEMPLATES: RoutineTemplate[] = [
+  { id: 'easy-base', name: 'Easy 기반주', sessionType: 'Easy', purpose: '유산소 기반 유지와 회복 가능한 볼륨 확보' },
+  { id: 'recovery-reset', name: 'Recovery 회복주', sessionType: 'Recovery', purpose: '롱런/템포 다음날 혈류 회복과 피로 확인' },
+  { id: 'easy-strides-8x', name: 'Easy + Strides', sessionType: 'Easy + Strides', purpose: '이지 기반에 짧은 신경근 자극 추가' },
+  { id: 'tempo-ceiling-165', name: 'Tempo', sessionType: 'Tempo', purpose: '목표 거리를 위한 역치 지속력 확보' },
+  { id: 'lsd-easy-long', name: 'Easy LSD', sessionType: 'LSD', purpose: '발 위 시간으로 지속력 쌓기' },
+  { id: 'steady-long', name: 'Steady Long', sessionType: 'Steady Long', purpose: '롱런 후반 목표 페이스 구간으로 특이성 확보' },
+  { id: '5k-check', name: '5km 체크', sessionType: 'TT', purpose: '현재 체력 확인과 목표 재추정' },
+  { id: 'cruise-interval', name: 'Cruise Interval', sessionType: 'Interval', purpose: '역치 자극을 나눠 담아 품질 확보' }
+]
+
+const TEMPLATE_BY_ID = new Map(ROUTINE_TEMPLATES.map((template) => [template.id, template]))
+
+export function routineTemplateById(id: string): RoutineTemplate | null {
   return TEMPLATE_BY_ID.get(id) ?? null
 }
 

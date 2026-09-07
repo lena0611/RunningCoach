@@ -14,7 +14,7 @@
 - `training_knowledge_requests` 저장은 사용자 backlog 등록만 담당한다. 프론트에서 요청을 저장할 때 OpenAI Edge Function을 호출하지 않고, 비용이 드는 조사/요약/구조화는 별도 관리 작업으로 분리한다.
 - AI 처방 컨텍스트는 `TrainingKnowledge`의 구조화 rule을 먼저 검색하고, 이후 `adaptiveTrainingProfile`으로 사용자별 보정을 적용한다. 지식 검색은 activeGoal 거리, 세션 타입, 훈련 단계, 부상/주의 조건을 기준으로 좁혀야 한다.
 - RAG/벡터 검색은 `training_knowledge_chunks`의 승인된 요약 chunk만 대상으로 한다. 책/유료 콘텐츠 원문 전문이나 긴 발췌를 저장하지 않는다.
-- legacy `knownIssues`는 자유 텍스트 주의사항으로 유지하고, 구조화된 부상관리는 `injuryItems`와 `activeInjuryItemId`를 기준으로 한다.
+- 부상관리는 `injuryItems`와 `activeInjuryItemId`를 단일 기준으로 한다. 자유 텍스트 레거시 필드(`knownIssues`·`runningStyle`·`heatStrategy`)는 후속 구조화 필드(부상 항목·`runnerIdentity`·날씨 코칭)로 대체돼 2026-09-07 제거했다. 저장된 옛 JSON 의 잔재는 컨텍스트 진입 지점(coach-run `sanitizeMemoryHeartRateCeilings`)에서 떼어낸다.
 - 부상 체크인/완치/보강운동 근거는 당분간 Supabase 별도 테이블이 아니라 `training_memory.memory.injuryItems` JSON 계약으로 확장한다. 항목별 체크인 이력은 `checkInHistory`, 최근 체크 시각은 `lastCheckedAt`, 사용자 승인 완치 시각은 `resolvedAt`, 보강운동 근거와 수행 조건은 `strengthPlanDetails`에 둔다. 기존 UI/AI 호환을 위해 표시용 문자열 `strengthPlan`은 유지한다.
 - `src/shared`: 포맷터, 통계 계산, 공통 UI, 외부 라이브러리 타입 선언을 담당한다.
 - `src/shared/ui`: PaceLAB 자체 UI 시스템의 구현 위치다. 외부 UI 라이브러리 전면 도입 대신 `.harness/project/ui-system-contract.md`의 토큰/컴포넌트 계약을 따른다.

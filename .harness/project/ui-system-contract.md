@@ -19,7 +19,7 @@ PaceLAB은 외부 UI 라이브러리를 전면 도입하지 않는다. 대신 �
 - spacing: `--space-1`부터 `--space-7`
 - radius: `--radius-card`, `--radius-button`, `--radius-field`, `--radius-sheet`, `--radius-pill`
 - typography: `--text-*`, `--font-weight-*`
-  - 처방 템플릿, 코칭 근거, 복귀 기준, 날씨 조언처럼 사용자가 판단에 쓰는 본문성 정보 텍스트는 `--text-info-size`, `--text-info-line`을 우선 사용한다. 이런 문장은 caption 크기로 낮추지 않는다.
+  - 세션 실행 지침, 코칭 근거, 복귀 기준, 날씨 조언처럼 사용자가 판단에 쓰는 본문성 정보 텍스트는 `--text-info-size`, `--text-info-line`을 우선 사용한다. 이런 문장은 caption 크기로 낮추지 않는다.
   - **폰트 사이즈 토큰 용도(6+1단계, 아래 표대로 쓴다 — 화면마다 임의 판단 후 하드코딩 금지):**
 
     | 토큰 | 크기 | 용도 |
