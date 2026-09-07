@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { TrainingGoal, TrainingInjuryItem } from '@/entities/training-memory/model'
 import type { ChronicLoadTrend } from '@/shared/lib/runStats'
 import { defaultScheduledSessionPrescription, type ScheduledSession } from '@/entities/training-schedule/model'
-import { buildSessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
+import { buildSessionBriefing, buildSessionExecution } from '@/shared/lib/coaching/sessionBriefing'
 
 function session(overrides: Partial<ScheduledSession>): ScheduledSession {
   return {
@@ -355,5 +355,42 @@ describe('복귀 중 부하 급증 주의 억제 (#743)', () => {
   it('공백이 없으면 그대로 경고한다 — 진짜 과부하까지 덮지 않는다', () => {
     const b = buildSessionBriefing(session({ sessionType: 'Easy' }), { goal, injury: null, chronic: spike })
     expect(cautions(b)).toContain('급증')
+  })
+})
+
+/*
+  #795: 코치에게 보내는 실행 지침은 **화면 브리핑과 같은 함수**를 지나야 한다.
+
+  실행 수치를 코치에게 안 보내던 동안, 코치는 옛 처방 템플릿("워밍업 10분 → 20초 가속/1분40초 회복 x8")을
+  스레드 기억으로 되풀이하며 "앱 기준으로는"이라고 틀린 출처까지 붙였다. 두 값이 갈리는 순간 다시 그 상태가
+  되므로, 같은 경로임을 테스트로 잠근다.
+*/
+describe('buildSessionExecution (코치 컨텍스트용)', () => {
+  const ctx = { injury: null, vdot: 40, adaptiveProfile: null, progression: null }
+
+  it('화면 브리핑의 execution 과 정확히 같다', () => {
+    for (const type of ['Easy + Strides', 'Easy', 'Recovery', 'Tempo', 'LSD', 'Steady Long'] as const) {
+      const s = session({ sessionType: type })
+      expect(buildSessionExecution(s, ctx)).toEqual(
+        buildSessionBriefing(s, { goal, injury: null, chronic: noChronic, vdot: 40 }).execution
+      )
+    }
+  })
+
+  it('Easy + Strides 는 SSOT 대로 본런 끝 스트라이드다 — 옛 템플릿의 고정 8회 인터벌이 아니다', () => {
+    const steps = buildSessionExecution(session({ sessionType: 'Easy + Strides', phase: 'Base' }), ctx)
+    const stride = steps.find((step) => step.label === '스트라이드')?.detail ?? ''
+    expect(stride).toContain('본런 끝에')
+    expect(stride).toContain('15~20초')
+    expect(stride).toContain('60~90초')
+    // 옛 템플릿 값이 되살아나면 실패한다.
+    expect(stride).not.toContain('1분40초')
+    expect(steps.some((step) => step.detail.includes('20초 가속'))).toBe(false)
+  })
+
+  it('부상 상태를 반영한다 — 같은 세션이라도 실행 지침이 달라진다', () => {
+    const s = session({ sessionType: 'Easy + Strides', phase: 'Base' })
+    const hurt = buildSessionExecution(s, { ...ctx, injury: injury({ area: '족저근막', severity: 3 }) })
+    expect(JSON.stringify(hurt)).not.toEqual(JSON.stringify(buildSessionExecution(s, ctx)))
   })
 })

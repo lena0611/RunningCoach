@@ -27,6 +27,8 @@ import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import { summarizeTempoCoaching } from '@/shared/lib/coaching/tempoAdaptation'
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { canIntensifySession } from '@/shared/lib/coaching/scheduleProposalEligibility'
+import { buildSessionExecution } from '@/shared/lib/coaching/sessionBriefing'
+import { resolvePaceModel } from '@/shared/lib/vdotPaces'
 import { buildCoachSessionEvidence } from '@/shared/lib/coaching/sessionQuality'
 import { assessHeatWindow, deriveHabitualRunHour } from '@/shared/lib/coaching/heatWindow'
 import { buildInjuryCoachSignals } from '@/entities/training-memory/injurySignals'
@@ -705,19 +707,34 @@ async function sendCoachRequest(note: string) {
       goalProjection: coachGoalProjection.value,
       raceBenchmark: coachRaceBenchmark.value,
       adaptiveProgress: coachAdaptiveProgress,
-      // 실제 주기화 스케줄의 다음 세션들 — 코치 "다음 훈련"이 weeklyPattern으로 엉뚱한 세션을 지어내지 않게(요약탭과 일치).
+      // 실제 주기화 스케줄의 다음 세션들 — 코치 "다음 훈련"이 엉뚱한 세션을 지어내지 않게(요약탭과 일치).
       upcomingSchedule: (() => {
         const today = new Date()
         const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+        // 실행 지침(어떻게 뛰나)을 만들 재료 — 화면 브리핑과 같은 함수를 지나게 하려고 같은 값을 넘긴다.
+        const executionCtx = {
+          injury: getActiveInjuryItem(memoryStore.memory),
+          vdot: resolvePaceModel(memoryStore.memory.athleteProfile).vdot,
+          adaptiveProfile: memoryStore.memory.adaptiveTrainingProfile,
+          progression: coachAdaptiveProgress.criteria
+        }
         // 5개(서버 상한과 동일). 3개면 "이번 주 어떻게 짜여 있어?" 같은 질문에 주 전체를 못 보여준다 —
-        // 코치가 부족한 재료를 weeklyPattern(옛 루틴 메모)으로 메꾸는 게 2026-08-18 실사고의 한 원인이었다.
+        // 코치가 부족한 재료를 옛 루틴 메모로 메꾸는 게 2026-08-18 실사고의 한 원인이었다.
         return scheduleStore.upcoming(todayStr).slice(0, 5).map((s) => ({
           date: s.date,
           type: s.sessionType,
           distanceKm: s.prescription.distanceKm ?? null,
           keySession: s.keySession,
           // 상향(intensify) 적격 판정은 웹 소유(#639 G7) — 서버는 이 플래그만 보고 상향 제안을 통과/폐기한다.
-          canIntensify: canIntensifySession(s.sessionType, coachAdaptiveProgress)
+          canIntensify: canIntensifySession(s.sessionType, coachAdaptiveProgress),
+          /**
+           * "어떻게 뛰나" 정본(#795) — 화면 프리런 브리핑과 **같은 함수**를 지난다.
+           *
+           * 이걸 안 보내던 동안 코치는 실행 수치의 정본이 없어 옛 처방 템플릿 숫자를 스레드 기억으로
+           * 되풀이했고 "앱 기준으로는"이라며 틀린 출처까지 붙였다. 프롬프트 크기는 실측 5세션 ≈ 1.2k 토큰
+           * (23k+ 프롬프트 대비 작다, [[coach-run-prompt-size]]) — 그래서 예정 전부에 싣는다.
+           */
+          execution: buildSessionExecution(s, executionCtx)
         }))
       })(),
       // 반복 하향 신호(#703 ①) — 판정은 웹 소유(client-summary 패턴). 같은 축 하향이 여러 주에 걸쳐
