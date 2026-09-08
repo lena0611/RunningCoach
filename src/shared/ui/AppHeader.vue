@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { PASSWORD_MIN_LENGTH, passwordTooShortMessage, useAuthStore } from '@/app/stores/authStore'
+import { passwordPolicyIssue, passwordRequirementsHint, useAuthStore } from '@/app/stores/authStore'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useLevelStore } from '@/app/stores/levelStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
@@ -410,8 +410,9 @@ function openPasswordPanel() {
 
 async function savePassword() {
   passwordNotice.value = ''
-  if (newPassword.value.length < PASSWORD_MIN_LENGTH) {
-    authStore.error = passwordTooShortMessage
+  const issue = passwordPolicyIssue(newPassword.value)
+  if (issue) {
+    authStore.error = issue
     return
   }
   if (newPassword.value !== newPasswordConfirm.value) {
@@ -695,7 +696,7 @@ function openSettingsPanel(focus: SettingsPanelFocus | null = null) {
     <FormGrid as="form" @submit.prevent="savePassword">
       <label class="full">
         새 비밀번호
-        <ClearableField v-model="newPassword" type="password" autocomplete="new-password" :placeholder="`${PASSWORD_MIN_LENGTH}자 이상`" required />
+        <ClearableField v-model="newPassword" type="password" autocomplete="new-password" :placeholder="passwordRequirementsHint" required />
       </label>
       <label class="full">
         새 비밀번호 확인
