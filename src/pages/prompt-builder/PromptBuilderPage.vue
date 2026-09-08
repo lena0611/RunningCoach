@@ -5,7 +5,7 @@ import { useRunStore } from '@/app/stores/runStore'
 import { useCompetitionStore } from '@/app/stores/competitionStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
-import { fetchCoachReports, requestCoachRun, type CoachReport } from '@/shared/api/coachRepository'
+import { fetchRecentCoachReports, requestCoachRun, type CoachReport } from '@/shared/api/coachRepository'
 import { summarizeAchievementsForCoach } from '@/shared/lib/achievement/achievements'
 import { summarizeTempoCoaching } from '@/shared/lib/coaching/tempoAdaptation'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
@@ -49,7 +49,7 @@ onMounted(() => {
 async function loadReports() {
   if (!isSupabaseConfigured) return
   try {
-    reports.value = await fetchCoachReports()
+    reports.value = await fetchRecentCoachReports()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '코칭 기록을 불러오지 못했습니다.'
   }
