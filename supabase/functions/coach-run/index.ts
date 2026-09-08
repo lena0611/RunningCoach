@@ -20,6 +20,8 @@ import {
 import { detectUngroundedDataClaims } from './ungroundedClaim.ts'
 import { buildExecutionGuideTail } from '../_shared/executionGuideTail.ts'
 import { collapseNearDuplicateFacts, isKnownFact, isNearDuplicateFact } from '../_shared/memoryDedupe.ts'
+import { mentionsExplicitMemoryRequest } from '../_shared/explicitMemoryRequest.ts'
+import { memoryIntakeNote, type MemoryIntake, type MemoryIntakeSkip } from '../_shared/memoryIntake.ts'
 import {
   buildUserNoteRelevancePolicy,
   detectCoachAnswerIntent,
@@ -439,6 +441,11 @@ type CoachTurnQueryLog = {
     failureKind?: string | null
     filters?: string[]
   }>
+  /**
+   * 장기기억 인입 결과(2026-09-08). "기억해줘"라 했는데 안 남는 일이 다시 생기면 **추측이 아니라
+   * 조회로** 확인한다 — explicit=true 인데 stored=0 인 행이 곧 그 신호다.
+   */
+  memoryIntake?: { explicit: boolean; stored: number; skipped: Array<{ reason: string }> }
   /** 도구 없이 나온 과거 수치 주장 문장 수(관측 전용 게이트). */
   ungroundedClaims: number
   /** 그 주장이 **직전 턴 조회 결과의 재진술**이었나 — 오탐 분리용. 아래 gate 주석 참조. */
@@ -468,12 +475,15 @@ async function persistCoachResult(
   model: string,
   queryLog: CoachTurnQueryLog
 ) {
+  // 사용자가 "기억해줘"라고 직접 요청한 턴인가 — 코드가 판정한다(지침에 맡기면 보장이 안 된다).
+  const explicitMemoryRequest = mentionsExplicitMemoryRequest(userNote)
   // 코퍼스 전체(memoryCorpus)와 대조한다 — 프롬프트 선별본만 보면 안 오른 기억과 중복된다(#796).
-  const durableMemoryItems = normalizeMemoryItems(ai.memoryItems, [
-    ...(context.memoryCorpus ?? []),
-    ...(context.coreMemoryItems ?? []),
-    ...context.coachMemoryItems
-  ])
+  const memoryIntake = normalizeMemoryItems(
+    ai.memoryItems,
+    [...(context.memoryCorpus ?? []), ...(context.coreMemoryItems ?? []), ...context.coachMemoryItems],
+    explicitMemoryRequest
+  )
+  const durableMemoryItems = memoryIntake.stored
   const memoryPatch = normalizeTrainingMemoryPatch(ai.trainingMemoryPatch)
   const injuryUpdateProposal = normalizeInjuryUpdateProposal(ai.injuryUpdateProposal, context.activeInjuryItem)
   // 스케줄 액션 제안(#639) — 승인형 후보. 게이트를 하나라도 못 넘으면 null 로 떨어진다(자동 적용 경로 없음).
@@ -521,13 +531,22 @@ async function persistCoachResult(
   const report = shouldApplyTrustLayer(userNote, context.coachResponseMode)
     ? applyTrustLayer(ai.report, context.trustLayerNote)
     : ai.report
+  // 사용자가 "기억해줘"라 했는데 아무것도 안 남았으면 코드가 그 사실을 알린다 — 코치는 저장 결과를
+  // 모르는 채 "기억해둘게요"라고 답하기 때문이다(위 memoryIntakeNote 주석).
+  queryLog.memoryIntake = {
+    explicit: explicitMemoryRequest,
+    stored: memoryIntake.stored.length,
+    skipped: memoryIntake.skipped.map((item) => ({ reason: item.reason }))
+  }
+  const intakeNote = memoryIntakeNote(memoryIntake, explicitMemoryRequest)
+  const reportWithIntakeNote = intakeNote ? `${report.trimEnd()}\n\n${intakeNote}` : report
   const { data: reportRow, error: reportError } = await admin
     .from('coach_reports')
     .insert({
       user_id: userId,
       selected_run_id: selectedRunId,
       user_note: userNote,
-      report,
+      report: reportWithIntakeNote,
       injury_context_snapshot: injuryContextSnapshot,
       model,
       // 턴당 1행 실측(#652 후속). 도구를 안 불렀으면 toolCalls 는 빈 배열이고, 그게 곧 신호다.
@@ -3037,6 +3056,10 @@ function buildCoachInstructions(context: unknown) {
     'memoryItems는 0~3개만 반환한다. 반복 패턴, 성향, 부상/더위/회복 기준, 계획 변경처럼 다음 코칭에도 쓸 장기 기억만 넣는다.',
     '훈련 준수 패턴뿐 아니라, 사용자가 대화(userNote)에서 직접 말한 개인 맥락과 주요 서사도 장기기억 대상이다: 본인이 밝힌 욕구·목표("오랜만에 5km 30분 도전하고 싶다", want to/하고 싶다/원한다 류), 동기와 이유, 선호("아내와 함께 이지런을 좋아한다"), 생활/환경 제약, 반복되는 컨디션·통증 호소, 코칭 톤 선호 등. 특히 사용자의 욕구·목표 서사는 코치가 오래 기억할수록 신뢰가 쌓이는 이 앱의 핵심이므로 잘 포착한다. 다음에 사용자를 더 잘 이해하는 데 쓸 안정적인 사실만 1인칭 사용자 관점으로 간결히 적는다. 예: "사용자는 오랜만에 5km를 30분 안에 들어오는 걸 목표로 의식한다."',
     'memoryItems에 단일 세션의 거리/페이스/심박, "오늘 잘했다", "다음 훈련은 휴식" 같은 일회성 코멘트를 넣지 않는다. 개인 맥락도 한 번의 가벼운 언급이면 저장하지 말고, 명시적 목표/선호이거나 반복해서 나온 것만 저장한다.',
+    // 2026-09-08: "기억해줘"의 보장은 코드가 진다(요청 감지 → 주제 화이트리스트 우회 → 결과를 코드가 알림).
+    // 모델이 할 일은 **요청받은 내용을 memoryItems 에 실제로 담는 것**과, 저장 여부를 단정하지 않는 것뿐이다.
+    '사용자가 "기억해줘"·"잊지 마"처럼 **직접 기억을 요청하면** 그 내용을 반드시 memoryItems 에 한 문장으로 담는다. 러닝 주제가 아니어도(여행·일정·생활 맥락) 담는다 — 무엇을 남길지는 코드가 최종 판정한다.',
+    '다만 **"기억해뒀어요"처럼 저장을 완료한 것처럼 단정하지 마라.** 실제 저장 여부는 네가 답을 쓴 뒤에 결정되고, 결과는 코드가 사용자에게 따로 알린다. "그렇게 볼게요"·"앞으로 그 기준으로 보겠습니다"처럼 **반영하겠다는 뜻**으로만 답한다.',
     '이미 context.coachMemoryItems나 trainingMemory에 같은 의미가 있으면 memoryItems에 다시 넣지 않는다.',
     '스트리밍 UI가 report를 먼저 표시하므로 JSON 객체의 키 순서는 반드시 report, memoryItems, trainingMemoryPatch, injuryUpdateProposal, coachScheduleProposal 순서로 둔다.',
     'structured output 스키마가 JSON 구조를 강제한다. JSON 외 텍스트를 붙이지 말고, 업데이트가 없으면 trainingMemoryPatch·injuryUpdateProposal·coachScheduleProposal은 null, memoryItems는 빈 배열로 둔다.',
@@ -5703,20 +5726,30 @@ function buildTieredCoachMemory(
  * 지침은 지켜지지 않았고(모델은 자기가 방금 본 것만 안다), 같은 사실이 최대 5번 쌓였다.
  * 지침이 아니라 코드가 판정한다([[coach-always-on-block-deterministic]]).
  */
-function normalizeMemoryItems(items: string[], corpus: string[]) {
-  const normalized: string[] = []
+function normalizeMemoryItems(items: string[], corpus: string[], explicitRequest = false): MemoryIntake {
+  const stored: string[] = []
+  const skipped: MemoryIntakeSkip[] = []
 
   for (const raw of items) {
     const content = truncateText(raw, 260)
     if (!content) continue
-    if (!looksLikeDurableMemory(content)) continue
-    if (isKnownFact(content, corpus)) continue
-    if (isKnownFact(content, normalized)) continue
-    normalized.push(content)
-    if (normalized.length >= 3) break
+    if (content.length < 12) {
+      skipped.push({ content, reason: 'too-short' })
+      continue
+    }
+    if (!explicitRequest && !looksLikeDurableMemory(content)) {
+      skipped.push({ content, reason: 'not-durable' })
+      continue
+    }
+    if (isKnownFact(content, corpus) || isKnownFact(content, stored)) {
+      skipped.push({ content, reason: 'already-known' })
+      continue
+    }
+    stored.push(content)
+    if (stored.length >= 3) break
   }
 
-  return normalized
+  return { stored, skipped }
 }
 
 function scoreMemoryItem(content: string, createdAt: string, contextTags: Set<string>, index: number) {
