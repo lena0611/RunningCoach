@@ -22,8 +22,6 @@ export type TrainingMemory = {
   adaptiveTrainingProfile: AdaptiveTrainingProfile
   runnerIdentity: RunnerIdentity
   coachBeliefs: CoachBelief[]
-  longRunStrategy: string
-  currentVolumeNote: string
   /**
    * 코치가 장기적으로 기억할 계획 변경 근거. **코치가 쓰는 칸이고 사람이 쓰는 칸이 아니다** —
    * 기억 탭에서는 읽기 전용으로 보여준다(2026-09-07).
@@ -405,8 +403,6 @@ export const initialTrainingMemory: TrainingMemory = {
     coachingStyle: ['부상 예방 우선', '장기 성장 중심', '페이스보다 심박/RPE 우선']
   },
   coachBeliefs: [],
-  longRunStrategy: '토요일 롱런은 격주로 Easy LSD와 Steady Long을 번갈아 수행한다.',
-  currentVolumeNote: '최근 반달 114km 누적. 대부분 5km Easy.',
   aiNotes: [
     '코칭은 단일 기록보다 최근 훈련 흐름과 격주 롱런 패턴을 함께 봐야 한다',
     '다음 훈련 추천은 피로도, 최근 14일 기록, 장거리 주차 여부를 함께 반영한다'
@@ -447,8 +443,6 @@ export function createBlankTrainingMemory(): TrainingMemory {
       }
     ],
     injuryItems: [],
-    longRunStrategy: '',
-    currentVolumeNote: '',
     aiNotes: [],
     runnerIdentity: { strengths: [], weaknesses: [], riskFactors: [], coachingStyle: [] }
   } as Partial<TrainingMemory>)

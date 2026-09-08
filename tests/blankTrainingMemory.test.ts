@@ -7,7 +7,6 @@ describe('createBlankTrainingMemory (#332)', () => {
     expect(memory.injuryItems).toEqual([])
     expect(getActiveInjuryItem(memory)).toBeNull()
     expect(memory.goal).not.toContain('10km 60분')
-    expect(memory.longRunStrategy).toBe('')
   })
 
   it('구조 기본값(훈련 단계·승급 조건)은 유지한다', () => {

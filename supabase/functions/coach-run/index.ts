@@ -1825,8 +1825,6 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
 type CoachContext = Awaited<ReturnType<typeof buildContext>>
 
 type TrainingMemoryPatch = {
-  longRunStrategy?: string
-  currentVolumeNote?: string
   activeGoalStrategyNotes?: string
   aiNotes?: string[]
   adaptiveTrainingProfile?: AdaptiveTrainingProfilePatch
@@ -3025,7 +3023,6 @@ function buildCoachInstructions(context: unknown) {
     '루틴 변경이 필요 없으면 trainingMemoryPatch는 null로 둔다.',
     '루틴 자체(요일 뼈대)는 코치가 텍스트로 저장하지 않는다 — 플랜 생성기가 목표에서 만든다. 코치는 기준 변화를 activeGoalStrategyNotes 에 남기고 개별 세션 조정만 coachScheduleProposal 로 제안한다.',
     '루틴 변경이 activeGoal의 목표관리에도 반영되어야 하면 trainingMemoryPatch.activeGoalStrategyNotes에 활성 목표의 새 strategyNotes 문장을 넣는다. 이 값은 activeGoal.strategyNotes에 저장된다.',
-    '롱런 전략이나 현재 볼륨 노트도 바뀌어야 하면 trainingMemoryPatch.longRunStrategy, trainingMemoryPatch.currentVolumeNote에 반영한다.',
     '사용자의 장기 정체성이 반복 근거로 보강되면 trainingMemoryPatch.runnerIdentity에 strengths/weaknesses/riskFactors/coachingStyle을 반환한다. 단일 세션만으로 "이 사람은 항상"이라고 단정하지 않는다.',
     '반복 패턴이 2회 이상 확인되거나 기존 belief를 보강/반박할 근거가 있으면 trainingMemoryPatch.coachBeliefs에 belief, category, confidence, supportCount, contradictionCount, evidenceRunIds, status를 넣는다.',
     '루틴을 바꾼 이유는 report에 짧게 설명하고, aiNotes에는 장기적으로 기억할 계획 변경 근거만 1~3개 넣는다.',
@@ -3071,8 +3068,6 @@ function buildCoachResponseFormat() {
                 type: 'object',
                 additionalProperties: false,
                 required: [
-                  'longRunStrategy',
-                  'currentVolumeNote',
                   'activeGoalStrategyNotes',
                   'aiNotes',
                   'adaptiveTrainingProfile',
@@ -3080,8 +3075,6 @@ function buildCoachResponseFormat() {
                   'coachBeliefs'
                 ],
                 properties: {
-                  longRunStrategy: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-                  currentVolumeNote: { anyOf: [{ type: 'string' }, { type: 'null' }] },
                   activeGoalStrategyNotes: { anyOf: [{ type: 'string' }, { type: 'null' }] },
                   aiNotes: { type: 'array', items: { type: 'string' } },
                   adaptiveTrainingProfile: buildAdaptiveTrainingProfileSchema(),
@@ -5153,12 +5146,6 @@ function normalizeTrainingMemoryPatch(patch: TrainingMemoryPatch | null): Traini
   if (!patch || typeof patch !== 'object') return null
   const normalized: TrainingMemoryPatch = {}
 
-  if (typeof patch.longRunStrategy === 'string' && patch.longRunStrategy.trim()) {
-    normalized.longRunStrategy = patch.longRunStrategy.trim().slice(0, 1000)
-  }
-  if (typeof patch.currentVolumeNote === 'string' && patch.currentVolumeNote.trim()) {
-    normalized.currentVolumeNote = patch.currentVolumeNote.trim().slice(0, 1000)
-  }
   if (typeof patch.activeGoalStrategyNotes === 'string' && patch.activeGoalStrategyNotes.trim()) {
     normalized.activeGoalStrategyNotes = patch.activeGoalStrategyNotes.trim().slice(0, 1200)
   }
@@ -5234,8 +5221,6 @@ function mergeTrainingMemoryPatch(memory: CoachContext['trainingMemory'], patch:
   return {
     ...current,
     ...(patch.activeGoalStrategyNotes && patchedGoals.length ? { goals: patchedGoals } : {}),
-    ...(patch.longRunStrategy ? { longRunStrategy: patch.longRunStrategy } : {}),
-    ...(patch.currentVolumeNote ? { currentVolumeNote: patch.currentVolumeNote } : {}),
     ...(patch.aiNotes ? { aiNotes: mergeAiNotes(current.aiNotes, patch.aiNotes) } : {}),
     ...(patch.adaptiveTrainingProfile
       ? { adaptiveTrainingProfile: mergeAdaptiveTrainingProfile(current.adaptiveTrainingProfile, patch.adaptiveTrainingProfile) }
@@ -5989,7 +5974,7 @@ function stripStaleHrList(value: unknown): unknown {
 function sanitizeMemoryHeartRateCeilings(memory: unknown): unknown {
   if (!memory || typeof memory !== 'object') return memory
   const mem = memory as Record<string, unknown>
-  for (const legacyKey of ['knownIssues', 'runningStyle', 'heatStrategy']) delete mem[legacyKey]
+  for (const legacyKey of ['knownIssues', 'runningStyle', 'heatStrategy', 'longRunStrategy', 'currentVolumeNote']) delete mem[legacyKey]
   const atp = mem.adaptiveTrainingProfile as Record<string, unknown> | undefined
   if (atp && typeof atp === 'object') {
     delete atp.prescriptionTemplates
