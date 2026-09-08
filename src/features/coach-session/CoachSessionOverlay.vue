@@ -19,7 +19,7 @@ import IntentFulfillmentCard from '@/shared/ui/IntentFulfillmentCard.vue'
 import type { RunLog } from '@/entities/run/model'
 import type { TrainingGoal, TrainingInjuryCheckIn, TrainingMemory } from '@/entities/training-memory/model'
 import { detectGoalIntent, type GoalIntentProposal } from '@/features/detect-goal-intent/detectGoalIntent'
-import { deleteCoachReport, fetchCoachReports, requestCoachRunStream, type CoachInjuryUpdateProposal, type CoachReport, type CoachScheduleProposal, type CoachStreamStage } from '@/shared/api/coachRepository'
+import { deleteCoachReport, fetchCoachReportPage, requestCoachRunStream, type CoachInjuryUpdateProposal, type CoachReport, type CoachScheduleProposal, type CoachStreamStage } from '@/shared/api/coachRepository'
 import { summarizeAchievementsForCoach } from '@/shared/lib/achievement/achievements'
 import { coachModelLabel, COACH_MODELS, isCoachModelId } from '@/shared/lib/coaching/coachModels'
 import { useSettingsStore } from '@/app/stores/settingsStore'
@@ -126,6 +126,21 @@ const pendingDeleteReport = ref<CoachReport | null>(null)
 const deletingReportId = ref('')
 const reportsLoaded = ref(false)
 const reportsLoading = ref(false)
+/**
+ * 스레드 페이지네이션(2026-09-08). 예전엔 스코프 없이 최신 80건을 받아 **전부 렌더**했다 —
+ * 실측: 전역 163턴 중 67턴만 도달했고(세션 대화가 예산을 잡아먹음, 8/22 이전은 볼 방법 없음)
+ * 그 67턴을 한 번에 그려 스크롤이 39,000px 였다. 스코프를 쿼리에 걸고 20턴씩 끊어 읽는다.
+ */
+const reportsHasMore = ref(false)
+const loadingOlderReports = ref(false)
+/**
+ * "이전 대화 더 보기" 동안 **맨 아래 자동 스크롤을 끈다.**
+ * 그 감시자는 새 턴이 도착했을 때 따라가라고 만든 것인데, 위쪽에 옛 대화를 붙일 때도 발동해
+ * 읽던 자리를 버리고 바닥으로 튀었다(실측: top 3000 → 20672).
+ */
+const preserveScrollAnchor = ref(false)
+/** 이 스레드에서 현재 로드된 것 중 가장 오래된 시각(다음 페이지 커서). */
+const oldestLoadedAt = ref<string | null>(null)
 /**
  * 데이터 카드 제안(#767) — 코치가 만든 **승인 카드**. 미리보기 숫자는 서버가 같은 계산 코어로 낸 실물이라,
  * 승인 전에 본 값과 저장 후 카드 값이 같다. 승인해야 저장된다(카드가 직접 만들어지지 않는다).
@@ -374,7 +389,7 @@ watch(visibleStreamingCoachText, () => {
 })
 
 watch(selectedReports, () => {
-  if (!coachStore.isOpen) return
+  if (!coachStore.isOpen || preserveScrollAnchor.value) return
   void nextTick(() => scrollCoachToBottom('auto'))
 })
 
@@ -412,6 +427,10 @@ async function onCoachOpened() {
 
 function onCoachClosed() {
   stopCoachStream()
+  // 다음에 열릴 스레드는 스코프가 다를 수 있다 — 페이지 상태를 남기면 남의 스레드 커서로 이어 읽는다.
+  reportsLoaded.value = false
+  reportsHasMore.value = false
+  oldestLoadedAt.value = null
   stopCoachScrollFollow()
   coachNote.value = ''
   coachError.value = ''
@@ -422,6 +441,11 @@ function onCoachClosed() {
   showCoachScrollButton.value = false
 }
 
+/** 현재 열려 있는 스레드의 스코프 키(전역이면 null). 스코프가 바뀌면 처음부터 다시 읽는다. */
+function currentThreadRunId(): string | null {
+  return coachStore.scope === 'session' ? coachStore.activeRun?.id ?? null : null
+}
+
 async function ensureReportsLoaded() {
   if (reportsLoaded.value || !isSupabaseConfigured) return
   if (reportsLoadPromise) return reportsLoadPromise
@@ -429,7 +453,10 @@ async function ensureReportsLoaded() {
   reportsLoading.value = true
   reportsLoadPromise = (async () => {
     try {
-      reports.value = await fetchCoachReports()
+      const page = await fetchCoachReportPage({ runId: currentThreadRunId() })
+      reports.value = page.reports
+      reportsHasMore.value = page.hasMore
+      oldestLoadedAt.value = page.reports.at(-1)?.createdAt ?? null
       reportsLoaded.value = true
     } catch (err) {
       coachError.value = err instanceof Error ? err.message : '코칭 기록을 불러오지 못했습니다.'
@@ -440,6 +467,36 @@ async function ensureReportsLoaded() {
   })()
 
   return reportsLoadPromise
+}
+
+/**
+ * "이전 대화 더 보기". 스크롤 위치를 **읽던 자리에 고정**한다 — 위에 내용이 붙으면 그만큼
+ * 아래로 밀려서, 보정하지 않으면 읽던 지점이 화면 밖으로 튄다.
+ */
+async function loadOlderReports() {
+  if (loadingOlderReports.value || !reportsHasMore.value || !oldestLoadedAt.value) return
+  loadingOlderReports.value = true
+  preserveScrollAnchor.value = true
+  const container = coachScrollContainer.value
+  const heightBefore = container?.scrollHeight ?? 0
+  const topBefore = container?.scrollTop ?? 0
+  try {
+    const page = await fetchCoachReportPage({ runId: currentThreadRunId(), before: oldestLoadedAt.value })
+    const known = new Set(reports.value.map((item) => item.id))
+    reports.value = [...reports.value, ...page.reports.filter((item) => !known.has(item.id))]
+    reportsHasMore.value = page.hasMore
+    oldestLoadedAt.value = page.reports.at(-1)?.createdAt ?? oldestLoadedAt.value
+    await nextTick()
+    if (container) container.scrollTop = topBefore + (container.scrollHeight - heightBefore)
+  } catch (err) {
+    coachError.value = err instanceof Error ? err.message : '이전 대화를 불러오지 못했습니다.'
+  } finally {
+    loadingOlderReports.value = false
+    // 감시자의 nextTick 콜백이 지난 뒤에 푼다 — 먼저 풀면 그 콜백이 바닥으로 끌어내린다.
+    void nextTick(() => {
+      preserveScrollAnchor.value = false
+    })
+  }
 }
 
 /**
@@ -1373,6 +1430,16 @@ function stopCoachThinkingTimer() {
             </div>
           </div>
           <template v-else>
+            <!-- 오래된 대화는 스크롤을 올려 필요할 때만 불러온다(초기 렌더·조용한 절단 방지). -->
+            <button
+              v-if="reportsHasMore"
+              type="button"
+              class="coach-load-older"
+              :disabled="loadingOlderReports"
+              @click="loadOlderReports"
+            >
+              {{ loadingOlderReports ? '불러오는 중…' : '이전 대화 더 보기' }}
+            </button>
             <template v-if="selectedReports.length">
               <div v-for="report in selectedReports" :key="report.id" class="coach-turn">
                 <CoachMessage v-if="report.userNote" role="user" :text="report.userNote" :meta="formatDateTimeWithWeekday(report.createdAt)" />

@@ -291,10 +291,48 @@ function summarizeWeatherForCoach(snapshot: WeatherSnapshot | null) {
   }
 }
 
-export async function fetchCoachReports(): Promise<CoachReport[]> {
-  const { data, error } = await requireSupabase().from('coach_reports').select('*').order('created_at', { ascending: false }).limit(80)
+/**
+ * 스코프 구분 없이 최근 리포트를 훑는다. **대화 화면용이 아니다** — 스레드 렌더에 쓰면
+ * 세션 대화가 전역 대화 자리를 잡아먹는다(아래 fetchCoachReportPage 주석). 개발용 목록 화면 전용.
+ */
+export async function fetchRecentCoachReports(limit = 80): Promise<CoachReport[]> {
+  const { data, error } = await requireSupabase()
+    .from('coach_reports')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit)
   if (error) throw error
   return (data ?? []).map(fromRow)
+}
+
+/** 코치 대화 한 페이지. `hasMore` 면 `before` 에 마지막 createdAt 을 넣어 더 부른다. */
+export type CoachReportPage = { reports: CoachReport[]; hasMore: boolean }
+
+/**
+ * 코치 대화 스레드를 **스코프별로, 페이지 단위로** 읽는다(2026-09-08).
+ *
+ * 예전엔 스코프 구분 없이 최신 80건을 통째로 받아 클라이언트에서 걸렀다. 그러면 두 문제가 겹친다.
+ *   ① 세션 대화가 80건 예산을 잡아먹어 전역 대화가 밀린다 — 실측: 전역 163건 중 **67건만** 화면에
+ *      도달했고, 8/22 이전 전역 대화는 앱에서 볼 방법이 없었다(에러도 없이 조용히 잘림).
+ *   ② 받은 걸 전부 렌더해 스크롤이 39,000px 까지 자랐다.
+ * 스코프를 **쿼리에** 걸고 페이지로 끊어 둘 다 없앤다([[silent-truncation-and-scope-in-data-reads]]).
+ */
+export async function fetchCoachReportPage(options: {
+  runId: string | null
+  limit?: number
+  /** 이 시각보다 **오래된** 것만(커서). 첫 페이지는 비운다. */
+  before?: string | null
+}): Promise<CoachReportPage> {
+  const limit = options.limit ?? 20
+  let query = requireSupabase().from('coach_reports').select('*')
+  // 스코프를 쿼리에 건다 — 전역 대화는 런에 매이지 않은 것만, 세션 대화는 그 런 것만(#616).
+  query = options.runId ? query.eq('selected_run_id', options.runId) : query.is('selected_run_id', null)
+  if (options.before) query = query.lt('created_at', options.before)
+  // 다음 페이지 존재 여부를 한 건 더 받아 판정한다(별도 count 왕복 없이).
+  const { data, error } = await query.order('created_at', { ascending: false }).limit(limit + 1)
+  if (error) throw error
+  const rows = data ?? []
+  return { reports: rows.slice(0, limit).map(fromRow), hasMore: rows.length > limit }
 }
 
 /**
