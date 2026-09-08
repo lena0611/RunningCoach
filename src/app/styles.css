@@ -471,6 +471,13 @@
   color: var(--color-muted);
   font-size: var(--text-caption-size);
   font-weight: var(--font-weight-bold);
+  /*
+    좁은 화면에서 "주의"가 "주 / 의"로 쪼개지던 것(2026-09-08 폰 실측).
+    flex 행의 아이템이라 폭이 모자라면 배지가 먼저 줄어든다 — 제목 쪽 div 에 min-width:0 이 있어
+    거기서 흡수해야 하는데, 배지가 shrink 가능하니 두 글자가 세로로 접혔다. 알약 배지는 줄바꿈하지 않는다.
+  */
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .trend-hero-good {
