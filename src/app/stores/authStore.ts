@@ -229,6 +229,35 @@ export const PASSWORD_MIN_LENGTH = 8
 export const passwordTooShortMessage = `비밀번호는 ${PASSWORD_MIN_LENGTH}자 이상으로 만들어주세요.`
 
 /**
+ * 문자 종류 요구(2026-09-08). Supabase 대시보드 Password requirements 를
+ * "Lowercase, uppercase letters, digits and symbols" 로 올린 것과 **같은 규칙**이다.
+ *
+ * ⚠️ 위 최소 길이와 같은 이유로 앱이 먼저 잡아야 한다. 안 잡으면 서버가 거부하면서
+ * "Password should contain at least one character of each: abcdefghijklmnopqrstuvwxyz, ..."
+ * 같은 **알파벳이 통째로 나열된 영어 원문**이 사용자에게 그대로 노출된다(번역 규칙에도 안 걸린다).
+ * 대시보드 설정을 바꾸면 여기도 함께 바꾼다.
+ */
+const PASSWORD_CLASS_RULES: { test: RegExp; label: string }[] = [
+  { test: /[a-z]/, label: '소문자' },
+  { test: /[A-Z]/, label: '대문자' },
+  { test: /[0-9]/, label: '숫자' },
+  { test: /[^a-zA-Z0-9]/, label: '기호' }
+]
+
+export const passwordRequirementsHint = `${PASSWORD_MIN_LENGTH}자 이상 · 소문자·대문자·숫자·기호 각각 1자 이상`
+
+/**
+ * 새 비밀번호가 규칙에 맞는지 본다. 맞으면 null, 아니면 **무엇이 빠졌는지** 알려주는 문장.
+ * 가입·비밀번호 변경에만 쓴다 — 로그인에는 적용하지 않는다(옛 규칙으로 만든 계정이 잠긴다).
+ */
+export function passwordPolicyIssue(password: string): string | null {
+  if (password.length < PASSWORD_MIN_LENGTH) return passwordTooShortMessage
+  const missing = PASSWORD_CLASS_RULES.filter((rule) => !rule.test.test(password)).map((rule) => rule.label)
+  if (!missing.length) return null
+  return `비밀번호에 ${missing.join('·')}를 넣어주세요. (${passwordRequirementsHint})`
+}
+
+/**
  * Supabase 인증 에러를 사용자 말로 옮긴다. 원문은 영어이고 "Invalid login credentials" 처럼
  * 무엇을 고쳐야 할지 알려주지 않는다.
  */
@@ -238,6 +267,13 @@ function authErrorMessage(message: string): string {
   if (text.includes('email not confirmed')) return '메일함에서 이메일 확인을 먼저 마쳐주세요.'
   if (text.includes('user already registered')) return '이미 가입된 이메일입니다. 로그인해 주세요.'
   if (text.includes('password should be at least')) return passwordTooShortMessage
+  // 서버가 문자 종류로 거부하면 원문에 알파벳 전체가 나열돼 온다 — 우리 문장으로 바꾼다.
+  if (text.includes('password should contain at least one character of each')) {
+    return `비밀번호에 소문자·대문자·숫자·기호를 각각 1자 이상 넣어주세요. (${passwordRequirementsHint})`
+  }
+  if (text.includes('password is too weak') || text.includes('weak_password')) {
+    return `비밀번호가 약해요. ${passwordRequirementsHint}로 만들어주세요.`
+  }
   if (text.includes('for security purposes') || text.includes('rate limit')) return '요청이 잠시 몰렸어요. 잠시 후 다시 시도해 주세요.'
   if (text.includes('provider is not enabled')) return '이 로그인 방식은 아직 준비 중입니다.'
   return message
