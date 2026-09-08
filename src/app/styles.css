@@ -5318,6 +5318,55 @@ button.run-session-row {
   color: var(--color-danger);
 }
 
+/* 코치 장기기억 목록(#806) — 판단해서 지우는 텍스트라 caption 으로 낮추지 않는다(info 16px). */
+.coach-memory-list {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.coach-memory-list > li {
+  display: grid;
+  gap: 6px;
+  padding: 12px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.coach-memory-list p {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--text-info-size);
+  line-height: var(--text-info-line);
+}
+
+.coach-memory-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.coach-memory-meta small {
+  color: var(--color-muted);
+  font-size: var(--text-caption-size);
+}
+
+.coach-memory-remove {
+  padding: 6px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-muted);
+  font-size: var(--text-caption-size);
+  font-weight: 600;
+}
+
+.coach-memory-remove:disabled {
+  opacity: 0.6;
+}
+
 .ai-note-list {
   display: grid;
   gap: 8px;
