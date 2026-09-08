@@ -24,14 +24,14 @@ function mergeStoreIntoDraft(draft: Memory, snapshot: Memory, fresh: Memory) {
 
 describe('기억 탭 draft 병합', () => {
   it('로드 전 빈 draft 는 도착한 값으로 채워진다 — 다른 칸을 편집 중이어도', () => {
-    const draft: Memory = { aiNotes: [], longRunStrategy: '', goal: '수정 중' }
-    const snapshot: Memory = { aiNotes: [], longRunStrategy: '', goal: '' }
-    const fresh: Memory = { aiNotes: ['a'], longRunStrategy: '서버 전략', goal: '서버 목표' }
+    const draft: Memory = { aiNotes: [], activeGoalId: '', goal: '수정 중' }
+    const snapshot: Memory = { aiNotes: [], activeGoalId: '', goal: '' }
+    const fresh: Memory = { aiNotes: ['a'], activeGoalId: 'g1', goal: '서버 목표' }
 
     mergeStoreIntoDraft(draft, snapshot, fresh)
 
     expect(draft.aiNotes).toEqual(['a'])
-    expect(draft.longRunStrategy).toEqual('서버 전략')
+    expect(draft.activeGoalId).toEqual('g1')
     // 편집 중인 칸은 지킨다 — 타이핑 중 값이 서버 값으로 튀면 그것도 데이터 유실이다.
     expect(draft.goal).toBe('수정 중')
   })

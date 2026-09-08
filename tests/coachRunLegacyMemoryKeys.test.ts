@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 */
 const coachRunSource = readFileSync(resolve(process.cwd(), 'supabase/functions/coach-run/index.ts'), 'utf8')
 
-const REMOVED_MEMORY_KEYS = ['prescriptionTemplates', 'knownIssues', 'runningStyle', 'heatStrategy']
+const REMOVED_MEMORY_KEYS = ['prescriptionTemplates', 'knownIssues', 'runningStyle', 'heatStrategy', 'longRunStrategy', 'currentVolumeNote']
 
 describe('coach-run 레거시 메모리 키 차단', () => {
   it('컨텍스트 진입 지점에서 제거된 키를 블롭에서 떼어낸다', () => {
@@ -20,7 +20,7 @@ describe('coach-run 레거시 메모리 키 차단', () => {
       coachRunSource.indexOf('function sanitizeMemoryHeartRateCeilings') + 1200
     )
     expect(sanitizer).toContain("delete atp.prescriptionTemplates")
-    for (const key of ['knownIssues', 'runningStyle', 'heatStrategy']) {
+    for (const key of ['knownIssues', 'runningStyle', 'heatStrategy', 'longRunStrategy', 'currentVolumeNote']) {
       expect(sanitizer).toContain(key)
     }
   })

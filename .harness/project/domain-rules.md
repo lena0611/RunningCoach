@@ -5,7 +5,7 @@
 ## 업무 용어
 - `RunLog`: 한 번의 러닝 세션을 구조화한 저장 단위다.
 - `Trend Lens`: 누적 `RunLog`와 `TrainingMemory`를 특정 러너 질문 기준으로 재해석하는 분석 단위다. 목표 진전, 유산소 효율, 강도 분포, 세션 품질, 회복 비용처럼 사용자가 발전/퇴보와 다음 처방 영향을 이해할 수 있는 Lens를 제공한다.
-- `TrainingMemory`: 목표 목록, 활성 목표, 부상관리 항목, 활성 부상관리 항목, 선수 프로필, 적응형 훈련 프로필, 러너 정체성, 코치 확신, 장거리 전략, 볼륨 노트, 코칭 메모 같은 장기 맥락이다.
+- `TrainingMemory`: 목표 목록, 활성 목표, 부상관리 항목, 활성 부상관리 항목, 선수 프로필, 적응형 훈련 프로필, 러너 정체성, 코치 확신, 코칭 메모 같은 장기 맥락이다.
 - `AdaptiveTrainingProfile`: 문헌 기반 코칭 기준선 위에 얹는 사용자별 개인화 보정값이다. 반복 처방 준수 패턴과 세션별 경계 조정 가이드를 저장한다.
 - `RunnerIdentity`: 단일 세션 이벤트가 아니라 strengths, weaknesses, riskFactors, coachingStyle로 이 러너가 어떤 사람인지 구조화한 장기 특성 계층이다.
 - `CoachBelief`: AI 코치가 반복적으로 확인한 패턴 가설이다. belief, category, confidence, supportCount, contradictionCount, evidenceRunIds, status를 갖고 candidate에서 confirmed로 승격될 수 있다.
@@ -26,7 +26,7 @@
 - `FastSegment`: route/speed 샘플에서 계산한 짧은 고속 구간 요약이다. 시작 시각, 지속 시간, 거리, 평균/최고 페이스를 가진다.
 - `RunMetricSample`: HealthKit/FIT에서 받은 심박, 페이스, 케이던스의 시간축 downsample 데이터다. Apple Fitness형 세부 차트와 코칭의 중간 과정 분석에 사용한다.
 - `RunRoutePoint`: 원본 route 전체가 아니라 표시를 위해 downsample한 좌표 샘플이다. 세션 상세 지도형 경로, 시작/종료 노드, 선택 구간 표시 용도다.
-- `TrainingMemory`: legacy `goal`, `goals`, `activeGoalId`, `injuryItems`, `activeInjuryItemId`, AthleteProfile, RunnerIdentity, CoachBeliefs, 장거리 전략, 현재 볼륨 노트, known issues, running style, heat strategy, ai notes를 가진다. **주간 루틴 메모는 없다**(2026-09-07 제거 — 루틴의 정본은 `training_schedule`). `goal`은 기존 호환용이며 활성 목표 제목과 동기화한다.
+- `TrainingMemory`: legacy `goal`, `goals`, `activeGoalId`, `injuryItems`, `activeInjuryItemId`, AthleteProfile, RunnerIdentity, CoachBeliefs, `aiNotes`(코치가 쓰는 코칭 메모)를 가진다. **사람이 적는 자유 텍스트 노트는 두지 않는다** — 주간 루틴 메모(2026-09-07), 처방 템플릿·기타 주의사항·러닝 스타일·여름 전략(2026-09-08 오전), 장거리 전략·현재 볼륨 노트(2026-09-08 오후)를 같은 이유로 제거했다: 루틴의 정본은 `training_schedule`, 실행 지침은 `sessionBriefing`, 볼륨은 매 턴 실시간 산출이라 손으로 적은 값은 **같은 것에 대한 두 번째 숫자**가 되어 코치 프롬프트에 함께 실린다. 사용자 서사·선호는 `coach_memory_items`가 갖는다. `goal`은 기존 호환용이며 활성 목표 제목과 동기화한다.
 - `AdaptiveTrainingProfile`: `methodologyVersion`, `updatedAt`, `compliancePatterns`, `sessionGuides`를 가진다. AI 코칭이 반복 근거를 찾았을 때만 갱신하며, 소스 코드나 원본 RunLog를 바꾸는 용도가 아니다.
 - `TrainingKnowledgeSource`: 훈련 지식의 출처 메타데이터다. 저자, URL, 신뢰도, 라이선스 주의, 요약을 가진다.
 - `TrainingMethod`: MAF, Daniels, Hanson 같은 훈련법 단위다. 적용 거리, 러너 수준, 주간 훈련 가능 횟수, 주의사항을 가진다.

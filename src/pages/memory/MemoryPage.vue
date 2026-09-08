@@ -196,18 +196,22 @@ const trainingNavMeta = computed(() => trainingPhase.value.currentPhase)
 const aiNavMeta = computed(() => `장기 메모 ${aiMemoryCount.value}개`)
 
 // ── 항목별 저장(리디자인 ①c): 전역 저장 제거 — 패널 그룹별 dirty 판정·부분 커밋 ──
-// AI 기억 패널은 코치가 쓰고 사람은 읽는 화면이라 저장 섹션이 없다(2026-09-07).
-type MemorySection = 'goals' | 'injuries' | 'training'
+/**
+ * 저장(편집) 섹션. AI 기억·훈련 기준 패널은 **읽는 화면**이라 여기 없다.
+ *
+ * 훈련 기준의 자유 텍스트 두 칸(장거리 전략·현재 볼륨 노트)은 2026-09-08 제거했다 — 루틴의 정본은
+ * 주기화 플랜이고 볼륨은 매 턴 실시간 계산되는데, 손으로 적은 값이 코치 프롬프트에 같이 실려
+ * **같은 것에 대한 숫자 두 개**가 가는 구조였다(weeklyPattern·처방 템플릿과 같은 병).
+ */
+type MemorySection = 'goals' | 'injuries'
 const SECTION_KEYS: Record<MemorySection, (keyof TrainingMemory)[]> = {
   goals: ['goals', 'activeGoalId', 'goal'],
-  injuries: ['injuryItems', 'activeInjuryItemId'],
-  training: ['longRunStrategy', 'currentVolumeNote']
+  injuries: ['injuryItems', 'activeInjuryItemId']
 }
 const snapshotMemory = computed<TrainingMemory>(() => JSON.parse(memorySnapshot.value))
 const panelSection = computed<MemorySection | null>(() => {
   if (panel.value.startsWith('goal')) return 'goals'
   if (panel.value.startsWith('injur')) return 'injuries'
-  if (panel.value === 'training') return 'training'
   return null
 })
 const isSectionDirty = computed(() => {
@@ -1038,17 +1042,6 @@ async function saveSection(section: MemorySection) {
                 <div class="phase-focus-list">
                   <span v-for="focus in trainingPhase.focus" :key="focus">{{ focus }}</span>
                 </div>
-              </div>
-
-              <div class="memory-note-grid">
-                <label>
-                  장거리 전략
-                  <ClearableField v-model="draft.longRunStrategy" as="textarea" rows="3" />
-                </label>
-                <label>
-                  현재 볼륨 노트
-                  <ClearableField v-model="draft.currentVolumeNote" as="textarea" rows="3" />
-                </label>
               </div>
 
             </div>

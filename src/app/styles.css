@@ -5487,7 +5487,6 @@ button.run-session-row {
 }
 
 .info-pair-grid,
-.memory-note-grid,
 .memory-subsection {
   min-width: 0;
 }
@@ -5538,12 +5537,6 @@ button.run-session-row {
   white-space: nowrap;
 }
 
-.memory-note-grid {
-  display: grid;
-  gap: 12px;
-}
-
-.memory-note-grid label,
 .memory-subsection {
   display: grid;
   gap: 10px;
