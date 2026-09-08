@@ -16,6 +16,11 @@ import {
 } from '@/entities/training-memory/injuryAreas'
 import type { TrainingKnowledgeCatalog, TrainingKnowledgeRequest, TrainingMethod } from '@/entities/training-knowledge/model'
 import { formatDateWithWeekday } from '@/shared/lib/format'
+import {
+  deleteCoachMemoryItem,
+  fetchCoachMemoryItems,
+  type CoachMemoryItem
+} from '@/shared/api/coachRepository'
 import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 import { useToastStore } from '@/app/stores/toastStore'
@@ -47,7 +52,7 @@ const editingInjuryId = ref('')
 const memorySnapshot = ref(JSON.stringify(draft))
 const saving = ref(false)
 const error = ref('')
-const pendingDelete = ref<{ kind: 'goal' | 'injury'; id: string; title: string } | null>(null)
+const pendingDelete = ref<{ kind: 'goal' | 'injury' | 'memory'; id: string; title: string } | null>(null)
 const schedulingHelpOpen = ref(false)
 const stackTransitionName = ref('stack-slide-forward')
 const knowledge = ref<TrainingKnowledgeCatalog>({ sources: [], methods: [], rules: [], requests: [] })
@@ -169,7 +174,19 @@ const routineHeartRateModel = computed(() => {
 })
 const trainingPhase = computed(() => draft.adaptiveTrainingProfile.trainingPhase)
 const progressionCriteria = computed(() => draft.adaptiveTrainingProfile.progressionCriteria)
-const aiMemoryCount = computed(() => draft.aiNotes.length)
+/**
+ * 코치 장기기억(#806). 이 화면은 그동안 `aiNotes` 만 세어 "장기 메모 0개"라고 표시했는데,
+ * 실제 기억은 `coach_memory_items` 에 121건 있었다 — 웹에서 **조회조차 안 했다.**
+ * 그 표시가 사람을 오판하게 만들었으므로(이 앱의 개발 판단까지 틀어졌다), 실제를 보여준다.
+ */
+const coachMemories = ref<CoachMemoryItem[]>([])
+const coachMemoryTotal = ref(0)
+const coachMemoryHasMore = ref(false)
+const coachMemoryLoading = ref(false)
+const coachMemoryError = ref('')
+const deletingMemoryId = ref('')
+
+const aiMemoryCount = computed(() => coachMemoryTotal.value)
 
 // ── 현재 코칭 기준 요약 카드 + 관리 nav (리디자인 ①c) ─────────────────
 const basisGoalMeta = computed(() => {
@@ -193,7 +210,7 @@ const hasInjuryAlert = computed(() => draft.injuryItems.some((item) => item.stat
 const goalsNavMeta = computed(() => `${activeGoal.value ? '활성 1개' : '활성 없음'} · 보조 ${secondaryGoals.value.length}개`)
 const injuriesNavMeta = computed(() => (managedInjuries.value.length ? `관리 중 ${managedInjuries.value.length}건` : '관리 항목 없음'))
 const trainingNavMeta = computed(() => trainingPhase.value.currentPhase)
-const aiNavMeta = computed(() => `장기 메모 ${aiMemoryCount.value}개`)
+const aiNavMeta = computed(() => `기억 ${aiMemoryCount.value}개`)
 
 // ── 항목별 저장(리디자인 ①c): 전역 저장 제거 — 패널 그룹별 dirty 판정·부분 커밋 ──
 /**
@@ -234,6 +251,14 @@ watch(
   () => memoryStore.selectedUser.updatedAt,
   () => mergeStoreIntoDraft()
 )
+
+/**
+ * 기억 탭에 들어오면 바로 읽는다.
+ *
+ * 처음엔 "AI 기억 패널을 열 때만" 으로 뒀는데, 그러면 **바깥 목록의 "기억 N개"가 0으로 남는다** —
+ * 그게 정확히 이 이슈(#806)에서 고치려던 거짓말이다. 첫 페이지 20건은 짧은 문장이라 부담이 없다.
+ */
+void loadCoachMemories()
 
 watch(
   () => route.query.panel,
@@ -672,7 +697,66 @@ function confirmDelete() {
   if (!target) return
   if (target.kind === 'goal') removeGoal(target.id)
   if (target.kind === 'injury') removeInjury(target.id)
+  // 기억 삭제만 즉시 DB 반영이다 — draft/저장 흐름을 타지 않는다(아래 확인 시트 문구가 그래서 갈린다).
+  if (target.kind === 'memory') void removeCoachMemory(target.id)
   pendingDelete.value = null
+}
+
+/** AI 기억 패널을 열 때 첫 페이지를 읽는다. 전부 그리지 않는다(대화 스레드와 같은 이유, #805). */
+async function loadCoachMemories() {
+  if (coachMemoryLoading.value) return
+  coachMemoryLoading.value = true
+  coachMemoryError.value = ''
+  try {
+    const page = await fetchCoachMemoryItems({})
+    coachMemories.value = page.items
+    coachMemoryHasMore.value = page.hasMore
+    coachMemoryTotal.value = page.total
+  } catch (err) {
+    coachMemoryError.value = err instanceof Error ? err.message : '기억을 불러오지 못했습니다.'
+  } finally {
+    coachMemoryLoading.value = false
+  }
+}
+
+async function loadMoreCoachMemories() {
+  if (coachMemoryLoading.value || !coachMemoryHasMore.value) return
+  const before = coachMemories.value.at(-1)?.createdAt
+  if (!before) return
+  coachMemoryLoading.value = true
+  try {
+    const page = await fetchCoachMemoryItems({ before })
+    const known = new Set(coachMemories.value.map((item) => item.id))
+    coachMemories.value = [...coachMemories.value, ...page.items.filter((item) => !known.has(item.id))]
+    coachMemoryHasMore.value = page.hasMore
+    coachMemoryTotal.value = page.total
+  } catch (err) {
+    coachMemoryError.value = err instanceof Error ? err.message : '기억을 더 불러오지 못했습니다.'
+  } finally {
+    coachMemoryLoading.value = false
+  }
+}
+
+/**
+ * 기억 한 건 삭제(#806). 되돌릴 수 없어 확인 시트를 거친다(목표·부상 삭제와 같은 규약).
+ * 지운 내용을 사용자가 다시 말하면 코치는 다시 배운다 — 그게 맞는 동작이라 막지 않는다.
+ */
+function askRemoveMemory(item: CoachMemoryItem) {
+  pendingDelete.value = { kind: 'memory', id: item.id, title: item.content }
+}
+
+async function removeCoachMemory(id: string) {
+  deletingMemoryId.value = id
+  coachMemoryError.value = ''
+  try {
+    await deleteCoachMemoryItem(id)
+    coachMemories.value = coachMemories.value.filter((item) => item.id !== id)
+    coachMemoryTotal.value = Math.max(0, coachMemoryTotal.value - 1)
+  } catch (err) {
+    coachMemoryError.value = err instanceof Error ? err.message : '기억을 지우지 못했습니다.'
+  } finally {
+    deletingMemoryId.value = ''
+  }
 }
 
 function goBack() {
@@ -1048,7 +1132,7 @@ async function saveSection(section: MemorySection) {
 
             <div v-else-if="panel === 'ai-memory'" class="memory-stack">
               <div class="memory-ai-summary">
-                <span class="context-chip">장기 메모 {{ aiMemoryCount }}개</span>
+                <span class="context-chip">기억 {{ aiMemoryCount }}개</span>
                 <button class="memory-link-button" type="button" @click="openKnowledge">훈련 지식 보관소</button>
               </div>
 
@@ -1064,6 +1148,38 @@ async function saveSection(section: MemorySection) {
                     <p>{{ criterion.action }}</p>
                   </li>
                 </ul>
+              </div>
+
+              <div class="memory-subsection">
+                <strong>코치가 기억하는 나</strong>
+                <small>대화에서 코치가 스스로 골라 남긴 것들이에요. 틀린 게 있으면 지우면 됩니다.</small>
+                <p v-if="coachMemoryError" class="error">{{ coachMemoryError }}</p>
+                <ul v-if="coachMemories.length" class="coach-memory-list">
+                  <li v-for="item in coachMemories" :key="item.id">
+                    <p>{{ item.content }}</p>
+                    <div class="coach-memory-meta">
+                      <small>{{ formatDateWithWeekday(item.createdAt.slice(0, 10)) }}</small>
+                      <button
+                        type="button"
+                        class="coach-memory-remove"
+                        :disabled="deletingMemoryId === item.id"
+                        @click="askRemoveMemory(item)"
+                      >
+                        {{ deletingMemoryId === item.id ? '지우는 중' : '지우기' }}
+                      </button>
+                    </div>
+                  </li>
+                </ul>
+                <p v-else-if="!coachMemoryLoading" class="helper">아직 기억이 없어요. 코치와 대화하면 쌓입니다.</p>
+                <button
+                  v-if="coachMemoryHasMore"
+                  type="button"
+                  class="memory-link-button"
+                  :disabled="coachMemoryLoading"
+                  @click="loadMoreCoachMemories"
+                >
+                  {{ coachMemoryLoading ? '불러오는 중…' : '더 보기' }}
+                </button>
               </div>
 
               <div class="memory-subsection">
@@ -1169,7 +1285,9 @@ async function saveSection(section: MemorySection) {
         <section class="bottom-sheet confirm-sheet" :class="{ 'bottom-sheet-dragging': deleteSheetDrag.dragging.value }" :style="deleteSheetDrag.sheetStyle.value" role="dialog" aria-modal="true" aria-label="삭제 확인">
           <div class="bottom-sheet-handle bottom-sheet-drag-zone" @pointerdown="deleteSheetDrag.startDrag" />
           <h2>삭제할까요?</h2>
-          <p>{{ pendingDelete.title }} 항목은 저장 전 draft에서 제거됩니다. 최종 반영하려면 저장을 눌러야 합니다.</p>
+          <p v-if="pendingDelete.kind === 'memory'">“{{ pendingDelete.title }}”</p>
+          <p v-if="pendingDelete.kind === 'memory'" class="helper">바로 지워지고 되돌릴 수 없어요. 다시 말씀하시면 코치가 다시 기억합니다.</p>
+          <p v-else>{{ pendingDelete.title }} 항목은 저장 전 draft에서 제거됩니다. 최종 반영하려면 저장을 눌러야 합니다.</p>
           <div class="confirm-actions">
             <button class="danger" type="button" @click="confirmDelete">삭제</button>
             <button class="ghost" type="button" @click="pendingDelete = null">취소</button>

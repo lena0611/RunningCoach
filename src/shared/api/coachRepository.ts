@@ -494,3 +494,50 @@ function normalizeInjurySnapshot(value: unknown): CoachInjuryContextSnapshot | n
     items
   }
 }
+
+/**
+ * 코치 장기기억 한 건(#806). 기억 탭이 "코치가 나를 뭘 안다고 생각하는지" 를 보여주는 데 쓴다.
+ *
+ * 그 전까지 이 테이블은 **웹에서 조회조차 하지 않았다** — 기억 탭은 `aiNotes` 만 세어
+ * "장기 메모 0개"라고 표시했고, 실제로는 121건이 있었다. 그 화면이 사람을 오판하게 만들었다.
+ */
+export type CoachMemoryItem = {
+  id: string
+  content: string
+  importance: number
+  createdAt: string
+}
+
+export type CoachMemoryItemPage = { items: CoachMemoryItem[]; hasMore: boolean; total: number }
+
+/** 최신순 한 페이지. 대화 스레드와 같은 이유로 전부 그리지 않는다(#805). */
+export async function fetchCoachMemoryItems(options: { limit?: number; before?: string | null } = {}): Promise<CoachMemoryItemPage> {
+  const limit = options.limit ?? 20
+  // count 를 같이 받는다 — "기억 N개"는 페이지 길이가 아니라 **전체**여야 한다(왕복 추가 없음).
+  let query = requireSupabase().from('coach_memory_items').select('id, content, importance, created_at', { count: 'exact' })
+  if (options.before) query = query.lt('created_at', options.before)
+  const { data, error, count } = await query.order('created_at', { ascending: false }).limit(limit + 1)
+  if (error) throw error
+  const rows = (data ?? []) as Array<{ id: string; content: string; importance: number | null; created_at: string }>
+  return {
+    items: rows.slice(0, limit).map((row) => ({
+      id: row.id,
+      content: row.content,
+      importance: typeof row.importance === 'number' ? row.importance : 3,
+      createdAt: row.created_at
+    })),
+    hasMore: rows.length > limit,
+    total: count ?? rows.length
+  }
+}
+
+/**
+ * 기억 한 건을 지운다(#806). 되돌릴 수 없다 — 호출부는 확인을 받고 부른다.
+ *
+ * ⚠️ 지운 내용을 사용자가 **다시 말하면 코치가 다시 배운다.** 그게 맞는 동작이다(지금 사실이면
+ * 기억하는 게 맞다). "영영 말하지 마라"가 필요해지면 그건 별도 기능이다.
+ */
+export async function deleteCoachMemoryItem(id: string): Promise<void> {
+  const { error } = await requireSupabase().from('coach_memory_items').delete().eq('id', id)
+  if (error) throw error
+}
