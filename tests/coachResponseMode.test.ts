@@ -313,3 +313,59 @@ describe('coach response mode and user note relevance', () => {
   })
 
 })
+
+/**
+ * 2026-09-16 실사고: 사용자가 자기 기록을 가리키며 조언을 구했는데 코치가 근거 없이 답했다.
+ *
+ * 실측(coach_reports.data_query_log): "체크런으로 뛰기 괜찮아? 내 최근 기록들" · "어제 세션기록으로
+ * 체크런하기 어때?" 두 턴 모두 toolCalls: []. 원인은 분류였다 — 둘 다 general 로 떨어져
+ * shouldUseStructuredCoachContext=false, 즉 **러닝 기록이 컨텍스트에 실리지도 않았다.**
+ *
+ * `mentionsFirstPerson` 이 `내 X` 를 명사 직결일 때만 받아서 "내 **최근** 기록들"이 새고,
+ * 시점으로 가리키는 "어제 세션기록"은 1인칭이 없어 처음부터 못 받았다.
+ */
+describe('자기 기록을 가리키는 발화는 개인 훈련 대화다 (2026-09-16)', () => {
+  const personal = [
+    '체크런으로 뛰기 괜찮아? 내 최근 기록들',
+    '어제 세션기록으로 체크런하기 어떄? 적당한 강도야?',
+    '지난주 기록 어땠어?',
+    '나의 지난 세션 보고 판단해줘',
+    '이번 주 런 어땠는지 봐줘'
+  ]
+
+  for (const note of personal) {
+    it(`"${note}" → personal_training (기록이 실린다)`, () => {
+      expect(detectUserNoteRunRelevance(note)).toBe('personal_training')
+      const mode = resolveCoachResponseMode(note, detectCoachAnswerIntent(note))
+      expect(shouldUseStructuredCoachContext(note, mode)).toBe(true)
+    })
+  }
+
+  it('"요즘 내 페이스면 무리일까?" 는 세션 지표 질문으로 가되 기록은 실린다', () => {
+    // 페이스·심박 어휘는 기존 규칙상 selected_run 으로 먼저 잡힌다. 라벨이 무엇이든
+    // 중요한 건 기록이 컨텍스트에 실리는 것이다.
+    const note = '요즘 내 페이스면 무리일까?'
+    const mode = resolveCoachResponseMode(note, detectCoachAnswerIntent(note))
+    expect(shouldUseStructuredCoachContext(note, mode)).toBe(true)
+  })
+
+  it('개인 훈련으로 분류돼도 조회 지시를 잃지 않는다', () => {
+    // 분류를 general 에서 personal_training 으로 옮기면서 #814 의 조회 지시를 잃을 뻔했다.
+    const policy = buildUserNoteRelevancePolicy('체크런으로 뛰기 괜찮아? 내 최근 기록들', 'conversational')
+    expect(policy).toContain('queryRuns')
+    expect(policy).toContain('되묻지 마라')
+  })
+
+  // 일반 개념 질문까지 끌어오면 반대 방향 회귀다 — 개념 질문은 general 로 남아야 한다.
+  const stillGeneral = [
+    '이지 스트라이드가 뭐야',
+    '러닝 후 스트레칭은 언제 해?',
+    '마라톤 세계기록이 얼마야'
+  ]
+
+  for (const note of stillGeneral) {
+    it(`"${note}" → general 유지`, () => {
+      expect(detectUserNoteRunRelevance(note)).toBe('general')
+    })
+  }
+})

@@ -311,3 +311,67 @@ describe('소수점이 의미 없는 단위는 정수로 확정한다 (#818)', (
     expect(result.rows[0].distanceKm).toBe(4.61)
   })
 })
+
+/**
+ * 2026-09-16 라이브 QA: #818 이 고친 거짓말이 **연산자만 바꿔** 되살아났다.
+ *
+ * "체크런으로 뛰기 괜찮아? 내 최근 기록들" 에 모델이 `type 포함 Easy` · `포함 Recovery` ·
+ * `포함 LSD` 세 개를 보냈고 0건이 돌아왔다(data_query_log 실측). 사용자에겐 9/15 Easy 4.61km,
+ * 9/6 Recovery, 9/5 LSD 가 멀쩡히 있었다.
+ */
+describe('같은 필드의 contains 도 집합(OR)으로 읽는다 (2026-09-16)', () => {
+  function spec(filters: QueryRunsSpec['filters']): QueryRunsSpec {
+    return { filters, groupBy: 'none', metrics: ['count'], limit: 50 }
+  }
+
+  const rows = [
+    row({ date: '2026-09-15', type: 'Easy', distance_km: 4.61 }),
+    row({ date: '2026-09-10', type: 'Easy', distance_km: 3.33 }),
+    row({ date: '2026-09-06', type: 'Recovery', distance_km: 4.11 }),
+    row({ date: '2026-09-05', type: 'LSD', distance_km: 6.59 }),
+    row({ date: '2026-09-02', type: 'Tempo', distance_km: 5.0 })
+  ]
+
+  it('세 타입을 포함으로 물으면 셋 다 잡는다 (전에는 0건)', () => {
+    const result = runQueryRuns(
+      spec([
+          { field: 'type', op: 'contains', value: 'Easy' },
+          { field: 'type', op: 'contains', value: 'Recovery' },
+          { field: 'type', op: 'contains', value: 'LSD' }
+      ]),
+      rows
+    )
+    expect(result.matchedRuns).toBe(4)
+  })
+
+  it('포함 하나만 오면 동작이 그대로다 (회귀 가드)', () => {
+    const result = runQueryRuns(
+      spec([{ field: 'type', op: 'contains', value: 'Easy' }]),
+      rows
+    )
+    expect(result.matchedRuns).toBe(2)
+  })
+
+  it('다른 필드끼리는 계속 AND 다', () => {
+    const result = runQueryRuns(
+      spec([
+          { field: 'type', op: 'contains', value: 'Easy' },
+          { field: 'distanceKm', op: 'gte', value: 4 }
+      ]),
+      rows
+    )
+    expect(result.matchedRuns).toBe(1)
+  })
+
+  it('eq 와 contains 는 서로 다른 OR 그룹이라 AND 로 남는다', () => {
+    // 같은 필드라도 의도가 다르다 — 한 덩어리로 합치면 조건이 조용히 넓어진다.
+    const result = runQueryRuns(
+      spec([
+          { field: 'type', op: 'eq', value: 'Easy' },
+          { field: 'type', op: 'contains', value: 'LSD' }
+      ]),
+      rows
+    )
+    expect(result.matchedRuns).toBe(0)
+  })
+})
