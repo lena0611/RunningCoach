@@ -15,7 +15,7 @@
 import type { RunLog } from '@/entities/run/model'
 import { getAcwr, getCadenceTrend, getChronicLoadTrend, getRunsWithinDays, sumDistance } from '@/shared/lib/runStats'
 import type { TrainingInjuryItem, TrainingMemory } from './model'
-import { getActiveInjuryItem } from './model'
+import { getActiveInjuryItem, getInjuryNoImprovementWeeks } from './model'
 import {
   INJURY_LEVER_LABEL,
   evaluateRedFlags,
@@ -102,7 +102,7 @@ function redFlagSignalsFromProbeAnswers(active: TrainingInjuryItem): RedFlagSign
  * 체크인 + grill 프로브에서 구조화된 redFlag 입력을 모은다(§4). 체크인: 체중부하 통증·진행성 악화.
  * 프로브: 화끈/저림·점통+hop·부종·고위험 골부위·체중부하 곤란/잠김 등 부위특이 자가검사(§5 Phase C).
  */
-function redFlagSignalsFromInjury(active: TrainingInjuryItem): RedFlagSignals {
+function redFlagSignalsFromInjury(active: TrainingInjuryItem, today: Date): RedFlagSignals {
   const probeSignals = redFlagSignalsFromProbeAnswers(active)
   const latest = active.checkInHistory[0] ?? null
   // ⚠ worseningOverTime 은 §4 "활동·시간이 갈수록 심해지고"(여러 날 진행성)다 — 단발 체크인의
@@ -115,7 +115,10 @@ function redFlagSignalsFromInjury(active: TrainingInjuryItem): RedFlagSignals {
     // 프로브 자가검사 신호를 먼저 깔고, 체크인 신호는 OR 로 합친다(둘 중 하나라도 켜지면 켬).
     ...probeSignals,
     dailyActivityPain: (latest?.dailyActivityPain || probeSignals.dailyActivityPain) || undefined,
-    worseningOverTime: (progressiveWorsening || probeSignals.worseningOverTime) || undefined
+    worseningOverTime: (progressiveWorsening || probeSignals.worseningOverTime) || undefined,
+    // §4 "6주(연부조직)~3개월(난치) 무호전". 이 값을 **채우는 곳이 없어서** 해당 redFlag 는 지금까지
+    // 한 번도 켜질 수 없었다(#817, 2026-09-16). 임계(≥6주)는 evaluateRedFlags 가 갖는다 — 한 곳에.
+    noImprovementWeeks: getInjuryNoImprovementWeeks(active, today) ?? undefined
   }
 }
 
@@ -148,7 +151,7 @@ export function buildInjuryCoachSignals(memory: TrainingMemory, runs: RunLog[], 
   const signals = buildInjuryDataSignals(memory, runs, active, today)
   // grill 답변(§2-B)을 랭킹에 반영 — 사용자가 고른 결정적 지문이 상위 "가능성"을 좁힌다(물어본 답을 무시하지 않음).
   const ranked = rankInjuryHypotheses(areaIds, signals, active.probeAnswers ?? {}).slice(0, 2)
-  const redFlag = evaluateRedFlags(redFlagSignalsFromInjury(active))
+  const redFlag = evaluateRedFlags(redFlagSignalsFromInjury(active, today))
 
   // 부위가 KB 스코프 밖(ankle/quad/lower-back)이라 가설이 없고 redFlag 도 없으면 보낼 게 없다.
   if (!ranked.length && !redFlag.tripped) return null

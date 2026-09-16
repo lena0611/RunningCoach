@@ -177,3 +177,72 @@ describe('buildInjuryCoachSignals (§5 coach-run 주입 묶음)', () => {
     expect(result!.hypotheses[0].possibility).toBe('햄스트링 좌상')
   })
 })
+
+/**
+ * #817 — KB §4 "6주(연부조직)~3개월(난치) 무호전" redFlag 는 `noImprovementWeeks` 를 **채우는 곳이
+ * 아무 데도 없어서** 프로덕션에서 한 번도 켜질 수 없었다(2026-09-16 확인). 타입·판정·단위테스트는 다
+ * 있었고 배선만 없었다 — 단위테스트가 evaluateRedFlags 를 직접 불러 통과시키고 있었다.
+ *
+ * 기간만으로 켜면 과대 의뢰가 된다(§6 경고). 호전 근거가 없을 때만 켠다.
+ */
+describe('무호전 redFlag 배선 (#817)', () => {
+  const PLANTAR = [{ areaId: 'right-plantar-fascia', painLevel: 3 }]
+
+  function pain(dayAgo: number, painLevel: number) {
+    return {
+      id: `ci-${dayAgo}`, checkedAt: `${daysAgo(dayAgo)}T09:00:00.000Z`, painLevel,
+      areaPainLevels: [{ areaId: 'right-plantar-fascia', painLevel }],
+      worsenedDuringOrAfterRun: false, dailyActivityPain: false,
+      readyForQualitySession: false, note: '', source: 'user_check_in' as const
+    }
+  }
+
+  it('8주째 통증이 그대로면 무호전으로 켠다', () => {
+    const memory = buildMemory({
+      title: '발바닥', status: 'monitoring', normalizedAreas: PLANTAR, onsetDate: daysAgo(56),
+      // checkInHistory 는 최신순
+      checkInHistory: [pain(2, 3), pain(30, 3), pain(54, 3)]
+    })
+    const signals = buildInjuryCoachSignals(memory, [], today)
+    expect(signals?.redFlag.tripped).toBe(true)
+    expect(signals?.redFlag.reasons.some((reason) => reason.includes('무호전'))).toBe(true)
+  })
+
+  it('좋아지는 중이면 오래됐어도 켜지 않는다 (과대 의뢰 방지)', () => {
+    const memory = buildMemory({
+      title: '발바닥', status: 'monitoring', normalizedAreas: PLANTAR, onsetDate: daysAgo(56),
+      checkInHistory: [pain(2, 1), pain(30, 2), pain(54, 4)]
+    })
+    const signals = buildInjuryCoachSignals(memory, [], today)
+    expect(signals?.redFlag.reasons.some((reason) => reason.includes('무호전'))).toBe(false)
+  })
+
+  it('6주 미만이면 정체여도 켜지 않는다', () => {
+    const memory = buildMemory({
+      title: '발바닥', status: 'monitoring', normalizedAreas: PLANTAR, onsetDate: daysAgo(20),
+      checkInHistory: [pain(2, 3), pain(18, 3)]
+    })
+    const signals = buildInjuryCoachSignals(memory, [], today)
+    expect(signals?.redFlag.reasons.some((reason) => reason.includes('무호전'))).toBe(false)
+  })
+
+  it('체크인이 1건뿐이면 판단 근거가 없어 켜지 않는다', () => {
+    const memory = buildMemory({
+      title: '발바닥', status: 'monitoring', normalizedAreas: PLANTAR, onsetDate: daysAgo(70),
+      checkInHistory: [pain(2, 3)]
+    })
+    const signals = buildInjuryCoachSignals(memory, [], today)
+    expect(signals?.redFlag.reasons.some((reason) => reason.includes('무호전'))).toBe(false)
+  })
+
+  it('재발(resolved 이후 재활성)은 옛 발병이 아니라 해소 시점부터 센다 — 과대 의뢰 방지', () => {
+    const memory = buildMemory({
+      title: '발바닥', status: 'monitoring', normalizedAreas: PLANTAR,
+      onsetDate: daysAgo(200), resolvedAt: daysAgo(20),
+      checkInHistory: [pain(2, 3), pain(18, 3)]
+    })
+    const signals = buildInjuryCoachSignals(memory, [], today)
+    // 옛 onsetDate 로 세면 28주째라 켜지지만, 현재 에피소드는 20일째라 켜지면 안 된다.
+    expect(signals?.redFlag.reasons.some((reason) => reason.includes('무호전'))).toBe(false)
+  })
+})

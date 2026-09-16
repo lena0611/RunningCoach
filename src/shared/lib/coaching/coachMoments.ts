@@ -10,6 +10,7 @@
 
 import type { RunLog } from '@/entities/run/model'
 import type { RestReason, TrainingInjuryItem } from '@/entities/training-memory/model'
+import { getInjuryEpisodeStartMs } from '@/entities/training-memory/model'
 import type { ChronicLoadTrend } from '@/shared/lib/runStats'
 import { analyzeExtraRunTrend, buildExtraRunInquiry } from '@/shared/lib/coaching/extraRunTrend'
 import { isRunningLoadGroup, PAIN_GROUP_LABEL, type PainGroup } from '@/features/post-run-interview/buildInterviewRunPatch'
@@ -565,13 +566,10 @@ function detectRestReturn(ctx: CoachMomentContext): CoachMoment | null {
 function detectInjuryEscalation(ctx: CoachMomentContext): CoachMoment | null {
   const inj = ctx.injury
   if (!inj || (inj.status !== 'active' && inj.status !== 'monitoring')) return null
-  let anchor = parseLocalDateMs(inj.onsetDate) ?? parseLocalDateMs(inj.createdAt)
+  // 에피소드 시작(재발이면 resolvedAt 하한) 정의는 model.getInjuryEpisodeStartMs 가 소유한다 — redFlag 무호전
+  // 판정이 **같은 정의**를 봐야 해서 공용화했다(#817). 양쪽에 두면 한쪽만 고쳐져 서로 다른 주차를 말한다.
+  const anchor = getInjuryEpisodeStartMs(inj)
   if (anchor === null) return null
-  // §3.5 정의는 "연속(continuous) 지속 >10주"다. resolved 이력이 있는데 다시 active/monitoring이면 = 재발(re-flare)이고,
-  // 현재 에피소드는 옛 최초 발병이 아니라 마지막 해소(resolvedAt) 이후에 다시 시작한 것이다. 그 경우 옛 onsetDate로
-  // "20주째"처럼 과대평가하지 않도록 resolvedAt를 에피소드 시작 하한으로 쓴다(연속 부상은 resolvedAt가 없어 그대로 onset 유지 — 약화 없음).
-  const resolvedMs = parseLocalDateMs(inj.resolvedAt)
-  if (resolvedMs !== null && resolvedMs > anchor) anchor = resolvedMs
   const todayMs = new Date(ctx.today).setHours(0, 0, 0, 0)
   const days = Math.floor((todayMs - anchor) / (24 * 60 * 60 * 1000))
   if (days < LONG_INJURY_ESCALATION_DAYS) return null
