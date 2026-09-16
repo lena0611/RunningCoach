@@ -284,3 +284,30 @@ describe('같은 필드의 eq 는 집합(OR)으로 읽는다 (#818)', () => {
     expect(result.matchedRuns).toBe(2)
   })
 })
+
+/**
+ * #818 라이브 QA: 같은 런(avg_heart_rate 136.77)을 앱 상세는 137, 코치는 136 이라고 말했다.
+ * 화면은 반올림하고 도구는 소수를 넘겨 모델이 잘라 읽었다 — 숫자는 한 벌이어야 한다.
+ */
+describe('소수점이 의미 없는 단위는 정수로 확정한다 (#818)', () => {
+  const rows = [row({ avg_heart_rate: 136.77, max_heart_rate: 150, cadence: 167.4, active_energy_kcal: 334.6, distance_km: 4.61 })]
+
+  it('심박·케이던스·칼로리를 정수로 돌려준다', () => {
+    const result = runQueryRuns(
+      { filters: [], groupBy: 'none', metrics: ['avgHeartRate', 'maxHeartRate', 'cadence', 'activeEnergyKcal'], limit: 20 },
+      rows
+    )
+    expect(result.rows[0].avgHeartRate).toBe(137)
+    expect(result.rows[0].maxHeartRate).toBe(150)
+    expect(result.rows[0].cadence).toBe(167)
+    expect(result.rows[0].activeEnergyKcal).toBe(335)
+  })
+
+  it('거리는 계속 소수 둘째 자리다 (과발동 가드)', () => {
+    const result = runQueryRuns(
+      { filters: [], groupBy: 'none', metrics: ['distanceKm'], limit: 20 },
+      rows
+    )
+    expect(result.rows[0].distanceKm).toBe(4.61)
+  })
+})

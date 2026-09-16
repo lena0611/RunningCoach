@@ -113,6 +113,15 @@ type Metric = QueryRunsMetric
 
 const SUM_METRICS: Metric[] = ['distanceKm', 'durationSec', 'activeEnergyKcal', 'elevationGainM']
 const MAX_METRICS: Metric[] = ['maxHeartRate']
+/**
+ * 소수점이 의미 없는 단위 — 정수로 맞춘다(#818 라이브 QA).
+ *
+ * 2026-09-16: 같은 런(avg_heart_rate=136.77)을 **앱 상세는 137**, **코치는 136** 이라고 말했다.
+ * 화면은 Math.round 로 올리고, 도구는 136.77 을 그대로 넘겨 모델이 136 으로 잘라 읽은 것이다.
+ * 심박·케이던스·칼로리는 소수 자리에 뜻이 없으므로 도구가 정수로 확정해 **모델이 자를 여지를 없앤다**.
+ * 이 코어는 웹 카드와 코치가 함께 쓰므로(#767) 두 표면이 같이 정수로 맞춰진다 — 숫자는 한 벌이어야 한다.
+ */
+const INTEGER_METRICS: Metric[] = ['avgHeartRate', 'maxHeartRate', 'cadence', 'activeEnergyKcal']
 
 export type QueryRunsFilter = { field: string; op: Op; value: string | number }
 export type QueryRunsSpec = {
@@ -270,9 +279,12 @@ export function runQueryRunsCore(spec: QueryRunsSpec, rows: QueryRunsRow[]): Que
         continue
       }
       const total = values.reduce((sum, item) => sum + item, 0)
-      if (SUM_METRICS.includes(metric)) row[metric] = round(total)
-      else if (MAX_METRICS.includes(metric)) row[metric] = round(Math.max(...values))
-      else row[metric] = round(total / values.length)
+      const raw = SUM_METRICS.includes(metric)
+        ? total
+        : MAX_METRICS.includes(metric)
+          ? Math.max(...values)
+          : total / values.length
+      row[metric] = INTEGER_METRICS.includes(metric) ? Math.round(raw) : round(raw)
       row[`${metric}Samples`] = values.length
     }
     if (!row.count) row.count = list.length
