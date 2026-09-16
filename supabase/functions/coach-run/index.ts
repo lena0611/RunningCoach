@@ -1990,7 +1990,7 @@ function buildQueryRunsArgSchema() {
     properties: {
       filters: {
         type: 'array',
-        description: '조건 목록(AND). 기간은 date 필드에 gte/lte 로 준다(YYYY-MM-DD). 요일은 weekday 에 월~일 한 글자.',
+        description: '조건 목록. 서로 다른 필드는 AND 로 좁히고, **같은 필드에 eq 를 여러 번 주면 그 값들 중 하나(OR)** 로 읽는다(예: type eq Easy + type eq LSD = Easy 또는 LSD). 연속 기간은 eq 를 나열하지 말고 date 에 gte/lte 로 준다(YYYY-MM-DD). 요일은 weekday 에 월~일 한 글자.',
         items: {
           type: 'object',
           additionalProperties: false,

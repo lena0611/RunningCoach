@@ -191,3 +191,96 @@ describe('#767 계산 코어 공용화', () => {
     expect(runQueryRuns(spec, rows).caution).toBeTruthy()
   })
 })
+
+/**
+ * #818 — 같은 필드의 eq 두 개가 AND 로 걸려 **항상 0건**이던 문제.
+ *
+ * 2026-09-16 실측(coach_data_gaps): "어제 뛴 세션데이터와 최근 러닝 횟수를 보고 코치해줘" 에
+ * 모델이 `date = 2026-09-15` · `date = 2026-09-16` 를 보냈고 0건이 돌아왔다. 9/15 에 4.61km 런이
+ * 있는데도 코치는 "어제와 오늘에 맞는 기록이 없다"고 답했다 — **없다는 거짓**이 모른다는 말보다 나쁘다.
+ */
+describe('같은 필드의 eq 는 집합(OR)으로 읽는다 (#818)', () => {
+  const rows = [
+    row({ date: '2026-09-15', distance_km: 4.61, type: 'Easy' }),
+    row({ date: '2026-09-10', distance_km: 3.33, type: 'Easy' }),
+    row({ date: '2026-09-05', distance_km: 6.59, type: 'LSD' })
+  ]
+
+  function spec(filters: QueryRunsSpec['filters']): QueryRunsSpec {
+    return { filters, groupBy: 'none', metrics: ['count', 'distanceKm'], limit: 20 }
+  }
+
+  it('날짜 eq 두 개가 0건이 아니라 해당 날짜들을 찾는다', () => {
+    const result = runQueryRuns(
+      spec([
+        { field: 'date', op: 'eq', value: '2026-09-15' },
+        { field: 'date', op: 'eq', value: '2026-09-16' }
+      ]),
+      rows
+    )
+    expect(result.matchedRuns).toBe(1)
+    expect(result.failureKind).not.toBe('no_matching_runs')
+    expect(result.rows[0].distanceKm).toBe(4.61)
+  })
+
+  it('텍스트 필드도 마찬가지다 — "Easy 또는 LSD"', () => {
+    const result = runQueryRuns(
+      spec([
+        { field: 'type', op: 'eq', value: 'Easy' },
+        { field: 'type', op: 'eq', value: 'LSD' }
+      ]),
+      rows
+    )
+    expect(result.matchedRuns).toBe(3)
+  })
+
+  it('조회 조건 표기도 집합으로 보여준다 — 코치가 범위를 그대로 말할 수 있어야 한다', () => {
+    const result = runQueryRuns(
+      spec([
+        { field: 'date', op: 'eq', value: '2026-09-15' },
+        { field: 'date', op: 'eq', value: '2026-09-16' }
+      ]),
+      rows
+    )
+    expect(result.appliedFilters).toEqual(['date = 2026-09-15 또는 2026-09-16'])
+  })
+
+  it('서로 다른 필드는 계속 AND 다 (과발동 가드)', () => {
+    const result = runQueryRuns(
+      spec([
+        { field: 'date', op: 'eq', value: '2026-09-15' },
+        { field: 'type', op: 'eq', value: 'LSD' }
+      ]),
+      rows
+    )
+    expect(result.matchedRuns).toBe(0)
+  })
+
+  it('eq 가 하나면 기존 동작 그대로다 (회귀 가드)', () => {
+    const result = runQueryRuns(spec([{ field: 'date', op: 'eq', value: '2026-09-15' }]), rows)
+    expect(result.matchedRuns).toBe(1)
+    expect(result.appliedFilters).toEqual(['date = 2026-09-15'])
+  })
+
+  it('ne 는 묶지 않는다 — "A도 아니고 B도 아니다"는 AND 가 정상 의미다', () => {
+    const result = runQueryRuns(
+      spec([
+        { field: 'type', op: 'ne', value: 'Easy' },
+        { field: 'type', op: 'ne', value: 'LSD' }
+      ]),
+      rows
+    )
+    expect(result.matchedRuns).toBe(0)
+  })
+
+  it('범위(gte/lte)는 여전히 AND 로 좁힌다', () => {
+    const result = runQueryRuns(
+      spec([
+        { field: 'date', op: 'gte', value: '2026-09-06' },
+        { field: 'date', op: 'lte', value: '2026-09-16' }
+      ]),
+      rows
+    )
+    expect(result.matchedRuns).toBe(2)
+  })
+})
