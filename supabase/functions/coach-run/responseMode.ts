@@ -189,6 +189,28 @@ export function mentionsInjuryStateChange(text: string): boolean {
   return mentionsArea && /\d|이제|해제|업데이트|갱신|상태/.test(text)
 }
 
+/**
+ * **자기 기록을 근거로 대달라는 발화**인가 (2026-09-16 실사고).
+ *
+ * `mentionsFirstPerson` 은 `내 X` 를 **명사가 바로 뒤에 붙을 때만** 받는다(#643 에서 좁힌 대가).
+ * 그래서 "내 **최근** 기록들"처럼 수식어가 한 칸 끼면 통째로 general 로 샜고, 시점으로 가리키는
+ * "**어제 세션기록**으로", "**지난주 기록** 어땠어?" 는 1인칭이 아예 없어 처음부터 못 받았다.
+ *
+ * general 이면 `shouldUseStructuredCoachContext` 가 false 라 **러닝 기록이 컨텍스트에 실리지 않는다.**
+ * 실측(coach_reports.data_query_log): 두 턴 모두 `toolCalls: []` — 데이터도 없고 도구도 안 불러
+ * 코치가 근거 없이 두루뭉술하게 답했다. 사용자 지적: "은근히 내 데이터를 조회하기를 바라는
+ * 요청인데 응하지 않는다."
+ *
+ * 오분류 손실은 여기서도 **비대칭**이다 — 괜히 기록을 실어 보내는 비용은 작고, 빠뜨리면 코치가
+ * 자기 사용자의 기록을 못 본 채 답한다.
+ */
+function referencesOwnRunRecords(text: string): boolean {
+  // ① 1인칭 + 수식어가 끼어도 받는다("내 최근 기록들", "나의 지난 세션").
+  if (/(내|제|나의)\s*[가-힣]{0,4}\s*(기록|세션|런|훈련|데이터)/.test(text)) return true
+  // ② 시점 지시 + 기록 명사. 1인칭이 없어도 자기 기록을 가리킨다("어제 세션기록", "지난주 기록").
+  return /(어제|그제|엊그제|오늘|이번\s*주|지난\s*주|저번\s*주|요즘|최근)\s*[가-힣]{0,3}\s*(기록|세션|런)/.test(text)
+}
+
 export function detectUserNoteRunRelevance(note: string): UserNoteRunRelevance {
   const text = note.trim().toLowerCase()
   if (!text) return 'selected_run'
@@ -213,11 +235,13 @@ export function detectUserNoteRunRelevance(note: string): UserNoteRunRelevance {
     mentionsScheduleChange(text) ||
     asksPeerComparison(text) ||
     mentionsFirstPerson(text) ||
+    // 자기 기록 지시(2026-09-16) — 이게 없으면 기록이 컨텍스트에 안 실린다(위 함수 주석).
+    referencesOwnRunRecords(text) ||
     // 러닝 행위 어형을 넓게 받는다(뛰었/달렸/뜀…) — 1인칭 대명사를 좁힌 대신, 주어 생략 개인 발화
     // ("오랜만에 5키로 도전한거야", "가볍게 뜀")가 general 로 새는 회귀를 막는 안전망.
     // 처방·판정은 "코치가 나에게 내린 것"을 가리키므로 개인 신호다 — 우연 통과가 가리던 케이스
     // ("처방받은 거리를 채우는 게 나을까", "이번세샨을 lsd로 판정내리지 않은 근거는?")의 명시적 대체.
-    /오늘\s*어떻게|다음\s*(훈련|러닝)|뛰어|뛰었|뛰고|뛰니|뛸|뜀|달려|달렸|달리|도전|목표|루틴|스케줄|통증|아파|아픈|발바닥|부상|회복|컨디션|피곤|피로|처방|판정/.test(text) ||
+    /오늘\s*어떻게|다음\s*(훈련|러닝)|뛰어|뛰었|뛰고|뛰니|뛸|뜀|뛰기|뛰는|뛰면|뛴\s|달려|달렸|달리|도전|목표|루틴|스케줄|통증|아파|아픈|발바닥|부상|회복|컨디션|피곤|피로|처방|판정/.test(text) ||
     // 부상 상태 변화 발화(#697). 기존 목록은 통증·부상·발바닥만 받아서 "이제 다 나았어",
     // "족저근막염 다 나았어 해제해줘", "무릎 이제 0이야" 가 전부 general 로 새고 있었다
     // (= 부상 컨텍스트가 아예 안 실려 코치가 "부상 없음"으로 답한다). 회복 어형과 부위명을 받는다.
@@ -241,7 +265,14 @@ export function buildUserNoteRelevancePolicy(note: string, mode: CoachResponseMo
     return '사용자 질문이 선택 세션/직전 답변/세션 지표를 직접 가리킨다. 선택 세션 데이터와 coachingDecisionBoard를 답변 근거로 사용해도 된다. 그래도 질문에 먼저 답하고, 세션 전체 리포트를 다시 쓰지는 않는다.'
   }
   if (relevance === 'personal_training') {
-    return '사용자 질문은 개인 훈련/목표/컨디션에 관한 것이지만 선택 세션 자체를 묻는 것은 아니다. activeGoal, upcomingSchedule, activeInjuryItem, 장기 기억은 필요할 때 사용해도 되지만, 현재 화면에 열려 있다는 이유만으로 selectedRun 지표·의도 달성률·랩 흐름을 근거로 끌어오지 않는다.'
+    // ⚠ 2026-09-16: 이 브랜치에는 **조회 지시가 아예 없었다.** general 쪽에만 #814 가 넣은
+    // "추측체로 답하지 말고 조회해서 사실로 말한다"가 있어서, 자기 기록을 가리키는 발화를
+    // general → personal_training 으로 바로잡자 오히려 그 지시를 잃는 구조였다(기존 #814 계약
+    // 테스트가 이 회귀를 잡았다). 분류를 옮길 때는 **그 분류가 받는 지침도 함께** 옮긴다
+    // ([[data-and-instruction-layers-must-agree]]).
+    return '사용자 질문은 개인 훈련/목표/컨디션에 관한 것이지만 선택 세션 자체를 묻는 것은 아니다. activeGoal, upcomingSchedule, activeInjuryItem, 장기 기억은 필요할 때 사용해도 되지만, 현재 화면에 열려 있다는 이유만으로 selectedRun 지표·의도 달성률·랩 흐름을 근거로 끌어오지 않는다. ' +
+      '**사용자가 자기 기록을 가리키면(내 최근 기록·어제 세션·지난주·요즘) 추측하지 말고 queryRuns 로 조회해 사실로 답한다.** "괜찮아?·어때?" 같은 조언 질문이어도 마찬가지다 — 기록을 가리킨 건 그 기록을 보고 판단해달라는 뜻이다. ' +
+      '이미 조회하면 알 수 있는 것을 사용자에게 되묻지 마라 — 어제 뛴 거리·페이스·최근 러닝 횟수는 조회하면 나온다.'
   }
   // #814: 예전엔 여기서 "부상 노트를 억지로 연결하지 말고", "개인화 단락도 생략한다" 라고 **사용하지 마라**
   // 라고 지시했다. 그런데 이 분류는 자주 틀린다(2026-09-16: "어제 뛴 세션대이터와 최근 러닝 횟수를 보고

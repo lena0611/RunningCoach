@@ -219,20 +219,34 @@ export function normalizeQueryRunsArgs(
  *
  * eq 가 하나뿐인 필드는 그룹 크기 1 이라 기존 동작과 완전히 같다(회귀면 없음).
  * `ne` 는 묶지 않는다 — "A 가 아니고 B 도 아니다"는 AND 가 정상 의미다.
+ *
+ * **2026-09-16: `contains` 도 같이 묶는다.** #818 은 eq 만 고쳤는데, 라이브 QA 에서 모델이
+ * "체크런으로 뛰기 괜찮아? 내 최근 기록들" 에 `type 포함 Easy` · `포함 Recovery` · `포함 LSD`
+ * 세 개를 보냈고 **0건**이 돌아왔다(data_query_log 실측). 타입이 세 라벨을 동시에 품을 수 없으니
+ * AND 로는 영원히 0 이다 — 사용자에게는 Easy 4.61km(9/15)·Recovery·LSD 가 멀쩡히 있는데도
+ * 코치가 "그 조건에 맞는 기록이 없다"고 답했다. #818 이 고친 그 거짓말이 연산자만 바꿔 되살아났다.
+ *
+ * ⚠ eq 와 달리 contains 는 AND 에도 성립 가능한 읽기가 **있다** — 타입 값에 `"Easy + Strides"`,
+ * `"Steady Long"` 같은 복합 라벨이 실제로 있어서 `포함 Easy` + `포함 Strides` 는 그 하나를 정확히
+ * 가리킨다. 그럼에도 OR 을 고르는 이유는 **오답의 비대칭**이다: OR 은 조금 넓게 잡을 뿐이고 그
+ * 조건(appliedFilters)이 사용자에게 그대로 표시되지만, AND 는 있는 기록을 **없다고 말한다.**
+ * 복합 라벨을 정확히 겨냥하려면 필터 하나에 전체 라벨을 담는다(`포함 "Easy + Strides"`).
  */
 function groupFilters(filters: QueryRunsFilter[]): QueryRunsFilter[][] {
   const eqByField = new Map<string, QueryRunsFilter[]>()
   const groups: QueryRunsFilter[][] = []
   for (const filter of filters) {
-    if (filter.op !== 'eq') {
+    if (filter.op !== 'eq' && filter.op !== 'contains') {
       groups.push([filter])
       continue
     }
-    const list = eqByField.get(filter.field)
+    // eq 와 contains 는 **연산자별로** 묶는다 — 같은 필드라도 `eq A` 와 `포함 B` 를 한 OR 로
+    // 합치면 서로 다른 의도가 뒤섞인다.
+    const list = eqByField.get(filter.op + '\u0000' + filter.field)
     if (list) list.push(filter)
     else {
       const created = [filter]
-      eqByField.set(filter.field, created)
+      eqByField.set(filter.op + '\u0000' + filter.field, created)
       groups.push(created)
     }
   }
@@ -240,7 +254,7 @@ function groupFilters(filters: QueryRunsFilter[]): QueryRunsFilter[][] {
 }
 
 export function runQueryRunsCore(spec: QueryRunsSpec, rows: QueryRunsRow[]): QueryRunsCoreResult {
-  // 같은 필드의 eq 는 **집합(OR)** 으로 읽는다 — 아래 groupFilters 주석 참고.
+  // 같은 필드의 eq·contains 는 **집합(OR)** 으로 읽는다 — 위 groupFilters 주석 참고.
   const filterGroups = groupFilters(spec.filters)
   const matched = rows.filter((row) =>
     filterGroups.every((group) => group.some((filter) => matchesFilter(row, filter)))

@@ -27,7 +27,13 @@ const blocks = computed(() => parseCoachMarkdown(props.text))
 
 function parseCoachMarkdown(markdown: string): CoachBlock[] {
   const blocks: CoachBlock[] = []
-  const lines = markdown.replace(/\r\n/g, '\n').split('\n')
+  // 모델이 JSON 안에서 줄바꿈을 한 번 더 이스케이프해 보내는 경우가 있다 — 그러면 본문에 역슬래시-n 이
+  // **글자 그대로** 찍혀 문단이 통째로 뭉개진다(2026-09-16 라이브 QA: "흔해요.\\n\\n지금처럼").
+  // 저장된 옛 답변에도 남아 있으므로 서버가 아니라 여기서 되돌린다 — 그래야 지난 대화까지 같이 낫는다.
+  const lines = markdown
+    .replace(/\r\n/g, '\n')
+    .replace(/\\r\\n|\\n/g, '\n')
+    .split('\n')
   let paragraph: string[] = []
   let list: string[] = []
   let code: string[] = []
