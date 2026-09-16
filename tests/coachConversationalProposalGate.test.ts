@@ -309,3 +309,26 @@ describe('형식 완화가 리포트 헤더까지 풀지 않는다 (2026-09-16 2
     expect(INDEX_SRC).toContain('답변 전체를 하나의 말투로 유지한다')
   })
 })
+
+/**
+ * #825 배선 가드. 검출기 단위테스트가 통과해도 **부르는 쪽이 없으면** 로그는 영영 빈다 —
+ * #817 이 정확히 그 사례였다(판정 함수는 멀쩡한데 값을 채우는 생산자가 없었다).
+ */
+describe('답변 품질 신호가 실제로 배선돼 있다 (#825)', () => {
+  it('검출기를 호출하고 결과를 로그에 담는다', () => {
+    expect(INDEX_SRC).toContain('detectAnswerQualitySignals(ai.report)')
+    expect(INDEX_SRC).toContain('queryLog.qualitySignals = { ...signals, mode }')
+  })
+
+  it('매 턴 남긴다 — 위반일 때만 담으면 위반율의 분모가 사라진다', () => {
+    // 저장 라인이 hasQualityViolation 분기 **안쪽**에 있으면 안 된다.
+    const storeAt = INDEX_SRC.indexOf('queryLog.qualitySignals = { ...signals, mode }')
+    const branchAt = INDEX_SRC.indexOf('if (hasQualityViolation(signals')
+    expect(storeAt).toBeGreaterThan(-1)
+    expect(branchAt).toBeGreaterThan(storeAt)
+  })
+
+  it('헤더 위반 판정에 응답 모드를 넘긴다 — report 모드의 ## 는 정상이다', () => {
+    expect(INDEX_SRC).toContain("hasQualityViolation(signals, mode !== 'report')")
+  })
+})

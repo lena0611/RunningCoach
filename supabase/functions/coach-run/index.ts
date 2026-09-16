@@ -18,6 +18,7 @@ import {
   type DataGapKind
 } from './dataGap.ts'
 import { detectUngroundedDataClaims } from './ungroundedClaim.ts'
+import { detectAnswerQualitySignals, hasQualityViolation, type AnswerQualitySignals } from './answerQuality.ts'
 import { buildExecutionGuideTail } from '../_shared/executionGuideTail.ts'
 import { buildTurnRequestTail } from '../_shared/turnRequestTail.ts'
 import { collapseNearDuplicateFacts, isKnownFact, isNearDuplicateFact } from '../_shared/memoryDedupe.ts'
@@ -449,6 +450,12 @@ type CoachTurnQueryLog = {
   memoryIntake?: { explicit: boolean; stored: number; skipped: Array<{ reason: string }> }
   /** 도구 없이 나온 과거 수치 주장 문장 수(관측 전용 게이트). */
   ungroundedClaims: number
+  /**
+   * 답변 품질 신호(#825, 관측 전용). 매 턴 남긴다 — **위반율의 분모가 있어야** 회귀를 알 수 있다.
+   * 위반만 남기면 "요즘 조용해진 건지 대화가 줄어든 건지"를 구분할 수 없다.
+   * `mode` 를 함께 남기는 이유: `headings` 는 report 모드에서 정상이고 대화 턴에서만 위반이다.
+   */
+  qualitySignals?: AnswerQualitySignals & { mode: string }
   /** 그 주장이 **직전 턴 조회 결과의 재진술**이었나 — 오탐 분리용. 아래 gate 주석 참조. */
   ungroundedThreadGrounded?: boolean
   /**
@@ -3529,6 +3536,32 @@ function streamCoachRun(
          * 오탐율을 이 로그로 측정한 뒤에 차단(재생성/문장 제거)으로 올린다. 순서를 건너뛰면
          * 정상 코칭을 막는 회귀를 사용자가 먼저 발견하게 된다.
          */
+        /**
+         * 답변 품질 신호(#825) — **관측 전용, 답변은 건드리지 않는다.**
+         *
+         * #821 의 여섯 건은 전부 사용자가 써보고 말해줘야 드러났다. 그중 내부 상태값 노출·금지
+         * 은유·리포트 헤더·문체 혼용·이스케이프 줄바꿈은 기계가 셀 수 있다. 다음 회귀를 사용자가
+         * 아니라 이 로그가 먼저 발견하게 한다.
+         *
+         * 평가셋을 따로 만들지 않는 게 요점이다 — 실제 대화가 곧 표본이라 추가 비용이 0 이다.
+         * 답변은 이미 스트리밍으로 나간 뒤라 여기서 고쳐도 사용자가 본 화면은 못 바꾼다.
+         * 차단으로 올릴지는 이 로그로 오탐율을 본 뒤에 정한다(ungroundedClaim 과 같은 순서).
+         */
+        {
+          const mode = typeof context.coachResponseMode === 'string' ? context.coachResponseMode : 'unknown'
+          const signals = detectAnswerQualitySignals(ai.report)
+          queryLog.qualitySignals = { ...signals, mode }
+          if (hasQualityViolation(signals, mode !== 'report')) {
+            console.warn('[coach-run] 답변 품질 신호 위반(관측 전용)', {
+              mode,
+              internalTerms: signals.internalTerms,
+              bannedPhrases: signals.bannedPhrases,
+              headings: signals.headings,
+              escapedNewlines: signals.escapedNewlines,
+              styleMixed: signals.styleMixed
+            })
+          }
+        }
         if (!toolWasCalled && userNote.trim()) {
           const claims = detectUngroundedDataClaims(ai.report)
           if (claims.length) {
