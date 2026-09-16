@@ -243,7 +243,15 @@ export function buildUserNoteRelevancePolicy(note: string, mode: CoachResponseMo
   if (relevance === 'personal_training') {
     return '사용자 질문은 개인 훈련/목표/컨디션에 관한 것이지만 선택 세션 자체를 묻는 것은 아니다. activeGoal, upcomingSchedule, activeInjuryItem, 장기 기억은 필요할 때 사용해도 되지만, 현재 화면에 열려 있다는 이유만으로 selectedRun 지표·의도 달성률·랩 흐름을 근거로 끌어오지 않는다.'
   }
-  return '사용자 질문은 일반 개념 설명/잡담이다. 선택 세션은 화면에 열려 있을 뿐 질문 대상이 아니다. selectedRun 지표, session type, coachingDecisionBoard, 목표 예상, 부상 노트를 억지로 연결하지 말고 질문 자체에 답한다. 안전상 꼭 필요한 경우를 제외하면 "너의 이번 세션에 적용하면" 같은 개인화 단락도 생략한다.'
+  // #814: 예전엔 여기서 "부상 노트를 억지로 연결하지 말고", "개인화 단락도 생략한다" 라고 **사용하지 마라**
+  // 라고 지시했다. 그런데 이 분류는 자주 틀린다(2026-09-16: "어제 뛴 세션대이터와 최근 러닝 횟수를 보고
+  // 코치해줘" → general). 틀린 분류 + "개인화 금지" 지시가 겹치면, 컨텍스트와 queryRuns 도구를 **둘 다
+  // 손에 쥔 채로** 코치가 자기 데이터를 안 보고 추측체로 답한다(실제로 그랬다).
+  // 그래서 금지가 아니라 **먼저 꺼내지 않기**로 바꾼다 — 묻지 않은 세션 분석을 들이밀지 않되,
+  // 사용자가 자기 얘기를 물으면 개인 사실과 조회 도구를 쓴다. 오분류의 손실이 비대칭이다.
+  return '사용자 질문은 일반 개념 설명/잡담으로 보인다. 선택 세션은 화면에 열려 있을 뿐 질문 대상이 아니다 — 묻지도 않았는데 selectedRun 지표, 세션 품질 분석, 목표 예상을 먼저 꺼내지 말고 질문 자체에 답한다. ' +
+    '다만 **이 분류는 자주 틀린다.** 사용자가 자기 몸·기록·일정을 조금이라도 가리키면(통증·발·컨디션·어제 뛴 것·최근 횟수·예정 훈련) 그건 개인 대화다 — 그때는 activeInjuryItem·upcomingSchedule·restState 같은 개인 사실을 그대로 쓰고, 수치가 필요하면 queryRuns 를 부른다. **개인 사실은 이 분류와 무관하게 항상 실려 있다.** ' +
+    '특히 이미 알고 있는 것을 사용자에게 되묻지 마라 — 어제 뛴 거리·페이스·최근 러닝 횟수는 조회하면 나온다. "일주일에 몇 번 뛰셨다면" 같은 추측체로 답하지 말고, 조회해서 사실로 말한다.'
 }
 
 export function shouldApplyTrustLayer(note: string, mode: CoachResponseMode): boolean {
@@ -251,9 +259,16 @@ export function shouldApplyTrustLayer(note: string, mode: CoachResponseMode): bo
   return detectUserNoteRunRelevance(note) === 'selected_run'
 }
 
-export function shouldAttachInjurySnapshot(note: string, mode: CoachResponseMode): boolean {
-  if (mode === 'report') return true
-  return detectUserNoteRunRelevance(note) !== 'general'
+/**
+ * 코칭 시점의 부상 상태를 리포트에 얼려 붙일까(#507).
+ *
+ * #814 로 **항상 붙인다.** 이건 모델 입력이 아니라 **그때 사용자가 어떤 상태였는지의 기록**이라,
+ * 질문 문구로 있었다 없었다 하면 기록으로서 못 쓴다. 실제로 2026-09-16 두 턴이 general 로 분류돼
+ * 캡션이 빠졌는데, 부상 얘기를 하던 중이었다(화면 브리핑엔 같은 부상이 떠 있었다).
+ * 부상이 없으면 buildInjuryContextSnapshot 이 알아서 비운다 — 여기서 미리 끊을 이유가 없다.
+ */
+export function shouldAttachInjurySnapshot(_note: string, _mode: CoachResponseMode): boolean {
+  return true
 }
 
 export function shouldUseStructuredCoachContext(note: string, mode: CoachResponseMode): boolean {

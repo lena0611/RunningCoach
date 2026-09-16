@@ -113,6 +113,15 @@ type Metric = QueryRunsMetric
 
 const SUM_METRICS: Metric[] = ['distanceKm', 'durationSec', 'activeEnergyKcal', 'elevationGainM']
 const MAX_METRICS: Metric[] = ['maxHeartRate']
+/**
+ * 소수점이 의미 없는 단위 — 정수로 맞춘다(#818 라이브 QA).
+ *
+ * 2026-09-16: 같은 런(avg_heart_rate=136.77)을 **앱 상세는 137**, **코치는 136** 이라고 말했다.
+ * 화면은 Math.round 로 올리고, 도구는 136.77 을 그대로 넘겨 모델이 136 으로 잘라 읽은 것이다.
+ * 심박·케이던스·칼로리는 소수 자리에 뜻이 없으므로 도구가 정수로 확정해 **모델이 자를 여지를 없앤다**.
+ * 이 코어는 웹 카드와 코치가 함께 쓰므로(#767) 두 표면이 같이 정수로 맞춰진다 — 숫자는 한 벌이어야 한다.
+ */
+const INTEGER_METRICS: Metric[] = ['avgHeartRate', 'maxHeartRate', 'cadence', 'activeEnergyKcal']
 
 export type QueryRunsFilter = { field: string; op: Op; value: string | number }
 export type QueryRunsSpec = {
@@ -195,8 +204,47 @@ export function normalizeQueryRunsArgs(
   }
 }
 
+/**
+ * 필터를 **AND 로 묶인 OR 그룹**으로 정리한다(#818).
+ *
+ * 같은 필드에 `eq` 가 둘 이상 오면 AND 로 읽을 때 **항상 0건**이다 — 한 값이 두 값과 동시에 같을 수
+ * 없기 때문이다. 즉 AND 해석에는 **성립 가능한 쓰임이 아예 없다.** 반면 OR 해석("9/15 또는 9/16",
+ * "Easy 또는 LSD")은 모델이 실제로 의도하는 유일한 읽기다. 그래서 OR 로 읽는다 — 추측이 아니라
+ * 논리적으로 다른 답이 없는 자리다.
+ *
+ * 2026-09-16 실측(coach_data_gaps): 사용자가 "어제 뛴 세션데이터와 최근 러닝 횟수를 보고 코치해줘"라고
+ * 묻자 모델이 `date = 2026-09-15` · `date = 2026-09-16` 두 개를 보냈고 0건이 돌아왔다. 9/15 에
+ * 4.61km 런이 **분명히 있는데도** 코치는 "어제와 오늘에 맞는 기록이 없다"고 답했다 — 없다고 말하는
+ * 거짓이 모른다고 말하는 것보다 나쁘다. 도구가 만들 수 없는 질의를 만들게 놔둔 쪽의 결함이다.
+ *
+ * eq 가 하나뿐인 필드는 그룹 크기 1 이라 기존 동작과 완전히 같다(회귀면 없음).
+ * `ne` 는 묶지 않는다 — "A 가 아니고 B 도 아니다"는 AND 가 정상 의미다.
+ */
+function groupFilters(filters: QueryRunsFilter[]): QueryRunsFilter[][] {
+  const eqByField = new Map<string, QueryRunsFilter[]>()
+  const groups: QueryRunsFilter[][] = []
+  for (const filter of filters) {
+    if (filter.op !== 'eq') {
+      groups.push([filter])
+      continue
+    }
+    const list = eqByField.get(filter.field)
+    if (list) list.push(filter)
+    else {
+      const created = [filter]
+      eqByField.set(filter.field, created)
+      groups.push(created)
+    }
+  }
+  return groups
+}
+
 export function runQueryRunsCore(spec: QueryRunsSpec, rows: QueryRunsRow[]): QueryRunsCoreResult {
-  const matched = rows.filter((row) => spec.filters.every((filter) => matchesFilter(row, filter)))
+  // 같은 필드의 eq 는 **집합(OR)** 으로 읽는다 — 아래 groupFilters 주석 참고.
+  const filterGroups = groupFilters(spec.filters)
+  const matched = rows.filter((row) =>
+    filterGroups.every((group) => group.some((filter) => matchesFilter(row, filter)))
+  )
   const groups = new Map<string, QueryRunsRow[]>()
   for (const row of matched) {
     const key = groupKey(row, spec.groupBy)
@@ -231,9 +279,12 @@ export function runQueryRunsCore(spec: QueryRunsSpec, rows: QueryRunsRow[]): Que
         continue
       }
       const total = values.reduce((sum, item) => sum + item, 0)
-      if (SUM_METRICS.includes(metric)) row[metric] = round(total)
-      else if (MAX_METRICS.includes(metric)) row[metric] = round(Math.max(...values))
-      else row[metric] = round(total / values.length)
+      const raw = SUM_METRICS.includes(metric)
+        ? total
+        : MAX_METRICS.includes(metric)
+          ? Math.max(...values)
+          : total / values.length
+      row[metric] = INTEGER_METRICS.includes(metric) ? Math.round(raw) : round(raw)
       row[`${metric}Samples`] = values.length
     }
     if (!row.count) row.count = list.length
@@ -242,7 +293,7 @@ export function runQueryRunsCore(spec: QueryRunsSpec, rows: QueryRunsRow[]): Que
 
   const failureKind = classifyFailure(spec, resultRows, matched.length, ordered.length)
   return {
-    appliedFilters: spec.filters.map(describeFilter),
+    appliedFilters: filterGroups.map(describeFilterGroup),
     groupBy: spec.groupBy,
     matchedRuns: matched.length,
     rows: resultRows,
@@ -331,6 +382,12 @@ function isoWeekKey(date: string): string {
   const offset = day === 0 ? 6 : day - 1
   parsed.setUTCDate(parsed.getUTCDate() - offset)
   return parsed.toISOString().slice(0, 10)
+}
+
+/** OR 그룹을 한 줄로. 값이 여럿이면 "또는"으로 묶어 코치가 조회 범위를 그대로 말할 수 있게 한다. */
+function describeFilterGroup(group: QueryRunsFilter[]): string {
+  if (group.length === 1) return describeFilter(group[0])
+  return `${group[0].field} = ${group.map((filter) => filter.value).join(' 또는 ')}`
 }
 
 function describeFilter(filter: QueryRunsFilter): string {

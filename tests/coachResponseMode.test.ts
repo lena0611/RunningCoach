@@ -20,7 +20,7 @@ describe('coach response mode and user note relevance', () => {
     const policy = buildUserNoteRelevancePolicy('Nsm훈련법이 뭐야', 'explain')
     expect(policy).toContain('일반 개념 설명/잡담')
     expect(policy).toContain('selectedRun 지표')
-    expect(policy).toContain('억지로 연결하지 말고')
+    expect(policy).toContain('먼저 꺼내지 말고')
   })
 
   it('treats structure and flow questions as explanation requests', () => {
@@ -33,12 +33,12 @@ describe('coach response mode and user note relevance', () => {
     expect(detectCoachAnswerIntent('이지스트라이드랑 같아 보이네?')).toBe('explain')
     expect(detectUserNoteRunRelevance('이지스트라이드랑 같아 보이네?')).toBe('general')
     expect(shouldApplyTrustLayer('이지스트라이드랑 같아 보이네?', 'explain')).toBe(false)
-    expect(shouldAttachInjurySnapshot('이지스트라이드랑 같아 보이네?', 'explain')).toBe(false)
+    expect(shouldAttachInjurySnapshot('이지스트라이드랑 같아 보이네?', 'explain')).toBe(true) // #814: 기록이라 항상 붙는다
     expect(shouldUseStructuredCoachContext('이지스트라이드랑 같아 보이네?', 'explain')).toBe(false)
 
     expect(detectCoachAnswerIntent('Nsm은 뭐의 약자야?')).toBe('explain')
     expect(detectUserNoteRunRelevance('Nsm은 뭐의 약자야?')).toBe('general')
-    expect(shouldAttachInjurySnapshot('Nsm은 뭐의 약자야?', 'explain')).toBe(false)
+    expect(shouldAttachInjurySnapshot('Nsm은 뭐의 약자야?', 'explain')).toBe(true) // #814
     expect(shouldUseStructuredCoachContext('Nsm은 뭐의 약자야?', 'explain')).toBe(false)
 
     expect(detectCoachAnswerIntent('노르웨이식 훈련법 아니야?')).toBe('explain')
@@ -70,12 +70,20 @@ describe('coach response mode and user note relevance', () => {
     expect(shouldApplyTrustLayer('이 세션은 왜 심박이 높게 나온 거야?', 'evidence')).toBe(true)
   })
 
-  it('attaches injury snapshots only when the question can use personal or selected-run context', () => {
-    expect(shouldAttachInjurySnapshot('', 'report')).toBe(true)
-    expect(shouldAttachInjurySnapshot('Nsm훈련법이 뭐야', 'explain')).toBe(false)
-    expect(shouldAttachInjurySnapshot('이지스트라이드랑 같아 보이네?', 'explain')).toBe(false)
-    expect(shouldAttachInjurySnapshot('나한테 다음 훈련은 어떻게 가져가면 돼?', 'explain')).toBe(true)
-    expect(shouldAttachInjurySnapshot('이 세션은 왜 심박이 높게 나온 거야?', 'evidence')).toBe(true)
+  // #814: 부상 스냅샷은 **모델 입력이 아니라 그때 상태의 기록**이다. 문구 분류로 있었다 없었다 하면
+  // 기록으로 못 쓴다 — 2026-09-16 두 턴이 general 로 분류돼 부상 얘기 중인데도 캡션이 빠졌다.
+  it('always attaches the injury snapshot — it is a record, not a prompt input (#814)', () => {
+    for (const [note, mode] of [
+      ['', 'report'],
+      ['Nsm훈련법이 뭐야', 'explain'],
+      ['이지스트라이드랑 같아 보이네?', 'explain'],
+      ['나한테 다음 훈련은 어떻게 가져가면 돼?', 'explain'],
+      ['이 세션은 왜 심박이 높게 나온 거야?', 'evidence'],
+      ['아침3점심2저녁0-1', 'conversational'],
+      ['짜장면 맛집 추천', 'conversational']
+    ] as const) {
+      expect(shouldAttachInjurySnapshot(note, mode), note || '(빈 입력)').toBe(true)
+    }
   })
 
   it('uses structured coach context only for report, selected-run, or personal coaching questions', () => {
@@ -268,4 +276,40 @@ describe('coach response mode and user note relevance', () => {
       expect(detectUserNoteRunRelevance('훈련량이 너무 많지 않아?')).toBe('personal_training')
     })
   })
+  /**
+   * #814 — 2026-09-16 실사고. 사용자가 같은 날 같은 주제를 ChatGPT 와 우리 코치 양쪽에 물었고,
+   * **데이터를 가진 우리가 졌다.** 두 턴 다 general 로 분류돼 부상·플랜이 통째로 빠졌고, 코치는
+   * 4.61km/39분을 DB 에 두고도 "한 주에 1회 정도라면" 이라고 추측체로 답했다.
+   *
+   * 분류기를 고치는 것만으로는 4번째 재발을 막을 수 없다(#701·#642 에서 이미 두 번 키워드를
+   * 더 넣어 막았고 두 번 다 다른 어형으로 다시 샜다). 그래서 **분류가 틀려도 개인 사실은 남는다**를
+   * 계약으로 잠근다 — 아래 두 문장은 여전히 general 로 분류돼도 무방하다. 중요한 건 그 뒤다.
+   */
+  describe('오분류가 나도 개인 사실은 살아남는다 (#814)', () => {
+    const 사고당시문장 = ['아침3점심2저녁0-1', '어제 뛴 세션대이터와 최근 러닝 횟수를 보고 코치해줘']
+
+    it('부상 스냅샷은 분류와 무관하게 붙는다', () => {
+      for (const note of 사고당시문장) {
+        expect(shouldAttachInjurySnapshot(note, 'conversational'), note).toBe(true)
+      }
+    })
+
+    it('general 정책이 개인화를 금지하지 않는다 — 되묻기 대신 조회하라고 말한다', () => {
+      for (const note of 사고당시문장) {
+        const policy = buildUserNoteRelevancePolicy(note, 'conversational')
+        // 옛 문구("억지로 연결하지 말고 … 개인화 단락도 생략한다")가 살아 있으면,
+        // 컨텍스트와 queryRuns 를 손에 쥐고도 코치가 자기 데이터를 안 본다.
+        expect(policy, note).not.toContain('개인화 단락도 생략')
+        expect(policy, note).toContain('queryRuns')
+        expect(policy, note).toContain('되묻지 마라')
+      }
+    })
+
+    it('정책은 이 분류가 틀릴 수 있다는 것을 코치에게 알린다', () => {
+      const policy = buildUserNoteRelevancePolicy('아침3점심2저녁0-1', 'conversational')
+      expect(policy).toContain('이 분류는 자주 틀린다')
+      expect(policy).toContain('개인 사실은 이 분류와 무관하게 항상 실려 있다')
+    })
+  })
+
 })

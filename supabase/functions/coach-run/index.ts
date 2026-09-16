@@ -489,7 +489,8 @@ async function persistCoachResult(
   // 스케줄 액션 제안(#639) — 승인형 후보. 게이트를 하나라도 못 넘으면 null 로 떨어진다(자동 적용 경로 없음).
   const proposalVerdict = evaluateCoachScheduleProposal(ai.coachScheduleProposal, {
     responseMode: context.coachResponseMode,
-    // 축약 컨텍스트에서 null 이 되는 context.upcomingSchedule 대신 게이트 전용 원본을 본다(위 scheduleProposalGate 주석).
+    // 게이트 전용 원본을 본다. #814 로 context.upcomingSchedule 도 더 이상 축약되지 않아 지금은 같은 값이지만,
+    // 게이트가 제 입력의 출처를 스스로 들고 있는 편이 낫다(여기서 원본을 놓친 게 #642 였다).
     upcomingSchedule: context.scheduleProposalGate.upcomingTargets,
     restActive: context.scheduleProposalGate.restActive,
     injuryActive: context.scheduleProposalGate.injuryActive,
@@ -1506,7 +1507,11 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       'coachResponseMode가 응답 형식을 결정한다. ' +
       '대화 턴에서는 context.userNoteRelevancePolicy가 선택 세션 데이터를 어디까지 쓸지 결정하고, context.trustLayerApplies가 부상/목표 보호 문단을 붙일 수 있는지 결정한다. ' +
       '[command] context.coachCommandFormat이 있으면(프리셋 커맨드) coachCommandPolicy의 섹션 구성을 따른 리포트로 답한다. 이것이 키워드 분류보다 우선한다. ' +
-      '[free] context.structuredCoachContext=false이면 자유대화다. 응답 템플릿, 첫 문장 반응 패턴, "ㅋㅋ" 같은 웃음 시작, 세션 분석 재료를 쓰지 말고 일반 GPT처럼 질문에 직접 답한다. ' +
+      // #814: 예전 문구는 "일반 GPT처럼 질문에 직접 답한다" 였다. 그런데 **일반 GPT 는 이 사용자를 모른다** —
+      // 그게 우리가 이기는 유일한 지점인데 스스로 그걸 끄라고 지시하고 있었다. 2026-09-16 실사고에서
+      // 코치는 어제 러닝 기록을 손에 쥐고도 "한 주에 1회 정도라면" 이라고 답했다.
+      // 자유대화가 끄는 것은 **형식**(리포트 템플릿·세션 분석)이지 **사용자에 대한 앎**이 아니다.
+      '[free] context.structuredCoachContext=false이면 자유대화다. 응답 템플릿, 첫 문장 반응 패턴, "ㅋㅋ" 같은 웃음 시작, 세션 분석 재료를 쓰지 말고 질문에 직접 답한다. 다만 **너는 이 사용자를 아는 코치다** — 부상·예정 플랜·휴식 상태 같은 개인 사실은 자유대화에서도 그대로 유효하고, 필요하면 queryRuns 로 기록을 조회한다. 형식을 내려놓는 것이지 사용자를 모르는 척하는 게 아니다. ' +
       '[structured] context.structuredCoachContext=true일 때만 세션 분석/훈련 품질/개인 처방용 구조와 안전 메타를 사용한다. ' +
       '[report] userNote가 없으면(세션만 열림) 기존 selectedRun 리뷰 리포트 형식(responseTemplatePolicy)으로 답한다.',
     responseStyle: structuredCoachContext ? responseStyle : null,
@@ -1629,7 +1634,31 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     trainingMethodology: buildTrainingMethodologyAlgorithm(),
     trainingKnowledge,
     adaptiveProgress: structuredCoachContext ? adaptiveProgress : null,
-    upcomingSchedule: structuredCoachContext ? upcomingSchedule : null,
+    /**
+     * ── 개인 사실은 항상 탑재한다(#814) ───────────────────────────────────────────
+     *
+     * 아래 필드들은 **문구 분류(structuredCoachContext)로 가리지 않는다.** 부상·예정 플랜·휴식·목표는
+     * "이번 세션 리뷰 재료"가 아니라 **이 사용자에 관한 사실**이라, 질문을 어떻게 적었느냐로 있었다
+     * 없었다 하면 안 된다.
+     *
+     * 2026-09-16 실사고: "어제 뛴 세션대이터와 최근 러닝 횟수를 보고 코치해줘" 가 general 로 분류됐다
+     * (러닝 어형 목록에 `뛴` 이 없었다). 그 한 글자 때문에 부상·플랜이 통째로 null 이 됐고, 코치는
+     * 데이터를 **보유한 채로** "한 주에 1회 정도라면" 이라고 추측체로 답했다. 같은 날 같은 질문에
+     * ChatGPT 는 데이터가 없어서 사용자에게 물어본 뒤 "4.6km/39분이면 강도 낮은 편" 이라고 판정했다.
+     * 데이터를 가진 쪽이 없는 쪽에게 졌다.
+     *
+     * 이 게이트의 3번째 재발이다(#701 내 플랜 발화, #642 세션 액션 4종). 그때마다 키워드를 하나씩
+     * 더 넣어 막았고, 그때마다 다른 어형으로 다시 샜다. 그래서 이번엔 목록이 아니라 **구조**를 바꾼다:
+     * 문구 분류는 **말투**(리포트체/자유대화·템플릿·세션 리뷰 재료)만 정하고, 개인 사실의 가용성은
+     * 분류와 무관하다. 선례도 이미 셋 있었다 — raceBenchmark, scheduleProposalGate, coachThread 가
+     * 전부 같은 이유로 게이트 밖으로 빠져 있었다. 예외를 원칙으로 승격시킨 것이다.
+     *
+     * 비용: 입력이 원가의 95% 라 상시 탑재는 무제한이 아니라 **선별**이다. 판단 기준은
+     * "이 필드가 없으면 코치가 나에 관한 사실을 틀리게 말하는가" 이지 "이 질문이 개인적으로 들리는가"
+     * 가 아니다. 세션 리뷰 재료(sessionEvidence·coachingDecisionBoard·responseTemplatePolicy 등)와
+     * 큰 파생값(adaptiveProgress·performanceProjection)은 게이트에 남긴다.
+     */
+    upcomingSchedule,
     /**
      * 대회 완주자 분포 속 현재 위치. **묻지 않으면 먼저 꺼내지 않는다**(코치는 채점관이 아니다 — 지침은 아래 rules).
      *
@@ -1686,7 +1715,7 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
      * ([[coach-always-on-block-deterministic]]). 이미 쉬기로 정한 사람에게 되풀이하면 설득으로 느껴진다.
      */
     restAlternativeAlreadyOffered: hasOfferedRestAlternative(threadReportRows),
-    restState: structuredCoachContext ? restState : null,
+    restState,
     instructionForRest:
       'context.restState는 사용자가 스스로 선언한 휴식(#473) 상태다(없으면 평소처럼 답한다). active=true면 지금 쉬는 중이다 — "## 다음 훈련"에서 훈련을 재촉하거나 처방을 들이밀지 말고 "푹 쉬세요, 일정은 정리해둘게요. 돌아오면 가볍게 시작해요"처럼 휴식을 존중한다(능동 휴식은 missed가 아니다). 사용자가 먼저 "그래도 뭘 하면 좋을지"를 물을 때만 가벼운 대안(스트레칭·산책, 통제 가능한 휴식이면 가벼운 회복주)을 1회 제안하되 강권하지 않는다. reason이 injury면 통증을 우선하고 무리한 대안을 권하지 않는다. isReturnDay=true이거나 daysUntilReturn이 0~1이면 "놓쳤다"가 아니라 "회복 후 정리" 톤으로 복귀 일정을 안내한다. longLayoff=true(4주 초과)면 복귀를 더 가볍게 시작해야 함과 목표(레이스) 실현가능성 재점검을 정직하게 덧붙인다. active=true면 휴식 존중이 upcomingSchedule 처방보다 우선이다.',
     downgradeSignal: structuredCoachContext ? downgradeSignal : null,
@@ -1695,13 +1724,13 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       'shouldPromoteToRoutine=true(서로 다른 주에 걸쳐 반복)면 국소 조정이 아니라 **루틴 자체가 실제 수행과 어긋난 것**이다. 이때는 그날 세션을 또 낮추자고 하지 말고 "요즘 계속 버거우면 주간 루틴을 한 단계 낮춰서 꾸준히 소화되는 쪽으로 맞추는 게 어떨까요"처럼 **루틴 재조정을 먼저 꺼낸다**(SSOT 루틴 변경 기준: "주간 루틴과 실제 수행이 계속 어긋난다"). ' +
       'count는 있지만 shouldPromoteToRoutine=false면 아직 한 주 안의 일이다 — 루틴을 건드리지 말고 평소대로 국소 조정으로 돕는다(한 주의 혼잡은 루틴 변경이 아니다). ' +
       'downgradeSignal이 null이면 이 얘기를 꺼내지 마라(없는 패턴을 지어내지 않는다).',
-    recentInjuryWindow: structuredCoachContext ? recentInjuryWindow : null,
+    recentInjuryWindow,
     instructionForInjuryHistory:
       'context.recentInjuryWindow는 사용자의 최근 12개월 부상 이력 요약이다(부위 무관 전역 재부상 위험창). 이전 부상은 러닝 부상의 가장 강하고 일관된 예측인자이고, 재부상의 상당수는 같은 부위가 아니라 다른 부위에서 온다. 있으면(hasRecentInjury=true): ① 지금 통증이 없거나 주행거리가 적어도 "이전 부상 이력이 있으니 조금 더 보수적으로, 점진적으로 가자"는 톤을 유지한다. ② 특히 "마일리지가 낮으니 안전하다/괜찮다"는 안심을 주지 마라 — 이전부상군에서는 저볼륨·낮은 ACWR이 신규 부상을 막아주지 못한다(근거 기반). ③ areas는 과거 부위라 모니터링 보조로만 쓰고 "그 부위만 조심하면 된다"고 단정하지 마라(재부상은 다른 부위로도 온다). mostRecentDaysAgo가 작을수록(최근일수록) 더 보수적으로. 단 이는 집단 통계적 연관이지 개인 부상 확정이 아니므로 부상 확률(%)을 단정하지 말고, 겁주거나 닦달하지 말고 안심시키는 코칭으로 전달한다. recentInjuryWindow가 null이면 이 보수화를 적용하지 않는다(과도한 부상 프레이밍 금지). redFlag·통증 안전 신호가 항상 우선이다.',
-    marathonFlag: structuredCoachContext ? marathonFlag : false,
+    marathonFlag,
     instructionForMarathonGoal:
       'context.marathonFlag가 true면 사용자의 현재 목표가 풀마라톤이다 — 풀마라톤 목표는 10km 대비 신규 부상 위험을 독립적으로 높인다(하프마라톤은 해당 없으니 하프엔 적용하지 마라). 점진적 빌드업·충분한 회복·롱런 관리를 강조하고, recentInjuryWindow가 함께 있으면 특히 보수적으로 안내한다. 이는 목표를 막거나 겁주려는 게 아니라 "조금 더 보수적으로, 무리하지 말고 길게 보자"는 신호다. marathonFlag가 false면 이 지침을 적용하지 않는다.',
-    injurySignals: structuredCoachContext ? injurySignals : null,
+    injurySignals,
     instructionForInjurySignals:
       'context.injurySignals는 활성 부상이 있을 때 웹이 통증 부위 + 보유 데이터(부하·케이던스·재발 등)로 좁힌 상위 1~2개의 "가능성 있는 원인 가설"(hypotheses)과 안전 적신호(redFlag)다(없으면 null — 이 지침을 적용하지 않는다). 이건 의료 진단이 아니라 러닝 부하 조절 코칭 보조다. ' +
       '① hypotheses는 확정 진단이 아니라 "가능성"으로만 말한다(예: "~일 가능성이 있어요", "~쪽일 수도 있어요"). 확률(%)·단정·의학적 진단명 나열 금지. possibility=가설명, why=감별 단서, levers=조절 레버(볼륨 동결/강도 하향/케이던스 큐(보조)/스트라이드 보류/회복 전환)다. 다음 훈련·루틴 조정에 이 levers를 자연스럽게 한두 가지만 녹이되, 처방을 들이밀듯 나열하지 말고 핵심 하나를 부드럽게 권한다. 케이던스 큐는 보조이니 단독 해법처럼 강조하지 않는다. ' +
@@ -1744,8 +1773,8 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
         '목표 달성 보장을 암시해야만 설명 가능한 변경이다.'
       ]
     },
-    goals: structuredCoachContext ? goals : [],
-    activeGoal: structuredCoachContext ? activeGoal : null,
+    goals,
+    activeGoal,
     performanceProjection: structuredCoachContext ? performanceProjection : null,
     runnerIdentity,
     coachBeliefs,
@@ -1763,9 +1792,9 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     coachingDecisionBoardInstruction: structuredCoachContext
       ? 'coachingDecisionBoard는 이번 답변의 판단 보드다. 답변 전에 selectedRunEvidence, lapProcess, prescriptionCompliance, goalProjectionCheck, routineUpdateCheck를 먼저 확인하고, 핵심 지표/해석 섹션/루틴 업데이트에 그 근거를 반영한다. 이 보드와 원본 RunLog가 충돌하면 원본 RunLog를 우선하되, 보드는 설명 구조를 잡는 데 사용한다.'
       : null,
-    injuryItems: structuredCoachContext ? injuryItems : [],
-    activeInjuryItem: structuredCoachContext ? activeInjuryItem : null,
-    selectedRunDate: structuredCoachContext ? selectedRunDateForTemporalContext : null,
+    injuryItems,
+    activeInjuryItem,
+    selectedRunDate: selectedRunDateForTemporalContext,
     injuryCheckInPolicy,
     recoveryOutlook,
     trustLayerNote: trustLayerApplies ? trustLayerNote : null,
@@ -1961,7 +1990,7 @@ function buildQueryRunsArgSchema() {
     properties: {
       filters: {
         type: 'array',
-        description: '조건 목록(AND). 기간은 date 필드에 gte/lte 로 준다(YYYY-MM-DD). 요일은 weekday 에 월~일 한 글자.',
+        description: '조건 목록. 서로 다른 필드는 AND 로 좁히고, **같은 필드에 eq 를 여러 번 주면 그 값들 중 하나(OR)** 로 읽는다(예: type eq Easy + type eq LSD = Easy 또는 LSD). 연속 기간은 eq 를 나열하지 말고 date 에 gte/lte 로 준다(YYYY-MM-DD). 요일은 weekday 에 월~일 한 글자.',
         items: {
           type: 'object',
           additionalProperties: false,
@@ -2477,8 +2506,8 @@ function buildCoachMessages(context: unknown) {
       role: 'user',
       content:
         `다음 PaceLAB 데이터를 바탕으로 코칭해라.\n\n${JSON.stringify(orderContextForCache(context))}` +
-        // 원본(scheduleProposalGate.upcomingTargets)을 넘긴다 — context.upcomingSchedule 은 축약 모드에서
-        // null 이 되어 꼬리표가 사라진다(#795 실측, _shared/executionGuideTail.ts 주석 참고).
+        // 원본(scheduleProposalGate.upcomingTargets)을 넘긴다. 예전엔 context.upcomingSchedule 이 축약 모드에서
+        // null 이 되어 꼬리표가 통째로 사라졌다(#795 실측). #814 로 축약 자체가 없어졌지만 원본 우선은 유지한다.
         buildExecutionGuideTail(
           (context as { scheduleProposalGate?: { upcomingTargets?: unknown }; upcomingSchedule?: unknown } | null)
             ?.scheduleProposalGate?.upcomingTargets ??
@@ -2659,11 +2688,15 @@ function buildFreeConversationInstructions(
     '사용자 질문(context.userNote)에 바로 답한다. 정해진 응답 템플릿, 고정 섹션, 첫 문장 반응 패턴을 쓰지 않는다.',
     '절대 금지: "ㅋㅋ", "좋아", "아," 같은 습관적 시작을 매번 붙이지 않는다. 사용자가 웃으며 말한 경우가 아니면 웃음 표현으로 시작하지 않는다.',
     '절대 금지: "## 핵심 지표 / 오늘 해석 / 조심할 점 / 다음 훈련 / 루틴 업데이트 / 한 줄 요약" 같은 코칭 리포트 섹션, 지표 나열, 세션 전체 재분석.',
+    // #697 은 이 분기의 **한쪽만** 고쳤다. hasStructuredContext=false 쪽은 여전히 "activeGoal,
+    // activeInjuryItem 이 없다고 보고 답한다"고 시스템 지침에서 못박고 있었다 — 즉 컨텍스트에 부상을
+    // 실어 보내도 상위 지침이 "없는 셈 쳐라"라고 덮어쓴다. #814 로 개인 사실을 상시 탑재해도 이 줄이
+    // 남아 있으면 수정이 통째로 무력화된다(Codex 교차검증 2026-09-16 지적, 확인 후 수용).
+    //
+    // 이제 두 분기의 차이는 **selectedRun(세션 리뷰 재료)** 하나뿐이다 — 개인 사실은 어느 쪽이든 유효하다.
     hasStructuredContext
-      ? // 개인 맥락이 실려 온 턴이다. 리포트 템플릿만 억제하고 맥락 자체는 살린다 — 여기서
-        // activeInjuryItem 까지 없다고 치면 "발바닥 다 나았어" 에 부상이 없는 듯 답한다(#697).
-        'context.responseStyle, context.responseTemplatePolicy, context.coachingDecisionBoard, trustLayerNote는 없다고 보고 답한다. selectedRun·activeGoal·activeInjuryItem은 질문이 그것을 가리킬 때만 쓰고, 묻지 않은 지표를 먼저 나열하지 않는다.'
-      : 'context.responseStyle, context.responseTemplatePolicy, context.coachingDecisionBoard, selectedRun, activeGoal, activeInjuryItem, trustLayerNote가 없다고 보고 답한다. 자유대화에서는 질문 주제 자체만 다룬다.',
+      ? 'context.responseStyle, context.responseTemplatePolicy, context.coachingDecisionBoard, trustLayerNote는 없다고 보고 답한다. selectedRun·activeGoal·activeInjuryItem은 질문이 그것을 가리킬 때만 쓰고, 묻지 않은 지표를 먼저 나열하지 않는다.'
+      : 'context.responseStyle, context.responseTemplatePolicy, context.coachingDecisionBoard, selectedRun, trustLayerNote가 없다고 보고 답한다. **다만 activeInjuryItem·activeGoal·upcomingSchedule·restState 같은 개인 사실은 실려 있고 유효하다** — 없는 셈 치지 마라. 질문이 그것을 가리키면 그대로 쓰고, 묻지 않았으면 먼저 나열하지 않는다.',
     '답변 길이와 형식은 질문에 맞춘다. 짧은 확인 질문이면 짧게, 개념 질문이면 필요한 만큼 설명하되 불필요한 개인화 단락을 붙이지 않는다.',
     ...buildCoachThreadInstruction(),
     ...buildDataQuestionInstruction(),
@@ -2681,9 +2714,11 @@ function buildFreeConversationInstructions(
     // #697: 여기서 injuryUpdateProposal 까지 강제 null 이라 **부상 상태를 대화로 바꾸는 경로가
     // 통째로 닫혀 있었다**. SSOT(domain-rules.md §164 · ai-coaching-goal.md §378)는 부상 상태 변경을
     // "AI 는 제안만, 사용자 승인 후 저장"으로 규정하고 그 유일한 통로가 injuryUpdateProposal 이다.
-    hasStructuredContext
-      ? '사용자가 부상 상태 변화를 말하면(다 나았다·통증이 줄었다/늘었다·수치를 불러줌·해제해달라) injuryUpdateProposal로 제안한다. 네가 상태를 바꾸는 게 아니라 사용자가 승인 카드로 확정하는 제안이다. 활성 부상이 없거나 상태 변화 언급이 없으면 null로 둔다. 승인 절차를 건너뛰었다는 식으로 "바꿔뒀다"고 말하지 마라 — "이렇게 바꿀까요?"로 제안하고 사용자가 카드에서 확정한다.'
-      : 'injuryUpdateProposal은 null로 둔다.'
+    // #814: 이 분기도 없앤다. 예전엔 general 로 분류되면 injuryUpdateProposal 이 강제 null 이라
+    // **부상 상태를 대화로 바꾸는 경로가 닫혔다** — #697 이 고친 그 버그가 false 쪽에 그대로 남아
+    // 있었다. 오분류가 잦은 분류기에 안전 경로를 매달지 않는다. 활성 부상이 없거나 상태 변화 언급이
+    // 없으면 모델이 알아서 null 을 낸다(승인 카드가 최종 게이트이므로 자동 변경 위험도 없다).
+    '사용자가 부상 상태 변화를 말하면(다 나았다·통증이 줄었다/늘었다·수치를 불러줌·해제해달라) injuryUpdateProposal로 제안한다. 네가 상태를 바꾸는 게 아니라 사용자가 승인 카드로 확정하는 제안이다. 활성 부상이 없거나 상태 변화 언급이 없으면 null로 둔다. 승인 절차를 건너뛰었다는 식으로 "바꿔뒀다"고 말하지 마라 — "이렇게 바꿀까요?"로 제안하고 사용자가 카드에서 확정한다.'
   ].join('\n')
 }
 

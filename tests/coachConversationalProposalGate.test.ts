@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest'
  *   #642 G3 게이트가 축약된 upcomingSchedule 을 봐서 세션 액션 4종 폐기
  *   #690 벤치마크 페이로드를 structuredCoachContext 뒤에 숨겨 비교 질문이 분류에서 탈락
  *   #697 conversational 지침이 injuryUpdateProposal 을 강제 null (부상 상태를 대화로 못 바꿈)
+ *   #814 general 지침이 "activeInjuryItem 이 없다고 보고 답한다" — 부상을 실어 보내도 없는 셈 침
  *
  * 전부 배포 후 실사용에서야 드러났다. 프롬프트 문자열은 타입도 테스트도 안 걸리기 때문이다.
  */
@@ -89,5 +90,50 @@ describe('세션 타입 자기정합 지침 (#715, 2026-08-26 실사용)', () =>
   it('이미 그 타입인 세션을 낮추자고 하지 않게 한다', () => {
     // 목요일이 이미 Easy 인데 "Easy 로 낮추자"는 낮출 게 없는 말이다.
     expect(INDEX_SRC).toContain('이미 그 타입인 세션을 "낮추자"고 하지 마라')
+  })
+})
+
+/**
+ * #814 — 개인 사실은 문구 분류와 무관하게 유효하다.
+ *
+ * 2026-09-16 실사고: "어제 뛴 세션대이터와 최근 러닝 횟수를 보고 코치해줘" 가 general 로 분류돼
+ * 코치가 4.61km/39분을 DB 에 두고도 "한 주에 1회 정도라면" 이라고 추측체로 답했다. 같은 날 같은
+ * 질문에 ChatGPT 는 **데이터가 없어서 사용자에게 물어본 뒤** 부하를 판정했다. 데이터를 가진 쪽이 졌다.
+ *
+ * 컨텍스트에 필드를 다시 실어도 그것만으로는 안 된다 — **시스템 지침이 "없는 셈 쳐라"라고 덮어쓰면
+ * 무력화된다**(Codex 교차검증이 잡은 P1). 두 층을 함께 잠근다.
+ */
+describe('개인 사실은 자유대화에서도 유효하다 (#814)', () => {
+  it('general 지침이 개인 사실을 "없다고 보고 답하라"고 하지 않는다', () => {
+    // 이 문자열이 살아 있으면 컨텍스트에 부상을 실어 보내도 코치가 부정한다.
+    expect(INDEX_SRC).not.toContain('selectedRun, activeGoal, activeInjuryItem, trustLayerNote가 없다고 보고 답한다')
+    expect(INDEX_SRC).toContain('개인 사실은 실려 있고 유효하다')
+  })
+
+  it('injuryUpdateProposal 을 general 이라는 이유로 강제 null 하지 않는다', () => {
+    // #697 이 conversational 쪽만 고쳤고 general 쪽엔 이 줄이 남아 있었다.
+    expect(INDEX_SRC).not.toContain("      : 'injuryUpdateProposal은 null로 둔다.'")
+  })
+
+  it('개인 사실 필드가 structuredCoachContext 게이트 뒤로 돌아가지 않는다', () => {
+    // 이 게이트가 다시 붙으면 오분류 한 번에 코치가 사용자를 모르는 상태가 된다.
+    for (const field of [
+      'upcomingSchedule',
+      'restState',
+      'injurySignals',
+      'activeInjuryItem',
+      'recentInjuryWindow'
+    ]) {
+      expect(INDEX_SRC, field).not.toContain(`${field}: structuredCoachContext ? ${field} : null,`)
+    }
+    expect(INDEX_SRC).not.toContain('injuryItems: structuredCoachContext ? injuryItems : [],')
+    expect(INDEX_SRC).not.toContain('marathonFlag: structuredCoachContext ? marathonFlag : false,')
+  })
+
+  it('자유대화가 "일반 GPT처럼" 답하라고 지시하지 않는다', () => {
+    // 일반 GPT 는 이 사용자를 모른다 — 그게 우리가 이기는 유일한 지점이다.
+    // ⚠ 단순히 '일반 GPT처럼' 만 찾으면 이 결정을 설명하는 **주석**에도 걸린다. 지침 원문만 본다.
+    expect(INDEX_SRC).not.toContain('세션 분석 재료를 쓰지 말고 일반 GPT처럼 질문에 직접 답한다')
+    expect(INDEX_SRC).toContain('너는 이 사용자를 아는 코치다')
   })
 })
