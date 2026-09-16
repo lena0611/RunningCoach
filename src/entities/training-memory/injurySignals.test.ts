@@ -197,14 +197,42 @@ describe('무호전 redFlag 배선 (#817)', () => {
     }
   }
 
-  it('8주째 통증이 그대로면 무호전으로 켠다', () => {
+  function shinPain(dayAgo: number, painLevel: number) {
+    return { ...pain(dayAgo, painLevel), areaPainLevels: [{ areaId: 'left-shin', painLevel }] }
+  }
+
+  // MTSS(정강이)는 개월 단위 질환이 아니라 기본 임계(6주)를 쓴다.
+  it('경과가 빠른 질환은 8주 평탄이면 무호전으로 켠다', () => {
     const memory = buildMemory({
-      title: '발바닥', status: 'monitoring', normalizedAreas: PLANTAR, onsetDate: daysAgo(56),
+      title: '정강이', status: 'monitoring', normalizedAreas: [{ areaId: 'left-shin', painLevel: 3 }],
+      onsetDate: daysAgo(56),
       // checkInHistory 는 최신순
-      checkInHistory: [pain(2, 3), pain(30, 3), pain(54, 3)]
+      checkInHistory: [shinPain(2, 3), shinPain(30, 3), shinPain(54, 3)]
     })
     const signals = buildInjuryCoachSignals(memory, [], today)
     expect(signals?.redFlag.tripped).toBe(true)
+    expect(signals?.redFlag.reasons.some((reason) => reason.includes('무호전'))).toBe(true)
+  })
+
+  /**
+   * §3-C: 족저근막증은 12개월에도 평균 2.81/10 이 남는 개월 단위 질환이다. 8주 평탄은 **정상 경과**라
+   * 적신호가 아니다 — 여기서 6주 임계를 쓰면 정상 경과를 병으로 부른다(과대 의뢰).
+   */
+  it('족저근막증은 8주 평탄이어도 켜지 않는다 — 정상 경과다', () => {
+    const memory = buildMemory({
+      title: '발바닥', status: 'monitoring', normalizedAreas: PLANTAR, onsetDate: daysAgo(56),
+      checkInHistory: [pain(2, 3), pain(30, 3), pain(54, 3)]
+    })
+    const signals = buildInjuryCoachSignals(memory, [], today)
+    expect(signals?.redFlag.reasons.some((reason) => reason.includes('무호전'))).toBe(false)
+  })
+
+  it('족저근막증도 3개월(12주)을 넘겨 평탄하면 켠다', () => {
+    const memory = buildMemory({
+      title: '발바닥', status: 'monitoring', normalizedAreas: PLANTAR, onsetDate: daysAgo(100),
+      checkInHistory: [pain(2, 3), pain(50, 3), pain(98, 3)]
+    })
+    const signals = buildInjuryCoachSignals(memory, [], today)
     expect(signals?.redFlag.reasons.some((reason) => reason.includes('무호전'))).toBe(true)
   })
 
@@ -244,5 +272,105 @@ describe('무호전 redFlag 배선 (#817)', () => {
     const signals = buildInjuryCoachSignals(memory, [], today)
     // 옛 onsetDate 로 세면 28주째라 켜지지만, 현재 에피소드는 20일째라 켜지면 안 된다.
     expect(signals?.redFlag.reasons.some((reason) => reason.includes('무호전'))).toBe(false)
+  })
+})
+
+/**
+ * Codex 교차검증(2026-09-16): top-2 는 comorbid 동반 표시지 확정이 아니다. some() 으로 읽으면
+ * 햄스트링 좌상(빠른 경과)이 PHT 와 함께 뜨는 것만으로 임계가 12주로 늘어 의뢰 신호가 사라진다.
+ */
+describe('느린 경과 임계는 후보 전부가 그럴 때만 (#817 안전 가드)', () => {
+  const PLANTAR = [{ areaId: 'right-plantar-fascia', painLevel: 3 }]
+
+  function pain(dayAgo: number, painLevel: number) {
+    return {
+      id: `gci-${dayAgo}`, checkedAt: `${daysAgo(dayAgo)}T09:00:00.000Z`, painLevel,
+      areaPainLevels: [{ areaId: 'right-plantar-fascia', painLevel }],
+      worsenedDuringOrAfterRun: false, dailyActivityPain: false,
+      readyForQualitySession: false, note: '', source: 'user_check_in' as const
+    }
+  }
+
+  function hamPain(dayAgo: number, painLevel: number) {
+    return {
+      id: `hci-${dayAgo}`, checkedAt: `${daysAgo(dayAgo)}T09:00:00.000Z`, painLevel,
+      areaPainLevels: [{ areaId: 'left-hamstring', painLevel }],
+      worsenedDuringOrAfterRun: false, dailyActivityPain: false,
+      readyForQualitySession: false, note: '', source: 'user_check_in' as const
+    }
+  }
+
+  it('빠른 경과 후보가 top-2 에 남아 있으면 6주 임계를 유지한다', () => {
+    const memory = buildMemory({
+      title: '햄스트링', status: 'monitoring',
+      normalizedAreas: [{ areaId: 'left-hamstring', painLevel: 3 }],
+      onsetDate: daysAgo(56),
+      checkInHistory: [hamPain(2, 3), hamPain(30, 3), hamPain(54, 3)]
+    })
+    const signals = buildInjuryCoachSignals(memory, [], today)
+    // PHT(느림) + 좌상(빠름)이 동반 표시되므로 보수적으로 6주 → 8주 평탄이면 켜져야 한다.
+    expect(signals?.redFlag.reasons.some((reason) => reason.includes('무호전'))).toBe(true)
+    expect(signals?.painMonitoringApplies).toBe(false)
+  })
+
+  it('족저근막증은 단독 후보라 통증 허용 판정이 적용된다', () => {
+    const memory = buildMemory({
+      title: '발바닥', status: 'monitoring', normalizedAreas: PLANTAR, onsetDate: daysAgo(20),
+      checkInHistory: [pain(2, 3), pain(18, 3)]
+    })
+    const signals = buildInjuryCoachSignals(memory, [], today)
+    expect(signals?.painMonitoringApplies).toBe(true)
+  })
+})
+
+/**
+ * Codex 교차검증 2차(2026-09-16): 표시용 top-2 로 안전을 판정하면, 다부위 부상에서 잘려 나간 빠른 경과
+ * 후보(MTSS)의 의뢰 신호가 사라진다. 안전 판정은 **후보 전체**로 한다.
+ */
+describe('다부위 부상에서 잘린 후보가 안전 판정을 왜곡하지 않는다 (#817)', () => {
+  it('발바닥+아킬레스+정강이면 MTSS 때문에 보수적 임계를 유지한다', () => {
+    const areas = [
+      { areaId: 'right-plantar-fascia', painLevel: 3 },
+      { areaId: 'right-achilles', painLevel: 3 },
+      { areaId: 'right-shin', painLevel: 3 }
+    ]
+    const multi = (dayAgo: number) => ({
+      id: `mci-${dayAgo}`, checkedAt: `${daysAgo(dayAgo)}T09:00:00.000Z`, painLevel: 3,
+      areaPainLevels: areas, worsenedDuringOrAfterRun: false, dailyActivityPain: false,
+      readyForQualitySession: false, note: '', source: 'user_check_in' as const
+    })
+    const memory = buildMemory({
+      title: '복합', status: 'monitoring', normalizedAreas: areas, onsetDate: daysAgo(56),
+      checkInHistory: [multi(2), multi(30), multi(54)]
+    })
+    const signals = buildInjuryCoachSignals(memory, [], today)
+    // MTSS 는 느린 경과 질환이 아니므로 6주 임계 → 8주 평탄이면 켜져야 한다.
+    expect(signals?.redFlag.reasons.some((reason) => reason.includes('무호전'))).toBe(true)
+    expect(signals?.painMonitoringApplies).toBe(false)
+  })
+})
+
+/**
+ * Codex 교차검증 3차(2026-09-16): rankInjuryHypotheses 는 KB 밖 부위(발목·대퇴사두·요추)를 **조용히
+ * 제외**한다. 후보 목록만 보고 "전부 느린 경과"라 읽으면 설명되지 않은 부위가 사라진 채 안전이 완화된다.
+ */
+describe('KB 밖 부위가 섞이면 완화하지 않는다 (#817)', () => {
+  it('발바닥+발목이면 발목이 설명되지 않으므로 보수적으로 간다', () => {
+    const areas = [
+      { areaId: 'right-plantar-fascia', painLevel: 3 },
+      { areaId: 'right-ankle', painLevel: 3 }
+    ]
+    const ci = (dayAgo: number) => ({
+      id: `aci-${dayAgo}`, checkedAt: `${daysAgo(dayAgo)}T09:00:00.000Z`, painLevel: 3,
+      areaPainLevels: areas, worsenedDuringOrAfterRun: false, dailyActivityPain: false,
+      readyForQualitySession: false, note: '', source: 'user_check_in' as const
+    })
+    const memory = buildMemory({
+      title: '발바닥+발목', status: 'monitoring', normalizedAreas: areas, onsetDate: daysAgo(56),
+      checkInHistory: [ci(2), ci(30), ci(54)]
+    })
+    const signals = buildInjuryCoachSignals(memory, [], today)
+    expect(signals?.painMonitoringApplies).toBe(false)
+    expect(signals?.redFlag.reasons.some((reason) => reason.includes('무호전'))).toBe(true)
   })
 })

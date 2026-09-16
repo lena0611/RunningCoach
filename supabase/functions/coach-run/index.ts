@@ -787,10 +787,18 @@ function normalizeRecentInjuryWindow(value: unknown): CoachRecentInjuryWindow | 
  * 활성 부상/신호가 없으면 웹이 null 로 보낸다 — 여기선 형태만 방어 검증한다.
  */
 type CoachInjurySignals = {
+  /** 웹이 평가한 부상 id. 서버가 고른 당시 부상과 다르면 질환별 규칙을 적용하지 않는다. */
+  injuryId: string
   areaLabel: string
   severity: number | null
   hypotheses: { possibility: string; levers: string[]; why: string }[]
   redFlag: { tripped: boolean; reasons: string[] }
+  /**
+   * Pain-Monitoring Model(§3-B "다음 날 아침 기준선 복귀면 견딘 것")을 적용해도 되는 질환인가.
+   * ⚠ 이 필드를 정규화에서 빠뜨리면 웹이 true 를 보내도 서버는 늘 false 로 읽어 **기능이 통째로 죽는다**
+   * (Codex 교차검증 2026-09-16 지적). 웹이 보낸 값을 그대로 보존한다.
+   */
+  painMonitoringApplies: boolean
 }
 function normalizeInjurySignals(value: unknown): CoachInjurySignals | null {
   if (!value || typeof value !== 'object') return null
@@ -814,10 +822,12 @@ function normalizeInjurySignals(value: unknown): CoachInjurySignals | null {
   // 보낼 게 전혀 없으면(가설·redFlag 모두 없음) null — 빈 부상 블록으로 프롬프트를 늘리지 않는다.
   if (!hypotheses.length && !redFlag.tripped) return null
   return {
+    injuryId: typeof v.injuryId === 'string' ? v.injuryId : '',
     areaLabel: typeof v.areaLabel === 'string' ? v.areaLabel.slice(0, 40) : '',
     severity: typeof v.severity === 'number' ? v.severity : null,
     hypotheses,
-    redFlag
+    redFlag,
+    painMonitoringApplies: v.painMonitoringApplies === true
   }
 }
 
@@ -1451,7 +1461,15 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     engine: runningAnalysisEngine
   })
   const efficiencyVsPast = buildEfficiencyVsPast(selectedRun, runRows)
-  const injuryCheckInPolicy = buildInjuryCheckInPolicy(activeInjuryItem, selectedRunInjuryContext(selectedRun))
+  const injuryCheckInPolicy = buildInjuryCheckInPolicy(
+    activeInjuryItem,
+    selectedRunInjuryContext(selectedRun),
+    // ⚠ 웹은 **현재** 부상을 평가하고, 서버는 선택 세션 날짜 기준 **당시** 부상을 고른다(#507 시점 규칙).
+    // 둘이 다르면 다른 부상에 통증 허용 규칙이 붙으므로 id 가 일치할 때만 적용한다.
+    injurySignals?.painMonitoringApplies === true &&
+      Boolean(injurySignals?.injuryId) &&
+      injurySignals?.injuryId === (activeInjuryItem as { id?: unknown } | null)?.id
+  )
   const recoveryOutlook = buildRecoveryOutlook(activeInjuryItem)
   const trustLayerNote = buildTrustLayerNote(recoveryOutlook, performanceProjection)
   const dataAvailability = {
@@ -4439,7 +4457,11 @@ function buildCoachingDecisionBoard(args: {
   }
 }
 
-function buildInjuryCheckInPolicy(activeInjuryItem: unknown, selectedRunContext?: { date: string; timing: string }) {
+function buildInjuryCheckInPolicy(
+  activeInjuryItem: unknown,
+  selectedRunContext?: { date: string; timing: string },
+  painMonitoringApplies = false
+) {
   return {
     active: Boolean(activeInjuryItem),
     painScale:
@@ -4450,8 +4472,30 @@ function buildInjuryCheckInPolicy(activeInjuryItem: unknown, selectedRunContext?
       '3/5: 강훈련과 롱런 상향을 보류하고 Easy 또는 Recovery 쪽으로 낮춘다.',
       '4~5/5: 러닝 강도 처방보다 중단/휴식/전문가 상담 안내를 우선한다.'
     ],
+    /**
+     * 예후 안내(#816). SSOT §3-C. "조용해지면"만 반복하면 사용자는 언제까지인지 알 수 없다 —
+     * 예후는 겁주기가 아니라 **기다릴 수 있게 하는 정보**다.
+     */
+    prognosisPolicy:
+      '사용자가 "언제쯤 낫냐"를 묻거나 같은 통증을 여러 번 반복해 말하면, 일반적 경과를 정직하게 알려준다. 부하성 건/근막 질환은 공통적으로 **주 단위가 아니라 개월 단위**로 본다. **구체 수치는 족저근막증에서만 말한다**(근거 연구가 족저근막증 코호트다): 가장 큰 호전은 첫 3개월에 오고, 12개월 시점에도 낮은 잔존 통증이 남는 것이 전형이며, **아침 첫 체중부하 통증이 마지막까지 남는 축**이라 낮에 괜찮아졌다고 바로 정상 복귀하면 재악화하기 쉽다. 아킬레스·둔근·햄스트링 건병증 등 다른 부위에는 이 숫자·시간표를 옮겨 붙이지 말고 "개월 단위로 보는 게 보통" 수준으로만 말한다. 단 "몇 주면 낫는다"처럼 단정하지 말고 개인차를 밝히며, 이건 진단이 아니라 일반적 경과 안내라고 분명히 한다. 예후를 근거로 안심만 시키지 말고 redFlag·장기 지속 신호는 그대로 우선한다.',
     strengthPlanPolicy:
       '보강운동은 치료 처방이 아니라 러닝 부하 조절 보조다. strengthPlanDetails의 useWhen/stopWhen/source 요약을 짧게 반영하고, 통증 0~2/5에서만 수행하도록 말한다.',
+    /**
+     * 부하가 적절했는지의 판정 기준(#815). SSOT `running-injury-knowledge.md` §3-B Pain-Monitoring Model
+     * (Thomeé → Silbernagel 2007 아킬레스 RCT). 고정 밴드만 있으면 **기준선이 높은 사람에게 영원히
+     * 빨간불**이 되고 "어제 그 러닝이 과했나"를 판정할 수 없다 — 2026-09-16 실사고에서 코치가 3주 내내
+     * 같은 말만 반복한 이유다(#813).
+     */
+    loadToleranceRule: !painMonitoringApplies ? null : [
+      '"통증이 0 이어야 뛴다"는 기준은 근거가 없다. 부하가 적절했는지는 **두 조건을 모두** 봐야 한다: ① 활동 중·직후 통증이 5/10을 넘지 않았는가 — 이 앱의 통증 척도는 0~5 이므로 대응치는 2.5/5 이고, 애매하면 낮은 쪽으로 봐서 **2/5 이하**를 기준으로 한다 ② **다음 날 아침에 그 사람의 평소 수준(기준선)으로 돌아왔는가.**',
+      '**한쪽만 만족하면 "견딘 것"이 아니다.** 다음 날 아침에 기준선으로 돌아왔더라도 뛰는 동안 통증이 상한을 넘었으면 그 부하는 과했던 것이고, 반대로 뛸 때 조용했어도 다음 날 아침이 기준선보다 높으면 역시 과했던 것이다.',
+      '핵심은 절대값이 아니라 **기준선 복귀**다. 아침 기준선이 3인 사람에게 "0~2면 괜찮다"는 고정 밴드를 들이대면 영원히 빨간불이라 판정이 불가능하다. 그 사람의 평소가 3이면 다음 날 아침 3이 유지된 것이 "잘 견뎠다"이고, 4~5로 올라간 것이 "과했다"다.',
+      '그래서 사용자가 기준선을 말해줬으면(예 "아침 3 점심 2 저녁 0~1") 그 값을 기준으로 삼아 다음 날을 비교해 말한다. 기준선을 모르면 한 번 물어 확보한다 — 매번 되묻지는 않는다.',
+      '판정을 말할 때는 "뛰는 동안 통증이 2/5를 넘지 않았고 다음 날 아침이 평소와 같았으면 그 부하는 견딘 것"처럼 **두 조건을 함께** 담아 사용자가 스스로 적용할 수 있는 형태로 준다.'
+    ],
+    loadTolerancePolicy: painMonitoringApplies
+      ? 'loadToleranceRule 은 이 부상(부하성 건/근막 질환)에 적용 가능한 판정 기준이다. 그대로 쓴다.'
+      : '이 부상에는 통증 허용(기준선 복귀) 판정의 **적용 근거가 확인되지 않았다** — loadToleranceRule 이 null 인 이유다. 근거가 없다는 뜻이지 "무통증이어야 한다"는 판정이 내려진 것은 아니다. 그러니 기준선 복귀 판정을 새로 꺼내지 말고, 해당 부위의 기존 질환별 기준(injurySignals 의 가설·레버, MTSS 라면 무통증 게이트)과 통증 척도 규칙을 그대로 따른다.',
     approvalPolicy:
       'AI는 injuryItems를 자동 갱신하지 않는다. 통증 변경, monitoring/resolved 후보, 완치 후보는 injuryUpdateProposal로만 반환하고 사용자가 승인해야 저장된다.',
     activeInjuryEvidence: buildInjuryCheckEvidence(activeInjuryItem, selectedRunContext)

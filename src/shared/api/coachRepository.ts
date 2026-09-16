@@ -179,10 +179,14 @@ export async function requestCoachRunStream(
      * 의료 진단 아님("가능성"으로만). redFlag.tripped면 코치가 처방을 멈추고 의뢰를 우선한다. 활성 부상/신호 없으면 null.
      */
     injurySignals?: {
+      /** 평가 대상 부상 id — 서버가 당시 부상과 대조해 일치할 때만 통증 허용 규칙을 적용한다. */
+      injuryId?: string
       areaLabel: string
       severity: number | null
       hypotheses: { possibility: string; levers: string[]; why: string }[]
       redFlag: { tripped: boolean; reasons: string[] }
+      /** Pain-Monitoring Model(기준선 복귀 판정)을 적용해도 되는 질환인가 — 부하성 건/근막에서만 true. */
+      painMonitoringApplies?: boolean
     } | null
   }
 ): Promise<CoachReport> {
