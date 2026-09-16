@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "web-5199",
+      "runtimeExecutable": "/bin/zsh",
+      "runtimeArgs": ["-lc", "export PATH=/Users/smart-tn-083/.nvm/versions/node/v24.15.0/bin:$PATH && npm run dev -- --port 5199 --strictPort"],
+      "port": 5199
+    },
+    {
+      "name": "web-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "preview"],
+      "port": 4173
+    }
+  ]
+}

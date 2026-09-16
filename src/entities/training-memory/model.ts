@@ -529,6 +529,60 @@ export function isInjuryProbeEligible(injury: TrainingInjuryItem, today: Date = 
   return false
 }
 
+/**
+ * 현재 부상 **에피소드**가 시작한 시각(ms). 없으면 null.
+ *
+ * §6 정의는 "연속(continuous) 지속"이다. resolved 이력이 있는데 다시 active/monitoring 이면 재발이고,
+ * 현재 에피소드는 옛 최초 발병이 아니라 마지막 해소(resolvedAt) 이후에 다시 시작한 것이다. 옛 onsetDate 로
+ * "20주째"처럼 과대평가하면 과대 의뢰가 된다 — resolvedAt 을 에피소드 시작 하한으로 쓴다(연속 부상은
+ * resolvedAt 이 없어 onset 그대로라 약화 없음).
+ *
+ * coachMoments.detectInjuryEscalation 과 redFlag 무호전 판정이 **같은 에피소드 정의**를 봐야 해서 여기 둔다
+ * (양쪽에 두면 한쪽만 고쳐져 서로 다른 주차를 말한다).
+ */
+export function getInjuryEpisodeStartMs(injury: TrainingInjuryItem): number | null {
+  let anchor = parseInjuryTimestamp(injury.onsetDate) ?? parseInjuryTimestamp(injury.createdAt)
+  if (anchor === null) return null
+  const resolvedMs = parseInjuryTimestamp(injury.resolvedAt)
+  if (resolvedMs !== null && resolvedMs > anchor) anchor = resolvedMs
+  return anchor
+}
+
+/**
+ * 현재 에피소드가 **호전 없이** 이어진 주수. 호전 근거가 있으면 null(= 무호전 아님).
+ *
+ * KB §4 전역 redFlag 에 "6주(연부조직)~3개월(난치) 무호전"이 있는데, `RedFlagSignals.noImprovementWeeks` 를
+ * **채우는 곳이 아무 데도 없었다**(2026-09-16 확인). 타입·판정·단위테스트는 다 있고 배선만 없어서, 그 안전
+ * 기준은 프로덕션에서 한 번도 켜질 수 없었다 — 단위테스트가 evaluateRedFlags 를 직접 불러 통과시키고 있었다.
+ *
+ * "무호전"은 **기간만으로 판정하지 않는다.** 좋아지는 중인 부상이 오래됐다고 의뢰로 밀면 과대 의뢰다(§6 경고).
+ * 그래서 이 에피소드 안의 체크인 통증이 **내려가지 않았을 때만** 주수를 돌려준다:
+ *  - 에피소드 안 체크인이 2건 미만이면 판단 근거가 없다 → null(보수적, 안 켠다).
+ *  - 가장 최근 통증 < 가장 오래된 통증 이면 호전 중 → null.
+ *  - 같거나 올랐으면 무호전 → 주수 반환(6주 임계 적용은 evaluateRedFlags 가 한다 — 임계는 한 곳에).
+ */
+export function getInjuryNoImprovementWeeks(injury: TrainingInjuryItem, today: Date = new Date()): number | null {
+  const startMs = getInjuryEpisodeStartMs(injury)
+  if (startMs === null) return null
+  const dayMs = 24 * 60 * 60 * 1000
+  const days = Math.floor((new Date(today).setHours(0, 0, 0, 0) - startMs) / dayMs)
+  if (days < 0) return null
+
+  // checkInHistory 는 최신순([0]=가장 최근). 이 에피소드 구간의 통증 기록만 본다.
+  const inEpisode = injury.checkInHistory.filter((entry) => {
+    const at = parseInjuryTimestamp(entry.checkedAt)
+    return at !== null && at >= startMs && typeof entry.painLevel === 'number'
+  })
+  if (inEpisode.length < 2) return null
+
+  const latest = inEpisode[0]?.painLevel
+  const earliest = inEpisode[inEpisode.length - 1]?.painLevel
+  if (typeof latest !== 'number' || typeof earliest !== 'number') return null
+  if (latest < earliest) return null
+
+  return Math.floor(days / 7)
+}
+
 /** 부위 무관 전역 재부상 위험창(최근 12개월 부상 이력) 요약. */
 export type RecentInjuryHistory = {
   /** 활성/관리 중이거나, resolved여도 가장 최근 관련일이 12개월 이내인 부상이 하나라도 있으면 true. */

@@ -15,7 +15,7 @@
 import type { RunLog } from '@/entities/run/model'
 import { getAcwr, getCadenceTrend, getChronicLoadTrend, getRunsWithinDays, sumDistance } from '@/shared/lib/runStats'
 import type { TrainingInjuryItem, TrainingMemory } from './model'
-import { getActiveInjuryItem } from './model'
+import { getActiveInjuryItem, getInjuryNoImprovementWeeks } from './model'
 import {
   INJURY_LEVER_LABEL,
   evaluateRedFlags,
@@ -102,7 +102,7 @@ function redFlagSignalsFromProbeAnswers(active: TrainingInjuryItem): RedFlagSign
  * 체크인 + grill 프로브에서 구조화된 redFlag 입력을 모은다(§4). 체크인: 체중부하 통증·진행성 악화.
  * 프로브: 화끈/저림·점통+hop·부종·고위험 골부위·체중부하 곤란/잠김 등 부위특이 자가검사(§5 Phase C).
  */
-function redFlagSignalsFromInjury(active: TrainingInjuryItem): RedFlagSignals {
+function redFlagSignalsFromInjury(active: TrainingInjuryItem, today: Date, slowRecovery: boolean): RedFlagSignals {
   const probeSignals = redFlagSignalsFromProbeAnswers(active)
   const latest = active.checkInHistory[0] ?? null
   // ⚠ worseningOverTime 은 §4 "활동·시간이 갈수록 심해지고"(여러 날 진행성)다 — 단발 체크인의
@@ -115,7 +115,11 @@ function redFlagSignalsFromInjury(active: TrainingInjuryItem): RedFlagSignals {
     // 프로브 자가검사 신호를 먼저 깔고, 체크인 신호는 OR 로 합친다(둘 중 하나라도 켜지면 켬).
     ...probeSignals,
     dailyActivityPain: (latest?.dailyActivityPain || probeSignals.dailyActivityPain) || undefined,
-    worseningOverTime: (progressiveWorsening || probeSignals.worseningOverTime) || undefined
+    worseningOverTime: (progressiveWorsening || probeSignals.worseningOverTime) || undefined,
+    // §4 "6주(연부조직)~3개월(난치) 무호전". 이 값을 **채우는 곳이 없어서** 해당 redFlag 는 지금까지
+    // 한 번도 켜질 수 없었다(#817, 2026-09-16). 임계(≥6주)는 evaluateRedFlags 가 갖는다 — 한 곳에.
+    noImprovementWeeks: getInjuryNoImprovementWeeks(active, today) ?? undefined,
+    slowRecovery: slowRecovery || undefined
   }
 }
 
@@ -129,10 +133,21 @@ function uniqueLeverLabels(hypothesis: InjuryHypothesis): string[] {
 export type CoachInjuryHypothesis = { possibility: string; levers: string[]; why: string }
 
 export type CoachInjurySignals = {
+  /**
+   * 이 신호가 **어느 부상을 평가한 것인가**. 서버는 선택 세션 날짜 기준으로 당시 부상을 고르므로
+   * (getActiveInjuryItemForRunDate), 현재 부상과 다를 수 있다. 그때 이 신호를 그대로 쓰면 **다른 부상에
+   * 통증 허용 규칙이 붙는다**(Codex 교차검증 4차 지적). 서버가 id 를 대조해 일치할 때만 적용한다.
+   */
+  injuryId: string
   areaLabel: string
   severity: number | null
   hypotheses: CoachInjuryHypothesis[]
   redFlag: { tripped: boolean; reasons: string[] }
+  /**
+   * Pain-Monitoring Model(§3-B "기준선 복귀면 견딘 것")을 이 부상에 적용해도 되는가.
+   * 부하성 건/근막 질환에서만 true — MTSS 처럼 **무통증 게이트**를 쓰는 질환에 주면 §3 과 충돌한다.
+   */
+  painMonitoringApplies: boolean
 }
 
 /**
@@ -147,8 +162,28 @@ export function buildInjuryCoachSignals(memory: TrainingMemory, runs: RunLog[], 
   const areaIds = active.normalizedAreas.map((selection) => selection.areaId)
   const signals = buildInjuryDataSignals(memory, runs, active, today)
   // grill 답변(§2-B)을 랭킹에 반영 — 사용자가 고른 결정적 지문이 상위 "가능성"을 좁힌다(물어본 답을 무시하지 않음).
-  const ranked = rankInjuryHypotheses(areaIds, signals, active.probeAnswers ?? {}).slice(0, 2)
-  const redFlag = evaluateRedFlags(redFlagSignalsFromInjury(active))
+  // 표시용은 상위 2개지만, **안전 판정은 후보 전체**로 한다(Codex 교차검증 2026-09-16 2차 지적).
+  // 다부위 부상(발바닥+아킬레스+정강이)에서 동점이면 카탈로그 순서로 MTSS 가 top-2 밖으로 밀리는데,
+  // 그 잘린 목록으로 "전부 느린 경과"라 읽으면 MTSS 의 8주 무호전 의뢰 신호가 사라진다.
+  const rankedAll = rankInjuryHypotheses(areaIds, signals, active.probeAnswers ?? {})
+  const ranked = rankedAll.slice(0, 2)
+  /**
+   * 부하성 건/근막 질환인가 — **every** 다(some 아님, Codex 교차검증 지적 수용 2026-09-16).
+   *
+   * top-2 는 comorbid 를 보존하는 **동반 표시 목록**이지 확정이 아니다(§2-B). some() 으로 읽으면
+   * 햄스트링에서 좌상(빠른 경과)이 1위여도 PHT 가 항상 2위에 남아 좌상까지 임계가 12주로 늘어난다
+   * — 8주 무호전 좌상의 의뢰 신호가 사라진다. **빠른 경과 후보가 하나라도 남아 있으면 보수적으로 간다.**
+   */
+  // ⚠ 후보 목록만 보면 **KB 밖 부위(발목·대퇴사두·요추)가 조용히 사라진다** — rankInjuryHypotheses 는
+  // 매핑되는 부위만 돌려주므로, 발바닥+발목을 함께 등록하면 발목이 빠진 채 "전부 느린 경과"가 된다
+  // (Codex 교차검증 3차 지적). 선택한 **모든 부위**가 부하성 후보로 설명될 때만 완화한다.
+  const coveredBases = new Set(rankedAll.flatMap((entry) => entry.hypothesis.areaBases))
+  const everyAreaExplained = areaIds.length > 0 && areaIds.every((areaId) => coveredBases.has(injuryAreaBase(areaId)))
+  const loadTolerant =
+    rankedAll.length > 0 &&
+    everyAreaExplained &&
+    rankedAll.every((entry) => entry.hypothesis.loadTolerantTendinopathy === true)
+  const redFlag = evaluateRedFlags(redFlagSignalsFromInjury(active, today, loadTolerant))
 
   // 부위가 KB 스코프 밖(ankle/quad/lower-back)이라 가설이 없고 redFlag 도 없으면 보낼 게 없다.
   if (!ranked.length && !redFlag.tripped) return null
@@ -165,5 +200,5 @@ export function buildInjuryCoachSignals(memory: TrainingMemory, runs: RunLog[], 
     }
   })
 
-  return { areaLabel: active.area, severity: active.severity, hypotheses, redFlag }
+  return { injuryId: active.id, areaLabel: active.area, severity: active.severity, hypotheses, redFlag, painMonitoringApplies: loadTolerant }
 }

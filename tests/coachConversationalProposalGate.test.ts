@@ -137,3 +137,58 @@ describe('개인 사실은 자유대화에서도 유효하다 (#814)', () => {
     expect(INDEX_SRC).toContain('너는 이 사용자를 아는 코치다')
   })
 })
+
+/**
+ * #815 · #816 — 통증 판정 기준과 예후.
+ *
+ * 2026-09-16: 사용자의 아침 기준선이 3인데 코치는 "0~2/5면 관찰" 고정 밴드를 3주 내내 반복했다.
+ * 고정 밴드는 기준선이 높은 사람에게 영원히 빨간불이라 "어제 그 러닝이 과했나"를 판정할 수 없다.
+ * 근거는 SSOT §3-B Pain-Monitoring Model(Silbernagel 2007) — 판정은 절대 0 이 아니라 **기준선 복귀**다.
+ */
+describe('통증 판정은 기준선 복귀로, 예후는 개월 단위로 (#815, #816)', () => {
+  it('"통증 0이어야 뛴다"가 근거 없음을 못박는다', () => {
+    expect(INDEX_SRC).toContain('"통증이 0 이어야 뛴다"는 기준은 근거가 없다')
+  })
+
+  it('판정 기준이 고정 밴드가 아니라 다음 날 아침 기준선 복귀다', () => {
+    expect(INDEX_SRC).toContain('다음 날 아침에 그 사람의 평소 수준(기준선)으로 돌아왔는가')
+    expect(INDEX_SRC).toContain('절대값이 아니라 **기준선 복귀**다')
+  })
+
+  it('예후를 개월 단위로 말하고 아침 통증이 마지막까지 남는다고 알린다', () => {
+    expect(INDEX_SRC).toContain('주 단위가 아니라 개월 단위')
+    expect(INDEX_SRC).toContain('아침 첫 체중부하 통증이 마지막까지 남는 축')
+  })
+
+  it('예후 안내가 안심으로 흐르지 않게 redFlag 우선을 유지한다', () => {
+    expect(INDEX_SRC).toContain('예후를 근거로 안심만 시키지 말고')
+  })
+})
+
+/**
+ * Codex 교차검증이 잡은 두 가지(2026-09-16, 확인 후 수용). 둘 다 **안전을 깎는** 방향이었다.
+ */
+describe('통증 허용 판정은 질환별로 켠다 (#815 스코프 가드)', () => {
+  it('적용 불가 질환에는 통증 허용 판정을 주지 않는다', () => {
+    // MTSS 는 §3 에서 "무통증 게이트 4~6주"를 쓴다. 기준선 복귀 판정을 주면 SSOT 와 정면 충돌한다.
+    expect(INDEX_SRC).toContain('loadToleranceRule: !painMonitoringApplies ? null :')
+    // false 는 "적용 불가"가 아니라 "근거 미확인"이다 — 단정하면 건병증에까지 무통증 요구가 새어 들어간다.
+    expect(INDEX_SRC).toContain('적용 근거가 확인되지 않았다')
+    expect(INDEX_SRC).toContain('판정이 내려진 것은 아니다')
+  })
+})
+
+/** Codex 교차검증 4차(2026-09-16). 시점 불일치와 근거 범위 초과 — 둘 다 다른 부상에 규칙이 새는 경로였다. */
+describe('질환별 규칙이 다른 부상으로 새지 않는다 (#815/#816 스코프)', () => {
+  it('웹이 평가한 부상과 서버가 고른 당시 부상이 같을 때만 통증 허용 규칙을 적용한다', () => {
+    // #507 시점 규칙: 서버는 선택 세션 날짜 기준 당시 부상을 고른다. 현재 부상 신호를 그대로 쓰면
+    // 과거 MTSS 세션에 족저근막 기준이 붙는다.
+    expect(INDEX_SRC).toContain("injurySignals?.injuryId === (activeInjuryItem as { id?: unknown } | null)?.id")
+  })
+
+  it('족저근막증 예후 수치를 다른 건병증에 옮겨 붙이지 않게 못박는다', () => {
+    expect(INDEX_SRC).toContain('구체 수치는 족저근막증에서만 말한다')
+    expect(INDEX_SRC).toContain('이 숫자·시간표를 옮겨 붙이지 말고')
+  })
+})
+

@@ -74,6 +74,19 @@ export type InjuryHypothesis = {
   structure: InjuryStructureType
   /** §1 사전확률 순위(1 = 가장 높음). */
   priorRank: number
+  /**
+   * **부하성 건/근막 질환(tendinopathy·fasciopathy)** 인가. 두 가지가 여기서 따라온다:
+   *  ① 정상 경과가 **개월 단위**라 "무호전" redFlag 임계가 6주가 아니라 3개월이다(§3-C).
+   *  ② **Pain-Monitoring Model**(Silbernagel 2007)의 검증 대상이라 "통증이 있어도 기준선 복귀면 견딘 것"
+   *     판정을 적용할 수 있다(§3-B). ⚠ MTSS 처럼 **무통증 게이트**를 쓰는 질환에 이 판정을 주면
+   *     SSOT §3 과 정면 충돌한다 — 그래서 질환별로 켠다.
+   *
+   * 근거: 족저근막증 RCT 2차분석 n=200(PMC12266988) — 활동 중 통증 6.31→2.81(12개월), 가장 큰 호전은
+   * 첫 3개월, **12개월에도 평균 2.81/10 잔존**. StatPearls: 75~80% 가 12개월 내 호전. 건병증도 같은 부하성
+   * 질환군으로 개월 단위다. 이런 질환에 6주 임계를 들이대면 **정상 경과를 적신호로 부른다**(과대 의뢰).
+   * KB §4 문구가 원래 "6주(연부조직)~3개월(난치)"로 두 단계였는데 코드가 6주 하나만 알고 있었다.
+   */
+  loadTolerantTendinopathy?: boolean
   /** §1 결정적 지문(감별 단서). */
   hallmark: string
   /** overuse = 1차 과사용 후보(rank 대상), red-flag = 의료 경계 후보(evaluateRedFlags 가 담당, rank 제외). */
@@ -103,6 +116,7 @@ export const injuryKnowledgeBase: InjuryHypothesis[] = [
   // ── 발바닥 ─────────────────────────────────────────────
   {
     id: 'plantar-fasciitis',
+    loadTolerantTendinopathy: true,
     label: '족저근막염',
     areaBases: ['plantar-fascia'],
     structure: 'fascia',
@@ -123,6 +137,7 @@ export const injuryKnowledgeBase: InjuryHypothesis[] = [
   // ── 아킬레스 ───────────────────────────────────────────
   {
     id: 'achilles-tendinopathy',
+    loadTolerantTendinopathy: true,
     label: '아킬레스 건병증',
     areaBases: ['achilles'],
     structure: 'tendon',
@@ -224,6 +239,7 @@ export const injuryKnowledgeBase: InjuryHypothesis[] = [
   // ── 고관절/둔근 ────────────────────────────────────────
   {
     id: 'gtps',
+    loadTolerantTendinopathy: true,
     label: '둔근건병증(GTPS)',
     areaBases: ['hip'],
     structure: 'tendon',
@@ -244,6 +260,7 @@ export const injuryKnowledgeBase: InjuryHypothesis[] = [
   // ── 햄스트링 ───────────────────────────────────────────
   {
     id: 'pht',
+    loadTolerantTendinopathy: true,
     label: '근위 햄스트링 건병증(PHT)',
     areaBases: ['hamstring'],
     structure: 'tendon',
@@ -312,6 +329,8 @@ export type RedFlagSignals = {
   weightBearingFailureOrInstability?: boolean
   /** 무호전 주수(연부조직 6주·난치 12주 초과). */
   noImprovementWeeks?: number | null
+  /** 부하성 건/근막 질환인가(§3-C). 무호전 임계를 6주 → 3개월로 늦춘다. */
+  slowRecovery?: boolean
   /**
    * RED-S 경계(§4): 월경 이상 + 저에너지가용성/저식이 + 피로골절 이력 조합 → 내분비 평가 의뢰.
    * ⚠ 이는 "성별을 위험 가중"에 쓰는 게 아니라(§6 do-not 가드) 효과수정자 기반 의뢰 경로다(dossier §4 효과수정자 인식).
@@ -341,7 +360,12 @@ export function evaluateRedFlags(signals: RedFlagSignals | null | undefined): Re
   if (signals.swellingRednessHeat) reasons.push('부종·발적·열감·발열(혈전·감염 경계)')
   if (signals.weightBearingFailureOrInstability) reasons.push('체중부하 곤란·관절 잠김/불안정(급성 구조 손상 경계) — 즉시 평가')
   if (signals.redSConcern) reasons.push('월경 이상·저에너지가용성·피로골절 이력(RED-S) — 내분비 평가 의뢰')
-  if (typeof signals.noImprovementWeeks === 'number' && signals.noImprovementWeeks >= 6) reasons.push(`${signals.noImprovementWeeks}주 무호전`)
+  // §4 "6주(연부조직)~3개월(난치) 무호전". 어느 쪽인지는 **질환 경과**로 정한다(§3-C) — 족저근막증·건병증은
+  // 개월 단위가 정상 경과라, 6주를 들이대면 정상 경과를 적신호로 부른다(과대 의뢰).
+  const noImprovementThresholdWeeks = signals.slowRecovery ? 12 : 6
+  if (typeof signals.noImprovementWeeks === 'number' && signals.noImprovementWeeks >= noImprovementThresholdWeeks) {
+    reasons.push(`${signals.noImprovementWeeks}주 무호전`)
+  }
   return { tripped: reasons.length > 0, reasons }
 }
 
