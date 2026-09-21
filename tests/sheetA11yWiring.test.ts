@@ -5,6 +5,12 @@ import { nextTick, type Component } from 'vue'
 import BottomSheetSelect from '../src/shared/ui/BottomSheetSelect.vue'
 import EvidenceSheet from '../src/shared/ui/EvidenceSheet.vue'
 import SchedulingHelpSheet from '../src/shared/ui/SchedulingHelpSheet.vue'
+import HeartRateHelpSheet from '../src/shared/ui/HeartRateHelpSheet.vue'
+import HeartRateTestGuideSheet from '../src/shared/ui/HeartRateTestGuideSheet.vue'
+import EarlyRunCreditSheet from '../src/shared/ui/EarlyRunCreditSheet.vue'
+import RescheduleSheet from '../src/pages/coach/RescheduleSheet.vue'
+import RestDeclarationSheet from '../src/pages/coach/RestDeclarationSheet.vue'
+import WeekendTriageSheet from '../src/pages/coach/WeekendTriageSheet.vue'
 
 /**
  * #828 — 시트별 **배선** 계약.
@@ -42,6 +48,34 @@ const CASES: SheetCase[] = [
     name: 'SchedulingHelpSheet',
     component: SchedulingHelpSheet,
     props: { open: true },
+    closeEvent: 'close'
+  },
+  // 배치 2
+  { name: 'HeartRateHelpSheet', component: HeartRateHelpSheet, props: { open: true }, closeEvent: 'close' },
+  { name: 'HeartRateTestGuideSheet', component: HeartRateTestGuideSheet, props: { open: true }, closeEvent: 'close' },
+  {
+    name: 'EarlyRunCreditSheet',
+    component: EarlyRunCreditSheet,
+    props: { open: true, sessionLabel: '이지', runTypeLabel: 'Easy' },
+    closeEvent: 'close'
+  },
+  // 배치 3
+  {
+    name: 'RescheduleSheet',
+    component: RescheduleSheet,
+    props: { open: true, title: '다른 날로', candidates: [], keySkip: false },
+    closeEvent: 'close'
+  },
+  {
+    name: 'RestDeclarationSheet',
+    component: RestDeclarationSheet,
+    props: { open: true, today: '2026-09-21' },
+    closeEvent: 'close'
+  },
+  {
+    name: 'WeekendTriageSheet',
+    component: WeekendTriageSheet,
+    props: { open: true, saveLabel: '살리기', releaseLabels: [] },
     closeEvent: 'close'
   }
 ]

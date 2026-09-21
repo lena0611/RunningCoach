@@ -9,11 +9,13 @@
  * 다음에 앱을 열면 다시 묻고, '예정대로 할게요'(decline)만 오늘 하루를 잠근다. 이 시트는 갈음의 유일한
  * 진입점이라, 배경을 잘못 눌러 닫힌 걸 결정으로 굳히면 오늘 갈음할 방법이 사라진다.
  */
+import { ref, toRef } from 'vue'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
+import { useSheetA11y } from '@/shared/lib/useSheetA11y'
 import PrimaryButton from './PrimaryButton.vue'
 import SecondaryButton from './SecondaryButton.vue'
 
-defineProps<{
+const props = defineProps<{
   open: boolean
   /** 오늘 예정 세션 라벨(예: 이지). 조사 분기를 피하려 본문에서 '세션을'로 받는다. */
   sessionLabel: string
@@ -30,12 +32,17 @@ const emit = defineEmits<{
 }>()
 
 const drag = useBottomSheetDrag(() => emit('close'))
+// #828 Escape·포커스 트랩·포커스 복귀·배경 비활성.
+const sheetEl = ref<HTMLElement | null>(null)
+useSheetA11y(toRef(props, 'open'), sheetEl, () => emit('close'))
 </script>
 
 <template>
   <Transition name="bottom-sheet">
     <div v-if="open" class="bottom-sheet-layer early-run-credit-layer" role="presentation" @click.self="emit('close')">
       <section
+        ref="sheetEl"
+        tabindex="-1"
         class="bottom-sheet early-run-credit-sheet"
         :class="{ 'bottom-sheet-dragging': drag.dragging.value }"
         :style="drag.sheetStyle.value"

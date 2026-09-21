@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onBeforeUnmount, watch } from 'vue'
+import { onBeforeUnmount, watch, toRef, ref } from 'vue'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
+import { useSheetA11y } from '@/shared/lib/useSheetA11y'
 
 /**
  * 주말 트리아지 바텀시트 (제안훈련 응답, 에픽 #362; 북극성 [[coach-proactive-communication-vision]]).
@@ -16,6 +17,9 @@ const props = defineProps<{
 const emit = defineEmits<{ save: []; release: []; close: [] }>()
 
 const drag = useBottomSheetDrag(() => emit('close'))
+// #828 Escape·포커스 트랩·포커스 복귀·배경 비활성.
+const sheetEl = ref<HTMLElement | null>(null)
+useSheetA11y(toRef(props, 'open'), sheetEl, () => emit('close'))
 
 watch(
   () => props.open,
@@ -29,7 +33,7 @@ onBeforeUnmount(() => document.body.classList.remove('sheet-open'))
     <Transition name="bottom-sheet">
     <div v-if="open" class="bottom-sheet-layer" role="presentation" data-no-swipe @click.self="emit('close')">
       <section
-        class="bottom-sheet triage-sheet"
+        ref="sheetEl" tabindex="-1" class="bottom-sheet triage-sheet"
         :class="{ 'bottom-sheet-dragging': drag.dragging.value }"
         :style="drag.sheetStyle.value"
         role="dialog"
