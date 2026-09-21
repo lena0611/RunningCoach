@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, watch } from 'vue'
+import { computed, onBeforeUnmount, watch, toRef, ref } from 'vue'
 import type { CoachAdaptiveProgressSummary } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
+import { useSheetA11y } from '@/shared/lib/useSheetA11y'
 
 const props = defineProps<{ open: boolean; summary: CoachAdaptiveProgressSummary; saving?: boolean }>()
 const emit = defineEmits<{ (e: 'confirm'): void; (e: 'close'): void }>()
@@ -10,6 +11,9 @@ const STATUS_ICON: Record<string, string> = { ready: '✅', watch: '⏳', blocke
 const proposal = computed(() => props.summary.phaseProposal)
 
 const drag = useBottomSheetDrag(() => emit('close'))
+// #828 Escape·포커스 트랩·포커스 복귀·배경 비활성.
+const sheetEl = ref<HTMLElement | null>(null)
+useSheetA11y(toRef(props, 'open'), sheetEl, () => emit('close'))
 
 watch(
   () => props.open,
@@ -28,6 +32,8 @@ onBeforeUnmount(() => {
     <Transition name="bottom-sheet">
     <div v-if="open" class="bottom-sheet-layer" role="presentation" @click.self="emit('close')">
       <section
+        ref="sheetEl"
+        tabindex="-1"
         class="bottom-sheet phase-eval-sheet"
         :class="{ 'bottom-sheet-dragging': drag.dragging.value }"
         :style="drag.sheetStyle.value"

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, toRef, computed } from 'vue'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
+import { useSheetA11y } from '@/shared/lib/useSheetA11y'
 
 const props = defineProps<{
   open: boolean
@@ -17,6 +18,10 @@ type Step = 'screening' | 'guide'
 const step = ref<Step>('screening')
 
 const drag = useBottomSheetDrag(() => closeSheet())
+// #828 Escape·포커스 트랩·포커스 복귀·배경 비활성.
+// ⚠ 템플릿의 렌더 조건과 **같은 식**을 넘긴다 — open 만 보면 시트가 없는데 배경만 잠긴다.
+const sheetEl = ref<HTMLElement | null>(null)
+useSheetA11y(toRef(props, 'open'), sheetEl, () => closeSheet())
 
 watch(
   () => props.open,
@@ -53,6 +58,8 @@ function finishGuide() {
   <Transition name="bottom-sheet">
   <div v-if="open" class="bottom-sheet-layer injury-screening-layer" role="presentation" @click.self="closeSheet">
     <section
+      ref="sheetEl"
+      tabindex="-1"
       class="bottom-sheet injury-screening-sheet"
       :class="{ 'bottom-sheet-dragging': drag.dragging.value }"
       :style="drag.sheetStyle.value"

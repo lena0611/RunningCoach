@@ -11,6 +11,36 @@ import EarlyRunCreditSheet from '../src/shared/ui/EarlyRunCreditSheet.vue'
 import RescheduleSheet from '../src/pages/coach/RescheduleSheet.vue'
 import RestDeclarationSheet from '../src/pages/coach/RestDeclarationSheet.vue'
 import WeekendTriageSheet from '../src/pages/coach/WeekendTriageSheet.vue'
+import DoublesAddSheet from '../src/pages/coach/DoublesAddSheet.vue'
+import PhaseTransitionModal from '../src/pages/coach/PhaseTransitionModal.vue'
+import NotificationSettingsPromptSheet from '../src/shared/ui/NotificationSettingsPromptSheet.vue'
+import InjuryScreeningSheet from '../src/shared/ui/InjuryScreeningSheet.vue'
+import InjuryCheckInSheet from '../src/shared/ui/InjuryCheckInSheet.vue'
+import PostRunInterviewSheet from '../src/shared/ui/PostRunInterviewSheet.vue'
+
+/** 파생 조건 시트용 최소 픽스처. 화면을 그리기만 하면 되므로 필수 필드만 채운다. */
+const injuryItem = {
+  id: 'i1',
+  title: '오른쪽 발바닥',
+  area: '발바닥',
+  normalizedAreas: [],
+  status: 'monitoring',
+  severity: 1,
+  onsetDate: null,
+  lastFlareDate: null,
+  lastCheckedAt: null,
+  resolvedAt: null,
+  checkInHistory: [],
+  notes: '',
+  managementPlan: '',
+  triggers: [],
+  restrictions: [],
+  returnToRunCriteria: '',
+  strengthPlan: [],
+  strengthPlanDetails: []
+}
+
+const runFixture = { id: 'r1', date: '2026-09-20', type: 'Easy', distanceKm: 4.6 }
 
 /**
  * #828 — 시트별 **배선** 계약.
@@ -76,6 +106,54 @@ const CASES: SheetCase[] = [
     name: 'WeekendTriageSheet',
     component: WeekendTriageSheet,
     props: { open: true, saveLabel: '살리기', releaseLabels: [] },
+    closeEvent: 'close'
+  },
+  // 배치 4
+  {
+    name: 'DoublesAddSheet',
+    component: DoublesAddSheet,
+    props: { open: true, amSession: null, eligibility: null },
+    closeEvent: 'close'
+  },
+  {
+    name: 'PhaseTransitionModal',
+    component: PhaseTransitionModal,
+    props: {
+      open: true,
+      summary: {
+        currentPhase: 'base',
+        criteria: [],
+        readyCount: 0,
+        allReady: false,
+        phaseProposal: { shouldTransition: false, toPhase: null, reason: '', blockers: [] },
+        adapted: { easyCeilingBpm: null, longRunDriftTolerancePercent: 0, recoveryRestDays: 0 }
+      }
+    },
+    closeEvent: 'close'
+  },
+  {
+    name: 'NotificationSettingsPromptSheet',
+    component: NotificationSettingsPromptSheet,
+    props: { open: true, disabledItems: [] },
+    closeEvent: 'close'
+  },
+  // 배치 5 — 열림 조건이 `open` 단독이 아니라 데이터와 함께인 시트들
+  {
+    name: 'InjuryScreeningSheet',
+    component: InjuryScreeningSheet,
+    props: { open: true, showGuide: false },
+    closeEvent: 'close'
+  },
+  {
+    name: 'InjuryCheckInSheet',
+    component: InjuryCheckInSheet,
+    props: { open: true, item: injuryItem },
+    closeEvent: 'close'
+  },
+  {
+    name: 'PostRunInterviewSheet',
+    component: PostRunInterviewSheet,
+    props: { open: true, run: runFixture },
     closeEvent: 'close'
   }
 ]
@@ -147,4 +225,28 @@ describe.each(CASES)('$name 접근성 배선', (sheetCase) => {
       expect(document.querySelector('.bottom-sheet')).toBeNull()
     }
   })
+})
+
+
+/**
+ * 파생 조건 시트의 함정: 템플릿은 `open && item` 으로 그리는데 컴포저블에 `open` 만 넘기면
+ * **시트가 없는데 배경만 잠긴다**(Tab·스크린리더가 갇히고 사용자는 이유를 모른다).
+ */
+describe('열림 조건이 데이터와 함께인 시트', () => {
+  const partial = [
+    { name: 'InjuryCheckInSheet', component: InjuryCheckInSheet, props: { open: true, item: null } },
+    { name: 'PostRunInterviewSheet', component: PostRunInterviewSheet, props: { open: true, run: null } }
+  ]
+
+  for (const c of partial) {
+    it(`${c.name}: open 만 true 이고 데이터가 없으면 배경을 잠그지 않는다`, async () => {
+      const wrapper = mount(c.component, { props: c.props, attachTo: document.body })
+      mounted.push(wrapper)
+      await nextTick()
+      await nextTick()
+
+      expect(document.querySelector('.bottom-sheet'), '시트가 그려지면 안 된다').toBeNull()
+      expect(appRoot.hasAttribute('inert'), '시트가 없는데 배경이 잠겼다').toBe(false)
+    })
+  }
 })
