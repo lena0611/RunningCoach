@@ -11,6 +11,7 @@ import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
 import { useCoachActionBridgeStore } from '@/app/stores/coachActionBridgeStore'
 import { useCrossTrainingStore } from '@/app/stores/crossTrainingStore'
 import { trainingWeekRange } from '@/shared/lib/coaching/periodizedSchedule'
+import { useSheetA11y } from '@/shared/lib/useSheetA11y'
 import { isChronicBaselineAfterLayoff } from '@/shared/lib/coaching/returnAnchor'
 import type { RestReason } from '@/entities/training-memory/model'
 import type { RunType } from '@/entities/run/model'
@@ -788,6 +789,10 @@ function createCardFromEditor() {
   openDataCardComposer()
 }
 
+
+// #828 카드 삭제 확인 시트에도 Escape·포커스 트랩·배경 비활성을 건다.
+const confirmSheetEl = ref<HTMLElement | null>(null)
+useSheetA11y(computed(() => !!pendingDeleteCard.value), confirmSheetEl, () => { pendingDeleteCard.value = null })
 </script>
 
 <template>
@@ -1002,7 +1007,10 @@ function createCardFromEditor() {
           role="presentation"
           @click.self="pendingDeleteCard = null"
         >
-          <section class="bottom-sheet confirm-sheet" role="dialog" aria-modal="true" aria-label="카드 삭제 확인">
+          <section
+            ref="confirmSheetEl"
+            tabindex="-1"
+            class="bottom-sheet confirm-sheet" role="dialog" aria-modal="true" aria-label="카드 삭제 확인">
             <div class="bottom-sheet-handle" />
             <h2>이 카드를 지울까요?</h2>
             <p><strong>{{ pendingDeleteCard.title }}</strong> 카드가 요약에서 사라집니다. 러닝 기록은 그대로예요.</p>

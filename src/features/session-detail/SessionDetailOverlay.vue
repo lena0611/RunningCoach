@@ -10,6 +10,7 @@ import { useToastStore } from '@/app/stores/toastStore'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { hasNativeBridge } from '@/shared/lib/runtime'
+import { useSheetA11y } from '@/shared/lib/useSheetA11y'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
 import { formatDateWithWeekday } from '@/shared/lib/format'
 import { friendlyErrorMessage } from '@/shared/lib/friendlyError'
@@ -121,6 +122,10 @@ async function confirmRemove() {
     deletingId.value = null
   }
 }
+
+// #828 삭제·추가 확인 시트에도 Escape·포커스 트랩·배경 비활성을 건다.
+const confirmSheetEl = ref<HTMLElement | null>(null)
+useSheetA11y(computed(() => !!pendingDeleteRun.value), confirmSheetEl, () => { pendingDeleteRun.value = null })
 </script>
 
 <template>
@@ -194,7 +199,9 @@ async function confirmRemove() {
   <Teleport to="body">
     <Transition name="bottom-sheet">
     <div v-if="pendingDeleteRun" class="bottom-sheet-layer confirm-layer" role="presentation" @click.self="pendingDeleteRun = null">
-      <section class="bottom-sheet confirm-sheet" :class="{ 'bottom-sheet-dragging': deleteSheetDrag.dragging.value }" :style="deleteSheetDrag.sheetStyle.value" role="dialog" aria-modal="true" aria-label="삭제 확인">
+      <section
+        ref="confirmSheetEl"
+        tabindex="-1" class="bottom-sheet confirm-sheet" :class="{ 'bottom-sheet-dragging': deleteSheetDrag.dragging.value }" :style="deleteSheetDrag.sheetStyle.value" role="dialog" aria-modal="true" aria-label="삭제 확인">
         <div class="bottom-sheet-handle bottom-sheet-drag-zone" @pointerdown="deleteSheetDrag.startDrag" />
         <h2>러닝 기록을 삭제할까요?</h2>
         <p>{{ formatDateWithWeekday(pendingDeleteRun.date) }} · {{ pendingDeleteRun.distanceKm }}km 기록이 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</p>
