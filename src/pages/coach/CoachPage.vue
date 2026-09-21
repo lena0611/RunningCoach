@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useLevelStore } from '@/app/stores/levelStore'
@@ -101,8 +101,51 @@ const {
 } = week
 
 /**
- * 코치 대화 제안(#639) 진입: 제안 카드가 요청한 날짜로 데이-스트립을 옮겨 그날 세션 카드를 띄운다.
- * 여기서 스케줄을 바꾸지 않는다 — 사용자가 기존 버튼(더 쉽게/다른 날로/놓아주기)을 눌러야 적용된다.
+ * 제안이 요청한 동작을 **도착지 핸들러로** 수행한다(#830). 실행했으면 true.
+ *
+ * ⚠ 여기서 스케줄을 직접 바꾸지 않는다 — 기존 핸들러를 부를 뿐이다. 그래야 키 세션 재배치
+ * 선권유·상향 소프트 경고·되돌리기가 전부 그대로 걸린다(#639 가 카드 직접 변이를 막은 이유).
+ *
+ * 브리핑 카드가 뜨는 **오늘·미래**에만 이어받는다. 지난 날(open/missed/skipped)은 다른 카드가
+ * 뜨고 버튼 이름도 달라(놓아주기) 잘못 실행하면 엉뚱한 세션을 건드린다 — 그때는 안내만 남긴다.
+ */
+function runProposedSessionAction(action: string | null, state: string | undefined): boolean {
+  if (!action) return false
+  if (state !== 'today' && state !== 'future') return false
+  if (!activeSession.value) return false
+  switch (action) {
+    case 'ease_session':
+      void onBriefingAlternative('easier')
+      return true
+    case 'intensify_session':
+      void onBriefingAlternative('harder')
+      return true
+    case 'reschedule_session':
+      onBriefingReschedule()
+      return true
+    case 'skip_session':
+      void onBriefingSkip()
+      return true
+    default:
+      return false
+  }
+}
+
+/**
+ * 코치 대화 제안이 요청한 **동작을 도착지에서 이어서 수행한다**(#830).
+ *
+ * 2026-09-21 실사고: 사용자가 "이 스케줄 무리일 듯하다"라고 했고 코치가 9/22 스트라이드를 빼자는
+ * 제안을 냈다. 사용자가 **승인했는데 스케줄은 그대로였다.** 카드 버튼은 이동만 하고(#639), 확정은
+ * 도착지 세션 카드에서 한 번 더 눌러야 했는데 — #741 이 붙인 안내 토스트는 몇 초 뒤 사라지고
+ * 버튼 이름도 "가볍게 바꾸기" → "더 쉽게" 로 달라 놓치기 쉬웠다. 앱이 승인했다고 믿게 만들고
+ * 아무것도 하지 않은 셈이다.
+ *
+ * 그래서 이동만 하지 말고 **그 동작을 이어서 실행**한다. 실행하는 것은 **기존 핸들러 그대로**라
+ * (#639 가 도착 화면에 걸어둔 가드가 살아 있다) 키 세션 건너뛰기는 여전히 재배치를 먼저 권하고,
+ * 상향 소프트 경고·되돌리기도 그대로 붙는다. 카드가 직접 변이하지 않는다는 원칙은 유지된다 —
+ * 변이는 여전히 도착지 핸들러가 한다.
+ *
+ * 이어받지 못한 경우(그새 상태가 바뀌어 세션 카드가 없는 등)에만 예전처럼 안내 토스트로 남긴다.
  * immediate: 코치 오버레이에서 탭 이동해 오면 이 페이지가 지연 로드로 뒤늦게 마운트되므로 한 번 집어낸다.
  */
 watch(
@@ -116,10 +159,16 @@ watch(
       const index = scheduleDays.value.findIndex((day) => day.date === date)
       if (index >= 0) {
         activeDayIndex.value = index
-        // 다음 한 걸음을 말해준다(#741). 이동만 해놓고 침묵하면 사용자는 이미 처리된 줄 알고 홈으로 간다.
-        const label = destinationActionLabel(bridge.focusAction, scheduleDays.value[index]?.state)
-        if (label) toastStore.success(`아직 반영 전이에요. 이 카드에서 '${label}'를 누르면 확정됩니다.`)
+        const state = scheduleDays.value[index]?.state
+        const action = bridge.focusAction
+        const label = destinationActionLabel(action, state)
         bridge.clearFocus()
+        // 데이-스트립을 옮긴 뒤라야 activeSession 이 그날로 바뀐다.
+        void nextTick().then(() => {
+          if (runProposedSessionAction(action, state)) return
+          // 이어받지 못했으면 최소한 다음 한 걸음은 말해준다(#741).
+          if (label) toastStore.success(`아직 반영 전이에요. 이 카드에서 '${label}'를 누르면 확정됩니다.`)
+        })
         return
       }
     }
