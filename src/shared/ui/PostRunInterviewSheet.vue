@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, watch, ref } from 'vue'
 import type { RunLog } from '@/entities/run/model'
 import type { PainGroup, PostRunInterviewResult, PostRunPainSeverity } from '@/features/post-run-interview/buildInterviewRunPatch'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
+import { useSheetA11y } from '@/shared/lib/useSheetA11y'
 import ScaleSlider from './ScaleSlider.vue'
 import SegmentTabs from './SegmentTabs.vue'
 
@@ -23,6 +24,10 @@ const PAIN_GROUPS: { value: PainGroup; label: string }[] = [
 ]
 
 const drag = useBottomSheetDrag(() => emit('close'))
+// #828 Escape·포커스 트랩·포커스 복귀·배경 비활성.
+// ⚠ 템플릿의 렌더 조건과 **같은 식**을 넘긴다 — open 만 보면 시트가 없는데 배경만 잠긴다.
+const sheetEl = ref<HTMLElement | null>(null)
+useSheetA11y(computed(() => props.open && !!props.run), sheetEl, () => emit('close'))
 
 const SEVERITIES: { value: PostRunPainSeverity; label: string }[] = [
   { value: 'none', label: '없음' },
@@ -88,6 +93,8 @@ function submit() {
   <Transition name="bottom-sheet">
   <div v-if="open && run" class="bottom-sheet-layer" role="presentation" @click.self="emit('close')">
     <section
+      ref="sheetEl"
+      tabindex="-1"
       class="bottom-sheet"
       :class="{ 'bottom-sheet-dragging': drag.dragging.value }"
       :style="drag.sheetStyle.value"

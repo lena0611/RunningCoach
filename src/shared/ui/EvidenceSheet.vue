@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onBeforeUnmount, watch } from 'vue'
+import { onBeforeUnmount, watch, toRef, ref } from 'vue'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
+import { useSheetA11y } from '@/shared/lib/useSheetA11y'
 import type { EvidenceRef } from '@/shared/lib/coaching/sessionBriefing'
 
 /**
@@ -15,6 +16,9 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [] }>()
 
 const drag = useBottomSheetDrag(() => emit('close'))
+// #828 Escape·포커스 트랩·포커스 복귀·배경 비활성.
+const sheetEl = ref<HTMLElement | null>(null)
+useSheetA11y(toRef(props, 'open'), sheetEl, () => emit('close'))
 
 watch(
   () => props.open,
@@ -33,7 +37,7 @@ onBeforeUnmount(() => {
     <Transition name="bottom-sheet">
     <div v-if="open" class="bottom-sheet-layer" role="presentation" @click.self="emit('close')">
       <section
-        class="bottom-sheet evidence-sheet"
+        ref="sheetEl" tabindex="-1" class="bottom-sheet evidence-sheet"
         :class="{ 'bottom-sheet-dragging': drag.dragging.value }"
         :style="drag.sheetStyle.value"
         role="dialog"

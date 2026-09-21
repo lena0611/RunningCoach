@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch, toRef } from 'vue'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
+import { useSheetA11y } from '@/shared/lib/useSheetA11y'
 import ScaleSlider from '@/shared/ui/ScaleSlider.vue'
 import type { ScheduledSession } from '@/entities/training-schedule/model'
 import { sessionTypeLabel } from '@/shared/lib/coaching/sessionBriefing'
@@ -32,6 +33,9 @@ const props = defineProps<{
 const emit = defineEmits<{ add: [payload: { durationMin: number }]; close: [] }>()
 
 const drag = useBottomSheetDrag(() => emit('close'))
+// #828 Escape·포커스 트랩·포커스 복귀·배경 비활성.
+const sheetEl = ref<HTMLElement | null>(null)
+useSheetA11y(toRef(props, 'open'), sheetEl, () => emit('close'))
 const durationMin = ref<number | null>(PM_DOUBLE_DEFAULT_DURATION_MIN)
 
 const gapNote = computed(() => {
@@ -64,6 +68,8 @@ function submit() {
     <Transition name="bottom-sheet">
     <div v-if="open" class="bottom-sheet-layer" role="presentation" data-no-swipe @click.self="emit('close')">
       <section
+        ref="sheetEl"
+        tabindex="-1"
         class="bottom-sheet doubles-sheet"
         :class="{ 'bottom-sheet-dragging': drag.dragging.value }"
         :style="drag.sheetStyle.value"

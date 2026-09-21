@@ -8,6 +8,7 @@ import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { useDataCardStore } from '@/app/stores/dataCardStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import type { DataCardSpec } from '@/shared/lib/coaching/dataCardAdapter'
+import { useSheetA11y } from '@/shared/lib/useSheetA11y'
 import { detectRepeatedDowngrade } from '@/shared/lib/coaching/adjustmentHistory'
 import { useCompetitionStore } from '@/app/stores/competitionStore'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
@@ -1382,6 +1383,10 @@ function stopCoachThinkingTimer() {
   window.clearInterval(coachThinkingTimer.value)
   coachThinkingTimer.value = null
 }
+
+// #828 데이터 카드 추가 확인 시트에도 Escape·포커스 트랩·배경 비활성을 건다.
+const confirmSheetEl = ref<HTMLElement | null>(null)
+useSheetA11y(computed(() => !!pendingDataCardProposal.value), confirmSheetEl, () => { dismissDataCardProposal() })
 </script>
 
 <template>
@@ -1562,7 +1567,10 @@ function stopCoachThinkingTimer() {
       role="presentation"
       @click.self="dismissDataCardProposal"
     >
-      <section class="bottom-sheet confirm-sheet goal-intent-sheet" role="dialog" aria-modal="true" aria-label="데이터 카드 추가 확인">
+      <section
+        ref="confirmSheetEl"
+        tabindex="-1"
+        class="bottom-sheet confirm-sheet goal-intent-sheet" role="dialog" aria-modal="true" aria-label="데이터 카드 추가 확인">
         <div class="bottom-sheet-handle" />
         <h2>이 카드를 요약에 둘까요?</h2>
         <p>지금 기록으로 계산한 값이에요. 추가하면 요약 탭에서 계속 보입니다.</p>

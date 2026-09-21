@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch, toRef } from 'vue'
 import type { RestReason } from '@/entities/training-memory/model'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
+import { useSheetA11y } from '@/shared/lib/useSheetA11y'
 import DateField from '@/shared/ui/DateField.vue'
 
 /**
@@ -22,6 +23,9 @@ const props = defineProps<{
 const emit = defineEmits<{ declare: [{ untilDate: string; reason: RestReason }]; close: [] }>()
 
 const drag = useBottomSheetDrag(() => emit('close'))
+// #828 Escape·포커스 트랩·포커스 복귀·배경 비활성.
+const sheetEl = ref<HTMLElement | null>(null)
+useSheetA11y(toRef(props, 'open'), sheetEl, () => emit('close'))
 
 const REASONS: { value: RestReason; label: string }[] = [
   { value: 'injury', label: '부상' },
@@ -89,7 +93,7 @@ onBeforeUnmount(() => document.body.classList.remove('sheet-open'))
     <Transition name="bottom-sheet">
     <div v-if="open" class="bottom-sheet-layer" role="presentation" data-no-swipe @click.self="emit('close')">
       <section
-        class="bottom-sheet rest-sheet"
+        ref="sheetEl" tabindex="-1" class="bottom-sheet rest-sheet"
         :class="{ 'bottom-sheet-dragging': drag.dragging.value }"
         :style="drag.sheetStyle.value"
         role="dialog"

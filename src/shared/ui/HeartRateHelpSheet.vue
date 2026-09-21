@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onBeforeUnmount, watch } from 'vue'
+import { onBeforeUnmount, watch, toRef, ref } from 'vue'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
+import { useSheetA11y } from '@/shared/lib/useSheetA11y'
 
 const props = defineProps<{
   open: boolean
@@ -11,6 +12,9 @@ const emit = defineEmits<{
 }>()
 
 const drag = useBottomSheetDrag(() => emit('close'))
+// #828 Escape·포커스 트랩·포커스 복귀·배경 비활성.
+const sheetEl = ref<HTMLElement | null>(null)
+useSheetA11y(toRef(props, 'open'), sheetEl, () => emit('close'))
 
 watch(
   () => props.open,
@@ -28,7 +32,7 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <Transition name="bottom-sheet">
     <div v-if="open" class="bottom-sheet-layer" role="presentation" @click.self="emit('close')">
-      <section class="bottom-sheet scheduling-help-sheet" :class="{ 'bottom-sheet-dragging': drag.dragging.value }" :style="drag.sheetStyle.value" role="dialog" aria-modal="true" aria-label="심박 기준 산출 방식">
+      <section ref="sheetEl" tabindex="-1" class="bottom-sheet scheduling-help-sheet" :class="{ 'bottom-sheet-dragging': drag.dragging.value }" :style="drag.sheetStyle.value" role="dialog" aria-modal="true" aria-label="심박 기준 산출 방식">
         <div class="bottom-sheet-handle bottom-sheet-drag-zone" @pointerdown="drag.startDrag" />
         <div class="bottom-sheet-heading bottom-sheet-drag-zone" @pointerdown="drag.startDrag">
           <h2>심박 기준은 어떻게 정해지나요?</h2>

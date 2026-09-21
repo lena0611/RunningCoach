@@ -16,6 +16,7 @@ import {
 } from '@/entities/training-memory/injuryAreas'
 import type { TrainingKnowledgeCatalog, TrainingKnowledgeRequest, TrainingMethod } from '@/entities/training-knowledge/model'
 import { formatDateWithWeekday } from '@/shared/lib/format'
+import { useSheetA11y } from '@/shared/lib/useSheetA11y'
 import {
   deleteCoachMemoryItem,
   fetchCoachMemoryItems,
@@ -834,6 +835,10 @@ async function saveSection(section: MemorySection) {
     saving.value = false
   }
 }
+
+// #828 삭제·추가 확인 시트에도 Escape·포커스 트랩·배경 비활성을 건다.
+const confirmSheetEl = ref<HTMLElement | null>(null)
+useSheetA11y(computed(() => !!pendingDelete.value), confirmSheetEl, () => { pendingDelete.value = null })
 </script>
 
 <template>
@@ -1282,7 +1287,9 @@ async function saveSection(section: MemorySection) {
     <Teleport to="body">
       <Transition name="bottom-sheet">
       <div v-if="pendingDelete" class="bottom-sheet-layer confirm-layer" role="presentation" @click.self="pendingDelete = null">
-        <section class="bottom-sheet confirm-sheet" :class="{ 'bottom-sheet-dragging': deleteSheetDrag.dragging.value }" :style="deleteSheetDrag.sheetStyle.value" role="dialog" aria-modal="true" aria-label="삭제 확인">
+        <section
+          ref="confirmSheetEl"
+          tabindex="-1" class="bottom-sheet confirm-sheet" :class="{ 'bottom-sheet-dragging': deleteSheetDrag.dragging.value }" :style="deleteSheetDrag.sheetStyle.value" role="dialog" aria-modal="true" aria-label="삭제 확인">
           <div class="bottom-sheet-handle bottom-sheet-drag-zone" @pointerdown="deleteSheetDrag.startDrag" />
           <h2>삭제할까요?</h2>
           <p v-if="pendingDelete.kind === 'memory'">“{{ pendingDelete.title }}”</p>

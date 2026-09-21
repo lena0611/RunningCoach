@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import type { DisabledNotificationItem } from '@/app/stores/settingsStore'
+import { ref, toRef } from 'vue'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
+import { useSheetA11y } from '@/shared/lib/useSheetA11y'
 import PrimaryButton from './PrimaryButton.vue'
 import SecondaryButton from './SecondaryButton.vue'
 
-defineProps<{
+const props = defineProps<{
   open: boolean
   disabledItems: DisabledNotificationItem[]
 }>()
@@ -15,12 +17,17 @@ const emit = defineEmits<{
 }>()
 
 const drag = useBottomSheetDrag(() => emit('close'))
+// #828 Escape·포커스 트랩·포커스 복귀·배경 비활성.
+const sheetEl = ref<HTMLElement | null>(null)
+useSheetA11y(toRef(props, 'open'), sheetEl, () => emit('close'))
 </script>
 
 <template>
   <Transition name="bottom-sheet">
   <div v-if="open" class="bottom-sheet-layer notification-settings-layer" role="presentation" @click.self="emit('close')">
     <section
+      ref="sheetEl"
+      tabindex="-1"
       class="bottom-sheet notification-settings-sheet"
       :class="{ 'bottom-sheet-dragging': drag.dragging.value }"
       :style="drag.sheetStyle.value"

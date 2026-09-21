@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onBeforeUnmount, watch } from 'vue'
+import { onBeforeUnmount, watch, toRef, ref } from 'vue'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
+import { useSheetA11y } from '@/shared/lib/useSheetA11y'
 
 /**
  * 세션 조정(다른 날로) 피커 바텀시트 (제안훈련 응답, 에픽 #362).
@@ -27,6 +28,9 @@ const props = defineProps<{
 const emit = defineEmits<{ pick: [date: string]; skip: []; close: [] }>()
 
 const drag = useBottomSheetDrag(() => emit('close'))
+// #828 Escape·포커스 트랩·포커스 복귀·배경 비활성.
+const sheetEl = ref<HTMLElement | null>(null)
+useSheetA11y(toRef(props, 'open'), sheetEl, () => emit('close'))
 
 // open 토글 시 body 스크롤 락(시트 공통 규약, EvidenceSheet 미러).
 watch(
@@ -41,7 +45,7 @@ onBeforeUnmount(() => document.body.classList.remove('sheet-open'))
     <Transition name="bottom-sheet">
     <div v-if="open" class="bottom-sheet-layer" role="presentation" data-no-swipe @click.self="emit('close')">
       <section
-        class="bottom-sheet reschedule-sheet"
+        ref="sheetEl" tabindex="-1" class="bottom-sheet reschedule-sheet"
         :class="{ 'bottom-sheet-dragging': drag.dragging.value }"
         :style="drag.sheetStyle.value"
         role="dialog"

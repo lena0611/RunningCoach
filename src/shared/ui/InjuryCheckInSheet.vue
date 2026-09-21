@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, reactive, watch } from 'vue'
+import { computed, reactive, watch, toRef, ref } from 'vue'
 import type { TrainingInjuryItem } from '@/entities/training-memory/model'
 import type { RunLog } from '@/entities/run/model'
 import { getInjuryAreaLabel, type InjuryAreaSelection } from '@/entities/training-memory/injuryAreas'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
+import { useSheetA11y } from '@/shared/lib/useSheetA11y'
 import ScaleSlider from './ScaleSlider.vue'
 import SegmentTabs from './SegmentTabs.vue'
 
@@ -44,6 +45,10 @@ const draft = reactive({
 })
 
 const drag = useBottomSheetDrag(() => emit('close'))
+// #828 Escape·포커스 트랩·포커스 복귀·배경 비활성.
+// ⚠ 템플릿의 렌더 조건과 **같은 식**을 넘긴다 — open 만 보면 시트가 없는데 배경만 잠긴다.
+const sheetEl = ref<HTMLElement | null>(null)
+useSheetA11y(computed(() => props.open && !!props.item), sheetEl, () => emit('close'))
 const areaLabels = computed(() => props.item?.normalizedAreas.map((area) => getInjuryAreaLabel(area.areaId)).filter(Boolean).join(', ') ?? '')
 // 세션-부상 브리지 문장: "방금 이 러닝이 들어왔고, 그 뒤 이 부위를 확인한다"는 맥락을 전달한다.
 const sessionFeedback = computed(() => {
@@ -136,6 +141,8 @@ function deriveMaxPainLevel(areas: InjuryAreaSelection[]) {
   <Transition name="bottom-sheet">
   <div v-if="open && item" class="bottom-sheet-layer injury-checkin-layer" role="presentation" @click.self="emit('close')">
     <section
+      ref="sheetEl"
+      tabindex="-1"
       class="bottom-sheet injury-checkin-sheet"
       :class="{ 'bottom-sheet-dragging': drag.dragging.value }"
       :style="drag.sheetStyle.value"
