@@ -18,19 +18,38 @@ import { nextTick, onBeforeUnmount, watch, type Ref } from 'vue'
  * 그래서 열린 시트를 **스택**으로 들고, 최상단만 Escape·Tab 을 처리하며 inert 는 스택이 빌 때만 푼다.
  */
 
-/** 열려 있는 시트 스택. 최상단만 키보드를 처리한다. */
-const openSheets: symbol[] = []
+/** 열려 있는 시트 스택. 최상단만 키보드를 처리하고, inert 판정에 시트 엘리먼트를 쓴다. */
+const openSheets: Array<{ id: symbol; el: Ref<HTMLElement | null> }> = []
 
 /** Tab 순환 대상. `inert`·`hidden`·disabled 는 브라우저가 이미 제외하므로 조건을 더 얹지 않는다. */
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-/** 앱 루트를 통째로 비활성화한다 — 스크린리더·Tab·포인터가 모두 시트 뒤로 새지 않는다. */
+/**
+ * 앱 루트를 통째로 비활성화한다 — 스크린리더·Tab·포인터가 모두 시트 뒤로 새지 않는다.
+ *
+ * ⚠⚠ **시트가 `#app` 안에 있으면 절대 걸면 안 된다 — 시트 자신이 꺼진다.**
+ * 2026-09-22 실기기 사고: 러닝 임포트 직후 뜬 부상 체크인 시트에서 **닫기도 안 되고 모든 게
+ * 먹통**이 됐다. `Teleport` 없이 `#app` 안에 렌더되는 시트가 5개 있었는데(InjuryCheckInSheet ·
+ * InjuryScreeningSheet · PostRunInterviewSheet · EarlyRunCreditSheet ·
+ * NotificationSettingsPromptSheet) 거기에도 inert 를 걸어 **앱 전체가 잠겼다.**
+ *
+ * 그래서 inert 는 **열린 시트가 전부 `#app` 밖(body teleport)일 때만** 건다. 하나라도 안에 있으면
+ * 걸지 않는다 — 배경 비활성을 잃는 대신 앱이 잠기지 않는다. Escape·포커스 트랩·포커스 복귀는
+ * 그대로 동작하므로 접근성의 대부분은 유지된다.
+ */
 function syncBackgroundInert() {
   const appRoot = document.getElementById('app')
   if (!appRoot) return
-  if (openSheets.length > 0) appRoot.setAttribute('inert', '')
+  const safe = openSheets.length > 0 && openSheets.every((entry) => !isInsideApp(entry.el.value, appRoot))
+  if (safe) appRoot.setAttribute('inert', '')
   else appRoot.removeAttribute('inert')
+}
+
+/** 시트 엘리먼트가 앱 루트 **안**에 있나. 판단 못 하면(아직 렌더 전 등) 안전한 쪽으로 true. */
+function isInsideApp(el: HTMLElement | null, appRoot: HTMLElement): boolean {
+  if (!el) return true
+  return appRoot.contains(el)
 }
 
 export function useSheetA11y(open: Ref<boolean>, sheetRef: Ref<HTMLElement | null>, onClose: () => void) {
@@ -39,7 +58,7 @@ export function useSheetA11y(open: Ref<boolean>, sheetRef: Ref<HTMLElement | nul
   let previouslyFocused: HTMLElement | null = null
 
   function isTopmost() {
-    return openSheets[openSheets.length - 1] === id
+    return openSheets[openSheets.length - 1]?.id === id
   }
 
   /**
@@ -95,7 +114,7 @@ export function useSheetA11y(open: Ref<boolean>, sheetRef: Ref<HTMLElement | nul
   }
 
   function release() {
-    const index = openSheets.indexOf(id)
+    const index = openSheets.findIndex((entry) => entry.id === id)
     if (index >= 0) openSheets.splice(index, 1)
     syncBackgroundInert()
   }
@@ -108,9 +127,12 @@ export function useSheetA11y(open: Ref<boolean>, sheetRef: Ref<HTMLElement | nul
   watch(open, async (isOpen) => {
     if (isOpen) {
       previouslyFocused = document.activeElement as HTMLElement | null
-      openSheets.push(id)
+      openSheets.push({ id, el: sheetRef })
       syncBackgroundInert()
       await nextTick()
+      // 렌더 전에는 시트 엘리먼트가 없어 "#app 안인가"를 판정할 수 없다 — 보수적으로 안 걸었다가
+      // 엘리먼트가 생긴 뒤 다시 맞춘다. 이걸 빠뜨리면 배경 비활성이 영영 안 걸린다.
+      syncBackgroundInert()
       // 첫 포커스는 시트 안으로. 대상이 없으면 시트 자체에(role=dialog 라 읽힌다).
       ;(focusables()[0] ?? sheetRef.value)?.focus?.()
     } else {
