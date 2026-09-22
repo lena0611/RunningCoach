@@ -55,6 +55,9 @@ function finishGuide() {
 </script>
 
 <template>
+  <!-- #828: body 로 내보낸다. #app 안에 남으면 배경 비활성(inert)이 시트 자신까지 꺼서
+       앱이 통째로 잠긴다(2026-09-22 실기기 먹통 사고). 다른 시트들과 같은 구조로 맞춘다. -->
+  <Teleport to="body">
   <Transition name="bottom-sheet">
   <div v-if="open" class="bottom-sheet-layer injury-screening-layer" role="presentation" @click.self="closeSheet">
     <section
@@ -124,4 +127,5 @@ function finishGuide() {
     </section>
   </div>
   </Transition>
+  </Teleport>
 </template>
