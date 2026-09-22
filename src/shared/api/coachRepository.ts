@@ -85,8 +85,6 @@ type CoachReportRow = {
   updated_at?: string
   injury_context_snapshot?: CoachInjuryContextSnapshot | null
   model?: string | null
-  /** 그 턴에 코치가 낸 스케줄 제안 원문(#830). 없으면 제안이 없었거나 게이트에서 폐기된 턴이다. */
-  schedule_proposal?: CoachScheduleProposal | null
 }
 
 /** 현재 설정에서 코칭에 쓸 모델 id(검증). 서버는 allowlist로 재검증한다. */
@@ -472,10 +470,7 @@ function fromRow(row: CoachReportRow): CoachReport {
     updatedAt: row.updated_at,
     trainingMemoryUpdated: false,
     injuryContextSnapshot: normalizeInjurySnapshot(row.injury_context_snapshot),
-    model: row.model ?? null,
-    // 제안을 복원한다(#830). 예전엔 스트리밍 응답에만 있어, 승인을 놓치면 대화를 다시 열어도
-    // 카드가 사라져 무슨 제안이었는지조차 확인할 수 없었다(2026-09-21 실사고).
-    coachScheduleProposal: row.schedule_proposal ?? null
+    model: row.model ?? null
   }
 }
 

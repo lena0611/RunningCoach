@@ -560,13 +560,9 @@ async function persistCoachResult(
       model,
       // 턴당 1행 실측(#652 후속). 도구를 안 불렀으면 toolCalls 는 빈 배열이고, 그게 곧 신호다.
       data_query_log: queryLog,
-      // 제안 원문을 남긴다(#830). 예전엔 스트리밍 응답에만 있어, 승인을 놓치면 대화를 다시 열어도
-      // 카드가 없었다(2026-09-21 실사고). 게이트를 통과한 것만 저장한다 — 폐기된 제안을
-      // 되살리면 코치가 내지도 않은 변경을 사용자가 보게 된다.
-      schedule_proposal: coachScheduleProposal,
       updated_at: new Date().toISOString()
     })
-    .select('id, selected_run_id, user_note, report, created_at, updated_at, injury_context_snapshot, model, schedule_proposal')
+    .select('id, selected_run_id, user_note, report, created_at, updated_at, injury_context_snapshot, model')
     .single()
   if (reportError) throw new CoachPipelineError('coach_reports.insert', reportError, 'AI 코칭 리포트 저장 실패')
 

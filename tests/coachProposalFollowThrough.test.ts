@@ -46,21 +46,30 @@ describe('도착지에서 제안 동작을 이어서 수행한다 (#830 ②)', (
   })
 })
 
-describe('제안을 저장하고 복원한다 (#830 ③)', () => {
-  it('서버가 제안 원문을 턴에 저장한다', () => {
-    expect(EDGE).toContain('schedule_proposal: coachScheduleProposal')
+describe('제안을 저장하지 않는다 (#639 결정 — 되돌린 #830 ③)', () => {
+  /**
+   * #639 본문이 **명시적으로** 정한 것이다:
+   *   "영속하지 않는다. coach_reports 에 컬럼을 추가하지 않는다 — 이 성질을 그대로 따르면
+   *    철 지난 제안이 과거 리포트에서 되살아나지 않는다(마이그레이션 0)."
+   *
+   * 2026-09-21 에 이 결정을 못 보고 컬럼을 추가했다가, 다음 날 경고한 일이 그대로 일어났다:
+   * 이미 적용한 ease_session(9/24) 카드가 대화에 되살아나 **누르면 또 낮춘다.** #830 의 ②
+   * (승인 즉시 실행)가 붙어 위험이 더 커졌다.
+   *
+   * ② 만으로 원래 문제는 해결된다 — 놓칠 단계가 없으니 "놓치면 사라진다"는 동기도 없다.
+   * 감사 목적은 data_query_log.proposal 이 이미 충족한다.
+   */
+  it('서버가 제안을 coach_reports 에 저장하지 않는다', () => {
+    expect(EDGE).not.toContain('schedule_proposal')
   })
 
-  it('게이트를 통과한 제안만 저장한다', () => {
-    // 폐기된 제안까지 저장하면 코치가 내지도 않은 변경을 사용자가 보게 된다.
-    expect(EDGE).not.toContain('schedule_proposal: ai.coachScheduleProposal')
+  it('웹이 저장된 제안을 복원하지 않는다', () => {
+    expect(REPO).not.toContain('schedule_proposal')
   })
 
-  it('웹이 저장된 제안을 복원한다', () => {
-    expect(REPO).toContain('coachScheduleProposal: row.schedule_proposal ?? null')
-  })
-
-  it('조회 컬럼에 제안이 포함된다', () => {
-    expect(EDGE).toContain('model, schedule_proposal')
+  it('관측은 data_query_log 로 남는다 — 무엇을 제안했는지는 추적 가능해야 한다', () => {
+    // 카드를 다시 그릴 수는 없지만(그게 의도다) 진단은 이걸로 한다.
+    expect(EDGE).toContain('actionType')
+    expect(EDGE).toContain('easeAxis')
   })
 })
