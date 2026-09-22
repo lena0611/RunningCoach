@@ -178,3 +178,76 @@ describe('중첩 시트 (CoachSessionOverlay 안의 BottomSheetSelect)', () => {
     expect(appRoot.hasAttribute('inert')).toBe(false)
   })
 })
+
+/**
+ * 2026-09-22 실기기 사고 — **앱 전체가 먹통**이 됐다.
+ *
+ * 러닝 임포트 직후 뜬 부상 체크인 시트에서 닫기도 안 되고 아무것도 눌리지 않았다. 원인은
+ * `#app` 에 건 `inert` 였다 — `Teleport` 없이 `#app` 안에 렌더되는 시트가 5개 있었는데
+ * 거기에도 inert 를 걸어 **시트 자신까지 꺼졌다.**
+ *
+ * 배경 비활성은 시트가 `#app` 밖에 있을 때만 성립한다. 안에 있으면 걸지 않는다 —
+ * 배경 비활성을 잃는 것이 앱이 잠기는 것보다 낫다.
+ */
+describe('시트가 #app 안에 있으면 배경을 잠그지 않는다 (2026-09-22 먹통 사고)', () => {
+  /** Teleport 없이 #app 안에 렌더되는 시트. */
+  function makeInAppSheet(label: string) {
+    const open = ref(false)
+    const closed = ref(0)
+    const Comp = defineComponent({
+      setup() {
+        const sheetRef = ref<HTMLElement | null>(null)
+        useSheetA11y(open, sheetRef, () => {
+          closed.value += 1
+          open.value = false
+        })
+        return () =>
+          open.value
+            ? h('section', { ref: sheetRef, tabindex: -1, role: 'dialog' }, [h('button', { id: `${label}-btn` }, '닫기')])
+            : null
+      }
+    })
+    return { open, closed, Comp }
+  }
+
+  it('#app 안에 렌더된 시트는 inert 를 걸지 않는다 — 걸면 시트가 죽는다', async () => {
+    const { open, Comp } = makeInAppSheet('inapp')
+    const wrapper = mount(Comp, { attachTo: appRoot })
+    mounted.push(wrapper)
+
+    open.value = true
+    await nextTick()
+    await nextTick()
+
+    const sheet = appRoot.querySelector('[role="dialog"]')
+    expect(sheet, '시트가 #app 안에 있어야 이 케이스다').toBeTruthy()
+    expect(appRoot.hasAttribute('inert'), '시트가 #app 안인데 inert 를 걸면 앱 전체가 잠긴다').toBe(false)
+  })
+
+  it('그래도 Escape 는 동작한다 — 접근성의 나머지는 유지된다', async () => {
+    const { open, closed, Comp } = makeInAppSheet('inapp2')
+    const wrapper = mount(Comp, { attachTo: appRoot })
+    mounted.push(wrapper)
+    open.value = true
+    await nextTick(); await nextTick()
+
+    press('Escape')
+    expect(closed.value).toBe(1)
+  })
+
+  it('#app 안 시트가 하나라도 열려 있으면 바깥 시트가 있어도 잠그지 않는다', async () => {
+    const outside = makeSheet('outside')
+    const inside = makeInAppSheet('inside')
+    mountSheet(outside.Comp)
+    const innerWrapper = mount(inside.Comp, { attachTo: appRoot })
+    mounted.push(innerWrapper)
+
+    outside.open.value = true
+    await nextTick(); await nextTick()
+    expect(appRoot.hasAttribute('inert'), '바깥 시트만 열렸을 때는 잠근다').toBe(true)
+
+    inside.open.value = true
+    await nextTick(); await nextTick()
+    expect(appRoot.hasAttribute('inert'), '#app 안 시트가 열리면 풀어야 한다').toBe(false)
+  })
+})
