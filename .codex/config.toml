@@ -4,3 +4,6 @@ inherit = "core"
 [shell_environment_policy.set]
 HARNESS_ROOT = ".harness"
 HARNESS_ADAPTER = "codex"
+HARNESS_HOOK_PROFILE = "standard"
+HARNESS_AGENT_EVENT_CAP = "50"
+HARNESS_AGENT_EVENT_TTL_MINUTES = "120"

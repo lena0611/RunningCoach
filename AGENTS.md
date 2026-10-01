@@ -42,3 +42,4 @@ Codex나 Copilot 계열 에이전트는 Claude Code의 `SessionStart` hook과 sl
   harness:update는 위 harness-managed 블록만 갱신하고 이 영역은 보존합니다.
 -->
 
+## Imported Claude Cowork project instructions

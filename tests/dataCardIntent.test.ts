@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { dataCardRequestIsSpecific, dataCardUnsupportedConcept, mentionsDataCardIntent } from '../supabase/functions/_shared/dataCardProposal'
+import { dataCardUnsupportedConcept, mentionsDataCardIntent } from '../supabase/functions/_shared/dataCardProposal'
 import { reorderVisibleCards } from '../src/pages/dashboard/summaryBlocks'
 
 /**
@@ -32,27 +34,6 @@ describe('mentionsDataCardIntent', () => {
     expect(mentionsDataCardIntent('최근 4주를 대상으로 주간볼륨 대비 lsd비중')).toBe(false)
     expect(mentionsDataCardIntent('오늘 뭐 뛰면 돼?')).toBe(false)
     expect(mentionsDataCardIntent('')).toBe(false)
-  })
-})
-
-/**
- * 되묻기 게이트(2026-09-04). 상한 2회는 핑퐁의 **길이**만 줄인다 —
- * "물어볼 게 없는데 묻는 첫 질문"은 못 막아서, 지표+기간이 다 있으면 코드가 되묻기를 거절한다.
- */
-describe('dataCardRequestIsSpecific', () => {
-  it('지표와 기간을 둘 다 말했으면 되물을 게 없다', () => {
-    expect(dataCardRequestIsSpecific('/카드생성 최근4주간 주간볼륨 대비 lsd볼륨 비중')).toBe(true)
-    expect(dataCardRequestIsSpecific('최근 4주 평균 케이던스를 카드로 만들어줘')).toBe(true)
-    expect(dataCardRequestIsSpecific('이번 달 총 거리 보여줘')).toBe(true)
-    expect(dataCardRequestIsSpecific('8월 심박 평균')).toBe(true)
-  })
-
-  it('한쪽이 비면 되묻기를 허용한다 — 실제로 애매했던 발화', () => {
-    // 기간(요즘)은 있는데 거리·시간·횟수 중 무엇인지가 없다. 이때는 묻는 게 맞다.
-    expect(dataCardRequestIsSpecific('/카드생성 요즘 얼마나 뛰는지 하나 보여줘')).toBe(false)
-    // 지표는 있는데 기간이 없다.
-    expect(dataCardRequestIsSpecific('LSD 비중 카드 만들어줘')).toBe(false)
-    expect(dataCardRequestIsSpecific('')).toBe(false)
   })
 })
 
@@ -95,5 +76,50 @@ describe('reorderVisibleCards', () => {
 
   it('전부 보이면 그대로 새 순서가 된다', () => {
     expect(reorderVisibleCards(['a', 'b', 'c'], ['b', 'c', 'a'])).toEqual(['b', 'c', 'a'])
+  })
+})
+
+/**
+ * #835 — 카드 되묻기 정책이 "첫 시도엔 묻지 않는다"로 바뀌었다(2026-10-02).
+ *
+ * 2026-10-01 실사용: 카드 2개를 만들려다 **5턴 걸려 1개만** 됐다.
+ *   `/카드생성 연간 총마일리지` → 되물음("'총 거리(km)' 카드로 만들면 될까요?")
+ *   `응`                        → **card_rejected** ("조회 조건을 이해하지 못했습니다")
+ *   `/카드생성 토요일 누적거리 km` → clarify 가 차단됐는데도 **답할 수 없는 질문**이 나갔다
+ *
+ * 원인이 어휘였다 — 되묻기를 막던 `dataCardRequestIsSpecific` 의 목록에 "연간"도 "마일리지"도
+ * 없었다. 어휘를 더 넣는 처방은 네 번 실패했으므로(#642·#643·#701·#821) 판정 자체를 없애고
+ * 기본값을 "묻지 말고 해석해서 만들기"로 바꿨다.
+ *
+ * 프롬프트·게이트 문자열은 타입도 테스트도 안 잡으므로 소스 가드로 잠근다.
+ */
+describe('카드 되묻기 정책 (#835)', () => {
+  const EDGE = readFileSync(resolve(__dirname, '../supabase/functions/coach-run/index.ts'), 'utf-8')
+  const SHARED = readFileSync(resolve(__dirname, '../supabase/functions/_shared/dataCardProposal.ts'), 'utf-8')
+
+  it('어휘 기반 되묻기 게이트가 사라졌다', () => {
+    // 되살아나면 "연간"·"마일리지" 같은 미등록 어휘에서 같은 핑퐁이 재발한다.
+    expect(SHARED).not.toContain('export function dataCardRequestIsSpecific')
+    expect(EDGE).not.toContain('dataCardRequestIsSpecific(userNote)')
+  })
+
+  it('첫 시도에는 되묻지 않는다', () => {
+    expect(EDGE).toContain('if (attempt === 0)')
+    expect(EDGE).toContain('첫 시도에는 되묻지 않습니다')
+  })
+
+  it('되묻기를 막으면 라운드 2 에서 도구를 강제한다 — guidance 만으로는 무시된다', () => {
+    // 2026-10-01 실사용에서 정확히 이게 무시돼 사용자가 답할 수 없는 질문을 받았다.
+    expect(EDGE).toContain('forceCardRetry: true')
+    expect(EDGE).toContain("requestForceTool.name = 'proposeDataCard'")
+  })
+
+  it('강제는 한 번만 — 소비하고 비운다(무한 재호출 방지)', () => {
+    expect(EDGE).toContain('if (toolSupport.requestForceTool) toolSupport.requestForceTool.name = null')
+  })
+
+  it('재시도에서도 못 만들면 그때는 되묻기를 허용한다', () => {
+    // attempt > 0 경로가 남아 있어야 진짜 애매한 요청("요즘 얼마나 뛰는지")을 물을 수 있다.
+    expect(EDGE).toContain('countRecentDataCardClarifications')
   })
 })
