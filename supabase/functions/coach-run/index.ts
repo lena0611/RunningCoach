@@ -10,7 +10,7 @@ import {
   type QueryRunsRow
 } from './queryRuns.ts'
 import { computeDataCard, type DataCardSpec } from '../_shared/dataCard.ts'
-import { dataCardRequestIsSpecific, dataCardUnsupportedConcept, mentionsDataCardIntent, normalizeDataCardProposalArgs } from '../_shared/dataCardProposal.ts'
+import { dataCardUnsupportedConcept, mentionsDataCardIntent, normalizeDataCardProposalArgs } from '../_shared/dataCardProposal.ts'
 import {
   buildDataGapDirective,
   normalizeReportDataGapArgs,
@@ -2328,18 +2328,29 @@ async function executeProposeDataCard(
   const normalized = normalizeDataCardProposalArgs(parsedArgs)
   if ('clarify' in normalized) {
     /*
-      이미 다 말한 요청에는 **되묻기를 아예 막는다**(2026-09-04 사용자 지시).
-      상한 2회는 핑퐁의 길이를 줄일 뿐 "물어볼 게 없는데 묻는 첫 질문"은 못 막는다.
-      지표와 기간이 둘 다 발화에 있으면 되물을 게 없다 — 조건을 그대로 써서 제안하게 한다.
+      **첫 시도에는 되묻지 않는다**(#835, 2026-10-02).
+
+      예전엔 발화에 지표·기간 어휘가 둘 다 있으면(`dataCardRequestIsSpecific`) 되묻기를 막았다.
+      그런데 어휘 목록에 "연간"도 "마일리지"도 없어서 `/카드생성 연간 총마일리지` 가 그대로 되묻기로
+      갔다. 어휘를 더 넣는 처방은 이 저장소에서 네 번 실패했다(#642·#643·#701·#821 분류기 누수) —
+      목록을 넓히는 대신 **기본값을 "묻지 말고 해석해서 만들기"로 바꾼다.**
+
+      카드는 승인형이라(미리보기 숫자를 보고 사용자가 확정) 해석이 틀려도 되돌리기 쉽다. 반면
+      되묻기는 핑퐁을 만들고, 실제로 그 핑퐁에서 코치가 **자기 제안을 승낙받고도 거절**했다
+      (10:10 "응" → card_rejected).
+
+      한 번 해석해보고 그래도 못 만들겠으면 그때 묻는다(아래 attempt > 0 경로).
     */
-    if (dataCardRequestIsSpecific(userNote)) {
+    if (attempt === 0) {
       return {
         clarifyBlocked: true,
-        error: '되물을 필요가 없는 요청입니다.',
+        /** 라운드 2 에서 도구를 **강제**한다 — guidance 만 주면 모델이 무시하고 되묻는 문장을 낸다. */
+        forceCardRetry: true,
+        error: '첫 시도에는 되묻지 않습니다.',
         guidance:
-          '사용자는 이미 지표와 기간을 말했다. **되묻지 마라** — 말한 그대로 조건을 만들어 ' +
-          'proposeDataCard 를 지금 다시 호출한다. 애매한 부분이 남으면 가장 자연스러운 해석을 택하고, ' +
-          '무엇으로 해석했는지 답변에서 한 줄로 밝힌다.'
+          '되묻지 마라. 사용자가 말한 그대로 조건을 만들어 proposeDataCard 를 지금 다시 호출한다. ' +
+          '애매한 부분은 가장 자연스러운 해석을 택하고(예: "연간"=올해, "마일리지"=총 거리), ' +
+          '무엇으로 해석했는지 답변에서 한 줄로 밝힌다. 사용자가 다르면 고쳐 말할 것이다.'
       }
     }
     // 상한을 넘으면 더 묻지 않는다 — 아는 것만으로 만들거나, 못 하겠다고 말하고 끝낸다.
@@ -3467,11 +3478,14 @@ function streamCoachRun(
         const queryLog: CoachTurnQueryLog = { toolCalls: [], ungroundedClaims: 0 }
         /** 이번 턴에 만들어진 카드 제안(#767). DB 에 넣지 않는다 — 승인 전이므로 화면이 들고 있다가 사용자가 저장한다. */
         let pendingDataCardProposal: { spec: DataCardSpec; previewText: string; matchedRuns: number } | null = null
+        /** 카드 되묻기를 막았을 때 라운드 2 에 도구를 강제하는 소비형 상자(#835). 한 번 쓰고 비운다. */
+        const requestForceTool: { name: string | null } = { name: null }
         const ai = await callCoachLlmStream(provider, context, (delta) => send('delta', { delta }), {
           messages: buildCoachMessages(context),
           tools: buildCoachTools(),
           // "카드로 만들어줘"는 되물을 게 없는 발화다 — 도구를 부르는 것 말고 할 일이 없다.
           forceTool: mentionsDataCardIntent(userNote) ? 'proposeDataCard' : undefined,
+          requestForceTool,
           onToolCall: async (name, args) => {
             toolWasCalled = true
             if (name === 'reportDataGap') {
@@ -3488,6 +3502,8 @@ function streamCoachRun(
               const unsupported = 'unsupportedConcept' in result
               // 승인 카드는 화면이 띄운다 — 여기선 마지막 제안만 들고 있다가 done 에 실어 보낸다.
               if (ok) pendingDataCardProposal = { spec: result.spec, previewText: result.previewText, matchedRuns: result.matchedRuns }
+              // 되묻기를 막았으면 라운드 2 에서 **반드시** 다시 부르게 한다(#835) — guidance 만으로는 무시된다.
+              if ('forceCardRetry' in result && result.forceCardRetry) requestForceTool.name = 'proposeDataCard'
               /*
                 관측(#767). 이걸 안 남기면 "카드가 안 만들어졌다"의 원인이 **모델 미호출인지 검증 거부인지**
                 구분되지 않는다 — 2026-09-03 진단 때 실제로 로그가 비어 있어(tools: []) 도구를 부른 턴과
@@ -3655,6 +3671,8 @@ async function callCoachLlmStream(
      * 의도가 분명한 발화는 코드가 판정하고 도구를 못 박는다.
      */
     forceTool?: string
+    /** 카드 되묻기를 막은 턴에서 라운드 2 에 도구를 강제하기 위한 통로(#835). 호출부가 채운다. */
+    requestForceTool?: { name: string | null }
   },
   /** 토큰 사용량 관측 콜백(요청당 원가 실측). 라운드마다 호출된다. */
   onUsage?: (usage: Record<string, unknown>) => void
@@ -3775,6 +3793,15 @@ async function callCoachLlmStream(
     ]
     // 라운드 상한은 코드가 쥔다. 마지막 라운드엔 tools 를 빼서 모델이 답변으로 수렴하게 강제한다.
     const roundsLeft = (toolSupport.roundsLeft ?? 2) - 1
+    /*
+      기본은 넘기지 않는다 — 한 번 부르고 나면 그 결과로 답해야 한다(무한 재호출 방지).
+      예외는 **카드 되묻기를 막은 턴**뿐이다(#835). guidance 로 "다시 호출해라"라고만 하면
+      모델이 무시하고 되묻는 문장을 냈다(2026-10-01 실사용: clarifyBlocked 인데 사용자에게
+      답할 수 없는 질문이 나갔다). 이 저장소가 반복해 배운 것 — 반드시 나가야 하는 건 코드로 강제한다.
+      한 번 쓰고 비우므로(소비형) 루프가 되지 않는다.
+    */
+    const forcedRetryTool = toolSupport.requestForceTool?.name ?? undefined
+    if (toolSupport.requestForceTool) toolSupport.requestForceTool.name = null
     return await callCoachLlmStream(
       provider,
       context,
@@ -3783,8 +3810,9 @@ async function callCoachLlmStream(
         messages: nextMessages,
         tools: roundsLeft > 0 ? toolSupport.tools : [],
         onToolCall: toolSupport.onToolCall,
+        requestForceTool: toolSupport.requestForceTool,
+        forceTool: roundsLeft > 0 ? forcedRetryTool : undefined,
         roundsLeft
-        // forceTool 은 넘기지 않는다 — 한 번 부르고 나면 그 결과로 답해야 한다(무한 재호출 방지).
       },
       onUsage
     )
