@@ -145,7 +145,7 @@ export function buildRunUpdateRow(run: RunLog, options?: { includeHeavyData?: bo
       source: rest.source,
       updated_at: new Date().toISOString()
   }
-  // 추정 플래그는 **알 때만** 쓴다(#838). 플래그를 모르는 경로가 false 로 덮으면 추정 기온이 실측처럼 보인다.
+  // 추정 플래그는 **알 때만** 쓴다(#838). 플래그를 모르는 경로가 false 로 덮으면 출처 기록이 틀어진다.
   if (rest.weatherEstimated !== undefined) row.weather_estimated = rest.weatherEstimated
   if (options?.includeHeavyData) {
     row.laps = rest.laps

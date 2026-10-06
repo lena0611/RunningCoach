@@ -33,8 +33,6 @@ export type QueryRunsRow = {
   temperature: number | null
   humidity: number | null
   wind_mps: number | null
-  /** 기온·습도가 과거 날씨 추정값인가(#838). 선택 컬럼 — 없으면 원본으로 본다. */
-  weather_estimated?: boolean | null
   elevation_gain_m: number | null
   elevation_loss_m: number | null
   course_type: string | null
@@ -146,8 +144,6 @@ export type QueryRunsCoreResult = {
   undecidedRuns: number
   /** 판정하지 못하게 만든 필드(카멜 이름). 문구는 호출자가 만든다. */
   undecidedFields: string[]
-  /** 기온·습도를 조건이나 지표로 쓴 질의에서, 그 값이 추정값이었던 러닝 수(#838). 안 썼으면 0. */
-  estimatedWeatherRuns: number
   rows: Array<Record<string, string | number | null>>
   /** 실패 종류(#652 PR2) — 코드가 판정한다. 프롬프트가 상황을 알아서 읽길 기대하지 않는다. */
   failureKind: QueryRunsFailureKind | null
@@ -324,7 +320,6 @@ export function runQueryRunsCore(spec: QueryRunsSpec, rows: QueryRunsRow[]): Que
     matchedRuns: matched.length,
     undecidedRuns: undecided.runs,
     undecidedFields: undecided.fields,
-    estimatedWeatherRuns: usesWeather(spec) ? matched.filter((row) => row.weather_estimated === true).length : 0,
     rows: resultRows,
     failureKind,
     failureDetail: failureKind ? failureDetail(failureKind, spec, matched.length, ordered.length) : undefined
@@ -387,12 +382,6 @@ function isMissingNumber(row: QueryRunsRow, filter: QueryRunsFilter): boolean {
   if (!spec || spec.kind !== 'number' || !('column' in spec)) return false
   const raw = row[spec.column]
   return typeof raw !== 'number' || !Number.isFinite(raw)
-}
-
-const WEATHER_FIELDS = new Set(['temperature', 'humidity'])
-
-function usesWeather(spec: QueryRunsSpec): boolean {
-  return spec.filters.some((filter) => WEATHER_FIELDS.has(filter.field)) || spec.metrics.some((metric) => WEATHER_FIELDS.has(metric))
 }
 
 function matchesFilter(row: QueryRunsRow, filter: QueryRunsFilter): boolean {

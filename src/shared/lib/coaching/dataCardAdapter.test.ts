@@ -13,7 +13,7 @@ function run(over: Partial<DataCardRunInput> = {}): DataCardRunInput {
 }
 
 /** 판정 못한 런·추정 날씨가 없는 기본값(#838). */
-const NO_GAPS = { undecidedRuns: 0, undecidedFields: [] as string[], estimatedWeatherRuns: 0 }
+const NO_GAPS = { undecidedRuns: 0, undecidedFields: [] as string[] }
 
 /**
  * #767 — 웹이 **Edge 와 같은 계산 파일**을 쓰는지 잠근다. 여기서 새 계산기를 만들면(미러 두 벌)
@@ -63,10 +63,10 @@ describe('dataCardAdapter (#767)', () => {
     expect(describeDataCardBasis({ value: null, display: '—', unit: '%', matchedRuns: 0, groupCount: 0, groupBy: 'week', windowDays: 28, period: { kind: 'rolling', lastDays: 28 }, failureKind: 'no_matching_runs', ...NO_GAPS })).toBe('해당 기록 없음')
   })
 
-  it('기온 조건 카드는 몰라서 못 센 런과 추정 포함을 밝힌다(#838) — 말없이 빼면 실제보다 적게 보인다', () => {
+  it('기온 조건 카드는 몰라서 못 센 런을 밝힌다(#838) — 말없이 빼면 실제보다 적게 보인다', () => {
     const runs = [
       run({ date: '2026-08-01', type: 'Easy', temperature: 30 }),
-      run({ date: '2026-08-02', type: 'Easy', temperature: 31, weatherEstimated: true }),
+      run({ date: '2026-08-02', type: 'Easy', temperature: 31 }),
       run({ date: '2026-08-03', type: 'Easy', temperature: 20 }),
       run({ date: '2026-08-04', type: 'Easy', temperature: null }),
       run({ date: '2026-08-05', temperature: null, type: 'Tempo' })
@@ -89,18 +89,8 @@ describe('dataCardAdapter (#767)', () => {
     expect(value.value).toBe(2)
     // 기온이 없어도 Tempo 는 어차피 대상이 아니다 — 몰라서 뺀 건 Easy 1건뿐이다.
     expect(value.undecidedRuns).toBe(1)
-    expect(value.estimatedWeatherRuns).toBe(1)
-    expect(describeDataCardBasis(value)).toBe('러닝 2건 기준 · 기온 없는 1건 제외 · 추정 기온 포함')
+    // 백필한 기온도 그냥 기온이다 — "추정" 문구를 붙이지 않는다(사용자 결정 2026-10-06).
+    expect(describeDataCardBasis(value)).toBe('러닝 2건 기준 · 기온 없는 1건 제외')
   })
 
-  it('기온을 안 쓰는 카드는 추정 여부를 말하지 않는다', () => {
-    const runs = [run({ date: '2026-08-01', distanceKm: 10, temperature: 31, weatherEstimated: true })]
-    const spec: DataCardSpec = {
-      kind: 'single',
-      title: '총 거리',
-      metric: 'distanceKm',
-      query: { filters: [], groupBy: 'none', metrics: ['distanceKm'], limit: 24 }
-    }
-    expect(describeDataCardBasis(computeDataCardFromRuns(spec, runs))).toBe('러닝 1건 기준')
-  })
 })

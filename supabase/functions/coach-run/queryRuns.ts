@@ -36,9 +36,6 @@ export function runQueryRuns(spec: QueryRunsSpec, rows: QueryRunsRow[]): QueryRu
     // 값이 없어 판정 못한 런(#838) — 데이터에만 실으면 모델이 "3번"만 말하고 넘어간다. 지침으로 못박는다.
     rest.undecidedRuns
       ? `${rest.undecidedFields.map(fieldLabel).join('·')} 값이 기록되지 않은 러닝 ${rest.undecidedRuns}건은 조건을 판정할 수 없어 세지 않았다. 답에 이 사실을 함께 밝혀라 — 모르는 것을 "아니다"로 말하지 않는다.`
-      : null,
-    rest.estimatedWeatherRuns
-      ? `이 중 ${rest.estimatedWeatherRuns}건의 기온·습도는 기록 원본이 아니라 시작 시각·위치로 추정한 과거 날씨다. 실측처럼 단정하지 말고 추정값이 섞였음을 밝혀라.`
       : null
   ].filter((item): item is string => Boolean(item))
   return {

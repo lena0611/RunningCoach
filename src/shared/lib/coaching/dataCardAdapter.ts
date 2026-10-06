@@ -36,7 +36,6 @@ export type DataCardRunInput = {
   temperature?: number | null
   humidity?: number | null
   windMps?: number | null
-  weatherEstimated?: boolean
   elevationGainM?: number | null
   elevationLossM?: number | null
   courseType?: string | null
@@ -63,7 +62,6 @@ export function toQueryRunsRow(run: DataCardRunInput): QueryRunsRow {
     temperature: numberOrNull(run.temperature),
     humidity: numberOrNull(run.humidity),
     wind_mps: numberOrNull(run.windMps),
-    weather_estimated: run.weatherEstimated === true,
     elevation_gain_m: numberOrNull(run.elevationGainM),
     elevation_loss_m: numberOrNull(run.elevationLossM),
     course_type: run.courseType ?? null,
@@ -102,7 +100,7 @@ export function describeDataCardBasis(value: DataCardValue): string {
 }
 
 /**
- * 몰라서 못 센 것·추정이 섞인 것을 밝힌다(#838). "기온 28도 이상 3회"가 기온 없는 런을 말없이 빼고
+ * 몰라서 못 센 것을 밝힌다(#838). "기온 28도 이상 3회"가 기온 없는 런을 말없이 빼고
  * 낸 값이면, 사용자는 더 뛴 날이 있다는 걸 알 길이 없다. 판정이 아니라 사실이다.
  */
 function describeDataGaps(value: DataCardValue): string {
@@ -111,7 +109,6 @@ function describeDataGaps(value: DataCardValue): string {
     const fields = value.undecidedFields.map((field) => FIELD_LABELS[field] ?? field).join('·')
     notes.push(`${fields} 없는 ${value.undecidedRuns}건 제외`)
   }
-  if (value.estimatedWeatherRuns > 0) notes.push('추정 기온 포함')
   return notes.join(' · ')
 }
 

@@ -18,9 +18,8 @@ describe('getRunMetaChips', () => {
     ])
   })
 
-  it('백필한 추정 기온은 "추정"을 밝힌다(#838) — 실측과 같은 품질로 보이면 안 된다', () => {
-    expect(getRunMetaChips(createRun({ temperature: 26.4, weatherEstimated: true })).at(-1)).toEqual({ label: '추정 기온 26°', tone: 'weather' })
-    expect(getRunMetaChips(createRun({ temperature: 26.4, weatherEstimated: false })).at(-1)).toEqual({ label: '기온 26°', tone: 'weather' })
+  it('백필한 기온도 그냥 "기온"으로 보인다(#838, 사용자 결정)', () => {
+    expect(getRunMetaChips(createRun({ temperature: 26.4, weatherEstimated: true })).at(-1)).toEqual({ label: '기온 26°', tone: 'weather' })
   })
 
   it('uses humidity or wind when temperature is not available', () => {
