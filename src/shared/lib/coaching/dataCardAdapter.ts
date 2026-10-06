@@ -36,6 +36,7 @@ export type DataCardRunInput = {
   temperature?: number | null
   humidity?: number | null
   windMps?: number | null
+  weatherEstimated?: boolean
   elevationGainM?: number | null
   elevationLossM?: number | null
   courseType?: string | null
@@ -62,6 +63,7 @@ export function toQueryRunsRow(run: DataCardRunInput): QueryRunsRow {
     temperature: numberOrNull(run.temperature),
     humidity: numberOrNull(run.humidity),
     wind_mps: numberOrNull(run.windMps),
+    weather_estimated: run.weatherEstimated === true,
     elevation_gain_m: numberOrNull(run.elevationGainM),
     elevation_loss_m: numberOrNull(run.elevationLossM),
     course_type: run.courseType ?? null,
@@ -94,6 +96,39 @@ export function formatDataCardValue(value: DataCardValue): string {
  * "주간 비중 평균"의 평균 대상이 몇 주인지 알 수 없다(2026-09-03 지적).
  */
 export function describeDataCardBasis(value: DataCardValue): string {
+  const notes = describeDataGaps(value)
+  const base = describeCoverage(value)
+  return notes ? `${base} · ${notes}` : base
+}
+
+/**
+ * 몰라서 못 센 것·추정이 섞인 것을 밝힌다(#838). "기온 28도 이상 3회"가 기온 없는 런을 말없이 빼고
+ * 낸 값이면, 사용자는 더 뛴 날이 있다는 걸 알 길이 없다. 판정이 아니라 사실이다.
+ */
+function describeDataGaps(value: DataCardValue): string {
+  const notes: string[] = []
+  if (value.undecidedRuns > 0) {
+    const fields = value.undecidedFields.map((field) => FIELD_LABELS[field] ?? field).join('·')
+    notes.push(`${fields} 없는 ${value.undecidedRuns}건 제외`)
+  }
+  if (value.estimatedWeatherRuns > 0) notes.push('추정 기온 포함')
+  return notes.join(' · ')
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  temperature: '기온',
+  humidity: '습도',
+  windMps: '바람',
+  avgHeartRate: '심박',
+  maxHeartRate: '심박',
+  cadence: '케이던스',
+  rpe: 'RPE',
+  sleepQuality: '수면',
+  conditionScore: '컨디션',
+  stressLevel: '스트레스'
+}
+
+function describeCoverage(value: DataCardValue): string {
   if (value.matchedRuns === 0) return '해당 기록 없음'
   const requested = describeWindow(value)
   const unit = GROUP_UNITS[value.groupBy]

@@ -20,6 +20,7 @@ type RunLogRow = {
   temperature: number | null
   humidity: number | null
   wind_mps: number | null
+  weather_estimated?: boolean
   elevation_gain_m: number | null
   elevation_loss_m: number | null
   course_type: RunLog['courseType'] | null
@@ -54,7 +55,7 @@ type RunLogRow = {
 const RUN_LIST_COLUMNS = [
   'id', 'user_id', 'external_id', 'session_title', 'date', 'start_at', 'end_at', 'type',
   'distance_km', 'duration_sec', 'avg_pace_sec', 'avg_heart_rate', 'max_heart_rate', 'cadence',
-  'active_energy_kcal', 'temperature', 'humidity', 'wind_mps', 'elevation_gain_m', 'elevation_loss_m',
+  'active_energy_kcal', 'temperature', 'humidity', 'wind_mps', 'weather_estimated', 'elevation_gain_m', 'elevation_loss_m',
   'course_type', 'rpe', 'workout_feeling', 'pain_note', 'sleep_quality', 'condition_score',
   'stress_level', 'companion', 'memo', 'tags', 'source', 'created_at', 'updated_at',
   'lap_count', 'metric_sample_count', 'route_point_count'
@@ -144,6 +145,8 @@ export function buildRunUpdateRow(run: RunLog, options?: { includeHeavyData?: bo
       source: rest.source,
       updated_at: new Date().toISOString()
   }
+  // 추정 플래그는 **알 때만** 쓴다(#838). 플래그를 모르는 경로가 false 로 덮으면 추정 기온이 실측처럼 보인다.
+  if (rest.weatherEstimated !== undefined) row.weather_estimated = rest.weatherEstimated
   if (options?.includeHeavyData) {
     row.laps = rest.laps
     row.fast_segments = rest.fastSegments
@@ -210,6 +213,47 @@ export async function fetchLastRunRouteStart(): Promise<{ latitude: number; long
   const start = (data as { route_points?: RunLog['routePoints'] } | null)?.route_points?.[0]
   if (!start || !Number.isFinite(start.latitude) || !Number.isFinite(start.longitude)) return null
   return { latitude: start.latitude, longitude: start.longitude }
+}
+
+/** 날씨 백필 대상 — 기온·습도가 둘 다 없고, 아직 추정하지 않았고, 경로가 있는 런(#838). */
+export type RunWeatherTarget = { id: string; startAt: string; latitude: number; longitude: number }
+
+/**
+ * 날씨 백필 대상과 **시작 좌표만** 가져온다(#838). 목록은 경로를 안 싣는다(#661) — 첫 점만 JSON 경로로 뽑는다.
+ * 경로가 없는 런(실내·수동)은 위치를 모르니 대상이 아니다.
+ */
+export async function fetchRunWeatherTargets(): Promise<RunWeatherTarget[]> {
+  const { data, error } = await requireSupabase()
+    .from('run_logs')
+    .select('id, start_at, start_point:route_points->0')
+    .is('temperature', null)
+    .is('humidity', null)
+    .eq('weather_estimated', false)
+    .gt('route_point_count', 0)
+    .not('start_at', 'is', null)
+  if (error) throw error
+  const rows = (data ?? []) as unknown as Array<{ id: string; start_at: string | null; start_point: Partial<RunLog['routePoints'][number]> | null }>
+  return rows.flatMap((row) => {
+    const point = row.start_point
+    if (!row.start_at || !point || !Number.isFinite(point.latitude) || !Number.isFinite(point.longitude)) return []
+    return [{ id: row.id, startAt: row.start_at, latitude: point.latitude as number, longitude: point.longitude as number }]
+  })
+}
+
+/**
+ * 추정 날씨를 저장한다(#838). **기온·습도가 여전히 비어 있을 때만** 쓴다 — 그 사이 동기화가 원본 값을
+ * 넣었으면 덮지 않는다(행이 안 바뀌면 false). updated_at 은 건드리지 않는다(사용자 편집이 아니다).
+ */
+export async function saveEstimatedRunWeather(id: string, weather: { temperature: number; humidity: number | null }): Promise<boolean> {
+  const { data, error } = await requireSupabase()
+    .from('run_logs')
+    .update({ temperature: weather.temperature, humidity: weather.humidity, weather_estimated: true })
+    .eq('id', id)
+    .is('temperature', null)
+    .is('humidity', null)
+    .select('id')
+  if (error) throw error
+  return (data ?? []).length > 0
 }
 
 export async function deleteRunLog(id: string) {
@@ -281,6 +325,7 @@ function fromRow(row: RunLogRow): RunLog {
     temperature: row.temperature,
     humidity: row.humidity,
     windMps: row.wind_mps,
+    weatherEstimated: row.weather_estimated ?? false,
     elevationGainM: row.elevation_gain_m,
     elevationLossM: row.elevation_loss_m,
     courseType: row.course_type ?? 'Unknown',

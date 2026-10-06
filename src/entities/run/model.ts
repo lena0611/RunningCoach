@@ -61,6 +61,12 @@ export type RunLog = {
   temperature: number | null
   humidity: number | null
   windMps: number | null
+  /**
+   * 기온·습도가 기록 원본이 아니라 **과거 날씨 추정값**인가(#838). 기록한 앱이 날씨를 안 넣은 런은
+   * 시작 시각 + 경로 첫 좌표로 Open-Meteo 값을 채운다(`backfillRunWeather`). SSOT §기상 입력의 역할 —
+   * 추정값을 실측과 같은 품질로 보여주지 않는다. undefined = false(로컬 모드·옛 런).
+   */
+  weatherEstimated?: boolean
   elevationGainM: number | null
   elevationLossM: number | null
   courseType: CourseType

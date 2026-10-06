@@ -374,4 +374,27 @@ describe('같은 필드의 contains 도 집합(OR)으로 읽는다 (2026-09-16)'
     )
     expect(result.matchedRuns).toBe(0)
   })
+
+  it('기온이 없어 판정 못한 런과 추정 날씨를 코치 주의로 못박는다(#838)', () => {
+    const spec: QueryRunsSpec = { filters: [{ field: 'temperature', op: 'gte', value: 28 }], groupBy: 'none', metrics: ['count'], limit: 24 }
+    const result = runQueryRuns(spec, [
+      row({ temperature: 30 }),
+      row({ temperature: 31, weather_estimated: true }),
+      row({ temperature: 20 }),
+      row({ temperature: null }),
+      row({ temperature: null })
+    ])
+    expect(result.matchedRuns).toBe(2)
+    expect(result.undecidedRuns).toBe(2)
+    expect(result.estimatedWeatherRuns).toBe(1)
+    expect(result.caution).toContain('기온 값이 기록되지 않은 러닝 2건')
+    expect(result.caution).toContain('추정한 과거 날씨')
+  })
+
+  it('조건 값이 다 있으면 주의를 붙이지 않는다', () => {
+    const spec: QueryRunsSpec = { filters: [{ field: 'temperature', op: 'gte', value: 28 }], groupBy: 'none', metrics: ['count'], limit: 24 }
+    const result = runQueryRuns(spec, [row({ temperature: 30 }), row({ temperature: 29 }), row({ temperature: 31 }), row({ temperature: 33 })])
+    expect(result.undecidedRuns).toBe(0)
+    expect(result.caution).toBeNull()
+  })
 })

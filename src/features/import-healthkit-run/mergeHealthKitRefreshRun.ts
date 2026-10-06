@@ -1,6 +1,9 @@
 import type { ExtractedRunData, RunLog } from '@/entities/run/model'
 
 export function mergeHealthKitRefreshRun(target: RunLog, extracted: ExtractedRunData): RunLog {
+  // 원본에 날씨가 있으면 원본이 이긴다(추정 해제). 없으면 기존 값을 지킨다 — null 로 덮으면
+  // 백필한 추정 날씨(#838)가 리프레시마다 지워졌다가 다시 채워진다.
+  const hasSourceWeather = extracted.temperature !== null || extracted.humidity !== null
   return {
     ...target,
     externalId: extracted.externalId ?? target.externalId,
@@ -15,9 +18,10 @@ export function mergeHealthKitRefreshRun(target: RunLog, extracted: ExtractedRun
     maxHeartRate: extracted.maxHeartRate,
     cadence: extracted.cadence,
     activeEnergyKcal: extracted.activeEnergyKcal,
-    temperature: extracted.temperature,
-    humidity: extracted.humidity,
-    windMps: extracted.windMps,
+    temperature: hasSourceWeather ? extracted.temperature : target.temperature,
+    humidity: hasSourceWeather ? extracted.humidity : target.humidity,
+    windMps: extracted.windMps ?? target.windMps,
+    weatherEstimated: hasSourceWeather ? false : target.weatherEstimated,
     elevationGainM: extracted.elevationGainM,
     elevationLossM: extracted.elevationLossM,
     courseType: extracted.courseType === 'Unknown' ? target.courseType : extracted.courseType,
