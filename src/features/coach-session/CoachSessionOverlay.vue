@@ -7,7 +7,7 @@ import { useRunStore } from '@/app/stores/runStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { useDataCardStore } from '@/app/stores/dataCardStore'
 import { useToastStore } from '@/app/stores/toastStore'
-import type { DataCardSpec } from '@/shared/lib/coaching/dataCardAdapter'
+import { computeDataCardFromRuns, describeDataCardBasis, formatDataCardValue, type DataCardSpec } from '@/shared/lib/coaching/dataCardAdapter'
 import { useSheetA11y } from '@/shared/lib/useSheetA11y'
 import { detectRepeatedDowngrade } from '@/shared/lib/coaching/adjustmentHistory'
 import { useCompetitionStore } from '@/app/stores/competitionStore'
@@ -146,7 +146,18 @@ const oldestLoadedAt = ref<string | null>(null)
  * 데이터 카드 제안(#767) — 코치가 만든 **승인 카드**. 미리보기 숫자는 서버가 같은 계산 코어로 낸 실물이라,
  * 승인 전에 본 값과 저장 후 카드 값이 같다. 승인해야 저장된다(카드가 직접 만들어지지 않는다).
  */
-const pendingDataCardProposal = ref<{ spec: DataCardSpec; previewText: string; matchedRuns: number } | null>(null)
+const pendingDataCardProposal = ref<{ spec: DataCardSpec } | null>(null)
+/**
+ * 카드 미리보기 — 요약 탭 카드와 **같은 계산·같은 문구 함수**로 낸다(#838). 서버가 보낸 미리보기 문구를
+ * 쓰면 기준 줄이 "러닝 N건 기준"뿐이라 "기온 없는 N건 제외" 같은 사실이 미리보기에서만 빠졌다.
+ * 본 것과 저장되는 것이 같아야 한다.
+ */
+const dataCardProposalPreview = computed(() => {
+  const proposal = pendingDataCardProposal.value
+  if (!proposal) return null
+  const value = computeDataCardFromRuns(proposal.spec, runStore.runs)
+  return { text: formatDataCardValue(value), basis: describeDataCardBasis(value) }
+})
 const pendingDataCardRequestText = ref('')
 const savingDataCard = ref(false)
 const pendingGoalProposal = ref<GoalIntentProposal | null>(null)
@@ -745,11 +756,7 @@ async function sendCoachRequest(note: string) {
       signal: controller.signal,
       onDelta: enqueueCoachReveal,
       onDataCardProposal: (proposal) => {
-        pendingDataCardProposal.value = {
-          spec: proposal.spec as DataCardSpec,
-          previewText: proposal.previewText,
-          matchedRuns: proposal.matchedRuns
-        }
+        pendingDataCardProposal.value = { spec: proposal.spec as DataCardSpec }
       },
       onStage: (stage, detail) => {
         coachStage.value = stage
@@ -1577,8 +1584,8 @@ useSheetA11y(computed(() => !!pendingDataCardProposal.value), confirmSheetEl, ()
         <!-- 미리보기는 목업이 아니라 실물이다 — 본 것과 저장되는 것이 같다. -->
         <div class="goal-intent-card">
           <small>{{ pendingDataCardProposal.spec.title }}</small>
-          <strong>{{ pendingDataCardProposal.previewText }}</strong>
-          <span>{{ pendingDataCardProposal.matchedRuns ? `러닝 ${pendingDataCardProposal.matchedRuns}건 기준` : '해당 기록 없음' }}</span>
+          <strong>{{ dataCardProposalPreview?.text }}</strong>
+          <span>{{ dataCardProposalPreview?.basis }}</span>
         </div>
         <div class="confirm-actions">
           <button type="button" :disabled="savingDataCard" @click="confirmDataCardProposal">
