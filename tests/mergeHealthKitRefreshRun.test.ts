@@ -132,4 +132,20 @@ describe('mergeHealthKitRefreshRun', () => {
     expect(updated.metricSamples).toHaveLength(1)
     expect(updated.laps).toHaveLength(1)
   })
+
+  it('원본에 날씨가 없으면 추정 날씨를 지우지 않는다(#838) — null 로 덮으면 리프레시마다 사라진다', () => {
+    const target: RunLog = { ...baseRun, temperature: 27.3, humidity: 81, weatherEstimated: true }
+    const merged = mergeHealthKitRefreshRun(target, healthKitExtracted)
+    expect(merged.temperature).toBe(27.3)
+    expect(merged.humidity).toBe(81)
+    expect(merged.weatherEstimated).toBe(true)
+  })
+
+  it('원본에 날씨가 있으면 원본이 이기고 추정 표시를 푼다(#838)', () => {
+    const target: RunLog = { ...baseRun, temperature: 27.3, humidity: 81, weatherEstimated: true }
+    const merged = mergeHealthKitRefreshRun(target, { ...healthKitExtracted, temperature: 25.1, humidity: 70 })
+    expect(merged.temperature).toBe(25.1)
+    expect(merged.humidity).toBe(70)
+    expect(merged.weatherEstimated).toBe(false)
+  })
 })

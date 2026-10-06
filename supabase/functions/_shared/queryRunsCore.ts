@@ -33,6 +33,8 @@ export type QueryRunsRow = {
   temperature: number | null
   humidity: number | null
   wind_mps: number | null
+  /** 기온·습도가 과거 날씨 추정값인가(#838). 선택 컬럼 — 없으면 원본으로 본다. */
+  weather_estimated?: boolean | null
   elevation_gain_m: number | null
   elevation_loss_m: number | null
   course_type: string | null
@@ -137,6 +139,15 @@ export type QueryRunsCoreResult = {
   groupBy: GroupBy
   /** 필터를 통과한 전체 러닝 수 — 표본 수 표기용. */
   matchedRuns: number
+  /**
+   * 숫자 조건의 값이 **비어 있어 판정하지 못한** 러닝 수(#838). 조건을 못 넘은 게 아니라 모르는 것이다 —
+   * "기온 28도 이상 3번"이 기온 없는 런 140건을 말없이 빼고 낸 답이면 거짓말이 된다.
+   */
+  undecidedRuns: number
+  /** 판정하지 못하게 만든 필드(카멜 이름). 문구는 호출자가 만든다. */
+  undecidedFields: string[]
+  /** 기온·습도를 조건이나 지표로 쓴 질의에서, 그 값이 추정값이었던 러닝 수(#838). 안 썼으면 0. */
+  estimatedWeatherRuns: number
   rows: Array<Record<string, string | number | null>>
   /** 실패 종류(#652 PR2) — 코드가 판정한다. 프롬프트가 상황을 알아서 읽길 기대하지 않는다. */
   failureKind: QueryRunsFailureKind | null
@@ -306,10 +317,14 @@ export function runQueryRunsCore(spec: QueryRunsSpec, rows: QueryRunsRow[]): Que
   })
 
   const failureKind = classifyFailure(spec, resultRows, matched.length, ordered.length)
+  const undecided = findUndecided(rows, filterGroups, new Set(matched))
   return {
     appliedFilters: filterGroups.map(describeFilterGroup),
     groupBy: spec.groupBy,
     matchedRuns: matched.length,
+    undecidedRuns: undecided.runs,
+    undecidedFields: undecided.fields,
+    estimatedWeatherRuns: usesWeather(spec) ? matched.filter((row) => row.weather_estimated === true).length : 0,
     rows: resultRows,
     failureKind,
     failureDetail: failureKind ? failureDetail(failureKind, spec, matched.length, ordered.length) : undefined
@@ -340,6 +355,44 @@ function failureDetail(kind: QueryRunsFailureKind, spec: QueryRunsSpec, matchedR
   if (kind === 'low_sample') return String(matchedRuns)
   if (kind === 'truncated_groups') return `${groupCount}개 중 최근 ${spec.limit}개`
   return undefined
+}
+
+/**
+ * 값이 비어서 떨어진 런(#838) — 비어 있는 숫자 조건을 "통과 가능"으로 봤을 때만 통과하는 런.
+ * 다른 조건(기간·유형)에서 이미 떨어지는 런은 세지 않는다 — 그건 몰라서가 아니라 대상이 아니라서다.
+ */
+function findUndecided(
+  rows: QueryRunsRow[],
+  filterGroups: QueryRunsFilter[][],
+  matched: Set<QueryRunsRow>
+): { runs: number; fields: string[] } {
+  const fields = new Set<string>()
+  let runs = 0
+  for (const row of rows) {
+    if (matched.has(row)) continue
+    const missing = filterGroups.flat().filter((filter) => isMissingNumber(row, filter))
+    if (!missing.length) continue
+    const passesIfUnknown = filterGroups.every((group) =>
+      group.some((filter) => matchesFilter(row, filter) || isMissingNumber(row, filter))
+    )
+    if (!passesIfUnknown) continue
+    runs += 1
+    for (const filter of missing) fields.add(filter.field)
+  }
+  return { runs, fields: [...fields] }
+}
+
+function isMissingNumber(row: QueryRunsRow, filter: QueryRunsFilter): boolean {
+  const spec = QUERY_RUNS_FIELDS[filter.field]
+  if (!spec || spec.kind !== 'number' || !('column' in spec)) return false
+  const raw = row[spec.column]
+  return typeof raw !== 'number' || !Number.isFinite(raw)
+}
+
+const WEATHER_FIELDS = new Set(['temperature', 'humidity'])
+
+function usesWeather(spec: QueryRunsSpec): boolean {
+  return spec.filters.some((filter) => WEATHER_FIELDS.has(filter.field)) || spec.metrics.some((metric) => WEATHER_FIELDS.has(metric))
 }
 
 function matchesFilter(row: QueryRunsRow, filter: QueryRunsFilter): boolean {

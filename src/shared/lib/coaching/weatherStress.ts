@@ -55,6 +55,11 @@ export type WeatherStressInput = {
   humidity: number | null
   /** 풍속(m/s). */
   windMps: number | null
+  /**
+   * 기온·습도가 과거 날씨 추정값인가(#838). 판정은 같은 임계로 하되(브리핑↔채점 일관성),
+   * 문구는 "추정"을 밝힌다 — SSOT §기상 입력의 역할: 추정값을 실측과 같은 품질로 표시하지 않는다.
+   */
+  weatherEstimated?: boolean
 }
 
 // ⚠️ `RunLog` 를 import 하지 않는다 — shared → entities 역방향 의존 래칫(#397).
@@ -65,11 +70,12 @@ export function assessWeatherStress(run: WeatherStressInput): WeatherStress {
   if (feltC < HEAT_CONFOUND_FELT_C) return { heatConfounded: false, feltC, note: null }
 
   const humid = run.humidity !== null && Number.isFinite(run.humidity) && run.humidity >= 70
+  const felt = `${run.weatherEstimated ? '추정 ' : ''}체감 ${Math.round(feltC)}도`
   return {
     heatConfounded: true,
     feltC,
     note: humid
-      ? `체감 ${Math.round(feltC)}도·습도 ${Math.round(run.humidity as number)}% — 이 조건에선 같은 강도라도 심박이 쉽게 오르고 페이스는 느려진다`
-      : `체감 ${Math.round(feltC)}도 — 이 조건에선 같은 강도라도 심박이 쉽게 오르고 페이스는 느려진다`
+      ? `${felt}·습도 ${Math.round(run.humidity as number)}% — 이 조건에선 같은 강도라도 심박이 쉽게 오르고 페이스는 느려진다`
+      : `${felt} — 이 조건에선 같은 강도라도 심박이 쉽게 오르고 페이스는 느려진다`
   }
 }

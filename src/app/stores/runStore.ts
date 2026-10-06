@@ -9,7 +9,17 @@ import { useCompetitionStore } from '@/app/stores/competitionStore'
 import { inferRunType } from '@/features/infer-run-type/inferRunType'
 import type { HeartRateModel } from '@/shared/lib/heartRateZones'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
-import { deleteRunLog, fetchRunHeavyData, fetchRunLogs, insertRunLog, insertRunLogs, updateRunLog } from '@/shared/api/runRepository'
+import {
+  deleteRunLog,
+  fetchRunHeavyData,
+  fetchRunLogs,
+  fetchRunWeatherTargets,
+  insertRunLog,
+  insertRunLogs,
+  saveEstimatedRunWeather,
+  updateRunLog
+} from '@/shared/api/runRepository'
+import { estimateRunWeather } from '@/features/import-open-meteo/openMeteoRunWeather'
 import {
   deleteDeniedExternalId,
   fetchDeniedExternalIds,
@@ -17,6 +27,9 @@ import {
 } from '@/shared/api/runImportDenylistRepository'
 
 const storageKey = 'runcontext.runLogs'
+// 날씨 백필은 한 번에 하나만 돈다. 도는 중에 또 불리면 끝난 뒤 한 번 더 돈다(새로 들어온 런을 놓치지 않게).
+let weatherBackfillRunning: Promise<void> | null = null
+let weatherBackfillAgain = false
 const denylistKey = 'pacelab.runImportDenylist'
 
 export const useRunStore = defineStore('runStore', {
@@ -53,6 +66,7 @@ export const useRunStore = defineStore('runStore', {
           this.deniedExternalIds = isSupabaseConfigured ? [] : loadDenylist()
         }
         this.loaded = true
+        void this.backfillMissingWeather()
       } catch (err) {
         this.error = err instanceof Error ? err.message : '러닝 기록을 불러오지 못했습니다.'
       } finally {
@@ -63,6 +77,7 @@ export const useRunStore = defineStore('runStore', {
       if (isSupabaseConfigured) {
         const run = await insertRunLog(data, source)
         this.runs.push(run)
+        void this.backfillMissingWeather()
         // 세션 의도 매칭은 best-effort — 실패해도 런 저장은 유지한다(#308).
         await this.matchSessionIntent(run)
         return run
@@ -93,6 +108,7 @@ export const useRunStore = defineStore('runStore', {
       if (isSupabaseConfigured) {
         const inserted = await insertRunLogs(items, source)
         this.runs.push(...inserted)
+        void this.backfillMissingWeather()
         // 벌크/HealthKit 인입도 단건(addRun)과 동일하게 예정 세션·의도를 done 매칭한다.
         // 누락 시 수행해도 스케줄이 planned 로 남아 정산에서 missed 오확정 + 디브리핑 달성률 카드 소실.
         for (const run of inserted) await this.matchSessionIntent(run)
@@ -128,6 +144,48 @@ export const useRunStore = defineStore('runStore', {
         (a, b) => b.date.localeCompare(a.date) || (b.startAt ?? '').localeCompare(a.startAt ?? '')
       )[0]
       this.pendingInterviewRunId = newest?.id ?? null
+    },
+    /**
+     * 날씨 없는 런에 과거 날씨 추정값을 채운다(#838) — 로드 직후·런 유입 직후 백그라운드로.
+     *
+     * 유입 경로(정규 동기화·과거 마이그레이션·레이싱 단건·수동/FIT)가 여럿이라 각 경로에 붙이지 않고
+     * **DB 의 빈 행**을 기준으로 잡는다 — 어느 경로로 들어왔든 다음 로드에 메워진다(멱등).
+     * 실패는 삼킨다: 날씨는 부가 정보라 런 저장·표시를 막을 이유가 없다.
+     *
+     * 메모리 갱신은 해당 필드만 바꾼다(`updateRun` 을 타지 않는다) — 사용자 편집이 아니라 다른 하류
+     * (스케줄 매칭 등)를 깨울 이유가 없다.
+     */
+    async backfillMissingWeather() {
+      if (!isSupabaseConfigured) return
+      if (weatherBackfillRunning) {
+        weatherBackfillAgain = true
+        return weatherBackfillRunning
+      }
+      weatherBackfillRunning = (async () => {
+        do {
+          weatherBackfillAgain = false
+          try {
+            const targets = await fetchRunWeatherTargets()
+            if (!targets.length) continue
+            const estimates = await estimateRunWeather(targets)
+            for (const [id, weather] of estimates) {
+              const saved = await saveEstimatedRunWeather(id, weather).catch(() => false)
+              if (!saved) continue
+              const index = this.runs.findIndex((run) => run.id === id)
+              const current = this.runs[index]
+              if (!current || current.temperature !== null || current.humidity !== null) continue
+              this.runs[index] = { ...current, temperature: weather.temperature, humidity: weather.humidity, weatherEstimated: true }
+            }
+          } catch {
+            // 다음 로드에 다시 시도된다.
+          }
+        } while (weatherBackfillAgain)
+      })()
+      try {
+        await weatherBackfillRunning
+      } finally {
+        weatherBackfillRunning = null
+      }
     },
     openInterview(runId: string) {
       this.pendingInterviewRunId = runId

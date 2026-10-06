@@ -80,6 +80,10 @@ async function saveEdit() {
     if (original && original.type !== editing.value.type) {
       editing.value.tags = Array.from(new Set([...(editing.value.tags ?? []).filter((tag) => tag !== 'type:auto'), 'type:user']))
     }
+    // 사용자가 기온·습도를 직접 고쳤으면 더는 추정값이 아니다(#838).
+    if (original && (original.temperature !== editing.value.temperature || original.humidity !== editing.value.humidity)) {
+      editing.value.weatherEstimated = false
+    }
     const updated = await runStore.updateRun(editing.value)
     // 상세 패널이 갱신된 런을 보이도록 스토어의 activeRun 을 교체한다.
     if (updated) sessionDetailStore.open(updated, { nested: sessionDetailStore.nested })
