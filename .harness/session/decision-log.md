@@ -411,3 +411,10 @@ performance 전용 코칭을 **3종 아키타입**(성과·체중·체형·건�
 - 구현 함정(기록): "이전 대화 더 보기"가 읽던 자리를 버리고 바닥으로 튀었다 — **새 턴 추종 감시자가 위쪽에 옛 대화를 붙일 때도 발동**했다. 그 구간만 끄되, 감시자의 nextTick 콜백이 지난 뒤에 풀어야 한다(먼저 풀면 다시 끌어내린다).
 - 미결(이슈 #806): 기억 탭이 "장기 메모 0개"라고 표시하지만 실제 `coach_memory_items` 는 121건이다 — 화면은 `aiNotes` 만 세고 그 테이블을 **웹에서 조회조차 하지 않는다.** 이 화면이 #796 의 최초 전제("장기 기억이 전부 비었다")를 잘못 잡게 만들었다. 목록만 노출할지 삭제까지 열지가 설계 갈림길이라 UI 합의 후 착수.
 - 적용 범위: `src/entities/training-memory/model.ts`, `src/pages/memory/MemoryPage.vue`, `src/features/coach-session/CoachSessionOverlay.vue`, `src/shared/api/coachRepository.ts`, `src/pages/prompt-builder/PromptBuilderPage.vue`, `src/app/styles.css`, `supabase/functions/coach-run/index.ts`, `supabase/functions/_shared/{explicitMemoryRequest,memoryIntake}.ts`, `.harness/project/{domain-rules,navigation-information-architecture}.md`.
+
+## 2026-10-06 - 런 날씨 추정 백필 + "추정" 표시를 빼기로 한 사용자 결정 (#838)
+- 배경: 기온 칩이 일부 런에만 붙었다 — 날씨는 기록 앱 메타에만 의존(225런 중 79건). #713 더위 감안·데이터 카드("28도 이상 몇 번")가 같은 값을 써서 과소 집계됐다(25도↑ 3회 → 실제 14회).
+- 결정 1: 빈 런은 시작 시각 + 경로 첫 좌표로 Open-Meteo 과거 날씨를 채운다(워치 76건 대조 MAE 1.1°C). 기상청 ASOS 과거 관측은 현 키 미등록이라 보류.
+- 결정 2: 숫자 조건 조회는 값이 없어 판정 못한 런을 "기온 없는 N건 제외"로 밝힌다(카드 hint·코치 caution).
+- 결정 3 (사용자 결정, SSOT 표시 규칙 예외): 처음엔 SSOT §기상 입력의 역할("추정값을 실측과 같은 품질로 표시 금지")에 따라 칩·문구·카드·코치에 "추정"을 붙였으나, 사용자가 "추정은 빼라, 그냥 기온"으로 결정. 표시는 전부 "기온", 추정 여부는 `run_logs.weather_estimated` 에 **저장만** 한다. 충돌 해석 순서상 사용자 명시 지시 > 프로젝트 기준. SSOT 에 예외로 명문화(다음 작업자가 "추정"을 되살리지 않게).
+- 적용 범위: `src/shared/lib/runMetaChips.ts`, `src/shared/lib/coaching/{weatherStress,dataCardAdapter}.ts`, `supabase/functions/_shared/{queryRunsCore,dataCard}.ts`, `supabase/functions/coach-run/{index,queryRuns}.ts`, `.harness/project/running-coaching-standards.md`.

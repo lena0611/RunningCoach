@@ -93,8 +93,6 @@ export type DataCardValue = {
   undecidedRuns: number
   /** 판정하지 못하게 만든 필드(카멜 이름). */
   undecidedFields: string[]
-  /** 기온·습도 추정값이 들어간 러닝 수(#838). 기온·습도를 안 쓴 카드면 0. */
-  estimatedWeatherRuns: number
 }
 
 /**
@@ -262,8 +260,7 @@ export function computeDataCard(spec: DataCardSpec, rows: QueryRunsRow[], today:
       period,
       failureKind: result.failureKind,
       undecidedRuns: result.undecidedRuns,
-      undecidedFields: result.undecidedFields,
-      estimatedWeatherRuns: result.estimatedWeatherRuns
+      undecidedFields: result.undecidedFields
     }
   }
 
@@ -275,8 +272,7 @@ export function computeDataCard(spec: DataCardSpec, rows: QueryRunsRow[], today:
   // 조건은 대개 분자에만 걸린다(“28도 이상”/전체). 양쪽에 걸렸으면 큰 쪽을 밝힌다 — 더하면 같은 런을 두 번 센다.
   const disclosure = {
     undecidedRuns: Math.max(numerator.undecidedRuns, denominator.undecidedRuns),
-    undecidedFields: [...new Set([...numerator.undecidedFields, ...denominator.undecidedFields])],
-    estimatedWeatherRuns: Math.max(numerator.estimatedWeatherRuns, denominator.estimatedWeatherRuns)
+    undecidedFields: [...new Set([...numerator.undecidedFields, ...denominator.undecidedFields])]
   }
 
   /*

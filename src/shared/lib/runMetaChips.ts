@@ -103,8 +103,8 @@ function hasWeatherData(run: RunLog) {
 }
 
 function getWeatherChipLabel(run: RunLog) {
-  // 백필한 과거 날씨(#838)는 "추정"을 밝힌다 — SSOT §기상 입력의 역할: 추정값을 실측과 같은 품질로 보여주지 않는다.
-  if (run.temperature !== null) return `${run.weatherEstimated ? '추정 ' : ''}기온 ${Math.round(run.temperature)}°`
+  // 백필한 과거 날씨(#838)도 그냥 "기온"으로 보인다 — 사용자 결정(2026-10-06). 추정 여부는 DB 에만 남긴다.
+  if (run.temperature !== null) return `기온 ${Math.round(run.temperature)}°`
   if (run.humidity !== null) return `습도 ${Math.round(run.humidity)}%`
   if (run.windMps !== null) return `바람 ${round(run.windMps)}m/s`
   return ''

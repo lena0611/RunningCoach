@@ -33,14 +33,6 @@ describe('assessWeatherStress (#713)', () => {
     expect(s.note).toMatch(/심박이 쉽게 오르고/)
   })
 
-  it('추정 날씨면 같은 임계로 판정하되 문구에 "추정"을 밝힌다(#838)', () => {
-    const measured = assessWeatherStress({ temperature: 29, humidity: 85, windMps: 1 })
-    const estimated = assessWeatherStress({ temperature: 29, humidity: 85, windMps: 1, weatherEstimated: true })
-    expect(estimated.heatConfounded).toBe(measured.heatConfounded)
-    expect(estimated.note).toMatch(/^추정 체감/)
-    expect(measured.note).toMatch(/^체감/)
-  })
-
   it('서늘하면 교란이 아니다', () => {
     expect(assessWeatherStress({ temperature: 12, humidity: 50, windMps: 2 }).heatConfounded).toBe(false)
   })

@@ -52,8 +52,6 @@ type RunLogRow = {
   temperature: number | null
   humidity: number | null
   wind_mps: number | null
-  /** 기온·습도가 과거 날씨 추정값인가(#838). 원본 기록이면 false. */
-  weather_estimated?: boolean | null
   elevation_gain_m: number | null
   elevation_loss_m: number | null
   course_type: string | null
@@ -2208,7 +2206,7 @@ async function executeQueryRuns(admin: SupabaseAdminClient, userId: string, rawA
   const { data, error } = await admin
     .from('run_logs')
     .select(
-      'date, start_at, type, distance_km, duration_sec, avg_pace_sec, avg_heart_rate, max_heart_rate, cadence, active_energy_kcal, temperature, humidity, wind_mps, weather_estimated, elevation_gain_m, elevation_loss_m, course_type, rpe, sleep_quality, condition_score, stress_level, companion'
+      'date, start_at, type, distance_km, duration_sec, avg_pace_sec, avg_heart_rate, max_heart_rate, cadence, active_energy_kcal, temperature, humidity, wind_mps, elevation_gain_m, elevation_loss_m, course_type, rpe, sleep_quality, condition_score, stress_level, companion'
     )
     .eq('user_id', userId)
     .order('date', { ascending: false })
@@ -2402,7 +2400,7 @@ async function executeProposeDataCard(
   const { data, error } = await admin
     .from('run_logs')
     .select(
-      'date, start_at, type, distance_km, duration_sec, avg_pace_sec, avg_heart_rate, max_heart_rate, cadence, active_energy_kcal, temperature, humidity, wind_mps, weather_estimated, elevation_gain_m, elevation_loss_m, course_type, rpe, sleep_quality, condition_score, stress_level, companion'
+      'date, start_at, type, distance_km, duration_sec, avg_pace_sec, avg_heart_rate, max_heart_rate, cadence, active_energy_kcal, temperature, humidity, wind_mps, elevation_gain_m, elevation_loss_m, course_type, rpe, sleep_quality, condition_score, stress_level, companion'
     )
     .eq('user_id', userId)
     .order('date', { ascending: false })
@@ -6567,9 +6565,7 @@ function summarizeRunForCoach(run: RunLogRow | null) {
     weather: {
       temperature: run.temperature,
       humidity: run.humidity,
-      windMps: run.wind_mps,
-      // 기록에 날씨가 없어 시작 시각·위치로 추정한 값이면 true(#838) — "그날 기온 N도"를 실측처럼 단정하지 않게.
-      estimated: run.weather_estimated === true
+      windMps: run.wind_mps
     },
     elevation: {
       gainM: run.elevation_gain_m,
