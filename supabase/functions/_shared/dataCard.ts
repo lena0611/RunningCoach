@@ -345,8 +345,16 @@ export function formatDataCardNumber(metric: QueryRunsMetric, value: number | nu
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
 }
 
+/**
+ * 거리는 소수 둘째 자리까지 — 앱 전역 km 표기(기록 탭 "3.83 KM")와 조회 코어(코치 답변)가 둘째 자리다.
+ * 첫째 자리로 자르면 10월 누적 3.83km 가 카드에선 "3.80"으로 보였다(2026-10-07 실측) — 같은 숫자가 세 곳에서 달랐다.
+ */
+const TWO_DECIMAL_METRICS = new Set<QueryRunsMetric>(['distanceKm'])
+
 function roundForMetric(metric: QueryRunsMetric, value: number): number {
-  return INTEGER_METRICS.has(metric) ? Math.round(value) : round(value)
+  if (INTEGER_METRICS.has(metric)) return Math.round(value)
+  if (TWO_DECIMAL_METRICS.has(metric)) return Math.round(value * 100) / 100
+  return round(value)
 }
 
 function round(value: number): number {
