@@ -93,4 +93,16 @@ describe('dataCardAdapter (#767)', () => {
     expect(describeDataCardBasis(value)).toBe('러닝 2건 기준 · 기온 없는 1건 제외')
   })
 
+  it('거리는 둘째 자리까지 낸다 — 기록 탭·코치와 같은 숫자(2026-10-07 실측: 3.83 이 카드에선 3.80)', () => {
+    const runs = [run({ date: '2026-10-02', distanceKm: 3.56 }), run({ date: '2026-10-04', distanceKm: 0.27 })]
+    const spec: DataCardSpec = {
+      kind: 'single',
+      title: '월간 마일리지',
+      metric: 'distanceKm',
+      query: { filters: [], groupBy: 'month', metrics: ['distanceKm'], limit: 24 }
+    }
+    const value = computeDataCardFromRuns(spec, runs)
+    expect(value.value).toBe(3.83)
+    expect(formatDataCardValue(value)).toBe('3.83km')
+  })
 })

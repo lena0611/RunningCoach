@@ -403,9 +403,9 @@ describe('지표별 자리수', () => {
     expect(hr.value).toBe(131)
   })
 
-  it('거리는 소수 한 자리를 유지한다', () => {
+  it('거리는 정수로 자르지 않고 둘째 자리까지 유지한다 — 기록 탭 km 표기와 같은 자리수', () => {
     const rows = [row({ distance_km: 5.25 }), row({ distance_km: 4.1 })]
-    expect(computeDataCard({ kind: 'single', title: '누적 거리', metric: 'distanceKm', query: query() }, rows).value).toBe(9.4)
+    expect(computeDataCard({ kind: 'single', title: '누적 거리', metric: 'distanceKm', query: query() }, rows).value).toBe(9.35)
   })
 })
 
