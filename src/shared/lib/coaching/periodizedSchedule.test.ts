@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AthleteProfile, TrainingGoal } from '@/entities/training-memory/model'
 import { defaultScheduledSessionPrescription, type ScheduledSession } from '@/entities/training-schedule/model'
-import { allocatePhases, assessGoalFeasibility, buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, trainingWeekRange } from '@/shared/lib/coaching/periodizedSchedule'
+import { allocatePhases, assessGoalFeasibility, minimumGoalWeeklyKm, buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, trainingWeekRange } from '@/shared/lib/coaching/periodizedSchedule'
 
 function session(overrides: Partial<ScheduledSession> & { date: string }): ScheduledSession {
   return {
@@ -365,6 +365,29 @@ describe('assessGoalFeasibility (#395)', () => {
   it('이미 목표 피크 이상이면 feasible', () => {
     const f = assessGoalFeasibility({ goal: goal({ targetDate: '2026-03-01', distanceKm: 10 }), profile: profile({}), today, currentWeeklyKm: 60 })
     expect(f.feasible).toBe(true)
+  })
+
+  it('10K·8주·주 12km 는 초보 플랜 기준으로 닿을 수 있다 — 경고 없음(거리×4 피크 과대 판정 회귀)', () => {
+    const f = assessGoalFeasibility({ goal: goal({ targetDate: '2026-03-01', distanceKm: 10 }), profile: profile({}), today, currentWeeklyKm: 12 })
+    expect(f.feasible).toBe(true)
+    expect(f.message).toBeNull()
+  })
+
+  it('경고 문구는 근거 약한 10% 룰을 안전 기준으로 내세우지 않는다', () => {
+    const f = assessGoalFeasibility({ goal: goal({ targetDate: '2026-03-01', distanceKm: 42 }), profile: profile({}), today, currentWeeklyKm: 8 })
+    expect(f.message).not.toContain('10%')
+    expect(f.message).toContain('주 약 64km')
+  })
+})
+
+describe('minimumGoalWeeklyKm — 초보 플랜 피크 바닥값', () => {
+  it('Higdon Novice 기준점과 보간', () => {
+    expect(minimumGoalWeeklyKm(10)).toBe(20)
+    expect(minimumGoalWeeklyKm(21.1)).toBe(38)
+    expect(minimumGoalWeeklyKm(42.195)).toBe(64)
+    expect(minimumGoalWeeklyKm(3)).toBe(15)
+    expect(minimumGoalWeeklyKm(15)).toBeGreaterThan(20)
+    expect(minimumGoalWeeklyKm(15)).toBeLessThan(38)
   })
 })
 
