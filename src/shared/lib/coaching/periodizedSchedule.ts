@@ -82,9 +82,6 @@ export type PeriodizationInput = {
   returnRamp?: { capKm: number; windowSessions: number } | null
 }
 
-/** 안전하다고 보는 주간 볼륨 증가율(소프트). running-coaching-standards "시작점 앵커링"(~10%, 30%+ 급증 회피). */
-export const SAFE_WEEKLY_GROWTH = 0.1
-
 /** 주차별 Phase 배분 결과(0번째 주가 가장 이른 주). */
 export function allocatePhases(totalWeeks: number, goalDistanceKm: number): TrainingPhaseName[] {
   if (totalWeeks <= 0) return []
@@ -523,10 +520,44 @@ export type GoalFeasibility = {
 }
 
 /**
+ * 목표 거리를 완주 준비하는 데 필요한 **최소** 주간 주행량(km) — 초보 플랜 피크 기준.
+ * Higdon Novice: 10K ≈ 주 12mi(최장 6mi), 하프 Novice 1 = 주 23~25mi, 풀 Novice 1 = 주 40mi(64km).
+ * 5K 는 직접 출처 없음 — 10K 절반 거리 대비 보수 추정. 사이는 선형 보간, 양끝은 고정.
+ * (플랜 생성기의 피크(거리×4)와는 다른 개념: 이건 "목표가 가능한가" 판정용 바닥값.)
+ */
+const NOVICE_PEAK_KM: Array<[number, number]> = [
+  [5, 15],
+  [10, 20],
+  [21.1, 38],
+  [42.195, 64]
+]
+
+export function minimumGoalWeeklyKm(distanceKm: number): number {
+  const first = NOVICE_PEAK_KM[0]
+  const last = NOVICE_PEAK_KM[NOVICE_PEAK_KM.length - 1]
+  if (distanceKm <= first[0]) return first[1]
+  if (distanceKm >= last[0]) return last[1]
+  for (let i = 1; i < NOVICE_PEAK_KM.length; i++) {
+    const [d1, km1] = NOVICE_PEAK_KM[i]
+    if (distanceKm <= d1) {
+      const [d0, km0] = NOVICE_PEAK_KM[i - 1]
+      return km0 + ((km1 - km0) * (distanceKm - d0)) / (d1 - d0)
+    }
+  }
+  return last[1]
+}
+
+/**
+ * 늘리는 주(회복주·테이퍼 제외)마다 필요한 증가율이 이 값을 넘으면 무리로 본다.
+ * 근거: Buist RCT — 주 23.7% 증가군이 10.5% 군보다 부상이 많지 않았다 / Nielsen — 주 30%+ 급증은 부상 연관.
+ */
+const GOAL_RAMP_WARN_GROWTH = 0.25
+
+/**
  * 현재 주간 주행량에서 목표일까지 **안전한 진행으로 닿을 수 있는지** 평가한다(#395).
- * 필요한 평균 주간 증가율(복리)이 안전 상한을 크게 넘으면 솔직히 경고하고 대안을 제시한다.
- * (근거: running-coaching-standards "시작점 앵커링" — ~30%+ 급증은 부상 연관(Nielsen),
- *  점진적 부하로 만성 부하를 키워야 보호적(Gabbett).)
+ * 목표 거리에 필요한 최소 주행량(minimumGoalWeeklyKm)까지, 회복주·테이퍼를 뺀 "늘리는 주"마다
+ * 필요한 증가율(복리)이 급증 경고선에 가까우면 솔직히 경고하고 대안을 제시한다.
+ * (근거: running-coaching-standards "시작점 앵커링" — 10% 룰은 근거 약함(Buist), ~30%+ 급증은 부상 연관(Nielsen).)
  */
 export function assessGoalFeasibility(input: PeriodizationInput): GoalFeasibility {
   const { goal, today, currentWeeklyKm } = input
@@ -536,18 +567,21 @@ export function assessGoalFeasibility(input: PeriodizationInput): GoalFeasibilit
   const start = startOfDay(today)
   const target = startOfDay(new Date(`${goal.targetDate}T00:00:00`))
   const weeks = Math.max(1, Math.ceil((target.getTime() - start.getTime()) / MS_PER_DAY / 7))
-  const goalPeakKm = Math.max(goal.distanceKm * 4, 30)
+  const neededKm = minimumGoalWeeklyKm(goal.distanceKm)
   const current = currentWeeklyKm && currentWeeklyKm > 0 ? currentWeeklyKm : Math.min(goal.distanceKm * 2.5, 20)
-  if (current >= goalPeakKm) return { feasible: true, requiredWeeklyGrowth: 0, message: null }
-  // current * (1+g)^weeks = peak  →  g = (peak/current)^(1/weeks) - 1
-  const growth = Math.pow(goalPeakKm / current, 1 / weeks) - 1
-  // 평균 필요 증가율이 안전 상한의 1.5배(≈15%/주)를 넘으면 무리로 본다.
-  if (growth <= SAFE_WEEKLY_GROWTH * 1.5) return { feasible: true, requiredWeeklyGrowth: growth, message: null }
+  if (current >= neededKm) return { feasible: true, requiredWeeklyGrowth: 0, message: null }
+  // 테이퍼·회복주(4주마다)는 볼륨을 늘리지 않으니 빼고 남은 주로 계산한다.
+  const taperWeeks = allocatePhases(weeks, goal.distanceKm).filter((p) => p === 'Taper').length
+  const recoveryWeeks = Math.floor((weeks - taperWeeks) / 4)
+  const buildWeeks = Math.max(1, weeks - taperWeeks - recoveryWeeks)
+  // current * (1+g)^buildWeeks = needed  →  g = (needed/current)^(1/buildWeeks) - 1
+  const growth = Math.pow(neededKm / current, 1 / buildWeeks) - 1
+  if (growth <= GOAL_RAMP_WARN_GROWTH) return { feasible: true, requiredWeeklyGrowth: growth, message: null }
   const pct = Math.round(growth * 100)
   return {
     feasible: false,
     requiredWeeklyGrowth: growth,
-    message: `지금 주행량(약 ${Math.round(current)}km/주)에서 목표일까지 맞추려면 매주 약 ${pct}%씩 늘려야 해요. 안전 범위(주 ${Math.round(SAFE_WEEKLY_GROWTH * 100)}% 안팎)를 넘어서 부상 위험이 커요. 목표일을 조금 미루거나 목표 거리를 낮추는 걸 권해요.`
+    message: `지금 주행량(약 ${Math.round(current)}km/주)에서 이 목표에 필요한 주행량(주 약 ${Math.round(neededKm)}km)까지 가려면, 회복 주와 대회 전 감량 주를 빼고 늘리는 주마다 약 ${pct}%씩 올려야 해요. 한 주에 30% 가까이 늘리면 부상 위험이 커져요. 목표일을 조금 미루거나 목표 거리를 낮추는 걸 권해요.`
   }
 }
 
