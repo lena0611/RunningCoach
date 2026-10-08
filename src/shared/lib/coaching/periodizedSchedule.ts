@@ -547,7 +547,7 @@ export function assessGoalFeasibility(input: PeriodizationInput): GoalFeasibilit
   return {
     feasible: false,
     requiredWeeklyGrowth: growth,
-    message: `지금 주행량(약 ${Math.round(current)}km/주)에서 목표일까지 안전하게 끌어올리려면 매주 약 ${pct}%씩 늘려야 해요 — 부상 위험이 큽니다. 목표일을 조금 미루거나 목표 거리를 낮추는 걸 권해요.`
+    message: `지금 주행량(약 ${Math.round(current)}km/주)에서 목표일까지 맞추려면 매주 약 ${pct}%씩 늘려야 해요. 안전 범위(주 ${Math.round(SAFE_WEEKLY_GROWTH * 100)}% 안팎)를 넘어서 부상 위험이 커요. 목표일을 조금 미루거나 목표 거리를 낮추는 걸 권해요.`
   }
 }
 
