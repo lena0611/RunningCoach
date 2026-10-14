@@ -3625,7 +3625,8 @@ function streamCoachRun(
               */
               queryLog.toolCalls.push({
                 name: 'proposeDataCard',
-                ok: ok || clarified,
+                // 블록 켜기 제안은 실패가 아니라 다른 경로로 답한 것이다 — 실패 집계에 섞지 않는다.
+                ok: ok || clarified || !!blockProposal,
                 matchedRuns: ok ? result.matchedRuns : undefined,
                 // 되묻기와 거부를 갈라 남긴다 — "카드가 안 나왔다"의 원인이 넷(미호출·되묻기·게이트·거부)이다.
                 // card_clarify_blocked 는 게이트가 과했는지 나중에 세어보기 위한 관측이다.

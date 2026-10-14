@@ -1629,7 +1629,8 @@ useSheetA11y(computed(() => !!pendingSummaryBlock.value), summaryBlockSheetEl, (
         class="bottom-sheet confirm-sheet goal-intent-sheet" role="dialog" aria-modal="true" aria-label="데이터 카드 추가 확인">
         <div class="bottom-sheet-handle" />
         <h2>이 카드를 요약에 둘까요?</h2>
-        <p>지금 기록으로 계산한 값이에요. 추가하면 요약 탭에서 계속 보입니다.</p>
+        <!-- VO2max 같은 프로필 카드(#853)는 기록 계산값이 아니다 — 출처를 사실대로 말한다. -->
+        <p>{{ pendingDataCardProposal.spec.kind === 'profile' ? '프로필에 저장된 값이에요.' : '지금 기록으로 계산한 값이에요.' }} 추가하면 요약 탭에서 계속 보입니다.</p>
         <!-- 미리보기는 목업이 아니라 실물이다 — 본 것과 저장되는 것이 같다. -->
         <div class="goal-intent-card">
           <small>{{ pendingDataCardProposal.spec.title }}</small>
