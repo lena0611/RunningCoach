@@ -426,3 +426,12 @@ performance 전용 코칭을 **3종 아키타입**(성과·체중·체형·건�
 - 결정 3 (기간 단정 금지): 주사 후 "N일/N주 달리기 금지"의 권위 수치가 없다(가이드라인·메타분석 모두 없음, 관행·병원 안내문 수준). 코치는 병원 안내를 먼저 묻고 따른다. 파열률 등 수치로 겁주지 않는다.
 - 결정 4 (노출 비용): 처치 후 6주는 한 줄, 7일 안이거나 그 턴에 다시 말하면 주의사항 전체(입력 토큰이 원가의 95%).
 - 적용 범위: `supabase/functions/_shared/{treatmentMention,treatmentGuide}.ts`, `supabase/functions/coach-run/index.ts`, `supabase/migrations/202610140001_injury_treatments.sql`, `.harness/project/running-injury-knowledge.md` §3-D, `.harness/project/research/injury-treatments-evidence.md`
+
+## 2026-10-14 - 앱이 가진 값 카드: VO2max 카드 + 예상 기록·달성률은 '활성 목표' 블록으로 (#853)
+- 배경: "/카드생성 vo2max"·"10km 예상시간"·"목표 달성률"을 실사용 3회(9/4·9/25·10/8) 거절. 10/8엔 거절 직후 코치가 "VO2max 34.4로 들어와 있어요"라고 말해 자기모순.
+- 결정 1 (사용자 결정): 예상 기록·달성률은 새 카드를 만들지 않고 이미 있는 '활성 목표' 블록(기본 숨김)을 켜는 시트로 잇는다.
+- 결정 2 (사용자 결정): VO2max 기반 예상 기록 카드는 만들지 않는다. 예상 기록은 실제 기록 기반 하나 — 같은 10K 예상이 두 숫자로 보이면 헷갈리고, 워치 VO2max는 대략적 추정이라 보조로만 쓴다.
+- 결정 3: VO2max 는 `kind: 'profile'` 카드. 웹·코치 같은 `computeDataCard`, 기준 줄은 "측정일 · 출처".
+- 결정 4: 경로 판정·안내 문구는 코드(`dataCardAppValueRoute`·`goalBlockReport`)가 낸다 — 모델이 "저장 안 된 값"이라 지어내던 자리.
+- 배포 순서: 웹 먼저 → coach-run(구 웹이 프로필 카드 제안을 받으면 계산이 깨진다).
+- 적용 범위: `supabase/functions/_shared/{dataCard,dataCardProposal}.ts`, `supabase/functions/coach-run/index.ts`, `src/features/coach-session/CoachSessionOverlay.vue`, `src/shared/api/coachRepository.ts`, `src/shared/lib/coaching/dataCardAdapter.ts`, `src/app/stores/dataCardStore.ts`, `src/pages/dashboard/DashboardPage.vue`
