@@ -174,7 +174,8 @@ export function goalBlockReport(options: { mentionsVo2Max: boolean; hasDistanceG
   if (!options.hasDistanceGoal) {
     return `${vo2Note}예상 기록과 달성 가능성은 거리가 있는 목표가 있어야 계산돼요. 목표를 먼저 정해 주시면 요약 탭 '활성 목표' 블록에서 볼 수 있어요.`
   }
-  return `${vo2Note}목표 예상 기록과 달성 가능성은 요약 탭 '활성 목표' 블록에 이미 있어요. 아래에서 바로 켤 수 있어요.`
+  // 코치(Edge)는 요약 구성(켜짐 여부)을 모른다 — 켜져 있으면 화면 시트가 "이미 요약에 있어요"라고 말한다.
+  return `${vo2Note}목표 예상 기록과 달성 가능성은 요약 탭 '활성 목표' 블록에 이미 있어요. 아래에서 확인하거나 바로 켤 수 있어요.`
 }
 
 /** 카드 어휘 밖의 개념이면 그 이유를, 아니면 null. 되묻기보다 **먼저** 본다. */
