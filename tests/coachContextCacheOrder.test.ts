@@ -6,8 +6,9 @@ import { describe, expect, it } from 'vitest'
  * 핵심 불변식: **NON_PROMPT_CONTEXT_KEYS 를 뺀 키·값 집합이 완전히 동일**해야 한다. 이 최적화는
  * "값은 그대로, 순서만" 이라서 하나라도 빠지면 코치가 그 정보를 잃는다(품질 회귀).
  *
- * 유일한 의도적 제외가 `memoryCorpus`(#796)다 — 장기기억 전체 본문은 저장 시 중복 판정용이라
+ * 의도적 제외: `memoryCorpus`(#796) — 장기기억 전체 본문은 저장 시 중복 판정용이라
  * 서버 안에만 있어야 한다. 프롬프트에 새면 200건 넘는 문장이 매 턴 정가로 청구된다(입력이 비용의 95%).
+ * `recentTreatments`·`treatmentMentions`(#850) — 처치는 JSON 뒤 꼬리표로만 싣는다(두 번 실리지 않게).
  *
  * index.ts 는 Deno 전용 import 가 섞여 vitest 에서 직접 불러올 수 없어 함수를 여기 미러한다.
  * 원본(`orderContextForCache`)을 바꾸면 이 미러도 함께 바꾼다 — 아래 소스 대조 테스트가 드리프트를 잡는다.
@@ -15,7 +16,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const NON_PROMPT_CONTEXT_KEYS: readonly string[] = ['memoryCorpus']
+const NON_PROMPT_CONTEXT_KEYS: readonly string[] = ['memoryCorpus', 'recentTreatments', 'treatmentMentions']
 const CACHE_STABLE_CONTEXT_KEYS = [
   'trainingKnowledge',
   'trainingMethodology',
@@ -93,9 +94,8 @@ describe('orderContextForCache — 값 보존이 최우선', () => {
 
   it('미러가 원본과 어긋나지 않는다 — 제외 키 목록을 소스와 대조', () => {
     const source = readFileSync(resolve(process.cwd(), 'supabase/functions/coach-run/index.ts'), 'utf8')
-    for (const key of NON_PROMPT_CONTEXT_KEYS) {
-      expect(source).toContain(`const NON_PROMPT_CONTEXT_KEYS: readonly string[] = ['${key}']`)
-    }
+    const list = NON_PROMPT_CONTEXT_KEYS.map((key) => `'${key}'`).join(', ')
+    expect(source).toContain(`const NON_PROMPT_CONTEXT_KEYS: readonly string[] = [${list}]`)
   })
 
   it('안정 키가 앞으로 오고, 매 턴 바뀌는 userNote 는 그 뒤로 밀린다', () => {
