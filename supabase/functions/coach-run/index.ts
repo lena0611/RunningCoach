@@ -9,8 +9,8 @@ import {
   QUERY_RUNS_METRICS,
   type QueryRunsRow
 } from './queryRuns.ts'
-import { computeDataCard, type DataCardSpec } from '../_shared/dataCard.ts'
-import { dataCardUnsupportedConcept, mentionsDataCardIntent, normalizeDataCardProposalArgs } from '../_shared/dataCardProposal.ts'
+import { computeDataCard, type DataCardProfileInput, type DataCardSpec, type RunDataCardSpec } from '../_shared/dataCard.ts'
+import { dataCardAppValueRoute, dataCardUnsupportedConcept, goalBlockReport, mentionsDataCardIntent, normalizeDataCardProposalArgs } from '../_shared/dataCardProposal.ts'
 import {
   buildDataGapDirective,
   normalizeReportDataGapArgs,
@@ -2340,7 +2340,7 @@ async function previousTurnQueriedRuns(
 }
 
 /** 성립 여부 판정용 — 기간만 떼어낸 같은 스펙. 기간 탓에 비어 있는 것과 조건이 틀린 것을 가른다. */
-function withoutPeriod(spec: DataCardSpec): DataCardSpec {
+function withoutPeriod(spec: RunDataCardSpec): RunDataCardSpec {
   return { ...spec, period: null }
 }
 
@@ -2372,6 +2372,9 @@ async function executeProposeDataCard(
     고르라고 물은 셈이다. 그리고 "10km 예상시간"은 매칭 0건으로 떨어져 "기록이 하나도 없어서"라는
     **틀린 이유**로 거절됐다(기록은 14건 있었다). 이유가 틀리면 정직한 거절이 아니다.
   */
+  // 앱이 이미 가진 값(#853) — 거절보다 먼저. 문구는 코드가 낸다(모델이 "저장 안 된 값"이라고 지어내던 자리).
+  const appRoute = dataCardAppValueRoute(userNote)
+  if (appRoute) return await executeAppValueCardRoute(admin, userId, appRoute)
   const unsupported = dataCardUnsupportedConcept(userNote)
   if (unsupported) {
     return { unsupportedConcept: true, error: unsupported, finalReport: `${unsupported} 대신 다른 지표를 요청해 주시겠어요?` }
@@ -2489,6 +2492,57 @@ async function executeProposeDataCard(
     guidance:
       '이 미리보기 숫자를 그대로 인용해 카드 이름과 함께 보여주고 "이대로 추가할까요?"라고 묻는다. ' +
       '저장은 사용자가 화면에서 승인해야 일어난다 — 이미 추가된 것처럼 말하지 않는다.'
+  }
+}
+
+/**
+ * 앱이 이미 가진 값으로 잇는 카드 요청(#853).
+ * - 예상 기록·달성률 → '활성 목표' 블록 켜기 제안(summaryBlockProposal). 새 계산을 만들지 않는다.
+ * - VO2max → 프로필 값 카드(웹이 같은 computeDataCard 로 미리보기·요약 카드를 낸다).
+ */
+async function executeAppValueCardRoute(
+  admin: SupabaseAdminClient,
+  userId: string,
+  route: NonNullable<ReturnType<typeof dataCardAppValueRoute>>
+) {
+  const { data } = await admin.from('training_memory').select('memory').eq('user_id', userId).maybeSingle()
+  const memory = ((data as { memory?: Record<string, unknown> } | null)?.memory ?? {}) as {
+    athleteProfile?: { vo2Max?: unknown; vo2MaxSampleDate?: unknown; vo2MaxSource?: unknown }
+    goals?: Array<{ id?: unknown; distanceKm?: unknown; status?: unknown }>
+    activeGoalId?: unknown
+  }
+  if (route.route === 'goalBlock') {
+    const activeGoal = (memory.goals ?? []).find((goal) => goal.id === memory.activeGoalId && goal.status !== 'archived')
+    const hasDistanceGoal = typeof activeGoal?.distanceKm === 'number' && activeGoal.distanceKm > 0
+    return {
+      appValueRoute: 'goalBlock',
+      summaryBlockProposal: hasDistanceGoal ? { blockId: 'goal' } : null,
+      finalReport: goalBlockReport({ mentionsVo2Max: route.mentionsVo2Max, hasDistanceGoal })
+    }
+  }
+  const profile = memory.athleteProfile ?? {}
+  const profileInput: DataCardProfileInput = {
+    vo2Max: typeof profile.vo2Max === 'number' ? profile.vo2Max : null,
+    vo2MaxSampleDate: typeof profile.vo2MaxSampleDate === 'string' ? profile.vo2MaxSampleDate : null,
+    vo2MaxSource: profile.vo2MaxSource === 'healthkit' || profile.vo2MaxSource === 'manual' ? profile.vo2MaxSource : null
+  }
+  const spec: DataCardSpec = { kind: 'profile', title: 'VO2max', field: 'vo2Max' }
+  const preview = computeDataCard(spec, [], new Date(), profileInput)
+  if (preview.value === null) {
+    return {
+      appValueRoute: 'vo2MaxCard',
+      error: 'VO2max 값이 없습니다.',
+      finalReport: '아직 VO2max 값이 없어요. 설정의 "심폐 체력(VO2max)"에서 HealthKit 갱신이나 직접 입력을 하면 카드로 둘 수 있어요.'
+    }
+  }
+  return {
+    ok: true,
+    appValueRoute: 'vo2MaxCard',
+    spec,
+    title: spec.title,
+    previewText: preview.display,
+    matchedRuns: 0,
+    finalReport: `VO2max는 ${preview.display}(${preview.basisNote})로 들어와 있어요. 아래에서 요약에 추가할지 정해 주세요.`
   }
 }
 
@@ -3534,6 +3588,8 @@ function streamCoachRun(
         const queryLog: CoachTurnQueryLog = { toolCalls: [], ungroundedClaims: 0 }
         /** 이번 턴에 만들어진 카드 제안(#767). DB 에 넣지 않는다 — 승인 전이므로 화면이 들고 있다가 사용자가 저장한다. */
         let pendingDataCardProposal: { spec: DataCardSpec; previewText: string; matchedRuns: number } | null = null
+        /** 요약 기본 블록 켜기 제안(#853) — 카드 제안과 같은 정책(승인 전, DB 미저장). */
+        let pendingSummaryBlockProposal: { blockId: string } | null = null
         /** 카드 되묻기를 막았을 때 라운드 2 에 도구를 강제하는 소비형 상자(#835). 한 번 쓰고 비운다. */
         const requestForceTool: { name: string | null } = { name: null }
         const ai = await callCoachLlmStream(provider, context, (delta) => send('delta', { delta }), {
@@ -3558,6 +3614,8 @@ function streamCoachRun(
               const unsupported = 'unsupportedConcept' in result
               // 승인 카드는 화면이 띄운다 — 여기선 마지막 제안만 들고 있다가 done 에 실어 보낸다.
               if (ok) pendingDataCardProposal = { spec: result.spec, previewText: result.previewText, matchedRuns: result.matchedRuns }
+              const blockProposal = 'summaryBlockProposal' in result ? result.summaryBlockProposal : null
+              if (blockProposal) pendingSummaryBlockProposal = blockProposal
               // 되묻기를 막았으면 라운드 2 에서 **반드시** 다시 부르게 한다(#835) — guidance 만으로는 무시된다.
               if ('forceCardRetry' in result && result.forceCardRetry) requestForceTool.name = 'proposeDataCard'
               /*
@@ -3573,7 +3631,9 @@ function streamCoachRun(
                 // card_clarify_blocked 는 게이트가 과했는지 나중에 세어보기 위한 관측이다.
                 failureKind: ok
                   ? null
-                  : clarified
+                  : blockProposal
+                    ? 'card_summary_block'
+                    : clarified
                     ? 'card_clarify'
                     : clarifyBlocked
                       ? 'card_clarify_blocked'
@@ -3673,7 +3733,11 @@ function streamCoachRun(
         clearInterval(heartbeat)
         // 카드 제안은 **승인 전**이라 DB 에 넣지 않는다(injuryUpdateProposal 과 같은 정책) —
         // 히스토리를 다시 읽어도 철 지난 제안이 되살아나지 않는다.
-        send('done', pendingDataCardProposal ? { ...result, dataCardProposal: pendingDataCardProposal } : result)
+        send('done', {
+          ...result,
+          ...(pendingDataCardProposal ? { dataCardProposal: pendingDataCardProposal } : {}),
+          ...(pendingSummaryBlockProposal ? { summaryBlockProposal: pendingSummaryBlockProposal } : {})
+        })
         closeQuietly()
       } catch (error) {
         clearInterval(heartbeat)

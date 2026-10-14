@@ -134,6 +134,8 @@ export async function requestCoachRunStream(
     onStage?: (stage: CoachStreamStage, detail: string) => void
     /** 데이터 카드 제안(#767) — 승인 카드로 띄운다. 사용자가 눌러야 저장된다. */
     onDataCardProposal?: (proposal: CoachDataCardProposal) => void
+    /** 요약 기본 블록 켜기 제안(#853). */
+    onSummaryBlockProposal?: (proposal: CoachSummaryBlockProposal) => void
     runnerLevel?: RunnerLevel
     commandId?: string | null
     achievements?: CoachAchievementSummary | null
@@ -252,14 +254,14 @@ export async function requestCoachRunStream(
     const parsed = drainSseBuffer(buffer)
     buffer = parsed.rest
 
-    const report = consumeCoachStreamEvents(parsed.events, options.onDelta, options.onStage, options.onDataCardProposal)
+    const report = consumeCoachStreamEvents(parsed.events, options.onDelta, options.onStage, options.onDataCardProposal, options.onSummaryBlockProposal)
     if (report) return report
   }
 
   buffer += decoder.decode()
   if (buffer.trim()) {
     const parsed = drainSseBuffer(hasSseTerminator(buffer) ? buffer : `${buffer}\n\n`)
-    const report = consumeCoachStreamEvents(parsed.events, options.onDelta, options.onStage, options.onDataCardProposal)
+    const report = consumeCoachStreamEvents(parsed.events, options.onDelta, options.onStage, options.onDataCardProposal, options.onSummaryBlockProposal)
     if (report) return report
   }
 
@@ -394,11 +396,15 @@ export type CoachDataCardProposal = {
   matchedRuns: number
 }
 
+/** 요약 기본 블록 켜기 제안(#853) — "목표 달성률" 같은 요청을 이미 있는 '활성 목표' 블록으로 잇는다. 승인 전, DB 미저장. */
+export type CoachSummaryBlockProposal = { blockId: string }
+
 export function consumeCoachStreamEvents(
   events: Array<{ event: string; data: unknown }>,
   onDelta: (delta: string) => void,
   onStage?: (stage: CoachStreamStage, detail: string) => void,
-  onDataCardProposal?: (proposal: CoachDataCardProposal) => void
+  onDataCardProposal?: (proposal: CoachDataCardProposal) => void,
+  onSummaryBlockProposal?: (proposal: CoachSummaryBlockProposal) => void
 ): CoachReport | null {
   for (const event of events) {
     if (event.event === 'delta') {
@@ -416,6 +422,8 @@ export function consumeCoachStreamEvents(
     if (event.event === 'done') {
       const proposal = parseDataCardProposal(event.data)
       if (proposal) onDataCardProposal?.(proposal)
+      const blockProposal = parseSummaryBlockProposal(event.data)
+      if (blockProposal) onSummaryBlockProposal?.(blockProposal)
       const report = parseCoachReport(event.data)
       if (report) return report
       throw new Error('AI 코칭 저장 응답이 비어 있습니다.')
@@ -445,6 +453,13 @@ function parseDataCardProposal(value: unknown): CoachDataCardProposal | null {
     previewText: getString(raw, 'previewText') || '—',
     matchedRuns: typeof matched === 'number' ? matched : 0
   }
+}
+
+function parseSummaryBlockProposal(value: unknown): CoachSummaryBlockProposal | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = (value as { summaryBlockProposal?: unknown }).summaryBlockProposal
+  const blockId = getString(raw, 'blockId')
+  return blockId ? { blockId } : null
 }
 
 function parseCoachReport(value: unknown): CoachReport | null {

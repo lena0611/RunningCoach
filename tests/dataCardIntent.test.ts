@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { dataCardUnsupportedConcept, mentionsDataCardIntent } from '../supabase/functions/_shared/dataCardProposal'
+import { dataCardAppValueRoute, dataCardUnsupportedConcept, goalBlockReport, mentionsDataCardIntent } from '../supabase/functions/_shared/dataCardProposal'
+import { computeDataCard } from '../supabase/functions/_shared/dataCard'
 import { reorderVisibleCards } from '../src/pages/dashboard/summaryBlocks'
 
 /**
@@ -43,12 +44,12 @@ describe('mentionsDataCardIntent', () => {
  * (기록은 14건 있었다), "나의 vo2Max" 는 둘 다 못 만드는 선택지를 두고 되물었다.
  */
 describe('dataCardUnsupportedConcept', () => {
-  it('추정값은 이유를 정확히 말하고 거절한다 — "기록이 없어서"가 아니다', () => {
-    const reason = dataCardUnsupportedConcept('/카드생성 10km 예상시간')
-    expect(reason).toContain('계산해 내는 값')
-    expect(reason).not.toContain('기록이 하나도')
-    expect(dataCardUnsupportedConcept('/카드생성 나의 vo2Max')).toBeTruthy()
-    expect(dataCardUnsupportedConcept('VDOT 카드로 보여줘')).toBeTruthy()
+  it('예상 기록·VO2max 는 더 이상 거절하지 않는다(#853) — 앱이 가진 값으로 잇는다', () => {
+    expect(dataCardUnsupportedConcept('/카드생성 10km 예상시간')).toBeNull()
+    expect(dataCardUnsupportedConcept('/카드생성 나의 vo2Max')).toBeNull()
+    expect(dataCardUnsupportedConcept('/카드생성 목표 달성률')).toBeNull()
+    // VDOT 는 코치 탭 레벨 카드에 있다 — 거절하되 어디서 보는지 말한다.
+    expect(dataCardUnsupportedConcept('VDOT 카드로 보여줘')).toContain('레벨 카드')
   })
 
   it('나이대·순위·체중처럼 없는 데이터도 이유를 밝힌다', () => {
@@ -121,5 +122,51 @@ describe('카드 되묻기 정책 (#835)', () => {
   it('재시도에서도 못 만들면 그때는 되묻기를 허용한다', () => {
     // attempt > 0 경로가 남아 있어야 진짜 애매한 요청("요즘 얼마나 뛰는지")을 물을 수 있다.
     expect(EDGE).toContain('countRecentDataCardClarifications')
+  })
+})
+
+/** #853 — 실사용 3회(9/4·9/25·10/8) 거절된 요청을 앱이 가진 값으로 잇는다. */
+describe('dataCardAppValueRoute', () => {
+  it.each([
+    ['/카드생성 10km 예상시간', false],
+    ['/카드생성 목표 달성률', false],
+    ['/카드생성 목표달성율', false],
+    ['현재 기록과 추세로 목표달성 가능성 카드로', false],
+    ['vo2max로 예상기록 카드로 만들어줘', true]
+  ])('%s → 활성 목표 블록', (note, mentionsVo2Max) => {
+    expect(dataCardAppValueRoute(note)).toEqual({ route: 'goalBlock', mentionsVo2Max })
+  })
+
+  it.each(['/카드생성 vo2max\n', '/카드생성 나의  vo2Max', '최대산소섭취량 카드로 만들어줘'])('%s → VO2max 카드', (note) => {
+    expect(dataCardAppValueRoute(note)).toEqual({ route: 'vo2MaxCard' })
+  })
+
+  it('러닝 집계 요청은 건드리지 않는다', () => {
+    expect(dataCardAppValueRoute('/카드생성 최근 4주 평균 페이스')).toBeNull()
+    expect(dataCardAppValueRoute('/카드생성 연간 총마일리지')).toBeNull()
+  })
+
+  it('VO2max 예상 기록을 원하면 왜 하나로만 보여주는지 말한다', () => {
+    const report = goalBlockReport({ mentionsVo2Max: true, hasDistanceGoal: true })
+    expect(report).toContain('실제로 뛴 기록')
+    expect(report).toContain('활성 목표')
+    expect(goalBlockReport({ mentionsVo2Max: false, hasDistanceGoal: false })).toContain('목표를 먼저')
+  })
+})
+
+describe('computeDataCard — 프로필 카드(#853)', () => {
+  const spec = { kind: 'profile' as const, title: 'VO2max', field: 'vo2Max' as const }
+
+  it('실사례: VO2max 34.4 · HealthKit — 웹·코치가 같은 값', () => {
+    const value = computeDataCard(spec, [], new Date(), { vo2Max: 34.4, vo2MaxSampleDate: '2026-10-08', vo2MaxSource: 'healthkit' })
+    expect(value.display).toBe('34.4')
+    expect(value.basisNote).toBe('10/8 · HealthKit')
+  })
+
+  it('값이 없으면 0 이 아니라 — 와 채우는 곳을 밝힌다', () => {
+    const value = computeDataCard(spec, [], new Date(), null)
+    expect(value.value).toBeNull()
+    expect(value.display).toBe('—')
+    expect(value.basisNote).toContain('프로필에서 갱신')
   })
 })

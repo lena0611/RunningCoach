@@ -51,7 +51,7 @@ export type DataCardPeriod =
   | { kind: 'fixed'; from: string; to: string }
   | null
 
-export type DataCardSpec =
+export type RunDataCardSpec =
   | { kind: 'single'; title: string; query: QueryRunsSpec; metric: QueryRunsMetric; window?: DataCardWindow; period?: DataCardPeriod }
   | {
       kind: 'ratio'
@@ -63,6 +63,22 @@ export type DataCardSpec =
       window?: DataCardWindow
       period?: DataCardPeriod
     }
+
+/**
+ * 러닝 집계가 아니라 **앱이 이미 가진 값**을 그대로 보여주는 카드(#853).
+ * "/카드생성 vo2max" 를 세 번(9/4·9/25·10/8) 거절했는데, 그 값은 프로필에 저장돼 있었다 —
+ * 코치가 거절 직후 "VO2max 34.4로 들어와 있어요"라고 말해 자기모순이 됐다. 지금은 VO2max 하나뿐이다.
+ */
+export type ProfileDataCardSpec = { kind: 'profile'; title: string; field: 'vo2Max' }
+
+export type DataCardSpec = RunDataCardSpec | ProfileDataCardSpec
+
+/** 프로필 카드 입력 — 웹은 athleteProfile, Edge 는 training_memory.memory.athleteProfile 에서 같은 모양으로 넘긴다. */
+export type DataCardProfileInput = {
+  vo2Max: number | null
+  vo2MaxSampleDate: string | null
+  vo2MaxSource: 'healthkit' | 'manual' | null
+} | null
 
 export type DataCardValue = {
   /** 표시할 값. 계산 불가면 null — 화면은 '—' 로 낸다(0 으로 보여주면 거짓말이 된다). */
@@ -93,6 +109,8 @@ export type DataCardValue = {
   undecidedRuns: number
   /** 판정하지 못하게 만든 필드(카멜 이름). */
   undecidedFields: string[]
+  /** 러닝 집계가 아닌 카드(프로필 값)의 기준 줄 — "10/8 · HealthKit". 있으면 화면이 이걸 그대로 쓴다. */
+  basisNote?: string
 }
 
 /**
@@ -151,6 +169,9 @@ export function validateDataCardSpec(
   spec: DataCardSpec
 ): { ok: true } | { ok: false; error: string; fixable: true } {
   if (!spec.title.trim()) return { ok: false, error: '카드 이름이 비어 있습니다.', fixable: true }
+  if (spec.kind === 'profile') {
+    return spec.field === 'vo2Max' ? { ok: true } : { ok: false, error: '지원하지 않는 프로필 값입니다.', fixable: true }
+  }
   /*
     기간은 **period 로만** 받는다. 필터에 직접 박은 날짜는 거부한다 — 의도가 rolling 인지 fixed 인지
     구분이 안 되고, 그러면 "최근 4주" 요청이 조용히 특정 월로 굳는다(2026-09-03 실사고).
@@ -186,7 +207,7 @@ export function validateDataCardSpec(
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
 
 /** 레거시 `window`(rolling 전용)를 period 로 편다 — 이미 저장된 카드가 계속 돌아야 한다. */
-function resolvePeriodSpec(spec: DataCardSpec): DataCardPeriod {
+function resolvePeriodSpec(spec: RunDataCardSpec): DataCardPeriod {
   if (spec.period !== undefined) return spec.period
   return spec.window ? { kind: 'rolling', lastDays: spec.window.lastDays } : null
 }
@@ -241,7 +262,13 @@ function withPeriod(query: QueryRunsSpec, period: DataCardPeriod, today: Date): 
  * 스펙과 러닝 행으로 카드 값을 만든다. 오늘(today)을 받는 이유는 창이 상대값이기 때문이다 —
  * 같은 스펙이라도 날이 바뀌면 값이 바뀌어야 맞다(그게 카드를 매일 보는 이유다).
  */
-export function computeDataCard(spec: DataCardSpec, rows: QueryRunsRow[], today: Date = new Date()): DataCardValue {
+export function computeDataCard(
+  spec: DataCardSpec,
+  rows: QueryRunsRow[],
+  today: Date = new Date(),
+  profile: DataCardProfileInput = null
+): DataCardValue {
+  if (spec.kind === 'profile') return computeProfileCard(profile)
   const period = resolvePeriodSpec(spec)
   const windowDays = period?.kind === 'rolling' ? period.lastDays : null
   if (spec.kind === 'single') {
@@ -328,6 +355,37 @@ export function computeDataCard(spec: DataCardSpec, rows: QueryRunsRow[], today:
     failureKind,
     ...disclosure
   }
+}
+
+/**
+ * 프로필 값 카드. 값이 없으면 0 이 아니라 '—' 와 함께 **어디서 채우는지**를 밝힌다.
+ * 단위(mL/kg·min)는 카드 폭에 안 들어가 기준 줄로 보내지 않고 뺀다 — VO2max 는 숫자만으로 통한다.
+ */
+function computeProfileCard(profile: DataCardProfileInput): DataCardValue {
+  const vo2 = profile?.vo2Max
+  const value = typeof vo2 === 'number' && Number.isFinite(vo2) && vo2 > 0 ? round(vo2) : null
+  const source = profile?.vo2MaxSource === 'healthkit' ? 'HealthKit' : profile?.vo2MaxSource === 'manual' ? '직접 입력' : ''
+  const date = profile?.vo2MaxSampleDate ? formatMonthDay(profile.vo2MaxSampleDate) : ''
+  return {
+    value,
+    display: value === null ? '—' : String(value),
+    unit: '',
+    matchedRuns: 0,
+    groupCount: 0,
+    groupBy: 'none',
+    windowDays: null,
+    period: null,
+    failureKind: null,
+    undecidedRuns: 0,
+    undecidedFields: [],
+    basisNote: value === null ? 'VO2max 값 없음 · 프로필에서 갱신' : [date, source].filter(Boolean).join(' · ') || 'VO2max'
+  }
+}
+
+/** "2026-10-08" 또는 ISO 시각 → "10/8". */
+function formatMonthDay(value: string): string {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  return match ? `${Number(match[2])}/${Number(match[3])}` : ''
 }
 
 /** 묶음 키. runQueryRunsCore 는 묶었을 때만 group 열을 낸다(안 묶었으면 묶음이 하나뿐이다). */

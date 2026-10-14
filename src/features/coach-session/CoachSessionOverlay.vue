@@ -6,6 +6,8 @@ import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { useDataCardStore } from '@/app/stores/dataCardStore'
+import { useSummaryLayoutStore } from '@/app/stores/summaryLayoutStore'
+import { SUMMARY_CARD_BLOCKS, SUMMARY_SECTION_BLOCKS } from '@/pages/dashboard/summaryBlocks'
 import { useToastStore } from '@/app/stores/toastStore'
 import { computeDataCardFromRuns, describeDataCardBasis, formatDataCardValue, type DataCardSpec } from '@/shared/lib/coaching/dataCardAdapter'
 import { useSheetA11y } from '@/shared/lib/useSheetA11y'
@@ -155,10 +157,18 @@ const pendingDataCardProposal = ref<{ spec: DataCardSpec } | null>(null)
 const dataCardProposalPreview = computed(() => {
   const proposal = pendingDataCardProposal.value
   if (!proposal) return null
-  const value = computeDataCardFromRuns(proposal.spec, runStore.runs)
+  // VO2max 카드(#853)는 프로필 값을 본다 — 요약 탭과 같은 입력을 넘긴다.
+  const value = computeDataCardFromRuns(proposal.spec, runStore.runs, memoryStore.memory.athleteProfile ?? null)
   return { text: formatDataCardValue(value), basis: describeDataCardBasis(value) }
 })
+/** 카드를 만든 사용자 원문 — 저장 행의 request_text. 예전엔 대입하는 곳이 없어 늘 빈 값이었다(#853). */
 const pendingDataCardRequestText = ref('')
+/**
+ * 요약 기본 블록 켜기 제안(#853). "목표 달성률"을 새 카드로 만들지 않고 이미 있는 '활성 목표' 블록으로 잇는다 —
+ * 예상 기록이 두 군데서 다른 숫자로 보이지 않게(실제 기록 기반 하나).
+ */
+const pendingSummaryBlock = ref<{ blockId: string; label: string; description: string; alreadyVisible: boolean } | null>(null)
+const savingSummaryBlock = ref(false)
 const savingDataCard = ref(false)
 const pendingGoalProposal = ref<GoalIntentProposal | null>(null)
 const pendingGoalCoachNote = ref('')
@@ -757,6 +767,10 @@ async function sendCoachRequest(note: string) {
       onDelta: enqueueCoachReveal,
       onDataCardProposal: (proposal) => {
         pendingDataCardProposal.value = { spec: proposal.spec as DataCardSpec }
+        pendingDataCardRequestText.value = note
+      },
+      onSummaryBlockProposal: (proposal) => {
+        void openSummaryBlockProposal(proposal.blockId)
       },
       onStage: (stage, detail) => {
         coachStage.value = stage
@@ -1060,6 +1074,39 @@ async function confirmDataCardProposal() {
 }
 function dismissDataCardProposal() {
   pendingDataCardProposal.value = null
+}
+
+async function openSummaryBlockProposal(blockId: string) {
+  const block = [...SUMMARY_SECTION_BLOCKS, ...SUMMARY_CARD_BLOCKS].find((item) => item.id === blockId)
+  if (!block) return
+  // 구성을 안 불러온 채 판단하면 기본값(숨김)으로 읽어 "이미 켜져 있다"를 놓치고, 저장하면 사용자 구성을 덮는다.
+  const layout = useSummaryLayoutStore()
+  if (!layout.loaded) await layout.load()
+  pendingSummaryBlock.value = { blockId, label: block.label, description: block.description, alreadyVisible: layout.isVisible(blockId) }
+}
+
+async function confirmSummaryBlock() {
+  const proposal = pendingSummaryBlock.value
+  if (!proposal || savingSummaryBlock.value) return
+  savingSummaryBlock.value = true
+  try {
+    const layout = useSummaryLayoutStore()
+    const cards = useDataCardStore()
+    if (!cards.loaded) await cards.load()
+    await layout.show(proposal.blockId, cards.cards.map((card) => card.id))
+    // show 는 실패하면 조용히 되돌린다 — 결과를 상태로 확인해 거짓 성공 토스트를 막는다.
+    if (layout.isVisible(proposal.blockId)) {
+      useToastStore().success(`요약 탭에 '${proposal.label}'을(를) 켰어요.`)
+      pendingSummaryBlock.value = null
+    } else {
+      coachError.value = '요약 구성을 저장하지 못했어요.'
+    }
+  } finally {
+    savingSummaryBlock.value = false
+  }
+}
+function dismissSummaryBlock() {
+  pendingSummaryBlock.value = null
 }
 
 function closeGoalProposal() {
@@ -1394,6 +1441,8 @@ function stopCoachThinkingTimer() {
 // #828 데이터 카드 추가 확인 시트에도 Escape·포커스 트랩·배경 비활성을 건다.
 const confirmSheetEl = ref<HTMLElement | null>(null)
 useSheetA11y(computed(() => !!pendingDataCardProposal.value), confirmSheetEl, () => { dismissDataCardProposal() })
+const summaryBlockSheetEl = ref<HTMLElement | null>(null)
+useSheetA11y(computed(() => !!pendingSummaryBlock.value), summaryBlockSheetEl, () => { dismissSummaryBlock() })
 </script>
 
 <template>
@@ -1592,6 +1641,42 @@ useSheetA11y(computed(() => !!pendingDataCardProposal.value), confirmSheetEl, ()
             {{ savingDataCard ? '추가 중' : '요약에 추가' }}
           </button>
           <button class="ghost" type="button" :disabled="savingDataCard" @click="dismissDataCardProposal">그만두기</button>
+        </div>
+      </section>
+    </div>
+    </Transition>
+    <Transition name="bottom-sheet">
+    <div
+      v-if="pendingSummaryBlock"
+      class="bottom-sheet-layer confirm-layer"
+      role="presentation"
+      @click.self="dismissSummaryBlock"
+    >
+      <section
+        ref="summaryBlockSheetEl"
+        tabindex="-1"
+        class="bottom-sheet confirm-sheet goal-intent-sheet" role="dialog" aria-modal="true" aria-label="요약 블록 켜기 확인">
+        <div class="bottom-sheet-handle" />
+        <h2>{{ pendingSummaryBlock.alreadyVisible ? '이미 요약에 있어요' : '요약에 켤까요?' }}</h2>
+        <p>
+          {{
+            pendingSummaryBlock.alreadyVisible
+              ? '요약 탭에서 이 블록을 보면 돼요.'
+              : '새로 계산하는 카드가 아니라, 요약 탭에 이미 있는 블록을 보이게 해요.'
+          }}
+        </p>
+        <div class="goal-intent-card">
+          <small>요약 블록</small>
+          <strong>{{ pendingSummaryBlock.label }}</strong>
+          <span>{{ pendingSummaryBlock.description }}</span>
+        </div>
+        <div class="confirm-actions">
+          <button v-if="!pendingSummaryBlock.alreadyVisible" type="button" :disabled="savingSummaryBlock" @click="confirmSummaryBlock">
+            {{ savingSummaryBlock ? '켜는 중' : '요약에 켜기' }}
+          </button>
+          <button class="ghost" type="button" :disabled="savingSummaryBlock" @click="dismissSummaryBlock">
+            {{ pendingSummaryBlock.alreadyVisible ? '확인' : '그만두기' }}
+          </button>
         </div>
       </section>
     </div>
