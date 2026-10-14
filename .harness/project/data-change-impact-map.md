@@ -239,6 +239,7 @@ SSOT 상 AI 는 제안만 하고 사용자 승인이 유일한 통로다(coach-r
 - severity null 기본값 차이: `getInjuryRecoveryFactor`는 `severity ?? 2`, `applyInjuryGate`는 `?? 0`, `buildInjuryCoachSignals`는 null 그대로 전달 → null일 때 세 경로 다르게 동작.
 - 정규화가 사용자 severity 덮어씀: `normalizeInjuryItems`(:1308)와 `updateInjuryAreas`(:652)가 areas 기준 재파생 → 수동 severity가 save 후 덮어써짐('왜 내 값이 안 남지' 버그 후보).
 - resolved와 archived 분기 차이: `getRecentInjuryHistory`는 archived만 제외·resolved는 12개월 이내 포함, `isInjuryProbeEligible`은 둘 다 불가, gate들은 둘 다 해제. status 값 선택이 4대 경로에 비대칭 전파.
+- **처치 기록은 부상 항목 밖이다(#850)**: 주사·충격파는 `injury_treatments` 표(코치가 발화에서 감지해 행 단위 upsert)에 있고 `TrainingInjuryItem` 에는 없다 — training_memory 는 통째 저장(LWW)이라 Edge 가 쓰면 열린 웹 탭이 지운다. 부상 항목을 지우거나 resolved 로 바꿔도 처치 기록은 남고, coach-run 은 처치일 기준 6주 동안 `treatmentGuide.ts` 꼬리표로 '처치 후 N일째'를 싣는다. 처치 종류를 늘리면 표의 `kind` check 제약·`TreatmentKind`·KB §3-D 를 함께 고친다.
 
 ---
 

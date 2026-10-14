@@ -23,6 +23,8 @@ import { buildExecutionGuideTail } from '../_shared/executionGuideTail.ts'
 import { buildTurnRequestTail } from '../_shared/turnRequestTail.ts'
 import { collapseNearDuplicateFacts, isKnownFact, isNearDuplicateFact } from '../_shared/memoryDedupe.ts'
 import { mentionsExplicitMemoryRequest } from '../_shared/explicitMemoryRequest.ts'
+import { detectTreatmentMentions, type TreatmentMention } from '../_shared/treatmentMention.ts'
+import { buildTreatmentGuideTail, mergeRecentTreatments, TREATMENT_AWARENESS_DAYS, treatmentRecordNote, type RecentTreatment } from '../_shared/treatmentGuide.ts'
 import { memoryIntakeNote, type MemoryIntake, type MemoryIntakeSkip } from '../_shared/memoryIntake.ts'
 import {
   buildUserNoteRelevancePolicy,
@@ -473,6 +475,37 @@ type CoachTurnQueryLog = {
   }
 }
 
+/**
+ * 처치 기록(#850). 같은 (종류·날짜)는 유니크 키로 무시되고, **새로 들어간 행만** 돌려준다 —
+ * 이미 기록된 처치를 다시 말할 때 "남겨뒀어요"를 또 붙이지 않기 위해서다.
+ * 실패해도 코칭은 살린다(경고만 남긴다).
+ */
+async function recordTreatments(
+  admin: SupabaseAdminClient,
+  userId: string,
+  mentions: TreatmentMention[],
+  warnings: CoachPersistenceWarning[]
+): Promise<TreatmentMention[]> {
+  if (!mentions.length) return []
+  const { data, error } = await admin
+    .from('injury_treatments')
+    .upsert(
+      mentions.map((item) => ({ user_id: userId, kind: item.kind, treated_on: item.treatedOn })),
+      { onConflict: 'user_id,kind,treated_on', ignoreDuplicates: true }
+    )
+    .select('kind, treated_on')
+  if (error) {
+    const warning = toPersistenceWarning('injury_treatments.upsert', error)
+    console.warn('coach-run persistence warning', warning)
+    warnings.push(warning)
+    return []
+  }
+  return ((data ?? []) as Array<{ kind: TreatmentMention['kind']; treated_on: string }>).map((row) => ({
+    kind: row.kind,
+    treatedOn: row.treated_on
+  }))
+}
+
 async function persistCoachResult(
   admin: SupabaseAdminClient,
   userId: string,
@@ -548,7 +581,11 @@ async function persistCoachResult(
     skipped: memoryIntake.skipped.map((item) => ({ reason: item.reason }))
   }
   const intakeNote = memoryIntakeNote(memoryIntake, explicitMemoryRequest)
-  const reportWithIntakeNote = intakeNote ? `${report.trimEnd()}\n\n${intakeNote}` : report
+  // 처치 기록(#850) — 사용자가 받았다고 말한 처치를 행으로 남기고, **새로 남긴 것만** 답변 끝에 알린다.
+  // 리포트보다 먼저 넣는 이유: 알림 문구가 리포트 본문에 들어가야 한다. 같은 처치를 또 말하면 무시된다(유니크 키).
+  const recordedTreatments = await recordTreatments(admin, userId, context.treatmentMentions, persistenceWarnings)
+  const treatmentNote = treatmentRecordNote(recordedTreatments)
+  const reportWithIntakeNote = [report.trimEnd(), intakeNote, treatmentNote].filter(Boolean).join('\n\n')
   const { data: reportRow, error: reportError } = await admin
     .from('coach_reports')
     .insert({
@@ -1297,7 +1334,8 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     { data: threadReports },
     { data: knowledgeSources },
     { data: trainingMethods },
-    { data: prescriptionRules }
+    { data: prescriptionRules },
+    { data: treatmentRows }
   ] = await Promise.all([
     admin.from('training_memory').select('memory').eq('user_id', userId).maybeSingle(),
     admin.from('run_logs').select('*').eq('user_id', userId).order('date', { ascending: false }).limit(120),
@@ -1311,8 +1349,18 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
     threadReportQuery(admin, userId, selectedRunId),
     admin.from('training_knowledge_sources').select('id, title, author, source_type, url, reliability, summary').eq('approved', true),
     admin.from('training_methods').select('id, source_id, name, slug, family, summary, target_distances, suitable_levels, weekly_days_min, weekly_days_max, caution_notes').eq('approved', true),
-    admin.from('training_prescription_rules').select('id, method_id, source_id, goal_distance, phase, session_type, rule_type, metric, prescription, raise_condition, lower_condition, contraindications, evidence_summary, priority, protocol, template_slug').eq('approved', true).order('priority')
+    admin.from('training_prescription_rules').select('id, method_id, source_id, goal_distance, phase, session_type, rule_type, metric, prescription, raise_condition, lower_condition, contraindications, evidence_summary, priority, protocol, template_slug').eq('approved', true).order('priority'),
+    // 최근 처치(#850). 표가 없거나(마이그레이션 전) 실패해도 코칭은 돈다 — data 가 null 이면 빈 목록.
+    admin.from('injury_treatments').select('kind, treated_on').eq('user_id', userId).gte('treated_on', shiftCoachDateKey(currentDateInSeoul(), -TREATMENT_AWARENESS_DAYS))
   ])
+  // 처치(#850): 저장분 + 이번 턴에 말한 것. 이번 턴 것도 바로 꼬리표에 실어야 "어제 맞았다"에 제대로 답한다.
+  const treatmentToday = currentDateInSeoul()
+  const treatmentMentions: TreatmentMention[] = detectTreatmentMentions(userNote, treatmentToday)
+  const recentTreatments: RecentTreatment[] = mergeRecentTreatments(
+    ((treatmentRows ?? []) as Array<{ kind: TreatmentMention['kind']; treated_on: string }>).map((row) => ({ kind: row.kind, treatedOn: row.treated_on })),
+    treatmentMentions,
+    treatmentToday
+  )
   let runRows = (runs ?? []) as RunLogRow[]
   const reportRows = (reports ?? []) as CoachReportRow[]
   const threadReportRows = (threadReports ?? []) as CoachReportRow[]
@@ -1832,6 +1880,9 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
      * 프롬프트 선별본만 대조하면 안 오른 기억과 중복돼 같은 사실이 계속 쌓인다(#796 실측 203건 중 다수).
      */
     memoryCorpus: memoryRows.map((row) => truncateText(row.content, 260)).filter(Boolean),
+    /** 처치(#850, 프롬프트 비탑재 — 꼬리표로만 싣는다). treatmentMentions 는 저장 대상. */
+    recentTreatments,
+    treatmentMentions,
     coreMemoryItems: tieredMemory.coreMemoryItems,
     coreMemoryItemsInstruction:
       'coreMemoryItems는 이 사용자를 대할 때 항상 안고 가는 활성 핵심 기억이다(사람으로 치면 늘 떠올리는 그 사람의 주요 서사·목표·동기·정체성·중요 제약). 매 답변의 기본 전제로 삼아 일관되게 사용자를 대한다. 사용자의 want to/하고 싶다/원한다 같은 욕구와 목표 서사를 특히 잊지 말고, 관련될 때 자연스럽게 이어 말해 신뢰를 쌓는다. 단 매번 통째로 나열하지 말고 맥락에 맞게 녹인다.',
@@ -2514,7 +2565,7 @@ const CACHE_STABLE_CONTEXT_KEYS = [
  * 200건 넘는 문장이 매 턴 정가로 청구된다 — 입력이 비용의 95%다([[monetization-pricing-decisions]]).
  * 선별본(coreMemoryItems·coachMemoryItems)만 모델이 본다.
  */
-const NON_PROMPT_CONTEXT_KEYS: readonly string[] = ['memoryCorpus']
+const NON_PROMPT_CONTEXT_KEYS: readonly string[] = ['memoryCorpus', 'recentTreatments', 'treatmentMentions']
 
 /**
  * 안정 키를 앞으로 모아 직렬화 순서를 바꾼다. 값은 그대로 유지하고,
@@ -2549,6 +2600,11 @@ function buildCoachMessages(context: unknown) {
           (context as { scheduleProposalGate?: { upcomingTargets?: unknown }; upcomingSchedule?: unknown } | null)
             ?.scheduleProposalGate?.upcomingTargets ??
             (context as { upcomingSchedule?: unknown } | null)?.upcomingSchedule
+        ) +
+        // 처치 꼬리표(#850) — 주사 직후 주의사항이 일반 통증 안내로 뭉개지지 않게 JSON 뒤에 세운다.
+        buildTreatmentGuideTail(
+          (context as { recentTreatments?: RecentTreatment[] } | null)?.recentTreatments ?? [],
+          (context as { treatmentMentions?: TreatmentMention[] } | null)?.treatmentMentions ?? []
         ) +
         // 실행 지침 꼬리표 **뒤에** 사용자 요청을 한 번 더 세운다. 그러지 않으면 프롬프트의 마지막
         // 블록이 예정 세션 목록이라, 대상이 생략된 짧은 요청("표로 보여줘")이 스케줄 비교로 끌려간다
