@@ -418,3 +418,11 @@ performance 전용 코칭을 **3종 아키타입**(성과·체중·체형·건�
 - 결정 2: 숫자 조건 조회는 값이 없어 판정 못한 런을 "기온 없는 N건 제외"로 밝힌다(카드 hint·코치 caution).
 - 결정 3 (사용자 결정, SSOT 표시 규칙 예외): 처음엔 SSOT §기상 입력의 역할("추정값을 실측과 같은 품질로 표시 금지")에 따라 칩·문구·카드·코치에 "추정"을 붙였으나, 사용자가 "추정은 빼라, 그냥 기온"으로 결정. 표시는 전부 "기온", 추정 여부는 `run_logs.weather_estimated` 에 **저장만** 한다. 충돌 해석 순서상 사용자 명시 지시 > 프로젝트 기준. SSOT 에 예외로 명문화(다음 작업자가 "추정"을 되살리지 않게).
 - 적용 범위: `src/shared/lib/runMetaChips.ts`, `src/shared/lib/coaching/{weatherStress,dataCardAdapter}.ts`, `supabase/functions/_shared/{queryRunsCore,dataCard}.ts`, `supabase/functions/coach-run/{index,queryRuns}.ts`, `.harness/project/running-coaching-standards.md`.
+
+## 2026-10-14 - 처치(주사·충격파) 기록과 처치 후 코칭 (#850)
+- 배경: "어제 뒷꿈치에 스테로이드 주사를 맞았다"에 코치가 일반 발 통증 안내만 했다. 부상 KB 에 처치 항목이 없었고, 처치 사실은 장기기억·부상 기록 어디에도 남지 않았다(9/8 PDRN·충격파도 동일).
+- 결정 1 (웹 검색 아님): 의료 정보는 그때그때 웹보다 **검증한 KB** 가 맞는 영역이다. 리서치→KB §3-D 적재→코드 꼬리표로 싣는다. 웹 검색은 대회·장소 같은 계속 바뀌는 정보용으로 따로 논의한다.
+- 결정 2 (저장 위치): `injury_treatments` 별도 표. 부상 항목(training_memory)은 통째 저장(LWW)이라 Edge 가 쓰면 열린 웹 탭이 지운다.
+- 결정 3 (기간 단정 금지): 주사 후 "N일/N주 달리기 금지"의 권위 수치가 없다(가이드라인·메타분석 모두 없음, 관행·병원 안내문 수준). 코치는 병원 안내를 먼저 묻고 따른다. 파열률 등 수치로 겁주지 않는다.
+- 결정 4 (노출 비용): 처치 후 6주는 한 줄, 7일 안이거나 그 턴에 다시 말하면 주의사항 전체(입력 토큰이 원가의 95%).
+- 적용 범위: `supabase/functions/_shared/{treatmentMention,treatmentGuide}.ts`, `supabase/functions/coach-run/index.ts`, `supabase/migrations/202610140001_injury_treatments.sql`, `.harness/project/running-injury-knowledge.md` §3-D, `.harness/project/research/injury-treatments-evidence.md`
