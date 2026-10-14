@@ -7,11 +7,11 @@
  * 코치가 "그 기준으로는 못 만든다"고 정직하게 말하고 **가장 가까운 대안**을 다시 낼 수 있어야 한다.
  */
 
-import { validateDataCardSpec, type DataCardPeriod, type DataCardSpec } from './dataCard.ts'
+import { validateDataCardSpec, type DataCardPeriod, type RunDataCardSpec } from './dataCard.ts'
 import { normalizeQueryRunsArgs, type QueryRunsSpec } from './queryRunsCore.ts'
 
 export type DataCardProposalResult =
-  | { spec: DataCardSpec }
+  | { spec: RunDataCardSpec }
   /** 되묻기(2026-09-03) — 조건이 애매하면 추측하지 않고 한 가지만 묻는다. */
   | { clarify: string }
   /** `fixable` 이면 모델이 조건을 고쳐 다시 부르면 되는 실수다 — 사용자에게 "못 만든다"고 말하지 않는다. */
@@ -45,7 +45,7 @@ export function normalizeDataCardProposalArgs(raw: unknown): DataCardProposalRes
     if (!query.spec.metrics.includes(metric as never)) {
       return { error: `'${metric || '지표'}'는 이 조회에 없는 지표입니다.` }
     }
-    const spec: DataCardSpec = {
+    const spec: RunDataCardSpec = {
       kind: 'single',
       title,
       query: dropDateFiltersWhenPeriodWins(query.spec, period),
@@ -61,7 +61,7 @@ export function normalizeDataCardProposalArgs(raw: unknown): DataCardProposalRes
   const denominator = normalizeQueryRunsArgs(value.denominator)
   if ('error' in denominator) return { error: denominator.error }
 
-  const spec: DataCardSpec = {
+  const spec: RunDataCardSpec = {
     kind: 'ratio',
     title,
     numerator: dropDateFiltersWhenPeriodWins(numerator.spec, period),
@@ -122,8 +122,8 @@ export function mentionsDataCardIntent(note: string): boolean {
 */
 const UNSUPPORTED_CARD_CONCEPTS: Array<{ test: RegExp; reason: string }> = [
   {
-    test: /(예상\s*(기록|시간|완주|페이스|타임)|목표\s*예상|vdot|vo2\s*_?max|최대\s*산소)/i,
-    reason: '예상 기록이나 VO2max 같은 추정값은 러닝 기록에 저장된 값이 아니라 그때그때 계산해 내는 값이라, 카드로는 만들 수 없어요.'
+    test: /vdot/i,
+    reason: 'VDOT는 코치 탭 레벨 카드에서 볼 수 있어서, 요약 카드로는 따로 만들지 않아요.'
   },
   {
     test: /(나이대|연령대|또래)/,
@@ -137,11 +137,45 @@ const UNSUPPORTED_CARD_CONCEPTS: Array<{ test: RegExp; reason: string }> = [
     test: /(체중|몸무게|체지방)/,
     reason: '체중·체성분은 저장하지 않아서 카드로 만들 수 없어요.'
   },
-  {
-    test: /(준비도|readiness|달성률|달성 ?확률)/i,
-    reason: '준비도·달성률은 기록이 아니라 코치가 계산해 내는 판단값이라, 카드로는 만들 수 없어요.'
-  }
 ]
+
+/*
+  앱이 **이미 가진 값**으로 잇는다(#853, 사용자 결정 2026-10-14).
+
+  예상 기록·달성률·VO2max 를 "카드로는 못 만든다"고 세 번 거절했다(9/4·9/25·10/8). 그런데
+  예상 기록과 달성 가능성은 요약 탭 '활성 목표' 블록이 이미 보여주고 있었고(기본 숨김),
+  VO2max 는 프로필에 저장돼 있었다 — 거절 직후 코치가 "VO2max 34.4로 들어와 있어요"라고 말했다.
+
+  - 예상 기록·달성률 → 새 계산 없이 '활성 목표' 블록을 켠다. 예상 기록은 **실제 기록 기반 하나**로만 보여준다.
+  - VO2max → 프로필 값 카드.
+  - "VO2max 로 예상 기록" → VO2max 기반 예상 기록은 만들지 않는다. 같은 10K 예상이 두 숫자로 보이면
+    어느 쪽을 믿을지 헷갈리고, 워치 VO2max 는 대략적 추정이라 페이스 추정 보조로만 써 왔다.
+  모델 해석에 맡기지 않고 발화로 코드가 가른다 — 고정 응답이라 반박해도 같은 말이 나오던 문제도 이 경로가 대신한다.
+*/
+const GOAL_VALUE_PATTERN = /(예상\s*(기록|시간|완주|페이스|타임)|목표\s*예상|준비도|readiness|달성\s*(률|율|확률|가능성)|달성률)/i
+const VO2MAX_PATTERN = /(vo2\s*_?max|최대\s*산소)/i
+
+export type DataCardAppValueRoute = { route: 'goalBlock'; mentionsVo2Max: boolean } | { route: 'vo2MaxCard' }
+
+/** 앱이 가진 값으로 이을 요청이면 그 경로를, 아니면 null. 거절 판정보다 **먼저** 본다. */
+export function dataCardAppValueRoute(note: string): DataCardAppValueRoute | null {
+  const text = (note || '').replace(/^\/카드생성/, '').replace(/\s+/g, ' ').trim()
+  if (!text) return null
+  if (GOAL_VALUE_PATTERN.test(text)) return { route: 'goalBlock', mentionsVo2Max: VO2MAX_PATTERN.test(text) }
+  if (VO2MAX_PATTERN.test(text)) return { route: 'vo2MaxCard' }
+  return null
+}
+
+/** '활성 목표' 블록 안내 문구. 목표가 없으면 블록을 켜도 예상이 안 나오므로 목표부터 말한다. */
+export function goalBlockReport(options: { mentionsVo2Max: boolean; hasDistanceGoal: boolean }): string {
+  const vo2Note = options.mentionsVo2Max
+    ? '예상 기록은 실제로 뛴 기록으로 계산한 값 하나로만 보여드려요. VO2max로 따로 추정하면 같은 거리 예상이 두 숫자가 돼 헷갈리고, 워치 VO2max는 대략적인 추정이라 보조로만 써요. '
+    : ''
+  if (!options.hasDistanceGoal) {
+    return `${vo2Note}예상 기록과 달성 가능성은 거리가 있는 목표가 있어야 계산돼요. 목표를 먼저 정해 주시면 요약 탭 '활성 목표' 블록에서 볼 수 있어요.`
+  }
+  return `${vo2Note}목표 예상 기록과 달성 가능성은 요약 탭 '활성 목표' 블록에 이미 있어요. 아래에서 바로 켤 수 있어요.`
+}
 
 /** 카드 어휘 밖의 개념이면 그 이유를, 아니면 null. 되묻기보다 **먼저** 본다. */
 export function dataCardUnsupportedConcept(note: string): string | null {

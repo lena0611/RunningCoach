@@ -10,12 +10,13 @@
 import {
   computeDataCard,
   validateDataCardSpec,
+  type DataCardProfileInput,
   type DataCardSpec,
   type DataCardValue
 } from '../../../../supabase/functions/_shared/dataCard.ts'
 import type { QueryRunsRow } from '../../../../supabase/functions/_shared/queryRunsCore.ts'
 
-export type { DataCardSpec, DataCardValue }
+export type { DataCardProfileInput, DataCardSpec, DataCardValue }
 export { validateDataCardSpec }
 
 /**
@@ -73,9 +74,16 @@ export function toQueryRunsRow(run: DataCardRunInput): QueryRunsRow {
   }
 }
 
-/** 카드 하나의 값. 화면은 이 결과만 보면 된다. */
-export function computeDataCardFromRuns(spec: DataCardSpec, runs: DataCardRunInput[]): DataCardValue {
-  return computeDataCard(spec, runs.map(toQueryRunsRow))
+/**
+ * 카드 하나의 값. 화면은 이 결과만 보면 된다.
+ * 프로필 카드(VO2max, #853)는 러닝이 아니라 athleteProfile 을 본다 — 호출부가 함께 넘긴다.
+ */
+export function computeDataCardFromRuns(
+  spec: DataCardSpec,
+  runs: DataCardRunInput[],
+  profile: DataCardProfileInput = null
+): DataCardValue {
+  return computeDataCard(spec, runs.map(toQueryRunsRow), new Date(), profile)
 }
 
 /**
@@ -94,6 +102,8 @@ export function formatDataCardValue(value: DataCardValue): string {
  * "주간 비중 평균"의 평균 대상이 몇 주인지 알 수 없다(2026-09-03 지적).
  */
 export function describeDataCardBasis(value: DataCardValue): string {
+  // 러닝 집계가 아닌 카드(프로필 값)는 코어가 기준 줄을 직접 낸다 — "해당 기록 없음"으로 읽히면 거짓이다.
+  if (value.basisNote) return value.basisNote
   const notes = describeDataGaps(value)
   const base = describeCoverage(value)
   return notes ? `${base} · ${notes}` : base

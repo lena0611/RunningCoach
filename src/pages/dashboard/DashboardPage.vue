@@ -438,7 +438,8 @@ const todayHeroHrCap = computed<number | null>(() => {
 const dataCardStore = useDataCardStore()
 const userDataCards = computed(() =>
   dataCardStore.cards.map((card) => {
-    const value = valueOfCard(card, runs.value)
+    // VO2max 카드(#853)는 러닝이 아니라 프로필 값을 본다.
+    const value = valueOfCard(card, runs.value, memoryStore.memory.athleteProfile ?? null)
     return {
       id: card.id,
       title: card.title,

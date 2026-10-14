@@ -7,7 +7,7 @@ import {
   type UserDataCard,
   type UserDataCardDraft
 } from '@/shared/api/dataCardRepository'
-import { computeDataCardFromRuns, type DataCardRunInput, type DataCardValue } from '@/shared/lib/coaching/dataCardAdapter'
+import { computeDataCardFromRuns, type DataCardProfileInput, type DataCardRunInput, type DataCardValue } from '@/shared/lib/coaching/dataCardAdapter'
 
 /**
  * 요약 탭 사용자 정의 데이터 카드(#767).
@@ -57,6 +57,6 @@ export const useDataCardStore = defineStore('dataCardStore', {
 })
 
 /** 카드 값 계산 — 화면이 러닝을 넘긴다. 순수 함수라 스토어 상태를 건드리지 않는다. */
-export function valueOfCard(card: UserDataCard, runs: DataCardRunInput[]): DataCardValue {
-  return computeDataCardFromRuns(card.spec, runs)
+export function valueOfCard(card: UserDataCard, runs: DataCardRunInput[], profile: DataCardProfileInput = null): DataCardValue {
+  return computeDataCardFromRuns(card.spec, runs, profile)
 }
