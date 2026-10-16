@@ -22,8 +22,10 @@ import { deriveWeeklyVolumeAnchorKm } from '@/shared/lib/coaching/returnAnchor'
  * 스케줄 앵커 계산식 버전. **계산식을 바꾸면 반드시 올린다** — 옛 기준선으로 드리프트를 판정하면
  * 고착되거나 오발동한다. v2: 앵커를 `최근 30일 평균` 대신 `최근 감당 볼륨 vs 공백 직전×디트레이닝 계수`
  * 중 큰 쪽으로 계산(2026-08-18, 공백 오염 축소 나선 수정).
+ * v3: 플랜 생성기 계산식 변경(#848 — 피크를 거리×4 대신 현재 주행량 등급으로, 주간 증가를 km 선형 대신 비율로).
+ * 앵커 자체는 그대로지만 저장된 플랜이 옛 피크(10K 40·하프 84·풀 169km)를 향하고 있어 1회 재빌드로 옮긴다.
  */
-const SCHEDULE_ANCHOR_LOGIC_VERSION = 2
+const SCHEDULE_ANCHOR_LOGIC_VERSION = 3
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, prescriptionFor, trainingWeekRange, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
 import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
