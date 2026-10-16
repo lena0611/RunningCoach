@@ -409,8 +409,13 @@ export function buildPeriodizedSchedule(input: PeriodizationInput): ScheduledSes
   // 데이터 없으면(콜드스타트) 보수적 기본값. 이미 목표 피크 이상으로 뛰면 피크를 현재 이상으로
   // 올려 유지하고 base ≤ peak 불변식을 지킨다. (running-coaching-standards "시작점 앵커링")
   const coldStartBaseKm = Math.min(goal.distanceKm * 2.5, 20)
-  const anchorKm = currentWeeklyKm && currentWeeklyKm > 0 ? currentWeeklyKm : coldStartBaseKm
-  const peakVolumeKm = planPeakWeeklyKm(goal.distanceKm, anchorKm)
+  const hasVolumeData = Boolean(currentWeeklyKm && currentWeeklyKm > 0)
+  const anchorKm = hasVolumeData ? (currentWeeklyKm as number) : coldStartBaseKm
+  // 데이터가 없으면 등급을 고를 근거가 없다 → 보수적 최저 등급(초보 피크). 콜드스타트 기본값(10K 20km)이
+  // 초보 피크와 같아 "이미 초보 피크를 뛴다"로 읽혀 중급(40km)으로 올라가던 사고(2026-10-16) 방지.
+  const peakVolumeKm = hasVolumeData
+    ? planPeakWeeklyKm(goal.distanceKm, anchorKm)
+    : Math.max(minimumGoalWeeklyKm(goal.distanceKm), anchorKm)
   const baseVolumeKm = Math.min(anchorKm, peakVolumeKm)
 
   const weeklyVolumes = planWeeklyVolumes(phases, baseVolumeKm, peakVolumeKm)
