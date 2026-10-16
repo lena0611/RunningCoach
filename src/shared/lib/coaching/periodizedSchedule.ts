@@ -41,6 +41,27 @@ export function isHardType(type: RunType): boolean {
 const TIME_TRIAL_PHASES: ReadonlySet<TrainingPhaseName> = new Set(['Base', 'Build', 'Threshold'])
 
 /**
+ * 한계 시험 사이 최소 간격(주) — #411 의도("코치는 4~8주마다 TT로 재측정")와 Daniels 계열 VDOT 재측정 주기(4~6주).
+ * 짧은 플랜은 단계가 1주씩이라 단계 끝마다 넣으면 TT 가 3주 연속 들어갔다(#861). 첫 TT 도 4주차부터다
+ * (훈련 없이 첫 주에 잰 값은 플랜 시작 시점 체력 — 이미 앵커가 반영한다).
+ */
+const TIME_TRIAL_MIN_GAP_WEEKS = 4
+
+/**
+ * 세션 하나의 최소 거리(km). 주간 볼륨이 낮으면 횟수를 줄여 한 번을 길게 한다(#861) — 주 7km 를 4회로 쪼개
+ * 회복런 1.0km · 스트라이드 1.5km 가 나왔다. 3km ≈ 초보 이지 20분(설계값; 참고 Higdon 10K Novice 첫 런 2.5mi).
+ * 주 3회 아래로는 줄이지 않는다(초보 플랜 표준 주 3회).
+ */
+const MIN_SESSION_KM = 3
+const MIN_RUN_DAYS = 3
+
+/** 그 주의 훈련 횟수 — 목표 횟수(프로필) 안에서, 세션이 MIN_SESSION_KM 아래로 쪼개지지 않게. */
+function runDaysForVolume(targetRunDays: number, weeklyVolumeKm: number): number {
+  const byVolume = Math.floor(weeklyVolumeKm / MIN_SESSION_KM)
+  return clamp(Math.min(targetRunDays, byVolume), Math.min(MIN_RUN_DAYS, targetRunDays), targetRunDays)
+}
+
+/**
  * 단계 블록 마지막 주에 한계 시험(TT='Race')을 키세션으로 끼운다 — VDOT 재측정·단계 게이트용(#411).
  * 롱런은 보존하고 Tempo 한 개를 TT로 대체(없으면 Easy 계열 하나를 대체). 이미 있으면 그대로.
  */
@@ -421,13 +442,17 @@ export function buildPeriodizedSchedule(input: PeriodizationInput): ScheduledSes
   const weeklyVolumes = planWeeklyVolumes(phases, baseVolumeKm, peakVolumeKm)
 
   const drafts: ScheduledSessionDraft[] = []
+  let lastTimeTrialWeek = -1
   for (let week = 0; week < phases.length; week++) {
     const phase = phases[week]
-    // 단계 블록 마지막 주면 한계 시험(TT) 삽입 — 다음 단계 진입 전 재측정(#411).
+    const weekRunDays = runDaysForVolume(runDays, weeklyVolumes[week])
+    // 단계 블록 마지막 주면 한계 시험(TT) 삽입 — 다음 단계 진입 전 재측정(#411). 단 직전 TT 와 4주 이상 떨어졌을 때만(#861).
     const isPhaseEnd = week === phases.length - 1 || phases[week + 1] !== phase
-    const baseTypes = weeklySessionTypes(phase, runDays)
-    const types = isPhaseEnd && TIME_TRIAL_PHASES.has(phase) ? injectTimeTrial(baseTypes) : baseTypes
-    const placement = placeOnDays(types, runDays, longRunDayIndex)
+    const timeTrialDue = isPhaseEnd && TIME_TRIAL_PHASES.has(phase) && week - lastTimeTrialWeek >= TIME_TRIAL_MIN_GAP_WEEKS
+    if (timeTrialDue) lastTimeTrialWeek = week
+    const baseTypes = weeklySessionTypes(phase, weekRunDays)
+    const types = timeTrialDue ? injectTimeTrial(baseTypes) : baseTypes
+    const placement = placeOnDays(types, weekRunDays, longRunDayIndex)
     const placedTypes = [...placement.values()]
     const distances = weekSessionDistances(placedTypes, weeklyVolumes[week])
 

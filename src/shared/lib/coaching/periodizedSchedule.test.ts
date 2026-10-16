@@ -570,3 +570,33 @@ describe('콜드스타트(주행량 데이터 없음)는 초보 등급 (#848 핫
     expect(Math.max(...weeklyTotals(drafts, today).map((w) => w.km))).toBeGreaterThan(30)
   })
 })
+
+describe('저볼륨 세션 길이 + 한계 시험 간격 (#861)', () => {
+  const today = new Date('2026-10-16T09:00:00')
+  const tenK = goal({ targetDate: '2026-11-30', distanceKm: 10 })
+  const weekOf = (date: string) => Math.floor((new Date(`${date}T00:00:00`).getTime() - new Date('2026-10-16T00:00:00').getTime()) / 86400000 / 7)
+
+  it('실계정 모양(주 5.5km): 세션이 3km 밑으로 쪼개지지 않는다 — 한계 시험(고정 단거리)만 예외', () => {
+    const drafts = buildPeriodizedSchedule({ goal: tenK, profile: profile({ weeklyRunDaysTarget: 4 }), today, currentWeeklyKm: 5.5 })
+    const short = drafts.filter((d) => d.sessionType !== 'Race' && (d.prescription.distanceKm ?? 0) < 1.8)
+    expect(short).toEqual([])
+    // 볼륨이 낮은 주는 주 3회로 줄인다
+    const perWeek = new Map<number, number>()
+    for (const d of drafts) perWeek.set(weekOf(d.date), (perWeek.get(weekOf(d.date)) ?? 0) + 1)
+    expect(perWeek.get(0)).toBe(3)
+  })
+
+  it('볼륨이 충분하면 프로필 목표 횟수(4회)를 그대로 쓴다', () => {
+    const drafts = buildPeriodizedSchedule({ goal: tenK, profile: profile({ weeklyRunDaysTarget: 4 }), today, currentWeeklyKm: 20 })
+    const week1 = drafts.filter((d) => weekOf(d.date) === 1)
+    expect(week1).toHaveLength(4)
+  })
+
+  it('짧은 플랜(7주)에서 한계 시험은 4주 이상 간격 — 예전엔 3주 연속', () => {
+    const drafts = buildPeriodizedSchedule({ goal: tenK, profile: profile({}), today, currentWeeklyKm: 15 })
+    const ttWeeks = drafts.filter((d) => d.sessionType === 'Race').map((d) => weekOf(d.date))
+    expect(ttWeeks.length).toBeGreaterThanOrEqual(1)
+    expect(ttWeeks[0]).toBeGreaterThanOrEqual(3)
+    for (let i = 1; i < ttWeeks.length; i++) expect(ttWeeks[i] - ttWeeks[i - 1]).toBeGreaterThanOrEqual(4)
+  })
+})
