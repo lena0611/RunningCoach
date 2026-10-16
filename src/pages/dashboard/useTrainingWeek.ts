@@ -17,6 +17,7 @@ import { getRaceProjection } from '@/shared/lib/performanceProjection'
 import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
 import { returnRampWindowSessions, returnSessionCapKm } from '@/shared/lib/coaching/returnRamp'
 import { deriveWeeklyVolumeAnchorKm } from '@/shared/lib/coaching/returnAnchor'
+import { isReloadingForNewBuild } from '@/shared/lib/buildVersion'
 
 /**
  * 스케줄 앵커 계산식 버전. **계산식을 바꾸면 반드시 올린다** — 옛 기준선으로 드리프트를 판정하면
@@ -184,6 +185,11 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
     // 메모리만 실린 순간에도 돈다 — 그때 런이 비어 있으면 앵커(currentWeeklyKm)가 null 이 되어 콜드스타트 기본값
     // (10K 20km)으로 플랜을 짓고, 버전 게이트 재빌드가 그 잘못된 플랜을 저장해 버린다. 둘 다 실리면 watch 가 다시 부른다.
     if (!runStore.loaded || !memoryStore.loaded) return
+    // 옛 번들이 새 처방을 되돌리지 못하게(#693). ① 부팅 확인에서 새 배포가 잡혀 새로고침 중이면 쓰지 않는다.
+    // ② 저장된 계산식 버전이 이 번들보다 높으면 이 번들이 옛것이다 — 재빌드·앵커 저장 모두 하지 않는다.
+    //    (버전 게이트가 `!==` 라 옛 번들이 새 버전을 보고 옛 식으로 재빌드한 뒤 낮은 버전을 다시 박는 핑퐁이 있었다.)
+    if (await isReloadingForNewBuild()) return
+    if ((memoryStore.memory.adaptiveTrainingProfile.scheduleAnchorLogicVersion ?? 0) > SCHEDULE_ANCHOR_LOGIC_VERSION) return
     const goal = activeGoal.value
     if (!goal) return
     const archetype = goalArchetype(goal.category)
