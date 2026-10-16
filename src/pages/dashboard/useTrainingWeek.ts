@@ -26,8 +26,9 @@ import { deriveWeeklyVolumeAnchorKm } from '@/shared/lib/coaching/returnAnchor'
  * 앵커 자체는 그대로지만 저장된 플랜이 옛 피크(10K 40·하프 84·풀 169km)를 향하고 있어 1회 재빌드로 옮긴다.
  * v4: v3 재빌드가 런 로딩 전에 돌아 콜드스타트 앵커(20km)로 중급 피크 플랜을 저장한 사고 복구(2026-10-16).
  *     로딩 가드를 넣고 한 번 더 재빌드한다.
+ * v5: 저볼륨 주는 횟수를 줄여 세션 최소 길이 확보 + 한계 시험 4주 간격(#861).
  */
-const SCHEDULE_ANCHOR_LOGIC_VERSION = 4
+const SCHEDULE_ANCHOR_LOGIC_VERSION = 5
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, prescriptionFor, trainingWeekRange, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
 import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
