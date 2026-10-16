@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AthleteProfile, TrainingGoal } from '@/entities/training-memory/model'
 import { defaultScheduledSessionPrescription, type ScheduledSession } from '@/entities/training-schedule/model'
-import { allocatePhases, assessGoalFeasibility, minimumGoalWeeklyKm, buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, trainingWeekRange } from '@/shared/lib/coaching/periodizedSchedule'
+import { allocatePhases, assessGoalFeasibility, minimumGoalWeeklyKm, planPeakWeeklyKm, planWeeklyVolumes, buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, trainingWeekRange } from '@/shared/lib/coaching/periodizedSchedule'
 
 function session(overrides: Partial<ScheduledSession> & { date: string }): ScheduledSession {
   return {
@@ -437,5 +437,122 @@ describe('buildWeekSummary — 보는 주(weekAnchor)', () => {
 
   it('앵커를 안 주면 예전처럼 오늘 주를 요약한다', () => {
     expect(buildWeekSummary(sessions, today, null, 'performance')!.weekKm).toBe(6)
+  })
+})
+
+/** 생성 플랜을 오늘 기준 7일 롤링 주로 묶어 주간 합(km)과 단계를 낸다(생성기의 주 정의와 같음). */
+function weeklyTotals(drafts: ReturnType<typeof buildPeriodizedSchedule>, today: Date): Array<{ km: number; phase: string }> {
+  const start = new Date(today)
+  start.setHours(0, 0, 0, 0)
+  const weeks: Array<{ km: number; phase: string }> = []
+  for (const d of drafts) {
+    const w = Math.floor((new Date(`${d.date}T00:00:00`).getTime() - start.getTime()) / 86400000 / 7)
+    weeks[w] ??= { km: 0, phase: d.phase }
+    weeks[w].km += d.prescription.distanceKm ?? 0
+  }
+  return weeks
+}
+
+describe('planPeakWeeklyKm — 현재 주행량이 등급을 고른다 (#848)', () => {
+  it('초보 피크 미만이면 초보 피크(Higdon Novice)', () => {
+    expect(planPeakWeeklyKm(10, 12)).toBe(20)
+    expect(planPeakWeeklyKm(21.1, 20)).toBe(38)
+    expect(planPeakWeeklyKm(42.195, 30)).toBe(64)
+  })
+
+  it('초보 피크를 이미 뛰면 중급 피크 — 중급 러너 플랜이 평평해지지 않는다', () => {
+    expect(planPeakWeeklyKm(10, 30)).toBe(40)
+    expect(planPeakWeeklyKm(21.1, 40)).toBe(55)
+    expect(planPeakWeeklyKm(42.195, 64)).toBe(71)
+  })
+
+  it('중급 피크도 넘으면 지금 주행량 유지(더 올리지 않는다)', () => {
+    expect(planPeakWeeklyKm(10, 60)).toBe(60)
+  })
+
+  it('옛 거리×4 피크(하프 84·풀 169km)로 가지 않는다', () => {
+    expect(planPeakWeeklyKm(21.1, 20)).toBeLessThan(84)
+    expect(planPeakWeeklyKm(42.195, 30)).toBeLessThan(169)
+  })
+})
+
+describe('planWeeklyVolumes — 늘리는 주는 같은 비율, 상한 25% (#848)', () => {
+  it('늘리는 주끼리 증가율이 25% 를 넘지 않는다(짧은 창이라 피크에 못 닿아도)', () => {
+    const phases = allocatePhases(5, 10)
+    const vols = planWeeklyVolumes(phases, 8, 40)
+    const build = vols.filter((_, i) => phases[i] !== 'Taper' && (i + 1) % 4 !== 0)
+    for (let i = 1; i < build.length; i++) expect(build[i] / build[i - 1]).toBeLessThanOrEqual(1.251)
+    expect(Math.max(...build)).toBeLessThan(40) // 상한 때문에 못 닿음 — 무리 여부는 판정이 말한다
+  })
+
+  it('회복주는 직전 늘린 주의 80%(바닥 base), 테이퍼는 실제 닿은 최고치 기준으로 감량', () => {
+    const phases = allocatePhases(8, 10)
+    const vols = planWeeklyVolumes(phases, 12, 20)
+    expect(vols[3]).toBeCloseTo(Math.max(12, vols[2] * 0.8), 0)
+    const reached = Math.max(...vols.filter((_, i) => phases[i] !== 'Taper'))
+    for (const [i, v] of vols.entries()) if (phases[i] === 'Taper') expect(v).toBeLessThan(reached)
+  })
+})
+
+describe('buildPeriodizedSchedule — 초보 플랜 현실화 (#848)', () => {
+  const today = new Date('2026-10-08T09:00:00')
+
+  it('실계정 모양(10K·11/30·주 12km): 피크 ≈ 20km, 회복주 직후 말고는 주 25% 넘게 안 뛴다', () => {
+    const weeks = weeklyTotals(buildPeriodizedSchedule({ goal: goal({ targetDate: '2026-11-30', distanceKm: 10 }), profile: profile({}), today, currentWeeklyKm: 12 }), today)
+    expect(Math.max(...weeks.map((w) => w.km))).toBeLessThanOrEqual(20.5)
+    for (let i = 1; i < weeks.length; i++) {
+      if ((i - 1 + 1) % 4 === 0) continue // 회복주 다음 주는 회복주 대비 증가로 보지 않는다
+      expect(weeks[i].km / weeks[i - 1].km).toBeLessThanOrEqual(1.26)
+    }
+  })
+
+  it('주간 합이 목표 곡선을 따른다 — 세션 가중치(Tempo ×1.1·Recovery ×0.7)로 튀지 않는다', () => {
+    const phases = allocatePhases(8, 10)
+    const target = planWeeklyVolumes(phases, 12, 20)
+    const weeks = weeklyTotals(buildPeriodizedSchedule({ goal: goal({ targetDate: '2026-12-03', distanceKm: 10 }), profile: profile({}), today, currentWeeklyKm: 12 }), today)
+    // 마지막 주는 대회일 이후 세션이 잘려 비교에서 뺀다
+    for (let i = 0; i < weeks.length - 1; i++) expect(Math.abs(weeks[i].km - target[i])).toBeLessThanOrEqual(0.3)
+  })
+
+  it('주 30km 러너의 풀코스 플랜은 초보 피크(64km) 안에서 끝난다 — 예전 140km', () => {
+    const weeks = weeklyTotals(buildPeriodizedSchedule({ goal: goal({ targetDate: '2027-02-11', distanceKm: 42.195 }), profile: profile({}), today, currentWeeklyKm: 30 }), today)
+    expect(Math.max(...weeks.map((w) => w.km))).toBeLessThanOrEqual(64.5)
+  })
+
+  it('중급 10K 러너(주 30km, 16주)는 여전히 40km 까지 올라간다', () => {
+    const weeks = weeklyTotals(buildPeriodizedSchedule({ goal: goal({ targetDate: '2027-01-28', distanceKm: 10 }), profile: profile({}), today, currentWeeklyKm: 30 }), today)
+    expect(Math.max(...weeks.map((w) => w.km))).toBeGreaterThan(38)
+  })
+})
+
+describe('assessGoalFeasibility — 목표 거리를 이미 뛰어봤으면 페이스로 (#847)', () => {
+  const today = new Date('2026-10-16T09:00:00')
+  const tenK = (targetDurationSec: number | null) => goal({ targetDate: '2026-11-30', distanceKm: 10, targetDurationSec })
+
+  it('실사례 모양: 10K 59:59 목표·예상 1:16:50·6주 → 솔직한 페이스 경고 + 현실적 목표 기록', () => {
+    const f = assessGoalFeasibility({ goal: tenK(3599), profile: profile({}), today, currentWeeklyKm: 4, recentLongestKm: 10.5, projectedSec: 4610 })
+    expect(f.basis).toBe('pace')
+    expect(f.feasible).toBe(false)
+    expect(f.message).toContain('완주는 걱정 없어요')
+    expect(f.message).toContain('1:16:50')
+    expect(f.message).toContain('59:59')
+    // 7주 × 0.5% = 3.5% → 4610×0.965 = 4449 → 분 올림 1:15:00
+    expect(f.message).toContain('1:15:00')
+    expect(f.message).not.toContain('주행량')
+  })
+
+  it('격차가 현실적 범위 안이면 경고 없음', () => {
+    const f = assessGoalFeasibility({ goal: tenK(3540), profile: profile({}), today, currentWeeklyKm: 4, recentLongestKm: 12, projectedSec: 3600 })
+    expect(f).toMatchObject({ feasible: true, basis: 'pace', message: null })
+  })
+
+  it('목표 기록이 없거나(완주 목표) 예상 기록이 없으면 경고하지 않는다 — 거리는 이미 뛰어봤다', () => {
+    expect(assessGoalFeasibility({ goal: tenK(null), profile: profile({}), today, currentWeeklyKm: 4, recentLongestKm: 12, projectedSec: 4610 }).feasible).toBe(true)
+    expect(assessGoalFeasibility({ goal: tenK(3599), profile: profile({}), today, currentWeeklyKm: 4, recentLongestKm: 12, projectedSec: null }).feasible).toBe(true)
+  })
+
+  it('최근 4주 안 최장이 목표 거리 미만이면 예전처럼 주행량으로 본다', () => {
+    const f = assessGoalFeasibility({ goal: tenK(3599), profile: profile({}), today, currentWeeklyKm: 12, recentLongestKm: 8, projectedSec: 4610 })
+    expect(f.basis).toBe('volume')
   })
 })

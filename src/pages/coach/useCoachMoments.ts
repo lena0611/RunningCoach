@@ -10,7 +10,8 @@ import { shouldOfferRecoveryRun } from '@/entities/training-memory/restWindow'
 import { resolveRunnerProgress } from '@/shared/lib/level/levelModel'
 import { collectCoachMoments, type CoachMomentOption } from '@/shared/lib/coaching/coachMoments'
 import { detectScheduleDeviation } from '@/shared/lib/coaching/scheduleRealign'
-import { assessGoalFeasibility, buildWeekSummary, goalArchetype } from '@/shared/lib/coaching/periodizedSchedule'
+import { assessGoalFeasibility, buildWeekSummary, goalArchetype, GOAL_DISTANCE_RECENCY_DAYS } from '@/shared/lib/coaching/periodizedSchedule'
+import { getLongestRunKmWithinDays } from '@/shared/lib/runStats'
 import { weekEndTriage } from '@/shared/lib/coaching/weeklyTriage'
 import { buildDoubleSuggestion, evaluateDoubleEligibility, type DoubleEligibility } from '@/shared/lib/coaching/doubleSession'
 import type { CriterionStatus } from '@/shared/lib/coaching/progressionCriteria'
@@ -83,7 +84,10 @@ export function useCoachMoments(week: TrainingWeek) {
           goal: activeGoal.value,
           profile: memoryStore.memory.athleteProfile,
           today: today.value,
-          currentWeeklyKm: currentWeeklyKm.value
+          currentWeeklyKm: currentWeeklyKm.value,
+          // #847: 목표 거리를 최근 4주 안에 뛰어봤으면 주행량 대신 페이스(요약 탭과 같은 예상 기록)로 판정.
+          recentLongestKm: getLongestRunKmWithinDays(runs.value, GOAL_DISTANCE_RECENCY_DAYS, today.value),
+          projectedSec: raceProjection.value?.current.projectedSec ?? null
         })
       : null
   )

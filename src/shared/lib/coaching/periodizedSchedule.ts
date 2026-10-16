@@ -20,6 +20,7 @@ import type {
   TrainingPhaseName
 } from '@/entities/training-schedule/model'
 import { formatPaceRangeSec, formatPaceSec, resolvePaceModel, type PaceModel } from '@/shared/lib/vdotPaces'
+import { formatDuration } from '@/shared/lib/format'
 
 // 코칭 스케줄 타입 재노출 — 코칭 순수로직(reschedule/weeklyTriage 등)이 entities 를 직접 import 하지 않고
 // 이 코칭 허브를 거쳐 쓰게 한다(#397 shared→entities 역방향 최소화, 아키텍처 래칫 정합).
@@ -226,30 +227,52 @@ function placeOnDays(types: RunType[], runDays: number, longRunDayIndex: number)
 }
 
 /**
- * 주간 목표 볼륨(km). base→peak 점진 증가, 4주마다 회복주(바닥은 base 이상), 테이퍼는 주차별 점진 감량.
- * taperPos: 테이퍼 내 위치(0=첫 테이퍼주), taperLen: 테이퍼 총 주수. 테이퍼가 아니면 둘 다 0.
+ * 늘리는 주 하나에서 허용하는 최대 증가율. 판정(assessGoalFeasibility)과 같은 값을 쓴다 — 생성기가 이보다 빨리
+ * 늘리면 "경고 없음"인데 플랜은 급증하고, 더 느리게 막으면 "닿을 수 있다"는데 플랜이 못 닿는다(#848).
+ * 근거: Buist RCT(주 23.7% 증가군 부상 무증가) / Nielsen(주 30%+ 급증은 부상 연관) — SSOT §시작점 앵커링.
  */
-function weeklyVolumeKm(
-  weekIndex: number,
-  phase: TrainingPhaseName,
-  baseVolumeKm: number,
-  peakVolumeKm: number,
-  totalWeeks: number,
-  taperPos: number,
-  taperLen: number
-): number {
-  if (phase === 'Taper') {
-    // 테이퍼: 0.75 → 0.45 로 주차 진행할수록 더 감량(피크 대비).
-    const frac = taperLen > 1 ? taperPos / (taperLen - 1) : 0
-    const factor = 0.75 - 0.3 * frac
-    return Math.round(peakVolumeKm * factor)
+const MAX_BUILD_WEEK_GROWTH = 0.25
+
+/**
+ * 주차별 목표 볼륨(km) — 늘리는 주마다 **같은 비율**로 base→peak (#848).
+ *
+ * 예전엔 km 를 선형으로 더했다. 낮은 시작점에선 같은 km 가 큰 비율이라 초반 주가 +30% 넘게 뛰었다
+ * (실계정 10K: 18.6 → 25.4km, +37%). 비율 증가로 바꾸면 매주 상승 폭이 일정하고, 상한(25%)을 넘지 않는다.
+ * 상한 때문에 peak 에 못 닿으면 닿은 데까지만 간다 — 무리한지는 판정 쪽이 솔직하게 말한다.
+ *
+ * - 4주마다 회복주: 직전 늘린 주의 80%(바닥 base). 회복주는 "늘리는 주"에서 빠진다.
+ * - 테이퍼: 실제로 닿은 최고 볼륨 대비 0.75 → 0.45 로 점진 감량(명목 peak 가 아니라 — 못 닿았는데 명목치로
+ *   감량하면 테이퍼가 오히려 늘어난다).
+ */
+export function planWeeklyVolumes(phases: TrainingPhaseName[], baseVolumeKm: number, peakVolumeKm: number): number[] {
+  const isRecoveryWeek = (i: number) => phases[i] !== 'Taper' && phases[i] !== 'Recovery' && (i + 1) % 4 === 0
+  const buildCount = phases.filter((p, i) => p !== 'Taper' && p !== 'Recovery' && !isRecoveryWeek(i)).length
+  const growth =
+    buildCount > 1 && peakVolumeKm > baseVolumeKm
+      ? Math.min(Math.pow(peakVolumeKm / baseVolumeKm, 1 / (buildCount - 1)) - 1, MAX_BUILD_WEEK_GROWTH)
+      : 0
+  const taperLen = phases.filter((p) => p === 'Taper').length
+  const volumes: number[] = []
+  let buildIndex = 0
+  let lastBuild = baseVolumeKm
+  let taperPos = 0
+  for (let i = 0; i < phases.length; i++) {
+    const phase = phases[i]
+    if (phase === 'Taper') {
+      const frac = taperLen > 1 ? taperPos / (taperLen - 1) : 0
+      volumes.push(lastBuild * (0.75 - 0.3 * frac))
+      taperPos++
+    } else if (phase === 'Recovery') {
+      volumes.push(baseVolumeKm * 0.6)
+    } else if (isRecoveryWeek(i)) {
+      volumes.push(Math.max(baseVolumeKm, lastBuild * 0.8))
+    } else {
+      lastBuild = Math.min(peakVolumeKm, baseVolumeKm * Math.pow(1 + growth, buildIndex))
+      volumes.push(lastBuild)
+      buildIndex++
+    }
   }
-  if (phase === 'Recovery') return Math.round(baseVolumeKm * 0.6)
-  // base→peak 선형 증가에 4주마다 회복주(-20%, 단 base 미만으로는 안 내림).
-  const progress = totalWeeks > 1 ? weekIndex / (totalWeeks - 1) : 1
-  let volume = baseVolumeKm + (peakVolumeKm - baseVolumeKm) * progress
-  if ((weekIndex + 1) % 4 === 0) volume = Math.max(baseVolumeKm, volume * 0.8) // 회복주(바닥 base)
-  return Math.round(volume)
+  return volumes.map((v) => Math.round(v * 10) / 10)
 }
 
 /** 세션 타입별 주간 볼륨 배분 가중치(롱런이 가장 큼). */
@@ -348,6 +371,19 @@ function estimateDurationMin(type: RunType, distanceKm: number, pace: PaceModel)
 }
 
 /**
+ * 한 주 세션들의 거리. 타입별 가중치(롱런 35%·Tempo ×1.1·Recovery ×0.7)로 나눈 뒤 **합이 주간 목표와 같아지게**
+ * 맞춘다(#848). 가중치만 쓰면 Tempo 가 많은 주는 목표보다 길고 Recovery 가 낀 주는 짧아져, 주간 합이 목표 곡선과
+ * 따로 놀았다(Threshold 진입 주가 +33% 로 튄 원인 중 하나). 한계 시험(Race)은 고정 단거리라 맞춤에서 뺀다.
+ */
+function weekSessionDistances(types: RunType[], weeklyVolume: number): number[] {
+  const raw = types.map((type) => sessionDistance(type, weeklyVolume, types.length))
+  const fixed = types.reduce((sum, type, i) => (type === 'Race' ? sum + raw[i] : sum), 0)
+  const flex = raw.reduce((sum, km, i) => (types[i] === 'Race' ? sum : sum + km), 0)
+  const scale = flex > 0 ? Math.max(0, weeklyVolume - fixed) / flex : 1
+  return raw.map((km, i) => (types[i] === 'Race' ? km : round1(km * scale)))
+}
+
+/**
  * 목표 → 오늘부터 D-day 까지 날짜별 ScheduledSessionDraft 골격.
  * targetDate/distanceKm 가 없으면 [] (주기화 불가).
  */
@@ -372,14 +408,12 @@ export function buildPeriodizedSchedule(input: PeriodizationInput): ScheduledSes
   // 시작 볼륨 앵커링(#395): 목표거리 역산(×2.5)이 아니라 현재 주간 주행량에서 시작한다.
   // 데이터 없으면(콜드스타트) 보수적 기본값. 이미 목표 피크 이상으로 뛰면 피크를 현재 이상으로
   // 올려 유지하고 base ≤ peak 불변식을 지킨다. (running-coaching-standards "시작점 앵커링")
-  const goalPeakKm = Math.max(goal.distanceKm * 4, 30)
   const coldStartBaseKm = Math.min(goal.distanceKm * 2.5, 20)
   const anchorKm = currentWeeklyKm && currentWeeklyKm > 0 ? currentWeeklyKm : coldStartBaseKm
-  const peakVolumeKm = Math.max(goalPeakKm, anchorKm)
+  const peakVolumeKm = planPeakWeeklyKm(goal.distanceKm, anchorKm)
   const baseVolumeKm = Math.min(anchorKm, peakVolumeKm)
 
-  const firstTaperWeek = phases.indexOf('Taper')
-  const taperLen = phases.filter((p) => p === 'Taper').length
+  const weeklyVolumes = planWeeklyVolumes(phases, baseVolumeKm, peakVolumeKm)
 
   const drafts: ScheduledSessionDraft[] = []
   for (let week = 0; week < phases.length; week++) {
@@ -389,14 +423,13 @@ export function buildPeriodizedSchedule(input: PeriodizationInput): ScheduledSes
     const baseTypes = weeklySessionTypes(phase, runDays)
     const types = isPhaseEnd && TIME_TRIAL_PHASES.has(phase) ? injectTimeTrial(baseTypes) : baseTypes
     const placement = placeOnDays(types, runDays, longRunDayIndex)
-    const taperPos = phase === 'Taper' && firstTaperWeek >= 0 ? week - firstTaperWeek : 0
-    const weeklyVol = weeklyVolumeKm(week, phase, baseVolumeKm, peakVolumeKm, totalWeeks, taperPos, taperLen)
     const placedTypes = [...placement.values()]
+    const distances = weekSessionDistances(placedTypes, weeklyVolumes[week])
 
-    for (const [dayIdx, type] of placement) {
+    for (const [slot, [dayIdx, type]] of [...placement].entries()) {
       const date = dateForWeekDay(start, week, dayIdx)
       if (date > target) continue
-      const distance = sessionDistance(type, weeklyVol, placedTypes.length)
+      const distance = distances[slot]
       drafts.push({
         goalId: goal.id ?? null,
         date: formatDateOnly(date),
@@ -517,6 +550,8 @@ export type GoalFeasibility = {
   requiredWeeklyGrowth: number
   /** 무리할 때 솔직한 경고 + 대안 메시지. 무리 아니면 null. */
   message: string | null
+  /** 무엇으로 판정했나 — 목표 거리를 최근 뛰어봤으면 'pace'(#847), 아니면 'volume'. */
+  basis: 'volume' | 'pace'
 }
 
 /**
@@ -533,14 +568,31 @@ const NOVICE_PEAK_KM: Array<[number, number]> = [
 ]
 
 export function minimumGoalWeeklyKm(distanceKm: number): number {
-  const first = NOVICE_PEAK_KM[0]
-  const last = NOVICE_PEAK_KM[NOVICE_PEAK_KM.length - 1]
+  return interpolateByDistance(NOVICE_PEAK_KM, distanceKm)
+}
+
+/**
+ * 한 단계 위 등급(Higdon Intermediate)의 피크 주간 주행량(km). 초보 피크(NOVICE_PEAK_KM)를 이미 뛰는 러너용.
+ * 출처(halhigdon.com 플랜 표, 2026-10-16 조사): 10K Intermediate ≈ 34km(거리 지정 런만 — 템포 포함 시
+ * ≈ 10K Advanced 40km), Half Intermediate 1 = 34mi ≈ 55km, Marathon Intermediate 1 = 44mi ≈ 71km,
+ * 5K Intermediate = 18mi ≈ 29km. 사이는 선형 보간.
+ */
+const INTERMEDIATE_PEAK_KM: Array<[number, number]> = [
+  [5, 29],
+  [10, 40],
+  [21.1, 55],
+  [42.195, 71]
+]
+
+function interpolateByDistance(table: Array<[number, number]>, distanceKm: number): number {
+  const first = table[0]
+  const last = table[table.length - 1]
   if (distanceKm <= first[0]) return first[1]
   if (distanceKm >= last[0]) return last[1]
-  for (let i = 1; i < NOVICE_PEAK_KM.length; i++) {
-    const [d1, km1] = NOVICE_PEAK_KM[i]
+  for (let i = 1; i < table.length; i++) {
+    const [d1, km1] = table[i]
     if (distanceKm <= d1) {
-      const [d0, km0] = NOVICE_PEAK_KM[i - 1]
+      const [d0, km0] = table[i - 1]
       return km0 + ((km1 - km0) * (distanceKm - d0)) / (d1 - d0)
     }
   }
@@ -548,40 +600,98 @@ export function minimumGoalWeeklyKm(distanceKm: number): number {
 }
 
 /**
- * 늘리는 주(회복주·테이퍼 제외)마다 필요한 증가율이 이 값을 넘으면 무리로 본다.
- * 근거: Buist RCT — 주 23.7% 증가군이 10.5% 군보다 부상이 많지 않았다 / Nielsen — 주 30%+ 급증은 부상 연관.
+ * 플랜 피크 주간 주행량 — **현재 주행량이 등급을 고른다**(SSOT §시작점 앵커링, #848).
+ * 지금 주행량보다 높은 첫 등급의 피크로 간다: 초보 피크 미만이면 초보 피크, 초보 피크를 이미 뛰면 중급 피크,
+ * 중급 피크도 넘으면 지금 주행량을 유지한다(더 올릴 근거 없음 — 이미 상급 볼륨).
+ *
+ * 예전엔 `max(목표거리×4, 30)` 하나였다: 10K 40·하프 84·풀 169km. 주 20km 러너의 하프 플랜이 74km,
+ * 주 30km 러너의 풀 플랜이 140km 를 향했다.
  */
-const GOAL_RAMP_WARN_GROWTH = 0.25
+export function planPeakWeeklyKm(distanceKm: number, currentWeeklyKm: number): number {
+  for (const peak of [minimumGoalWeeklyKm(distanceKm), interpolateByDistance(INTERMEDIATE_PEAK_KM, distanceKm)]) {
+    if (currentWeeklyKm < peak) return Math.round(peak * 10) / 10
+  }
+  return currentWeeklyKm
+}
 
 /**
- * 현재 주간 주행량에서 목표일까지 **안전한 진행으로 닿을 수 있는지** 평가한다(#395).
- * 목표 거리에 필요한 최소 주행량(minimumGoalWeeklyKm)까지, 회복주·테이퍼를 뺀 "늘리는 주"마다
- * 필요한 증가율(복리)이 급증 경고선에 가까우면 솔직히 경고하고 대안을 제시한다.
+ * 목표 거리를 "최근 뛰어봤다"로 인정하는 창(일). SSOT §휴식과 복귀의 디트레이닝 4주 경계를 그대로 쓴다 —
+ * 그보다 오래된 긴 런은 최근 획득분이 빠지기 시작해 "완주는 문제 아니다"의 근거가 되지 못한다.
+ * (이 창 자체를 정한 권위 출처는 없다 — 2026-10-16 조사. 기존 SSOT 경계를 재사용한 설계값.)
+ */
+export const GOAL_DISTANCE_RECENCY_DAYS = 28
+
+/**
+ * 한 주에 현실적으로 기대할 수 있는 기록 단축(비율). **넉넉하게** 잡은 상한이다 — 이보다 큰 격차만 경고한다.
+ * 근거(약함, 2026-10-16 조사): Daniels 계열 — VDOT 를 4~6주마다 재측정, 한 블록에 1~3 포인트, 1포인트 ≈ 기록 1.5~2%.
+ * "4주에 1포인트(≈2%)"를 주당으로 펴면 0.5%. 통제 연구 효과크기는 찾지 못했다 — 그래서 상한으로만 쓴다.
+ */
+const REALISTIC_WEEKLY_IMPROVEMENT = 0.005
+
+export type GoalFeasibilityInput = PeriodizationInput & {
+  /** 최근 GOAL_DISTANCE_RECENCY_DAYS 안 최장 런(km). 목표 거리 이상이면 페이스로 판정한다(#847). */
+  recentLongestKm?: number | null
+  /** 지금 예상 기록(초) — 요약 탭 '활성 목표' 블록이 보여주는 값과 같은 것. */
+  projectedSec?: number | null
+}
+
+/**
+ * 목표가 지금 체력에서 **닿을 수 있는지** 평가한다(#395).
+ *
+ * - 목표 거리를 최근 4주 안에 뛰어봤으면(#847) 완주는 문제가 아니다 → **페이스**로 본다: 예상 기록에서 목표
+ *   기록까지 줄여야 하는 비율이 남은 주 동안의 현실적 단축(주 0.5%)을 넘으면 경고하고 현실적인 목표 기록을 제안.
+ * - 아니면 **주행량**으로 본다: 목표 거리의 최소 주간 주행량(minimumGoalWeeklyKm)까지, 회복주·테이퍼를 뺀
+ *   "늘리는 주"마다 필요한 증가율(복리)이 급증선(MAX_BUILD_WEEK_GROWTH)을 넘으면 경고.
  * (근거: running-coaching-standards "시작점 앵커링" — 10% 룰은 근거 약함(Buist), ~30%+ 급증은 부상 연관(Nielsen).)
  */
-export function assessGoalFeasibility(input: PeriodizationInput): GoalFeasibility {
+export function assessGoalFeasibility(input: GoalFeasibilityInput): GoalFeasibility {
   const { goal, today, currentWeeklyKm } = input
   if (!goal.targetDate || !goal.distanceKm || goal.distanceKm <= 0) {
-    return { feasible: true, requiredWeeklyGrowth: 0, message: null }
+    return { feasible: true, requiredWeeklyGrowth: 0, message: null, basis: 'volume' }
   }
   const start = startOfDay(today)
   const target = startOfDay(new Date(`${goal.targetDate}T00:00:00`))
   const weeks = Math.max(1, Math.ceil((target.getTime() - start.getTime()) / MS_PER_DAY / 7))
+
+  if ((input.recentLongestKm ?? 0) >= goal.distanceKm) return assessGoalPace(goal, weeks, input.projectedSec ?? null)
+
   const neededKm = minimumGoalWeeklyKm(goal.distanceKm)
   const current = currentWeeklyKm && currentWeeklyKm > 0 ? currentWeeklyKm : Math.min(goal.distanceKm * 2.5, 20)
-  if (current >= neededKm) return { feasible: true, requiredWeeklyGrowth: 0, message: null }
-  // 테이퍼·회복주(4주마다)는 볼륨을 늘리지 않으니 빼고 남은 주로 계산한다.
+  if (current >= neededKm) return { feasible: true, requiredWeeklyGrowth: 0, message: null, basis: 'volume' }
+  // 테이퍼·회복주(4주마다)는 볼륨을 늘리지 않으니 빼고 남은 주로 계산한다(planWeeklyVolumes 와 같은 규칙).
   const taperWeeks = allocatePhases(weeks, goal.distanceKm).filter((p) => p === 'Taper').length
   const recoveryWeeks = Math.floor((weeks - taperWeeks) / 4)
   const buildWeeks = Math.max(1, weeks - taperWeeks - recoveryWeeks)
   // current * (1+g)^buildWeeks = needed  →  g = (needed/current)^(1/buildWeeks) - 1
   const growth = Math.pow(neededKm / current, 1 / buildWeeks) - 1
-  if (growth <= GOAL_RAMP_WARN_GROWTH) return { feasible: true, requiredWeeklyGrowth: growth, message: null }
+  if (growth <= MAX_BUILD_WEEK_GROWTH) return { feasible: true, requiredWeeklyGrowth: growth, message: null, basis: 'volume' }
   const pct = Math.round(growth * 100)
   return {
     feasible: false,
     requiredWeeklyGrowth: growth,
+    basis: 'volume',
     message: `지금 주행량(약 ${Math.round(current)}km/주)에서 이 목표에 필요한 주행량(주 약 ${Math.round(neededKm)}km)까지 가려면, 회복 주와 대회 전 감량 주를 빼고 늘리는 주마다 약 ${pct}%씩 올려야 해요. 한 주에 30% 가까이 늘리면 부상 위험이 커져요. 목표일을 조금 미루거나 목표 거리를 낮추는 걸 권해요.`
+  }
+}
+
+/** 목표 거리를 이미 뛰어본 러너 — 관건은 버티기가 아니라 목표 페이스다(#847). */
+function assessGoalPace(goal: TrainingGoal, weeks: number, projectedSec: number | null): GoalFeasibility {
+  const targetSec = goal.targetDurationSec ?? null
+  // 목표 기록이 없거나(완주 목표) 예상 기록을 못 내면 판정할 게 없다 — 거리는 이미 뛰어봤다.
+  if (!targetSec || !projectedSec || projectedSec <= targetSec) {
+    return { feasible: true, requiredWeeklyGrowth: 0, message: null, basis: 'pace' }
+  }
+  const neededCut = (projectedSec - targetSec) / projectedSec
+  // 장기(30주+) 상한 15% — 초보 1년 단축 추정치(10~15%, Runner's Connect 코칭 추정)를 넘겨 약속하지 않는다.
+  const realisticCut = Math.min(REALISTIC_WEEKLY_IMPROVEMENT * weeks, 0.15)
+  if (neededCut <= realisticCut) return { feasible: true, requiredWeeklyGrowth: 0, message: null, basis: 'pace' }
+  // 제안 기록은 분 단위로 올림 — "1:14:23" 보다 "1:15:00" 이 목표답고, 낙관 쪽으로 깎지 않는다.
+  const suggestedSec = Math.ceil((projectedSec * (1 - realisticCut)) / 60) * 60
+  return {
+    feasible: false,
+    requiredWeeklyGrowth: 0,
+    basis: 'pace',
+    message: `최근 ${goal.distanceKm}km 를 이미 뛰어봤으니 완주는 걱정 없어요. 관건은 페이스예요 — 지금 예상 기록(${formatDuration(projectedSec)})에서 목표(${formatDuration(targetSec)})까지 약 ${Math.round(neededCut * 100)}% 빨라져야 하는데, 남은 ${weeks}주 동안 현실적으로 기대할 수 있는 건 ${Math.max(1, Math.round(realisticCut * 100))}% 안팎이에요. 목표 기록을 ${formatDuration(suggestedSec)} 정도로 조정하거나 목표일을 미루는 걸 권해요.`
   }
 }
 
