@@ -24,8 +24,10 @@ import { deriveWeeklyVolumeAnchorKm } from '@/shared/lib/coaching/returnAnchor'
  * 중 큰 쪽으로 계산(2026-08-18, 공백 오염 축소 나선 수정).
  * v3: 플랜 생성기 계산식 변경(#848 — 피크를 거리×4 대신 현재 주행량 등급으로, 주간 증가를 km 선형 대신 비율로).
  * 앵커 자체는 그대로지만 저장된 플랜이 옛 피크(10K 40·하프 84·풀 169km)를 향하고 있어 1회 재빌드로 옮긴다.
+ * v4: v3 재빌드가 런 로딩 전에 돌아 콜드스타트 앵커(20km)로 중급 피크 플랜을 저장한 사고 복구(2026-10-16).
+ *     로딩 가드를 넣고 한 번 더 재빌드한다.
  */
-const SCHEDULE_ANCHOR_LOGIC_VERSION = 3
+const SCHEDULE_ANCHOR_LOGIC_VERSION = 4
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, prescriptionFor, trainingWeekRange, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
 import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
@@ -177,6 +179,10 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
 
   async function doEnsureSchedule() {
     if (!isSupabaseConfigured) return
+    // 런·메모리가 다 실리기 전엔 짓지 않는다(2026-10-16 실사고). 이 함수를 부르는 loaded-watch 는 immediate 라
+    // 메모리만 실린 순간에도 돈다 — 그때 런이 비어 있으면 앵커(currentWeeklyKm)가 null 이 되어 콜드스타트 기본값
+    // (10K 20km)으로 플랜을 짓고, 버전 게이트 재빌드가 그 잘못된 플랜을 저장해 버린다. 둘 다 실리면 watch 가 다시 부른다.
+    if (!runStore.loaded || !memoryStore.loaded) return
     const goal = activeGoal.value
     if (!goal) return
     const archetype = goalArchetype(goal.category)

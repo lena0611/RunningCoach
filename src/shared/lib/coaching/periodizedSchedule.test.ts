@@ -556,3 +556,17 @@ describe('assessGoalFeasibility — 목표 거리를 이미 뛰어봤으면 페�
     expect(f.basis).toBe('volume')
   })
 })
+
+describe('콜드스타트(주행량 데이터 없음)는 초보 등급 (#848 핫픽스)', () => {
+  const today = new Date('2026-10-16T09:00:00')
+
+  it('10K 데이터 없음 → 초보 피크(20km) 안에서 — 콜드스타트 20km 가 중급(40km)으로 올라가지 않는다', () => {
+    const drafts = buildPeriodizedSchedule({ goal: goal({ targetDate: '2026-11-30', distanceKm: 10 }), profile: profile({}), today, currentWeeklyKm: null })
+    expect(Math.max(...weeklyTotals(drafts, today).map((w) => w.km))).toBeLessThanOrEqual(20.5)
+  })
+
+  it('같은 20km 라도 실제로 뛴 주행량이면 중급으로 간다(등급은 데이터가 고른다)', () => {
+    const drafts = buildPeriodizedSchedule({ goal: goal({ targetDate: '2027-01-28', distanceKm: 10 }), profile: profile({}), today, currentWeeklyKm: 20 })
+    expect(Math.max(...weeklyTotals(drafts, today).map((w) => w.km))).toBeGreaterThan(30)
+  })
+})
