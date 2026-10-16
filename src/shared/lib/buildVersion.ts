@@ -55,6 +55,18 @@ export async function reloadIfNewBuild(): Promise<boolean> {
   return true
 }
 
+/**
+ * 부팅 직후 첫 확인 결과(#693). 새 배포로 새로고침 중이면 true.
+ *
+ * 부팅 확인은 비동기라, 그 사이 옛 번들이 스케줄을 **옛 계산식으로** 다시 써 버릴 수 있었다(2026-08-18 실측:
+ * 새 번들이 쓴 Easy 4.1km 를 5분 뒤 옛 번들이 0.9km 로 되돌림). DB 에 쓰는 쪽은 이 결과를 기다렸다가 쓴다.
+ * 확인 전(watchForNewBuild 미호출)·개발 서버·오프라인이면 false — 확인 실패로 앱을 멈추지 않는다.
+ */
+let bootCheck: Promise<boolean> = Promise.resolve(false)
+export function isReloadingForNewBuild(): Promise<boolean> {
+  return bootCheck
+}
+
 /** 포그라운드로 돌아올 때마다 확인한다. 앱을 다시 여는 순간이 곧 "최신을 기대하는" 순간이다. */
 export function watchForNewBuild(): () => void {
   const check = () => {
@@ -63,7 +75,7 @@ export function watchForNewBuild(): () => void {
   document.addEventListener('visibilitychange', check)
   window.addEventListener('focus', check)
   window.addEventListener('pageshow', check)
-  void reloadIfNewBuild()
+  bootCheck = reloadIfNewBuild()
   return () => {
     document.removeEventListener('visibilitychange', check)
     window.removeEventListener('focus', check)
