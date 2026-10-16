@@ -25,6 +25,7 @@ import { collapseNearDuplicateFacts, isKnownFact, isNearDuplicateFact } from '..
 import { mentionsExplicitMemoryRequest } from '../_shared/explicitMemoryRequest.ts'
 import { detectTreatmentMentions, type TreatmentMention } from '../_shared/treatmentMention.ts'
 import { buildTreatmentGuideTail, mergeRecentTreatments, TREATMENT_AWARENESS_DAYS, treatmentRecordNote, type RecentTreatment } from '../_shared/treatmentGuide.ts'
+import { buildRestPlanTail, type RestPlanInput } from '../_shared/restPlanTail.ts'
 import { memoryIntakeNote, type MemoryIntake, type MemoryIntakeSkip } from '../_shared/memoryIntake.ts'
 import {
   buildUserNoteRelevancePolicy,
@@ -2660,6 +2661,8 @@ function buildCoachMessages(context: unknown) {
           (context as { recentTreatments?: RecentTreatment[] } | null)?.recentTreatments ?? [],
           (context as { treatmentMentions?: TreatmentMention[] } | null)?.treatmentMentions ?? []
         ) +
+        // 사용자가 정한 휴식(#856) — 처치 꼬리표의 "walk-run 점진"이 휴식 계획을 덮지 않게 그 **뒤에** 세운다.
+        buildRestPlanTail((context as { restState?: RestPlanInput | null } | null)?.restState) +
         // 실행 지침 꼬리표 **뒤에** 사용자 요청을 한 번 더 세운다. 그러지 않으면 프롬프트의 마지막
         // 블록이 예정 세션 목록이라, 대상이 생략된 짧은 요청("표로 보여줘")이 스케줄 비교로 끌려간다
         // (2026-09-16 실사고 2회 재현). 자세한 경위는 turnRequestTail.ts 주석.
