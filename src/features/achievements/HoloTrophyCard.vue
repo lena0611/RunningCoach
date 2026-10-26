@@ -305,7 +305,8 @@ const progressPct = computed(() => {
   border: var(--bw) var(--frame-style) var(--edge);
   border-radius: var(--radius);
   background: var(--stock);
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.48), inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+  /* shadow-exception: 트로피 카드 금박 테두리·엠블럼 연출(그림자 아님) */ 
+  box-shadow: var(--shadow-overlay), inset 0 0 0 1px rgba(255, 255, 255, 0.5);
   color: var(--ink);
   font-family: inherit;
   text-align: left;
@@ -371,7 +372,7 @@ const progressPct = computed(() => {
   --stat-bg: rgba(130, 138, 150, 0.14);
   --stat-edge: rgba(130, 138, 150, 0.28);
   --frame-style: dashed;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32);
+  box-shadow: var(--shadow-float);
 }
 
 /* 대각 에치 — 카드지의 인쇄 질감. overlay 라 밝은 종이 위에서만 은은하게 뜬다. */
@@ -516,6 +517,7 @@ const progressPct = computed(() => {
   position: relative;
   z-index: 1;
   color: var(--ink);
+  /* shadow-exception: 트로피 카드 금박 테두리·엠블럼 연출(그림자 아님) */ 
   filter: drop-shadow(0 4px 6px rgba(70, 60, 30, 0.36));
   /* 카드가 기울 때 엠블럼이 안에서 살짝 어긋나 떠 보인다. 기울기만 키우고 이걸 안 키우면
      카드가 통짜 판자처럼 돈다.
@@ -712,7 +714,8 @@ const progressPct = computed(() => {
   --bw: 1.5px;
   --emblem-w: 82%;
   aspect-ratio: 5 / 7;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.38), inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+  /* shadow-exception: 트로피 카드 금박 테두리·엠블럼 연출(그림자 아님) */ 
+  box-shadow: var(--shadow-float), inset 0 0 0 1px rgba(255, 255, 255, 0.45);
 }
 .htc.size-thumb .htc-inner-frame {
   inset: 3px;
@@ -845,7 +848,7 @@ const progressPct = computed(() => {
 }
 .htc-flip.is-animating .htc {
   /* 큰 blur 그림자도 회전 중엔 매 프레임 다시 계산된다. 도는 동안만 얇게. */
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-float);
 }
 
 /* 카드 뒷면 문양 — 지폐/증서 질감. 동심원(앞면 아트창과 같은 어휘) + 45° 격자.
@@ -888,6 +891,7 @@ const progressPct = computed(() => {
   letter-spacing: 0.26em;
   /* 워드마크는 카드지에 눌러 찍힌 듯 — 밝은 하이라이트 + 어두운 그림자 한 줄. */
   color: var(--ink);
+  /* shadow-exception: 트로피 카드 금박 테두리·엠블럼 연출(그림자 아님) */ 
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 .htc-back-rule-line {

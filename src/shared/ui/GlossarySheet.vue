@@ -185,7 +185,7 @@ const resultCount = computed(() => filteredGroups.value.reduce((sum, group) => s
 .glossary-term-highlight {
   border-color: var(--color-accent, var(--color-primary));
   background: var(--color-accent-soft, var(--color-primary-soft));
-  box-shadow: 0 0 0 2px var(--color-accent-soft, rgba(34, 160, 107, 0.2));
+  box-shadow: 0 0 0 2px var(--color-accent-soft);
 }
 
 .glossary-term dt {

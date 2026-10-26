@@ -1378,7 +1378,6 @@ useSheetA11y(computed(() => !!pendingDeleteCard.value), confirmSheetEl, () => { 
   border: 0;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
   text-shadow: none;
   color: var(--color-danger, #ef4444);
   font-size: 22px;
