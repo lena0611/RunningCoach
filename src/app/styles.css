@@ -43,7 +43,7 @@
   --color-page-aura: rgba(52, 211, 153, 0.1);
   --color-header-bg: rgba(14, 17, 22, 0.86);
   --color-nav-bg: rgba(14, 17, 22, 0.92);
-  --color-nav-shadow: 0 -14px 30px rgba(0, 0, 0, 0.24);
+  --color-nav-shadow: 0 -14px 30px color-mix(in srgb, var(--color-shadow) 24%, transparent);
   --color-body-gradient-start: #0e1116;
   --color-body-gradient-end: #12161d;
   --color-surface-gradient-start: rgba(27, 34, 43, 0.96);
@@ -216,8 +216,16 @@
   --bottom-nav-height: 82px;
   --bottom-nav-reserve: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 12px);
   --keyboard-inset-bottom: 0px;
-  --shadow-card: 0 10px 26px rgba(0, 0, 0, 0.18);
-  --shadow-float: 0 16px 36px rgba(0, 0, 0, 0.24);
+  /*
+   * 그림자(2026-10-26 사용자 결정): 그림자 색은 --color-shadow 하나 — **배경을 더 어둡게 섞은 색**이라 어떤 면 위에서도
+   * 배경보다 밝아지지 않는다. 컴포넌트는 아래 --shadow-* 토큰만 쓴다. rgba·hex 를 직접 쓰지 않고, 색 글로우(초록·빨강)나
+   * 흰 하이라이트처럼 배경보다 밝은 그림자를 만들지 않는다(어두운 화면에서 떠 보인다). 검사: tests/shadowTokens.test.ts
+   */
+  --color-shadow: color-mix(in srgb, var(--color-bg) 30%, black);
+  --shadow-card: 0 10px 26px color-mix(in srgb, var(--color-shadow) 18%, transparent);
+  --shadow-float: 0 16px 36px color-mix(in srgb, var(--color-shadow) 24%, transparent);
+  --shadow-overlay: 0 18px 48px color-mix(in srgb, var(--color-shadow) 32%, transparent);
+  --shadow-text: 0 1px 8px color-mix(in srgb, var(--color-shadow) 65%, transparent);
   --font-sans: "Pretendard Variable", -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   color-scheme: dark;
@@ -1224,7 +1232,7 @@ label {
   background: color-mix(in srgb, var(--color-nav-bg) 84%, transparent);
   backdrop-filter: blur(24px) saturate(1.4);
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  box-shadow: var(--shadow-overlay);
   transform: translate3d(-50%, 0, 0);
   will-change: transform;
 }
@@ -1281,7 +1289,6 @@ label {
   flex: 1 1 0%;
   background: linear-gradient(180deg, color-mix(in srgb, var(--color-surface-2) 88%, transparent), color-mix(in srgb, var(--color-surface) 76%, transparent));
   color: var(--color-primary);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .bottom-nav-icon {
@@ -1397,14 +1404,14 @@ body.tab-swiping {
   background: color-mix(in srgb, var(--color-surface-2) 92%, var(--color-bg));
   border-color: color-mix(in srgb, var(--color-border) 80%, transparent);
   color: var(--color-muted);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+  box-shadow: var(--shadow-card);
 }
 
 .app-toast-top.app-toast-neutral {
   background: color-mix(in srgb, var(--color-surface-2) 88%, var(--color-bg));
   border-color: color-mix(in srgb, var(--color-border) 72%, transparent);
   color: var(--color-muted);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-float);
 }
 
 .app-toast-success {
@@ -1417,7 +1424,7 @@ body.tab-swiping {
   background: linear-gradient(135deg, var(--color-primary), var(--color-primary-strong));
   border-color: rgba(255, 255, 255, 0.28);
   color: var(--color-on-primary);
-  box-shadow: 0 14px 34px rgba(34, 197, 94, 0.32);
+  box-shadow: var(--shadow-float);
 }
 
 .app-toast-error {
@@ -1430,7 +1437,7 @@ body.tab-swiping {
   background: linear-gradient(135deg, var(--color-danger), #b91c1c);
   border-color: rgba(255, 255, 255, 0.28);
   color: #fff;
-  box-shadow: 0 14px 34px rgba(239, 68, 68, 0.3);
+  box-shadow: var(--shadow-float);
 }
 
 .toast-rise-enter-active,
@@ -3377,7 +3384,7 @@ button.run-session-row {
   gap: 0;
   overflow: hidden;
   border-radius: 18px;
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.24);
+  box-shadow: var(--shadow-float);
 }
 
 .fitness-route-card {
@@ -3454,6 +3461,7 @@ button.run-session-row {
 .fitness-route-line {
   stroke: #22e8ff;
   stroke-width: 4.2;
+  /* shadow-exception: 그림자가 아니라 지도 경로선 발광(데이터 표시) */
   filter:
     drop-shadow(0 0 7px rgba(34, 232, 255, 0.98))
     drop-shadow(0 0 16px rgba(34, 232, 255, 0.72));
@@ -3478,6 +3486,7 @@ button.run-session-row {
 .fitness-route-selected {
   fill: #38bdf8;
   stroke-width: 2.4;
+  /* shadow-exception: 그림자가 아니라 지도 경로선 발광(데이터 표시) */
   filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.95));
 }
 
@@ -3485,6 +3494,7 @@ button.run-session-row {
   fill: rgba(56, 189, 248, 0.22);
   stroke: rgba(255, 255, 255, 0.92);
   stroke-width: 2.8;
+  /* shadow-exception: 그림자가 아니라 지도 경로선 발광(데이터 표시) */
   filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.9));
 }
 
@@ -3538,7 +3548,7 @@ button.run-session-row {
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-shadow: 0 1px 8px rgba(2, 6, 12, 0.65);
+  text-shadow: var(--shadow-text);
 }
 
 .fitness-route-empty {
@@ -4116,7 +4126,6 @@ button.run-session-row {
   border-radius: 22px;
   background: linear-gradient(180deg, var(--color-surface-2), var(--color-surface));
   padding: 10px 0;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .body-map-svg {

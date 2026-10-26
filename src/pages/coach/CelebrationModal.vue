@@ -50,7 +50,7 @@ function headline(kind: LevelUpEvent['kind']): string {
   padding: 28px 24px;
   background: var(--color-surface-card);
   border-radius: var(--radius-card, 20px);
-  box-shadow: var(--shadow-float, 0 12px 40px rgba(0, 0, 0, 0.4));
+  box-shadow: var(--shadow-overlay);
 }
 
 .celebration-emoji {

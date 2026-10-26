@@ -741,7 +741,7 @@ const showStartCta = computed(() => step.value === 'setup' && raceMode.value ===
 
 /* 같은 날 둘째 세션 minGap 강한 확인 오버레이(#462) */
 .race-gap-confirm { position: fixed; inset: 0; z-index: 1160; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(6px); }
-.gap-confirm-card { width: 100%; max-width: 360px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 18px; padding: 22px 20px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3); }
+.gap-confirm-card { width: 100%; max-width: 360px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 18px; padding: 22px 20px; box-shadow: var(--shadow-overlay); }
 .gap-confirm-title { margin: 0 0 8px; font-size: 1.12rem; font-weight: 800; color: var(--color-text); }
 .gap-confirm-body { margin: 0 0 18px; font-size: 0.95rem; line-height: 1.55; color: var(--color-muted); }
 .gap-confirm-body strong { color: var(--color-text); font-weight: 700; }

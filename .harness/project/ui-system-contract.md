@@ -152,6 +152,7 @@ UI 변경 리뷰 시 아래를 확인한다.
 
 ## 현재 결정
 
+- **그림자는 토큰으로만, 배경보다 어둡게(2026-10-26 사용자 결정).** 그림자 색은 `--color-shadow`(배경을 검정 쪽으로 섞은 색) 하나이고 컴포넌트는 `--shadow-card`·`--shadow-float`·`--shadow-overlay`·`--shadow-text` 만 쓴다. `rgba(0,0,0,.1)` 같은 색을 직접 쓰지 않고, 색 글로우(초록·빨강)·흰 하이라이트처럼 **배경보다 밝은 그림자**를 만들지 않는다 — 어두운 화면에서 떠 보인다. 그림자가 아닌 연출(지도 경로선 발광·트로피 금박)은 바로 위에 `shadow-exception: <이유>` 를 단다. 검사 `tests/shadowTokens.test.ts`.
 - **버튼에는 그림자(drop shadow)를 두지 않는다(2026-10-26 사용자 결정).** `--shadow-button: none` 이 전역 `button` 과 그 변형을 덮는다. 새 버튼·플로팅 버튼·토글 활성 상태에도 drop shadow 를 넣지 않는다(안쪽 1px 하이라이트·초점 링은 그림자가 아니라 테두리 역할이라 허용). 카드 모양의 탭 가능한 요소(`stat-card`·코치 대화 입구)는 카드 그림자를 따른다.
 - PrimeVue, Vuetify, Element Plus, Naive UI 같은 외부 UI 라이브러리는 전면 도입하지 않는다.
 - TDS Mobile은 참고 자료로 유지하되, PaceLAB의 자체 토큰과 컴포넌트로 구현한다.
