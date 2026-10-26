@@ -4392,7 +4392,8 @@ function defaultTrainingPhase(): Required<TrainingPhasePatch> {
   return {
     currentPhase: 'Base',
     startedAt: null,
-    goal: '10km 60분 목표를 위한 유산소 기반과 주간 루틴 안정화',
+    // 개발용 예시 목표(10km 60분)를 넣지 않는다 — 신규 계정 훈련 기준에 그대로 보였다(#866). 웹 model.ts ↔ coach-run 미러.
+    goal: '유산소 기반과 주간 루틴 안정화',
     focus: ['Easy 심박 안정', 'Easy + Strides 신경근 자극', 'Tempo 상한 준수', '격주 Long Run 지속성'],
     nextPhase: 'Build',
     reviewAfter: '핵심 세션 2~3주 안정 수행 후'

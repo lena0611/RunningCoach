@@ -119,6 +119,15 @@ const injuryStatusOptions = [
   { value: 'resolved', label: '해소됨' },
   { value: 'archived', label: '보관' }
 ]
+const criterionStatusOptions = [
+  { value: 'ready', label: '준비됨' },
+  { value: 'watch', label: '지켜보는 중' },
+  { value: 'blocked', label: '보류' }
+]
+/** 저장 코드(health·active 등)를 화면 라벨로(#866) — 신규 계정 기억 탭에 영어 코드가 그대로 보였다. */
+function optionLabel(options: Array<{ value: string; label: string }>, value: string): string {
+  return options.find((option) => option.value === value)?.label ?? value
+}
 
 const activeGoal = computed(() => draft.goals.find((goal) => goal.id === draft.activeGoalId) ?? draft.goals[0] ?? null)
 const editingGoal = computed(() => draft.goals.find((goal) => goal.id === editingGoalId.value) ?? null)
@@ -193,7 +202,7 @@ const aiMemoryCount = computed(() => coachMemoryTotal.value)
 const basisGoalMeta = computed(() => {
   if (!activeGoal.value) return '기억 > 목표에서 목표를 만들어 주세요'
   const target = activeGoal.value.targetDate
-  if (!target) return `${activeGoal.value.category} · 목표일 미정`
+  if (!target) return `${optionLabel(goalCategoryOptions, activeGoal.value.category)} · 목표일 미정`
   const dday = Math.ceil((new Date(`${target}T00:00:00`).getTime() - Date.now()) / 86_400_000)
   const ddayText = dday > 0 ? `D-${dday}` : dday === 0 ? 'D-DAY' : '목표일 지남'
   return `${ddayText} · ${formatDateWithWeekday(target)}`
@@ -920,7 +929,7 @@ useSheetA11y(computed(() => !!pendingDelete.value), confirmSheetEl, () => { pend
             <button v-for="goal in draft.goals" :key="goal.id" class="memory-list-card" type="button" @click="openGoalEdit(goal.id)">
               <span>
                 <strong>{{ goal.title }}</strong>
-                <small>{{ goal.id === draft.activeGoalId ? '활성 목표 · ' : '' }}{{ goal.category }} · {{ goal.status }}{{ goalDateMeta(goal) }}</small>
+                <small>{{ goal.id === draft.activeGoalId ? '활성 목표 · ' : '' }}{{ optionLabel(goalCategoryOptions, goal.category) }} · {{ optionLabel(goalStatusOptions, goal.status) }}{{ goalDateMeta(goal) }}</small>
               </span>
               <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
             </button>
@@ -1013,7 +1022,7 @@ useSheetA11y(computed(() => !!pendingDelete.value), confirmSheetEl, () => { pend
             <button v-for="item in draft.injuryItems" :key="item.id" class="memory-list-card" type="button" @click="openInjuryEdit(item.id)">
               <span>
                 <strong>{{ item.title }}</strong>
-                <small>{{ item.id === draft.activeInjuryItemId ? '현재 기준 · ' : '' }}{{ item.status }}{{ item.severity !== null ? ` · ${item.severity}/5` : '' }}{{ injuryDateMeta(item) }}</small>
+                <small>{{ item.id === draft.activeInjuryItemId ? '현재 기준 · ' : '' }}{{ optionLabel(injuryStatusOptions, item.status) }}{{ item.severity !== null ? ` · ${item.severity}/5` : '' }}{{ injuryDateMeta(item) }}</small>
                 <small>{{ injuryAreaMeta(item) }}</small>
               </span>
               <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
@@ -1146,7 +1155,7 @@ useSheetA11y(computed(() => !!pendingDelete.value), confirmSheetEl, () => { pend
                 <ul class="progression-criteria-list">
                   <li v-for="criterion in progressionCriteria" :key="criterion.id">
                     <div>
-                      <span class="context-chip" :class="`criterion-${criterion.status}`">{{ criterion.status }}</span>
+                      <span class="context-chip" :class="`criterion-${criterion.status}`">{{ optionLabel(criterionStatusOptions, criterion.status) }}</span>
                       <strong>{{ criterion.label }}</strong>
                     </div>
                     <small>{{ criterion.evidence }}</small>
