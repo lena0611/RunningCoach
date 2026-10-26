@@ -108,6 +108,30 @@ PaceLAB 코칭의 정당성은 "우리가 똑똑해서"가 아니라 **외부의
 
 출처: NHS Couch to 5K 주차별 표 https://www.nhs.uk/better-health/get-active/get-running-with-couch-to-5k/couch-to-5k-running-plan/ (2026-10-26 원문 대조), Higdon 5K Novice https://www.halhigdon.com/training-programs/5k-training/novice-5k/
 
+## 숙련도별 처방 — 단계와 판정 신호 (#876, 2026-10-26)
+
+숙련도는 라벨 하나가 아니다. 처방을 바꾸는 신호는 넷이고, 단계(tier)는 그 넷으로 판정한다. 이 절이 "누구에게 무엇을 얼마나"의 정본이고, 위 §시작점 앵커링(볼륨)·§완전 초보(입문 실행)·§개인화 진화 규칙(수행 게이트)·§같은 날 2세션(더블)은 이 표의 한 칸을 자세히 푼 것이다.
+
+- **판정 신호 4개 — 우선순위대로**: ① **연속주 능력**(5K 완주 여부·연속 30분) ② **현재 주행량과 최근 최장 런**(최근 4주 실제 기록, 없으면 온보딩 완주 경험) ③ **경력**(부하에 버틴 기간 — 힘줄·뼈 적응은 심폐보다 느리다) ④ **수행 게이트**(이지 심박 안정·템포 상한 준수·롱런 지속성·부상/회복). **속도(VDOT)는 단계를 고르지 않는다** — 페이스만 정한다. 빠르지만 주행량이 낮은 사람은 초급 볼륨·중급 페이스다.
+- **단계는 아래 조건을 모두 채운 가장 높은 단계**다. 신호가 엇갈리면 낮은 쪽을 따른다(보수 원칙 — 과소 처방이 안전한 실수). 기록이 쌓이면 다시 판정하고, 4주 넘게 쉬면 §휴식과 복귀가 먼저 낮춘다.
+
+| 단계 | 판정 (모두 충족) | 주 횟수 | 품질 세션 / 주 | 롱런 | 스트라이드 | 템포·인터벌 | 한계 시험(TT) | 더블 |
+|---|---|---|---|---|---|---|---|---|
+| **입문** | 5K 미완주 또는 연속 30분 불가 | 3 | **0** — 전부 걷기·뛰기 | 없음(회차 길이 같음) | 없음 | 없음 | 없음 | 금지 |
+| **초급** | 연속 30분 가능 · 주 < 약 30km 또는 경력 < 1년 | 3~4 | **0~1** — 기본은 전부 이지, 기반 4주 뒤 짧은 템포 1회까지 | 주 거리의 **40%까지** 허용 | 이지 런 끝 4회부터, 주 1~2회 | 템포 10~20분, 인터벌 없음 | 첫 기록 후 4주부터, 4~8주 간격 | 금지 |
+| **중급** | 주 약 30~60km · 경력 1년 이상 | 4~5 | **1~2** | 주 거리의 **30%**(약 64km 이하) | 4~6회 | 템포 20~30분 · 인터벌 회당 주 거리의 8% 이하 | 4~8주 간격 | 금지 |
+| **상급** | 주 약 60km 이상 · 수년간 무통증 | 5~7 | **2~3** (품질 롱런 포함) | 주 거리의 **25%** · **150분 이하** | 6~8회 | 템포(T) 주 거리 10% 이하 · 인터벌(I) 8% 이하(3~5분 반복) | 4~8주 간격 | §같은 날 2세션 게이트(경력 36개월·주 80km·무통증) |
+
+- **모든 단계 공통 — 단일 세션 상한이 주간 %보다 강한 가드다.** 한 세션 거리가 **최근 30일 최장 런의 +10%를 넘지 않게** 한다(초과 폭별 부상 위험 1.52~2.28배). 반면 주간 증가율(10% vs 24%)은 부상률 차이를 못 보였다 — 주간 25% 상한(§시작점 앵커링)은 유지하되, 롱런·TT 같은 단일 세션 길이는 이 상한으로 먼저 자른다. 롱런 비율(위 표)과 이 상한 중 **작은 쪽**이 그 주 롱런이다.
+- **강도 분포**: 80/20(폴라라이즈드)의 근거는 이미 단련된 선수(경력 2년+·VO2max 50+) 연구다. 입문·초급은 **사실상 전부 이지**로 시작하고(Higdon Novice·NHS·Daniels White 공통), 중급부터 약 80/20을 지향한다. 초보에게 피라미드형이 낫다는 근거는 약하다 — 고집하지 않는다.
+- **초보는 더 보수적으로**: 초보의 부상률은 1000시간당 17.8건으로 일반 레크리에이션 러너(7.7건)의 두 배가 넘는다. 단계를 올릴 때 볼륨·강도·횟수를 같은 주에 함께 올리지 않는다.
+- **회복 주**: 시스템마다 3~5주에 한 번(Higdon 3주, 그 외 3~5주). 지금 플랜은 4주에 한 번(-20~30%)이고, 이 범위 안이라 유지한다.
+- **설계값 표시**: 초급 롱런 40%(Higdon Novice 플랜 피크 롱런이 주 거리의 40~50% — 표 집계값, Daniels 는 64km 이하 30%), 초급의 '기반 4주 뒤 짧은 템포 1회'(Higdon Novice 는 끝까지 없음, Hansons Beginner 는 6주차 — 그 사이), 단계별 템포 분수(Daniels 템포 약 20분, Higdon Advanced 30~45분 사이를 나눔)는 **설계값**이다. 단계 경계의 주 30km·60km·경력 1년도 **설계값**이다 — Higdon Novice 2(약 1년·주 24~40km), Pfitzinger 하프 1단계(주 약 48km), Daniels 2Q·5K-10K 플랜(주 약 64km 기반)의 진입 조건을 사이에 둔 값이고, 단일 권위 숫자는 없다. 스트라이드 시작 시점도 출처가 갈린다(바로 시작 ~ 8~12주 후) — 입문 졸업 후 시작으로 정했다.
+- **runnerLevel(초·중·상) 라벨의 역할**: 코치 말투(문단·글머리 수, 용어 깊이)용이다. 처방 숫자는 이 라벨이 아니라 위 판정 신호로 정한다 — 라벨이 처방을 바꾸면 두 기준이 생긴다.
+- **코드와 어긋난 곳(2026-10-26 감사)**: 입문인데 레이스 목표면 주기화 플랜에 스트라이드·TT·템포가 들어감 · 품질 세션 수가 단계와 무관(단계·횟수로만) · 롱런이 단계 무관 35% 고정에 시간·단일 세션 상한 없음 · 테이퍼에 롱런이 아예 없음(근거 미확인) 등 — 목록·우선순위는 이슈 #876.
+
+출처: Higdon 플랜 페이지(Novice 1·2, Intermediate, Advanced — 진입 조건·주 횟수·스텝백 3주) https://www.halhigdon.com/training-programs/marathon-training/novice-2-marathon/ , https://www.halhigdon.com/training-programs/marathon-training/advanced-1/ · NHS Couch to 5K https://www.nhs.uk/better-health/get-active/get-running-with-couch-to-5k/ · Daniels White·2Q·롱런 25~30%/150분·T 10%·I 8%(2차 요약, 원서 미확인) https://buenavida.run/plans/daniels-white-starting-plan/ , https://runningwithrock.com/marathon-training-plan-jd-2q/ , https://runningmagazine.ca/?p=99607 , https://www.coachray.nz/2023/05/03/jack-daniels-running-intensity/ · Pfitzinger 하프 단계(2차) https://runningwithrock.com/?p=595 · 80/20 근거 Seiler 2010 https://pubmed.ncbi.nlm.nih.gov/20861519/ , 메타분석 https://pubmed.ncbi.nlm.nih.gov/29863593/ · 초보 부상률 Videbæk 2015 https://pubmed.ncbi.nlm.nih.gov/25951917/ · 주간 % 무효 Buist RCT https://pubmed.ncbi.nlm.nih.gov/17940147/ , Damsted 2018 https://pubmed.ncbi.nlm.nih.gov/30534459/ · 단일 세션 급증 Frandsen 2025 BJSM https://pubmed.ncbi.nlm.nih.gov/40623829/ · 스트라이드 시작 시점(2차, 갈림) https://runnersconnect.net/how-to-do-strides/ , https://endorphinsrunning.com/article/when-should-beginners-start-speed-work
+
 ## 휴식과 복귀(layoff & return-to-training) — 쉬는 건 실패가 아니다
 
 훈련 중단은 부상뿐 아니라 장마·일·번아웃 등으로도 생기며 **기간은 사용자가 정한다.** 쉬는 동안 닦달하지 않고(능동 휴식 ≠ `missed`), 돌아올 땐 잃은 만큼만 낮춰 점진 복귀한다. (근거: 딥리서치 2026-06-22 — Coyle 1984/1986, Mujika & Padilla 2000, Frontiers 2023, OSU Wexner RTR, Rathleff 2015, BJSM 2025 Garmin)
