@@ -12,6 +12,9 @@
 create table if not exists public.test_reset_accounts (
   user_id uuid primary key references auth.users(id) on delete cascade,
   note text not null default '',
+  -- 기기 HealthKit 기록을 가져오지 않는다. 완전 초보 시나리오를 폰에서 보려면 필요하다 — 폰 주인의 실제 러닝이
+  -- 들어오면 첫 접속에 바로 기록 26건짜리 계정이 된다(2026-10-26 실측).
+  skip_healthkit_import boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -29,6 +32,17 @@ security definer
 set search_path = public
 as $$
   select exists (select 1 from public.test_reset_accounts where user_id = auth.uid());
+$$;
+
+-- HealthKit 자동 동기화를 건너뛸 계정인가. 본인 것만 답한다.
+create or replace function public.test_account_skips_healthkit()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((select skip_healthkit_import from public.test_reset_accounts where user_id = auth.uid()), false);
 $$;
 
 -- 본인 데이터를 전부 지운다. 계정(auth.users)·로그인은 남는다.
@@ -73,11 +87,13 @@ $$;
 -- Supabase 는 새 함수에 anon/authenticated execute 를 자동 부여한다(202609080001 참고).
 -- 로그인 사용자만 부르게 anon 에서 회수한다. 판정은 함수 안에서 user_id 로 한다.
 revoke execute on function public.can_reset_test_account() from public, anon;
+revoke execute on function public.test_account_skips_healthkit() from public, anon;
 revoke execute on function public.reset_test_account() from public, anon;
 grant execute on function public.can_reset_test_account() to authenticated;
+grant execute on function public.test_account_skips_healthkit() to authenticated;
 grant execute on function public.reset_test_account() to authenticated;
 
 -- 신규 유저 테스트용 완전 초보 계정(2026-10-26 사용자 지정). 그 계정이 없는 DB(로컬 등)에선 건너뛴다.
-insert into public.test_reset_accounts (user_id, note)
-select id, '완전 초보 신규 유저 테스트 계정' from auth.users where id = 'ddaabf4c-c1cf-4157-9ffc-9b0c4f52451b'
+insert into public.test_reset_accounts (user_id, note, skip_healthkit_import)
+select id, '완전 초보 신규 유저 테스트 계정', true from auth.users where id = 'ddaabf4c-c1cf-4157-9ffc-9b0c4f52451b'
 on conflict (user_id) do nothing;

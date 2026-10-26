@@ -12,6 +12,24 @@ export async function canResetTestAccount(): Promise<boolean> {
   return data === true
 }
 
+let healthKitSkipCache: { userId: string; skip: boolean } | null = null
+
+/**
+ * 이 계정이 기기 HealthKit 기록을 가져오지 않는 테스트 계정인가. 사용자별로 한 번만 묻는다.
+ * 판정에 실패하면 false — 실사용자의 동기화를 막지 않는 쪽으로 실패한다.
+ */
+export async function skipsHealthKitImport(userId: string): Promise<boolean> {
+  if (healthKitSkipCache?.userId === userId) return healthKitSkipCache.skip
+  try {
+    const { data, error } = await requireSupabase().rpc('test_account_skips_healthkit')
+    if (error) return false
+    healthKitSkipCache = { userId, skip: data === true }
+    return healthKitSkipCache.skip
+  } catch {
+    return false
+  }
+}
+
 export async function resetTestAccount(): Promise<void> {
   const supabase = requireSupabase()
   const { error } = await supabase.rpc('reset_test_account')

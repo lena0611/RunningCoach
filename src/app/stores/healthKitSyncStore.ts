@@ -26,6 +26,7 @@ import { mergeHealthKitRefreshRun } from '@/features/import-healthkit-run/mergeH
 import { notifyHealthKitNewRuns } from '@/features/sync-native-notifications/notificationBridge'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import { friendlyErrorMessage } from '@/shared/lib/friendlyError'
+import { skipsHealthKitImport } from '@/shared/api/testAccountRepository'
 import { deriveHeartRateModel, deriveObservedMaxHr, type HeartRateModel } from '@/shared/lib/heartRateZones'
 import { computeTempoCeilingAdaptation } from '@/shared/lib/coaching/tempoAdaptation'
 import { getActiveInjuryItem } from '@/entities/training-memory/model'
@@ -131,6 +132,12 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
       }
       if (!hasNativeBridge()) {
         this.skipReason = '이 환경엔 HealthKit 브리지가 없어요(웹에서 열면 정상).'
+        if (options.feedback === 'toast') showSyncToast('neutral', this.skipReason, 3200)
+        return
+      }
+      // 완전 초보 테스트 계정(#864)은 기기 기록을 가져오지 않는다 — 폰 주인의 실제 러닝이 들어오면 신규 사용자 시나리오가 깨진다.
+      if (authStore.user && (await skipsHealthKitImport(authStore.user.id))) {
+        this.skipReason = '이 테스트 계정은 HealthKit 기록을 가져오지 않아요(신규 사용자 시나리오).'
         if (options.feedback === 'toast') showSyncToast('neutral', this.skipReason, 3200)
         return
       }
