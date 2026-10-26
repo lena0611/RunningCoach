@@ -14,7 +14,8 @@ import type { ScheduledSession } from '@/entities/training-schedule/model'
 import type { AdaptiveTrainingProfile, TrainingGoal, TrainingInjuryItem } from '@/entities/training-memory/model'
 import type { SessionIntentTargets } from '@/entities/session-intent/model'
 import type { ChronicLoadTrend } from '@/shared/lib/runStats'
-import { shouldPrescribeWalkRun, walkRunExecutionSteps, walkRunCautions, WALK_RUN_KEY_POINT } from './walkRunReturn'
+import { shouldPrescribeWalkRun, walkRunExecutionSteps, walkRunCautions, WALK_RUN_KEY_POINT, WALK_RUN_SESSION_TYPES } from './walkRunReturn'
+import { beginnerWalkRunSteps, BEGINNER_WALK_RUN_KEY_POINT, type BeginnerWalkRunStage } from './beginnerWalkRun'
 import type { HeatWindow } from './heatWindow'
 
 /** SessionIntent(의도)에서 가져오는 결정 지원 정보. 브리핑이 흡수해 단일 카드로 보여준다. */
@@ -128,6 +129,11 @@ const EVIDENCE = {
     method: '강도 판정 RPE 우선 (#354)',
     summary: 'Easy/Recovery는 심박·페이스보다 RPE·호흡을 우선해 강도를 판정한다. 상한 소폭 초과도 RPE 낮으면 인정.'
   },
+  beginnerWalkRun: {
+    method: '완전 초보 걷기·뛰기 (NHS Couch to 5K)',
+    summary: '아직 연속으로 뛰어 본 적 없으면 걷기와 뛰기를 섞어 9주에 걸쳐 연속 30분까지 늘린다. 버거우면 회차를 반복해도 된다.',
+    url: 'https://www.nhs.uk/better-health/get-active/get-running-with-couch-to-5k/couch-to-5k-running-plan/'
+  },
   walkRunReturn: {
     method: '부상 후 복귀 walk-run (OSU Wexner RTR)',
     summary: '급성 통증성 부상 복귀는 연속주가 아니라 걷기-뛰기 5단계로 점진 재적응한다. 단계 진행은 달력이 아니라 통증으로 게이트한다(통증 없이 안정 시에만 다음 단계).',
@@ -234,10 +240,14 @@ function executionFor(
   progression: ProgressionStatus,
   progressionEvidence: string,
   tempoCeilingBpm: number | null,
-  walkRun: boolean
+  walkRun: boolean,
+  beginner: BeginnerWalkRunStage | null
 ): BriefingStep[] {
   const { sessionType, prescription, phase } = session
   const steps: BriefingStep[] = []
+
+  // 완전 초보(#870): 저강도 세션을 연속주 대신 Couch to 5K 걷기·뛰기로. 부상 복귀(walkRun)가 있으면 그쪽이 먼저다.
+  if (!walkRun && beginner) return beginnerWalkRunSteps(beginner, prescription.distanceKm ?? null)
 
   // 급성 통증성 부상 복귀(#501): 저강도 세션의 "어떻게 뛰나"를 연속주 대신 걷기-뛰기 5단계로 교체(SSOT §3-B).
   // 거리/볼륨 상한은 returnRamp 가 따로 적용하므로 여기선 인터벌·통증 정지만 다룬다.
@@ -408,6 +418,11 @@ export type SessionBriefingContext = {
    * 없으면(예보 없음·비더위) 브리핑은 종전과 동일하다.
    */
   heat?: HeatWindow | null
+  /**
+   * 완전 초보의 Couch to 5K 단계(#870, `beginnerWalkRunStage`). 있으면 저강도 세션의 "어떻게 뛰나"가 걷기·뛰기가 된다.
+   * 코치에게 보내는 실행 지침(buildSessionExecution)도 같은 값을 받아야 화면과 어긋나지 않는다.
+   */
+  beginnerWalkRun?: BeginnerWalkRunStage | null
 }
 
 const EASY_PACE_FAMILY: ReadonlySet<RunType> = new Set(['Easy', 'Easy + Strides', 'Recovery', 'LSD', 'Steady Long'])
@@ -416,8 +431,9 @@ const EASY_PACE_FAMILY: ReadonlySet<RunType> = new Set(['Easy', 'Easy + Strides'
  * 🎯 오늘의 핵심 — 세션 타입별 "딱 하나만 지키면 되는 것"(결정론). 포스트런 채점 기준(sessionQuality)과 정렬.
  * 상세 이행은 execution(라이프사이클)에, 여기엔 "오늘의 합격선" 한 줄만.
  */
-function keyPointFor(type: RunType, walkRun: boolean): string {
+function keyPointFor(type: RunType, walkRun: boolean, beginner: boolean): string {
   if (walkRun) return WALK_RUN_KEY_POINT
+  if (beginner) return BEGINNER_WALK_RUN_KEY_POINT
   switch (type) {
     case 'Easy':
       return '심박 상한 이하로 대화가 가능한 강도 유지 — 페이스보다 심박 안정(RPE·호흡 우선). 살짝 넘어도 편하면 OK.'
@@ -485,7 +501,7 @@ function heatCautions(type: RunType, heat: HeatWindow | null | undefined): strin
  */
 export function buildSessionExecution(
   session: ScheduledSession,
-  ctx: Pick<SessionBriefingContext, 'injury' | 'vdot' | 'adaptiveProfile' | 'progression'>
+  ctx: Pick<SessionBriefingContext, 'injury' | 'vdot' | 'adaptiveProfile' | 'progression' | 'beginnerWalkRun'>
 ): BriefingStep[] {
   const prog = resolveProgression(session.sessionType, ctx.progression, ctx.adaptiveProfile)
   return executionFor(
@@ -495,8 +511,14 @@ export function buildSessionExecution(
     prog.status,
     prog.evidence,
     ctx.adaptiveProfile?.tempoCeiling?.adoptedBpm ?? null,
-    shouldPrescribeWalkRun(ctx.injury, session.sessionType)
+    shouldPrescribeWalkRun(ctx.injury, session.sessionType),
+    beginnerFor(session.sessionType, ctx.beginnerWalkRun)
   )
+}
+
+/** 초보 걷기·뛰기는 저강도 세션에만(부상 복귀 walk-run 과 같은 대상 타입). */
+function beginnerFor(type: RunType, stage: BeginnerWalkRunStage | null | undefined): BeginnerWalkRunStage | null {
+  return stage && WALK_RUN_SESSION_TYPES.has(type) ? stage : null
 }
 
 export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBriefingContext): SessionBriefing {
@@ -509,12 +531,14 @@ export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBrie
   const effect = effectFor(session.sessionType)
   // 급성 통증성 부상 복귀면 저강도 세션의 "어떻게 뛰나"를 걷기-뛰기로 교체(#501, SSOT §3-B).
   const walkRun = shouldPrescribeWalkRun(ctx.injury, session.sessionType)
+  const beginner = !walkRun && Boolean(beginnerFor(session.sessionType, ctx.beginnerWalkRun))
   const execution = buildSessionExecution(session, ctx)
   const caution = cautionsFor(session, ctx.injury, ctx.chronic, walkRun, ctx.baselineAfterLayoff ?? false)
 
   const easyFamily = session.sessionType === 'Easy' || session.sessionType === 'Recovery' || session.sessionType === 'Easy + Strides'
   const evidence: EvidenceRef[] = dedupeEvidence([
     walkRun ? EVIDENCE.walkRunReturn : null,
+    beginner ? EVIDENCE.beginnerWalkRun : null,
     effect.evidence,
     session.sessionType === 'Tempo' || session.sessionType === 'Race' ? EVIDENCE.daniels : null,
     easyFamily ? EVIDENCE.rpePriority : null,
@@ -522,7 +546,7 @@ export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBrie
   ])
 
   return {
-    keyPoint: keyPointFor(session.sessionType, walkRun),
+    keyPoint: keyPointFor(session.sessionType, walkRun, beginner),
     goalLine,
     why: syncInjurySeverityText(ctx.intent?.why ?? '', ctx.injury),
     effect: effect.text,

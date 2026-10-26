@@ -176,7 +176,7 @@ describe('resolveRunnerProgress', () => {
     expect(p.gate1).not.toBeNull()
     expect(p.runnerLevel).toBe('beginner')
     expect(p.runnerLevelSource).toBe('derived')
-    expect(p.maintenanceDue).toBe(true)
+    expect(p.maintenanceDue).toBe(false) // 측정한 적 없는 입문 — 유지할 등급이 없다(#870)
     expect(p.racePredictions).toEqual([])
     expect(runnerProgressLabel(p)).toBe('입문')
   })
@@ -263,5 +263,22 @@ describe('detectLevelUps', () => {
   it('no grade event when current grade is null', () => {
     const r = detectLevelUps('5k', null, '5k', null)
     expect(r.events).toEqual([])
+  })
+})
+
+describe('첫 측정 권유 시점 (#870)', () => {
+  it('측정한 적 없는 입문은 기록이 쌓여도 TT 를 권하지 않는다 — 연속주가 먼저', () => {
+    const p = resolveRunnerProgress(profile(), [run(daysAgo(40), 2.4), run(daysAgo(2), 2.6)], today)
+    expect(p.distanceClass.key).toBe('pre')
+    expect(p.maintenanceDue).toBe(false)
+  })
+
+  it('5K 이상 러너도 첫 기록 후 4주가 지나야 첫 측정을 권한다', () => {
+    expect(resolveRunnerProgress(profile(), [run(daysAgo(10), 6)], today).maintenanceDue).toBe(false)
+    expect(resolveRunnerProgress(profile(), [run(daysAgo(40), 6), run(daysAgo(3), 5)], today).maintenanceDue).toBe(true)
+  })
+
+  it('기록이 없으면 자기보고 클래스가 높아도 권하지 않는다', () => {
+    expect(resolveRunnerProgress(profile(), [], today, { maxDistanceM: 21097.5 }).maintenanceDue).toBe(false)
   })
 })

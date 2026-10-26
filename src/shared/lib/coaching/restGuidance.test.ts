@@ -64,3 +64,12 @@ describe('evaluateExtraRun (예정에 없던 추가 런 평가)', () => {
     expect(evaluateExtraRun({ type: 'Easy' }, null, spike).caution).toBe(true)
   })
 })
+
+describe('첫 훈련 전 휴식 카드 (#870)', () => {
+  it('뛴 적 없는 사람에게 "그동안의 부하"를 말하지 않고 첫 러닝 준비를 말한다', () => {
+    const g = buildRestGuidance(null, null, true)
+    expect(g.purpose).not.toContain('그동안의 부하')
+    expect(g.purpose).toContain('첫 훈련 전')
+    expect(g.items.join(' ')).toContain('걷기')
+  })
+})

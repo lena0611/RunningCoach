@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useCoachStore } from '@/app/stores/coachStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
+import { useLevelStore } from '@/app/stores/levelStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { useDataCardStore } from '@/app/stores/dataCardStore'
 import { useSummaryLayoutStore } from '@/app/stores/summaryLayoutStore'
@@ -31,6 +32,7 @@ import { summarizeTempoCoaching } from '@/shared/lib/coaching/tempoAdaptation'
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { canIntensifySession } from '@/shared/lib/coaching/scheduleProposalEligibility'
 import { buildSessionExecution } from '@/shared/lib/coaching/sessionBriefing'
+import { beginnerWalkRunStage } from '@/shared/lib/coaching/beginnerWalkRun'
 import { resolvePaceModel } from '@/shared/lib/vdotPaces'
 import { buildCoachSessionEvidence } from '@/shared/lib/coaching/sessionQuality'
 import { assessHeatWindow, deriveHabitualRunHour } from '@/shared/lib/coaching/heatWindow'
@@ -795,7 +797,9 @@ async function sendCoachRequest(note: string) {
           injury: getActiveInjuryItem(memoryStore.memory),
           vdot: resolvePaceModel(memoryStore.memory.athleteProfile).vdot,
           adaptiveProfile: memoryStore.memory.adaptiveTrainingProfile,
-          progression: coachAdaptiveProgress.criteria
+          progression: coachAdaptiveProgress.criteria,
+          // 완전 초보 걷기·뛰기(#870) — 화면 브리핑과 같은 단계를 넘겨야 코치가 "연속 2.3km"라고 하지 않는다.
+          beginnerWalkRun: beginnerWalkRunStage(useLevelStore().selfReportedMaxDistanceM, runStore.runs)
         }
         // 5개(서버 상한과 동일). 3개면 "이번 주 어떻게 짜여 있어?" 같은 질문에 주 전체를 못 보여준다 —
         // 코치가 부족한 재료를 옛 루틴 메모로 메꾸는 게 2026-08-18 실사고의 한 원인이었다.

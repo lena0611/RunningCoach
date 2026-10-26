@@ -297,7 +297,12 @@ export function resolveRunnerProgress(
   }
 
   const lastMeasured = laterDate(measured?.basisDate ?? null, lastSelfRaceDate(runs))
-  const maintenanceDue = gradeMaintenanceDue(lastMeasured, today)
+  // 측정한 적이 없으면 "유지"할 등급이 없다(#870 — 가입 첫날 TT 권유). 5K 를 완주해 본 적 없으면 기록 측정보다
+  // 연속주가 먼저이고, 그 외엔 첫 기록 후 4주가 지나야 첫 측정을 권한다(SSOT #861 "첫 한계 시험은 4주차부터").
+  const firstRun = runs.reduce<string | null>((min, run) => (run.date && (!min || run.date < min) ? run.date : min), null)
+  const maintenanceDue = lastMeasured
+    ? gradeMaintenanceDue(lastMeasured, today)
+    : distanceClass.key !== 'pre' && firstRun !== null && gradeMaintenanceDue(firstRun, today)
 
   const racePredictions =
     vdot !== null
