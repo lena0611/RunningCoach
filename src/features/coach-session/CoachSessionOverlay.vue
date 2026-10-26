@@ -34,6 +34,8 @@ import { canIntensifySession } from '@/shared/lib/coaching/scheduleProposalEligi
 import { buildSessionExecution } from '@/shared/lib/coaching/sessionBriefing'
 import { beginnerWalkRunStage } from '@/shared/lib/coaching/beginnerWalkRun'
 import { resolvePaceModel } from '@/shared/lib/vdotPaces'
+import { deriveEasyPaceReference } from '@/shared/lib/coaching/easyPaceReference'
+import { isSelfRaceRun } from '@/entities/competition/model'
 import { buildCoachSessionEvidence } from '@/shared/lib/coaching/sessionQuality'
 import { assessHeatWindow, deriveHabitualRunHour } from '@/shared/lib/coaching/heatWindow'
 import { buildInjuryCoachSignals } from '@/entities/training-memory/injurySignals'
@@ -869,6 +871,14 @@ async function sendCoachRequest(note: string) {
       })(),
       // 풀마라톤 목표 위험 플래그(하프 제외) — 풀만 독립 위험↑.
       marathonFlag: isFullMarathonGoal(getActiveGoal(memoryStore.memory)),
+      // 코치의 "Easy 비율"이 요약 카드와 같은 기준이게(#878 A5, client-summary) — 처방 모델, 없으면 본인 평소 페이스.
+      easyPaceReferenceSec: (() => {
+        const now = new Date()
+        const observed = deriveObservedMaxHr(runStore.sortedRuns.map((r) => ({ maxHeartRate: r.maxHeartRate, date: r.date })), now)
+        const hr = deriveHeartRateModel(memoryStore.memory.athleteProfile, now.getFullYear(), observed)
+        const trainingRuns = runStore.sortedRuns.filter((run) => !isSelfRaceRun(run))
+        return deriveEasyPaceReference(memoryStore.memory.athleteProfile, trainingRuns, hr, now)
+      })(),
       // 활성 부상 감별 신호(§5 부상 KB) — 통증 부위+데이터로 좁힌 상위 1~2 "가능성" 가설+레버+안전 redFlag.
       // 활성 부상/신호 없으면 null(게이팅은 buildInjuryCoachSignals 내부). 진단 아님 — 코치가 "가능성"으로만 전달.
       injurySignals: buildInjuryCoachSignals(memoryStore.memory, runStore.sortedRuns, new Date()),

@@ -294,7 +294,8 @@ export function isHealthKitBridgeAvailable(): boolean {
 
 export function toExtractedRunData(
   candidate: HealthKitRunCandidate,
-  heartRateModel: HeartRateModel | null = null
+  heartRateModel: HeartRateModel | null = null,
+  easyPaceSec: number | null = null
 ): ExtractedRunData {
   const distanceKm = candidate.distanceKm ?? 0
   const durationSec = candidate.durationSec
@@ -307,6 +308,7 @@ export function toExtractedRunData(
     metricSamples: candidate.metricSamples ?? [],
     routePoints: candidate.routePoints ?? [],
     heartRateModel,
+    easyPaceSec,
     date: candidate.date
   })
   const elevationGainM = candidate.elevationGainM

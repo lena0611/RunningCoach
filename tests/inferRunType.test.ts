@@ -5,8 +5,11 @@ import type { FastSegment, Lap, RunRoutePoint } from '@/entities/run/model'
 
 // anchor=165 모델(easy 145 / Z4 156~165) — 기존 판정 기준과 동일한 개인 심박 모델로 주입한다.
 const hrModel = deriveHeartRateModel({ heartRateMode: 'manual', lactateThresholdHr: 165 }, 2026)
+// 이 픽스처들은 개발자 실측 런(2026-05)이다 — 판정 기준도 그 러너의 Easy 페이스(≈7:12/km)로 둔다(#878 A5).
+const DEV_EASY_PACE_SEC = 432
+
 function infer(input: Parameters<typeof inferRunType>[0]) {
-  return inferRunType({ ...input, heartRateModel: hrModel })
+  return inferRunType({ easyPaceSec: DEV_EASY_PACE_SEC, ...input, heartRateModel: hrModel })
 }
 
 describe('inferRunType', () => {

@@ -101,6 +101,7 @@ const {
   hasSchedule,
   isPerformanceGoal,
   scheduleLoadingPlaceholder,
+  easyPaceReferenceSec,
   activeBriefing,
   activeDisplaySession,
   activeDoneRun,
@@ -141,7 +142,13 @@ const crossTrainingWeekMinutes = computed(() => {
   const { start, end } = trainingWeekRange(today.value)
   return crossTrainingStore.totalMinutesBetween(start, end)
 })
-const easyRatio = computed(() => getEasyRatio(getRunsWithinDays(runs.value, 30, today.value)))
+const runs30 = computed(() => getRunsWithinDays(runs.value, 30, today.value))
+const easyRatio = computed(() => getEasyRatio(runs30.value, easyPaceReferenceSec.value))
+const easyRatioText = computed(() => (easyRatio.value === null ? '—' : `${easyRatio.value}%`))
+const easyRatioHint = computed(() => {
+  if (easyRatio.value !== null) return '최근 30일 · 내 Easy 페이스 기준'
+  return runs30.value.length ? '최근 30일 · 기준 페이스가 아직 없어요' : '최근 30일 기록이 아직 없어요'
+})
 // NumbersGrid 평균 심박: 최근 7일 러닝의 avgHeartRate 단순 평균(표시용 뷰 집계 — getRunsWithinDays 재사용).
 const avgHeartRate7d = computed(() => {
   const values = getRunsWithinDays(runs.value, 7, today.value)
@@ -353,8 +360,12 @@ const goalProtectionText = computed(() =>
 const hardSessions = computed(() =>
   getRunsWithinDays(runs.value, 7, today.value).filter((run) => ['Tempo', 'LSD', 'Steady Long', 'Race'].includes(run.type)).length
 )
-// #352: 오늘/다음 폴백 히어로(스케줄 없음) 뷰(결정론, AI 호출 없음)
+// #352: 오늘 폴백 히어로(스케줄 없음) 뷰(결정론, AI 호출 없음)
 const dayView = computed(() => getTrainingDayView(memoryStore.memory, runs.value, today.value))
+// 레이스 목표인데 날짜·거리가 없어 플랜을 못 짓는 상태(#878 A4) — 스케줄 생성 가드와 같은 조건.
+const planNeedsGoalDate = computed(
+  () => isPerformanceGoal.value && !(activeGoal.value?.targetDate && activeGoal.value?.distanceKm)
+)
 /**
  * 처방 한 줄에 붙는 날씨 칩 — **이모지와 값만**(2026-09-03). 날짜는 스트립 아래 스탬프가 이미 말한다.
  * 오늘이 아닌 다음 세션 날이면 그날 최고기온, 오늘이면 체감온도를 쓴다(heroWeatherLine 과 같은 규칙).
@@ -691,7 +702,7 @@ const visibleSummaryCardIds = computed(() => summaryCardIds.value.filter((id) =>
 /** 값 미리보기. 이름만 보고 뭘 붙이는지 모르면 추가가 아니라 도박이 된다. */
 const summaryCardPreviews = computed<Record<string, { value: string; hint: string }>>(() => ({
   last7: { value: `${last7.value}km`, hint: '최근 7일' },
-  easy: { value: `${easyRatio.value}%`, hint: '최근 30일 · 랩/페이스 기준' },
+  easy: { value: easyRatioText.value, hint: easyRatioHint.value },
   hard: { value: `${hardSessions.value}회`, hint: '최근 7일' },
   avgHr: { value: avgHeartRate7d.value ? `${avgHeartRate7d.value}bpm` : '—', hint: '최근 7일' },
   goal: { value: activeGoal.value.title, hint: goalMetaText.value || '' },
@@ -929,7 +940,17 @@ useSheetA11y(computed(() => !!pendingDeleteCard.value), confirmSheetEl, () => { 
             </template>
           </template>
           <template v-else>
-            <template v-if="dayView.today.state === 'pending'">
+            <!-- 날짜 없는 레이스 목표(#878 A4): 플랜이 없는 이유를 말하고 고칠 곳으로 보낸다 — "오늘은 휴식"으로 얼버무리지 않는다. -->
+            <template v-if="planNeedsGoalDate && dayView.today.state !== 'done'">
+              <h2>📅 플랜이 아직 없어요</h2>
+              <p class="helper">목표에 날짜와 거리를 넣으면 주간 플랜을 짜 드려요. 그전엔 편하게 뛰는 Easy면 충분해요.</p>
+              <div class="hero-actions">
+                <button type="button" class="hero-action-primary" @click.stop="openMemoryPanel('goals')" @keydown.enter.stop>
+                  목표 날짜 정하기
+                </button>
+              </div>
+            </template>
+            <template v-else-if="dayView.today.state === 'pending'">
               <h2>{{ dayView.today.title }}</h2>
               <p v-if="dayView.today.coachLine" class="helper coach-line">{{ dayView.today.coachLine }}</p>
             </template>
@@ -944,10 +965,6 @@ useSheetA11y(computed(() => !!pendingDeleteCard.value), confirmSheetEl, () => { 
           </template>
         </section>
 
-        <section v-if="!hasSchedule && dayView.next" class="day-block day-block-next">
-          <p class="eyebrow">다음 훈련</p>
-          <p class="next-line">{{ formatDateWithWeekday(dayView.next.date) }} · {{ dayView.next.title }}</p>
-        </section>
 
       </div>
       <svg class="card-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
@@ -984,7 +1001,7 @@ useSheetA11y(computed(() => !!pendingDeleteCard.value), confirmSheetEl, () => { 
           @pointercancel="summaryEditMode ? endCardDrag() : cancelCardLongPress()"
         >
           <StatCard v-if="cardId === 'last7'" label="주간 거리" :value="`${last7}km`" hint="최근 7일" :loading="runDataLoading" :interactive="!summaryEditMode" @click="!summaryEditMode && (trendMetric = 'last7')" />
-          <StatCard v-else-if="cardId === 'easy'" label="Easy 비율" :value="`${easyRatio}%`" hint="최근 30일 · 랩/페이스 기준" :loading="runDataLoading" :interactive="!summaryEditMode" @click="!summaryEditMode && (trendMetric = 'easy')" />
+          <StatCard v-else-if="cardId === 'easy'" label="Easy 비율" :value="easyRatioText" :hint="easyRatioHint" :loading="runDataLoading" :interactive="!summaryEditMode" @click="!summaryEditMode && (trendMetric = 'easy')" />
           <StatCard v-else-if="cardId === 'hard'" label="강훈련" :value="`${hardSessions}회`" hint="최근 7일" tone="warning" :loading="runDataLoading" :interactive="!summaryEditMode" @click="!summaryEditMode && (trendMetric = 'hard')" />
           <StatCard v-else-if="cardId === 'avgHr'" label="평균 심박" :value="avgHeartRate7d ? `${avgHeartRate7d}bpm` : '—'" hint="최근 7일" tone="accent" :loading="runDataLoading" :value-kind="avgHeartRate7d ? 'metric' : 'text'" />
           <!--
@@ -1582,11 +1599,6 @@ useSheetA11y(computed(() => !!pendingDeleteCard.value), confirmSheetEl, () => { 
   gap: 4px;
 }
 
-.day-block-next {
-  padding-top: 12px;
-  border-top: 1px solid var(--color-border, rgba(120, 120, 120, 0.2));
-}
-
 .coach-line {
   color: var(--color-text);
 }
@@ -1625,13 +1637,6 @@ useSheetA11y(computed(() => !!pendingDeleteCard.value), confirmSheetEl, () => { 
   font-size: 0.78em;
   font-weight: 600;
   color: var(--color-muted);
-}
-
-.next-line {
-  font-size: var(--text-info-size);
-  font-weight: 600;
-  color: var(--color-text);
-  margin: 0;
 }
 
 /* 히어로 액션(수락/바꾸기·복귀 컨트롤) — article 히어로 내부 버튼 행 */

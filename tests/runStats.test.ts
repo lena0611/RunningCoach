@@ -24,25 +24,33 @@ describe('runStats', () => {
       })
     ]
 
-    expect(getEasyRatio(runs)).toBe(50)
+    // 기준 Easy 7:12/km → Easy 하한 6:29(0.90E). 430·420 랩만 Easy.
+    expect(getEasyRatio(runs, 432)).toBe(50)
   })
 
-  it('alternates the next long run type from the latest Saturday 10km+ run', () => {
+  // #878 A5: 같은 런이라도 러너마다 Easy 기준이 다르다 — 개발자 페이스(6:30)로 모두를 재지 않는다.
+  it('Easy 비율은 그 사람의 Easy 페이스 기준이다', () => {
+    const run = makeRun({
+      distanceKm: 4,
+      laps: [1, 2, 3, 4].map((index) => ({ index, distanceKm: 1, paceSec: 300, avgHeartRate: null, cadence: null }))
+    })
+    expect(getEasyRatio([run], 300)).toBe(100) // 5:00 가 평소인 러너에겐 Easy
+    expect(getEasyRatio([run], 432)).toBe(0) // 7:12 가 평소인 러너에겐 Easy 아님
+    expect(getEasyRatio([run], null)).toBeNull() // 기준이 없으면 모른다
+    expect(getEasyRatio([], 432)).toBeNull() // 기록이 없어도 모른다 — "0%" 아님
+  })
+
+  // #878 A4: 플랜이 없으면 무엇을 할지 지어내지 않는다 — 예전엔 매일 "토요일 LSD"를 오늘로 냈다.
+  it('플랜이 없으면 오늘 편한 Easy 만 권한다(롱런 요일·토요일 10km 기준 없음)', () => {
     const recommendation = getNextSessionRecommendation(
       initialTrainingMemory,
-      [
-        makeRun({
-          date: '2026-05-16',
-          type: 'Steady Long',
-          distanceKm: 12,
-          avgPaceSec: 405
-        })
-      ],
+      [makeRun({ date: '2026-05-16', type: 'Steady Long', distanceKm: 12, avgPaceSec: 405 })],
       new Date('2026-05-22T09:00:00+09:00')
     )
 
-    expect(recommendation.title).toBe('토요일 LSD')
-    expect(recommendation.intensity).toContain('7:05~7:30/km')
+    expect(recommendation.title).toBe('Easy')
+    expect(recommendation.plannedDate).toBe('2026-05-22')
+    expect(`${recommendation.reason} ${recommendation.intensity}`).not.toMatch(/토요일|LSD|10km/)
   })
 
   describe('getTrainingDayView (#352)', () => {

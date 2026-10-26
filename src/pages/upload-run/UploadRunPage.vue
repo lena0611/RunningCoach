@@ -5,6 +5,8 @@ import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
+import { deriveEasyPaceReference } from '@/shared/lib/coaching/easyPaceReference'
+import { isSelfRaceRun } from '@/entities/competition/model'
 import RunImageUploader from '@/widgets/run-image-uploader/RunImageUploader.vue'
 import ActionGroup from '@/shared/ui/ActionGroup.vue'
 import ContentStack from '@/shared/ui/ContentStack.vue'
@@ -51,7 +53,9 @@ async function analyze() {
   try {
     const observed = deriveObservedMaxHr(runStore.sortedRuns.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })))
     const heartRateModel = deriveHeartRateModel(memoryStore.memory.athleteProfile, new Date().getFullYear(), observed)
-    form.value = await extractRunDataFromFile(file.value, heartRateModel)
+    const trainingRuns = runStore.sortedRuns.filter((run) => !isSelfRaceRun(run))
+    const easyPaceSec = deriveEasyPaceReference(memoryStore.memory.athleteProfile, trainingRuns, heartRateModel, new Date())
+    form.value = await extractRunDataFromFile(file.value, heartRateModel, easyPaceSec)
   } catch (err) {
     error.value = err instanceof Error ? err.message : '파일 분석 실패'
   } finally {

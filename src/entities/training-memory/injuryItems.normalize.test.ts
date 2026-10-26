@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { initialTrainingMemory, normalizeTrainingMemory } from './model'
+import { normalizeTrainingMemory } from './model'
 
 // #303: 부상 삭제 영속 — normalizeInjuryItems가 명시적 빈 배열을 존중하고,
 // 자동 복원/기본 시드는 injuryItems 키 부재(최초/레거시)에만 1회 적용하는지 검증한다.
@@ -26,10 +26,40 @@ describe('normalizeTrainingMemory injuryItems (#303)', () => {
     expect(result.injuryItems[0].title).toContain('햄스트링')
   })
 
-  it('injuryItems·knownIssues 모두 부재 → 기본 시드 1회(최초 사용자)', () => {
+  // #878 A6: 예전엔 개발자 예시 부상(좌측 햄스트링)을 시드했다 — 신규 유저에게 없는 부상이 생겼다.
+  it('injuryItems·knownIssues 모두 부재 → 부상 없음(예시 부상을 시드하지 않는다)', () => {
+    expect(normalizeTrainingMemory({}).injuryItems).toEqual([])
+    expect(normalizeTrainingMemory({}).activeInjuryItemId).toBeNull()
+  })
+})
+
+// #878 A6: 빈 칸은 중립값으로 — 개발자 예시(10km 60분·햄스트링·더위 심박·코칭 메모)로 채우지 않는다.
+describe('normalizeTrainingMemory 빈 칸 기본값 (#878 A6)', () => {
+  it('메모리가 통째로 비어도 개발자 예시가 새지 않는다', () => {
     const result = normalizeTrainingMemory({})
-    expect(result.injuryItems.length).toBe(initialTrainingMemory.injuryItems.length)
-    expect(result.injuryItems.length).toBeGreaterThan(0)
+    expect(result.goals).toHaveLength(1)
+    expect(result.goals[0]).toMatchObject({ title: '목표 미설정', category: 'health', distanceKm: null, targetDurationSec: null })
+    expect(result.runnerIdentity).toEqual({ strengths: [], weaknesses: [], riskFactors: [], coachingStyle: [] })
+    expect(result.aiNotes).toEqual([])
+    expect(JSON.stringify(result)).not.toMatch(/햄스트링|10km 60분/)
+  })
+
+  it('coach-run 이 patch 만 upsert 한 메모리(aiNotes 만 있음)도 예시로 채우지 않는다', () => {
+    const result = normalizeTrainingMemory({ aiNotes: ['주 3회 꾸준히'] })
+    expect(result.aiNotes).toEqual(['주 3회 꾸준히'])
+    expect(result.injuryItems).toEqual([])
+    expect(result.goals[0].title).toBe('목표 미설정')
+  })
+
+  it('옛 목표 문자열만 있으면 제목만 살리고 거리·기록은 지어내지 않는다', () => {
+    const goal = normalizeTrainingMemory({ goal: '하프 완주' }).goals[0]
+    expect(goal).toMatchObject({ title: '하프 완주', category: 'health', distanceKm: null, targetDurationSec: null, successCriteria: '' })
+  })
+
+  it('목표 제목을 모두 비우면 중립 목표로 — 10km 60분 레이스 목표가 생기지 않는다', () => {
+    const goal = normalizeTrainingMemory({ goals: [{ title: '  ' }] as never }).goals[0]
+    expect(goal.title).toBe('목표 미설정')
+    expect(goal.distanceKm).toBeNull()
   })
 })
 

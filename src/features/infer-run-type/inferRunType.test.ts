@@ -5,12 +5,15 @@ import type { Lap, RunMetricSample } from '@/entities/run/model'
 
 // anchor=165 모델(easy 145 / recovery 130 / Z4 156~165) — 기존 판정 기준과 동일한 개인 심박 모델로 테스트한다.
 const hrModel = deriveHeartRateModel({ heartRateMode: 'manual', lactateThresholdHr: 165 }, 2026)
+// 픽스처는 개발자 실측 런 기준이라 판정 기준도 그 러너의 Easy 페이스(≈7:12/km)로 둔다(#878 A5).
+const DEV_EASY_PACE_SEC = 432
 
 describe('inferRunType', () => {
   it('infers Easy + Strides from easy heart rate and repeated pace/cadence spikes', () => {
     const metricSamples = buildStrideSamples()
 
     expect(inferRunType({
+      easyPaceSec: DEV_EASY_PACE_SEC,
       date: '2026-05-26',
       distanceKm: 5.37,
       avgPaceSec: 460,
@@ -31,6 +34,7 @@ describe('inferRunType', () => {
     }))
 
     expect(inferRunType({
+      easyPaceSec: DEV_EASY_PACE_SEC,
       date: '2026-05-26',
       distanceKm: 5.2,
       avgPaceSec: 462,
@@ -54,6 +58,7 @@ describe('inferRunType', () => {
     })
 
     expect(inferRunType({
+      easyPaceSec: DEV_EASY_PACE_SEC,
       date: '2026-05-25',
       distanceKm: 6.05,
       avgPaceSec: 468,
@@ -77,6 +82,7 @@ describe('inferRunType', () => {
     })
 
     expect(inferRunType({
+      easyPaceSec: DEV_EASY_PACE_SEC,
       date: '2026-05-25',
       distanceKm: 6.05,
       avgPaceSec: 468,
@@ -90,6 +96,7 @@ describe('inferRunType', () => {
 
   it('keeps an easy-heart-rate Saturday long run as LSD even with a natural negative split', () => {
     expect(inferRunType({
+      easyPaceSec: DEV_EASY_PACE_SEC,
       date: '2026-05-02',
       distanceKm: 13.06,
       avgPaceSec: 452,
@@ -117,6 +124,7 @@ describe('inferRunType', () => {
 
   it('infers Steady Long when a long run spends meaningful distance in Z3 with a faster second half', () => {
     expect(inferRunType({
+      easyPaceSec: DEV_EASY_PACE_SEC,
       date: '2026-05-09',
       distanceKm: 12.5,
       avgPaceSec: 418,
@@ -145,6 +153,7 @@ describe('inferRunType', () => {
     // 11.4km / 1:31:33(≈8:02/km=482s) — 토요일 LSD를 일요일로 옮겨 뛴 케이스. 거리는 12km 미만이지만
     // 발 위 시간이 ~91분이라 명백한 롱런. 요일·12km에 걸려 Easy로 떨어지면 안 된다(running-coaching-standards.md:91).
     expect(inferRunType({
+      easyPaceSec: DEV_EASY_PACE_SEC,
       date: '2026-05-03', // 일요일(2026-05-02 토요일의 다음 날)
       distanceKm: 11.4,
       avgPaceSec: 482,
@@ -171,6 +180,7 @@ describe('inferRunType', () => {
   it('keeps a mid-length easy run as Easy off Saturday when time-on-feet is under the long-run threshold', () => {
     // 10.5km / 73.5분(420s/km) — 12km 미만 + 80분 미만 + 비토요일이면 롱런 신호가 없으므로 Easy 유지(과분류 가드).
     expect(inferRunType({
+      easyPaceSec: DEV_EASY_PACE_SEC,
       date: '2026-05-04', // 월요일
       distanceKm: 10.5,
       avgPaceSec: 420,
@@ -207,3 +217,35 @@ function buildLongRunLaps(values: Array<[paceSec: number, avgHeartRate: number]>
     cadence: 166
   }))
 }
+
+// #878 A5: 빠름/느림은 그 사람의 Easy 페이스 기준이다 — 개발자 페이스(6:30·8:00/km) 상수로 판정하지 않는다.
+describe('inferRunType 개인 페이스 기준 (#878 A5)', () => {
+  const flat = (paceSec: number, km = 5) => ({
+    date: '2026-10-21',
+    distanceKm: km,
+    avgPaceSec: paceSec,
+    avgHeartRate: null,
+    laps: Array.from({ length: km }, (_, index) => ({ index: index + 1, distanceKm: 1, paceSec, avgHeartRate: null, cadence: null })) as Lap[],
+    fastSegments: []
+  })
+
+  it('4:50/km 가 평소인 러너의 4:50 5km 는 Easy (예전엔 템포)', () => {
+    expect(inferRunType({ ...flat(290), easyPaceSec: 290 })).toBe('Easy')
+  })
+
+  it('같은 러너가 4:15 로 5km 를 밀면 템포', () => {
+    expect(inferRunType({ ...flat(255), easyPaceSec: 290 })).toBe('Tempo')
+  })
+
+  it('8:30/km 가 평소인 초보의 8:30 3km 는 Easy (예전엔 회복주)', () => {
+    expect(inferRunType({ ...flat(510, 3), easyPaceSec: 510 })).toBe('Easy')
+  })
+
+  it('그 초보가 평소보다 한참 느리면(9:45) 회복주', () => {
+    expect(inferRunType({ ...flat(585, 3), easyPaceSec: 510 })).toBe('Recovery')
+  })
+
+  it('기준 페이스가 없으면 페이스로 템포를 단정하지 않는다', () => {
+    expect(inferRunType({ ...flat(290) })).not.toBe('Tempo')
+  })
+})

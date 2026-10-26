@@ -97,6 +97,7 @@ PaceLAB를 성장형 RPG로 재구성하는 레벨 도메인. 거리 클래스 �
 - 거리/시간/페이스는 가능하면 FIT의 세션/랩 요약값을 기준으로 한다.
 - 코칭의 최종 자연어 판단은 AI 응답을 기준으로 한다. 프로그램 로직은 통계, 최근 흐름, 선택 기록 요약 같은 2차 가공을 담당한다.
 - Easy 비율은 `RunType`만으로 계산하지 않는다. `RunType`은 세션 의도/유형이며, 실제 Easy 여부는 가능하면 랩별 페이스와 거리로 계산한다. 랩 데이터가 없을 때만 세션 평균 페이스를 fallback으로 쓴다.
+- 페이스로 빠름/느림을 말할 때는 **그 사람의 기준 Easy 페이스**에 대한 비율로만 말한다(#878 A5, `paceBands.ts`). 기준은 처방과 같은 모델(관측 Easy > PB VDOT > VO2max), 없으면 본인 최근 90일 평소 페이스(`deriveEasyPaceReference`). 6:30/km 같은 절대 페이스 상수를 판정에 쓰지 않는다 — 4:50/km 러너는 전부 템포, 8:30/km 초보는 전부 회복이 됐다. 기준이 없으면 Easy 비율은 null(—).
 - HealthKit 후보의 `RunType`은 사용자가 수정 가능한 제안값이다. 자동 추론은 날짜/요일, 총거리, 평균 페이스, 랩별 페이스, `fastSegments`를 함께 보고 판단한다.
 - HealthKit/FIT 후보의 `courseType`은 사용자가 수정 가능한 제안값이다. 누적 상승/하강, 거리, route altitude 변동으로 추론 가능할 때만 미리 선택하고, 고저 데이터나 거리가 부족하면 Unknown으로 둔다. 기본 기준은 거리당 상승/하강 6m/km 미만 및 altitude range 25m 미만이면 Flat, 6~18m/km 또는 range 25m 이상이면 Mixed, 18~35m/km 또는 range 60m 이상이면 Hilly, 35m/km 이상 또는 route undulation 45m/km 이상 또는 range 120m 이상이면 Trail이다. Track/Treadmill은 고도만으로 단정하지 않는다. 세션별 HealthKit 새로고침에서 새 추론값이 Unknown이면 사용자가 이미 고른 코스 타입을 덮어쓰지 않는다.
 - HealthKit/FIT 후보의 세션 제목은 저장 전 사용자가 수정 가능한 기본값으로 만든다. 기본 형식은 `화요일 밤 러닝`처럼 `요일 + 시간대 + 러닝`으로 둔다. 스케줄/추가 여부, 시간대, 날씨 보유 여부는 제목에 섞지 말고 세션 유형 칩 옆의 메타 칩으로 분리한다.
@@ -134,7 +135,7 @@ PaceLAB를 성장형 RPG로 재구성하는 레벨 도메인. 거리 클래스 �
 - 앱 추천값과 사용자 직접입력값은 분리 관리한다(러너레벨 auto/manual과 동일 패턴). `heartRateMode`로 추천(자동)과 직접 입력을 토글하고, 직접 입력값은 보존돼 언제든 추천으로 되돌릴 수 있다. UI(`AppHeader`/`MemoryPage`)는 현재 적용값·추천값·source와 함께 산출식과 외부 근거(Tanaka, Friel LTHR, ASICS)를 보여줘 신뢰를 준다.
 - Tanaka 나이 추정과 관측 보정은 단정 근거가 아니라 보수 신호이며, 정확히 하려면 30분 LTHR 테스트나 측정 HRmax 입력을 권한다. 레벨·나이로 안전 상한을 낮추지 않는다.
 - 안정심박이 입력돼 있으면 최대심박→역치 환산에 Karvonen(HRR)을 쓴다: 역치 ≈ 0.85×(HRmax−HRrest)+HRrest (역치/템포 ~80~90% HRR 중앙값). 안정심박이 없으면 역치 ≈ 0.9×HRmax(%HRmax)로 환산한다. LTHR이 직접 입력되면 안정심박과 무관하게 LTHR을 anchor로 쓴다. 웹 `ltAnchorFromMax`와 coach-run `coachLtAnchorFromMax`가 동일 공식이다.
-- 자동 RunType 판정(`inferRunType`)도 상수 없이 주입된 개인 모델의 존/상한을 쓴다. 모델 상한이 null이면 HR 기반 분기를 건너뛰고 페이스/거리/스트라이드 패턴으로만 판정한다. 모델은 import 시 store(`healthKitSyncStore`/`UploadRunPage`)에서 `athleteProfile`+관측으로 만들어 extractor에 주입한다.
+- 자동 RunType 판정(`inferRunType`)도 상수 없이 주입된 개인 모델의 존/상한을 쓴다. 모델 상한이 null이면 HR 기반 분기를 건너뛰고 페이스/거리/스트라이드 패턴으로만 판정한다. 모델은 import 시 store(`healthKitSyncStore`/`UploadRunPage`)에서 `athleteProfile`+관측으로 만들어 extractor에 주입한다. 페이스 경계도 같은 방식으로 기준 Easy 페이스(`easyPaceSec`)를 주입받는다 — 가져오는 묶음(batch)도 평소 페이스 계산에 넣어 첫 가져오기에서도 본인 기준으로 판정한다.
 - 자동 유형 판정에서 Easy는 “대부분 Z1~Z2 또는 Z3 초입에 머문 낮은 심박”을 핵심 근거로 본다. 평균 페이스가 빠르거나 케이던스가 튀어도 심박이 안정적이면 Tempo로 단정하지 않는다.
 - `Easy + Strides` 판정에서 케이던스 급상승만으로 스트라이드라고 보지 않는다. 케이던스는 보조 신호이며, 페이스 급상승 또는 route/FIT 기반 짧은 고속 구간이 반복되어야 한다.
 - 현재 Easy 처방은 페이스보다 max/lap 심박 145bpm 이하 유지가 핵심이다. 평균심박만 낮다고 Easy 처방을 통과한 것으로 단정하지 않는다.

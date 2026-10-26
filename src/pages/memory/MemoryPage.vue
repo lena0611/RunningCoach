@@ -822,6 +822,14 @@ function replaceTopPanel(nextPanel: MemoryPanel) {
 // 항목별 저장(리디자인 ①c): 열려 있는 패널 그룹의 키만 스토어 기준 위에 얹어 커밋한다.
 // 다른 패널의 미저장 편집은 draft·스냅샷 양쪽에 그대로 남아 함께 저장되지 않는다.
 async function saveSection(section: MemorySection) {
+  // 이름이 빈 항목은 정규화가 조용히 버린다 — 목표가 전부 비면 다른 목표로 바뀌어 저장된다(#878 A6). 저장 전에 막는다.
+  const blankTitle = section === 'goals'
+    ? draft.goals.some((goal) => !goal.title.trim())
+    : draft.injuryItems.some((item) => !item.title.trim())
+  if (blankTitle) {
+    useToastStore().error(section === 'goals' ? '목표명을 입력해주세요' : '항목명을 입력해주세요', { placement: 'top' })
+    return
+  }
   saving.value = true
   error.value = ''
   try {

@@ -323,7 +323,7 @@ export const injuryAreaCatalog: InjuryAreaDefinition[] = [
     y: 95,
     width: 12,
     height: 7,
-    keywords: ['좌측 발목', '왼쪽 발목', 'ankle', '인대']
+    keywords: ['좌측 발목', '왼쪽 발목', 'ankle', '발목 인대']
   },
   {
     id: 'right-ankle',
@@ -338,7 +338,7 @@ export const injuryAreaCatalog: InjuryAreaDefinition[] = [
     y: 95,
     width: 12,
     height: 7,
-    keywords: ['우측 발목', '오른쪽 발목', 'ankle', '인대']
+    keywords: ['우측 발목', '오른쪽 발목', 'ankle', '발목 인대']
   },
   {
     id: 'left-plantar-fascia',
@@ -400,6 +400,26 @@ export function normalizeInjuryAreaSelections(value: unknown, legacyArea = ''): 
   const unique = uniqueSelections(normalized)
   if (unique.length) return unique
   return inferLegacyAreaSelections(legacyArea)
+}
+
+export type InjurySide = 'left' | 'right' | 'both'
+
+/**
+ * 부위 종류(햄스트링·무릎…) + 좌우 → 카탈로그 부위 선택(#878 A3).
+ *
+ * 온보딩은 "햄스트링"처럼 좌우 없는 이름만 저장해서 키워드 추론이 아무 부위도 못 찾았다 — 부위별 제한·보강운동·
+ * 감별 질문·같은 부위 재발 위험이 전부 빠졌다. 좌우가 없는 부위(허리)는 side 를 보지 않는다.
+ * 카탈로그에 없는 조합이면 빈 배열(지어내지 않는다).
+ */
+export function injuryAreaSelectionsFor(base: string, side: InjurySide | null, painLevel: number | null): InjuryAreaSelection[] {
+  const ids = getInjuryArea(base)
+    ? [base]
+    : side === 'both'
+      ? [`left-${base}`, `right-${base}`]
+      : side
+        ? [`${side}-${base}`]
+        : []
+  return ids.filter((id) => getInjuryArea(id)).map((areaId) => ({ areaId, painLevel }))
 }
 
 export function deriveInjurySeverity(selections: InjuryAreaSelection[], fallback: unknown): number | null {

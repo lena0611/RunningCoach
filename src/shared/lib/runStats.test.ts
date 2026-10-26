@@ -57,34 +57,34 @@ describe('getLongestRunKmWithinDays (#473 복귀 램프 입력)', () => {
 })
 
 /*
-  주간 루틴 메모를 걷어낸 뒤(2026-09-07) 이 경로는 **플랜 없는 폴백**만 남는다 —
-  기본 추천은 선호 롱런 요일의 LSD 다. 부상 게이트 자체(severity 별 하향·카우션)가 이 describe 의 대상이라
-  기대값의 세션명만 폴백 기준으로 옮긴다.
+  이 경로는 **플랜 없는 폴백**만 남는다 — 기본 추천은 편한 Easy 다(#878 A4, 예전엔 매일 롱런 요일 LSD).
+  부상 게이트 자체(severity 별 카우션·회복 우선)가 이 describe 의 대상이다.
 */
 describe('getNextSessionRecommendation injury gate', () => {
   it('keeps the quality session when there is no injury', () => {
     const rec = getNextSessionRecommendation(buildMemory(), runs, today)
-    expect(rec.title).toBe('토요일 LSD')
+    expect(rec.title).toBe('Easy')
     expect(rec.injuryAdjusted).toBe(false)
   })
 
   it('keeps the recommendation for severity 0-1', () => {
     const rec = getNextSessionRecommendation(buildMemory({ severity: 1 }), runs, today)
-    expect(rec.title).toBe('토요일 LSD')
+    expect(rec.title).toBe('Easy')
     expect(rec.injuryAdjusted).toBe(false)
   })
 
   it('adds a checkpoint note but keeps the session for severity 2', () => {
     const rec = getNextSessionRecommendation(buildMemory({ severity: 2 }), runs, today)
-    expect(rec.title).toBe('토요일 LSD')
+    expect(rec.title).toBe('Easy')
     expect(rec.injuryAdjusted).toBe(true)
     expect(rec.injuryNote).toContain('체크포인트')
   })
 
-  it('downgrades a quality session to Easy/Recovery for severity 3', () => {
+  it('holds intensity for severity 3 (Easy stays Easy)', () => {
     const rec = getNextSessionRecommendation(buildMemory({ severity: 3 }), runs, today)
-    expect(rec.title).toBe('Easy 또는 Recovery')
+    expect(rec.title).toBe('Easy')
     expect(rec.injuryAdjusted).toBe(true)
+    expect(rec.injuryNote).toContain('강도 상향은 보류')
   })
 
   it('prioritizes recovery or rest for severity 4-5', () => {
@@ -96,7 +96,7 @@ describe('getNextSessionRecommendation injury gate', () => {
 
   it('does not gate when the injury is resolved', () => {
     const rec = getNextSessionRecommendation(buildMemory({ status: 'resolved', severity: 5 }), runs, today)
-    expect(rec.title).toBe('토요일 LSD')
+    expect(rec.title).toBe('Easy')
     expect(rec.injuryAdjusted).toBe(false)
   })
 })
@@ -141,8 +141,7 @@ describe('getNextSessionRecommendation chronic load', () => {
   it('adds a load caution note on chronic spike without forcing downgrade', () => {
     const loaded = [run(daysAgo(3), 30), run(daysAgo(10), 30), run(daysAgo(40), 20), run(daysAgo(50), 20)]
     const rec = getNextSessionRecommendation(buildMemory(), loaded, today)
-    // 최근 롱런 이력에 따라 LSD/Steady Long 을 번갈아 고른다(chooseNextLongRunType) — 이 픽스처는 Steady Long.
-    expect(rec.title).toBe('토요일 Steady Long')
+    expect(rec.title).toBe('Easy')
     expect(rec.loadCaution).toBe(true)
     expect(rec.loadNote).toContain('30일')
   })
@@ -210,7 +209,7 @@ describe('getNextSessionRecommendation 이전부상 보수화(3.1/3.3)', () => {
     expect(rec.loadCaution).toBe(true)
     expect(rec.loadNote).toContain('다른 부위')
     expect(rec.injuryAdjusted).toBe(false) // resolved라 통증 게이트는 작동하지 않음
-    expect(rec.title).toBe('토요일 LSD') // 세션 자체는 강등하지 않음
+    expect(rec.title).toBe('Easy') // 세션 자체는 강등하지 않음
   })
 
   it('부상 이력이 없으면 안정 부하에서 보수화 카우션 없음', () => {
