@@ -1,5 +1,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useLevelStore } from '@/app/stores/levelStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
@@ -31,7 +32,7 @@ import { isReloadingForNewBuild } from '@/shared/lib/buildVersion'
  */
 const SCHEDULE_ANCHOR_LOGIC_VERSION = 5
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
-import { buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, prescriptionFor, trainingWeekRange, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
+import { buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, coldStartWeeklyKm, goalArchetype, prescriptionFor, trainingWeekRange, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
 import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
 import { buildRealignedSchedule, dropDraftsOnRestedDates } from '@/shared/lib/coaching/scheduleRealign'
 import { buildSessionBriefing, sessionTypeLabel, type SessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
@@ -97,6 +98,7 @@ export type UseTrainingWeekOptions = {
 export function useTrainingWeek(options: UseTrainingWeekOptions) {
   const runStore = useRunStore()
   const memoryStore = useMemoryStore()
+  const levelStore = useLevelStore()
   const weatherStore = useWeatherStore()
   const scheduleStore = useTrainingScheduleStore()
   const sessionIntentStore = useSessionIntentStore()
@@ -141,7 +143,14 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
    * 스케줄 생성과 재정렬 드리프트 판정이 **같은 값**을 봐야 서로 싸우지 않으므로 여기 단일 소스로 둔다.
    */
   const volumeAnchor = computed(() => deriveWeeklyVolumeAnchorKm(runs.value, new Date(`${todayDate.value}T12:00:00`)))
-  const currentWeeklyKm = computed(() => (volumeAnchor.value.anchorKm > 0 ? volumeAnchor.value.anchorKm : null))
+  // 런 기록이 아예 없는 신규 사용자만 온보딩 답으로 시작점을 고른다(#865). 기록이 있는데 앵커가 0 인 복귀자는
+  // null 그대로 — 예전 최장 거리로 무거운 플랜을 받으면 안 된다(복귀는 §휴식과 복귀 경로가 맡는다).
+  const currentWeeklyKm = computed(() => {
+    if (volumeAnchor.value.anchorKm > 0) return volumeAnchor.value.anchorKm
+    return runs.value.length === 0 ? coldStartWeeklyKm(levelStore.selfReportedMaxDistanceM) : null
+  })
+  // App 이 온보딩을 띄우는 조건(showOnboarding)과 같다. 레벨 상태를 아직 못 읽었으면 그것도 기다린다.
+  const onboardingPending = computed(() => isSupabaseConfigured && (!levelStore.loaded || levelStore.needsOnboarding))
 
   // 휴식 선언 상태(#473): activeRest + 오늘 기준 파생(active·복귀 D-N·복귀일 등). 차분 배너·복귀 컨트롤이 쓴다.
   const restState = computed(() => deriveRestState(memoryStore.memory.activeRest, todayDate.value))
@@ -185,6 +194,9 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
     // 메모리만 실린 순간에도 돈다 — 그때 런이 비어 있으면 앵커(currentWeeklyKm)가 null 이 되어 콜드스타트 기본값
     // (10K 20km)으로 플랜을 짓고, 버전 게이트 재빌드가 그 잘못된 플랜을 저장해 버린다. 둘 다 실리면 watch 가 다시 부른다.
     if (!runStore.loaded || !memoryStore.loaded) return
+    // 온보딩이 끝나기 전엔 짓지 않는다(#865, 2026-10-26 신규 계정 실측). 온보딩 화면 뒤에서 기본값으로 먼저 지어
+    // 저장하면, 온보딩 답(주 횟수·완주 경험)이 반영될 길이 없다 — 비성과 리듬은 활성 세션이 남아 있는 한 다시 짓지 않는다.
+    if (onboardingPending.value) return
     // 옛 번들이 새 처방을 되돌리지 못하게(#693). ① 부팅 확인에서 새 배포가 잡혀 새로고침 중이면 쓰지 않는다.
     // ② 저장된 계산식 버전이 이 번들보다 높으면 이 번들이 옛것이다 — 재빌드·앵커 저장 모두 하지 않는다.
     //    (버전 게이트가 `!==` 라 옛 번들이 새 버전을 보고 옛 식으로 재빌드한 뒤 낮은 버전을 다시 박는 핑퐁이 있었다.)
@@ -690,7 +702,7 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
     }
   }
   async function ensureTodayIntent() {
-    if (!isSupabaseConfigured || !runStore.loaded || !memoryStore.loaded) return
+    if (!isSupabaseConfigured || !runStore.loaded || !memoryStore.loaded || onboardingPending.value) return
     try {
       await sessionIntentStore.ensureIntentFor(buildSessionIntentDraft(intentArgs()))
     } catch {
@@ -717,7 +729,8 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
     return reinferInFlight
   }
   watch(
-    () => [runStore.loaded, memoryStore.loaded] as const,
+    // 온보딩 완료도 신호다 — 끝나는 순간 그 답으로 첫 플랜을 짓는다(#865).
+    () => [runStore.loaded, memoryStore.loaded, onboardingPending.value] as const,
     async () => {
       // ⚠️ 순서 중요: 스케줄(복귀 램프·realign 등 그날 세션 타입 재작성 포함)을 먼저 정산한 **뒤**
       // 오늘 의도를 만든다. 안 그러면 램프가 세션을 Easy 로 낮추기 전의 타입("Easy + Strides")으로
