@@ -98,6 +98,18 @@ watch(
 // 운동 직후 코치 인터뷰(#311): HealthKit 임포트 직후 표시, 결과는 run 주관 필드로 저장.
 const pendingInterviewRun = computed(() => runStore.runs.find((run) => run.id === runStore.pendingInterviewRunId) ?? null)
 const interviewSaving = ref(false)
+
+/**
+ * 로그아웃 뒤 로그인 화면으로 새로 불러온다(#866). 로그인 검사는 화면을 옮길 때만 돌아 그 자리에 남았고,
+ * 스토어마다 이전 계정의 기록·레벨·일정이 남아 새로고침 없이 다른 계정으로 들어오면 섞였다
+ * (레벨이 남으면 새 계정인데 온보딩이 안 뜬다). 하나씩 비우는 대신 새로 불러온다.
+ */
+async function signOut() {
+  await authStore.signOut()
+  window.location.hash = '#/auth'
+  window.location.reload()
+}
+
 async function submitPostRunInterview(result: PostRunInterviewResult) {
   const run = pendingInterviewRun.value
   if (!run) return
@@ -1001,7 +1013,7 @@ function animateTabRelease(targetOffset: number, targetRoute: string | null) {
 </script>
 
 <template>
-  <AppShell :nav-items="navItems" :is-authenticated="authStore.isAuthenticated" @sign-out="authStore.signOut()" @open-achievements="achievementsOpen = true">
+  <AppShell :nav-items="navItems" :is-authenticated="authStore.isAuthenticated" @sign-out="signOut" @open-achievements="achievementsOpen = true">
     <ToastHost />
     <CoachSessionOverlay />
     <SessionDetailOverlay />
