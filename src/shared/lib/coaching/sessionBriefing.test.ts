@@ -394,3 +394,31 @@ describe('buildSessionExecution (코치 컨텍스트용)', () => {
     expect(JSON.stringify(hurt)).not.toEqual(JSON.stringify(buildSessionExecution(s, ctx)))
   })
 })
+
+describe('완전 초보 걷기·뛰기 (#870)', () => {
+  const stage = { week: 1, run: 1, mainSet: '뛰기 1분 → 걷기 1분 30초를 7번, 마지막에 뛰기 1분', totalMin: 28.5 }
+  const easy = session({ sessionType: 'Easy', prescription: { ...defaultScheduledSessionPrescription(), distanceKm: 2.3, durationMin: null, paceRange: '' } })
+
+  it('저강도 세션의 "어떻게 뛰나"와 핵심 한 줄이 걷기·뛰기가 된다', () => {
+    const b = buildSessionBriefing(easy, { goal, injury: null, chronic: noChronic, beginnerWalkRun: stage })
+    expect(execText(b)).toContain('뛰기 1분 → 걷기 1분 30초')
+    expect(execText(b)).toContain('Couch to 5K 1주차 1회차')
+    expect(b.keyPoint).toContain('걷기를 섞는 게 정답')
+    expect(b.evidence.some((e) => e.method.includes('Couch to 5K'))).toBe(true)
+  })
+
+  it('코치에게 보내는 실행 지침도 같은 값 — 화면과 어긋나지 않는다', () => {
+    const b = buildSessionBriefing(easy, { goal, injury: null, chronic: noChronic, beginnerWalkRun: stage })
+    expect(buildSessionExecution(easy, { injury: null, beginnerWalkRun: stage })).toEqual(b.execution)
+  })
+
+  it('품질 세션(Tempo)엔 적용하지 않는다', () => {
+    const tempo = session({ sessionType: 'Tempo' })
+    expect(execText(buildSessionBriefing(tempo, { goal, injury: null, chronic: noChronic, beginnerWalkRun: stage }))).not.toContain('Couch to 5K')
+  })
+
+  it('급성 통증성 부상 복귀(walk-run)가 있으면 그쪽이 먼저다', () => {
+    const b = buildSessionBriefing(easy, { goal, injury: injury({ severity: 2 }), chronic: noChronic, beginnerWalkRun: stage })
+    expect(execText(b)).not.toContain('Couch to 5K')
+  })
+})

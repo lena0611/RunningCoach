@@ -81,7 +81,9 @@ const LOAD_EVIDENCE: EvidenceRef = {
  */
 export function buildRestGuidance(
   injury: TrainingInjuryItem | null,
-  chronic: ChronicLoadTrend | null
+  chronic: ChronicLoadTrend | null,
+  /** 아직 한 번도 안 뛰었나(#870). "그동안의 부하를 적응으로"는 뛴 적 없는 사람에게 맞지 않는다. */
+  firstRunPending = false
 ): RestGuidance {
   const items: string[] = []
   const evidence: EvidenceRef[] = [REST_EVIDENCE]
@@ -112,6 +114,14 @@ export function buildRestGuidance(
     items.push('충분한 수면·수분·영양으로 회복 촉진')
     items.push('가벼운 산책·스트레칭 정도는 OK')
     evidence.push(LOAD_EVIDENCE)
+    return { purpose, items, evidence }
+  }
+
+  if (firstRunPending) {
+    purpose = '아직 첫 훈련 전이에요 — 오늘은 가볍게 걸으며 몸을 깨우고 첫 러닝을 준비해요.'
+    items.push('가볍게 걷기 15~20분 — 첫 러닝도 걷기로 시작하고 끝나요')
+    items.push('편한 러닝화와 옷 챙겨 두기')
+    items.push('충분한 수면·수분 — 첫 세션 컨디션을 위해')
     return { purpose, items, evidence }
   }
 

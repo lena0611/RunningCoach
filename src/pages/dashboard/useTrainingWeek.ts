@@ -36,6 +36,7 @@ import { buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, col
 import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
 import { buildRealignedSchedule, dropDraftsOnRestedDates } from '@/shared/lib/coaching/scheduleRealign'
 import { buildSessionBriefing, sessionTypeLabel, type SessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
+import { beginnerWalkRunStage } from '@/shared/lib/coaching/beginnerWalkRun'
 import { assessHeatWindow, deriveHabitualRunHour } from '@/shared/lib/coaching/heatWindow'
 import { isChronicBaselineAfterLayoff } from '@/shared/lib/coaching/returnAnchor'
 import { resolvePaceModel } from '@/shared/lib/vdotPaces'
@@ -149,6 +150,8 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
     if (volumeAnchor.value.anchorKm > 0) return volumeAnchor.value.anchorKm
     return runs.value.length === 0 ? coldStartWeeklyKm(levelStore.selfReportedMaxDistanceM) : null
   })
+  // 완전 초보의 Couch to 5K 단계(#870) — 5K 완주 경험이 없고 27회 전이면 저강도 브리핑이 걷기·뛰기가 된다.
+  const beginnerWalkRun = computed(() => beginnerWalkRunStage(levelStore.selfReportedMaxDistanceM, runs.value))
   // App 이 온보딩을 띄우는 조건(showOnboarding)과 같다. 레벨 상태를 아직 못 읽었으면 그것도 기다린다.
   const onboardingPending = computed(() => isSupabaseConfigured && (!levelStore.loaded || levelStore.needsOnboarding))
 
@@ -618,7 +621,8 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
       nonPeriodized: !isPerformanceGoal.value,
       // 복귀 중이면 "30일 부하 급증" 주의를 내지 않는다(#743) — 모먼트·피로경고와 같은 판정을 쓴다.
       baselineAfterLayoff: isChronicBaselineAfterLayoff(runStore.runs.map((run) => run.date), today.value),
-      heat: todayHeatWindow.value
+      heat: todayHeatWindow.value,
+      beginnerWalkRun: beginnerWalkRun.value
     })
   })
   // 세션 타입별 상한(#866). 예전엔 늘 이지 상한이라 회복런 날 요약 탭(133)과 코치 탭(148)이 달랐고, 채점은 133 이었다.

@@ -325,7 +325,7 @@ const weekMission = computed(() => {
 })
 
 // 전략적 휴식(#378): 휴식날도 회복·부상관리·근력 보강 안내
-const restGuidance = computed(() => buildRestGuidance(activeInjury.value, chronicLoad.value))
+const restGuidance = computed(() => buildRestGuidance(activeInjury.value, chronicLoad.value, runs.value.length === 0))
 
 function onMomentAction(moment: { key: string; action?: { kind: string } }) {
   if (moment.action?.kind === 'open-injury-screening') useInjuryFlowStore().requestScreening()
@@ -852,6 +852,11 @@ async function applyPhaseTransition() {
           <template v-if="lastRace">
             <strong class="stat-card-value stat-card-text-value">{{ lastRace.distanceKm.toFixed(2) }}km · {{ formatDuration(lastRace.durationSec ?? 0) }}</strong>
             <small>마지막 한계 도전 · {{ formatDateWithWeekday(lastRace.date) }}</small>
+          </template>
+          <!-- 5K 완주 전(입문)엔 기록 측정보다 연속주가 먼저다(#870) — 첫날부터 TT 를 권하지 않는다. -->
+          <template v-else-if="runnerProgress.distanceClass.key === 'pre'">
+            <strong class="stat-card-value stat-card-text-value">5K를 완주한 뒤에 도전해요</strong>
+            <small>지금은 걷기·뛰기로 쉬지 않고 30분을 뛰는 몸을 만드는 단계예요. 기록 측정은 그다음이에요.</small>
           </template>
           <template v-else>
             <strong class="stat-card-value stat-card-text-value">한계 도전으로 체력을 측정해요</strong>
