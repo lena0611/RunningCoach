@@ -54,7 +54,7 @@ onBeforeUnmount(() => {
 
         <div class="evidence-content">
           <p class="helper">
-            PaceLAB 코칭은 검증된 러닝/지구력 훈련 방법론에 뿌리를 둡니다. 오늘 처방의 근거예요.
+            PaceLAB 코칭은 검증된 러닝/지구력 훈련 방법론에 뿌리를 둡니다. 오늘 훈련의 근거예요.
           </p>
           <ul class="evidence-list">
             <li v-for="(e, i) in evidence" :key="i" class="evidence-item">

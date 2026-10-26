@@ -55,7 +55,7 @@ export const GLOSSARY_CATEGORY_LABEL: Record<GlossaryCategory, string> = {
 export const GLOSSARY_CATEGORY_DESCRIPTION: Record<GlossaryCategory, string> = {
   basics: '러닝 기록을 읽을 때 가장 자주 보는 기본 지표',
   heart_rate: '강도 기준이 되는 심박존과 개인화 심박 상한',
-  session_type: '훈련 처방에 쓰이는 세션 종류',
+  session_type: '훈련 플랜에 쓰이는 세션 종류',
   load: '얼마나 많이·세게 달렸고 목표에 얼마나 준비됐는지',
   trend: '누적 데이터를 질문별로 다시 해석하는 분석 관점',
   injury: '통증·부상 상태를 훈련 강도에 반영하는 기준',

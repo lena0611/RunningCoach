@@ -20,7 +20,7 @@ export type TempoCeilingSource = 'estimate' | 'adapted'
 export type TempoCeilingConfidence = 'low' | 'medium' | 'high'
 
 export type TempoGradeResult = {
-  /** A 처방 완전 준수 / B 자극 확보+경계 일부 초과 / C 경계 크게·반복 초과 / D 세션 목적 실패. */
+  /** A 지침 완전 준수 / B 자극 확보+경계 일부 초과 / C 경계 크게·반복 초과 / D 세션 목적 실패. */
   grade: TempoGrade
   /** 템포다운 자극을 확보했는가(실제 품질 세션이었는가). */
   stimulus: boolean
@@ -100,7 +100,7 @@ export function gradeTempoRun(run: RunLog, ceilingBpm: number | null, fadeLevel:
   // 등급에 맞춘 사유. '상한' 토큰은 Quality Lens '심박 초과' 카드 집계에 쓰이므로 초과 시 유지한다.
   const reasons: string[] = []
   if (grade === 'A') {
-    reasons.push('처방 완전 준수')
+    reasons.push('지침 완전 준수')
   } else if (grade === 'B') {
     if (overBpm !== null && overBpm > 0) reasons.push(`상한 ${overBpm}bpm 초과(경계)`)
     else if (lateFade) reasons.push('후반 드리프트(상한은 준수)')

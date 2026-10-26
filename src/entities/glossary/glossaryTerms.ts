@@ -152,9 +152,9 @@ export const GLOSSARY_FALLBACK_TERMS: GlossaryTerm[] = [
     term: '템포 등급 (A·B·C·D)',
     aka: ['tempo grade', '템포 평가', 'A B C D'],
     category: 'heart_rate',
-    shortDef: '템포를 성공/실패 이진이 아니라 자극 확보 × 처방 준수로 나눈 등급.',
+    shortDef: '템포를 성공/실패 이진이 아니라 자극 확보 × 지침 준수로 나눈 등급.',
     detail:
-      'A는 처방 완전 준수, B는 템포 자극은 확보했고 상한을 일부 초과, C는 상한을 크게/반복 초과, D는 세션 목적(템포 자극) 자체를 못 이룬 경우입니다. 상한을 몇 bpm 넘겼다고 곧바로 "실패"로 보지 않고, 자극·후반 유지·회복을 함께 봅니다.',
+      'A는 지침 완전 준수, B는 템포 자극은 확보했고 상한을 일부 초과, C는 상한을 크게/반복 초과, D는 세션 목적(템포 자극) 자체를 못 이룬 경우입니다. 상한을 몇 bpm 넘겼다고 곧바로 "실패"로 보지 않고, 자극·후반 유지·회복을 함께 봅니다.',
     relatedSlugs: ['tempo-ceiling', 'tempo-ceiling-adaptation'],
     orderIndex: 56
   },
@@ -252,7 +252,7 @@ export const GLOSSARY_FALLBACK_TERMS: GlossaryTerm[] = [
     category: 'session_type',
     shortDef: '고강도 구간과 회복 구간을 번갈아 반복하는 세션.',
     detail:
-      '왜: 심폐(VO2max)와 속도를 강하게 자극하는 품질 훈련입니다.\n본질·유래: 트랙의 반복훈련 전통(Iglói, 다니엘스의 I/R 페이스). 80–20에서 "20"에 해당하는 고강도 축.\n실행: 고강도 구간과 회복 구간을 번갈아 반복. 회복·부상 게이트가 막히지 않을 때만 처방하고, 폼이 무너지면 중단합니다.',
+      '왜: 심폐(VO2max)와 속도를 강하게 자극하는 품질 훈련입니다.\n본질·유래: 트랙의 반복훈련 전통(Iglói, 다니엘스의 I/R 페이스). 80–20에서 "20"에 해당하는 고강도 축.\n실행: 고강도 구간과 회복 구간을 번갈아 반복. 회복·부상 게이트가 막히지 않을 때만 넣고, 폼이 무너지면 중단합니다.',
     relatedSlugs: ['race-tt', 'strides'],
     orderIndex: 70
   },
@@ -382,7 +382,7 @@ export const GLOSSARY_FALLBACK_TERMS: GlossaryTerm[] = [
     aka: ['trend lens', 'lens', '렌즈'],
     category: 'trend',
     shortDef: '누적 기록을 특정 질문 기준으로 다시 해석하는 분석 관점.',
-    detail: '“추세” 화면에서 목표 진전·유산소 효율·강도 분포·세션 품질·회복 비용 같은 Lens로 발전/퇴보와 다음 처방 영향을 봅니다.',
+    detail: '“추세” 화면에서 목표 진전·유산소 효율·강도 분포·세션 품질·회복 비용 같은 Lens로 발전/퇴보와 다음 훈련에 주는 영향을 봅니다.',
     relatedSlugs: ['goal-progress', 'aerobic-efficiency'],
     orderIndex: 10
   },
@@ -425,7 +425,7 @@ export const GLOSSARY_FALLBACK_TERMS: GlossaryTerm[] = [
     term: '세션 품질',
     aka: ['session quality', '세션 품질'],
     category: 'trend',
-    shortDef: '세션이 의도한 처방대로 수행됐는지 보는 Lens.',
+    shortDef: '세션이 의도한 훈련대로 수행됐는지 보는 Lens.',
     detail: '예: 템포가 상한 안에서 안정적으로 유지됐는지, Easy가 충분히 쉬웠는지.',
     relatedSlugs: ['trend-lens', 'tempo'],
     orderIndex: 50
@@ -710,7 +710,7 @@ export const GLOSSARY_FALLBACK_TERMS: GlossaryTerm[] = [
     aka: ['solo race', '한계 시험', '고스트 대전', 'TT', '타임트라이얼'],
     category: 'competition',
     shortDef: '상대 없이 전력 측정(TT)하거나, 과거의 나(고스트)와 겨뤄 한계를 갱신.',
-    detail: '타겟이 “없음”이면 순수 한계 시험(TT, 측정만), “내 베스트(고스트)”면 게임화된 측정입니다 — 둘 다 결과가 VDOT·등급으로 이어집니다. 스케줄은 단계 블록 끝에 한계 시험을 재측정 관문으로 처방합니다.',
+    detail: '타겟이 “없음”이면 순수 한계 시험(TT, 측정만), “내 베스트(고스트)”면 게임화된 측정입니다 — 둘 다 결과가 VDOT·등급으로 이어집니다. 스케줄은 단계 블록 끝에 한계 시험을 재측정 관문으로 넣습니다.',
     relatedSlugs: ['racing', 'ghost', 'my-best'],
     orderIndex: 20
   },
