@@ -183,7 +183,7 @@ function buildTrendOverallSummaryFromResults(input: Omit<TrendInput, 'lens'>, le
       recentFlow: overallItem('최근 흐름', '데이터 부족', '러닝 기록이 저장되면 목표, 효율, 강도, 품질, 회복을 함께 봅니다.', 'neutral'),
       bestSignal: overallItem('가장 좋은 신호', '아직 없음', '좋은 신호를 고르기에는 비교 가능한 기록이 부족합니다.', 'neutral'),
       cautionSignal: overallItem('가장 조심할 신호', '아직 없음', '주의 신호도 기록이 쌓인 뒤 판단합니다.', 'neutral'),
-      prescriptionDirection: overallItem('다음 처방 방향', '기록 확보 우선', 'HealthKit 또는 수동 기록을 저장한 뒤 다음 훈련 조정 신호를 확인합니다.', 'neutral')
+      prescriptionDirection: overallItem('다음 훈련 방향', '기록 확보 우선', 'HealthKit 또는 수동 기록을 저장한 뒤 다음 훈련 조정 신호를 확인합니다.', 'neutral')
     }
   }
 
@@ -212,7 +212,7 @@ function buildTrendOverallSummaryFromResults(input: Omit<TrendInput, 'lens'>, le
       ? resultItem('가장 좋은 신호', good, '좋은 쪽으로 확인된 신호입니다.')
       : overallItem('가장 좋은 신호', '확실한 상승 신호 부족', '좋은 흐름을 고르기에는 아직 관찰 또는 데이터 부족 신호가 더 큽니다.', 'watch'),
     cautionSignal: warning
-      ? resultItem('가장 조심할 신호', warning, '다음 처방을 보수적으로 만드는 신호입니다.')
+      ? resultItem('가장 조심할 신호', warning, '다음 훈련을 보수적으로 잡게 하는 신호입니다.')
       : overallItem('가장 조심할 신호', '큰 경고 없음', '현재 렌즈 조합에서는 강하게 낮춰야 할 경고가 크지 않습니다.', 'good'),
     prescriptionDirection: prescriptionDirectionItem(reduce, raiseBlocker ? undefined : raise, raiseBlocker)
   }
@@ -278,7 +278,7 @@ function buildGoalLens(runs: RunLog[], memory: TrainingMemory, today: Date, hr: 
     prescriptionImpact: prescription(
       tone === 'good' ? 'raise-candidate' : tone === 'warning' ? 'reduce-or-recover' : 'maintain',
       tone === 'good' ? '목표 훈련 유지 또는 소폭 상향 후보' : tone === 'warning' ? '목표 상향보다 병목 보완 우선' : '목표 루틴 유지',
-      [weakest ? `${weakest.label} 신호를 다음 처방 판단에 우선 반영합니다.` : '추가 품질 세션이 필요합니다.']
+      [weakest ? `${weakest.label} 신호를 다음 훈련 판단에 우선 반영합니다.` : '추가 품질 세션이 필요합니다.']
     )
   }
 }
@@ -334,7 +334,7 @@ function buildEfficiencyLens(window: DateWindow, hr: HeartRateModel): TrendLensR
     evidenceRuns: evidenceFromRuns(window.current.filter((run) => run.avgHeartRate && run.avgPaceSec).slice(-4), 'supporting', '효율 비교에 사용한 최근 기록입니다.'),
     prescriptionImpact: prescription(
       tone === 'good' ? 'raise-candidate' : tone === 'warning' ? 'maintain' : 'maintain',
-      tone === 'good' ? 'Easy 또는 Tempo 처방 소폭 상향 후보' : '심박 기준 처방 유지',
+      tone === 'good' ? 'Easy 또는 Tempo 훈련 소폭 상향 후보' : '심박 기준 훈련 유지',
       ['효율 변화는 다음 훈련 강도를 올릴 수 있는 보조 신호입니다.', '회복 비용 Lens가 나쁘면 상향하지 않습니다.']
     )
   }
@@ -372,7 +372,7 @@ function buildIntensityLens(window: DateWindow, today: Date, hr: HeartRateModel)
     explanations: [
       'Easy 비율은 RunType만으로 계산하지 않고 가능한 경우 랩/페이스를 우선합니다.',
       '최근 부하 증가는 부상 예측 공식이 아니라 스케줄 보수성 조절 신호입니다.',
-      loadWatchCount >= 3 ? '부하 신호가 한 주에 몰려 다음 처방 상향은 보류하는 편이 낫습니다.' : '강훈련 과밀 신호는 크지 않습니다.'
+      loadWatchCount >= 3 ? '부하 신호가 한 주에 몰려 다음 훈련 상향은 보류하는 편이 낫습니다.' : '강훈련 과밀 신호는 크지 않습니다.'
     ],
     evidenceRuns: loadSignals
       .filter((item) => item.hard || item.watch)
@@ -415,7 +415,7 @@ function buildQualityLens(window: DateWindow, hr: HeartRateModel, tempoAdaptatio
       card('stable', '안정 세션', String(stableCount), '회', '품질 기준 통과', tone),
       card('total', '품질 세션', String(evaluations.length), '회', window.currentLabel, 'neutral'),
       card('drift', '드리프트 주의', String(evaluations.filter((item) => item.reason.includes('드리프트')).length), '회', '후반 안정성 후보', 'watch'),
-      card('hr', '심박 초과', String(evaluations.filter((item) => item.reason.includes('상한')).length), '회', '처방 상한 후보', 'warning')
+      card('hr', '심박 초과', String(evaluations.filter((item) => item.reason.includes('상한')).length), '회', '상한 조정 후보', 'warning')
     ],
     chart: evaluations.map((item) => ({
       id: item.run.id,
@@ -428,7 +428,7 @@ function buildQualityLens(window: DateWindow, hr: HeartRateModel, tempoAdaptatio
       confidence: item.run.laps.length >= 2 ? 'high' : 'medium'
     })),
     explanations: [
-      'Tempo는 이진 성공/실패가 아니라 A/B/C/D 등급으로 봅니다(자극 확보 × 처방 준수). A·B는 안정으로 셉니다.',
+      'Tempo는 이진 성공/실패가 아니라 A/B/C/D 등급으로 봅니다(자극 확보 × 지침 준수). A·B는 안정으로 셉니다.',
       'Tempo 상한은 고정 추정값이 아니라 최근 수행으로 검증·적응하는 "현재까지 확인된 최적 추정치"입니다.',
       ...(adaptationNote ? [adaptationNote] : []),
       '랩이나 심박 데이터가 부족한 세션은 낮은 confidence로 처리합니다.'
@@ -438,7 +438,7 @@ function buildQualityLens(window: DateWindow, hr: HeartRateModel, tempoAdaptatio
       tempoAdaptation.candidateCeilingBpm !== null || tone === 'good' ? 'raise-candidate' : 'maintain',
       tempoAdaptation.candidateCeilingBpm !== null
         ? `Tempo 상한 ${tempoAdaptation.candidateCeilingBpm}bpm 상향 후보`
-        : tone === 'good' ? '동일 유형 처방 소폭 상향 후보' : '같은 처방 유지',
+        : tone === 'good' ? '같은 유형 훈련 소폭 상향 후보' : '같은 훈련 유지',
       [
         tempoAdaptation.candidateCeilingBpm !== null
           ? '최근 Tempo가 상한을 넘겨도 RPE·후반·회복이 안정적이라 상한 상향을 관찰 중입니다.'
@@ -491,8 +491,8 @@ function buildRecoveryLens(window: DateWindow): TrendLensResult {
     evidenceRuns: checks.filter((item) => item.cost >= 2).map((item) => ({ runId: item.run.id, role: 'warning', reason: item.reason })),
     prescriptionImpact: prescription(
       tone === 'warning' ? 'reduce-or-recover' : 'maintain',
-      tone === 'warning' ? '강도 상향 보류' : '처방 유지 후보',
-      ['회복 비용이 큰 세션 뒤에는 Recovery/Easy 또는 동일 처방 유지가 우선입니다.']
+      tone === 'warning' ? '강도 상향 보류' : '훈련 유지 후보',
+      ['회복 비용이 큰 세션 뒤에는 Recovery/Easy 또는 같은 훈련 유지가 우선입니다.']
     )
   }
 }
@@ -844,7 +844,7 @@ function raiseBlockerResult(results: TrendLensResult[]) {
 function blockedRaisePrescription(result: TrendLensResult, raiseBlocker: TrendLensResult): TrendPrescriptionImpact {
   return prescription(
     'maintain',
-    '현재 처방 유지 후 1회 더 확인',
+    '지금 훈련 유지 후 1회 더 확인',
     [
       `${lensQuestionLabels[result.lens]} 신호는 좋지만 ${lensQuestionLabels[raiseBlocker.lens]} 렌즈가 주의 신호라 상향 후보를 바로 적용하지 않습니다.`,
       '좋은 신호는 유지하되 회복/부하 게이트가 안정된 뒤 다시 확인합니다.'
@@ -869,7 +869,7 @@ function resultItem(label: string, result: TrendLensResult, fallback: string): T
 function prescriptionDirectionItem(reduce?: TrendLensResult, raise?: TrendLensResult, raiseBlocker?: TrendLensResult): TrendOverallItem {
   if (reduce) {
     return overallItem(
-      '다음 처방 방향',
+      '다음 훈련 방향',
       reduce.prescriptionImpact.title,
       reduce.prescriptionImpact.reasons[0] ?? '회복 또는 Easy 우선으로 다음 세션을 보수적으로 봅니다.',
       'warning',
@@ -878,23 +878,23 @@ function prescriptionDirectionItem(reduce?: TrendLensResult, raise?: TrendLensRe
   }
   if (raise) {
     return overallItem(
-      '다음 처방 방향',
+      '다음 훈련 방향',
       raise.prescriptionImpact.title,
-      raise.prescriptionImpact.reasons[0] ?? '회복 비용이 조용하면 같은 유형의 처방을 소폭 올릴 수 있습니다.',
+      raise.prescriptionImpact.reasons[0] ?? '회복 비용이 조용하면 같은 유형의 훈련을 소폭 올릴 수 있습니다.',
       'good',
       raise.lens
     )
   }
   if (raiseBlocker) {
     return overallItem(
-      '다음 처방 방향',
-      '현재 처방 유지 후 1회 더 확인',
+      '다음 훈련 방향',
+      '지금 훈련 유지 후 1회 더 확인',
       `${lensQuestionLabels[raiseBlocker.lens]} 렌즈가 주의 신호라 상향 후보를 바로 적용하지 않습니다.`,
       'watch',
       raiseBlocker.lens
     )
   }
-  return overallItem('다음 처방 방향', '현재 루틴 유지', '뚜렷한 상향 또는 하향 신호보다 같은 처방을 반복 확인할 근거가 큽니다.', 'watch')
+  return overallItem('다음 훈련 방향', '현재 루틴 유지', '뚜렷한 상향 또는 하향 신호보다 같은 훈련을 반복 확인할 근거가 큽니다.', 'watch')
 }
 
 function overallTitle(tone: TrendInsightTone, goodCount: number, warningCount: number) {

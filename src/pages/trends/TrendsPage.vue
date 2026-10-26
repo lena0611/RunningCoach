@@ -36,7 +36,7 @@ const lensOptions: Array<{ key: TrendLensKey; label: string; description: string
   { key: 'goal', label: '목표까지', description: '목표에 가까워졌는지' },
   { key: 'efficiency', label: '같은 심박에서', description: '비슷한 심박으로 더 잘 달리는지' },
   { key: 'intensity', label: '무리했나', description: '강훈련과 부하가 몰렸는지' },
-  { key: 'quality', label: '잘 수행했나', description: '처방 의도대로 뛰었는지' },
+  { key: 'quality', label: '잘 수행했나', description: '훈련 의도대로 뛰었는지' },
   { key: 'recovery', label: '회복됐나', description: '좋은 훈련 뒤 무리가 남았는지' }
 ]
 
@@ -185,7 +185,7 @@ function evidenceRoleTone(role: TrendEvidenceRun['role']) {
   <PageLayout>
     <section class="trends-page-header">
       <p class="eyebrow">추세</p>
-      <h2>훈련 변화와 다음 처방</h2>
+      <h2>훈련 변화와 다음 훈련</h2>
       <p class="helper">비교 방법을 고르면 아래 모든 판단이 그 기준으로 계산됩니다.</p>
     </section>
 
@@ -269,7 +269,7 @@ function evidenceRoleTone(role: TrendEvidenceRun['role']) {
         </div>
       </SectionGroup>
 
-      <SectionGroup title="다음 처방 영향" :surface="false">
+      <SectionGroup title="다음 훈련에 주는 영향" :surface="false">
         <div class="trend-prescription-card" :class="`trend-prescription-${result.prescriptionImpact.status}`">
           <strong>{{ result.prescriptionImpact.title }}</strong>
           <p v-for="reason in result.prescriptionImpact.reasons" :key="reason">{{ reason }}</p>

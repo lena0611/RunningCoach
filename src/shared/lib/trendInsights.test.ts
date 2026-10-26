@@ -316,7 +316,7 @@ describe('buildTrendAnalysis', () => {
 
     expect(analysis.lensResults.efficiency.hero.tone).toBe('good')
     expect(analysis.lensResults.efficiency.prescriptionImpact.status).toBe('maintain')
-    expect(analysis.lensResults.efficiency.prescriptionImpact.title).toBe('현재 처방 유지 후 1회 더 확인')
+    expect(analysis.lensResults.efficiency.prescriptionImpact.title).toBe('지금 훈련 유지 후 1회 더 확인')
     expect(analysis.lensResults.efficiency.prescriptionImpact.reasons.join(' ')).toContain('회복됐나')
     expect(analysis.overallSummary.prescriptionDirection.title).toBe('강도 상향 보류')
   })
@@ -361,6 +361,6 @@ describe('buildTrendAnalysis', () => {
     })
 
     expect(analysis.lensResults.efficiency.prescriptionImpact.status).toBe('raise-candidate')
-    expect(analysis.overallSummary.prescriptionDirection.title).toBe('Easy 또는 Tempo 처방 소폭 상향 후보')
+    expect(analysis.overallSummary.prescriptionDirection.title).toBe('Easy 또는 Tempo 훈련 소폭 상향 후보')
   })
 })

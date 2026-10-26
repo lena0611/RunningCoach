@@ -1196,7 +1196,7 @@ function normalizeStrengthPlanDetails(value: unknown, normalizedAreas: InjuryAre
       id: `legacy-strength-${index + 1}`,
       title: instruction.split(':')[0]?.trim() || `보강운동 ${index + 1}`,
       targetAreaIds: normalizedAreas.map((area) => area.areaId),
-      purpose: '기존 문자열 보강운동 처방을 구조화 계약에 맞춰 보존한다.',
+      purpose: '기존 보강운동 메모를 구조화해 보존한다.',
       instruction,
       useWhen: '통증 0~2/5이고 다음날 악화가 없을 때',
       stopWhen: '통증이 커지거나 일상 보행 통증, 저림, 붓기, 날카로운 통증이 있을 때',

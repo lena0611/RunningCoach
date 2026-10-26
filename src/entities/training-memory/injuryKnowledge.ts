@@ -524,8 +524,8 @@ export const injuryProbes: InjuryProbeDef[] = [
     question: '아킬레스 통증, 어디에 가장 가까워요?',
     options: [
       { label: '복사뼈 위 2~6cm, 힘줄 가운데가 아파요', value: 'mid-portion', sentiment: 'neutral', favors: 'achilles-tendinopathy', favorWeight: 0.8, subtype: 'mid-portion', response: '힘줄 중간부 패턴이에요. 중간부형은 편심/HSR 강화가 잘 들어요 — 갑작스러운 거리·강도 증가를 막으면서요. 가능성 안내예요.' },
-      { label: '더 아래 뼈에 붙는 곳이 아프고, 발등 당기기·오르막에서 심해져요', value: 'insertional', sentiment: 'neutral', favors: 'achilles-tendinopathy', favorWeight: 0.8, subtype: 'insertional', response: '부착부형에 가까워요. 부착부는 풀 ROM 편심·오르막을 피하고 중립 범위·힐리프트로 관리해요(중간부와 처방이 달라요).' },
-      { label: "'뚝' 소리/느낌 뒤로 발끝으로 못 서요", value: 'pop-cannot-stand', sentiment: 'caution', redFlagSelfTest: ['weightBearingFailureOrInstability'], response: "'뚝' 하는 느낌과 발끝으로 못 서는 건 힘줄 파열을 의심해야 하는 응급 신호예요. 달리기 처방을 멈추고 바로 전문가 평가를 받으세요." }
+      { label: '더 아래 뼈에 붙는 곳이 아프고, 발등 당기기·오르막에서 심해져요', value: 'insertional', sentiment: 'neutral', favors: 'achilles-tendinopathy', favorWeight: 0.8, subtype: 'insertional', response: '부착부형에 가까워요. 부착부는 풀 ROM 편심·오르막을 피하고 중립 범위·힐리프트로 관리해요(중간부와 관리법이 달라요).' },
+      { label: "'뚝' 소리/느낌 뒤로 발끝으로 못 서요", value: 'pop-cannot-stand', sentiment: 'caution', redFlagSelfTest: ['weightBearingFailureOrInstability'], response: "'뚝' 하는 느낌과 발끝으로 못 서는 건 힘줄 파열을 의심해야 하는 응급 신호예요. 달리기를 멈추고 바로 전문가 평가를 받으세요." }
     ]
   },
   // 정강이 — 자가검사: 넓게(MTSS) ↔ 한 점+hop(피로골절) ↔ 앞쪽 뼈(고위험) ↔ 운동성 조임·저림(구획증후군, §1 ③)

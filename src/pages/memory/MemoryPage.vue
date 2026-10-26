@@ -571,7 +571,7 @@ function getWeeklyRoutineGuide(item: string, hr: ReturnType<typeof deriveHeartRa
   }
   return {
     title: '세부 지침 미정',
-    metric: 'AI 코칭에서 처방 필요',
+    metric: 'AI 코칭에서 정해요',
     details: ['다음 코칭 때 목표와 최근 기록을 보고 세부 기준을 정합니다.']
   }
 }
@@ -1041,7 +1041,7 @@ useSheetA11y(computed(() => !!pendingDelete.value), confirmSheetEl, () => { pend
           <DateField v-model="newInjury.onsetDate" label="시작일" />
           <DateField v-model="newInjury.lastFlareDate" label="최근 신호일" />
           <div v-if="newInjury.strengthPlan.length" class="strength-plan-card full">
-            <strong>보강운동 처방</strong>
+            <strong>보강운동</strong>
             <small>러닝 부하 조절을 돕는 참고용 기본값입니다. 의료 진단이나 치료 처방이 아닙니다.</small>
             <div class="strength-plan-detail-list">
               <article v-for="plan in newInjury.strengthPlanDetails" :key="plan.id">
@@ -1093,8 +1093,8 @@ useSheetA11y(computed(() => !!pendingDelete.value), confirmSheetEl, () => { pend
           <DateField v-model="editingInjury.onsetDate" label="시작일" @update:model-value="updateInjury(editingInjury)" />
           <DateField v-model="editingInjury.lastFlareDate" label="최근 신호일" @update:model-value="updateInjury(editingInjury)" />
           <div v-if="editingInjury.strengthPlan.length" class="strength-plan-card full">
-            <strong>보강운동 처방</strong>
-            <small>부위와 통증 레벨을 기준으로 만든 참고용 처방입니다. 통증이 커지거나 보행 통증이 있으면 축소/중단을 우선합니다.</small>
+            <strong>보강운동</strong>
+            <small>부위와 통증 레벨을 기준으로 만든 참고용 안내입니다. 통증이 커지거나 보행 통증이 있으면 축소/중단을 우선합니다.</small>
             <div class="strength-plan-detail-list">
               <article v-for="plan in editingInjury.strengthPlanDetails" :key="plan.id">
                 <strong>{{ plan.title }}</strong>
@@ -1211,7 +1211,7 @@ useSheetA11y(computed(() => !!pendingDelete.value), confirmSheetEl, () => { pend
                 <button type="button" @click="openKnowledgeRequest">검토 요청</button>
               </SectionHeader>
               <p class="helper">
-                승인된 훈련법과 처방 규칙만 AI 코칭에 들어갑니다. 원문 전체가 아니라 출처, 적용 조건, 처방 규칙만 저장합니다.
+                승인된 훈련법과 훈련 규칙만 AI 코칭에 들어갑니다. 원문 전체가 아니라 출처, 적용 조건, 훈련 규칙만 저장합니다.
               </p>
               <p class="helper">
                 검토 요청은 AI API를 호출하지 않고 Supabase 대기 목록에만 저장됩니다.
@@ -1229,7 +1229,7 @@ useSheetA11y(computed(() => !!pendingDelete.value), confirmSheetEl, () => { pend
                 <p>{{ method.summary }}</p>
                 <p v-if="method.cautionNotes" class="helper">{{ method.cautionNotes }}</p>
                 <div v-if="rulesByMethod.get(method.id)?.length" class="knowledge-rule-list">
-                  <strong>처방 규칙</strong>
+                  <strong>훈련 규칙</strong>
                   <ul>
                     <li v-for="rule in rulesByMethod.get(method.id)?.slice(0, 3)" :key="rule.id">
                       <span>{{ rule.sessionType }} · {{ rule.metric }}</span>

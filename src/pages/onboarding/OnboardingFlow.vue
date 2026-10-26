@@ -551,19 +551,19 @@ async function persist(placed: boolean) {
           </li>
         </ul>
         <button v-if="routineSlots.length < 7" type="button" class="slot-add" @click="addSlot">＋ 세션 추가</button>
-        <small class="onboarding-help">요일 탭→다음 요일 · 세션 탭→처방 교체</small>
+        <small class="onboarding-help">요일 탭→다음 요일 · 세션 탭→다른 훈련으로 교체</small>
       </section>
 
       <!-- 5: 처방 매핑 확정 (#330) -->
       <section v-else-if="step === 5" class="onboarding-step">
-        <h2>처방 확인</h2>
-        <p class="onboarding-help">각 세션이 무엇을 위한 건지예요. ‘다른 처방’으로 바꿀 수 있어요. 웜업·반복수 같은 세부 실행 지침은 목표로 플랜이 만들어진 뒤 세션마다 계산돼요.</p>
+        <h2>훈련 확인</h2>
+        <p class="onboarding-help">각 세션이 무엇을 위한 건지예요. ‘다른 훈련’으로 바꿀 수 있어요. 웜업·반복수 같은 세부 실행 지침은 목표로 플랜이 만들어진 뒤 세션마다 계산돼요.</p>
         <ul class="rx-list">
           <li v-for="(slot, index) in routineSlots" :key="index" class="rx-row">
             <div class="rx-head">
               <span class="rx-day">{{ slot.day }}</span>
               <span class="rx-name">{{ templateName(slot.templateId) }}</span>
-              <button type="button" class="rx-swap" @click="swapPrescription(index)">다른 처방</button>
+              <button type="button" class="rx-swap" @click="swapPrescription(index)">다른 훈련</button>
             </div>
             <p class="rx-purpose">{{ templateOf(slot.templateId)?.purpose }}</p>
           </li>
