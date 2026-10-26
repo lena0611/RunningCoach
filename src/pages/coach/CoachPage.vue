@@ -792,7 +792,7 @@ async function applyPhaseTransition() {
         </article>
         <!-- 휴식: 전략적 휴식(#378) — 회복·부상관리·근력 -->
         <article v-else class="carousel-card">
-          <strong class="carousel-card-title">🌙 전략적 휴식</strong>
+          <strong class="carousel-card-title">{{ runs.length === 0 ? '🏁 첫 훈련 준비' : '🌙 전략적 휴식' }}</strong>
           <p class="carousel-card-line">{{ restGuidance.purpose }}</p>
           <ul class="rest-list">
             <li v-for="(item, i) in restGuidance.items" :key="i">{{ item }}</li>

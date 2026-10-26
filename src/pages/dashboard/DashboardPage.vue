@@ -385,9 +385,20 @@ const todayHero = computed(() => {
 /** 아직 한 번도 안 뛴 신규 사용자의 첫 훈련(#870) — 오늘 세션이 없을 때 히어로가 "오늘은 휴식" 대신 이걸 보인다. */
 const firstSessionAhead = computed(() => {
   if (runs.value.length > 0) return null
-  return scheduleStore.sessions
-    .filter((s) => s.date > todayDate.value && (s.status === 'planned' || s.status === 'missed'))
-    .sort((a, b) => a.date.localeCompare(b.date))[0] ?? null
+  const s = scheduleStore.sessions
+    .filter((item) => item.date > todayDate.value && (item.status === 'planned' || item.status === 'missed'))
+    .sort((a, b) => a.date.localeCompare(b.date))[0]
+  if (!s) return null
+  // 히어로 제목이라 짧게 — "2026-10-27(화)"는 폰에서 두 줄로 꺾였다.
+  const date = new Date(`${s.date}T00:00:00`)
+  const days = Math.round((date.getTime() - new Date(`${todayDate.value}T00:00:00`).getTime()) / 86_400_000)
+  const weekday = '일월화수목금토'[date.getDay()]
+  const when = days === 1 ? `내일(${weekday})` : days === 2 ? `모레(${weekday})` : `${date.getMonth() + 1}/${date.getDate()}(${weekday})`
+  const km = s.prescription.distanceKm ? ` ${s.prescription.distanceKm}km` : ''
+  return {
+    title: `🏁 첫 훈련은 ${when}`,
+    detail: `${sessionTypeLabel(s.sessionType)}${km} — 오늘은 가볍게 걸으며 몸을 깨워 두면 충분해요.`
+  }
 })
 /**
  * 오늘 세션을 **어제 런으로 갈음**한 상태(2026-09-03). 오늘 뛴 런은 없으므로 activeDoneRun 은 비고,
@@ -909,12 +920,8 @@ useSheetA11y(computed(() => !!pendingDeleteCard.value), confirmSheetEl, () => { 
             </template>
             <!-- 가입 첫날(#870): 뛴 적 없는 사람에게 "오늘은 휴식"이 먼저 보이지 않게 첫 훈련을 앞세운다. -->
             <template v-else-if="firstSessionAhead">
-              <h2>🏁 첫 훈련은 {{ formatDateWithWeekday(firstSessionAhead.date) }}</h2>
-              <p class="helper">
-                {{ sessionTypeLabel(firstSessionAhead.sessionType)
-                }}<template v-if="firstSessionAhead.prescription.distanceKm"> {{ firstSessionAhead.prescription.distanceKm }}km</template>
-                — 오늘은 가볍게 걸으며 몸을 깨워 두면 충분해요.
-              </p>
+              <h2>{{ firstSessionAhead.title }}</h2>
+              <p class="helper">{{ firstSessionAhead.detail }}</p>
             </template>
             <template v-else>
               <h2>🌙 오늘은 휴식</h2>
