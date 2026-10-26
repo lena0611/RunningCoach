@@ -101,7 +101,6 @@ defineEmits<{ remove: [] }>()
   border: none;
   border-radius: 999px;
   background: #ffffff;
-  box-shadow: var(--shadow-card);
   color: var(--color-danger);
   place-items: center;
 }

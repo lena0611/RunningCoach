@@ -152,6 +152,7 @@ UI 변경 리뷰 시 아래를 확인한다.
 
 ## 현재 결정
 
+- **버튼에는 그림자(drop shadow)를 두지 않는다(2026-10-26 사용자 결정).** `--shadow-button: none` 이 전역 `button` 과 그 변형을 덮는다. 새 버튼·플로팅 버튼·토글 활성 상태에도 drop shadow 를 넣지 않는다(안쪽 1px 하이라이트·초점 링은 그림자가 아니라 테두리 역할이라 허용). 카드 모양의 탭 가능한 요소(`stat-card`·코치 대화 입구)는 카드 그림자를 따른다.
 - PrimeVue, Vuetify, Element Plus, Naive UI 같은 외부 UI 라이브러리는 전면 도입하지 않는다.
 - TDS Mobile은 참고 자료로 유지하되, PaceLAB의 자체 토큰과 컴포넌트로 구현한다.
 - `BottomSheetSelect`처럼 상호작용이 까다로운 컴포넌트는 공통 컴포넌트에서 기능을 확장하고 테스트를 추가한다.
