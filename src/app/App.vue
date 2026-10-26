@@ -125,6 +125,14 @@ async function submitPostRunInterview(result: PostRunInterviewResult) {
   }
 }
 const showOnboarding = computed(() => authStore.isAuthenticated && isSupabaseConfigured && levelStore.needsOnboarding)
+// HealthKit 자동 동기화는 온보딩 중 멈춰 있다(#870, healthKitSyncStore.requestSync). 온보딩이 끝나거나
+// 이미 끝난 사용자의 레벨 상태가 실리는 순간 다시 부른다 — 로그인 직후 첫 시도는 레벨 로딩 전이라 건너뛴다.
+watch(
+  () => authStore.isAuthenticated && levelStore.loaded && !levelStore.needsOnboarding,
+  (ready) => {
+    if (ready) void healthKitSyncStore.syncAfterActivation()
+  }
+)
 watch(
   () => authStore.isAuthenticated,
   (auth) => {

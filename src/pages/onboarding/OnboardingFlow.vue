@@ -1,7 +1,17 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { useAuthStore } from '@/app/stores/authStore'
+import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useLevelStore } from '@/app/stores/levelStore'
+import { hasNativeBridge } from '@/shared/lib/runtime'
+import { skipsHealthKitImport } from '@/shared/api/testAccountRepository'
+import {
+  answerBelowRecord,
+  distanceKeyFromLongestKm,
+  summarizeHealthKitPreview,
+  weeklyDaysFromPreview
+} from '@/features/import-healthkit-run/onboardingImport'
 import { type TrainingInjuryItem, type TrainingMemory } from '@/entities/training-memory/model'
 import { vdotFromPerformance, vdotFromVo2Max } from '@/shared/lib/vdotPaces'
 import { distanceClassFromMeters, gradeBandFromVdot, nextDistanceClass } from '@/shared/lib/level/levelModel'
@@ -19,11 +29,86 @@ import {
 
 const memoryStore = useMemoryStore()
 const levelStore = useLevelStore()
+const authStore = useAuthStore()
+const healthKitSyncStore = useHealthKitSyncStore()
 
-type StepKey = 1 | 2 | 3 | 4 | 5 | 'reveal'
+type StepKey = 1 | 'records' | 2 | 3 | 4 | 5 | 'reveal'
 const step = ref<StepKey>(1)
 const saving = ref(false)
 const error = ref('')
+
+// ── 기록 가져오기 단계(#870) ─────────────────────────────────────────────
+// 아이폰 앱(HealthKit 브리지)에서만 보인다. HealthKit 차단 테스트 계정도 건너뛴다. 1단계를 넘길 때 정한다.
+const recordsEnabled = ref(false)
+let recordsDecided = false
+/** 'import' = 미리본 기록을 온보딩 마지막에 저장, 'today' = 오늘 이전 러닝은 가져오지 않음, null = 고르지 않음(단계 없음). */
+const recordsChoice = ref<'import' | 'today' | null>(null)
+const PREVIEW_TIMEOUT_MS = 20_000
+let previewTimer: ReturnType<typeof setTimeout> | null = null
+
+const stepOrder = computed<StepKey[]>(() => (recordsEnabled.value ? [1, 'records', 2, 3, 4, 5] : [1, 2, 3, 4, 5]))
+const stepIndex = computed(() => stepOrder.value.indexOf(step.value))
+
+const preview = computed(() => healthKitSyncStore.onboardingPreview)
+const previewSummary = computed(() => {
+  const p = preview.value
+  return p?.status === 'done' && p.candidates.length ? summarizeHealthKitPreview(p.candidates, localTodayIso()) : null
+})
+const recordsView = computed<'ask' | 'loading' | 'found' | 'empty'>(() => {
+  const p = preview.value
+  if (!p) return 'ask'
+  if (p.status === 'loading') return 'loading'
+  return previewSummary.value ? 'found' : 'empty'
+})
+/** 가져오기로 고른 기록의 요약 — 미리 채우기·어긋남 확인·시작 위치 근거에 쓴다. */
+const importedSummary = computed(() => (recordsChoice.value === 'import' ? previewSummary.value : null))
+const recordDistanceKey = computed(() => (importedSummary.value ? distanceKeyFromLongestKm(importedSummary.value.longestKm) : null))
+/** '아직 레이싱 전'을 골랐는데 기록상 5K 이상을 뛰었다 — 걷기·뛰기부터 시작할지 한 번 묻는다. */
+const showRecordConflict = computed(
+  () => form.maxDistanceKey === 'pre' && recordDistanceKey.value !== null && answerBelowRecord('pre', recordDistanceKey.value)
+)
+
+async function decideRecordsStep() {
+  if (recordsDecided) return
+  recordsDecided = true
+  const userId = authStore.user?.id
+  recordsEnabled.value = hasNativeBridge() && !(userId && (await skipsHealthKitImport(userId)))
+}
+
+function findRecords() {
+  recordsChoice.value = null // 찾으면 다시 '가져오기'가 기본 선택이 되게
+  healthKitSyncStore.requestOnboardingPreview()
+  if (previewTimer) clearTimeout(previewTimer)
+  // 권한 시트에서 오래 머물거나 응답이 끊기면 '찾지 못했어요'로 넘긴다(무한 로딩 금지).
+  previewTimer = setTimeout(() => {
+    if (healthKitSyncStore.onboardingPreview?.status === 'loading') {
+      healthKitSyncStore.onboardingPreview = { status: 'error', candidates: [], error: '응답이 없어요' }
+    }
+  }, PREVIEW_TIMEOUT_MS)
+}
+
+function startFresh() {
+  recordsChoice.value = 'today'
+  goNext()
+}
+
+// 기록을 찾으면 기본 선택은 '가져오기'(추천).
+watch(recordsView, (view) => {
+  if (view === 'found' && recordsChoice.value === null) recordsChoice.value = 'import'
+})
+
+/** 가져오기로 고르면 다음 단계들을 기록으로 미리 채운다(바꿔도 된다). */
+function applyRecordsPrefill() {
+  const summary = importedSummary.value
+  if (!summary) return
+  form.maxDistanceKey = distanceKeyFromLongestKm(summary.longestKm)
+  const days = weeklyDaysFromPreview(summary)
+  if (days) form.weeklyDays = days
+}
+
+onBeforeUnmount(() => {
+  if (previewTimer) clearTimeout(previewTimer)
+})
 
 type DistKey = 'pre' | '5k' | '10k' | 'half' | 'full'
 type GoalKey = '5k' | '10k' | 'half' | 'full'
@@ -144,25 +229,27 @@ function swapPrescription(index: number) {
   slot.sessionType = templateOf(nextId)?.sessionType ?? slot.sessionType
 }
 
-function next() {
-  if (step.value === 1) step.value = 2
-  else if (step.value === 2) step.value = 3
-  else if (step.value === 3) {
-    regenerateRoutine()
-    step.value = 4
-  } else if (step.value === 4) step.value = 5
-  else if (step.value === 5) step.value = 'reveal'
+async function next() {
+  if (step.value === 1) await decideRecordsStep()
+  if (step.value === 'records') applyRecordsPrefill()
+  if (step.value === 3) regenerateRoutine()
+  goNext()
+}
+function goNext() {
+  step.value = stepOrder.value[stepIndex.value + 1] ?? 'reveal'
 }
 function back() {
-  if (step.value === 2) step.value = 1
-  else if (step.value === 3) step.value = 2
-  else if (step.value === 4) step.value = 3
-  else if (step.value === 5) step.value = 4
-  else if (step.value === 'reveal') step.value = 5
+  if (step.value === 'reveal') step.value = stepOrder.value[stepOrder.value.length - 1]
+  else if (stepIndex.value > 0) step.value = stepOrder.value[stepIndex.value - 1]
 }
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10)
+}
+/** 기기 시간대 기준 오늘(YYYY-MM-DD). "오늘부터만" 기준일은 UTC 가 아니라 사용자의 오늘이어야 한다. */
+function localTodayIso() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function buildInjuryItem(): TrainingInjuryItem {
@@ -181,8 +268,13 @@ async function persist(placed: boolean) {
   saving.value = true
   error.value = ''
   try {
+    // 기록 가져오기(#870): 플랜을 짓기 전에(아래 complete 가 짓는 신호다) 고른 대로 저장한다.
+    // 건너뛰기면 고르지 않은 것으로 보고 미리본 것도 버린다 — 온보딩이 끝나면 평소 자동 동기화가 돈다.
+    if (placed && recordsChoice.value === 'import') await healthKitSyncStore.importOnboardingPreview()
+    else healthKitSyncStore.clearOnboardingPreview()
     if (placed) {
       const memory: TrainingMemory = JSON.parse(JSON.stringify(memoryStore.memory))
+      if (recordsChoice.value === 'today') memory.healthKitImportFrom = localTodayIso()
       memory.athleteProfile.birthYear = form.birthYear
       memory.athleteProfile.sex = form.sex
       memory.athleteProfile.runningExperienceMonths = form.experienceMonths
@@ -227,11 +319,7 @@ async function persist(placed: boolean) {
     <div class="onboarding-card">
       <header class="onboarding-head">
         <div class="onboarding-dots" v-if="step !== 'reveal'">
-          <span :class="{ on: typeof step === 'number' && step >= 1 }" />
-          <span :class="{ on: typeof step === 'number' && step >= 2 }" />
-          <span :class="{ on: typeof step === 'number' && step >= 3 }" />
-          <span :class="{ on: typeof step === 'number' && step >= 4 }" />
-          <span :class="{ on: typeof step === 'number' && step >= 5 }" />
+          <span v-for="(key, index) in stepOrder" :key="key" :class="{ on: index <= stepIndex }" />
         </div>
         <button v-if="step !== 'reveal'" class="onboarding-skip" type="button" :disabled="saving" @click="persist(false)">
           건너뛰기
@@ -261,6 +349,94 @@ async function persist(placed: boolean) {
         </label>
       </section>
 
+      <!-- 기록 가져오기(#870): 아이폰 앱에서만. 조회는 미리보기이고 저장은 온보딩 마지막에 한다. -->
+      <section v-else-if="step === 'records'" class="onboarding-step">
+        <template v-if="recordsView === 'ask'">
+          <h2>지금까지 뛴 기록이 있나요?</h2>
+          <p class="onboarding-help">아이폰 건강 앱에 러닝 기록이 있으면 가져와서, 처음부터 내 몸에 맞는 강도로 시작해요.</p>
+          <div class="records-box">
+            <span class="records-box-label">가져오는 것</span>
+            <span>러닝 운동 — 거리·시간·페이스</span>
+            <span>심박·케이던스</span>
+            <span>경로(지도)</span>
+            <small class="onboarding-help">몇 개가 있는지 먼저 보여드리고, 가져올지는 그다음에 골라요.</small>
+          </div>
+          <div class="records-actions">
+            <button class="primary" type="button" @click="findRecords">건강 앱에서 찾아보기</button>
+            <button class="ghost" type="button" @click="startFresh">아직 뛴 기록이 없어요</button>
+          </div>
+        </template>
+
+        <template v-else-if="recordsView === 'loading'">
+          <h2>건강 앱에서 찾는 중…</h2>
+          <p class="onboarding-help">권한을 묻는 창이 뜨면 '운동'과 '운동 경로'를 허용해 주세요.</p>
+        </template>
+
+        <template v-else-if="recordsView === 'found' && previewSummary">
+          <h2>최근 90일 러닝을 {{ previewSummary.count }}개 찾았어요</h2>
+          <p class="onboarding-help">아직 아무것도 저장하지 않았어요.</p>
+          <div class="records-grid">
+            <div class="records-stat">
+              <span>기간</span>
+              <strong>{{ previewSummary.firstDate?.slice(5).replace('-', '/') }} ~ {{ previewSummary.lastDate?.slice(5).replace('-', '/') }}</strong>
+            </div>
+            <div class="records-stat">
+              <span>가장 긴 러닝</span>
+              <strong>{{ previewSummary.longestKm }}km</strong>
+            </div>
+            <div class="records-stat">
+              <span>최근 4주 평균</span>
+              <strong>{{ previewSummary.recentRunsPerWeek > 0 ? `주 ${previewSummary.recentKmPerWeek}km · ${Math.round(previewSummary.recentRunsPerWeek)}회` : '기록 없음' }}</strong>
+            </div>
+            <div class="records-stat">
+              <span>마지막 러닝</span>
+              <strong>{{ previewSummary.daysSinceLast === 0 ? '오늘' : `${previewSummary.daysSinceLast}일 전` }}</strong>
+            </div>
+          </div>
+          <div class="records-choices" role="radiogroup" aria-label="기록을 어떻게 할까요">
+            <button
+              type="button"
+              role="radio"
+              class="records-choice"
+              :class="{ on: recordsChoice === 'import' }"
+              :aria-checked="recordsChoice === 'import'"
+              @click="recordsChoice = 'import'"
+            >
+              <strong>이 기록 가져오기 <span class="records-badge">추천</span></strong>
+              <span>시작 강도를 이 기록에 맞춰요. 기록·추세 탭에도 바로 보여요.</span>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              class="records-choice"
+              :class="{ on: recordsChoice === 'today' }"
+              :aria-checked="recordsChoice === 'today'"
+              @click="recordsChoice = 'today'"
+            >
+              <strong>오늘부터 뛴 것만</strong>
+              <span>지금까지 기록은 가져오지 않아요. 오늘 이후 러닝만 들어와요.</span>
+            </button>
+          </div>
+        </template>
+
+        <template v-else>
+          <h2>최근 90일 러닝을 찾지 못했어요</h2>
+          <p class="onboarding-help">둘 중 하나예요. iOS 는 어느 쪽인지 알려주지 않아요.</p>
+          <div class="records-box">
+            <strong>아직 아이폰으로 뛴 기록이 없어요</strong>
+            <small class="onboarding-help">처음부터 시작하면 돼요. 걷기·뛰기부터 차근차근 안내할게요.</small>
+          </div>
+          <div class="records-box">
+            <strong>건강 앱에서 '운동' 읽기를 꺼 두었어요</strong>
+            <small class="onboarding-help">설정 › 건강 › 데이터 접근 및 기기 › PaceLAB 에서 '운동'과 '운동 경로'를 켠 뒤 다시 찾아보세요.</small>
+          </div>
+          <div class="records-actions">
+            <button class="primary" type="button" @click="startFresh">처음부터 시작할게요</button>
+            <button class="ghost" type="button" @click="findRecords">켜고 다시 찾아보기</button>
+          </div>
+        </template>
+      </section>
+
       <!-- 2: 완주 경험 + 기록 -->
       <section v-else-if="step === 2" class="onboarding-step">
         <h2>완주해본 가장 긴 거리는?</h2>
@@ -276,6 +452,15 @@ async function persist(placed: boolean) {
           >
             {{ DIST_LABEL[key] }}
           </button>
+        </div>
+        <small v-if="importedSummary" class="onboarding-help">
+          기록상 가장 긴 러닝 {{ importedSummary.longestKm }}km · {{ importedSummary.longestDate?.slice(5).replace('-', '/') }} — 기록으로 미리 골라 두었어요. 바꿔도 돼요.
+        </small>
+        <div v-if="showRecordConflict && importedSummary" class="records-conflict" role="status">
+          <strong>기록을 보니 이미 {{ importedSummary.longestKm }}km를 뛰셨어요</strong>
+          <span>'레이싱 전'으로 시작하면 걷기·뛰기 1주차부터예요. 지금 기록이면 그보다 위에서 시작하는 게 맞아 보여요.</span>
+          <button class="primary" type="button" @click="form.maxDistanceKey = recordDistanceKey ?? 'pre'">기록 기준으로 시작 (추천)</button>
+          <button class="ghost" type="button" @click="recordsChoice = 'today'">그래도 걷기·뛰기부터 — 지금까지 기록은 안 가져와요</button>
         </div>
         <div v-if="form.maxDistanceKey !== 'pre'" class="record-row">
           <span class="field-label">{{ DIST_LABEL[form.maxDistanceKey] }} 기록 (선택)</span>
@@ -389,18 +574,33 @@ async function persist(placed: boolean) {
       <section v-else class="onboarding-step onboarding-reveal">
         <p class="reveal-eyebrow">🎉 시작 위치</p>
         <div class="reveal-badge">{{ previewLabel }}</div>
-        <p class="reveal-tentative">(잠정 · GPS 주행으로 완주하면 인증됩니다)</p>
+        <!-- 가져온 기록이 클래스를 받쳐 주면 이미 GPS 로 확인된 것이다(#870) -->
+        <p v-if="!importedSummary || answerBelowRecord(recordDistanceKey ?? 'pre', form.maxDistanceKey)" class="reveal-tentative">(잠정 · GPS 주행으로 완주하면 인증됩니다)</p>
         <p v-if="placementVdot" class="onboarding-help">VDOT {{ placementVdot }} 기준</p>
         <p v-else class="onboarding-help">기록/VO2max가 쌓이면 등급이 잡혀요.</p>
         <p v-if="previewNextClass" class="reveal-next">다음 목표: {{ previewNextClass.label }} 🔒</p>
+        <p v-if="importedSummary" class="reveal-basis">
+          가져온 기록 {{ importedSummary.count }}개 기준 ·
+          <template v-if="importedSummary.daysSinceLast !== null && importedSummary.daysSinceLast > 28">마지막 러닝이 {{ importedSummary.daysSinceLast }}일 전이라 쉰 만큼 낮춰서 시작해요.</template>
+          <template v-else>최근 4주 기록에 맞춰 첫 플랜을 짜요.</template>
+        </p>
+        <p v-else-if="recordsChoice === 'today'" class="reveal-basis">지금까지 기록은 가져오지 않고, 온보딩 답으로 첫 플랜을 짜요.</p>
       </section>
 
       <p v-if="error" class="onboarding-error">{{ error }}</p>
 
       <footer class="onboarding-foot">
         <button v-if="step !== 1" class="ghost" type="button" :disabled="saving" @click="back">이전</button>
-        <button v-if="step !== 'reveal'" class="primary" type="button" :disabled="saving" @click="next">다음</button>
-        <button v-else class="primary" type="button" :disabled="saving" @click="persist(true)">
+        <button
+          v-if="step !== 'reveal' && (step !== 'records' || recordsView === 'found')"
+          class="primary"
+          type="button"
+          :disabled="saving"
+          @click="next"
+        >
+          다음
+        </button>
+        <button v-else-if="step === 'reveal'" class="primary" type="button" :disabled="saving" @click="persist(true)">
           {{ saving ? '저장 중…' : '시작하기' }}
         </button>
       </footer>
@@ -708,6 +908,126 @@ async function persist(placed: boolean) {
   font-size: 14px;
   color: var(--color-text);
   margin-top: 6px;
+}
+
+.records-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--color-surface-2);
+  font-size: var(--text-info-size);
+  color: var(--color-text);
+}
+
+.records-box-label {
+  font-size: var(--text-caption-size);
+  font-weight: 700;
+  color: var(--color-muted);
+}
+
+.records-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.records-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.records-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--color-surface-2);
+}
+
+.records-stat span {
+  font-size: var(--text-micro-size);
+  color: var(--color-muted);
+}
+
+.records-stat strong {
+  font-size: var(--text-info-size);
+  color: var(--color-text);
+}
+
+.records-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 전역 button 기본(그라디언트·그림자·높이)을 지우고 카드형 선택지로 쓴다(ui-system-contract 커스텀 버튼 규칙). */
+.records-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 0;
+  padding: 14px;
+  border: 2px solid var(--color-border-strong);
+  border-radius: 14px;
+  background: var(--color-surface-2);
+  box-shadow: none;
+  text-shadow: none;
+  color: var(--color-text);
+  text-align: left;
+}
+
+.records-choice.on {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.records-choice strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-info-size);
+}
+
+.records-choice span {
+  font-size: var(--text-caption-size);
+  font-weight: 400;
+  color: var(--color-muted);
+}
+
+.records-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-primary);
+  color: var(--color-on-primary) !important;
+  font-size: var(--text-micro-size) !important;
+  font-weight: 700 !important;
+}
+
+.records-conflict {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--color-accent);
+  background: var(--color-accent-soft);
+  color: var(--color-text);
+}
+
+.records-conflict span {
+  font-size: var(--text-caption-size);
+  color: var(--color-muted);
+}
+
+.reveal-basis {
+  font-size: var(--text-caption-size);
+  color: var(--color-muted);
+  margin: 6px 0 0;
 }
 
 .onboarding-error {

@@ -34,6 +34,11 @@ export type TrainingMemory = {
    * 닦달 차단은 세션 status='rested' 가 담당하고, 이 메타는 복귀 D-N 배너·복귀 감지·대안 제시 조건에 쓴다.
    */
   activeRest: ActiveRest | null
+  /**
+   * 이 날짜(YYYY-MM-DD) 이전의 HealthKit 러닝은 가져오지 않는다(#870). 온보딩에서 "오늘부터 뛴 것만"·
+   * "아직 뛴 기록이 없어요"를 고르면 그날로 정해진다. null = 제한 없음(최근 90일부터 가져옴).
+   */
+  healthKitImportFrom: string | null
 }
 
 /**
@@ -408,7 +413,8 @@ export const initialTrainingMemory: TrainingMemory = {
     '코칭은 단일 기록보다 최근 훈련 흐름과 격주 롱런 패턴을 함께 봐야 한다',
     '다음 훈련 추천은 피로도, 최근 14일 기록, 장거리 주차 여부를 함께 반영한다'
   ],
-  activeRest: null
+  activeRest: null,
+  healthKitImportFrom: null
 }
 
 /**
@@ -680,7 +686,8 @@ export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null |
     injuryItems,
     activeInjuryItemId,
     goal: activeGoal.title,
-    activeRest: normalizeActiveRest(memory?.activeRest)
+    activeRest: normalizeActiveRest(memory?.activeRest),
+    healthKitImportFrom: normalizeIsoDateOrNull(memory?.healthKitImportFrom)?.slice(0, 10) ?? null
   }
 }
 

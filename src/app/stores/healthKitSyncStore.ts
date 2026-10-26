@@ -23,10 +23,13 @@ import {
   type HealthKitVo2MaxSample
 } from '@/features/import-healthkit-run/healthKitBridge'
 import { mergeHealthKitRefreshRun } from '@/features/import-healthkit-run/mergeHealthKitRefreshRun'
+import { filterFromImportDate, ONBOARDING_LOOKBACK_DAYS } from '@/features/import-healthkit-run/onboardingImport'
 import { notifyHealthKitNewRuns } from '@/features/sync-native-notifications/notificationBridge'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import { friendlyErrorMessage } from '@/shared/lib/friendlyError'
 import { skipsHealthKitImport } from '@/shared/api/testAccountRepository'
+import { isSupabaseConfigured } from '@/shared/api/supabase'
+import { useLevelStore } from '@/app/stores/levelStore'
 import { deriveHeartRateModel, deriveObservedMaxHr, type HeartRateModel } from '@/shared/lib/heartRateZones'
 import { computeTempoCeilingAdaptation } from '@/shared/lib/coaching/tempoAdaptation'
 import { getActiveInjuryItem } from '@/entities/training-memory/model'
@@ -38,6 +41,7 @@ const syncToastDelayMs = 900
 let listenersAttached = false
 type SyncFeedbackMode = 'changes-only' | 'toast'
 type HistoricalMigrationRange = { startDate: string; endDate: string }
+type OnboardingPreview = { status: 'loading' | 'done' | 'error'; candidates: HealthKitRunCandidate[]; error: string }
 
 export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
   state: () => ({
@@ -70,7 +74,12 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
     historicalMigrationRange: null as HistoricalMigrationRange | null,
     vo2MaxRequesting: false,
     lastVo2MaxAt: 0,
-    lastVo2MaxSample: null as HealthKitVo2MaxSample | null
+    lastVo2MaxSample: null as HealthKitVo2MaxSample | null,
+    /**
+     * 온보딩 "기록 가져오기" 미리보기(#870). 조회만 하고 **저장하지 않는다** — 사용자가 고른 뒤
+     * 온보딩 마지막에 `importOnboardingPreview` 가 저장한다. null = 미리보기 중이 아님.
+     */
+    onboardingPreview: null as OnboardingPreview | null
   }),
   actions: {
     init() {
@@ -84,7 +93,9 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         onVo2Max: (sample) => void this.handleVo2Max(sample),
         onVo2MaxError: (message) => this.handleVo2MaxError(message),
         // 러닝 대체 운동(#739) — 별도 스토어로만 흘려보낸다. RunLog 로는 절대 들어가지 않는다.
-        onCrossTraining: (sessions) => void useCrossTrainingStore().ingestFromHealthKit(sessions)
+        // "오늘부터만" 기준일 이전 운동은 대체 운동도 가져오지 않는다(#870).
+        onCrossTraining: (sessions) =>
+          void useCrossTrainingStore().ingestFromHealthKit(filterFromImportDate(sessions, useMemoryStore().memory.healthKitImportFrom))
       })
       this.initialized = true
     },
@@ -141,6 +152,14 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         if (options.feedback === 'toast') showSyncToast('neutral', this.skipReason, 3200)
         return
       }
+      // 온보딩이 끝날 때까지 자동으로 가져오지 않는다(#870). 예전엔 로그인 직후 묻지 않고 최근 90일을 전부
+      // 가져와 "완전 초보" 답보다 기록이 먼저 들어왔다 — 가져올지는 온보딩 '기록 가져오기' 단계에서 고른다.
+      // App 의 온보딩 표시 조건(showOnboarding)과 같고, 끝나는 순간 App 이 다시 동기화를 부른다.
+      const levelStore = useLevelStore()
+      if (isSupabaseConfigured && (!levelStore.loaded || levelStore.needsOnboarding)) {
+        this.skipReason = '시작 설정을 마친 뒤에 기록을 가져와요.'
+        return
+      }
       this.skipReason = ''
 
       const requestedAt = Date.now()
@@ -152,7 +171,8 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
 
       try {
         await ensureRunStoreLoaded()
-        const lookbackDays = getLookbackDays(getLatestSavedDate())
+        // 저장된 러닝이 없으면 "오늘부터만" 기준일부터 조회한다(그 이전은 어차피 거른다).
+        const lookbackDays = getLookbackDays(getLatestSavedDate() ?? useMemoryStore().memory.healthKitImportFrom)
         requestHealthKitRuns(lookbackDays)
         // 같은 회차에 대체 운동도 훑는다(#739). 새 권한 없이 같은 workoutType 권한으로 읽는다 —
         // 러닝만 들어오던 건 권한이 아니라 조회 조건 때문이었다. 실패해도 러닝 동기화를 막지 않는다.
@@ -233,6 +253,11 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
       }
     },
     async handleRuns(runs: HealthKitRunCandidate[]) {
+      // 온보딩 미리보기(#870): 저장하지 않고 후보만 담는다.
+      if (this.onboardingPreview?.status === 'loading') {
+        this.onboardingPreview = { status: 'done', candidates: runs, error: '' }
+        return
+      }
       if (this.historicalMigrationRange) {
         await this.handleHistoricalMigrationRuns(runs, this.historicalMigrationRange)
         return
@@ -259,7 +284,7 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         const memoryStore = useMemoryStore()
         const heartRateModel = buildInferenceHeartRateModel()
         const repaired = await repairExistingHealthKitRuns(runs, heartRateModel)
-        const newRuns = runs
+        const newRuns = filterFromImportDate(runs, memoryStore.memory.healthKitImportFrom)
           .filter((candidate) => isAfterLatestSaved(candidate, latestDate))
           .filter((candidate) => !isAlreadySaved(candidate))
           .sort((a, b) => a.date.localeCompare(b.date) || a.startAt.localeCompare(b.startAt))
@@ -347,7 +372,31 @@ export const useHealthKitSyncStore = defineStore('healthKitSyncStore', {
         this.syncFeedbackMode = 'toast'
       }
     },
+    /** 온보딩 "기록 가져오기"(#870): 최근 90일 러닝을 조회만 한다. 첫 호출이면 iOS 건강 권한 시트가 뜬다. */
+    requestOnboardingPreview() {
+      this.init()
+      this.onboardingPreview = { status: 'loading', candidates: [], error: '' }
+      try {
+        requestHealthKitRuns(ONBOARDING_LOOKBACK_DAYS)
+      } catch (err) {
+        this.onboardingPreview = { status: 'error', candidates: [], error: friendlyErrorMessage(err, 'HealthKit 조회 실패') }
+      }
+    },
+    /** 미리보기 후보를 저장한다 — 온보딩 마지막, 플랜을 짓기 전에 부른다(플랜이 이 기록을 보고 지어지게). */
+    async importOnboardingPreview() {
+      const candidates = this.onboardingPreview?.candidates ?? []
+      this.onboardingPreview = null
+      if (candidates.length) await this.handleRuns(candidates)
+    },
+    clearOnboardingPreview() {
+      this.onboardingPreview = null
+    },
     handleError(message: string) {
+      // 온보딩 미리보기 실패는 그 화면이 말한다(토스트 대신 '찾지 못했어요' 안내).
+      if (this.onboardingPreview?.status === 'loading') {
+        this.onboardingPreview = { status: 'error', candidates: [], error: message || 'HealthKit 조회 실패' }
+        return
+      }
       this.syncing = false
       this.historicalMigrationRange = null
       this.status = ''

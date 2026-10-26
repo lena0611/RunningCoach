@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
@@ -166,3 +166,63 @@ function createCandidate(overrides: Partial<HealthKitRunCandidate> = {}): Health
     ...overrides
   }
 }
+
+describe('온보딩 기록 가져오기 (#870)', () => {
+  afterEach(() => {
+    delete (window as unknown as { webkit?: unknown }).webkit
+    delete window.RunContextHealthKit
+  })
+
+  function installFakeBridge() {
+    const postMessage = vi.fn()
+    ;(window as unknown as { webkit: unknown }).webkit = { messageHandlers: { runContextHealthKit: { postMessage } } }
+    return postMessage
+  }
+
+  it('미리보기는 조회만 하고 저장하지 않는다 — 고른 뒤에야 저장', async () => {
+    const postMessage = installFakeBridge()
+    const syncStore = useHealthKitSyncStore()
+    const runStore = useRunStore()
+    runStore.loaded = true
+
+    syncStore.requestOnboardingPreview()
+    expect(postMessage).toHaveBeenCalledWith({ type: 'requestRecentRunningWorkouts', days: 90 })
+    expect(syncStore.onboardingPreview?.status).toBe('loading')
+
+    window.RunContextHealthKit?.receiveRuns([
+      createCandidate({ externalId: 'hk-a', date: '2026-10-05', startAt: '2026-10-05T06:00:00.000Z', endAt: '2026-10-05T06:30:00.000Z' })
+    ])
+    await Promise.resolve()
+    expect(syncStore.onboardingPreview?.status).toBe('done')
+    expect(syncStore.onboardingPreview?.candidates).toHaveLength(1)
+    expect(runStore.runs).toHaveLength(0)
+
+    await syncStore.importOnboardingPreview()
+    expect(runStore.runs).toHaveLength(1)
+    expect(syncStore.onboardingPreview).toBeNull()
+  })
+
+  it('미리보기 중 오류는 토스트 대신 미리보기 상태로 — 화면이 "찾지 못했어요"를 말한다', () => {
+    installFakeBridge()
+    const syncStore = useHealthKitSyncStore()
+    const show = vi.spyOn(useToastStore(), 'show')
+    syncStore.requestOnboardingPreview()
+    window.RunContextHealthKit?.receiveError('authorization failed')
+    expect(syncStore.onboardingPreview).toMatchObject({ status: 'error', candidates: [] })
+    expect(show).not.toHaveBeenCalled()
+  })
+
+  it('"오늘부터만" 기준일 이전 러닝은 자동 동기화에서도 들어오지 않는다', async () => {
+    const syncStore = useHealthKitSyncStore()
+    const runStore = useRunStore()
+    const memoryStore = useMemoryStore()
+    runStore.loaded = true
+    memoryStore.memory.healthKitImportFrom = '2026-10-26'
+
+    await syncStore.handleRuns([
+      createCandidate({ externalId: 'hk-old', date: '2026-10-20', startAt: '2026-10-20T06:00:00.000Z', endAt: '2026-10-20T06:30:00.000Z' }),
+      createCandidate({ externalId: 'hk-new', date: '2026-10-27', startAt: '2026-10-27T06:00:00.000Z', endAt: '2026-10-27T06:30:00.000Z' })
+    ])
+    expect(runStore.runs.map((r) => r.externalId)).toEqual(['hk-new'])
+  })
+})
