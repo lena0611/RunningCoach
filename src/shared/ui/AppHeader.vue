@@ -27,6 +27,8 @@ import GlossarySheet from '@/shared/ui/GlossarySheet.vue'
 import HeartRateHelpSheet from '@/shared/ui/HeartRateHelpSheet.vue'
 import HeartRateTestGuideSheet from '@/shared/ui/HeartRateTestGuideSheet.vue'
 import StackPage from '@/shared/ui/StackPage.vue'
+import { canResetTestAccount, clearLocalAppState, resetTestAccount } from '@/shared/api/testAccountRepository'
+import { useSheetA11y } from '@/shared/lib/useSheetA11y'
 
 defineProps<{ isAuthenticated: boolean }>()
 // openAchievements: 업적 스택은 App 레벨이 호스팅(#397 래칫 — shared 가 entities 도메인 컴포넌트를 직접 들지 않는다)
@@ -66,6 +68,15 @@ watch(
 )
 const saving = ref(false)
 const error = ref('')
+// 테스트 계정 초기화 — 노출 여부는 서버 판정(can_reset_test_account)을 따른다.
+const canResetAccount = ref(false)
+const resetConfirmOpen = ref(false)
+const resettingAccount = ref(false)
+const resetError = ref('')
+const confirmSheetEl = ref<HTMLElement | null>(null)
+useSheetA11y(resetConfirmOpen, confirmSheetEl, () => {
+  if (!resettingAccount.value) resetConfirmOpen.value = false
+})
 const draftName = ref(memoryStore.selectedUser.name)
 const draft = reactive<TrainingMemory>(clone(memoryStore.memory))
 const sexOptions = [
@@ -315,6 +326,32 @@ function openDrawer() {
   drawerOpen.value = true
   drawerPanel.value = 'account'
   document.body.classList.add('memory-stack-open')
+  void refreshCanResetAccount()
+}
+
+async function refreshCanResetAccount() {
+  try {
+    canResetAccount.value = await canResetTestAccount()
+  } catch {
+    canResetAccount.value = false
+  }
+}
+
+async function confirmResetAccount() {
+  if (resettingAccount.value) return
+  resettingAccount.value = true
+  resetError.value = ''
+  try {
+    await resetTestAccount()
+    clearLocalAppState()
+    // 스토어마다 이전 데이터를 들고 있다 — 하나씩 비우는 대신 새로 불러와 신규 사용자 첫 화면을 그대로 띄운다.
+    window.location.hash = '#/'
+    window.location.reload()
+  } catch (err) {
+    resetError.value = err instanceof Error ? err.message : '초기화에 실패했어요. 잠시 후 다시 시도해 주세요.'
+    resettingAccount.value = false
+    resetConfirmOpen.value = false
+  }
 }
 
 function closeDrawer() {
@@ -586,7 +623,32 @@ function openSettingsPanel(focus: SettingsPanelFocus | null = null) {
       <button class="ghost" type="button" @click="openPasswordPanel">비밀번호 변경</button>
       <button class="ghost" type="button" @click="signOutAndClose">로그아웃</button>
     </ActionGroup>
+
+    <!-- 테스트 계정 초기화(migration 202610260001) — 서버에 등록된 테스트 계정에만 보인다 -->
+    <div v-if="canResetAccount" class="test-account-reset">
+      <p class="helper">테스트 계정 · 기록·플랜·코치 대화를 모두 지우고 가입 직후 상태로 돌아가요.</p>
+      <p v-if="resetError" class="error">{{ resetError }}</p>
+      <button class="danger" type="button" @click="resetConfirmOpen = true">처음부터 다시 시작</button>
+    </div>
   </StackPage>
+
+  <Teleport to="body">
+    <Transition name="bottom-sheet">
+      <div v-if="resetConfirmOpen" class="bottom-sheet-layer confirm-layer" role="presentation" @click.self="resetConfirmOpen = false">
+        <section ref="confirmSheetEl" tabindex="-1" class="bottom-sheet confirm-sheet" role="dialog" aria-modal="true" aria-label="초기화 확인">
+          <div class="bottom-sheet-handle" />
+          <h2>처음부터 다시 시작할까요?</h2>
+          <p>이 계정의 러닝 기록·훈련 플랜·코치 대화·기억이 모두 삭제되고, 다음 화면은 가입 직후와 같아요. 로그인은 유지돼요. 이 작업은 되돌릴 수 없습니다.</p>
+          <div class="confirm-actions">
+            <button class="danger" type="button" :disabled="resettingAccount" @click="confirmResetAccount">
+              {{ resettingAccount ? '초기화 중' : '초기화' }}
+            </button>
+            <button class="ghost" type="button" :disabled="resettingAccount" @click="resetConfirmOpen = false">취소</button>
+          </div>
+        </section>
+      </div>
+    </Transition>
+  </Teleport>
 
   <StackPage
     :open="drawerOpen && drawerPanel === 'profile'"
