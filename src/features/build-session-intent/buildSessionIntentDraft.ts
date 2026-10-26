@@ -48,7 +48,8 @@ export function easierAlternative(type: RunType): RunType {
   }
 }
 
-function ceilingFor(type: RunType, hr: BuildSessionIntentArgs['heartRateModel']): number | null {
+/** 세션 타입별 심박 상한 — Tempo·Race 는 템포, Recovery 는 회복, 나머지는 이지. 요약 히어로·코치 브리핑 배지·의도가 같은 값을 쓴다. */
+export function ceilingFor(type: RunType, hr: BuildSessionIntentArgs['heartRateModel']): number | null {
   if (QUALITY_HR_TYPES.includes(type)) return hr.tempoCeilingBpm
   if (RECOVERY_TYPES.includes(type)) return hr.recoveryCeilingBpm
   return hr.easyCeilingBpm

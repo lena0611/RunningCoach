@@ -39,7 +39,10 @@ watch(
     <main class="app-main">
       <slot />
     </main>
-    <div class="bottom-nav-scrim" aria-hidden="true" />
-    <BottomNav :items="navItems" />
+    <!-- 로그인 화면엔 갈 탭이 없다 — 눌러도 다시 로그인 화면으로 돌아온다(#866) -->
+    <template v-if="route.path !== '/auth'">
+      <div class="bottom-nav-scrim" aria-hidden="true" />
+      <BottomNav :items="navItems" />
+    </template>
   </div>
 </template>

@@ -38,7 +38,7 @@ import { buildSessionBriefing, sessionTypeLabel, type SessionBriefing } from '@/
 import { assessHeatWindow, deriveHabitualRunHour } from '@/shared/lib/coaching/heatWindow'
 import { isChronicBaselineAfterLayoff } from '@/shared/lib/coaching/returnAnchor'
 import { resolvePaceModel } from '@/shared/lib/vdotPaces'
-import { buildSessionIntentDraft, type BuildSessionIntentArgs } from '@/features/build-session-intent/buildSessionIntentDraft'
+import { buildSessionIntentDraft, ceilingFor, type BuildSessionIntentArgs } from '@/features/build-session-intent/buildSessionIntentDraft'
 import { formatDuration } from '@/shared/lib/format'
 import type { CarouselDay } from '@/pages/coach/WeekTrainingCarousel.vue'
 
@@ -609,9 +609,12 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
       heat: todayHeatWindow.value
     })
   })
-  const briefingCeilingText = computed(() =>
-    heartRateModel.value.easyCeilingBpm ? `심박 상한 ${heartRateModel.value.easyCeilingBpm}` : null
-  )
+  // 세션 타입별 상한(#866). 예전엔 늘 이지 상한이라 회복런 날 요약 탭(133)과 코치 탭(148)이 달랐고, 채점은 133 이었다.
+  const briefingCeilingText = computed(() => {
+    const session = activeDisplaySession.value ?? activeSession.value
+    const ceiling = session ? ceilingFor(session.sessionType, heartRateModel.value) : heartRateModel.value.easyCeilingBpm
+    return ceiling ? `심박 상한 ${ceiling}` : null
+  })
 
   // === 스케줄 변경 액션 공통 래퍼(중복 쓰기 방지 busy + 실패 토스트) ===
   const intentBusy = ref(false)

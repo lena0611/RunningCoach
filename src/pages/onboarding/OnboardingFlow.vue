@@ -309,10 +309,21 @@ async function persist(placed: boolean) {
           <span>주간 러닝 목표 (회/주)</span>
           <input v-model.number="form.weeklyDays" type="number" inputmode="numeric" min="1" max="7" />
         </label>
-        <label class="field field-row">
-          <span>현재 관리 중인 부상이 있나요?</span>
-          <input v-model="form.hasInjury" type="checkbox" />
-        </label>
+        <!-- 체크박스는 전역 input 스타일(폭 100%·높이 48px)에 늘어나 회색 막대로 보였다(#866) — 앱의 켬/끔 스위치로 -->
+        <div class="field field-row">
+          <span id="onboarding-injury-label">현재 관리 중인 부상이 있나요?</span>
+          <button
+            class="switch-control"
+            :class="{ on: form.hasInjury }"
+            type="button"
+            role="switch"
+            aria-labelledby="onboarding-injury-label"
+            :aria-checked="form.hasInjury"
+            @click="form.hasInjury = !form.hasInjury"
+          >
+            <span />
+          </button>
+        </div>
         <div v-if="form.hasInjury" class="injury-detail">
           <label class="field">
             <span>부위</span>

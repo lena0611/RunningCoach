@@ -51,11 +51,22 @@ export async function getAppSessionToken() {
 
   const payload = await response.json().catch(() => ({})) as AppSessionResponse & { error?: string }
   if (!response.ok || !payload.token || !payload.expiresAt) {
-    throw new Error(payload.error || `앱 실행 검증 실패: ${response.status}`)
+    throw new Error(appSessionErrorMessage(response.status, payload.error))
   }
 
   writeCachedAppSession(payload.token, payload.expiresAt)
   return payload.token
+}
+
+/**
+ * 서버 영어 원문을 사용자 문장으로(#866). 허용 목록 밖 계정은 코치·날씨처럼 서버를 거치는 기능을 아직 못 쓴다 —
+ * 신규 계정이 코치에게 첫 질문을 하자 "User is not approved for app access" 가 그대로 떴다(2026-10-26).
+ */
+function appSessionErrorMessage(status: number, error?: string): string {
+  if (status === 403 && error?.includes('not approved')) {
+    return '아직 코치·날씨 기능이 열리지 않은 계정이에요. 지금은 초대받은 계정만 쓸 수 있어요.'
+  }
+  return error || `앱 실행 검증 실패: ${status}`
 }
 
 function requestDeviceCheckToken(): Promise<string> {
