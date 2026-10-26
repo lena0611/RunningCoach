@@ -539,10 +539,11 @@ export function buildSteadyWeeklyRhythm(input: SteadyRhythmInput): ScheduledSess
   const { archetype, profile, today, goalId = null } = input
   const weeks = input.weeks ?? 6
   const spec = RHYTHM_SPEC[archetype]
-  const runDays = clamp(profile.weeklyRunDaysTarget ?? spec.runDays, 3, 5)
   const longRunDayIndex = Math.max(0, DAY_NAMES.indexOf(profile.preferredLongRunDay || '토요일'))
   const pace = withObservedEasy(resolvePaceModel(profile), input.observedEasyPace)
   const weeklyKm = input.currentWeeklyKm && input.currentWeeklyKm > 0 ? input.currentWeeklyKm : spec.weeklyKmDefault
+  // 저볼륨이면 횟수를 줄인다(#861 규칙을 리듬에도) — 주 7.2km 를 4회로 쪼개면 1.8km 세션이 된다(#865).
+  const runDays = runDaysForVolume(clamp(profile.weeklyRunDaysTarget ?? spec.runDays, 3, 5), weeklyKm)
 
   // 주간 타입: 대부분 Easy. 지방연소는 1회 긴 존2(LSD, easy 페이스)+회복 섞음. 건강·습관은 Easy/Recovery 저부담.
   const types: RunType[] = []
@@ -558,6 +559,8 @@ export function buildSteadyWeeklyRhythm(input: SteadyRhythmInput): ScheduledSess
     const placed = [...placement.values()]
     for (const [dayIdx, type] of placement) {
       const date = dateForWeekDay(start, week, dayIdx)
+      // 주 합이 weeklyKm 의 70~88% 다(롱런 몫 35% 를 떼어 둠). 주기화처럼 합을 맞추지 않는다 — 앵커는 "최근 가장 많이 뛴
+      // 7일"이라, 맞추면 매주 최고 주를 처방하게 된다. 남는 몫이 상시 리듬의 안전 여유다(#865 에서 검토 후 유지).
       const distance = sessionDistance(type, weeklyKm, placed.length)
       drafts.push({
         goalId,
@@ -599,6 +602,22 @@ const NOVICE_PEAK_KM: Array<[number, number]> = [
 
 export function minimumGoalWeeklyKm(distanceKm: number): number {
   return interpolateByDistance(NOVICE_PEAK_KM, distanceKm)
+}
+
+/**
+ * 런 기록이 하나도 없는 신규 사용자의 시작 주간 주행량(km) — 온보딩 "완주해본 가장 긴 거리"로 고른다(#865).
+ * 완주한 거리의 **다음 거리 초보 플랜 1주차** 주행량(halhigdon.com 표, 2026-10-26 조사):
+ * 레이스 전 → 5K Novice 2.4km×3 = 7.2("Never run before? This one's for you"), 5K → 10K Novice 12.0,
+ * 10K 이상 → Half Novice 1 16.0(고정 런만, 전제 "3마일을 주 3~4회").
+ * 하프·풀 완주자도 16 에서 멈춘다 — 온보딩은 **언제** 완주했는지 모른다. 완주 경험은 현재 체력의 약한 대리값이라
+ * (몇 년 전 풀코스 완주자가 지금은 안 뛸 수 있다) 위로 올리지 않고, 실제 기록이 쌓이면 그걸로 넘어간다.
+ * 답이 없으면(건너뛰기) 레이스 전과 같다 — SSOT §시작점 앵커링 "그것도 없으면 보수적 최저 등급".
+ */
+export function coldStartWeeklyKm(selfReportedMaxDistanceM: number | null): number {
+  const m = selfReportedMaxDistanceM ?? 0
+  if (m >= 10000) return 16
+  if (m >= 5000) return 12
+  return 7.2
 }
 
 /**

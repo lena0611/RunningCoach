@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AthleteProfile, TrainingGoal } from '@/entities/training-memory/model'
 import { defaultScheduledSessionPrescription, type ScheduledSession } from '@/entities/training-schedule/model'
-import { allocatePhases, assessGoalFeasibility, minimumGoalWeeklyKm, planPeakWeeklyKm, planWeeklyVolumes, buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, trainingWeekRange } from '@/shared/lib/coaching/periodizedSchedule'
+import { allocatePhases, assessGoalFeasibility, coldStartWeeklyKm, minimumGoalWeeklyKm, planPeakWeeklyKm, planWeeklyVolumes, buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, trainingWeekRange } from '@/shared/lib/coaching/periodizedSchedule'
 
 function session(overrides: Partial<ScheduledSession> & { date: string }): ScheduledSession {
   return {
@@ -598,5 +598,40 @@ describe('저볼륨 세션 길이 + 한계 시험 간격 (#861)', () => {
     expect(ttWeeks.length).toBeGreaterThanOrEqual(1)
     expect(ttWeeks[0]).toBeGreaterThanOrEqual(3)
     for (let i = 1; i < ttWeeks.length; i++) expect(ttWeeks[i] - ttWeeks[i - 1]).toBeGreaterThanOrEqual(4)
+  })
+})
+
+describe('신규 사용자 시작점 — 온보딩 완주 경험으로 고른다 (#865)', () => {
+  // 2026-10-26 신규 계정 실측: 경력 0개월·레이스 전·주 3회 → 기본값(주 18km)으로 이지 5.9km×2 + 4.1km 가 나왔다.
+  const today = new Date('2026-10-26T09:00:00')
+  // weeks: 1 이라 전체 합 = 그 주 합
+  const totalKm = (drafts: Array<{ prescription: { distanceKm: number | null } }>) => drafts.reduce((sum, d) => sum + (d.prescription.distanceKm ?? 0), 0)
+
+  it('완주한 거리의 다음 거리 초보 플랜 1주차 주행량 — 답이 없으면 레이스 전과 같다', () => {
+    expect(coldStartWeeklyKm(null)).toBe(7.2)
+    expect(coldStartWeeklyKm(0)).toBe(7.2)
+    expect(coldStartWeeklyKm(5000)).toBe(12)
+    expect(coldStartWeeklyKm(10000)).toBe(16)
+  })
+
+  it('하프·풀 완주자도 Half Novice 1주차(16km)에서 멈춘다 — 언제 완주했는지 모른다', () => {
+    expect(coldStartWeeklyKm(21097.5)).toBe(16)
+    expect(coldStartWeeklyKm(42195)).toBe(16)
+  })
+
+  it('완전 초보(레이스 전)의 건강·습관 리듬은 기본값보다 확실히 가볍다', () => {
+    const beginner = buildSteadyWeeklyRhythm({ archetype: 'wellbeing', profile: profile({ weeklyRunDaysTarget: 3 }), today, weeks: 1, currentWeeklyKm: coldStartWeeklyKm(null) })
+    const fallback = buildSteadyWeeklyRhythm({ archetype: 'wellbeing', profile: profile({ weeklyRunDaysTarget: 3 }), today, weeks: 1 })
+    // Higdon 5K Novice 1주차(2.4km × 3) 수준 — 리듬은 시작점의 70~88% 를 처방한다(안전 여유)
+    expect(totalKm(beginner)).toBeLessThanOrEqual(7.2)
+    expect(totalKm(beginner)).toBeLessThan(totalKm(fallback) / 2)
+    expect(Math.max(...beginner.map((d) => d.prescription.distanceKm ?? 0))).toBeLessThanOrEqual(2.5)
+  })
+
+  it('저볼륨 리듬은 목표 횟수(4회)로 쪼개지 않고 주 3회로 줄인다 — #861 규칙을 리듬에도', () => {
+    const drafts = buildSteadyWeeklyRhythm({ archetype: 'wellbeing', profile: profile({ weeklyRunDaysTarget: 4 }), today, weeks: 1, currentWeeklyKm: 7.2 })
+    expect(drafts).toHaveLength(3)
+    const enough = buildSteadyWeeklyRhythm({ archetype: 'wellbeing', profile: profile({ weeklyRunDaysTarget: 4 }), today, weeks: 1, currentWeeklyKm: 18 })
+    expect(enough).toHaveLength(4)
   })
 })
