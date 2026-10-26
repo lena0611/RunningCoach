@@ -417,42 +417,56 @@ export const initialTrainingMemory: TrainingMemory = {
   healthKitImportFrom: null
 }
 
+/** 목표가 하나도 없을 때 채우는 중립 목표 — 거리·기록을 지어내지 않는다(#878 A6). */
+function createNeutralGoal(title: string, now: string): TrainingGoal {
+  return {
+    id: defaultGoalId,
+    title,
+    category: 'health',
+    startDate: null,
+    targetDate: null,
+    distanceKm: null,
+    targetDurationSec: null,
+    priority: 1,
+    status: 'active',
+    successCriteria: '',
+    strategyNotes: '',
+    notes: '',
+    createdAt: now,
+    updatedAt: now
+  }
+}
+
 /**
- * 신규/온보딩 미완 사용자용 중립 메모리 (#332).
- * initialTrainingMemory(개발자 예시 루틴/부상/목표)를 신규 사용자에게 주입하지 않기 위해
- * 개인 서사(부상·목표·루틴 텍스트)를 비운 상태로 만든다.
- * 구조 기본값(adaptiveTrainingProfile 등)은 유지한다. 온보딩이 실제 값으로 채운다.
- * - injuryItems: [] 명시 → normalize가 존중(#303), 햄스트링 재시드 안 됨.
- * - goals: 중립 활성 목표 1개(title 필수) → '10km 60분' 기본값 대체.
- * initialTrainingMemory는 예시/테스트 fixture·normalize fallback으로 그대로 보존한다.
+ * 정규화의 바탕 — 개인 서사(목표·부상·러너 성향·코칭 메모)를 비운 메모리(#332, #878 A6).
+ *
+ * 예전엔 initialTrainingMemory(개발자 예시: 10km 60분·좌측 햄스트링·더위 심박)를 바탕으로 병합해서,
+ * 목표 제목을 비우고 저장하거나 coach-run 이 메모리 행 없이 patch 만 upsert 하면 **빈 칸이 개발자 사정으로 채워졌다.**
+ * 구조 기본값(athleteProfile·adaptiveTrainingProfile)만 예시와 같다. initialTrainingMemory 는 테스트 fixture 로만 남긴다.
  */
+const neutralMemoryBase: TrainingMemory = {
+  ...initialTrainingMemory,
+  goal: '',
+  activeGoalId: defaultGoalId,
+  activeInjuryItemId: null,
+  goals: [createNeutralGoal('목표 미설정', '2026-01-01T00:00:00.000Z')],
+  injuryItems: [],
+  runnerIdentity: { strengths: [], weaknesses: [], riskFactors: [], coachingStyle: [] },
+  coachBeliefs: [],
+  aiNotes: []
+}
+
+/** 신규/온보딩 미완 사용자용 중립 메모리 (#332). 온보딩이 실제 값으로 채운다. */
 export function createBlankTrainingMemory(): TrainingMemory {
   return normalizeTrainingMemory({
     goal: '',
     activeGoalId: defaultGoalId,
     activeInjuryItemId: null,
-    goals: [
-      {
-        id: defaultGoalId,
-        title: '목표 미설정',
-        category: 'health',
-        startDate: null,
-        targetDate: null,
-        distanceKm: null,
-        targetDurationSec: null,
-        priority: 1,
-        status: 'active',
-        successCriteria: '',
-        strategyNotes: '',
-        notes: '',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z'
-      }
-    ],
+    goals: cloneMemory(neutralMemoryBase.goals),
     injuryItems: [],
     aiNotes: [],
-    runnerIdentity: { strengths: [], weaknesses: [], riskFactors: [], coachingStyle: [] }
-  } as Partial<TrainingMemory>)
+    runnerIdentity: cloneMemory(neutralMemoryBase.runnerIdentity)
+  })
 }
 
 export function getActiveGoal(memory: TrainingMemory): TrainingGoal {
@@ -649,7 +663,7 @@ export function isFullMarathonGoal(goal: TrainingGoal | null | undefined): boole
 }
 
 export function normalizeTrainingMemory(memory: Partial<TrainingMemory> | null | undefined): TrainingMemory {
-  const base = cloneMemory(initialTrainingMemory)
+  const base = cloneMemory(neutralMemoryBase)
   const merged = {
     ...base,
     ...(memory ?? {}),
@@ -1020,15 +1034,8 @@ function normalizeGoals(memory: Partial<TrainingMemory> | null | undefined): Tra
 
   if (goals.length) return goals
 
-  const title = memory?.goal?.trim() || initialTrainingMemory.goal
-  return [
-    {
-      ...cloneMemory(initialTrainingMemory.goals[0]),
-      id: defaultGoalId,
-      title,
-      updatedAt: now
-    }
-  ]
+  // 옛 메모리의 목표 문자열만 남은 경우 제목만 살린다 — 거리·기록은 지어내지 않는다(#878 A6).
+  return [createNeutralGoal(memory?.goal?.trim() || '목표 미설정', now)]
 }
 
 function normalizeGoal(goal: Partial<TrainingGoal>, index: number, now: string): TrainingGoal | null {
@@ -1064,7 +1071,7 @@ function normalizeInjuryItems(memory: Partial<TrainingMemory> | null | undefined
   const now = new Date().toISOString()
 
   // injuryItems 키가 명시적으로 있으면(빈 배열 포함) 사용자 의도를 그대로 존중한다.
-  // 자동 복원(knownIssues 동기화)·기본 시드는 키가 부재한 최초/레거시 메모리에만 1회 적용한다.
+  // 자동 복원(knownIssues 동기화)은 키가 부재한 레거시 메모리에만 1회 적용한다. 예시 부상 시드는 없다(#878 A6).
   // 그래야 사용자가 마지막 부상을 삭제했을 때 기본 시드/텍스트로 되살아나지 않는다(#303).
   const explicitItems = Array.isArray(memory?.injuryItems)
     ? (memory!.injuryItems as Partial<TrainingInjuryItem>[])
@@ -1083,8 +1090,7 @@ function normalizeInjuryItems(memory: Partial<TrainingMemory> | null | undefined
     .map((issue, index) => normalizeInjuryItem({ title: issue, notes: issue, status: 'monitoring' }, index, now))
     .filter((item): item is TrainingInjuryItem => Boolean(item))
 
-  if (legacyItems.length) return legacyItems
-  return cloneMemory(initialTrainingMemory.injuryItems)
+  return legacyItems
 }
 
 function normalizeInjuryItem(item: Partial<TrainingInjuryItem>, index: number, now: string): TrainingInjuryItem | null {

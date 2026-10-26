@@ -40,6 +40,7 @@ import { beginnerWalkRunStage } from '@/shared/lib/coaching/beginnerWalkRun'
 import { assessHeatWindow, deriveHabitualRunHour } from '@/shared/lib/coaching/heatWindow'
 import { isChronicBaselineAfterLayoff } from '@/shared/lib/coaching/returnAnchor'
 import { resolvePaceModel } from '@/shared/lib/vdotPaces'
+import { easyPaceReference } from '@/shared/lib/paceBands'
 import { buildSessionIntentDraft, ceilingFor, type BuildSessionIntentArgs } from '@/features/build-session-intent/buildSessionIntentDraft'
 import { formatDuration } from '@/shared/lib/format'
 import type { CarouselDay } from '@/pages/coach/WeekTrainingCarousel.vue'
@@ -124,6 +125,8 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
   )
   // 보정 PaceModel: Easy 계열 페이스를 관측값으로 덮은 모델(브리핑 표시 즉시 보정용).
   const calibratedPaceModel = computed(() => withObservedEasy(resolvePaceModel(memoryStore.memory.athleteProfile), observedEasyPace.value))
+  // 런 종류·Easy 비율의 기준 Easy 페이스(#878 A5) — 처방과 같은 모델, 없으면 본인 평소 페이스.
+  const easyPaceReferenceSec = computed(() => easyPaceReference(calibratedPaceModel.value.easyPaceSec, trainingRuns.value, today.value))
 
   const raceProjection = computed(() =>
     getRaceProjection(trainingRuns.value, activeGoal.value, today.value, activeInjury.value, ageLoadWeight.value, {
@@ -710,6 +713,9 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
   }
   async function ensureTodayIntent() {
     if (!isSupabaseConfigured || !runStore.loaded || !memoryStore.loaded || onboardingPending.value) return
+    // 플랜에 세션이 없는 날(플랜 없음·휴식일)엔 의도를 만들지 않는다(#878 A4). 예전엔 폴백 추천(매일 LSD)이
+    // 오늘 의도로 저장돼 그날 뛴 런이 LSD 로 채점됐다. 의도가 없으면 런은 제 타입으로 평가된다.
+    if (!hasSchedule.value || !activeSession.value) return
     try {
       await sessionIntentStore.ensureIntentFor(buildSessionIntentDraft(intentArgs()))
     } catch {
@@ -723,7 +729,7 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
     if (!isSupabaseConfigured || reinferDone) return Promise.resolve()
     if (reinferInFlight) return reinferInFlight
     reinferInFlight = runStore
-      .reinferMislabeledLongRuns(heartRateModel.value)
+      .reinferMislabeledLongRuns(heartRateModel.value, easyPaceReferenceSec.value)
       .then(() => {
         reinferDone = true
       })
@@ -867,6 +873,7 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
     heartRateModel,
     observedEasyPace,
     calibratedPaceModel,
+    easyPaceReferenceSec,
     chronicLoad,
     currentWeeklyKm,
     raceProjection,

@@ -5,17 +5,25 @@ import { inferRunType } from '@/features/infer-run-type/inferRunType'
 import { sanitizeCadence } from '@/shared/lib/cadence'
 import type { HeartRateModel } from '@/shared/lib/heartRateZones'
 
-export async function extractRunDataFromFile(file: File, heartRateModel: HeartRateModel | null = null): Promise<ExtractedRunData> {
+export async function extractRunDataFromFile(
+  file: File,
+  heartRateModel: HeartRateModel | null = null,
+  easyPaceSec: number | null = null
+): Promise<ExtractedRunData> {
   const lowerName = file.name.toLowerCase()
 
   if (!lowerName.endsWith('.fit')) {
     throw new Error('현재는 Workoutdoors FIT 파일만 지원합니다.')
   }
 
-  return extractFromFit(await file.arrayBuffer(), heartRateModel)
+  return extractFromFit(await file.arrayBuffer(), heartRateModel, easyPaceSec)
 }
 
-async function extractFromFit(buffer: ArrayBuffer, heartRateModel: HeartRateModel | null = null): Promise<ExtractedRunData> {
+async function extractFromFit(
+  buffer: ArrayBuffer,
+  heartRateModel: HeartRateModel | null = null,
+  easyPaceSec: number | null = null
+): Promise<ExtractedRunData> {
   const { default: FitParser } = await import('fit-file-parser')
   const fitParser = new FitParser({
     force: true,
@@ -64,16 +72,19 @@ async function extractFromFit(buffer: ArrayBuffer, heartRateModel: HeartRateMode
   })
   const metricSamples = buildMetricSamples(records, session?.start_time ?? session?.timestamp ?? records[0]?.timestamp)
   const routePoints = buildRoutePoints(records, session?.start_time ?? session?.timestamp ?? records[0]?.timestamp)
+  const avgPaceSec = totalDistanceKm > 0 && durationSec ? Math.round(durationSec / totalDistanceKm) : null
   const type = inferRunType({
     date,
     distanceKm: totalDistanceKm,
-    avgPaceSec: totalDistanceKm > 0 && durationSec ? Math.round(durationSec / totalDistanceKm) : null,
+    avgPaceSec,
     avgHeartRate: numberOrNull(String(session?.avg_heart_rate ?? '')),
     laps: mappedLaps,
     fastSegments: [],
     metricSamples,
     routePoints,
-    heartRateModel
+    heartRateModel,
+    // 기준 페이스가 없으면(첫 기록) 이 런 자신이 기준 — HealthKit 첫 가져오기와 같은 규칙(#878 A5).
+    easyPaceSec: easyPaceSec ?? avgPaceSec
   })
 
   return {

@@ -245,7 +245,7 @@ export const useRunStore = defineStore('runStore', {
      *   아니므로 멱등. 롱런 게이트는 거리/시간(런별 고정값) 기반이라 심박모델 드리프트에도 흔들리지 않는다.
      * 반환: 타입이 바뀐 런 목록(스케줄 매칭 재연결 repointReinferredRuns 입력).
      */
-    async reinferMislabeledLongRuns(heartRateModel: HeartRateModel | null): Promise<RunLog[]> {
+    async reinferMislabeledLongRuns(heartRateModel: HeartRateModel | null, easyPaceSec: number | null = null): Promise<RunLog[]> {
       const changed: RunLog[] = []
       for (const run of this.runs) {
         if (run.source !== 'healthkit' && run.source !== 'file_import') continue
@@ -262,7 +262,8 @@ export const useRunStore = defineStore('runStore', {
           fastSegments: run.fastSegments,
           metricSamples: run.metricSamples,
           routePoints: run.routePoints,
-          heartRateModel
+          heartRateModel,
+          easyPaceSec
         })
         if (inferred !== 'LSD' && inferred !== 'Steady Long') continue
         const updated = await this.updateRun({

@@ -7,6 +7,7 @@ import { deriveHeartRateModel, deriveObservedMaxHr, type HeartRateModel } from '
 import { evaluateLapDrift } from '@/shared/lib/lapDrift'
 import { computeTempoCeilingAdaptation, gradeTempoRun, type TempoCeilingAdaptation, type TempoGrade } from '@/shared/lib/coaching/tempoAdaptation'
 import { evaluateEasyRecovery, evaluateLsd, evaluateSteadyLong, LSD_KIND_LABEL } from '@/shared/lib/coaching/sessionQuality'
+import { deriveEasyPaceReference } from '@/shared/lib/coaching/easyPaceReference'
 
 export type TrendLensKey = 'goal' | 'efficiency' | 'intensity' | 'quality' | 'recovery'
 export type TrendPeriod = '90d' | '180d' | '365d' | 'all'
@@ -142,7 +143,11 @@ export function buildTrendLensResult(input: TrendInput): TrendLensResult {
   const hr = deriveHeartRateModel(input.memory.athleteProfile, today.getFullYear(), observed)
   // tempoCeiling은 goal/quality 렌즈만 사용하므로 적응 계산도 그 두 경우에만 한다(efficiency/intensity/recovery는 base).
   if (input.lens === 'efficiency') return buildEfficiencyLens(window, hr)
-  if (input.lens === 'intensity') return buildIntensityLens(window, today, hr)
+  if (input.lens === 'intensity') {
+    // 요약 카드와 같은 기준 Easy 페이스(#878 A5) — 처방 모델(관측 Easy > PB > VO2max), 없으면 본인 평소 페이스.
+    const easyPaceSec = deriveEasyPaceReference(input.memory.athleteProfile, runs, hr, today)
+    return buildIntensityLens(window, today, hr, easyPaceSec)
+  }
   if (input.lens === 'recovery') return buildRecoveryLens(window)
   // Tempo 상한 적응(#301): 추정 base 위에 검증된 상향만 얹는다(채택값 sticky). effective를 Tempo 평가/목표 예상에 쓴다.
   const tempoAdaptation = computeTempoCeilingAdaptation(runs, hr.tempoCeilingBpm, {
@@ -340,23 +345,23 @@ function buildEfficiencyLens(window: DateWindow, hr: HeartRateModel): TrendLensR
   }
 }
 
-function buildIntensityLens(window: DateWindow, today: Date, hr: HeartRateModel): TrendLensResult {
+function buildIntensityLens(window: DateWindow, today: Date, hr: HeartRateModel, easyPaceSec: number | null): TrendLensResult {
   const currentDistance = sumDistance(window.current)
   const baselineDistance = sumDistance(window.baseline)
-  const easyRatio = getEasyRatio(window.current)
+  const easyRatio = getEasyRatio(window.current, easyPaceSec)
   const loadSignals = window.current.map((run) => loadSignalForRun(run, hr.easyCeilingBpm))
   const loadWatchCount = loadSignals.filter((item) => item.hard || item.watch).length
   const current7 = sumDistance(getRunsWithinDays(window.current, 7, today))
   const previous7 = sumDistance(getRunsWithinDays(window.current, 14, today).filter((run) => !getRunsWithinDays(window.current, 7, today).some((recent) => recent.id === run.id)))
   const loadDelta = previous7 > 0 ? ((current7 - previous7) / previous7) * 100 : null
-  const tone: TrendInsightTone = loadWatchCount >= 3 || (loadDelta !== null && loadDelta >= 35) ? 'warning' : easyRatio >= 70 ? 'good' : 'watch'
+  const tone: TrendInsightTone = loadWatchCount >= 3 || (loadDelta !== null && loadDelta >= 35) ? 'warning' : easyRatio !== null && easyRatio >= 70 ? 'good' : 'watch'
 
   return {
     lens: 'intensity',
     title: '강도 분포',
     summary: 'Easy 기반과 강훈련 밀도가 균형을 이루는지 봅니다.',
     hero: {
-      value: `${easyRatio}%`,
+      value: easyRatio === null ? '—' : `${easyRatio}%`,
       label: 'Easy 비율',
       detail: `부하 주의 ${loadWatchCount}회 · ${window.currentLabel}`,
       tone,
@@ -364,7 +369,9 @@ function buildIntensityLens(window: DateWindow, today: Date, hr: HeartRateModel)
     },
     cards: [
       card('distance', '거리 변화', signedNumber(currentDistance - baselineDistance, 'km'), '', `${window.baselineLabel} 대비`, currentDistance >= baselineDistance ? 'good' : 'watch'),
-      card('easy', 'Easy 비율', String(easyRatio), '%', '랩/페이스 기반', easyRatio >= 70 ? 'good' : easyRatio < 55 ? 'warning' : 'watch'),
+      easyRatio === null
+        ? card('easy', 'Easy 비율', '—', '', '기준 페이스나 기록이 아직 없어요', 'neutral')
+        : card('easy', 'Easy 비율', String(easyRatio), '%', '내 Easy 페이스 기준', easyRatio >= 70 ? 'good' : easyRatio < 55 ? 'warning' : 'watch'),
       card('hard', '부하 주의', String(loadWatchCount), '회', '강훈련 또는 LSD 부하 신호', loadWatchCount >= 3 ? 'warning' : 'watch'),
       card('load', '최근 부하', loadDelta === null ? '비교 부족' : `${Math.round(loadDelta)}%`, '', '최근 7일 vs 이전 7일', loadDelta !== null && loadDelta >= 35 ? 'warning' : 'neutral')
     ],

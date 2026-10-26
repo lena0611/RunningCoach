@@ -3,9 +3,9 @@ import type { RecentInjuryHistory, TrainingInjuryItem, TrainingMemory } from '@/
 import { getActiveGoal, getActiveInjuryItem, getRecentInjuryHistory, isFullMarathonGoal } from '@/entities/training-memory/model'
 import { formatDateWithWeekday } from '@/shared/lib/format'
 import { sanitizeCadence } from '@/shared/lib/cadence'
+import { paceBandsFor } from '@/shared/lib/paceBands'
 
 const dayMs = 24 * 60 * 60 * 1000
-const easyPaceThresholdSec = 390
 
 export function getRunsWithinDays(runs: RunLog[], days: number, today = new Date()): RunLog[] {
   const start = new Date(today.getTime() - (days - 1) * dayMs)
@@ -36,11 +36,18 @@ export function getThisMonthRuns(runs: RunLog[], today = new Date()): RunLog[] {
   return runs.filter((run) => new Date(run.date) >= start)
 }
 
-export function getEasyRatio(runs: RunLog[]): number {
+/**
+ * Easy 비율(%) — 랩 페이스가 그 사람의 Easy 하한(paceBandsFor) 이상인 거리 비중(#878 A5).
+ * 예전엔 개발자 페이스 6:30/km 가 기준이라 4:50/km 러너는 0%, 초보는 100% 였다.
+ * 기준 페이스나 기록이 없으면 null(모른다) — 첫날 신규 유저에게 "0%"를 보이지 않는다.
+ */
+export function getEasyRatio(runs: RunLog[], easyPaceSec: number | null): number | null {
+  const bands = paceBandsFor(easyPaceSec)
+  if (!bands) return null
   const segments = runs.flatMap(getPaceSegments)
   const total = round(segments.reduce((sum, segment) => sum + segment.distanceKm, 0))
-  if (!total) return 0
-  const easy = round(segments.filter((segment) => segment.paceSec >= easyPaceThresholdSec).reduce((sum, segment) => sum + segment.distanceKm, 0))
+  if (!total) return null
+  const easy = round(segments.filter((segment) => segment.paceSec >= bands.easyFloorSec).reduce((sum, segment) => sum + segment.distanceKm, 0))
   return Math.round((easy / total) * 100)
 }
 
@@ -241,50 +248,27 @@ export type NextSessionRecommendation = {
   loadNote: string
 }
 
-const qualitySessionKeywords = ['Tempo', 'Interval', 'LSD', 'Steady Long', 'Race', 'Strides', 'Threshold', 'Repetition']
-
 export function getNextSessionRecommendation(memory: TrainingMemory, runs: RunLog[], today = new Date()): NextSessionRecommendation {
+  /*
+    플랜(training_schedule)이 없을 때만 쓰는 폴백이다 — 날짜 없는 레이스 목표, 스케줄 로딩 실패 등.
+    예전엔 매일 (선호 롱런 요일‖토요일) "LSD 또는 Steady Long" 을 오늘로 내놓고 "최근 토요일 10km+" 로
+    강도를 정했다(개발자 루틴). 플랜이 없으면 무엇을 할지 지어내지 않고 편한 Easy 만 권한다(#878 A4).
+  */
   const sorted = [...runs].sort((a, b) => b.date.localeCompare(a.date))
-  // 오늘 이미 수행한 런이 있으면(#352) 오늘 슬롯을 건너뛰고 다음 예정일을 추천한다.
-  const ranToday = runs.some((run) => run.date === formatDateOnly(today))
-  const upcoming = getNextPlannedWorkout(memory, today, { excludeToday: ranToday })
   const lastRun = sorted[0] ?? null
-  const lastRunSchedule = lastRun ? getPlannedWorkoutOnDate() : null
-
-  let base: NextSessionRecommendation
-  if (upcoming.dayName === memory.athleteProfile.preferredLongRunDay || upcoming.pattern.includes('LSD') || upcoming.pattern.includes('Long')) {
-    const recentLong = getRecentSaturdayLongRun(sorted)
-    const longType = chooseNextLongRunType(recentLong)
-    base = {
-      title: `${upcoming.dayName} ${longType}`,
-      plannedDate: upcoming.date,
-      dayName: upcoming.dayName,
-      reason: [
-        `주간 루틴의 다음 주요 세션은 ${upcoming.pattern || `${upcoming.dayName} 롱런`}입니다.`,
-        getLastRunContextText(lastRun, lastRunSchedule),
-        recentLong ? `최근 토요일 10km+ 기록은 ${formatDateWithWeekday(recentLong.date)} ${recentLong.distanceKm}km입니다.` : '최근 토요일 10km+ 기준 기록은 아직 부족합니다.'
-      ].join(' '),
-      intensity: describeLongRunIntensity(longType, recentLong),
-      injuryAdjusted: false,
-      injuryNote: '',
-      loadCaution: false,
-      loadNote: ''
-    }
-  } else {
-    base = {
-      title: upcoming.workout || 'Easy + Strides',
-      plannedDate: upcoming.date,
-      dayName: upcoming.dayName,
-      reason: [
-        upcoming.pattern ? `주간 루틴상 다음 세션은 ${upcoming.pattern}입니다.` : '주간 루틴 기준 다음 세션입니다.',
-        getLastRunContextText(lastRun, lastRunSchedule)
-      ].join(' '),
-      intensity: '추천 세션 자체는 주간 훈련 스케줄을 기준으로 안내합니다. 컨디션과 통증 신호가 있으면 강도만 조절하세요.',
-      injuryAdjusted: false,
-      injuryNote: '',
-      loadCaution: false,
-      loadNote: ''
-    }
+  const base: NextSessionRecommendation = {
+    title: 'Easy',
+    plannedDate: formatDateOnly(today),
+    dayName: getDayName(today),
+    reason: [
+      '아직 주간 플랜이 없어요. 플랜이 생기기 전까지는 편하게 뛰는 Easy 가 기본이에요.',
+      lastRun ? `최근 기록은 ${formatDateWithWeekday(lastRun.date)} ${lastRun.sessionTitle || lastRun.type}입니다.` : '최근 저장 기록은 아직 없습니다.'
+    ].join(' '),
+    intensity: '대화가 되는 편한 강도로 뛰고, 통증이나 피로가 느껴지면 쉬어가세요.',
+    injuryAdjusted: false,
+    injuryNote: '',
+    loadCaution: false,
+    loadNote: ''
   }
 
   const injury = getActiveInjuryItem(memory)
@@ -312,8 +296,6 @@ export type TrainingDayView = {
     /** done일 때 오늘 수행 요약(예: "Easy 6.2km · 32:10"). */
     doneSummary: string | null
   }
-  /** 다음 예정 세션(오늘 제외). 패턴이 없으면 null. */
-  next: { date: string; dayName: string; title: string } | null
 }
 
 function formatDurationMmSs(durationSec: number | null): string {
@@ -340,7 +322,6 @@ export function getTrainingDayView(memory: TrainingMemory, runs: RunLog[], today
   const todayRun = runs
     .filter((run) => run.date === todayStr)
     .sort((a, b) => (b.distanceKm ?? 0) - (a.distanceKm ?? 0))[0] ?? null
-  const upcoming = getNextPlannedWorkout(memory, today, { excludeToday: true })
 
   let todayView: TrainingDayView['today']
   if (todayRun) {
@@ -353,10 +334,7 @@ export function getTrainingDayView(memory: TrainingMemory, runs: RunLog[], today
     todayView = { state: 'rest', title: null, coachLine: '', doneSummary: null }
   }
 
-  return {
-    today: todayView,
-    next: upcoming ? { date: upcoming.date, dayName: upcoming.dayName, title: upcoming.workout || `${upcoming.dayName} 세션` } : null
-  }
+  return { today: todayView }
 }
 
 function applyChronicLoad(
@@ -425,17 +403,6 @@ function applyInjuryGate(base: NextSessionRecommendation, injury: TrainingInjury
     }
   }
 
-  if (severity >= 3 && isQualitySessionTitle(base.title)) {
-    return {
-      ...base,
-      title: 'Easy 또는 Recovery',
-      injuryAdjusted: true,
-      injuryNote: `${area} 통증 ${severity}/5로 Tempo·Strides·Steady Long 같은 상위 세션은 보류합니다. 통증이 0~2/5로 가라앉으면 예정 세션으로 복귀하세요.`,
-      reason: `${base.reason} 활성 부상 ${severity}/5라 예정 품질 세션 대신 Easy/Recovery로 낮춰 추천합니다.`,
-      intensity: '심박 안정 위주의 낮은 강도로 진행하고, 통증이 커지면 중단하세요.'
-    }
-  }
-
   if (severity >= 3) {
     return {
       ...base,
@@ -453,51 +420,13 @@ function applyInjuryGate(base: NextSessionRecommendation, injury: TrainingInjury
   }
 }
 
-function isQualitySessionTitle(title: string): boolean {
-  return qualitySessionKeywords.some((keyword) => title.includes(keyword))
-}
-
 function round(value: number): number {
   return Math.round(value * 100) / 100
-}
-
-function getNextPlannedWorkout(
-  memory: TrainingMemory,
-  today: Date,
-  opts: { excludeToday?: boolean } = {}
-): { dayName: string; workout: string; pattern: string; date: string } {
-  /*
-    주간 루틴 메모(weeklyPattern)를 걷어냈다(2026-09-07). 루틴의 정본은 목표로 생성되는
-    주기화 플랜(training_schedule)이고, 이 경로는 **플랜이 없을 때만** 도는 폴백이다 —
-    메모는 이미 비어 있어 여기로 떨어지고 있었으니 동작은 그대로다.
-  */
-  void opts
-  const longRunDay = memory.athleteProfile.preferredLongRunDay || '토요일'
-  return {
-    dayName: longRunDay,
-    workout: 'LSD 또는 Steady Long',
-    pattern: `${longRunDay}: LSD 또는 Steady Long`,
-    date: formatDateOnly(today)
-  }
 }
 
 /** 플랜 없는 폴백 경로에는 "오늘 예정"이 없다 — 주간 루틴 메모를 걷어낸 뒤로 항상 null(2026-09-07). */
 function getPlannedWorkoutOnDate(): { dayName: string; workout: string; pattern: string } | null {
   return null
-}
-
-function getLastRunContextText(lastRun: RunLog | null, schedule: { pattern: string } | null): string {
-  if (!lastRun) return '최근 저장 기록은 아직 없습니다.'
-  if (!schedule) {
-    return `최근 저장 기록 ${formatDateWithWeekday(lastRun.date)} ${lastRun.sessionTitle || lastRun.type}은 주간 루틴 외 추가런으로 보고 다음 세션 추천에서는 제외합니다.`
-  }
-  return `최근 저장 기록은 ${formatDateWithWeekday(lastRun.date)} ${lastRun.sessionTitle || lastRun.type}입니다.`
-}
-
-function addDays(value: Date, days: number): Date {
-  const next = new Date(value)
-  next.setDate(next.getDate() + days)
-  return next
 }
 
 function formatDateOnly(value: Date): string {
@@ -510,43 +439,6 @@ function formatDateOnly(value: Date): string {
 
 function getDayName(value: Date): string {
   return ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'][value.getDay()]
-}
-
-function getRecentSaturdayLongRun(runs: RunLog[]): RunLog | null {
-  return (
-    runs.find((run) => {
-      const date = new Date(`${run.date}T00:00:00`)
-      return date.getDay() === 6 && run.distanceKm >= 10
-    }) ?? null
-  )
-}
-
-function chooseNextLongRunType(recentLong: RunLog | null): 'LSD' | 'Steady Long' {
-  if (!recentLong) return 'LSD'
-  if (recentLong.type === 'Steady Long') return 'LSD'
-  if (recentLong.type === 'LSD') return 'Steady Long'
-  if (recentLong.avgPaceSec && recentLong.avgPaceSec <= 390) return 'LSD'
-  return 'Steady Long'
-}
-
-function describeLongRunIntensity(type: 'LSD' | 'Steady Long', recentLong: RunLog | null): string {
-  if (!recentLong?.avgPaceSec) {
-    return type === 'LSD'
-      ? '최근 토요일 10km+ 페이스 기준이 부족하므로 대화 가능 강도, 심박 안정 우선으로 진행합니다.'
-      : '최근 토요일 10km+ 페이스 기준이 부족하므로 후반 자연 가속만 허용합니다.'
-  }
-
-  if (type === 'LSD') {
-    return `최근 토요일 10km+ 평균 페이스 ${formatPaceText(recentLong.avgPaceSec)} 기준, LSD는 ${formatPaceText(recentLong.avgPaceSec + 20)}~${formatPaceText(recentLong.avgPaceSec + 45)}/km 정도로 낮추고 심박 안정 우선입니다.`
-  }
-
-  return `최근 토요일 10km+ 평균 페이스 ${formatPaceText(recentLong.avgPaceSec)} 기준, Steady Long은 ${formatPaceText(Math.max(recentLong.avgPaceSec - 10, 0))}~${formatPaceText(recentLong.avgPaceSec + 15)}/km 범위에서 후반 자연 가속만 허용합니다.`
-}
-
-function formatPaceText(seconds: number): string {
-  const min = Math.floor(seconds / 60)
-  const sec = String(Math.round(seconds % 60)).padStart(2, '0')
-  return `${min}:${sec}`
 }
 
 function getPaceSegments(run: RunLog): Array<{ distanceKm: number; paceSec: number }> {

@@ -60,6 +60,8 @@ runStore.addRun() / addRuns()                              src/app/stores/runSto
    ├─ chronicLoad (getChronicLoadTrend)                    DashboardPage.vue:320 → currentWeeklyKm:322 / restGuidance:843 / coachMoments:853
    ├─ raceProjection (getRaceProjection)                   DashboardPage.vue:181 (benchmark :187 / goalProgress :853)
    ├─ nextSession (getNextSessionRecommendation)           DashboardPage.vue:128 (상세 StackPage :2001)  ← runs.value(레이싱 포함) 입력!
+   │   — 플랜 없을 때만 쓰는 폴백: 오늘 편한 Easy(#878 A4, 예전 매일 LSD 폐기). 오늘 의도(ensureTodayIntent)는
+   │     **플랜의 그날 세션에서만** 만든다 — 플랜 없음·휴식일엔 의도 없음(그날 런이 폴백 타입으로 채점되지 않게).
    ├─ coachMoments / topCoachMoment 🩺                     DashboardPage.vue:853/888 / coachMoments.ts
    ├─ restGuidance / evaluateExtraRun 🩺                    DashboardPage.vue:843/763 / restGuidance.ts
    └─ doEnsureSchedule 정합 파이프라인 (마운트/포커스)      DashboardPage.vue:415-517  → #3 참조

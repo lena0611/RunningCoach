@@ -13,6 +13,7 @@ import {
   weeklyDaysFromPreview
 } from '@/features/import-healthkit-run/onboardingImport'
 import { type TrainingInjuryItem, type TrainingMemory } from '@/entities/training-memory/model'
+import { injuryAreaSelectionsFor, summarizeInjuryAreas, type InjurySide } from '@/entities/training-memory/injuryAreas'
 import { vdotFromPerformance, vdotFromVo2Max } from '@/shared/lib/vdotPaces'
 import { distanceClassFromMeters, gradeBandFromVdot, nextDistanceClass } from '@/shared/lib/level/levelModel'
 import {
@@ -118,7 +119,21 @@ const DIST_LABEL: Record<DistKey, string> = { pre: '아직 레이싱 전', '5k':
 const GOAL_KM: Record<GoalKey, number> = { '5k': 5, '10k': 10, half: 21.0975, full: 42.195 }
 const GOAL_LABEL: Record<GoalKey, string> = { '5k': '5K', '10k': '10K', half: '하프', full: '풀마라톤' }
 
-const INJURY_AREAS = ['햄스트링', '무릎', '족저/발바닥', '아킬레스', '장경인대(IT밴드)', '정강이', '발목', '고관절/엉덩이', '허리', '기타'] as const
+// base = 부위 카탈로그 id 의 좌우를 뗀 이름(#878 A3) — 좌우를 골라야 부위별 제한·보강운동·감별 질문이 붙는다.
+const INJURY_AREAS = [
+  { label: '햄스트링', base: 'hamstring' },
+  { label: '무릎', base: 'knee' },
+  { label: '족저/발바닥', base: 'plantar-fascia' },
+  { label: '아킬레스', base: 'achilles' },
+  { label: '종아리', base: 'calf' },
+  { label: '장경인대(IT밴드)', base: 'it-band' },
+  { label: '정강이', base: 'shin' },
+  { label: '발목', base: 'ankle' },
+  { label: '고관절/엉덩이', base: 'hip' },
+  { label: '허리', base: 'lower-back' },
+  { label: '기타', base: '' }
+] as const
+const INJURY_SIDE_LABEL: Record<InjurySide, string> = { left: '왼쪽', right: '오른쪽', both: '양쪽' }
 const SEVERITY_LABEL: Record<number, string> = { 1: '자각 정도', 2: '러닝 후 통증', 3: '러닝 중 통증', 4: '러닝 어려움' }
 // 처방 교체 시 순환할 템플릿 순서.
 const TEMPLATE_CYCLE = ROUTINE_TEMPLATES.map((template) => template.id)
@@ -133,7 +148,8 @@ const form = reactive({
   goalKey: '10k' as GoalKey,
   weeklyDays: 4,
   hasInjury: false,
-  injuryArea: '햄스트링' as string,
+  injuryArea: '' as string,
+  injurySide: null as InjurySide | null,
   injurySeverity: 2 as number,
   injuryOnset: '' as string
 })
@@ -232,7 +248,10 @@ function swapPrescription(index: number) {
 async function next() {
   if (step.value === 1) await decideRecordsStep()
   if (step.value === 'records') applyRecordsPrefill()
-  if (step.value === 3) regenerateRoutine()
+  if (step.value === 3) {
+    if (injuryIncomplete.value) return
+    regenerateRoutine()
+  }
   goNext()
 }
 function goNext() {
@@ -252,10 +271,28 @@ function localTodayIso() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+const injuryAreaOption = computed(() => INJURY_AREAS.find((area) => area.label === form.injuryArea) ?? null)
+/** 좌우를 물어야 하는 부위인가 — 허리·기타는 묻지 않는다. */
+const injuryNeedsSide = computed(() => {
+  const base = injuryAreaOption.value?.base
+  return Boolean(base) && injuryAreaSelectionsFor(base!, null, null).length === 0
+})
+const injuryAreaSelections = computed(() => {
+  const base = injuryAreaOption.value?.base
+  return base ? injuryAreaSelectionsFor(base, form.injurySide, form.injurySeverity) : []
+})
+/** 부상 있음인데 부위(·좌우)를 안 골랐으면 다음으로 못 간다 — 예전엔 기본값 '햄스트링'이 그대로 저장됐다. */
+const injuryIncomplete = computed(() =>
+  form.hasInjury && (!injuryAreaOption.value || (injuryNeedsSide.value && !form.injurySide))
+)
+
 function buildInjuryItem(): TrainingInjuryItem {
+  // 부위 심각도는 painLevel 에서 파생된다(deriveInjurySeverity) — 온보딩 심각도를 부위에도 실어 같은 값이 되게 한다.
+  const summary = summarizeInjuryAreas(injuryAreaSelections.value) || '기타 부위'
   return {
-    title: `${form.injuryArea} (온보딩 신고)`,
-    area: form.injuryArea,
+    title: `${summary} (온보딩 신고)`,
+    area: summary,
+    normalizedAreas: injuryAreaSelections.value,
     status: 'active',
     severity: form.injurySeverity,
     onsetDate: form.injuryOnset || null,
@@ -512,10 +549,27 @@ async function persist(placed: boolean) {
         <div v-if="form.hasInjury" class="injury-detail">
           <label class="field">
             <span>부위</span>
-            <select v-model="form.injuryArea">
-              <option v-for="area in INJURY_AREAS" :key="area" :value="area">{{ area }}</option>
+            <select v-model="form.injuryArea" @change="form.injurySide = null">
+              <option value="" disabled>부위를 골라주세요</option>
+              <option v-for="area in INJURY_AREAS" :key="area.label" :value="area.label">{{ area.label }}</option>
             </select>
           </label>
+          <template v-if="injuryNeedsSide">
+            <span class="field-label">어느 쪽인가요?</span>
+            <div class="chip-grid">
+              <button
+                v-for="side in (['left', 'right', 'both'] as InjurySide[])"
+                :key="side"
+                type="button"
+                class="chip"
+                :class="{ on: form.injurySide === side }"
+                :aria-pressed="form.injurySide === side"
+                @click="form.injurySide = side"
+              >
+                {{ INJURY_SIDE_LABEL[side] }}
+              </button>
+            </div>
+          </template>
           <span class="field-label">심각도</span>
           <div class="chip-grid">
             <button
@@ -534,6 +588,9 @@ async function persist(placed: boolean) {
             <input v-model="form.injuryOnset" type="date" />
           </label>
           <small class="onboarding-help">부상 정보는 추천 루틴에서 고강도 세션을 자동으로 낮춰요.</small>
+          <small v-if="injuryIncomplete" class="onboarding-help" role="status">
+            {{ injuryAreaOption ? '어느 쪽인지 골라주세요.' : '부위를 골라주세요.' }}
+          </small>
         </div>
       </section>
 
@@ -595,7 +652,7 @@ async function persist(placed: boolean) {
           v-if="step !== 'reveal' && (step !== 'records' || recordsView === 'found')"
           class="primary"
           type="button"
-          :disabled="saving"
+          :disabled="saving || (step === 3 && injuryIncomplete)"
           @click="next"
         >
           다음
