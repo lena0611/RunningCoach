@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AthleteProfile, TrainingGoal } from '@/entities/training-memory/model'
 import { defaultScheduledSessionPrescription, type ScheduledSession } from '@/entities/training-schedule/model'
-import { allocatePhases, assessGoalFeasibility, coldStartWeeklyKm, minimumGoalWeeklyKm, planMatchesEntryLevel, planPeakWeeklyKm, planWeeklyVolumes, buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, trainingWeekRange } from '@/shared/lib/coaching/periodizedSchedule'
+import { allocatePhases, assessGoalFeasibility, coldStartWeeklyKm, minimumGoalWeeklyKm, planMatchesEntryLevel, planPeakWeeklyKm, planStartWeeklyKm, planWeeklyVolumes, buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, trainingWeekRange } from '@/shared/lib/coaching/periodizedSchedule'
 
 function session(overrides: Partial<ScheduledSession> & { date: string }): ScheduledSession {
   return {
@@ -617,6 +617,19 @@ describe('신규 사용자 시작점 — 온보딩 완주 경험으로 고른다
   it('하프·풀 완주자도 Half Novice 1주차(16km)에서 멈춘다 — 언제 완주했는지 모른다', () => {
     expect(coldStartWeeklyKm(21097.5)).toBe(16)
     expect(coldStartWeeklyKm(42195)).toBe(16)
+  })
+
+  it('planStartWeeklyKm: 기록이 없으면 온보딩 답, 있으면 기록이 시작점(대시보드·온보딩 미리보기 공용)', () => {
+    expect(planStartWeeklyKm([], null, today)).toBe(7.2)
+    expect(planStartWeeklyKm([], 5000, today)).toBe(12)
+    const recent = [
+      { date: '2026-10-20', distanceKm: 6 },
+      { date: '2026-10-22', distanceKm: 6 },
+      { date: '2026-10-25', distanceKm: 8 }
+    ]
+    // 기록이 있으면 완주 경험 답은 보지 않는다
+    expect(planStartWeeklyKm(recent, null, today)).toBe(planStartWeeklyKm(recent, 42195, today))
+    expect(planStartWeeklyKm(recent, null, today)).toBeGreaterThan(7.2)
   })
 
   it('완전 초보(레이스 전)의 건강·습관 리듬은 기본값보다 확실히 가볍다', () => {
