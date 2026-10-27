@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { guardRedirect, type RouteGuardState } from './guard'
 
@@ -61,5 +63,13 @@ describe('안내 페이지 라우트', () => {
     const access = router.getRoutes().find((route) => route.path === '/access')
     // 지연 로드면 () => import(...) 함수, 정적이면 컴포넌트 객체.
     expect(typeof access?.components?.default).toBe('object')
+  })
+})
+
+describe('부팅 — 첫 화면을 top-level await 로 기다리지 않는다', () => {
+  it('main.ts 에 줄 맨 앞 `await router.isReady()` 가 없다 — 지연 청크가 메인 번들을 기다려 교착(2026-10-27)', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/main.ts'), 'utf8')
+    expect(source).not.toMatch(/^await\s+router\.isReady\(\)/m)
+    expect(source).toMatch(/router\.isReady\(\)\.then\(/)
   })
 })
