@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AthleteProfile, TrainingGoal } from '@/entities/training-memory/model'
 import { defaultScheduledSessionPrescription, type ScheduledSession } from '@/entities/training-schedule/model'
-import { allocatePhases, assessGoalFeasibility, coldStartWeeklyKm, minimumGoalWeeklyKm, planPeakWeeklyKm, planWeeklyVolumes, buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, trainingWeekRange } from '@/shared/lib/coaching/periodizedSchedule'
+import { allocatePhases, assessGoalFeasibility, coldStartWeeklyKm, minimumGoalWeeklyKm, planMatchesEntryLevel, planPeakWeeklyKm, planWeeklyVolumes, buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, trainingWeekRange } from '@/shared/lib/coaching/periodizedSchedule'
 
 function session(overrides: Partial<ScheduledSession> & { date: string }): ScheduledSession {
   return {
@@ -633,5 +633,62 @@ describe('신규 사용자 시작점 — 온보딩 완주 경험으로 고른다
     expect(drafts).toHaveLength(3)
     const enough = buildSteadyWeeklyRhythm({ archetype: 'wellbeing', profile: profile({ weeklyRunDaysTarget: 4 }), today, weeks: 1, currentWeeklyKm: 18 })
     expect(enough).toHaveLength(4)
+  })
+})
+
+// #876: 입문(5K 미완주)은 레이스 목표여도 걷기·뛰기만 — SSOT §숙련도별 처방 입문 행.
+describe('입문자 레이스 플랜 (#876)', () => {
+  const today = new Date('2026-10-26T09:00:00')
+  const beginner = profile({ weeklyRunDaysTarget: 4 })
+
+  it.each([
+    ['5K 10주', 5, '2027-01-04'],
+    ['하프 12주', 21.1, '2027-01-18']
+  ])('%s — 주 3회, 전부 Easy, 키세션·한계 시험·스트라이드·템포 없음', (_label, distanceKm, targetDate) => {
+    const drafts = buildPeriodizedSchedule({
+      goal: goal({ distanceKm, targetDate }),
+      profile: beginner,
+      today,
+      currentWeeklyKm: 7.2,
+      entryLevel: true
+    })
+    expect(drafts.length).toBeGreaterThan(0)
+    expect(new Set(drafts.map((d) => d.sessionType))).toEqual(new Set(['Easy']))
+    expect(drafts.some((d) => d.keySession)).toBe(false)
+    expect(new Set(drafts.map((d) => d.phase))).toEqual(new Set(['Base']))
+    const perWeek = new Map<string, number>()
+    for (const d of drafts) {
+      const monday = trainingWeekRange(new Date(`${d.date}T00:00:00`)).start
+      perWeek.set(monday, (perWeek.get(monday) ?? 0) + 1)
+    }
+    expect(Math.max(...perWeek.values())).toBeLessThanOrEqual(3)
+  })
+
+  it('입문이 아니면 그대로 — 롱런·스트라이드가 있다(회귀 방지)', () => {
+    const drafts = buildPeriodizedSchedule({
+      goal: goal({ distanceKm: 5, targetDate: '2027-01-04' }),
+      profile: beginner,
+      today,
+      currentWeeklyKm: 12
+    })
+    const types = new Set(drafts.map((d) => d.sessionType))
+    expect(types.has('LSD') || types.has('Steady Long')).toBe(true)
+    expect(types.has('Easy + Strides')).toBe(true)
+  })
+})
+
+describe('planMatchesEntryLevel — 입문 여부와 플랜이 어긋나면 다시 짓는다 (#876)', () => {
+  const t = (...types: Array<'Easy' | 'Recovery' | 'Tempo' | 'Easy + Strides' | 'LSD'>) => types.map((sessionType) => ({ sessionType }))
+
+  it('입문인데 템포·스트라이드가 있으면 어긋남', () => {
+    expect(planMatchesEntryLevel(t('Easy', 'Tempo', 'Easy'), true)).toBe(false)
+    expect(planMatchesEntryLevel(t('Easy + Strides', 'Easy'), true)).toBe(false)
+    expect(planMatchesEntryLevel(t('Easy', 'Easy', 'Recovery'), true)).toBe(true)
+  })
+
+  it('졸업했는데 앞으로 일정이 전부 걷기·뛰기면 어긋남 — 끝물(3개 미만)은 놔둔다', () => {
+    expect(planMatchesEntryLevel(t('Easy', 'Easy', 'Easy'), false)).toBe(false)
+    expect(planMatchesEntryLevel(t('Easy', 'Easy'), false)).toBe(true)
+    expect(planMatchesEntryLevel(t('Easy', 'LSD', 'Easy + Strides'), false)).toBe(true)
   })
 })

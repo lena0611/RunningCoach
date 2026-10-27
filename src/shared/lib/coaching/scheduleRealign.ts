@@ -200,7 +200,9 @@ export function buildRealignedSchedule(
   /** 관측 Easy 페이스(#405) — 재정렬 시에도 관측 보정 페이스로 처방. */
   observedEasyPace: { easyPaceSec: number; easyPaceRangeSec: [number, number] } | null = null,
   /** 복귀 램프(#473 Phase 2) — 휴식 복귀 재정렬이면 초반 세션들을 Easy·캡으로. caller 가 capKm·windowSessions 계산해 전달. */
-  returnRamp: { capKm: number; windowSessions: number } | null = null
+  returnRamp: { capKm: number; windowSessions: number } | null = null,
+  /** 입문(#876) — 재정렬로 다시 지어도 걷기·뛰기 구성을 지킨다. */
+  entryLevel = false
 ): RealignPlan {
   // summarizeUpcomingWeek 는 이제 대표 단계(upcomingPhase)만 쓴다 — plannedWeeklyKm 는 앵커 비율에서 빠졌다.
   const { upcomingPhase } = summarizeUpcomingWeek(sessions, today)
@@ -213,7 +215,7 @@ export function buildRealignedSchedule(
   if (!deviation.shouldRealign) {
     return { fromDate, drafts: [], deviation }
   }
-  const drafts = buildPeriodizedSchedule({ goal, profile, today, currentWeeklyKm, observedEasyPace, returnRamp }).map((d) => ({
+  const drafts = buildPeriodizedSchedule({ goal, profile, today, currentWeeklyKm, observedEasyPace, returnRamp, entryLevel }).map((d) => ({
     ...d,
     source: 'realign' as const
   }))

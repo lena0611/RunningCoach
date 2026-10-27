@@ -102,6 +102,26 @@ export type PeriodizationInput = {
    * currentWeeklyKm 재앵커가 점진 복원을 맡는다. capKm·windowSessions 는 caller 가 휴식 길이로 계산해 넘긴다.
    */
   returnRamp?: { capKm: number; windowSessions: number } | null
+  /**
+   * 입문(5K 미완주 — `beginnerWalkRunStage` 가 null 이 아님, #876). SSOT §숙련도별 처방 입문 행: 주 3회, 품질 세션 0,
+   * 롱런·스트라이드·템포·한계 시험 없음 — 전부 걷기·뛰기(Easy, 실행은 C25K 사다리가 정한다).
+   * 레이스 목표라도 연속주 능력이 먼저다. 볼륨 곡선(단계)은 그대로 두고 세션 구성만 바꾼다.
+   */
+  entryLevel?: boolean
+}
+
+const ENTRY_RUN_DAYS = 3
+const ENTRY_SESSION_TYPES: ReadonlySet<RunType> = new Set(['Easy', 'Recovery'])
+
+/**
+ * 지금 플랜이 입문 여부와 맞는가(#876) — 안 맞으면 다시 짓는다. 저장 필드 없이 플랜 자체로 판정한다.
+ * - 입문인데 품질·스트라이드가 하나라도 있으면 어긋남(입문 전에 지었거나 옛 생성기).
+ * - 입문이 아닌데 앞으로 일정(3개 이상)이 전부 Easy·Recovery 면 입문 때 지은 플랜이다(졸업 — 5K 완주·27회).
+ *   일반 플랜은 매주 롱런·스트라이드가 있어 이렇게 될 수 없다. 3개 미만이면 끝물이라 다시 짓지 않는다.
+ */
+export function planMatchesEntryLevel(upcoming: Array<{ sessionType: RunType }>, entryLevel: boolean): boolean {
+  const allEasy = upcoming.every((session) => ENTRY_SESSION_TYPES.has(session.sessionType))
+  return entryLevel ? allEasy : !(allEasy && upcoming.length >= 3)
 }
 
 /** 주차별 Phase 배분 결과(0번째 주가 가장 이른 주). */
@@ -421,7 +441,8 @@ export function buildPeriodizedSchedule(input: PeriodizationInput): ScheduledSes
   const phases = allocatePhases(totalWeeks, goal.distanceKm)
   if (!phases.length) return []
 
-  const runDays = clamp(profile.weeklyRunDaysTarget ?? 4, 3, 6)
+  const entryLevel = Boolean(input.entryLevel)
+  const runDays = entryLevel ? ENTRY_RUN_DAYS : clamp(profile.weeklyRunDaysTarget ?? 4, 3, 6)
   const longRunDayIndex = Math.max(0, DAY_NAMES.indexOf(profile.preferredLongRunDay || '토요일'))
   // Easy 페이스는 관측값(있으면)으로 보정 — VDOT 추정이 심박과 싸우는 문제 해결(#405).
   const pace = withObservedEasy(resolvePaceModel(profile), input.observedEasyPace)
@@ -448,9 +469,10 @@ export function buildPeriodizedSchedule(input: PeriodizationInput): ScheduledSes
     const weekRunDays = runDaysForVolume(runDays, weeklyVolumes[week])
     // 단계 블록 마지막 주면 한계 시험(TT) 삽입 — 다음 단계 진입 전 재측정(#411). 단 직전 TT 와 4주 이상 떨어졌을 때만(#861).
     const isPhaseEnd = week === phases.length - 1 || phases[week + 1] !== phase
-    const timeTrialDue = isPhaseEnd && TIME_TRIAL_PHASES.has(phase) && week - lastTimeTrialWeek >= TIME_TRIAL_MIN_GAP_WEEKS
+    // 입문은 한계 시험이 없다(SSOT §완전 초보 "첫 측정은 권하지 않는다").
+    const timeTrialDue = !entryLevel && isPhaseEnd && TIME_TRIAL_PHASES.has(phase) && week - lastTimeTrialWeek >= TIME_TRIAL_MIN_GAP_WEEKS
     if (timeTrialDue) lastTimeTrialWeek = week
-    const baseTypes = weeklySessionTypes(phase, weekRunDays)
+    const baseTypes: RunType[] = entryLevel ? Array(weekRunDays).fill('Easy') : weeklySessionTypes(phase, weekRunDays)
     const types = timeTrialDue ? injectTimeTrial(baseTypes) : baseTypes
     const placement = placeOnDays(types, weekRunDays, longRunDayIndex)
     const placedTypes = [...placement.values()]
@@ -463,7 +485,8 @@ export function buildPeriodizedSchedule(input: PeriodizationInput): ScheduledSes
       drafts.push({
         goalId: goal.id ?? null,
         date: formatDateOnly(date),
-        phase,
+        // 입문 주는 단계 이름도 '기초'다 — "역치 집중" 같은 이름을 걷기·뛰기 주에 붙이지 않는다.
+        phase: entryLevel ? 'Base' : phase,
         sessionType: type,
         keySession: QUALITY_TYPES.has(type),
         prescription: prescriptionFor(type, distance, pace),
