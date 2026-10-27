@@ -7,6 +7,7 @@ import {
   pushSessionToNative,
   requestStoredSessionFromNative
 } from '@/features/restore-native-session/authBridge'
+import { claimLocalCacheFor, releaseLocalCache } from '@/shared/lib/accountCache'
 
 export const useAuthStore = defineStore('authStore', {
   state: () => ({
@@ -38,8 +39,16 @@ export const useAuthStore = defineStore('authStore', {
 
       this.session = session
       this.user = session?.user ?? null
+      // 캐시를 지금 사람에게 맞춘다(#878 B3). 스토어가 캐시를 읽기 전이라 새로고침 없이 비우기만 하면 된다.
+      claimLocalCacheFor(session?.user?.id ?? null)
 
       supabase.auth.onAuthStateChange((_event, nextSession) => {
+        // 앱이 뜬 채 다른 계정으로 바뀌면(세션 만료 뒤 다른 사람이 로그인 등) 스토어가 앞 사람 데이터를
+        // 들고 있다 — 캐시를 비웠으면 새로고침해 스토어를 새로 읽힌다. 같은 사람·깨끗한 상태면 아무 일도 없다.
+        if (nextSession && claimLocalCacheFor(nextSession.user.id)) {
+          window.location.reload()
+          return
+        }
         this.session = nextSession
         this.user = nextSession?.user ?? null
         if (nextSession) {
@@ -209,6 +218,8 @@ export const useAuthStore = defineStore('authStore', {
       this.session = null
       this.user = null
       clearNativeSession()
+      // 다음 사람에게 내 메모리·기록 캐시가 남지 않게(#878 B3). 호출한 쪽(App.signOut)이 새로고침한다.
+      releaseLocalCache()
     }
   }
 })

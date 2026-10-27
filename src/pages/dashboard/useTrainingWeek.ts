@@ -32,7 +32,7 @@ import { isReloadingForNewBuild } from '@/shared/lib/buildVersion'
  */
 const SCHEDULE_ANCHOR_LOGIC_VERSION = 5
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
-import { buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, coldStartWeeklyKm, goalArchetype, prescriptionFor, trainingWeekRange, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
+import { buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, coldStartWeeklyKm, goalArchetype, planMatchesEntryLevel, prescriptionFor, trainingWeekRange, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
 import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
 import { buildRealignedSchedule, dropDraftsOnRestedDates } from '@/shared/lib/coaching/scheduleRealign'
 import { buildSessionBriefing, sessionTypeLabel, type SessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
@@ -155,6 +155,8 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
   })
   // 완전 초보의 Couch to 5K 단계(#870) — 5K 완주 경험이 없고 27회 전이면 저강도 브리핑이 걷기·뛰기가 된다.
   const beginnerWalkRun = computed(() => beginnerWalkRunStage(levelStore.selfReportedMaxDistanceM, runs.value))
+  // 입문(5K 미완주) — 레이스 목표여도 플랜은 주 3회 걷기·뛰기만(#876, SSOT §숙련도별 처방 입문 행).
+  const entryLevel = computed(() => beginnerWalkRun.value !== null)
   // App 이 온보딩을 띄우는 조건(showOnboarding)과 같다. 레벨 상태를 아직 못 읽었으면 그것도 기다린다.
   const onboardingPending = computed(() => isSupabaseConfigured && (!levelStore.loaded || levelStore.needsOnboarding))
 
@@ -272,7 +274,8 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
             profile: memoryStore.memory.athleteProfile,
             today: today.value,
             currentWeeklyKm: currentWeeklyKm.value,
-            observedEasyPace: observedEasyPace.value
+            observedEasyPace: observedEasyPace.value,
+            entryLevel: entryLevel.value
           }),
           mine
         )
@@ -281,7 +284,15 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
           await persistScheduleAnchor(currentWeeklyKm.value)
         }
       } else if (
-        memoryStore.memory.adaptiveTrainingProfile.scheduleAnchorLogicVersion !== SCHEDULE_ANCHOR_LOGIC_VERSION
+        memoryStore.memory.adaptiveTrainingProfile.scheduleAnchorLogicVersion !== SCHEDULE_ANCHOR_LOGIC_VERSION ||
+        // 입문 여부와 플랜 구성이 어긋나면(입문인데 템포·한계 시험이 있거나, 졸업했는데 전부 걷기·뛰기) 1회 재빌드(#876).
+        // 단 휴식·복귀 중엔 '졸업' 쪽을 보지 않는다 — 복귀 램프가 일반 플랜도 잠깐 전부 Easy 로 낮추므로
+        // 그걸 입문 플랜으로 읽으면 부팅마다 다시 짓는다. 입문 쪽(품질 세션 제거)은 언제나 본다.
+        (!planMatchesEntryLevel(
+          mine.filter((s) => s.status === 'planned' && s.date >= dateOnly(today.value)),
+          entryLevel.value
+        ) &&
+          (entryLevel.value || !memoryStore.memory.activeRest))
       ) {
         /**
          * 앵커 계산식이 바뀌었으면 옛 기준선과의 비교는 의미가 없다 → **1회 재빌드**로 새 계산식에 수렴시킨다.
@@ -299,6 +310,7 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
             today: today.value,
             currentWeeklyKm: currentWeeklyKm.value,
             observedEasyPace: observedEasyPace.value,
+            entryLevel: entryLevel.value,
             // 휴식 메타가 살아 있으면 캡을 보존한다(램프 창 중 재빌드가 캡을 잃지 않게).
             returnRamp: (() => {
               const rest = memoryStore.memory.activeRest
@@ -335,7 +347,7 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
             await persistScheduleAnchor(currentWeeklyKm.value)
             anchorForCheck = currentWeeklyKm.value
           }
-          const plan = buildRealignedSchedule(mine, goal, memoryStore.memory.athleteProfile, today.value, currentWeeklyKm.value, anchorForCheck, observedEasyPace.value, returnRamp)
+          const plan = buildRealignedSchedule(mine, goal, memoryStore.memory.athleteProfile, today.value, currentWeeklyKm.value, anchorForCheck, observedEasyPace.value, returnRamp, entryLevel.value)
           // rested 날짜 차단(#473 메타-독립 가드): 메타가 유실돼도 재정렬이 휴식 창을 다시 채우지 않는다.
           // (복귀 램프 경로는 위에서 unrestFrom 이 선행돼 rested 가 없으므로 필터가 no-op — 램프 초안 안 깎임)
           plan.drafts = dropDraftsOnRestedDates(plan.drafts, scheduleStore.sessions.filter((s) => s.goalId === goal.id))
@@ -405,7 +417,8 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
       today: today.value,
       currentWeeklyKm: currentWeeklyKm.value,
       observedEasyPace: observedEasyPace.value,
-      returnRamp: payload
+      returnRamp: payload,
+      entryLevel: entryLevel.value
     }).map((d) => ({ ...d, source: 'realign' as const }))
     if (!drafts.length) return
     await scheduleStore.realign(goal.id, dateOnly(today.value), drafts)
