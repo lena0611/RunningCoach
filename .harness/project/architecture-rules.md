@@ -4,6 +4,7 @@
 
 ## 레이어와 책임
 - `src/app`: 앱 부트스트랩, 라우터, 전역 스토어, 전역 스타일을 담당한다.
+  - **부팅은 라우터 준비를 top-level await 로 기다리지 않는다(2026-10-27).** 라우트는 지연 청크이고 지연 청크는 메인 번들을 import 한다 — `main.ts` 가 `await router.isReady()` 하면 메인 번들 평가가 안 끝나 서로를 기다린다(Chromium·데스크톱 WebKit 스플래시 교착, iOS WebKit 은 우연히 통과). 마운트는 `router.isReady().then(...)` 안에서, 가드 규칙은 `src/app/router/guard.ts`(모든 상태·경로에서 리다이렉트가 끝나는지 테스트). 부팅·라우팅 변경은 dev 서버(번들링 없음)로는 재현이 안 되니 **프로덕션 빌드**로 확인한다.
 - `src/pages`: 화면 단위 조합을 담당한다.
 - `src/widgets`: 재사용 가능한 화면 블록을 담당한다.
 - `src/features`: 파일 import, HealthKit 후보 수신, AI 컨텍스트 생성 같은 사용자 행동 중심 로직을 담당한다.
