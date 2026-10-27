@@ -909,6 +909,7 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
     activeDoneSummary,
     activeDisplaySession,
     activeBriefing,
+    beginnerWalkRun,
     briefingCeilingText,
     activePlannedIntent,
     todayPlannedIntent,

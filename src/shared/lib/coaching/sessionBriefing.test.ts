@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { TrainingGoal, TrainingInjuryItem } from '@/entities/training-memory/model'
 import type { ChronicLoadTrend } from '@/shared/lib/runStats'
 import { defaultScheduledSessionPrescription, type ScheduledSession } from '@/entities/training-schedule/model'
-import { buildSessionBriefing, buildSessionExecution } from '@/shared/lib/coaching/sessionBriefing'
+import { buildSessionBriefing, buildSessionExecution, walkRunHeadline } from '@/shared/lib/coaching/sessionBriefing'
+import { beginnerWalkRunStage } from '@/shared/lib/coaching/beginnerWalkRun'
 
 function session(overrides: Partial<ScheduledSession>): ScheduledSession {
   return {
@@ -420,5 +421,32 @@ describe('완전 초보 걷기·뛰기 (#870)', () => {
   it('급성 통증성 부상 복귀(walk-run)가 있으면 그쪽이 먼저다', () => {
     const b = buildSessionBriefing(easy, { goal, injury: injury({ severity: 2 }), chronic: noChronic, beginnerWalkRun: stage })
     expect(execText(b)).not.toContain('Couch to 5K')
+  })
+})
+
+describe('walkRunHeadline — 요약 히어로 이름이 "어떻게 뛰나"와 같다', () => {
+  const firstTimer = beginnerWalkRunStage(null, [])
+
+  it('입문 저강도 날은 "이지 2.4km" 대신 걷기·뛰기 회차와 시간(2026-10-27 실계정)', () => {
+    expect(walkRunHeadline('Easy', { injury: null, beginnerWalkRun: firstTimer })).toEqual({ title: '걷기·뛰기 1주차 1회차', minutes: 29 })
+  })
+
+  it('브리핑도 같은 날 걷기·뛰기 회차를 말한다', () => {
+    const text = buildSessionExecution(session({ sessionType: 'Easy' }), { injury: null, beginnerWalkRun: firstTimer })
+      .map((step) => step.detail)
+      .join(' ')
+    expect(text).toContain('Couch to 5K 1주차 1회차')
+  })
+
+  it('입문이 아니거나 걷기·뛰기 대상 타입이 아니면 평소 이름', () => {
+    expect(walkRunHeadline('Easy', { injury: null, beginnerWalkRun: null })).toBeNull()
+    expect(walkRunHeadline('Tempo', { injury: null, beginnerWalkRun: firstTimer })).toBeNull()
+  })
+
+  it('급성 통증 부상이면 부상 복귀 걷기·뛰기가 먼저 — 브리핑과 같은 순서', () => {
+    expect(walkRunHeadline('Easy', { injury: injury({ status: 'active', severity: 2 }), beginnerWalkRun: firstTimer })).toEqual({
+      title: '걷기·뛰기 복귀',
+      minutes: null
+    })
   })
 })

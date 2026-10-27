@@ -37,7 +37,7 @@ import {
   type RaceBenchmarkSegmentKey
 } from '@/shared/lib/raceBenchmark'
 import { formatWeatherNumber, weatherSymbolToEmoji } from '@/shared/lib/weather'
-import { sessionTypeLabel } from '@/shared/lib/coaching/sessionBriefing'
+import { sessionTypeLabel, walkRunHeadline } from '@/shared/lib/coaching/sessionBriefing'
 import EmptyState from '@/shared/ui/EmptyState.vue'
 import MetricGrid from '@/shared/ui/MetricGrid.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
@@ -103,6 +103,7 @@ const {
   scheduleLoadingPlaceholder,
   easyPaceReferenceSec,
   activeBriefing,
+  beginnerWalkRun,
   activeDisplaySession,
   activeDoneRun,
   activeDoneSummary,
@@ -385,6 +386,17 @@ const heroWeatherChip = computed(() => {
 const todayHero = computed(() => {
   const s = activeDisplaySession.value
   if (!s) return null
+  // 걷기·뛰기 날은 이름과 기준을 브리핑과 맞춘다 — 거리·페이스 대신 시간(입문), 코치 탭 "어떻게 뛰나"와 같은 판정.
+  const walkRun = walkRunHeadline(s.sessionType, { injury: activeInjury.value, beginnerWalkRun: beginnerWalkRun.value })
+  if (walkRun) {
+    return {
+      title: walkRun.title,
+      sessionType: s.sessionType,
+      distanceKm: walkRun.minutes ? null : s.prescription.distanceKm ?? null,
+      metaLine: walkRun.minutes ? `약 ${walkRun.minutes}분` : '',
+      keyPoint: activeBriefing.value?.keyPoint ?? ''
+    }
+  }
   return {
     title: sessionTypeLabel(s.sessionType),
     sessionType: s.sessionType,
@@ -406,9 +418,11 @@ const firstSessionAhead = computed(() => {
   const weekday = '일월화수목금토'[date.getDay()]
   const when = days === 1 ? `내일(${weekday})` : days === 2 ? `모레(${weekday})` : `${date.getMonth() + 1}/${date.getDate()}(${weekday})`
   const km = s.prescription.distanceKm ? ` ${s.prescription.distanceKm}km` : ''
+  const walkRun = walkRunHeadline(s.sessionType, { injury: activeInjury.value, beginnerWalkRun: beginnerWalkRun.value })
+  const what = walkRun ? `${walkRun.title}${walkRun.minutes ? ` 약 ${walkRun.minutes}분` : ''}` : `${sessionTypeLabel(s.sessionType)}${km}`
   return {
     title: `🏁 첫 훈련은 ${when}`,
-    detail: `${sessionTypeLabel(s.sessionType)}${km} — 오늘은 가볍게 걸으며 몸을 깨워 두면 충분해요.`
+    detail: `${what} — 오늘은 가볍게 걸으며 몸을 깨워 두면 충분해요.`
   }
 })
 /**

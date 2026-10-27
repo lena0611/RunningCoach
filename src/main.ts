@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './app/App.vue'
 import { router } from './app/router'
+import { guardRedirect } from './app/router/guard'
 import { useAuthStore } from '@/app/stores/authStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
@@ -29,14 +30,14 @@ await withTimeout(authStore.init(), 4000, '인증 초기화 시간이 초과되�
   authStore.initialized = true
 })
 
-router.beforeEach((to) => {
-  if (isE2ERouteSmoke && (to.path === '/auth' || to.path === '/access')) return '/'
-  if (!isE2ERouteSmoke && !canUseAppFeatures() && to.path !== '/access') return '/access'
-  if (!isE2ERouteSmoke && canUseAppFeatures() && to.path === '/access') return '/'
-  if (!isE2ERouteSmoke && !isSupabaseConfigured && to.path !== '/auth') return '/auth'
-  if (!isE2ERouteSmoke && isSupabaseConfigured && !authStore.isAuthenticated && to.path !== '/auth') return '/auth'
-  if (authStore.isAuthenticated && to.path === '/auth') return '/'
-})
+router.beforeEach((to) =>
+  guardRedirect(to.path, {
+    e2eRouteSmoke: isE2ERouteSmoke,
+    canUseApp: canUseAppFeatures(),
+    supabaseConfigured: isSupabaseConfigured,
+    authenticated: authStore.isAuthenticated
+  })
+)
 
 app.use(router)
 router.onError((error) => {

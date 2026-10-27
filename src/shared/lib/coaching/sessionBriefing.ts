@@ -521,6 +521,26 @@ function beginnerFor(type: RunType, stage: BeginnerWalkRunStage | null | undefin
   return stage && WALK_RUN_SESSION_TYPES.has(type) ? stage : null
 }
 
+export type WalkRunHeadline = {
+  title: string
+  /** 앞뒤 걷기 포함 총 시간(분). 입문 걷기·뛰기만 — 부상 복귀는 단계가 통증에 달려 null. */
+  minutes: number | null
+}
+
+/**
+ * 세션 이름 한 줄이 걷기·뛰기여야 하나 — "어떻게 뛰나"와 같은 판정·같은 순서(부상 복귀가 먼저, 다음이 입문).
+ * 요약 히어로가 "이지 2.4km"라고만 하면 완전 초보가 2.4km 를 쉬지 않고 뛰려 한다(2026-10-27 실계정 확인).
+ * 걷기·뛰기의 기준은 거리가 아니라 시간이다(§완전 초보). 아니면 null — 평소 이름(sessionTypeLabel)을 쓴다.
+ */
+export function walkRunHeadline(
+  type: RunType,
+  ctx: Pick<SessionBriefingContext, 'injury' | 'beginnerWalkRun'>
+): WalkRunHeadline | null {
+  if (shouldPrescribeWalkRun(ctx.injury, type)) return { title: '걷기·뛰기 복귀', minutes: null }
+  const stage = beginnerFor(type, ctx.beginnerWalkRun)
+  return stage ? { title: `걷기·뛰기 ${stage.week}주차 ${stage.run}회차`, minutes: Math.round(stage.totalMin) } : null
+}
+
 export function buildSessionBriefing(session: ScheduledSession, ctx: SessionBriefingContext): SessionBriefing {
   const goalLabel = ctx.goal?.title ? `'${ctx.goal.title}' ` : ''
   // 비성과는 주기화 단계가 없으므로 goalLine에서 단계 라벨을 뺀다(#398).
