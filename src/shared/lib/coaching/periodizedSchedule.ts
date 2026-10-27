@@ -21,6 +21,7 @@ import type {
 } from '@/entities/training-schedule/model'
 import { formatPaceRangeSec, formatPaceSec, resolvePaceModel, type PaceModel } from '@/shared/lib/vdotPaces'
 import { formatDuration } from '@/shared/lib/format'
+import { deriveWeeklyVolumeAnchorKm } from './returnAnchor'
 
 // 코칭 스케줄 타입 재노출 — 코칭 순수로직(reschedule/weeklyTriage 등)이 entities 를 직접 import 하지 않고
 // 이 코칭 허브를 거쳐 쓰게 한다(#397 shared→entities 역방향 최소화, 아키텍처 래칫 정합).
@@ -641,6 +642,23 @@ export function coldStartWeeklyKm(selfReportedMaxDistanceM: number | null): numb
   if (m >= 10000) return 16
   if (m >= 5000) return 12
   return 7.2
+}
+
+/**
+ * 플랜을 짓는 시작 주간 주행량(km) — 대시보드 생성과 온보딩 첫 주 미리보기가 **같은 값**을 보게 여기 둔다.
+ * 기록이 있으면 최근 감당 볼륨(공백 직전 × 디트레이닝 포함, `deriveWeeklyVolumeAnchorKm`), 기록이 하나도 없는
+ * 신규 사용자만 온보딩 답(`coldStartWeeklyKm`, #865). 기록이 있는데 앵커가 0 인 복귀자는 null — 예전 최장 거리로
+ * 무거운 플랜을 받으면 안 된다(복귀는 §휴식과 복귀 경로가 맡는다).
+ */
+export function planStartWeeklyKm(
+  runs: Array<{ date: string; distanceKm: number }>,
+  selfReportedMaxDistanceM: number | null,
+  today: Date
+): number | null {
+  const noon = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 12)
+  const anchorKm = deriveWeeklyVolumeAnchorKm(runs, noon).anchorKm
+  if (anchorKm > 0) return anchorKm
+  return runs.length === 0 ? coldStartWeeklyKm(selfReportedMaxDistanceM) : null
 }
 
 /**

@@ -17,7 +17,6 @@ import { getAgeLoadWeight, getChronicLoadTrend, getLongestRunKmWithinDays, getNe
 import { getRaceProjection } from '@/shared/lib/performanceProjection'
 import { deriveHeartRateModel, deriveObservedMaxHr } from '@/shared/lib/heartRateZones'
 import { returnRampWindowSessions, returnSessionCapKm } from '@/shared/lib/coaching/returnRamp'
-import { deriveWeeklyVolumeAnchorKm } from '@/shared/lib/coaching/returnAnchor'
 import { isReloadingForNewBuild } from '@/shared/lib/buildVersion'
 
 /**
@@ -32,7 +31,7 @@ import { isReloadingForNewBuild } from '@/shared/lib/buildVersion'
  */
 const SCHEDULE_ANCHOR_LOGIC_VERSION = 5
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
-import { buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, coldStartWeeklyKm, goalArchetype, planMatchesEntryLevel, prescriptionFor, trainingWeekRange, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
+import { buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, planMatchesEntryLevel, planStartWeeklyKm, prescriptionFor, trainingWeekRange, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
 import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
 import { buildRealignedSchedule, dropDraftsOnRestedDates } from '@/shared/lib/coaching/scheduleRealign'
 import { buildSessionBriefing, sessionTypeLabel, type SessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
@@ -145,14 +144,11 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
    * 다음 평균이 더 작아지는 **양의 피드백 루프**가 된다(2026-08-18 실사고: Easy 처방 0.9km·LSD 1.4km).
    * `deriveWeeklyVolumeAnchorKm` 가 최근 감당 볼륨과 "공백 직전 × 디트레이닝 계수" 중 큰 쪽을 고른다.
    * 스케줄 생성과 재정렬 드리프트 판정이 **같은 값**을 봐야 서로 싸우지 않으므로 여기 단일 소스로 둔다.
+   * 신규 사용자 시작점(#865)까지 포함한 계산은 `planStartWeeklyKm` — 온보딩 첫 주 미리보기도 같은 함수를 쓴다.
    */
-  const volumeAnchor = computed(() => deriveWeeklyVolumeAnchorKm(runs.value, new Date(`${todayDate.value}T12:00:00`)))
-  // 런 기록이 아예 없는 신규 사용자만 온보딩 답으로 시작점을 고른다(#865). 기록이 있는데 앵커가 0 인 복귀자는
-  // null 그대로 — 예전 최장 거리로 무거운 플랜을 받으면 안 된다(복귀는 §휴식과 복귀 경로가 맡는다).
-  const currentWeeklyKm = computed(() => {
-    if (volumeAnchor.value.anchorKm > 0) return volumeAnchor.value.anchorKm
-    return runs.value.length === 0 ? coldStartWeeklyKm(levelStore.selfReportedMaxDistanceM) : null
-  })
+  const currentWeeklyKm = computed(() =>
+    planStartWeeklyKm(runs.value, levelStore.selfReportedMaxDistanceM, new Date(`${todayDate.value}T12:00:00`))
+  )
   // 완전 초보의 Couch to 5K 단계(#870) — 5K 완주 경험이 없고 27회 전이면 저강도 브리핑이 걷기·뛰기가 된다.
   const beginnerWalkRun = computed(() => beginnerWalkRunStage(levelStore.selfReportedMaxDistanceM, runs.value))
   // 입문(5K 미완주) — 레이스 목표여도 플랜은 주 3회 걷기·뛰기만(#876, SSOT §숙련도별 처방 입문 행).

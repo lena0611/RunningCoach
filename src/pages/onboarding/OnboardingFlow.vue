@@ -4,6 +4,7 @@ import { useAuthStore } from '@/app/stores/authStore'
 import { useHealthKitSyncStore } from '@/app/stores/healthKitSyncStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useLevelStore } from '@/app/stores/levelStore'
+import { useRunStore } from '@/app/stores/runStore'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import { skipsHealthKitImport } from '@/shared/api/testAccountRepository'
 import {
@@ -12,29 +13,98 @@ import {
   summarizeHealthKitPreview,
   weeklyDaysFromPreview
 } from '@/features/import-healthkit-run/onboardingImport'
-import { type TrainingInjuryItem, type TrainingMemory } from '@/entities/training-memory/model'
+import { type TrainingGoal, type TrainingInjuryItem, type TrainingMemory } from '@/entities/training-memory/model'
 import { injuryAreaSelectionsFor, summarizeInjuryAreas, type InjurySide } from '@/entities/training-memory/injuryAreas'
 import { vdotFromPerformance, vdotFromVo2Max } from '@/shared/lib/vdotPaces'
 import { distanceClassFromMeters, gradeBandFromVdot, nextDistanceClass } from '@/shared/lib/level/levelModel'
+import { formatDateWithWeekday, formatDuration } from '@/shared/lib/format'
 import {
-  buildInitialWeeklyPattern,
-  routineTemplateById,
-  ROUTINE_TEMPLATES,
-  WEEK_DAYS,
-  type RoutineGoalKey,
-  type RoutineSlot,
-  type RoutineTemplate,
-  type RunnerLevelKey,
-  type WeekDay
-} from '@/shared/lib/coaching/initialWeeklyPattern'
+  assessGoalFeasibility,
+  buildPeriodizedSchedule,
+  buildSteadyWeeklyRhythm,
+  goalArchetype,
+  GOAL_DISTANCE_RECENCY_DAYS,
+  minimumGoalWeeklyKm,
+  planStartWeeklyKm,
+  type GoalFeasibilityInput
+} from '@/shared/lib/coaching/periodizedSchedule'
+import { earliestFeasibleRaceDate, recommendedRaceDate } from '@/shared/lib/coaching/raceDate'
+import { beginnerWalkRunStage } from '@/shared/lib/coaching/beginnerWalkRun'
+import { sessionTypeLabel } from '@/shared/lib/coaching/sessionBriefing'
+import { WALK_RUN_SESSION_TYPES } from '@/shared/lib/coaching/walkRunReturn'
+import DateField from '@/shared/ui/DateField.vue'
 
 const memoryStore = useMemoryStore()
 const levelStore = useLevelStore()
 const authStore = useAuthStore()
 const healthKitSyncStore = useHealthKitSyncStore()
+const runStore = useRunStore()
 
-type StepKey = 1 | 'records' | 2 | 3 | 4 | 5 | 'reveal'
-const step = ref<StepKey>(1)
+type DistKey = 'pre' | '5k' | '10k' | 'half' | 'full'
+type GoalKey = '5k' | '10k' | 'half' | 'full'
+// 목표 종류 = TrainingGoal.category 그대로. 플랜 모양은 goalArchetype 이 가른다(race=주기화, fitness=체중, health=건강·습관).
+type GoalType = 'race' | 'health' | 'fitness'
+
+const DIST_M: Record<DistKey, number> = { pre: 0, '5k': 5000, '10k': 10000, half: 21097.5, full: 42195 }
+const DIST_LABEL: Record<DistKey, string> = { pre: '아직 레이싱 전', '5k': '5K', '10k': '10K', half: '하프', full: '풀마라톤' }
+const GOAL_ORDER: GoalKey[] = ['5k', '10k', 'half', 'full']
+const GOAL_KM: Record<GoalKey, number> = { '5k': 5, '10k': 10, half: 21.0975, full: 42.195 }
+const GOAL_LABEL: Record<GoalKey, string> = { '5k': '5K', '10k': '10K', half: '하프', full: '풀마라톤' }
+/** 대회 거리 기본 선택 — 완주해 본 거리의 다음 거리. */
+const NEXT_GOAL: Record<DistKey, GoalKey> = { pre: '5k', '5k': '10k', '10k': 'half', half: 'full', full: 'full' }
+const GOAL_TYPES: Array<{ key: GoalType; title: string; help: string }> = [
+  { key: 'race', title: '대회·기록', help: '날짜가 있는 목표. 대회일까지 단계별로 쌓아 가는 플랜이에요.' },
+  { key: 'health', title: '건강·습관', help: '마감 없이 꾸준히. 편한 강도로 이어 가요.' },
+  { key: 'fitness', title: '체중 관리', help: '편한 강도로 오래. 주 1회는 조금 길게 뛰어요.' }
+]
+const GOAL_TYPE_TITLE: Record<Exclude<GoalType, 'race'>, string> = { health: '건강·습관 러닝', fitness: '체중 관리 러닝' }
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
+const DAY_MS = 86_400_000
+
+// base = 부위 카탈로그 id 의 좌우를 뗀 이름(#878 A3) — 좌우를 골라야 부위별 제한·보강운동·감별 질문이 붙는다.
+const INJURY_AREAS = [
+  { label: '햄스트링', base: 'hamstring' },
+  { label: '무릎', base: 'knee' },
+  { label: '족저/발바닥', base: 'plantar-fascia' },
+  { label: '아킬레스', base: 'achilles' },
+  { label: '종아리', base: 'calf' },
+  { label: '장경인대(IT밴드)', base: 'it-band' },
+  { label: '정강이', base: 'shin' },
+  { label: '발목', base: 'ankle' },
+  { label: '고관절/엉덩이', base: 'hip' },
+  { label: '허리', base: 'lower-back' },
+  { label: '기타', base: '' }
+] as const
+const INJURY_SIDE_LABEL: Record<InjurySide, string> = { left: '왼쪽', right: '오른쪽', both: '양쪽' }
+const SEVERITY_LABEL: Record<number, string> = { 1: '자각 정도', 2: '러닝 후 통증', 3: '러닝 중 통증', 4: '러닝 어려움' }
+
+const form = reactive({
+  birthYear: null as number | null,
+  sex: 'unknown' as 'male' | 'female' | 'other' | 'unknown',
+  experienceMonths: null as number | null,
+  maxDistanceKey: 'pre' as DistKey,
+  recordMin: null as number | null,
+  recordSec: null as number | null,
+  goalType: 'race' as GoalType,
+  goalKey: '5k' as GoalKey,
+  raceDate: null as string | null,
+  noRaceDate: false,
+  goalMin: null as number | null,
+  goalSec: null as number | null,
+  weeklyDays: 4,
+  hasInjury: false,
+  injuryArea: '' as string,
+  injurySide: null as InjurySide | null,
+  injurySeverity: 2 as number,
+  injuryOnset: '' as string
+})
+/** 거리 칩을 직접 골랐나 — 안 골랐으면 완주 경험이 바뀔 때 기본 거리를 다시 맞춘다. */
+let goalKeyPicked = false
+/** 목표 id — 예전 고정 id('goal-10k-60')는 개발자 예시에서 온 이름이라 쓰지 않는다(#878 B5). */
+const goalId = `goal-${crypto.randomUUID()}`
+
+type StepKey = 'basic' | 'records' | 'distance' | 'goalType' | 'race' | 'routine' | 'preview' | 'reveal'
+const step = ref<StepKey>('basic')
 const saving = ref(false)
 const error = ref('')
 
@@ -47,7 +117,17 @@ const recordsChoice = ref<'import' | 'today' | null>(null)
 const PREVIEW_TIMEOUT_MS = 20_000
 let previewTimer: ReturnType<typeof setTimeout> | null = null
 
-const stepOrder = computed<StepKey[]>(() => (recordsEnabled.value ? [1, 'records', 2, 3, 4, 5] : [1, 2, 3, 4, 5]))
+// 대회 상세는 대회·기록 목표일 때만. 예전 4·5단계(루틴 편집·훈련 확인)는 저장하지 않는 편집이라 실제 플랜과 달랐다 —
+// 실제 생성기로 만든 첫 주 미리보기 한 장으로 바꿨다(#878 B5).
+const stepOrder = computed<StepKey[]>(() => [
+  'basic',
+  ...(recordsEnabled.value ? (['records'] as StepKey[]) : []),
+  'distance',
+  'goalType',
+  ...(form.goalType === 'race' ? (['race'] as StepKey[]) : []),
+  'routine',
+  'preview'
+])
 const stepIndex = computed(() => stepOrder.value.indexOf(step.value))
 
 const preview = computed(() => healthKitSyncStore.onboardingPreview)
@@ -111,51 +191,6 @@ onBeforeUnmount(() => {
   if (previewTimer) clearTimeout(previewTimer)
 })
 
-type DistKey = 'pre' | '5k' | '10k' | 'half' | 'full'
-type GoalKey = '5k' | '10k' | 'half' | 'full'
-
-const DIST_M: Record<DistKey, number> = { pre: 0, '5k': 5000, '10k': 10000, half: 21097.5, full: 42195 }
-const DIST_LABEL: Record<DistKey, string> = { pre: '아직 레이싱 전', '5k': '5K', '10k': '10K', half: '하프', full: '풀마라톤' }
-const GOAL_KM: Record<GoalKey, number> = { '5k': 5, '10k': 10, half: 21.0975, full: 42.195 }
-const GOAL_LABEL: Record<GoalKey, string> = { '5k': '5K', '10k': '10K', half: '하프', full: '풀마라톤' }
-
-// base = 부위 카탈로그 id 의 좌우를 뗀 이름(#878 A3) — 좌우를 골라야 부위별 제한·보강운동·감별 질문이 붙는다.
-const INJURY_AREAS = [
-  { label: '햄스트링', base: 'hamstring' },
-  { label: '무릎', base: 'knee' },
-  { label: '족저/발바닥', base: 'plantar-fascia' },
-  { label: '아킬레스', base: 'achilles' },
-  { label: '종아리', base: 'calf' },
-  { label: '장경인대(IT밴드)', base: 'it-band' },
-  { label: '정강이', base: 'shin' },
-  { label: '발목', base: 'ankle' },
-  { label: '고관절/엉덩이', base: 'hip' },
-  { label: '허리', base: 'lower-back' },
-  { label: '기타', base: '' }
-] as const
-const INJURY_SIDE_LABEL: Record<InjurySide, string> = { left: '왼쪽', right: '오른쪽', both: '양쪽' }
-const SEVERITY_LABEL: Record<number, string> = { 1: '자각 정도', 2: '러닝 후 통증', 3: '러닝 중 통증', 4: '러닝 어려움' }
-// 처방 교체 시 순환할 템플릿 순서.
-const TEMPLATE_CYCLE = ROUTINE_TEMPLATES.map((template) => template.id)
-
-const form = reactive({
-  birthYear: null as number | null,
-  sex: 'unknown' as 'male' | 'female' | 'other' | 'unknown',
-  experienceMonths: null as number | null,
-  maxDistanceKey: 'pre' as DistKey,
-  recordMin: null as number | null,
-  recordSec: null as number | null,
-  goalKey: '10k' as GoalKey,
-  weeklyDays: 4,
-  hasInjury: false,
-  injuryArea: '' as string,
-  injurySide: null as InjurySide | null,
-  injurySeverity: 2 as number,
-  injuryOnset: '' as string
-})
-
-const routineSlots = ref<RoutineSlot[]>([])
-
 const selfMaxDistanceM = computed(() => DIST_M[form.maxDistanceKey])
 const selfDistanceKm = computed(() => selfMaxDistanceM.value / 1000)
 
@@ -180,78 +215,181 @@ const previewLabel = computed(() =>
   previewGrade.value ? `${previewClass.value.label} · ${previewGrade.value.label}` : previewClass.value.label
 )
 
-// 경력(개월) 기반 보수적 레벨 추정. grade label 포맷에 의존하지 않는다.
-const levelKey = computed<RunnerLevelKey>(() => {
-  const months = form.experienceMonths ?? 0
-  if (months < 6) return 'beginner'
-  if (months < 18) return 'novice'
-  if (months < 36) return 'intermediate'
-  return 'advanced'
+// ── 목표와 첫 주 (#878 B5) ───────────────────────────────────────────────
+// 플랜은 온보딩이 끝난 뒤 대시보드가 짓는다(#865). 여기서는 **같은 입력·같은 생성기**로 미리 계산해 보여준다 —
+// 시작 볼륨(planStartWeeklyKm)·입문 판정(beginnerWalkRunStage)·무리 판정(assessGoalFeasibility)이 대시보드와 같다.
+/** 미리보기·추천 기준일 — 온보딩을 연 날. */
+const today = new Date()
+const todayLocal = localTodayIso()
+
+/** 플랜이 보게 될 기록 — 이미 저장된 런 + 가져오기로 고른 기록(저장은 마지막에 한다). */
+const planRuns = computed(() => [
+  ...runStore.runs.map((run) => ({ date: run.date, distanceKm: run.distanceKm ?? 0 })),
+  ...(recordsChoice.value === 'import' ? (preview.value?.candidates ?? []) : []).map((c) => ({ date: c.date, distanceKm: c.distanceKm ?? 0 }))
+])
+const selfReportedM = computed(() => selfMaxDistanceM.value || null)
+const startWeeklyKm = computed(() => planStartWeeklyKm(planRuns.value, selfReportedM.value, today))
+/** 입문(5K 미완주) — 대시보드 entryLevel 과 같은 판정. 플랜은 주 3회 걷기·뛰기, 목표 기록 칸은 숨긴다. */
+const entryLevel = computed(() => beginnerWalkRunStage(selfReportedM.value, planRuns.value) !== null)
+const recentLongestKm = computed(() => {
+  const from = shiftLocalIso(todayLocal, -GOAL_DISTANCE_RECENCY_DAYS)
+  return planRuns.value.reduce((max, run) => (run.date.slice(0, 10) >= from ? Math.max(max, run.distanceKm) : max), 0)
+})
+const planProfile = computed(() => ({ ...memoryStore.memory.athleteProfile, weeklyRunDaysTarget: form.weeklyDays }))
+
+/** 목표 기록 — 걷기·뛰기 단계는 기록보다 완주가 먼저라 받지 않는다. */
+const raceTargetSec = computed<number | null>(() => {
+  if (entryLevel.value) return null
+  const total = (form.goalMin ?? 0) * 60 + (form.goalSec ?? 0)
+  return total > 0 ? total : null
 })
 
-function templateOf(id: string): RoutineTemplate | null {
-  return routineTemplateById(id)
-}
-function templateName(id: string): string {
-  return templateOf(id)?.name ?? id
-}
-
-function regenerateRoutine() {
-  routineSlots.value = buildInitialWeeklyPattern({
-    weeklyDays: form.weeklyDays,
-    goal: form.goalKey as RoutineGoalKey,
-    level: levelKey.value,
-    hasActiveInjury: form.hasInjury
-  })
-}
-
-// Step 4: 요일 순환(✎), 처방 순환(칩 탭), 삭제(✕), 추가(+).
-function cycleDay(index: number) {
-  const slot = routineSlots.value[index]
-  if (!slot) return
-  const current = WEEK_DAYS.indexOf(slot.day)
-  slot.day = WEEK_DAYS[(current + 1) % WEEK_DAYS.length]
-}
-function cycleTemplate(index: number) {
-  const slot = routineSlots.value[index]
-  if (!slot) return
-  const current = TEMPLATE_CYCLE.indexOf(slot.templateId)
-  const nextId = TEMPLATE_CYCLE[(current + 1) % TEMPLATE_CYCLE.length]
-  slot.templateId = nextId
-  slot.sessionType = templateOf(nextId)?.sessionType ?? slot.sessionType
-}
-function removeSlot(index: number) {
-  routineSlots.value.splice(index, 1)
-}
-function addSlot() {
-  if (routineSlots.value.length >= 7) return
-  const used = new Set(routineSlots.value.map((s) => s.day))
-  const freeDay = WEEK_DAYS.find((d) => !used.has(d)) ?? '수'
-  routineSlots.value.push({ day: freeDay, templateId: 'easy-base', sessionType: 'Easy' })
+function buildGoal(targetDate: string | null): TrainingGoal {
+  const now = new Date().toISOString()
+  const race = form.goalType === 'race'
+  const label = GOAL_LABEL[form.goalKey]
+  const targetSec = race ? raceTargetSec.value : null
+  return {
+    id: goalId,
+    title: race ? `${label} ${targetSec ? formatDuration(targetSec) : '완주'}` : GOAL_TYPE_TITLE[form.goalType as Exclude<GoalType, 'race'>],
+    category: form.goalType,
+    startDate: todayLocal,
+    targetDate: race ? targetDate : null,
+    distanceKm: race ? GOAL_KM[form.goalKey] : null,
+    targetDurationSec: targetSec,
+    priority: 1,
+    status: 'active',
+    successCriteria: race ? `${label} 완주${targetSec ? ` — ${formatDuration(targetSec)} 이내` : ''}` : '',
+    strategyNotes: '',
+    notes: '온보딩에서 정한 목표',
+    createdAt: now,
+    updatedAt: now
+  }
 }
 
-// Step 5: 부상 시 금기 처방 제외하고 순환.
-const INJURY_BLOCKED = new Set(['cruise-interval', '5k-check'])
-function eligibleTemplateIds(): string[] {
-  return form.hasInjury ? TEMPLATE_CYCLE.filter((id) => !INJURY_BLOCKED.has(id)) : TEMPLATE_CYCLE
+function feasibilityInput(goalKey: GoalKey, targetDate: string | null): GoalFeasibilityInput {
+  return {
+    goal: { ...buildGoal(targetDate), category: 'race', distanceKm: GOAL_KM[goalKey] },
+    profile: planProfile.value,
+    today,
+    currentWeeklyKm: startWeeklyKm.value,
+    recentLongestKm: recentLongestKm.value
+  }
 }
-function swapPrescription(index: number) {
-  const slot = routineSlots.value[index]
-  if (!slot) return
-  const pool = eligibleTemplateIds()
-  const current = pool.indexOf(slot.templateId)
-  const nextId = pool[(current + 1) % pool.length]
-  slot.templateId = nextId
-  slot.sessionType = templateOf(nextId)?.sessionType ?? slot.sessionType
+
+/** 날짜가 아직 없을 때 쓰는 날짜 — 기본 준비 기간(입문은 걷기·뛰기 9주 더), 무리면 안전하게 닿는 날. */
+const recommendedDate = computed(() => recommendedRaceDate(feasibilityInput(form.goalKey, null), entryLevel.value))
+const raceDateInPast = computed(() => Boolean(form.raceDate && form.raceDate <= todayLocal))
+const effectiveRaceDate = computed<string | null>(() => {
+  if (form.goalType !== 'race') return null
+  if (form.noRaceDate) return recommendedDate.value.date
+  return form.raceDate && !raceDateInPast.value ? form.raceDate : null
+})
+const chosenFeasibility = computed(() =>
+  form.goalType === 'race' && !form.noRaceDate && effectiveRaceDate.value
+    ? assessGoalFeasibility(feasibilityInput(form.goalKey, effectiveRaceDate.value))
+    : null
+)
+/** 고른 날짜가 지금 체력으로 무리 — 코치 경고(goal-feasibility)와 같은 판정이라 미리 말한다. */
+const tooSoon = computed(() => chosenFeasibility.value?.feasible === false)
+/** '그대로 할게요'를 골랐다. 거리·날짜를 바꾸면 다시 묻는다. */
+const tooSoonAccepted = ref(false)
+watch(
+  () => [form.goalKey, form.raceDate, form.noRaceDate],
+  () => {
+    tooSoonAccepted.value = false
+  }
+)
+const postponeOption = computed(() => (tooSoon.value ? earliestFeasibleRaceDate(feasibilityInput(form.goalKey, null)) : null))
+/** 같은 날짜에 닿는 더 짧은 거리 중 가장 긴 것 — '거리를 바꿀게요'. */
+const shorterGoalOption = computed<GoalKey | null>(() => {
+  const date = effectiveRaceDate.value
+  if (!tooSoon.value || !date) return null
+  const shorter = GOAL_ORDER.slice(0, GOAL_ORDER.indexOf(form.goalKey)).reverse()
+  return shorter.find((key) => assessGoalFeasibility(feasibilityInput(key, date)).feasible) ?? null
+})
+const raceIncomplete = computed(
+  () => form.goalType === 'race' && (!effectiveRaceDate.value || (tooSoon.value && !tooSoonAccepted.value))
+)
+const raceHint = computed(() => {
+  if (raceDateInPast.value) return '오늘 이후 날짜를 골라주세요.'
+  if (!form.noRaceDate && !form.raceDate) return "대회 날짜를 고르거나, 아직 없으면 '아직 날짜가 없어요'를 켜 주세요."
+  return ''
+})
+const recommendedReason = computed(() => {
+  const label = GOAL_LABEL[form.goalKey]
+  if (recommendedDate.value.extended) return `지금 주행량에서 안전하게 늘리면 ${label} 준비에 이만큼 걸려요.`
+  if (entryLevel.value) {
+    return form.goalKey === '5k'
+      ? '걷기·뛰기 9주로 쉬지 않고 30분을 뛰게 되면 5K를 뛸 수 있어요.'
+      : `걷기·뛰기 9주로 쉬지 않고 30분을 만든 다음 ${label} 준비를 시작해요.`
+  }
+  return `${label} 초보 플랜의 기본 준비 기간이에요.`
+})
+/** 코치가 목표를 읽을 때 알아야 할 사정 — 날짜가 임시인지, 빠듯한 걸 알고 골랐는지. */
+const goalStrategyNote = computed(() => {
+  if (form.goalType !== 'race') return ''
+  if (form.noRaceDate) return '대회 날짜 미정 — 기본 준비 기간으로 잡은 임시 날짜다. 대회가 정해지면 날짜를 바꾼다.'
+  if (tooSoon.value && tooSoonAccepted.value) {
+    return '목표일이 빠듯한 걸 알고 그대로 정했다 — 플랜은 안전한 증가 폭만 쓰므로, 대회는 걷기를 섞어 완주하는 걸 목표로 한다.'
+  }
+  return ''
+})
+
+function pickGoalKey(key: GoalKey) {
+  form.goalKey = key
+  goalKeyPicked = true
 }
+
+/** 첫 주 미리보기 — 대시보드가 온보딩 직후 짓는 플랜과 같은 생성기·같은 입력. */
+const previewDrafts = computed(() => {
+  const goal = buildGoal(effectiveRaceDate.value)
+  const archetype = goalArchetype(goal.category)
+  if (archetype === 'performance') {
+    return buildPeriodizedSchedule({
+      goal,
+      profile: planProfile.value,
+      today,
+      currentWeeklyKm: startWeeklyKm.value,
+      entryLevel: entryLevel.value
+    })
+  }
+  return buildSteadyWeeklyRhythm({ archetype, profile: planProfile.value, today, currentWeeklyKm: startWeeklyKm.value, goalId: goal.id })
+})
+const firstWeekRows = computed(() => {
+  const lastDay = shiftLocalIso(todayLocal, 6)
+  return previewDrafts.value
+    .filter((draft) => draft.date <= lastDay)
+    .map((draft, index) => {
+      // 걷기·뛰기 회차는 완료한 런 수로 나아간다 — 앞 세션들을 마쳤다고 보고 그 회차를 보여준다(브리핑과 같은 함수).
+      const stage = WALK_RUN_SESSION_TYPES.has(draft.sessionType)
+        ? beginnerWalkRunStage(selfReportedM.value, [...planRuns.value, ...Array.from({ length: index }, () => ({ distanceKm: 0 }))])
+        : null
+      const [, month, day] = draft.date.split('-')
+      return {
+        date: draft.date,
+        weekday: WEEKDAYS[new Date(`${draft.date}T12:00:00`).getDay()],
+        monthDay: `${Number(month)}/${Number(day)}`,
+        title: stage ? `걷기·뛰기 ${stage.week}주차 ${stage.run}회차` : sessionTypeLabel(draft.sessionType),
+        detail: stage
+          ? `${stage.mainSet} · 앞뒤 걷기 포함 약 ${Math.round(stage.totalMin)}분`
+          : [draft.prescription.distanceKm ? `${draft.prescription.distanceKm}km` : '', draft.prescription.note].filter(Boolean).join(' · ')
+      }
+    })
+})
+const previewSubtitle = computed(() => {
+  const perWeek = `주 ${firstWeekRows.value.length}회`
+  if (form.goalType !== 'race') return `${GOAL_TYPE_TITLE[form.goalType]} · 마감 없이 · ${perWeek}`
+  const date = effectiveRaceDate.value
+  return date ? `${GOAL_LABEL[form.goalKey]} · ${shortDate(date)}까지 ${weeksUntil(date)}주 · ${perWeek}` : perWeek
+})
 
 async function next() {
-  if (step.value === 1) await decideRecordsStep()
+  if (step.value === 'basic') await decideRecordsStep()
   if (step.value === 'records') applyRecordsPrefill()
-  if (step.value === 3) {
-    if (injuryIncomplete.value) return
-    regenerateRoutine()
-  }
+  if (step.value === 'distance' && !goalKeyPicked) form.goalKey = NEXT_GOAL[form.maxDistanceKey]
+  if (step.value === 'race' && raceIncomplete.value) return
+  if (step.value === 'routine' && injuryIncomplete.value) return
   goNext()
 }
 function goNext() {
@@ -269,6 +407,27 @@ function todayIso() {
 function localTodayIso() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function shiftLocalIso(iso: string, days: number) {
+  const d = new Date(`${iso}T12:00:00`)
+  d.setDate(d.getDate() + days)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function daysUntil(iso: string) {
+  return Math.round((new Date(`${iso}T12:00:00`).getTime() - new Date(`${todayLocal}T12:00:00`).getTime()) / DAY_MS)
+}
+/** 고른 날짜까지 몇 주(반올림). 추천 날짜는 일요일로 맞추며 며칠 늘어나므로 내림한 recommendedDate.weeks 를 쓴다. */
+function weeksUntil(iso: string) {
+  return form.noRaceDate ? recommendedDate.value.weeks : Math.round(daysUntil(iso) / 7)
+}
+/** "3주 뒤" — 2주 안쪽은 날짜로. */
+function relativeLabel(iso: string) {
+  const days = daysUntil(iso)
+  return days < 14 ? `${days}일 뒤` : `${weeksUntil(iso)}주 뒤`
+}
+function shortDate(iso: string) {
+  const [, month, day] = iso.split('-')
+  return `${Number(month)}/${Number(day)}(${WEEKDAYS[new Date(`${iso}T12:00:00`).getDay()]})`
 }
 
 const injuryAreaOption = computed(() => INJURY_AREAS.find((area) => area.label === form.injuryArea) ?? null)
@@ -322,15 +481,14 @@ async function persist(placed: boolean) {
           { distanceKm: selfDistanceKm.value, durationSec: recordSec.value, date: todayIso(), source: 'estimated' }
         ]
       }
-      if (memory.goals?.[0]) {
-        memory.goals[0].distanceKm = GOAL_KM[form.goalKey]
-        memory.goals[0].title = `${GOAL_LABEL[form.goalKey]} 목표`
-      }
-      memory.goal = `${GOAL_LABEL[form.goalKey]} 목표`
+      // 목표는 미리보기에 쓴 것 그대로 — 첫 자리(빈 메모리의 '목표 미설정')를 바꾸고 활성으로 둔다.
+      const goal: TrainingGoal = { ...buildGoal(effectiveRaceDate.value), strategyNotes: goalStrategyNote.value }
+      memory.goals = [goal, ...(memory.goals ?? []).slice(1)]
+      memory.activeGoalId = goal.id
+      memory.goal = goal.title
 
-      // 온보딩 루틴 슬롯은 "이런 주로 시작해요" 미리보기다 — 메모리에 저장하지 않는다.
-      // 주간 루틴의 정본은 목표로 생성되는 주기화 플랜(training_schedule), 세션별 실행 지침은
-      // sessionBriefing 이 갖는다. 여기서 처방을 따로 영속하면 그 둘과 어긋난다(2026-09-07).
+      // 주간 루틴의 정본은 목표로 생성되는 주기화 플랜(training_schedule), 세션별 실행 지침은 sessionBriefing 이 갖는다.
+      // 온보딩은 처방을 따로 저장하지 않는다(2026-09-07) — 첫 주 미리보기도 같은 생성기로 계산만 한다.
 
       // #331: 부상 심화 입력 → 구조화 TrainingInjuryItem
       if (form.hasInjury) {
@@ -363,8 +521,8 @@ async function persist(placed: boolean) {
         </button>
       </header>
 
-      <!-- 1: 기본 -->
-      <section v-if="step === 1" class="onboarding-step">
+      <!-- 기본 -->
+      <section v-if="step === 'basic'" class="onboarding-step">
         <h2>나를 알려주세요</h2>
         <p class="onboarding-help">레벨을 정확히 잡기 위한 기본 정보예요.</p>
         <label class="field">
@@ -430,22 +588,22 @@ async function persist(placed: boolean) {
               <strong>{{ previewSummary.daysSinceLast === 0 ? '오늘' : `${previewSummary.daysSinceLast}일 전` }}</strong>
             </div>
           </div>
-          <div class="records-choices" role="radiogroup" aria-label="기록을 어떻게 할까요">
+          <div class="choice-list" role="radiogroup" aria-label="기록을 어떻게 할까요">
             <button
               type="button"
               role="radio"
-              class="records-choice"
+              class="choice-card"
               :class="{ on: recordsChoice === 'import' }"
               :aria-checked="recordsChoice === 'import'"
               @click="recordsChoice = 'import'"
             >
-              <strong>이 기록 가져오기 <span class="records-badge">추천</span></strong>
+              <strong>이 기록 가져오기 <span class="choice-badge">추천</span></strong>
               <span>시작 강도를 이 기록에 맞춰요. 기록·추세 탭에도 바로 보여요.</span>
             </button>
             <button
               type="button"
               role="radio"
-              class="records-choice"
+              class="choice-card"
               :class="{ on: recordsChoice === 'today' }"
               :aria-checked="recordsChoice === 'today'"
               @click="recordsChoice = 'today'"
@@ -474,8 +632,8 @@ async function persist(placed: boolean) {
         </template>
       </section>
 
-      <!-- 2: 완주 경험 + 기록 -->
-      <section v-else-if="step === 2" class="onboarding-step">
+      <!-- 완주 경험 + 기록 -->
+      <section v-else-if="step === 'distance'" class="onboarding-step">
         <h2>완주해본 가장 긴 거리는?</h2>
         <p class="onboarding-help">거리 클래스(전직)를 정합니다. 영구 해금이라 줄어들지 않아요.</p>
         <div class="chip-grid">
@@ -510,27 +668,112 @@ async function persist(placed: boolean) {
         </div>
       </section>
 
-      <!-- 3: 목표 & 현재 + 부상 심화 -->
-      <section v-else-if="step === 3" class="onboarding-step">
-        <h2>목표와 현재 루틴</h2>
-        <p class="onboarding-help">퀘스트와 추천 훈련의 기준이 됩니다.</p>
-        <span class="field-label">목표 거리</span>
+      <!-- 목표 종류 (#878 B5) -->
+      <section v-else-if="step === 'goalType'" class="onboarding-step">
+        <h2>무엇을 위해 뛰나요?</h2>
+        <p class="onboarding-help">플랜 모양이 달라져요. 나중에 기억 탭에서 바꿀 수 있어요.</p>
+        <div class="choice-list" role="radiogroup" aria-label="목표 종류">
+          <button
+            v-for="option in GOAL_TYPES"
+            :key="option.key"
+            type="button"
+            role="radio"
+            class="choice-card"
+            :class="{ on: form.goalType === option.key }"
+            :aria-checked="form.goalType === option.key"
+            @click="form.goalType = option.key"
+          >
+            <strong>{{ option.title }}</strong>
+            <span>{{ option.help }}</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- 대회 상세 (#878 B5): 날짜가 없으면 추천 날짜, 무리면 솔직하게 -->
+      <section v-else-if="step === 'race'" class="onboarding-step">
+        <h2>어떤 대회를 준비하나요?</h2>
+        <span class="field-label">거리</span>
         <div class="chip-grid">
           <button
-            v-for="key in (['5k','10k','half','full'] as GoalKey[])"
+            v-for="key in GOAL_ORDER"
             :key="key"
             type="button"
             class="chip"
             :class="{ on: form.goalKey === key }"
-            @click="form.goalKey = key"
+            :aria-pressed="form.goalKey === key"
+            @click="pickGoalKey(key)"
           >
             {{ GOAL_LABEL[key] }}
           </button>
         </div>
+
+        <template v-if="!form.noRaceDate">
+          <DateField v-model="form.raceDate" class="field" label="대회 날짜" placeholder="날짜 선택" />
+          <small v-if="effectiveRaceDate" class="onboarding-help">{{ relativeLabel(effectiveRaceDate) }} · 대회일에 맞춰 단계를 나눠요</small>
+        </template>
+        <div class="field field-row">
+          <span id="onboarding-no-date-label">아직 날짜가 없어요</span>
+          <button
+            class="switch-control"
+            :class="{ on: form.noRaceDate }"
+            type="button"
+            role="switch"
+            aria-labelledby="onboarding-no-date-label"
+            :aria-checked="form.noRaceDate"
+            @click="form.noRaceDate = !form.noRaceDate"
+          >
+            <span />
+          </button>
+        </div>
+        <small v-if="raceHint" class="onboarding-help" role="status">{{ raceHint }}</small>
+
+        <div v-if="form.noRaceDate" class="goal-box" role="status">
+          <span class="goal-box-label">이 날짜를 목표로 플랜을 짤게요</span>
+          <strong>{{ formatDateWithWeekday(recommendedDate.date) }} · {{ recommendedDate.weeks }}주 뒤</strong>
+          <span>{{ recommendedReason }} 대회가 정해지면 기억 탭에서 날짜만 바꾸면 돼요.</span>
+        </div>
+
+        <div v-if="tooSoon && !tooSoonAccepted && effectiveRaceDate" class="records-conflict" role="status">
+          <strong>{{ relativeLabel(effectiveRaceDate) }} {{ GOAL_LABEL[form.goalKey] }} 대회는 지금 몸으로는 무리예요</strong>
+          <span>
+            <template v-if="startWeeklyKm">지금은 주 {{ Math.round(startWeeklyKm) }}km예요. </template>
+            {{ GOAL_LABEL[form.goalKey] }} 완주 준비엔 주 {{ Math.round(minimumGoalWeeklyKm(GOAL_KM[form.goalKey])) }}km 안팎이 필요해요.
+            <template v-if="postponeOption">한 주에 안전하게 늘릴 수 있는 만큼 늘리면 {{ postponeOption.weeks }}주쯤 걸려요.</template>
+          </span>
+          <button v-if="postponeOption" class="primary" type="button" @click="form.raceDate = postponeOption.date">
+            {{ shortDate(postponeOption.date) }}로 미루기 (추천)
+          </button>
+          <button v-if="shorterGoalOption" class="ghost" type="button" @click="pickGoalKey(shorterGoalOption)">
+            이 날짜에 {{ GOAL_LABEL[shorterGoalOption] }}로 바꿀게요
+          </button>
+          <button class="ghost" type="button" @click="tooSoonAccepted = true">그대로 할게요</button>
+          <small>'그대로'를 골라도 플랜은 한 주에 안전하게 늘릴 수 있는 만큼만 늘려요. 대회 날엔 걷기를 섞어 완주하는 걸 목표로 잡아요.</small>
+        </div>
+        <small v-else-if="tooSoon && tooSoonAccepted" class="onboarding-help" role="status">
+          빠듯한 날짜로 가요 — 플랜은 안전한 폭으로만 늘리고, 대회 날엔 걷기를 섞어 완주를 노려요.
+        </small>
+
+        <div v-if="!entryLevel" class="record-row">
+          <span class="field-label">목표 기록 (선택)</span>
+          <div class="record-inputs">
+            <input v-model.number="form.goalMin" type="number" inputmode="numeric" placeholder="분" aria-label="목표 기록 분" />
+            <span>:</span>
+            <input v-model.number="form.goalSec" type="number" inputmode="numeric" placeholder="초" aria-label="목표 기록 초" />
+          </div>
+          <small class="onboarding-help">비워 두면 완주가 목표예요.</small>
+        </div>
+        <small v-else class="onboarding-help">걷기·뛰기 단계에선 기록보다 완주가 먼저라, 목표 기록은 5K를 뛰고 나서 정해요.</small>
+      </section>
+
+      <!-- 지금 루틴 + 부상 심화 -->
+      <section v-else-if="step === 'routine'" class="onboarding-step">
+        <h2>지금 루틴과 몸 상태</h2>
+        <p class="onboarding-help">주 횟수는 플랜에, 부상은 세션 강도에 반영돼요.</p>
         <label class="field">
           <span>주간 러닝 목표 (회/주)</span>
           <input v-model.number="form.weeklyDays" type="number" inputmode="numeric" min="1" max="7" />
         </label>
+        <small v-if="entryLevel" class="onboarding-help">걷기·뛰기 단계는 주 3회로 시작해요 — 사이사이 쉬는 날을 둬요.</small>
         <!-- 체크박스는 전역 input 스타일(폭 100%·높이 48px)에 늘어나 회색 막대로 보였다(#866) — 앱의 켬/끔 스위치로 -->
         <div class="field field-row">
           <span id="onboarding-injury-label">현재 관리 중인 부상이 있나요?</span>
@@ -587,44 +830,32 @@ async function persist(placed: boolean) {
             <span>언제부터인가요? (선택)</span>
             <input v-model="form.injuryOnset" type="date" />
           </label>
-          <small class="onboarding-help">부상 정보는 추천 루틴에서 고강도 세션을 자동으로 낮춰요.</small>
+          <small class="onboarding-help">부상 정보는 세션마다 강도를 자동으로 낮춰요.</small>
           <small v-if="injuryIncomplete" class="onboarding-help" role="status">
             {{ injuryAreaOption ? '어느 쪽인지 골라주세요.' : '부위를 골라주세요.' }}
           </small>
         </div>
       </section>
 
-      <!-- 4: 주간 루틴 추천 + 인라인 편집 (#329) -->
-      <section v-else-if="step === 4" class="onboarding-step">
-        <h2>주간 루틴 추천</h2>
-        <p class="onboarding-help">
-          주 {{ form.weeklyDays }}회 · {{ GOAL_LABEL[form.goalKey] }} 목표 기준이에요. 요일/세션을 바꿀 수 있어요.
-        </p>
-        <ul class="slot-list">
-          <li v-for="(slot, index) in routineSlots" :key="index" class="slot-row">
-            <button type="button" class="slot-day" @click="cycleDay(index)">{{ slot.day }}</button>
-            <button type="button" class="chip slot-chip" @click="cycleTemplate(index)">{{ templateName(slot.templateId) }}</button>
-            <button type="button" class="slot-x" aria-label="삭제" @click="removeSlot(index)">✕</button>
+      <!-- 첫 주 미리보기 (#878 B5): 대시보드가 짓는 플랜과 같은 생성기·같은 입력. 편집은 시작한 뒤에. -->
+      <section v-else-if="step === 'preview'" class="onboarding-step">
+        <h2>첫 주는 이렇게 시작해요</h2>
+        <p class="onboarding-help">{{ previewSubtitle }}</p>
+        <ul v-if="firstWeekRows.length" class="week-list">
+          <li v-for="row in firstWeekRows" :key="row.date" class="week-row">
+            <span class="week-day">
+              <strong>{{ row.weekday }}</strong>
+              <small>{{ row.monthDay }}</small>
+            </span>
+            <span class="week-body">
+              <strong>{{ row.title }}</strong>
+              <span>{{ row.detail }}</span>
+            </span>
           </li>
         </ul>
-        <button v-if="routineSlots.length < 7" type="button" class="slot-add" @click="addSlot">＋ 세션 추가</button>
-        <small class="onboarding-help">요일 탭→다음 요일 · 세션 탭→다른 훈련으로 교체</small>
-      </section>
-
-      <!-- 5: 처방 매핑 확정 (#330) -->
-      <section v-else-if="step === 5" class="onboarding-step">
-        <h2>훈련 확인</h2>
-        <p class="onboarding-help">각 세션이 무엇을 위한 건지예요. ‘다른 훈련’으로 바꿀 수 있어요. 웜업·반복수 같은 세부 실행 지침은 목표로 플랜이 만들어진 뒤 세션마다 계산돼요.</p>
-        <ul class="rx-list">
-          <li v-for="(slot, index) in routineSlots" :key="index" class="rx-row">
-            <div class="rx-head">
-              <span class="rx-day">{{ slot.day }}</span>
-              <span class="rx-name">{{ templateName(slot.templateId) }}</span>
-              <button type="button" class="rx-swap" @click="swapPrescription(index)">다른 훈련</button>
-            </div>
-            <p class="rx-purpose">{{ templateOf(slot.templateId)?.purpose }}</p>
-          </li>
-        </ul>
+        <p v-else class="onboarding-help">이번 주에 잡힌 훈련이 없어요. 다음 주부터 시작해요.</p>
+        <p class="onboarding-help">실제로 만들어질 플랜의 첫 주예요. 시작한 뒤에도 날짜를 옮기거나 다른 훈련으로 바꿀 수 있어요.</p>
+        <p v-if="form.hasInjury" class="onboarding-help">부상이 있어서 세션마다 통증에 맞춰 강도를 낮춰 안내해요.</p>
       </section>
 
       <!-- reveal: 시작 배치 -->
@@ -647,12 +878,12 @@ async function persist(placed: boolean) {
       <p v-if="error" class="onboarding-error">{{ error }}</p>
 
       <footer class="onboarding-foot">
-        <button v-if="step !== 1" class="ghost" type="button" :disabled="saving" @click="back">이전</button>
+        <button v-if="step !== 'basic'" class="ghost" type="button" :disabled="saving" @click="back">이전</button>
         <button
           v-if="step !== 'reveal' && (step !== 'records' || recordsView === 'found')"
           class="primary"
           type="button"
-          :disabled="saving || (step === 3 && injuryIncomplete)"
+          :disabled="saving || (step === 'race' && raceIncomplete) || (step === 'routine' && injuryIncomplete)"
           @click="next"
         >
           다음
@@ -822,117 +1053,6 @@ async function persist(placed: boolean) {
   background: var(--color-surface-card);
 }
 
-.slot-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.slot-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.slot-day {
-  flex: 0 0 auto;
-  width: 44px;
-  padding: 10px 0;
-  border-radius: 12px;
-  border: 1px solid rgba(120, 120, 120, 0.3);
-  background: var(--color-surface-card);
-  color: var(--color-text);
-  font-size: var(--text-info-size);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.slot-chip {
-  flex: 1;
-  text-align: center;
-}
-
-.slot-x {
-  flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
-  border-radius: 999px;
-  border: 1px solid rgba(120, 120, 120, 0.3);
-  background: transparent;
-  color: var(--color-muted);
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.slot-add {
-  align-self: flex-start;
-  padding: 10px 16px;
-  border-radius: 999px;
-  border: 1px dashed rgba(120, 120, 120, 0.4);
-  background: transparent;
-  color: var(--color-text);
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.rx-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.rx-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 14px;
-  border-radius: var(--radius-card, 16px);
-  border: 1px solid rgba(120, 120, 120, 0.3);
-  background: var(--color-surface-card);
-}
-
-.rx-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.rx-day {
-  flex: 0 0 auto;
-  font-weight: 700;
-  color: var(--color-primary);
-}
-
-.rx-name {
-  flex: 1;
-  font-weight: 600;
-  color: var(--color-text);
-}
-
-.rx-swap {
-  flex: 0 0 auto;
-  padding: 6px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(120, 120, 120, 0.3);
-  background: transparent;
-  color: var(--color-muted);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.rx-purpose {
-  font-size: var(--text-caption-size);
-  color: var(--color-text);
-  margin: 0;
-}
-
-
 .onboarding-reveal {
   align-items: center;
   text-align: center;
@@ -1015,14 +1135,14 @@ async function persist(placed: boolean) {
   color: var(--color-text);
 }
 
-.records-choices {
+.choice-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
 /* 전역 button 기본(그라디언트·그림자·높이)을 지우고 카드형 선택지로 쓴다(ui-system-contract 커스텀 버튼 규칙). */
-.records-choice {
+.choice-card {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -1038,25 +1158,25 @@ async function persist(placed: boolean) {
   text-align: left;
 }
 
-.records-choice.on {
+.choice-card.on {
   border-color: var(--color-primary);
   background: var(--color-primary-soft);
 }
 
-.records-choice strong {
+.choice-card strong {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: var(--text-info-size);
 }
 
-.records-choice span {
+.choice-card span {
   font-size: var(--text-caption-size);
   font-weight: 400;
   color: var(--color-muted);
 }
 
-.records-badge {
+.choice-badge {
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--color-primary);
@@ -1078,6 +1198,93 @@ async function persist(placed: boolean) {
 
 .records-conflict span {
   font-size: var(--text-caption-size);
+  color: var(--color-muted);
+}
+
+.records-conflict small {
+  font-size: var(--text-caption-size);
+  color: var(--color-muted);
+}
+
+.goal-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+
+.goal-box-label {
+  font-size: var(--text-caption-size);
+  font-weight: 700;
+  color: var(--color-muted);
+}
+
+.goal-box strong {
+  font-size: var(--text-title-size);
+  font-weight: 800;
+}
+
+.goal-box span:last-child {
+  font-size: var(--text-caption-size);
+  color: var(--color-muted);
+}
+
+.week-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.week-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--color-surface-2);
+}
+
+.week-day {
+  flex: 0 0 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.week-day strong {
+  font-size: var(--text-info-size);
+  font-weight: 800;
+  color: var(--color-text);
+}
+
+.week-day small {
+  font-size: var(--text-micro-size);
+  color: var(--color-muted);
+}
+
+.week-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.week-body strong {
+  font-size: var(--text-info-size);
+  font-weight: 800;
+  color: var(--color-text);
+}
+
+.week-body span {
+  font-size: var(--text-caption-size);
+  line-height: 1.5;
   color: var(--color-muted);
 }
 
