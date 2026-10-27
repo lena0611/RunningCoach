@@ -1,7 +1,6 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
-// 안내 페이지는 지연 로드하지 않는다(2026-10-27). main.ts 가 `await router.isReady()` 로 첫 화면을 기다리는데,
-// 지연 청크는 메인 번들(아직 평가 중)을 import 해서 Chromium 에선 서로를 기다리며 스플래시에 멈췄다.
-// 일반 브라우저(앱 밖)가 갈 수 있는 화면은 이것뿐이라 이것만 메인 번들에 둔다(약 1KB). 아이폰 앱(WebKit)은 영향 없음.
+// 안내 페이지는 지연 로드하지 않는다(2026-10-27). 일반 브라우저(앱 밖)가 갈 수 있는 유일한 화면이라 메인 번들에 둔다(약 1KB).
+// 부팅 교착(main.ts 가 첫 화면 지연 청크를 top-level await 로 기다리던 것)의 1차 수정이었고, 근본 수정은 main.ts 에 있다.
 import AccessGuidePage from '@/pages/access-gate/AccessGuidePage.vue'
 
 export const router = createRouter({

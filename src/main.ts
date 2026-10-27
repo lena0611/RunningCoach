@@ -55,15 +55,20 @@ router.onError((error) => {
   window.sessionStorage.setItem('runcontext:chunk-reload-attempted', '1')
   window.location.reload()
 })
-await router.isReady()
-app.mount('#app')
+// 첫 화면이 준비되면 마운트한다 — **top-level await 로 기다리지 않는다**(2026-10-27). 첫 화면은 지연 청크인데,
+// 지연 청크는 이 모듈(메인 번들)을 import 한다. 여기서 await 하면 이 모듈의 평가가 끝나지 않아 청크도 못 끝나고,
+// 서로를 기다리며 스플래시에 멈춘다(Chromium·데스크톱 WebKit 에서 재현, iOS WebKit 은 우연히 통과).
+// 마운트와 그 뒤 순서(마운트 → 스토어 로드)는 예전과 같다.
+void router.isReady().then(() => {
+  app.mount('#app')
 
-if (!isSupabaseConfigured || authStore.isAuthenticated) {
-  void useLevelStore().load()
-  Promise.all([useMemoryStore().load(), useRunStore().load()]).catch(() => {
-    // 화면 mount를 막지 않는다. 각 store가 자체 error 상태를 표시한다.
-  })
-}
+  if (!isSupabaseConfigured || authStore.isAuthenticated) {
+    void useLevelStore().load()
+    Promise.all([useMemoryStore().load(), useRunStore().load()]).catch(() => {
+      // 화면 mount를 막지 않는다. 각 store가 자체 error 상태를 표시한다.
+    })
+  }
+})
 
 // DEV 전용 E2E 시드 훅(#473 복귀 램프 검증). 동적 import + DEV 게이트라 프로덕션 번들엔 빠진다.
 if (import.meta.env.DEV) {
