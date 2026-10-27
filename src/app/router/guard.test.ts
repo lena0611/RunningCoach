@@ -54,3 +54,12 @@ describe('guardRedirect — 전역 라우트 가드', () => {
     expect(settle('/coach', state({ e2eRouteSmoke: true, canUseApp: false, authenticated: false }))).toBe('/coach')
   })
 })
+
+describe('안내 페이지 라우트', () => {
+  it('지연 로드하지 않는다 — 부팅이 첫 화면을 기다리는 동안 지연 청크가 메인 번들을 기다려 Chromium 에서 멈췄다', async () => {
+    const { router } = await import('./index')
+    const access = router.getRoutes().find((route) => route.path === '/access')
+    // 지연 로드면 () => import(...) 함수, 정적이면 컴포넌트 객체.
+    expect(typeof access?.components?.default).toBe('object')
+  })
+})
