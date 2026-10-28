@@ -28,10 +28,12 @@ import { isReloadingForNewBuild } from '@/shared/lib/buildVersion'
  * v4: v3 재빌드가 런 로딩 전에 돌아 콜드스타트 앵커(20km)로 중급 피크 플랜을 저장한 사고 복구(2026-10-16).
  *     로딩 가드를 넣고 한 번 더 재빌드한다.
  * v5: 저볼륨 주는 횟수를 줄여 세션 최소 길이 확보 + 한계 시험 4주 간격(#861).
+ * v6: 단계 달력 고정 — 다시 지어도 첫 세션 날짜부터의 단계를 잇는다 + 주 9km 미만 주는 이지만(#893).
+ *     저장 플랜이 오늘부터 다시 나눈 단계(기초기부터)를 들고 있어 1회 재빌드로 옮긴다.
  */
-const SCHEDULE_ANCHOR_LOGIC_VERSION = 5
+const SCHEDULE_ANCHOR_LOGIC_VERSION = 6
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
-import { buildPlanPhaseJourney } from '@/shared/lib/coaching/planPhases'
+import { buildPlanPhaseJourney, phaseCalendarStart } from '@/shared/lib/coaching/planPhases'
 import { buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, planMatchesEntryLevel, planStartWeeklyKm, prescriptionFor, trainingWeekRange, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
 import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
 import { buildRealignedSchedule, dropDraftsOnRestedDates } from '@/shared/lib/coaching/scheduleRealign'
@@ -168,6 +170,18 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
     return buildCoachAdaptiveProgress(runs.value, memoryStore.memory, journey ? journey.blocks[journey.currentIndex].phase : 'Base')
   })
 
+  /**
+   * 단계 달력 시작일(#893) — 다시 지어도 지금 단계를 잇는다. 그 목표의 가장 이른 세션 날짜, 플랜 중 28일 넘게 쉬었으면
+   * 공백 뒤 첫 런(planPhases.phaseCalendarStart). 콜드스타트·재빌드·재정렬·복귀 램프가 모두 이 값을 넘긴다.
+   */
+  function phaseStartFor(goalId: string): string | null {
+    return phaseCalendarStart(
+      scheduleStore.sessions.filter((s) => s.goalId === goalId),
+      runs.value.map((r) => r.date),
+      dateOnly(today.value)
+    )
+  }
+
   /** 목표에 targetDate+거리가 있으면 골격 생성, 없으면 재정렬 점검(best-effort, no-op 안전). */
   function ensureSchedule(): Promise<void> {
     if (ensureInFlight) return ensureInFlight
@@ -291,7 +305,8 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
             today: today.value,
             currentWeeklyKm: currentWeeklyKm.value,
             observedEasyPace: observedEasyPace.value,
-            entryLevel: entryLevel.value
+            entryLevel: entryLevel.value,
+            phaseStartDate: phaseStartFor(goal.id)
           }),
           mine
         )
@@ -330,6 +345,7 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
             currentWeeklyKm: currentWeeklyKm.value,
             observedEasyPace: observedEasyPace.value,
             entryLevel: entryLevel.value,
+            phaseStartDate: phaseStartFor(goal.id),
             // 휴식 메타가 살아 있으면 캡을 보존한다(램프 창 중 재빌드가 캡을 잃지 않게).
             returnRamp: (() => {
               const rest = memoryStore.memory.activeRest
@@ -366,7 +382,7 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
             await persistScheduleAnchor(currentWeeklyKm.value)
             anchorForCheck = currentWeeklyKm.value
           }
-          const plan = buildRealignedSchedule(mine, goal, memoryStore.memory.athleteProfile, today.value, currentWeeklyKm.value, anchorForCheck, observedEasyPace.value, returnRamp, entryLevel.value)
+          const plan = buildRealignedSchedule(mine, goal, memoryStore.memory.athleteProfile, today.value, currentWeeklyKm.value, anchorForCheck, observedEasyPace.value, returnRamp, entryLevel.value, phaseStartFor(goal.id))
           // rested 날짜 차단(#473 메타-독립 가드): 메타가 유실돼도 재정렬이 휴식 창을 다시 채우지 않는다.
           // (복귀 램프 경로는 위에서 unrestFrom 이 선행돼 rested 가 없으므로 필터가 no-op — 램프 초안 안 깎임)
           plan.drafts = dropDraftsOnRestedDates(plan.drafts, scheduleStore.sessions.filter((s) => s.goalId === goal.id))
@@ -439,7 +455,8 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
       currentWeeklyKm: currentWeeklyKm.value,
       observedEasyPace: observedEasyPace.value,
       returnRamp: payload,
-      entryLevel: entryLevel.value
+      entryLevel: entryLevel.value,
+      phaseStartDate: phaseStartFor(goal.id)
     }).map((d) => ({ ...d, source: 'realign' as const }))
     if (!drafts.length) return
     await scheduleStore.realign(goal.id, dateOnly(today.value), drafts)

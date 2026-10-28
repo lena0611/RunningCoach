@@ -5,11 +5,13 @@ import { useLevelStore } from '@/app/stores/levelStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useRunStore } from '@/app/stores/runStore'
 import { useToastStore } from '@/app/stores/toastStore'
+import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
 import { applyGoalChange, type GoalChange } from '@/entities/training-memory/goalChanges'
 import { beginnerWalkRunStage } from '@/shared/lib/coaching/beginnerWalkRun'
 import { goalAdjustOptions, goalAdjustStartDate, isGoalDateFeasible, raceDistanceLabel, type GoalAdjustInput } from '@/shared/lib/coaching/goalAdjust'
 import { buildPeriodizedSchedule, GOAL_DISTANCE_RECENCY_DAYS, planStartWeeklyKm } from '@/shared/lib/coaching/periodizedSchedule'
+import { phaseCalendarStart } from '@/shared/lib/coaching/planPhases'
 import { getLongestRunKmWithinDays } from '@/shared/lib/runStats'
 import { formatDuration, formatMonthDay } from '@/shared/lib/format'
 import { useBottomSheetDrag } from '@/shared/lib/useBottomSheetDrag'
@@ -29,6 +31,7 @@ const memoryStore = useMemoryStore()
 const runStore = useRunStore()
 const levelStore = useLevelStore()
 const toastStore = useToastStore()
+const scheduleStore = useTrainingScheduleStore()
 
 const step = ref<Step>('options')
 const choice = ref<Choice | null>(null)
@@ -189,7 +192,9 @@ const preview = computed(() => {
     profile: memoryStore.memory.athleteProfile,
     today: today.value,
     currentWeeklyKm: currentWeeklyKm.value,
-    entryLevel: beginnerWalkRunStage(levelStore.selfReportedMaxDistanceM, runStore.runs) !== null
+    entryLevel: beginnerWalkRunStage(levelStore.selfReportedMaxDistanceM, runStore.runs) !== null,
+    // 실제 재빌드(useTrainingWeek)와 같은 단계 달력(#893) — 미리보기 첫 주가 다시 짠 플랜과 어긋나지 않게.
+    phaseStartDate: phaseCalendarStart(scheduleStore.sessions.filter((s) => s.goalId === g.id), runStore.runs.map((r) => r.date), isoOf(today.value))
   }).filter((d) => d.date >= start)
   if (!drafts.length) return null
   const first = drafts[0].date

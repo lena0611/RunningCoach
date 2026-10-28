@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { normalizeTrainingMemory, type TrainingPhaseName } from '@/entities/training-memory/model'
 import { defaultScheduledSessionPrescription, type ScheduledSession } from '@/entities/training-schedule/model'
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
-import { buildPlanPhaseJourney, currentPlanPhase } from '@/shared/lib/coaching/planPhases'
+import { buildPlanPhaseJourney, currentPlanPhase, phaseCalendarStart } from '@/shared/lib/coaching/planPhases'
 
 function session(overrides: Partial<ScheduledSession> & { date: string }): ScheduledSession {
   return {
@@ -78,6 +78,16 @@ describe('buildPlanPhaseJourney (#887 — 단계의 정본은 플랜)', () => {
     expect(currentPlanPhase(plan, new Date('2026-11-25T09:00:00'))).toBe('Threshold')
   })
 
+  it('이번 주가 핵심 세션 없이 9km 미만이면 주행량 먼저 쌓는 주(#893) — 단계 카드 설명을 바꾼다', () => {
+    const rx = (distanceKm: number) => ({ ...defaultScheduledSessionPrescription(), distanceKm })
+    const withKm = (km: number, key: boolean) =>
+      tenWeekPlan().map((s) => ({ ...s, prescription: rx(km), keySession: key && s.date === '2026-11-26' }))
+    const today = new Date('2026-11-25T09:00:00') // 7주차(역치)
+    expect(buildPlanPhaseJourney(withKm(2, false), today)!.volumeFirstWeek).toBe(true)
+    expect(buildPlanPhaseJourney(withKm(2, true), today)!.volumeFirstWeek).toBe(false)
+    expect(buildPlanPhaseJourney(withKm(4, false), today)!.volumeFirstWeek).toBe(false)
+  })
+
   it('오늘이 플랜 기간 밖이면 null — 카드를 띄우지 않는다', () => {
     expect(buildPlanPhaseJourney(tenWeekPlan(), new Date('2026-12-30T09:00:00'))).toBeNull()
     expect(buildPlanPhaseJourney([], new Date('2026-11-25T09:00:00'))).toBeNull()
@@ -91,5 +101,44 @@ describe('buildCoachAdaptiveProgress — 플랜 단계를 쓴다(#887)', () => {
     expect(summary.currentPhase).toBe('Threshold')
     expect(summary.criteria.find((c) => c.id === 'tempo-ceiling-quality')?.status).not.toBe('n/a')
     expect('phaseProposal' in summary).toBe(false)
+  })
+})
+
+// #893: 단계 달력 시작일 — 첫 세션 날짜, 단 28일 넘는 런 공백 뒤면 공백 뒤 첫 런(지금 공백 중이면 오늘).
+describe('phaseCalendarStart (#893)', () => {
+  const sessions = (...dates: string[]) => dates.map((date) => ({ date }))
+
+  it('플랜이 없거나 오늘 시작이면 null — 오늘부터 나눈다', () => {
+    expect(phaseCalendarStart([], ['2026-10-01'], '2026-10-28')).toBeNull()
+    expect(phaseCalendarStart(sessions('2026-10-28', '2026-10-30'), [], '2026-10-28')).toBeNull()
+  })
+
+  it('꾸준히 뛰었으면 그 목표의 가장 이른 세션 날짜', () => {
+    const runs = ['2026-09-28', '2026-10-03', '2026-10-10', '2026-10-17', '2026-10-25']
+    expect(phaseCalendarStart(sessions('2026-10-12', '2026-10-01', '2026-11-20'), runs, '2026-10-28')).toBe('2026-10-01')
+  })
+
+  it('플랜 중 28일 넘게 안 뛰었으면 공백 뒤 첫 런부터 — 쌓은 체력이 사실상 사라졌다', () => {
+    const runs = ['2026-08-03', '2026-08-10', '2026-09-20', '2026-09-25', '2026-10-20']
+    expect(phaseCalendarStart(sessions('2026-08-01'), runs, '2026-10-28')).toBe('2026-09-20')
+  })
+
+  it('공백이 4주 이하면 달력을 잇는다', () => {
+    // 08-03 → 08-31 사이 안 뛴 날 27일
+    expect(phaseCalendarStart(sessions('2026-08-01'), ['2026-08-03', '2026-08-31', '2026-09-25'], '2026-10-01')).toBe('2026-08-01')
+  })
+
+  it('공백은 플랜 시작 전 마지막 런부터 잰다', () => {
+    // 플랜 시작 20일 전에 마지막으로 뛰고 시작 12일 뒤에 돌아왔다 — 31일 쉬었다
+    expect(phaseCalendarStart(sessions('2026-09-01'), ['2026-08-12', '2026-09-13', '2026-09-20'], '2026-10-01')).toBe('2026-09-13')
+  })
+
+  it('지금 28일 넘게 쉬는 중이면 오늘부터', () => {
+    expect(phaseCalendarStart(sessions('2026-08-01'), ['2026-08-05', '2026-09-01'], '2026-10-28')).toBe('2026-10-28')
+  })
+
+  it('플랜을 짓고 한 번도 안 뛰었으면 플랜 시작일부터 잰다', () => {
+    expect(phaseCalendarStart(sessions('2026-10-15'), [], '2026-10-28')).toBe('2026-10-15')
+    expect(phaseCalendarStart(sessions('2026-09-01'), [], '2026-10-28')).toBe('2026-10-28')
   })
 })
