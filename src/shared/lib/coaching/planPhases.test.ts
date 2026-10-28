@@ -137,6 +137,17 @@ describe('phaseCalendarStart (#893)', () => {
     expect(phaseCalendarStart(sessions('2026-08-01'), ['2026-08-05', '2026-09-01'], '2026-10-28')).toBe('2026-10-28')
   })
 
+  it('목표 시작일이 첫 세션보다 늦으면 그날부터 — 쉬던 목표를 다시 시작하면 새 달력(#893 후속)', () => {
+    const steady = ['2026-06-20', '2026-07-01', '2026-07-20', '2026-08-10', '2026-09-01', '2026-09-20', '2026-10-10', '2026-11-01', '2026-11-20']
+    // 6/18 플랜, 11/30 에 다시 시작(회복 리듬으로 계속 뛰어 28일 공백 없음) → 다시 시작한 날부터
+    expect(phaseCalendarStart(sessions('2026-06-18'), steady, '2026-12-10', '2026-11-30')).toBe('2026-11-30')
+    // 다시 시작한 날이 오늘이면 오늘부터 나눈다
+    expect(phaseCalendarStart(sessions('2026-06-18'), steady, '2026-11-30', '2026-11-30')).toBeNull()
+    // 시작일이 첫 세션보다 이르거나 없으면 예전처럼 첫 세션
+    expect(phaseCalendarStart(sessions('2026-06-18'), steady, '2026-10-28', '2026-06-01')).toBe('2026-06-18')
+    expect(phaseCalendarStart(sessions('2026-06-18'), steady, '2026-10-28', null)).toBe('2026-06-18')
+  })
+
   it('플랜을 짓고 한 번도 안 뛰었으면 플랜 시작일부터 잰다', () => {
     expect(phaseCalendarStart(sessions('2026-10-15'), [], '2026-10-28')).toBe('2026-10-15')
     expect(phaseCalendarStart(sessions('2026-09-01'), [], '2026-10-28')).toBe('2026-10-28')

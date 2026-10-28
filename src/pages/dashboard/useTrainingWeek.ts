@@ -171,14 +171,16 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
   })
 
   /**
-   * 단계 달력 시작일(#893) — 다시 지어도 지금 단계를 잇는다. 그 목표의 가장 이른 세션 날짜, 플랜 중 28일 넘게 쉬었으면
-   * 공백 뒤 첫 런(planPhases.phaseCalendarStart). 콜드스타트·재빌드·재정렬·복귀 램프가 모두 이 값을 넘긴다.
+   * 단계 달력 시작일(#893) — 다시 지어도 지금 단계를 잇는다. 그 목표의 가장 이른 세션 날짜(목표 시작일이 더 늦으면 그날 —
+   * 쉬던 목표를 다시 시작한 경우), 플랜 중 28일 넘게 쉬었으면 공백 뒤 첫 런(planPhases.phaseCalendarStart).
+   * 콜드스타트·재빌드·재정렬·복귀 램프가 모두 이 값을 넘긴다.
    */
-  function phaseStartFor(goalId: string): string | null {
+  function phaseStartFor(goal: TrainingGoal): string | null {
     return phaseCalendarStart(
-      scheduleStore.sessions.filter((s) => s.goalId === goalId),
+      scheduleStore.sessions.filter((s) => s.goalId === goal.id),
       runs.value.map((r) => r.date),
-      dateOnly(today.value)
+      dateOnly(today.value),
+      goal.startDate
     )
   }
 
@@ -306,7 +308,7 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
             currentWeeklyKm: currentWeeklyKm.value,
             observedEasyPace: observedEasyPace.value,
             entryLevel: entryLevel.value,
-            phaseStartDate: phaseStartFor(goal.id)
+            phaseStartDate: phaseStartFor(goal)
           }),
           mine
         )
@@ -345,7 +347,7 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
             currentWeeklyKm: currentWeeklyKm.value,
             observedEasyPace: observedEasyPace.value,
             entryLevel: entryLevel.value,
-            phaseStartDate: phaseStartFor(goal.id),
+            phaseStartDate: phaseStartFor(goal),
             // 휴식 메타가 살아 있으면 캡을 보존한다(램프 창 중 재빌드가 캡을 잃지 않게).
             returnRamp: (() => {
               const rest = memoryStore.memory.activeRest
@@ -382,7 +384,7 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
             await persistScheduleAnchor(currentWeeklyKm.value)
             anchorForCheck = currentWeeklyKm.value
           }
-          const plan = buildRealignedSchedule(mine, goal, memoryStore.memory.athleteProfile, today.value, currentWeeklyKm.value, anchorForCheck, observedEasyPace.value, returnRamp, entryLevel.value, phaseStartFor(goal.id))
+          const plan = buildRealignedSchedule(mine, goal, memoryStore.memory.athleteProfile, today.value, currentWeeklyKm.value, anchorForCheck, observedEasyPace.value, returnRamp, entryLevel.value, phaseStartFor(goal))
           // rested 날짜 차단(#473 메타-독립 가드): 메타가 유실돼도 재정렬이 휴식 창을 다시 채우지 않는다.
           // (복귀 램프 경로는 위에서 unrestFrom 이 선행돼 rested 가 없으므로 필터가 no-op — 램프 초안 안 깎임)
           plan.drafts = dropDraftsOnRestedDates(plan.drafts, scheduleStore.sessions.filter((s) => s.goalId === goal.id))
@@ -456,7 +458,7 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
       observedEasyPace: observedEasyPace.value,
       returnRamp: payload,
       entryLevel: entryLevel.value,
-      phaseStartDate: phaseStartFor(goal.id)
+      phaseStartDate: phaseStartFor(goal)
     }).map((d) => ({ ...d, source: 'realign' as const }))
     if (!drafts.length) return
     await scheduleStore.realign(goal.id, dateOnly(today.value), drafts)

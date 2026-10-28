@@ -194,7 +194,10 @@ const preview = computed(() => {
     currentWeeklyKm: currentWeeklyKm.value,
     entryLevel: beginnerWalkRunStage(levelStore.selfReportedMaxDistanceM, runStore.runs) !== null,
     // 실제 재빌드(useTrainingWeek)와 같은 단계 달력(#893) — 미리보기 첫 주가 다시 짠 플랜과 어긋나지 않게.
-    phaseStartDate: phaseCalendarStart(scheduleStore.sessions.filter((s) => s.goalId === g.id), runStore.runs.map((r) => r.date), isoOf(today.value))
+    // 다시 시작은 시작일이 오늘로 바뀌어(goalChanges 'resume') 오늘부터 새 달력이다.
+    phaseStartDate: resumeMode.value
+      ? null
+      : phaseCalendarStart(scheduleStore.sessions.filter((s) => s.goalId === g.id), runStore.runs.map((r) => r.date), isoOf(today.value), g.startDate)
   }).filter((d) => d.date >= start)
   if (!drafts.length) return null
   const first = drafts[0].date

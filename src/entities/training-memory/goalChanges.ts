@@ -51,8 +51,11 @@ export function applyGoalChange(memory: TrainingMemory, goalId: string, change: 
       return { ...memory, goals, activeGoalId: RECOVERY_GOAL_ID, goal: '회복 우선' }
     }
     case 'resume': {
+      // 다시 시작한 날이 새 시작일(#893 후속) — 단계 달력은 시작일과 첫 세션 중 늦은 쪽부터라, 옛 플랜 첫 세션(몇 달 전)부터
+      // 이어 가지 않고 기초기부터 새로 나눈다. 쉬는 동안 회복 리듬으로 계속 뛰어 28일 공백이 없어도 마찬가지다.
       const goals = mapTarget(() => ({
         status: 'active',
+        startDate: localDateOf(now),
         targetDate: change.targetDate,
         ...(change.distanceKm ? { distanceKm: change.distanceKm, targetDurationSec: null } : {}),
         feasibilityAcceptedFor: null
@@ -95,6 +98,12 @@ export function goalResumeSignal(memory: TrainingMemory, todayIso: string, quiet
   }
   if (daysBetween(pausedOn, todayIso) < quietDays) return null
   return { goalId: goal.id, areaLabel: null, pausedOnly: true }
+}
+
+/** 시각(ISO) → 그 사용자의 달력 날짜. UTC 로 자르면 한국 오전 9시 전엔 어제가 된다. */
+function localDateOf(iso: string): string {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function daysBetween(fromIso: string, toIso: string): number {
