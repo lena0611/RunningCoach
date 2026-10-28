@@ -25,6 +25,7 @@ import StackPage from '@/shared/ui/StackPage.vue'
 import { useCoachStore } from '@/app/stores/coachStore'
 import { useSessionDetailStore } from '@/app/stores/sessionDetailStore'
 import InjuryCheckInSheet from '@/shared/ui/InjuryCheckInSheet.vue'
+import GoalAdjustSheet from '@/features/goal-adjust/GoalAdjustSheet.vue'
 import InjuryScreeningSheet from '@/shared/ui/InjuryScreeningSheet.vue'
 import NotificationSettingsPromptSheet from '@/shared/ui/NotificationSettingsPromptSheet.vue'
 import EarlyRunCreditSheet from '@/shared/ui/EarlyRunCreditSheet.vue'
@@ -1036,6 +1037,8 @@ function animateTabRelease(targetOffset: number, targetRoute: string | null) {
       :coins="levelStore.pendingCelebration.coins"
       @dismiss="levelStore.dismissCelebration()"
     />
+    <!-- 목표 다시 정하기(#889): 코치 모먼트·코치 탭·요약 탭·기억 탭 어디서든 goalAdjustStore 로 연다 -->
+    <GoalAdjustSheet />
     <InjuryCheckInSheet
       :open="Boolean(injuryCheckInItem)"
       :item="injuryCheckInItem"

@@ -7,7 +7,7 @@ import { useWeatherStore } from '@/app/stores/weatherStore'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
-import { getActiveGoal, getActiveInjuryItem } from '@/entities/training-memory/model'
+import { getActiveGoal, getActiveInjuryItem, goalPlanKey, RECOVERY_GOAL_ID, sameGoalPlanKey } from '@/entities/training-memory/model'
 import type { ActiveRest, TrainingGoal } from '@/entities/training-memory/model'
 import { deriveRestState } from '@/entities/training-memory/restWindow'
 import { isActiveSession, shouldAdoptPrescribedRunType, type ScheduledSession } from '@/entities/training-schedule/model'
@@ -198,6 +198,17 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
     })
   }
 
+  /** 활성 목표의 플랜이 어느 날짜·거리로 지어졌는지 목표에 남긴다(#889). 같으면 쓰지 않는다. */
+  async function persistPlanBuiltFor(goal: TrainingGoal) {
+    const key = goalPlanKey(goal)
+    const current = memoryStore.memory.goals.find((g) => g.id === goal.id)
+    if (!current || sameGoalPlanKey(current.planBuiltFor, key)) return
+    await memoryStore.update({
+      ...memoryStore.memory,
+      goals: memoryStore.memory.goals.map((g) => (g.id === goal.id ? { ...g, planBuiltFor: key } : g))
+    })
+  }
+
   async function doEnsureSchedule() {
     if (!isSupabaseConfigured) return
     // 런·메모리가 다 실리기 전엔 짓지 않는다(2026-10-16 실사고). 이 함수를 부르는 loaded-watch 는 immediate 라
@@ -286,6 +297,9 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
           await persistScheduleAnchor(currentWeeklyKm.value)
         }
       } else if (
+        // 목표 날짜·거리가 플랜을 지은 값과 다르면(#889) 오늘부터 다시 짠다 — '목표 다시 정하기' 시트든 기억 탭 직접
+        // 편집이든 같은 길. 예전엔 날짜를 바꿔도 놓친 세션 재조정·휴식 복귀 때까지 옛 플랜이 그대로였다.
+        (goal.planBuiltFor != null && !sameGoalPlanKey(goal.planBuiltFor, goalPlanKey(goal))) ||
         memoryStore.memory.adaptiveTrainingProfile.scheduleAnchorLogicVersion !== SCHEDULE_ANCHOR_LOGIC_VERSION ||
         // 입문 여부와 플랜 구성이 어긋나면(입문인데 템포·한계 시험이 있거나, 졸업했는데 전부 걷기·뛰기) 1회 재빌드(#876).
         // 단 휴식·복귀 중엔 '졸업' 쪽을 보지 않는다 — 복귀 램프가 일반 플랜도 잠깐 전부 Easy 로 낮추므로
@@ -366,6 +380,8 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
           }
         }
       }
+      // 플랜이 지금 목표 날짜·거리로 지어졌음을 남긴다(#889, 같으면 no-op). 처음 보는 목표는 다시 짓지 않고 기록만 한다.
+      if (archetype === 'performance') await persistPlanBuiltFor(goal)
       // 주간 정산(무조건·멱등): 닫힌 주(월~일)의 미수행 planned → missed 확정. realign 시도 뒤에 둬서
       // 닫힌 주 누락이 재정렬 트리거로 먼저 평가되게 한다. 현재 주의 지난 날은 'open'(따라잡기 가능)으로 유지.
       await scheduleStore.settleClosedWeeks(goal.id, trainingWeekRange(today.value).start)
@@ -499,7 +515,8 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
       activeGoal.value?.targetDate ?? null,
       activeGoal.value ? goalArchetype(activeGoal.value.category) : 'performance',
       anchor,
-      entryLevel.value
+      entryLevel.value,
+      activeGoal.value?.id === RECOVERY_GOAL_ID
     )
   })
   function navWeek(delta: number) {
@@ -796,6 +813,15 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
       // 진행 중 ensure 를 비운 뒤 의도를 만든다(스케줄 정산 → 의도 순서 보존, returnFromRestNow 와 같은 패턴).
       if (ensureInFlight) await ensureInFlight.catch(() => {})
       await ensureTodayIntent()
+    }
+  )
+
+  // 활성 목표의 날짜·거리가 바뀌면(#889 — 목표 다시 정하기·기억 탭 편집) 일정 확인을 다시 돌려 플랜을 오늘부터 다시 짓는다.
+  watch(
+    () => (activeGoal.value ? `${activeGoal.value.id}|${activeGoal.value.targetDate}|${activeGoal.value.distanceKm}` : null),
+    (key, prev) => {
+      if (!key || !prev || key === prev || key.split('|')[0] !== prev.split('|')[0]) return
+      void ensureSchedule()
     }
   )
 

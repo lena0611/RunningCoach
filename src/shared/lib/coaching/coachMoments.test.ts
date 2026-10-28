@@ -439,3 +439,38 @@ describe('collectCoachMoments', () => {
     expect(moments.some((m) => m.kind === 'pain-probe')).toBe(true)
   })
 })
+
+describe('목표 다시 정하기 모먼트 (#889)', () => {
+  const rest = {
+    active: true,
+    reason: 'injury' as const,
+    daysUntilReturn: 3,
+    justDeclared: false,
+    offerRecoveryRun: false,
+    isOver: false,
+    durationDays: 4,
+    windowKey: '2026-10-31'
+  }
+  const adjust = { dateLabel: '11/30', distanceLabel: '10K', weeksLeft: 4, injury: true }
+
+  it('휴식 중에도 뜬다 — 목표 경고는 숨지만 다시 정할 선택지는 건넨다', () => {
+    const moments = collectCoachMoments(ctx({ rest, goalAdjustDuringRest: adjust, goalFeasibility: { feasible: false, message: '빠듯해요' } }))
+    const m = moments.find((x) => x.kind === 'goal-adjust')
+    expect(m?.message).toBe('대회(11/30 · 10K)까지 4주 남았어요. 이번 부상으로 빠듯하면, 쉬는 동안 목표를 다시 정해도 괜찮아요.')
+    expect(m?.action).toEqual({ label: '목표 다시 정하기', kind: 'open-goal-adjust' })
+    // 닦달성 목표 경고는 휴식 중 억제 그대로
+    expect(moments.some((x) => x.kind === 'goal-feasibility')).toBe(false)
+  })
+
+  it('휴식이 아니면 목표 다시 정하기 모먼트는 없고, 무리 카드가 다시 정하기로 데려간다', () => {
+    const moments = collectCoachMoments(ctx({ goalAdjustDuringRest: adjust, goalFeasibility: { feasible: false, message: '빠듯해요' } }))
+    expect(moments.some((x) => x.kind === 'goal-adjust')).toBe(false)
+    expect(moments.find((x) => x.kind === 'goal-feasibility')?.action?.kind).toBe('open-goal-adjust')
+  })
+
+  it('쉬던 목표 다시 정하기 — 그 목표를 연다', () => {
+    const m = collectCoachMoments(ctx({ goalResume: { goalId: 'g10k', areaLabel: '발바닥' } })).find((x) => x.kind === 'goal-resume')
+    expect(m?.message).toBe('발바닥 쪽이 2주째 조용해요. 쉬고 있던 대회 목표, 다시 정해볼까요?')
+    expect(m?.action).toEqual({ label: '목표 정하기', kind: 'open-goal-adjust', goalId: 'g10k' })
+  })
+})

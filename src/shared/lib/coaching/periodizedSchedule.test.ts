@@ -451,6 +451,12 @@ describe('buildWeekSummary — 입문(걷기·뛰기) 라벨 (#887)', () => {
     expect(summary!.sessionCount).toBe(3)
   })
 
+  it('회복 우선 목표(#889)는 회복 우선 라벨', () => {
+    const summary = buildWeekSummary(sessions, today, null, 'wellbeing', today, false, true)
+    expect(summary!.phaseLabel).toBe('회복 우선')
+    expect(summary!.focusLine).toBe('통증 없이 가볍게')
+  })
+
   it('입문이 아니면 그대로 기초기', () => {
     expect(buildWeekSummary(sessions, today, '2027-01-03', 'performance')!.phaseLabel).toBe('기초기')
   })

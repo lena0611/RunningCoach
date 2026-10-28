@@ -13,7 +13,7 @@ import {
   summarizeHealthKitPreview,
   weeklyDaysFromPreview
 } from '@/features/import-healthkit-run/onboardingImport'
-import { type TrainingGoal, type TrainingInjuryItem, type TrainingMemory } from '@/entities/training-memory/model'
+import { goalPlanKey, type TrainingGoal, type TrainingInjuryItem, type TrainingMemory } from '@/entities/training-memory/model'
 import { injuryAreaSelectionsFor, summarizeInjuryAreas, type InjurySide } from '@/entities/training-memory/injuryAreas'
 import { vdotFromPerformance, vdotFromVo2Max } from '@/shared/lib/vdotPaces'
 import { distanceClassFromMeters, gradeBandFromVdot, nextDistanceClass } from '@/shared/lib/level/levelModel'
@@ -481,7 +481,12 @@ async function persist(placed: boolean) {
         ]
       }
       // 목표는 미리보기에 쓴 것 그대로 — 첫 자리(빈 메모리의 '목표 미설정')를 바꾸고 활성으로 둔다.
-      const goal: TrainingGoal = { ...buildGoal(effectiveRaceDate.value), strategyNotes: goalStrategyNote.value }
+      const goal: TrainingGoal = {
+        ...buildGoal(effectiveRaceDate.value),
+        strategyNotes: goalStrategyNote.value,
+        // '그대로 할게요'(빠듯한 날짜를 알고 정함)는 코치 무리 카드가 같은 날짜·거리 동안 다시 묻지 않게 남긴다(#886).
+        feasibilityAcceptedFor: tooSoon.value && tooSoonAccepted.value ? goalPlanKey(buildGoal(effectiveRaceDate.value)) : null
+      }
       memory.goals = [goal, ...(memory.goals ?? []).slice(1)]
       memory.activeGoalId = goal.id
       memory.goal = goal.title

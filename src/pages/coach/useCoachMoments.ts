@@ -3,10 +3,13 @@ import { useLevelStore } from '@/app/stores/levelStore'
 import { useMemoryStore } from '@/app/stores/memoryStore'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
-import { isInjuryProbeEligible } from '@/entities/training-memory/model'
+import { getActiveInjuryItem, isInjuryProbeEligible, RECOVERY_GOAL_ID, sameGoalPlanKey, goalPlanKey } from '@/entities/training-memory/model'
 import type { TrainingMemory } from '@/entities/training-memory/model'
 import { selectNextProbe, type InjuryProbeDef } from '@/entities/training-memory/injuryKnowledge'
 import { shouldOfferRecoveryRun } from '@/entities/training-memory/restWindow'
+import { pausedGoals } from '@/entities/training-memory/goalChanges'
+import { GOAL_ADJUST_REST_WINDOW_DAYS, GOAL_RESUME_PAIN_FREE_DAYS, raceDistanceLabel } from '@/shared/lib/coaching/goalAdjust'
+import { formatMonthDay } from '@/shared/lib/format'
 import { resolveRunnerProgress } from '@/shared/lib/level/levelModel'
 import { collectCoachMoments, type CoachMomentOption } from '@/shared/lib/coaching/coachMoments'
 import { detectScheduleDeviation } from '@/shared/lib/coaching/scheduleRealign'
@@ -79,8 +82,9 @@ export function useCoachMoments(week: TrainingWeek) {
   })
 
   // #395 목표 실현가능성: 현재 체력 대비 목표가 무리면 코치가 솔직히 경고+대안(coach-moment로 노출).
+  // 이 날짜·거리로 '그대로 가기'를 골랐으면(#886·#889) 같은 동안 다시 묻지 않는다.
   const goalFeasibility = computed(() =>
-    activeGoal.value
+    activeGoal.value && !sameGoalPlanKey(activeGoal.value.feasibilityAcceptedFor, goalPlanKey(activeGoal.value))
       ? assessGoalFeasibility({
           goal: activeGoal.value,
           profile: memoryStore.memory.athleteProfile,
@@ -117,10 +121,41 @@ export function useCoachMoments(week: TrainingWeek) {
     }
   })
 
+  // 휴식 중 목표 다시 정하기(#889): 대회가 8주 안이고 휴식 첫 주일 때만. 휴식 중엔 목표 경고를 억제하므로 선택지로만 건넨다.
+  const goalAdjustDuringRest = computed(() => {
+    const rest = restMomentCtx.value
+    const goal = activeGoal.value
+    const meta = memoryStore.memory.activeRest
+    if (!rest?.active || !meta || !goal || goalArchetype(goal.category) !== 'performance' || !goal.targetDate || !goal.distanceKm) return null
+    if (sameGoalPlanKey(goal.feasibilityAcceptedFor, goalPlanKey(goal))) return null
+    const sinceDeclared = diffDaysIso(todayDate.value, dateOnly(new Date(meta.declaredAt)))
+    const daysLeft = diffDaysIso(goal.targetDate, todayDate.value)
+    if (sinceDeclared < 0 || sinceDeclared > 6 || daysLeft <= 0 || daysLeft > GOAL_ADJUST_REST_WINDOW_DAYS) return null
+    return {
+      dateLabel: formatMonthDay(goal.targetDate),
+      distanceLabel: raceDistanceLabel(goal.distanceKm),
+      weeksLeft: Math.max(1, Math.floor(daysLeft / 7)),
+      injury: rest.reason === 'injury'
+    }
+  })
+
+  // 쉬던 대회 목표 다시 정하기(#889): 회복 우선 목표가 활성이고, 부상이 해소됐거나 2주 동안 다시 아프지 않았으면.
+  const goalResume = computed(() => {
+    if (activeGoal.value?.id !== RECOVERY_GOAL_ID) return null
+    const paused = pausedGoals(memoryStore.memory)
+    if (!paused.length) return null
+    const injury = getActiveInjuryItem(memoryStore.memory)
+    if (injury) {
+      const lastPain = injury.lastFlareDate ?? injury.onsetDate
+      if (!lastPain || diffDaysIso(todayDate.value, lastPain) < GOAL_RESUME_PAIN_FREE_DAYS) return null
+    }
+    return { goalId: paused[0].id, areaLabel: injury?.area ?? null }
+  })
+
   // 위크 요약(이번 주 단계·포커스·핵심·볼륨·D-day) — "이번 주가 통째로 뭘 위한 주인지"
   const activeArchetype = computed(() => (activeGoal.value ? goalArchetype(activeGoal.value.category) : 'performance'))
   const weekSummary = computed(() =>
-    buildWeekSummary(scheduleStore.sessions, today.value, activeGoal.value?.targetDate ?? null, activeArchetype.value, today.value, beginnerWalkRun.value !== null)
+    buildWeekSummary(scheduleStore.sessions, today.value, activeGoal.value?.targetDate ?? null, activeArchetype.value, today.value, beginnerWalkRun.value !== null, activeGoal.value?.id === RECOVERY_GOAL_ID)
   )
 
   // 플랜 시작일(가장 이른 세션 날짜). 이 날짜 이전 런은 "플랜 없던 시절"이라 추가런 판정에서 제외.
@@ -250,7 +285,9 @@ export function useCoachMoments(week: TrainingWeek) {
         doubleSuggestion: doubleSuggestionData.value
           ? { backlogLabel: doubleSuggestionData.value.backlogLabel, amDayLabel: doubleSuggestionData.value.amDayLabel }
           : null,
-        rest: restMomentCtx.value
+        rest: restMomentCtx.value,
+        goalAdjustDuringRest: goalAdjustDuringRest.value,
+        goalResume: goalResume.value
       },
       dismissedMomentKeys.value
     )

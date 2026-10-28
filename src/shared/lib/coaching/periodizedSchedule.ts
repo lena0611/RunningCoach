@@ -866,6 +866,8 @@ const NON_PERF_SUMMARY: Record<'fat-loss' | 'wellbeing', { label: string; focus:
 }
 /** 입문(5K 미완주) 레이스 플랜 — 단계 이름도 걷기·뛰기다(#887). 플랜 세션은 'Base' 를 달지만 화면엔 기초기라 부르지 않는다. */
 const ENTRY_SUMMARY = { label: '걷기·뛰기', focus: '30분 연속 달리기 만들기' }
+/** 대회 목표를 잠시 내려놓은 회복 우선 목표(#889) — 건강·습관 리듬이지만 이름은 회복이 먼저임을 말한다. */
+const RECOVERY_SUMMARY = { label: '회복 우선', focus: '통증 없이 가볍게' }
 
 /**
  * "이번 주" 단일 기준(SSOT). 훈련 주는 **월요일 시작–일요일 종료**로 통일한다.
@@ -892,7 +894,9 @@ export function buildWeekSummary(
    */
   weekAnchor: Date = today,
   /** 입문(걷기·뛰기) — 단계 대신 '걷기·뛰기' 라벨(#887). */
-  entryLevel = false
+  entryLevel = false,
+  /** 회복 우선 목표(#889) — '회복 우선' 라벨. */
+  recovery = false
 ): WeekSummary | null {
   const start = startOfDay(today)
   const { start: startStr, end: endStr } = trainingWeekRange(weekAnchor)
@@ -922,7 +926,7 @@ export function buildWeekSummary(
   }
 
   // 비성과는 단계(기초기 등) 대신 유형 라벨, 입문은 걷기·뛰기.
-  const label = archetype !== 'performance' ? NON_PERF_SUMMARY[archetype] : entryLevel ? ENTRY_SUMMARY : null
+  const label = recovery ? RECOVERY_SUMMARY : archetype !== 'performance' ? NON_PERF_SUMMARY[archetype] : entryLevel ? ENTRY_SUMMARY : null
   return {
     phase,
     phaseLabel: label?.label ?? PHASE_LABEL_KO[phase],
