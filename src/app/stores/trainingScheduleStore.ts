@@ -29,6 +29,9 @@ function todayIsoDate(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+/** 진행 중인 load(#891) — 겹쳐 부른 쪽이 끝날 때까지 기다리게 한다. */
+let loadInFlight: Promise<void> | null = null
+
 /**
  * 날짜축 주기화 스케줄 store (#363). F2 생성기·A1 재정렬·A2 작전 바꾸기가 사용한다.
  * 영속은 Supabase 전용 — 미설정 환경에선 no-op(런 저장·대시보드를 막지 않기 위함).
@@ -89,42 +92,53 @@ export const useTrainingScheduleStore = defineStore('trainingScheduleStore', {
         this.loaded = true
         return
       }
-      if (this.loading) return
-      this.loading = true
-      this.error = ''
-      try {
-        this.sessions = await fetchTrainingSchedule(goalId)
-        this.loaded = true
-        this.loadedGoalId = goalId ?? null
-        // 크로스 클라이언트 재정렬 레이스가 남긴 같은 날 planned 클론 자가치유(멱등, 2026-07-04 사고).
-        // 치유 실패는 로드를 막지 않는다 — 다음 로드에서 재시도된다.
-        try {
-          for (const clone of findDuplicatePlannedClones(this.sessions)) {
-            await this.setStatus(clone.id, 'superseded')
-          }
-        } catch {
-          /* noop */
-        }
-        // 오래된 superseded 행 정리(#661). supersede+insert 부산물이 무한 누적돼 전송량·메모리가 되고,
-        // 실제로 1000행 상한에 걸려 미래 세션이 잘린 사고가 있었다(fetchTrainingSchedule 주석).
-        // 되돌리기 창(14일)·같은 날 활성 세션·목표별 최초 날짜는 판정 함수가 보존한다. 실패는 무해하다.
-        try {
-          const prunableIds = findPrunableSupersededIds(this.sessions, todayIsoDate())
-          if (prunableIds.length) {
-            const removed = await deleteSupersededSessions(prunableIds)
-            if (removed) {
-              const removedSet = new Set(prunableIds)
-              this.sessions = this.sessions.filter((s) => !removedSet.has(s.id))
-            }
-          }
-        } catch {
-          /* noop — 다음 로드에서 재시도된다 */
-        }
-      } catch (err) {
-        this.error = err instanceof Error ? err.message : '훈련 스케줄을 불러오지 못했습니다.'
-      } finally {
-        this.loading = false
+      // 이미 불러오는 중이면 끝날 때까지 기다린다(#891). 예전엔 그냥 돌아가서, 기다린 줄 아는 호출부(일정 확인)가
+      // 빈 세션을 '예정 세션 없음'으로 읽고 플랜을 한 벌 더 지었다 — 로그인 직후 기억이 기본 목표→실제 목표로
+      // 바뀌며 목표 전환 watch 와 일정 확인이 동시에 load 를 부를 때. 다른 목표를 불러오던 중이었으면 끝난 뒤 다시 부른다.
+      while (loadInFlight) {
+        await loadInFlight
+        if (this.loaded && this.loadedGoalId === (goalId ?? null)) return
       }
+      loadInFlight = (async () => {
+        this.loading = true
+        this.error = ''
+        try {
+          this.sessions = await fetchTrainingSchedule(goalId)
+          this.loaded = true
+          this.loadedGoalId = goalId ?? null
+          // 크로스 클라이언트 재정렬 레이스가 남긴 같은 날 planned 클론 자가치유(멱등, 2026-07-04 사고).
+          // 치유 실패는 로드를 막지 않는다 — 다음 로드에서 재시도된다.
+          try {
+            for (const clone of findDuplicatePlannedClones(this.sessions)) {
+              await this.setStatus(clone.id, 'superseded')
+            }
+          } catch {
+            /* noop */
+          }
+          // 오래된 superseded 행 정리(#661). supersede+insert 부산물이 무한 누적돼 전송량·메모리가 되고,
+          // 실제로 1000행 상한에 걸려 미래 세션이 잘린 사고가 있었다(fetchTrainingSchedule 주석).
+          // 되돌리기 창(14일)·같은 날 활성 세션·목표별 최초 날짜는 판정 함수가 보존한다. 실패는 무해하다.
+          try {
+            const prunableIds = findPrunableSupersededIds(this.sessions, todayIsoDate())
+            if (prunableIds.length) {
+              const removed = await deleteSupersededSessions(prunableIds)
+              if (removed) {
+                const removedSet = new Set(prunableIds)
+                this.sessions = this.sessions.filter((s) => !removedSet.has(s.id))
+              }
+            }
+          } catch {
+            /* noop — 다음 로드에서 재시도된다 */
+          }
+        } catch (err) {
+          this.error = err instanceof Error ? err.message : '훈련 스케줄을 불러오지 못했습니다.'
+        } finally {
+          this.loading = false
+        }
+      })().finally(() => {
+        loadInFlight = null
+      })
+      await loadInFlight
     },
     /** F2/A1 생성·재구축 결과 벌크 반영. */
     async insertMany(drafts: ScheduledSessionDraft[]): Promise<ScheduledSession[]> {

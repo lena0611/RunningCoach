@@ -7,7 +7,7 @@ import { getActiveInjuryItem, isInjuryProbeEligible, RECOVERY_GOAL_ID, sameGoalP
 import type { TrainingMemory } from '@/entities/training-memory/model'
 import { selectNextProbe, type InjuryProbeDef } from '@/entities/training-memory/injuryKnowledge'
 import { shouldOfferRecoveryRun } from '@/entities/training-memory/restWindow'
-import { pausedGoals } from '@/entities/training-memory/goalChanges'
+import { goalResumeSignal } from '@/entities/training-memory/goalChanges'
 import { GOAL_ADJUST_REST_WINDOW_DAYS, GOAL_RESUME_PAIN_FREE_DAYS, raceDistanceLabel } from '@/shared/lib/coaching/goalAdjust'
 import { formatMonthDay } from '@/shared/lib/format'
 import { resolveRunnerProgress } from '@/shared/lib/level/levelModel'
@@ -139,18 +139,8 @@ export function useCoachMoments(week: TrainingWeek) {
     }
   })
 
-  // 쉬던 대회 목표 다시 정하기(#889): 회복 우선 목표가 활성이고, 부상이 해소됐거나 2주 동안 다시 아프지 않았으면.
-  const goalResume = computed(() => {
-    if (activeGoal.value?.id !== RECOVERY_GOAL_ID) return null
-    const paused = pausedGoals(memoryStore.memory)
-    if (!paused.length) return null
-    const injury = getActiveInjuryItem(memoryStore.memory)
-    if (injury) {
-      const lastPain = injury.lastFlareDate ?? injury.onsetDate
-      if (!lastPain || diffDaysIso(todayDate.value, lastPain) < GOAL_RESUME_PAIN_FREE_DAYS) return null
-    }
-    return { goalId: paused[0].id, areaLabel: injury?.area ?? null }
-  })
+  // 쉬던 대회 목표 다시 정하기(#889) — 언제 묻는지는 goalResumeSignal 이 정한다.
+  const goalResume = computed(() => goalResumeSignal(memoryStore.memory, todayDate.value, GOAL_RESUME_PAIN_FREE_DAYS))
 
   // 위크 요약(이번 주 단계·포커스·핵심·볼륨·D-day) — "이번 주가 통째로 뭘 위한 주인지"
   const activeArchetype = computed(() => (activeGoal.value ? goalArchetype(activeGoal.value.category) : 'performance'))

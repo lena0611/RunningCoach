@@ -74,6 +74,19 @@ const recommendedDate = computed(() => {
   return o.postpone
 })
 
+/**
+ * 이미 안전한 날짜를 미루는 경우(기억 탭에서 직접 연 시트). 그 날짜 그대로는 '미루기'가 아니다 — 1/3 목표에
+ * "1/3(일)로 미루기 · 추천"이 떴다(#891 라이브 QA). 이때는 한 주 뒤부터 내밀고 추천 표시는 하지 않는다.
+ */
+const postponingSafeDate = computed(() => !resumeMode.value && Boolean(options.value?.feasibleNow))
+/** 미루기 화면이 내미는 첫 날짜. */
+const postponeFrom = computed(() => {
+  const rec = recommendedDate.value
+  if (!rec || !postponingSafeDate.value) return rec
+  const date = addDaysIso(rec.date, 7)
+  return { date, weeks: weeksFromStart(date) }
+})
+
 const situation = computed(() => {
   const km = currentWeeklyKm.value
   const load = km ? `요즘 주 약 ${Math.round(km)}km` : '요즘 기록이 적은 편'
@@ -84,19 +97,28 @@ const situation = computed(() => {
   return `${body} ${from}${formatMonthDay(goal.value!.targetDate!)} ${distanceLabel.value}까지 안전하게 늘릴 시간이 모자라요.`
 })
 
+// 잠시 내려놓기 — 기억 탭에선 부상·휴식 없이도 열 수 있다. 그때 "부상 회복이 먼저예요"는 틀린 말이다(#891 라이브 QA).
+const letGoLead = computed(() =>
+  injury.value
+    ? '부상 회복이 먼저예요. 대회는 다 나은 뒤에 다시 정해도 늦지 않아요.'
+    : restUntil.value
+      ? '쉬는 동안은 대회 걱정 없이 쉬어요. 다시 뛸 준비가 되면 정해요.'
+      : '대회는 잠시 내려두고 부담 없이 달려요. 준비되면 다시 정해요.'
+)
+
 type Row = { value: Choice; title: string; detail: string; recommended: boolean }
 const rows = computed<Row[]>(() => {
   const o = options.value
   const g = goal.value
   if (!o || !g) return []
   const list: Row[] = []
-  const rec = recommendedDate.value
+  const rec = postponeFrom.value
   if (rec) {
     list.push({
       value: 'postpone',
       title: resumeMode.value ? '날짜 정해 다시 시작' : '날짜 미루기',
       detail: `${formatMonthDay(rec.date, true)} ${distanceLabel.value} · ${afterRest.value}${rec.weeks}주`,
-      recommended: true
+      recommended: !postponingSafeDate.value
     })
   }
   if (o.shorter) {
@@ -116,7 +138,12 @@ const rows = computed<Row[]>(() => {
     })
   }
   if (!resumeMode.value) {
-    list.push({ value: 'letgo', title: '잠시 내려놓기', detail: '대회 목표는 보관하고 회복부터 챙겨요. 나으면 다시 정해요', recommended: list.length === 0 })
+    list.push({
+      value: 'letgo',
+      title: '잠시 내려놓기',
+      detail: injury.value ? '대회 목표는 보관하고 회복부터 챙겨요. 나으면 다시 정해요' : '대회 목표는 보관하고 가볍게 이어가요. 준비되면 다시 정해요',
+      recommended: list.length === 0
+    })
   }
   return list
 })
@@ -130,7 +157,7 @@ watch(
     today.value = new Date()
     step.value = 'options'
     choice.value = rows.value.find((r) => r.recommended)?.value ?? rows.value[0]?.value ?? null
-    pickedDate.value = recommendedDate.value?.date ?? null
+    pickedDate.value = postponeFrom.value?.date ?? null
     customDate.value = null
   }
 )
@@ -143,11 +170,11 @@ useSheetA11y(computed(() => store.open && Boolean(goal.value)), sheetEl, () => s
 
 // 미루기 화면 — 추천일·+1주·+2주·직접 고르기.
 const dateChoices = computed(() => {
-  const rec = recommendedDate.value
+  const rec = postponeFrom.value
   if (!rec) return []
   return [0, 7, 14].map((offset) => {
     const date = addDaysIso(rec.date, offset)
-    return { date, label: formatMonthDay(date, true), recommended: offset === 0 }
+    return { date, label: formatMonthDay(date, true), recommended: offset === 0 && !postponingSafeDate.value }
   })
 })
 const finalDate = computed(() => customDate.value ?? pickedDate.value)
@@ -168,11 +195,12 @@ const preview = computed(() => {
   const first = drafts[0].date
   const firstWeek = drafts.filter((d) => d.date < addDaysIso(first, 7))
   const kms = firstWeek.map((d) => d.prescription.distanceKm ?? 0).filter((km) => km > 0)
+  const [minKm, maxKm] = [Math.min(...kms).toFixed(1), Math.max(...kms).toFixed(1)]
   return {
     firstDate: first,
     weeks: weeksFromStart(date),
     count: firstWeek.length,
-    kmRange: kms.length ? `${Math.min(...kms).toFixed(1)}~${Math.max(...kms).toFixed(1)}km` : null
+    kmRange: kms.length ? (minKm === maxKm ? `${minKm}km` : `${minKm}~${maxKm}km`) : null
   }
 })
 
@@ -313,11 +341,11 @@ function isoOf(d: Date): string {
                     @click="pickedDate = d.date; customDate = null"
                   >
                     <strong>{{ d.label }}</strong>
-                    <span v-if="d.recommended">추천 · 가장 이른 안전한 날</span>
+                    <span v-if="d.recommended">{{ options?.feasibleNow ? '추천 · 원래 날짜 그대로' : '추천 · 가장 이른 안전한 날' }}</span>
                   </button>
                 </div>
                 <DateField v-model="customDate" label="직접 고르기" />
-                <p v-if="customTooSoon" class="goal-adjust-warn">이 날짜는 빠듯해요. {{ dateChoices[0] ? `${dateChoices[0].label} 이후를 권해요.` : '' }}</p>
+                <p v-if="customTooSoon" class="goal-adjust-warn">이 날짜는 빠듯해요. {{ recommendedDate ? `${formatMonthDay(recommendedDate.date, true)} 이후를 권해요.` : '' }}</p>
                 <p v-else class="goal-adjust-note">나갈 대회가 정해져 있으면 그 날을 고르세요.</p>
               </div>
               <div v-if="finalDate" class="goal-adjust-changes">
@@ -335,14 +363,14 @@ function isoOf(d: Date): string {
             </template>
 
             <template v-else>
-              <p class="goal-adjust-lead">부상 회복이 먼저예요. 대회는 다 나은 뒤에 다시 정해도 늦지 않아요.</p>
+              <p class="goal-adjust-lead">{{ letGoLead }}</p>
               <div class="goal-adjust-changes">
                 <strong>이렇게 바뀌어요</strong>
                 <ul>
                   <li>'{{ goal.title }}' 목표는 지우지 않고 보관해요. 코치 탭에서 언제든 다시 꺼낼 수 있어요</li>
                   <li>플랜은 '회복 우선' 리듬으로 바뀌어요. {{ restUntil ? `휴식이 끝난 ${formatMonthDay(addDaysIso(restUntil, 1), true)}부터 ` : '' }}주 3회 정도 가볍게</li>
                   <li>D-day·기록 예측·훈련 단계 카드는 잠시 숨겨요</li>
-                  <li>통증이 가라앉으면 코치가 다음 목표를 먼저 물어봐요</li>
+                  <li>{{ injury ? '통증이 가라앉으면' : '2주쯤 지나면' }} 코치가 다음 목표를 먼저 물어봐요</li>
                 </ul>
               </div>
               <div class="goal-adjust-actions">
