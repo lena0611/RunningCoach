@@ -727,3 +727,75 @@ describe('planMatchesEntryLevel — 입문 여부와 플랜이 어긋나면 다�
     expect(planMatchesEntryLevel(t('Easy', 'LSD', 'Easy + Strides'), false)).toBe(true)
   })
 })
+
+// #893: 단계는 대회일에서 거꾸로 짠 달력이다 — 다시 지어도 오늘이 기초기 1주차로 돌아가지 않는다.
+describe('단계 달력 고정 — 다시 지어도 지금 단계가 이어진다 (#893)', () => {
+  const tenK = goal({ distanceKm: 10, targetDate: '2026-12-27' })
+  const base = { goal: tenK, profile: profile({ weeklyRunDaysTarget: 4 }), currentWeeklyKm: 20 }
+  const phaseByDate = (drafts: ReturnType<typeof buildPeriodizedSchedule>) => new Map(drafts.map((d) => [d.date, d.phase]))
+
+  it('같은 목표를 4주 뒤 다시 지어도 같은 날짜는 같은 단계다', () => {
+    const first = phaseByDate(buildPeriodizedSchedule({ ...base, today: new Date('2026-10-05T09:00:00') }))
+    const rebuilt = buildPeriodizedSchedule({ ...base, today: new Date('2026-11-02T09:00:00'), phaseStartDate: '2026-10-05' })
+    expect(rebuilt.length).toBeGreaterThan(0)
+    for (const d of rebuilt) if (first.has(d.date)) expect(d.phase).toBe(first.get(d.date))
+  })
+
+  it('달력 없이 다시 지으면 기초기부터 — 실계정 증상(남은 8주 → 기초 3주)', () => {
+    const today = new Date('2026-11-02T09:00:00')
+    expect(buildPeriodizedSchedule({ ...base, today })[0].phase).toBe('Base')
+    expect(buildPeriodizedSchedule({ ...base, today, phaseStartDate: '2026-10-05' })[0].phase).toBe('Build')
+  })
+
+  it('주 중간에 다시 지어도 단계가 뒤로 가지 않고, 대회 주는 테이퍼다', () => {
+    const order = ['Base', 'Build', 'Threshold', 'Race Specific', 'Taper']
+    const first = buildPeriodizedSchedule({ ...base, today: new Date('2026-10-05T09:00:00') })
+    const rebuilt = buildPeriodizedSchedule({ ...base, today: new Date('2026-11-04T09:00:00'), phaseStartDate: '2026-10-05' })
+    const firstPhaseOn = (date: string) => first.filter((d) => d.date <= date).at(-1)?.phase ?? 'Base'
+    // 다시 지은 첫 세션 단계는 원래 플랜의 그날 단계보다 앞이 아니다
+    expect(order.indexOf(rebuilt[0].phase)).toBeGreaterThanOrEqual(order.indexOf(firstPhaseOn(rebuilt[0].date)))
+    expect(rebuilt.at(-1)?.phase).toBe('Taper')
+    expect(first.at(-1)?.phase).toBe('Taper')
+  })
+
+  it('달력 시작일이 오늘이거나 그 뒤면 오늘부터(첫 플랜과 같다)', () => {
+    const today = new Date('2026-11-02T09:00:00')
+    const plain = buildPeriodizedSchedule({ ...base, today })
+    expect(buildPeriodizedSchedule({ ...base, today, phaseStartDate: '2026-11-02' })).toEqual(plain)
+    expect(buildPeriodizedSchedule({ ...base, today, phaseStartDate: '2026-11-20' })).toEqual(plain)
+  })
+})
+
+// #893: 주 3회 × 3km 에 못 미치는 주는 롱런·템포·한계 시험 없이 이지 — 주 5km 에 "LSD 1.8km"·초소형 템포가 나왔다.
+describe('저볼륨 주 구성 — 품질·롱런 없이 이지 (#893)', () => {
+  const today = new Date('2026-10-16T09:00:00')
+  const tenK = goal({ targetDate: '2026-11-30', distanceKm: 10 })
+  const weekOf = (date: string) => Math.floor((new Date(`${date}T00:00:00`).getTime() - new Date('2026-10-16T00:00:00').getTime()) / 86400000 / 7)
+  const NOT_IN_LOW_WEEK = new Set(['LSD', 'Steady Long', 'Tempo', 'Race'])
+
+  it('주 9km 미만인 주엔 LSD·Steady Long·Tempo·Race 가 없고 스트라이드 1회가 있다 — 단계 이름은 그대로', () => {
+    const drafts = buildPeriodizedSchedule({ goal: tenK, profile: profile({ weeklyRunDaysTarget: 4 }), today, currentWeeklyKm: 5 })
+    const weeks = new Map<number, typeof drafts>()
+    for (const d of drafts) weeks.set(weekOf(d.date), [...(weeks.get(weekOf(d.date)) ?? []), d])
+    let lowWeeks = 0
+    for (const week of weeks.values()) {
+      const km = week.reduce((sum, d) => sum + (d.prescription.distanceKm ?? 0), 0)
+      if (km >= 8.9 || week.length < 3) continue
+      lowWeeks++
+      expect(week.filter((d) => NOT_IN_LOW_WEEK.has(d.sessionType))).toEqual([])
+      expect(week.filter((d) => d.sessionType === 'Easy + Strides')).toHaveLength(1)
+      expect(week.some((d) => d.keySession)).toBe(false)
+    }
+    expect(lowWeeks).toBeGreaterThan(0)
+    // 볼륨이 9km 를 넘는 주부턴 원래 구성(롱런)이 돌아온다
+    expect(drafts.some((d) => d.sessionType === 'LSD' || d.sessionType === 'Steady Long')).toBe(true)
+  })
+
+  it('저볼륨 플랜은 입문 플랜으로 읽히지 않는다 — 부팅마다 다시 짓지 않게', () => {
+    const shortGoal = goal({ targetDate: '2026-11-08', distanceKm: 5 })
+    const drafts = buildPeriodizedSchedule({ goal: shortGoal, profile: profile({ weeklyRunDaysTarget: 3 }), today, currentWeeklyKm: 4 })
+    expect(drafts.length).toBeGreaterThanOrEqual(3)
+    expect(drafts.some((d) => NOT_IN_LOW_WEEK.has(d.sessionType))).toBe(false)
+    expect(planMatchesEntryLevel(drafts, false)).toBe(true)
+  })
+})

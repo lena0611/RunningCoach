@@ -63,6 +63,19 @@ function runDaysForVolume(targetRunDays: number, weeklyVolumeKm: number): number
 }
 
 /**
+ * 저볼륨 주(#893) — 주 3회 × 최소 세션 거리에 못 미쳐 세션이 3km 밑으로 내려가는 주. 이런 주는 롱런·템포·한계 시험
+ * 없이 이지만 뛴다: 롱런이 다른 런과 거의 같은 길이라 의미가 없고(주 5km → "LSD 1.8km"), 템포·한계 시험은 정식
+ * 웜업·쿨다운(각 10~15분)만으로 세션 길이를 넘는다. SSOT §숙련도별 처방 초급 "기본은 전부 이지"·"볼륨·강도를 같은
+ * 주에 함께 올리지 않는다". 스트라이드 1회는 남긴다(초급 "이지 런 끝, 주 1~2회") — 전부 Easy 면 입문 플랜과 구별이
+ * 안 돼 planMatchesEntryLevel 이 '졸업했는데 입문 플랜'으로 읽고 부팅마다 다시 짓는다.
+ */
+const LOW_VOLUME_WEEK_KM = MIN_RUN_DAYS * MIN_SESSION_KM
+
+function lowVolumeWeekTypes(runDays: number): RunType[] {
+  return ['Easy + Strides', ...Array<RunType>(Math.max(0, runDays - 1)).fill('Easy')]
+}
+
+/**
  * 단계 블록 마지막 주에 한계 시험(TT='Race')을 키세션으로 끼운다 — VDOT 재측정·단계 게이트용(#411).
  * 롱런은 보존하고 Tempo 한 개를 TT로 대체(없으면 Easy 계열 하나를 대체). 이미 있으면 그대로.
  */
@@ -109,6 +122,11 @@ export type PeriodizationInput = {
    * 레이스 목표라도 연속주 능력이 먼저다. 볼륨 곡선(단계)은 그대로 두고 세션 구성만 바꾼다.
    */
   entryLevel?: boolean
+  /**
+   * 단계 달력 시작일(YYYY-MM-DD, #893). 있으면 단계를 이날부터 대회일까지 통째로 나눈 뒤 끝에서 남은 주만큼 쓴다 —
+   * 다시 지어도 지금 단계가 이어진다. 없거나 오늘 이후면 오늘부터 나눈다(첫 플랜). 값은 `phaseCalendarStart`(planPhases.ts).
+   */
+  phaseStartDate?: string | null
 }
 
 const ENTRY_RUN_DAYS = 3
@@ -153,6 +171,20 @@ export function allocatePhases(totalWeeks: number, goalDistanceKm: number): Trai
     ...Array(raceSpecific).fill('Race Specific'),
     ...Array(taper).fill('Taper')
   ] as TrainingPhaseName[]
+}
+
+/**
+ * 오늘부터 대회까지 주차별 단계(#893). 단계는 대회일에서 거꾸로 짠 달력이라, 다시 지을 때 남은 주만 나누면 앞쪽이 매번
+ * 기초기가 된다(재정렬할 때마다 기초기 1주차로 돌아가던 버그). 달력 시작일이 오늘보다 앞이면 그날부터 대회까지 통째로
+ * 나눈 뒤 끝에서 잘라 쓴다 — 대회 주는 언제나 테이퍼이고, 오늘이 시작이면 예전과 같다.
+ */
+function phasesFromToday(remainingWeeks: number, goalDistanceKm: number, start: Date, target: Date, phaseStartDate?: string | null): TrainingPhaseName[] {
+  const calendarStart = phaseStartDate ? startOfDay(new Date(`${phaseStartDate}T00:00:00`)) : null
+  const calendarWeeks =
+    calendarStart && calendarStart < start
+      ? Math.max(remainingWeeks, Math.ceil(Math.round((target.getTime() - calendarStart.getTime()) / MS_PER_DAY) / 7))
+      : remainingWeeks
+  return allocatePhases(calendarWeeks, goalDistanceKm).slice(calendarWeeks - remainingWeeks)
 }
 
 /** Phase 별 주간 세션 구성(요일 슬롯에 채울 타입 순서). 첫 항목이 키 롱런/키 세션 우선. */
@@ -439,7 +471,7 @@ export function buildPeriodizedSchedule(input: PeriodizationInput): ScheduledSes
 
   const totalDays = Math.round((target.getTime() - start.getTime()) / MS_PER_DAY)
   const totalWeeks = Math.max(1, Math.ceil(totalDays / 7))
-  const phases = allocatePhases(totalWeeks, goal.distanceKm)
+  const phases = phasesFromToday(totalWeeks, goal.distanceKm, start, target, input.phaseStartDate)
   if (!phases.length) return []
 
   const entryLevel = Boolean(input.entryLevel)
@@ -468,12 +500,17 @@ export function buildPeriodizedSchedule(input: PeriodizationInput): ScheduledSes
   for (let week = 0; week < phases.length; week++) {
     const phase = phases[week]
     const weekRunDays = runDaysForVolume(runDays, weeklyVolumes[week])
+    const lowVolume = weeklyVolumes[week] < LOW_VOLUME_WEEK_KM
     // 단계 블록 마지막 주면 한계 시험(TT) 삽입 — 다음 단계 진입 전 재측정(#411). 단 직전 TT 와 4주 이상 떨어졌을 때만(#861).
     const isPhaseEnd = week === phases.length - 1 || phases[week + 1] !== phase
-    // 입문은 한계 시험이 없다(SSOT §완전 초보 "첫 측정은 권하지 않는다").
-    const timeTrialDue = !entryLevel && isPhaseEnd && TIME_TRIAL_PHASES.has(phase) && week - lastTimeTrialWeek >= TIME_TRIAL_MIN_GAP_WEEKS
+    // 입문은 한계 시험이 없다(SSOT §완전 초보 "첫 측정은 권하지 않는다"). 저볼륨 주도 없다(#893).
+    const timeTrialDue = !entryLevel && !lowVolume && isPhaseEnd && TIME_TRIAL_PHASES.has(phase) && week - lastTimeTrialWeek >= TIME_TRIAL_MIN_GAP_WEEKS
     if (timeTrialDue) lastTimeTrialWeek = week
-    const baseTypes: RunType[] = entryLevel ? Array(weekRunDays).fill('Easy') : weeklySessionTypes(phase, weekRunDays)
+    const baseTypes: RunType[] = entryLevel
+      ? Array(weekRunDays).fill('Easy')
+      : lowVolume
+        ? lowVolumeWeekTypes(weekRunDays)
+        : weeklySessionTypes(phase, weekRunDays)
     const types = timeTrialDue ? injectTimeTrial(baseTypes) : baseTypes
     const placement = placeOnDays(types, weekRunDays, longRunDayIndex)
     const placedTypes = [...placement.values()]

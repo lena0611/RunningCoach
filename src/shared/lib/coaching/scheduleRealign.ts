@@ -181,8 +181,8 @@ export function dropDraftsOnRestedDates<T extends { date: string }>(
 }
 
 /**
- * 목표일을 고정한 채 "오늘부터" 스케줄을 재구축한다. allocatePhases 가 남은 주수에 맞춰
- * Phase 를 다시 압축하므로(주수↓→base↓), 잃은 기간이 자연히 반영된 forward 재계산이 된다.
+ * 목표일을 고정한 채 "오늘부터" 세션을 재구축한다. 단계는 다시 나누지 않는다 — phaseStartDate(첫 세션 날짜)부터 대회일까지의
+ * 단계 달력을 그대로 잇는다(#893). 예전엔 남은 주만 다시 나눠 재정렬할 때마다 기초기 1주차로 돌아갔다.
  * shouldRealign 이 아니면 drafts 는 비고 fromDate 는 오늘(no-op 신호).
  */
 export function buildRealignedSchedule(
@@ -202,7 +202,9 @@ export function buildRealignedSchedule(
   /** 복귀 램프(#473 Phase 2) — 휴식 복귀 재정렬이면 초반 세션들을 Easy·캡으로. caller 가 capKm·windowSessions 계산해 전달. */
   returnRamp: { capKm: number; windowSessions: number } | null = null,
   /** 입문(#876) — 재정렬로 다시 지어도 걷기·뛰기 구성을 지킨다. */
-  entryLevel = false
+  entryLevel = false,
+  /** 단계 달력 시작일(#893) — 다시 지어도 지금 단계를 잇는다(planPhases.phaseCalendarStart). null 이면 오늘부터. */
+  phaseStartDate: string | null = null
 ): RealignPlan {
   // summarizeUpcomingWeek 는 이제 대표 단계(upcomingPhase)만 쓴다 — plannedWeeklyKm 는 앵커 비율에서 빠졌다.
   const { upcomingPhase } = summarizeUpcomingWeek(sessions, today)
@@ -215,7 +217,7 @@ export function buildRealignedSchedule(
   if (!deviation.shouldRealign) {
     return { fromDate, drafts: [], deviation }
   }
-  const drafts = buildPeriodizedSchedule({ goal, profile, today, currentWeeklyKm, observedEasyPace, returnRamp, entryLevel }).map((d) => ({
+  const drafts = buildPeriodizedSchedule({ goal, profile, today, currentWeeklyKm, observedEasyPace, returnRamp, entryLevel, phaseStartDate }).map((d) => ({
     ...d,
     source: 'realign' as const
   }))

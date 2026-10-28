@@ -1,6 +1,7 @@
 import type { TrainingPhaseName } from '@/entities/training-memory/model'
 import type { ScheduledSession } from '@/entities/training-schedule/model'
 import { trainingWeekRange, weekPhase } from './periodizedSchedule'
+import { RETURN_LONG_LAYOFF_DAYS } from './returnRamp'
 
 /**
  * 플랜의 단계 여정(#887) — 코치 탭 단계 카드·시트와 AI 코치가 보는 "지금 단계"의 정본.
@@ -106,6 +107,35 @@ export function buildPlanPhaseJourney(sessions: ScheduledSession[], today: Date)
   })
 
   return { blocks, currentIndex, weekInBlock, weekInPlan: currentWeek + 1, totalWeeks: weeks.length }
+}
+
+/**
+ * 단계 달력 시작일(#893) — 다시 지을 때 단계를 어디서부터 나눌지(`buildPeriodizedSchedule({ phaseStartDate })`).
+ *
+ * 그 목표의 **가장 이른 세션 날짜**다(상태 무관 — 정리(prune)도 이 행은 남긴다). 오늘부터 나누면 재정렬할 때마다 기초기
+ * 1주차로 돌아갔다. 단 플랜 중 28일 넘게 안 뛰었으면 쌓은 체력이 사실상 사라진다(SSOT §휴식과 복귀 디트레이닝 4주
+ * 경계) — 공백 뒤 첫 런(지금 쉬는 중이면 오늘)을 새 시작으로 본다. 복귀 램프는 처음 몇 세션만 낮추므로, 달력이 이걸
+ * 맡지 않으면 5주 쉰 사람이 곧바로 템포를 받는다. 공백은 플랜 시작 전 마지막 런부터(없으면 플랜 시작일부터) 잰다.
+ * 오늘부터 나눠야 하면(플랜 없음·오늘 시작) null.
+ */
+export function phaseCalendarStart(goalSessions: Array<Pick<ScheduledSession, 'date'>>, runDates: string[], todayIso: string): string | null {
+  const planStart = goalSessions.reduce<string | null>((min, s) => (!min || s.date < min ? s.date : min), null)
+  if (!planStart || planStart >= todayIso) return null
+  const days = [...new Set(runDates.map((d) => d.slice(0, 10)))].filter((d) => d <= todayIso).sort()
+  const restDays = (from: string, to: string) => diffDays(to, from) - 1
+  let start = planStart
+  let last = days.filter((d) => d <= planStart).at(-1) ?? planStart
+  for (const day of days) {
+    if (day <= planStart) continue
+    if (restDays(last, day) >= RETURN_LONG_LAYOFF_DAYS) start = day
+    last = day
+  }
+  if (restDays(last, todayIso) >= RETURN_LONG_LAYOFF_DAYS) start = todayIso
+  return start
+}
+
+function diffDays(a: string, b: string): number {
+  return Math.round((new Date(`${a}T12:00:00`).getTime() - new Date(`${b}T12:00:00`).getTime()) / 86400000)
 }
 
 /** 오늘이 속한 플랜 단계. 플랜이 없거나 기간 밖이면 null. */
