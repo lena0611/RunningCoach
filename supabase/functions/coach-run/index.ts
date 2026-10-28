@@ -1182,7 +1182,6 @@ type CoachAdaptiveProgress = {
   criteria: Array<{ id: string; label: string; status: CriterionStatusValue; evidence: string }>
   readyCount: number
   allReady: boolean
-  phaseProposal: { shouldTransition: boolean; toPhase: PhaseName | null; reason: string; blockers: string[] }
   adapted: { easyCeilingBpm: number | null; longRunDriftTolerancePercent: number | null; recoveryRestDays: number | null }
 }
 
@@ -1214,21 +1213,12 @@ function normalizeAdaptiveProgress(value: unknown): CoachAdaptiveProgress | null
     })
     .filter((item): item is CoachAdaptiveProgress['criteria'][number] => Boolean(item))
     .slice(0, 8)
-  const proposal = (v.phaseProposal && typeof v.phaseProposal === 'object' ? v.phaseProposal : {}) as Record<string, unknown>
   const adapted = (v.adapted && typeof v.adapted === 'object' ? v.adapted : {}) as Record<string, unknown>
   return {
     currentPhase,
     criteria,
     readyCount: nullableNumber(v.readyCount) ?? criteria.filter((c) => c.status === 'ready').length,
     allReady: v.allReady === true,
-    phaseProposal: {
-      shouldTransition: proposal.shouldTransition === true,
-      toPhase: normalizePhaseName(proposal.toPhase),
-      reason: typeof proposal.reason === 'string' ? proposal.reason.slice(0, 240) : '',
-      blockers: Array.isArray(proposal.blockers)
-        ? proposal.blockers.filter((b): b is string => typeof b === 'string').slice(0, 6)
-        : []
-    },
     adapted: {
       easyCeilingBpm: nullableNumber(adapted.easyCeilingBpm),
       longRunDriftTolerancePercent: nullableNumber(adapted.longRunDriftTolerancePercent),
@@ -1703,9 +1693,10 @@ async function buildContext(admin: SupabaseAdminClient, userId: string, selected
       patchPolicy:
         '루틴은 플랜(training_schedule)이 갖는다 — 코치가 텍스트로 루틴을 저장하지 않는다. 변경이 필요하면 activeGoalStrategyNotes(또는 aiNotes)에 새 기준을 남기고, 개별 세션 조정은 coachScheduleProposal(승인형 제안)로 낸다. 유지가 맞으면 report의 루틴 업데이트 섹션에 유지 근거와 다음 상향 조건을 짧게 쓴다.',
       adaptiveProgressPolicy:
-        'context.adaptiveProgress는 웹이 결정적으로 산출한 진행 평가다(#336~#338): progressionCriteria 4기준 status(ready/watch/blocked), 현재 phase, phaseProposal(다음 단계 전환 제안과 blockers), 적응값(Easy 상한/Long Run 드리프트 허용/회복 휴식일). 이것이 있으면 루틴 진화·단계 판단의 1차 근거로 쓴다. ' +
+        'context.adaptiveProgress는 웹이 결정적으로 산출한 진행 평가다(#336~#338): 이번 단계에서 보는 기준 status(ready/watch/blocked, n/a=이 단계엔 그 세션이 없음), 현재 phase, 적응값(Easy 상한/Long Run 드리프트 허용/회복 휴식일). 이것이 있으면 루틴 진화 판단의 1차 근거로 쓴다. ' +
+        'currentPhase는 플랜(주기화)이 대회일에서 거꾸로 정한 이번 주 단계이고 날짜대로 넘어간다(#887). 단계 전환을 제안하거나 미루자고 하지 않는다 — 기준이 덜 됐으면 그 단계 안에서 강도·양을 조절하는 말로 챙긴다. ' +
         '루틴 진화 트리거: 해당 기준이 ready로 안정됐을 때만 한 번에 한 요소를 소폭 올린다(예: Tempo 상한 준수 ready 2주 → Tempo 지속 +1세트, Long Run 지속성 ready → Long 거리 소폭↑). watch면 유지하며 관찰, blocked면 낮추거나 회복을 우선한다. ' +
-        'phaseProposal.shouldTransition=true이면 report의 루틴/다음훈련 섹션에서 "다음 단계(toPhase) 전환 준비가 됐다"고 근거(reason)와 함께 제안하되, 단정적 자동 변경이 아니라 사용자 확인이 필요한 제안으로 말한다. blockers가 있으면 무엇이 남았는지 1~2개만 짚는다. adaptiveProgress가 null이면 이 정책을 적용하지 않고 기존 기준으로 판단한다.'
+        'adaptiveProgress가 null이면 이 정책을 적용하지 않고 기존 기준으로 판단한다.'
     } : null,
     trainingMemory: structuredCoachContext ? trainingMemory : null,
     trainingMethodology: buildTrainingMethodologyAlgorithm(),
@@ -1973,19 +1964,9 @@ type InjuryUpdateProposal = {
 type AdaptiveTrainingProfilePatch = {
   methodologyVersion?: string
   updatedAt?: string
-  trainingPhase?: TrainingPhasePatch
   progressionCriteria?: ProgressionCriterionPatch[]
   compliancePatterns?: string[]
   sessionGuides?: AdaptiveSessionGuidePatch[]
-}
-
-type TrainingPhasePatch = {
-  currentPhase?: 'Base' | 'Build' | 'Threshold' | 'Race Specific' | 'Taper' | 'Recovery'
-  startedAt?: string | null
-  goal?: string
-  focus?: string[]
-  nextPhase?: 'Base' | 'Build' | 'Threshold' | 'Race Specific' | 'Taper' | 'Recovery' | null
-  reviewAfter?: string
 }
 
 type ProgressionCriterionPatch = {
@@ -3168,13 +3149,13 @@ function buildCoachInstructions(context: unknown) {
     'trainingKnowledge.prescriptionRules가 있으면 세션 평가와 루틴 업데이트에서 해당 규칙의 prescription, raiseCondition, lowerCondition, contraindications를 반영한다. 단, 규칙 텍스트에 절대 심박 숫자(예: max HR 165)가 적혀 있어도 그 숫자를 심박 상한으로 쓰지 않는다. 심박 상한의 유일 출처는 heartRateModel이며, 규칙은 세션 구조·상향/하향 조건·금기 같은 처방 논리에만 반영한다.',
     'trainingKnowledge는 원문 전문이 아니라 저작권 문제를 피한 구조화 요약이다. 답변에서는 출처명을 짧게 언급할 수 있지만 원문 문구를 길게 재현하지 않는다.',
     'context.adaptiveTrainingProfile은 사용자 데이터와 대화로 누적된 개인화 레이어다. 문헌 기준선 위에 얹는 보정값이며, 단일 세션을 보고 즉흥적으로 덮어쓰지 않는다.',
-    'adaptiveTrainingProfile.trainingPhase는 현재 훈련 블록이다. Base/Build/Threshold/Race Specific/Taper/Recovery 중 하나로 보고, activeGoal까지 남은 기간과 최근 수행 품질에 맞춰 다음 단계 후보를 판단한다.',
+    '훈련 단계는 context.adaptiveProgress.currentPhase(플랜이 대회일에서 거꾸로 정한 이번 주 단계)다. 단계는 날짜대로 넘어가므로 코치가 단계를 바꾸거나 전환을 제안하지 않는다(#887).',
     'adaptiveTrainingProfile.progressionCriteria는 승급 조건이다. Easy 심박 안정, Tempo 상한 준수, Long Run 지속성, 부상/회복 게이트 같은 조건을 보고 유지/상향/하향/보류를 결정한다.',
     // 세션 실행 지침의 정본은 웹 sessionBriefing 이다(context.upcomingSchedule·selectedRunExecutionGuide 로 들어온다).
     // 저장된 처방 템플릿을 별도 후보 풀로 두던 경로는 SSOT 와 어긋나 제거했다(2026-09-07).
     '심박 상한 숫자는 progressionCriteria 같은 저장 텍스트에 적힌 값이 아니라 항상 heartRateModel(tempoCeilingBpm/easyCeilingBpm/recoveryCeilingBpm)에서 가져온다. 저장 텍스트에 과거 숫자가 남아 있어도 무시하고 heartRateModel 값으로 말하고 처방한다. heartRateModel.source가 insufficient이면 심박 상한을 말하지 말고 페이스/RPE로 처방한다.',
     '5km TT, 10km TT, 진짜 인터벌/크루즈 인터벌 같은 상위 품질 훈련은 progressionCriteria가 ready이고 부상/회복 게이트가 막히지 않을 때만 제안한다.',
-    '훈련 단계나 승급 조건을 바꿔야 하면 trainingMemoryPatch.adaptiveTrainingProfile.trainingPhase/progressionCriteria에 전체 구조를 반환한다. 단일 세션만 보고 바꾸지 말고 반복 근거가 있을 때만 한다.',
+    '승급 조건을 바꿔야 하면 trainingMemoryPatch.adaptiveTrainingProfile.progressionCriteria에 전체 구조를 반환한다. 단일 세션만 보고 바꾸지 말고 반복 근거가 있을 때만 한다.',
     '알고리즘이 스스로 더 나아진다는 뜻은 소스 코드가 바뀐다는 뜻이 아니다. 반복되는 수행 패턴, 처방 준수율, 사용자 피드백을 trainingMemory.adaptiveTrainingProfile에 저장해 다음 판단에 반영한다는 뜻이다.',
     'adaptiveTrainingProfile을 업데이트할 때는 최근 2~3회 이상 같은 세션 유형에서 같은 준수/이탈 패턴이 반복되거나, 사용자가 강도/회복/통증에 대해 명시 피드백을 준 경우만 사용한다.',
     '날씨, 동반주, 과거 기록 리뷰, 데이터 부족처럼 일시적 이유로 설명되는 결과는 adaptiveTrainingProfile을 바꾸지 않는다.',
@@ -3409,28 +3390,10 @@ function buildAdaptiveTrainingProfileSchema(): Record<string, unknown> {
       {
         type: 'object',
         additionalProperties: false,
-        required: ['methodologyVersion', 'updatedAt', 'trainingPhase', 'progressionCriteria', 'compliancePatterns', 'sessionGuides'],
+        required: ['methodologyVersion', 'updatedAt', 'progressionCriteria', 'compliancePatterns', 'sessionGuides'],
         properties: {
           methodologyVersion: { anyOf: [{ type: 'string' }, { type: 'null' }] },
           updatedAt: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-          trainingPhase: {
-            anyOf: [
-              { type: 'null' },
-              {
-                type: 'object',
-                additionalProperties: false,
-                required: ['currentPhase', 'startedAt', 'goal', 'focus', 'nextPhase', 'reviewAfter'],
-                properties: {
-                  currentPhase: { type: 'string', enum: ['Base', 'Build', 'Threshold', 'Race Specific', 'Taper', 'Recovery'] },
-                  startedAt: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-                  goal: { anyOf: [{ type: 'string' }, { type: 'null' }] },
-                  focus: { type: 'array', items: { type: 'string' } },
-                  nextPhase: { anyOf: [{ type: 'string', enum: ['Base', 'Build', 'Threshold', 'Race Specific', 'Taper', 'Recovery'] }, { type: 'null' }] },
-                  reviewAfter: { anyOf: [{ type: 'string' }, { type: 'null' }] }
-                }
-              }
-            ]
-          },
           progressionCriteria: {
             type: 'array',
             items: {
@@ -4370,7 +4333,6 @@ function normalizeAdaptiveTrainingProfile(value: unknown) {
       ? raw.methodologyVersion.trim().slice(0, 80)
       : 'pacelab-2026-05-v1',
     updatedAt: typeof raw.updatedAt === 'string' && raw.updatedAt.trim() ? raw.updatedAt.trim().slice(0, 80) : null,
-    trainingPhase: normalizeTrainingPhase(raw.trainingPhase),
     progressionCriteria: normalizeProgressionCriteria(raw.progressionCriteria),
     compliancePatterns: normalizeStringArray(raw.compliancePatterns, 20, 240),
     sessionGuides: normalizeAdaptiveSessionGuides(raw.sessionGuides),
@@ -4387,18 +4349,6 @@ function normalizeCoachTempoCeiling(value: unknown) {
     adoptedBpm: num(raw.adoptedBpm),
     baseBpm: num(raw.baseBpm),
     adoptedAt: typeof raw.adoptedAt === 'string' && raw.adoptedAt ? raw.adoptedAt.slice(0, 40) : null
-  }
-}
-
-function defaultTrainingPhase(): Required<TrainingPhasePatch> {
-  return {
-    currentPhase: 'Base',
-    startedAt: null,
-    // 개발용 예시 목표(10km 60분)를 넣지 않는다 — 신규 계정 훈련 기준에 그대로 보였다(#866). 웹 model.ts ↔ coach-run 미러.
-    goal: '유산소 기반과 주간 루틴 안정화',
-    focus: ['Easy 심박 안정', 'Easy + Strides 신경근 자극', 'Tempo 상한 준수', '격주 Long Run 지속성'],
-    nextPhase: 'Build',
-    reviewAfter: '핵심 세션 2~3주 안정 수행 후'
   }
 }
 
@@ -4433,25 +4383,6 @@ function defaultProgressionCriteria(): Required<ProgressionCriterionPatch>[] {
       action: '착지감과 다음날 반응이 조용할 때만 강도나 거리 상향을 검토한다.'
     }
   ]
-}
-
-function normalizeTrainingPhase(value: unknown): Required<TrainingPhasePatch> {
-  const base = defaultTrainingPhase()
-  const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {}
-  return {
-    currentPhase: normalizeTrainingPhaseName(raw.currentPhase, base.currentPhase) ?? base.currentPhase,
-    startedAt: typeof raw.startedAt === 'string' && raw.startedAt.trim() ? raw.startedAt.trim().slice(0, 80) : null,
-    goal: typeof raw.goal === 'string' && raw.goal.trim() ? raw.goal.trim().slice(0, 300) : base.goal,
-    focus: normalizeStringArray(raw.focus, 8, 120).length ? normalizeStringArray(raw.focus, 8, 120) : base.focus,
-    nextPhase: normalizeTrainingPhaseName(raw.nextPhase, base.nextPhase),
-    reviewAfter: typeof raw.reviewAfter === 'string' && raw.reviewAfter.trim() ? raw.reviewAfter.trim().slice(0, 180) : base.reviewAfter
-  }
-}
-
-function normalizeTrainingPhaseName(value: unknown, fallback: Required<TrainingPhasePatch>['currentPhase'] | null) {
-  return value === 'Base' || value === 'Build' || value === 'Threshold' || value === 'Race Specific' || value === 'Taper' || value === 'Recovery'
-    ? value
-    : fallback
 }
 
 function normalizeProgressionCriteria(value: unknown): Required<ProgressionCriterionPatch>[] {
@@ -4502,9 +4433,6 @@ function normalizeAdaptiveTrainingProfilePatch(value: unknown): AdaptiveTraining
     normalized.updatedAt = raw.updatedAt.trim().slice(0, 80)
   }
 
-  if (raw.trainingPhase) {
-    normalized.trainingPhase = normalizeTrainingPhase(raw.trainingPhase)
-  }
   if (raw.progressionCriteria) {
     normalized.progressionCriteria = normalizeProgressionCriteria(raw.progressionCriteria)
   }
@@ -5586,7 +5514,6 @@ function mergeAdaptiveTrainingProfile(current: unknown, patch: AdaptiveTrainingP
   return {
     methodologyVersion: patch.methodologyVersion ?? base.methodologyVersion,
     updatedAt: patch.updatedAt ?? new Date().toISOString(),
-    trainingPhase: patch.trainingPhase ? normalizeTrainingPhase(patch.trainingPhase) : base.trainingPhase,
     progressionCriteria: patch.progressionCriteria ? normalizeProgressionCriteria(patch.progressionCriteria) : base.progressionCriteria,
     compliancePatterns: mergeStringLists(patch.compliancePatterns ?? [], base.compliancePatterns, 20),
     sessionGuides: [...patchGuides, ...[...guidesByType.values()].filter((guide) => !patchGuides.some((next) => next.type === guide.type))].slice(0, 12),

@@ -198,7 +198,6 @@ export type PersonalBest = {
 export type AdaptiveTrainingProfile = {
   methodologyVersion: string
   updatedAt: string | null
-  trainingPhase: TrainingPhasePlan
   progressionCriteria: ProgressionCriterion[]
   compliancePatterns: string[]
   sessionGuides: AdaptiveSessionGuide[]
@@ -228,16 +227,11 @@ export type AdaptiveTempoCeiling = {
   adoptedAt: string | null
 }
 
+/**
+ * 주기화 단계 이름. 단계는 **플랜 세션에 붙어 있고**(allocatePhases) 기억에 따로 저장하지 않는다(#887 —
+ * 예전 adaptiveTrainingProfile.trainingPhase 는 수동 전환 때만 바뀌어 플랜과 어긋났다).
+ */
 export type TrainingPhaseName = 'Base' | 'Build' | 'Threshold' | 'Race Specific' | 'Taper' | 'Recovery'
-
-export type TrainingPhasePlan = {
-  currentPhase: TrainingPhaseName
-  startedAt: string | null
-  goal: string
-  focus: string[]
-  nextPhase: TrainingPhaseName | null
-  reviewAfter: string
-}
 
 export type ProgressionCriterion = {
   id: string
@@ -262,16 +256,6 @@ export type AdaptiveSessionGuide = {
 
 export const defaultGoalId = 'goal-10k-60'
 export const defaultInjuryItemId = 'injury-left-hamstring'
-
-export const defaultTrainingPhase: TrainingPhasePlan = {
-  currentPhase: 'Base',
-  startedAt: null,
-  // 개발용 예시 목표(10km 60분)를 넣지 않는다 — 신규 계정 훈련 기준에 그대로 보였다(#866). 웹 model.ts ↔ coach-run 미러.
-    goal: '유산소 기반과 주간 루틴 안정화',
-  focus: ['Easy 심박 안정', 'Easy + Strides 신경근 자극', 'Tempo 상한 준수', '격주 Long Run 지속성'],
-  nextPhase: 'Build',
-  reviewAfter: '핵심 세션 2~3주 안정 수행 후'
-}
 
 export const defaultProgressionCriteria: ProgressionCriterion[] = [
   {
@@ -370,7 +354,6 @@ export const initialTrainingMemory: TrainingMemory = {
   adaptiveTrainingProfile: {
     methodologyVersion: 'pacelab-2026-05-v1',
     updatedAt: null,
-    trainingPhase: defaultTrainingPhase,
     progressionCriteria: defaultProgressionCriteria,
     compliancePatterns: [],
     sessionGuides: [],
@@ -932,7 +915,6 @@ function normalizeAdaptiveTrainingProfile(value: unknown): AdaptiveTrainingProfi
   return {
     methodologyVersion: typeof raw.methodologyVersion === 'string' && raw.methodologyVersion ? raw.methodologyVersion : 'pacelab-2026-05-v1',
     updatedAt: typeof raw.updatedAt === 'string' && raw.updatedAt ? raw.updatedAt : null,
-    trainingPhase: normalizeTrainingPhase(raw.trainingPhase),
     progressionCriteria: normalizeProgressionCriteria(raw.progressionCriteria),
     compliancePatterns: Array.isArray(raw.compliancePatterns)
       ? raw.compliancePatterns.filter((item) => typeof item === 'string' && item.trim()).map((item) => stripStaleHeartRateCeilings(item.trim())).slice(0, 20)
@@ -959,25 +941,6 @@ function normalizeAdaptiveTempoCeiling(value: unknown): AdaptiveTempoCeiling {
     baseBpm: num(raw.baseBpm),
     adoptedAt: typeof raw.adoptedAt === 'string' && raw.adoptedAt ? raw.adoptedAt : null
   }
-}
-
-function normalizeTrainingPhase(value: unknown): TrainingPhasePlan {
-  const raw = value && typeof value === 'object' ? value as Partial<TrainingPhasePlan> : {}
-  const currentPhase = normalizeTrainingPhaseName(raw.currentPhase, defaultTrainingPhase.currentPhase) ?? defaultTrainingPhase.currentPhase
-  return {
-    currentPhase,
-    startedAt: typeof raw.startedAt === 'string' && raw.startedAt ? raw.startedAt : null,
-    goal: typeof raw.goal === 'string' && raw.goal.trim() ? raw.goal.trim() : defaultTrainingPhase.goal,
-    focus: normalizeStringArray(raw.focus).slice(0, 8).length ? normalizeStringArray(raw.focus).slice(0, 8) : [...defaultTrainingPhase.focus],
-    nextPhase: normalizeTrainingPhaseName(raw.nextPhase, defaultTrainingPhase.nextPhase),
-    reviewAfter: typeof raw.reviewAfter === 'string' && raw.reviewAfter.trim() ? raw.reviewAfter.trim() : defaultTrainingPhase.reviewAfter
-  }
-}
-
-export function normalizeTrainingPhaseName(value: unknown, fallback: TrainingPhaseName | null): TrainingPhaseName | null {
-  return value === 'Base' || value === 'Build' || value === 'Threshold' || value === 'Race Specific' || value === 'Taper' || value === 'Recovery'
-    ? value
-    : fallback
 }
 
 function normalizeProgressionCriteria(value: unknown): ProgressionCriterion[] {

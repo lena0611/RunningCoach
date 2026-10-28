@@ -12,7 +12,7 @@ import RescheduleSheet from '../src/pages/coach/RescheduleSheet.vue'
 import RestDeclarationSheet from '../src/pages/coach/RestDeclarationSheet.vue'
 import WeekendTriageSheet from '../src/pages/coach/WeekendTriageSheet.vue'
 import DoublesAddSheet from '../src/pages/coach/DoublesAddSheet.vue'
-import PhaseTransitionModal from '../src/pages/coach/PhaseTransitionModal.vue'
+import PlanStepsSheet from '../src/pages/coach/PlanStepsSheet.vue'
 import NotificationSettingsPromptSheet from '../src/shared/ui/NotificationSettingsPromptSheet.vue'
 import InjuryScreeningSheet from '../src/shared/ui/InjuryScreeningSheet.vue'
 import InjuryCheckInSheet from '../src/shared/ui/InjuryCheckInSheet.vue'
@@ -116,18 +116,14 @@ const CASES: SheetCase[] = [
     closeEvent: 'close'
   },
   {
-    name: 'PhaseTransitionModal',
-    component: PhaseTransitionModal,
+    name: 'PlanStepsSheet',
+    component: PlanStepsSheet,
     props: {
       open: true,
-      summary: {
-        currentPhase: 'base',
-        criteria: [],
-        readyCount: 0,
-        allReady: false,
-        phaseProposal: { shouldTransition: false, toPhase: null, reason: '', blockers: [] },
-        adapted: { easyCeilingBpm: null, longRunDriftTolerancePercent: 0, recoveryRestDays: 0 }
-      }
+      title: '대회까지 단계',
+      subtitle: '10주 플랜',
+      rows: [{ key: 'a', title: '기초기', meta: '10/12~11/8 · 4주', body: '이지런과 롱런', state: 'now' }],
+      note: ''
     },
     closeEvent: 'close'
   },

@@ -24,12 +24,12 @@ export type BeginnerWalkRunStage = {
   totalMin: number
 }
 
-type Session = { mainSet: string; totalMin: number }
+export type WalkRunSession = { mainSet: string; totalMin: number }
 
-const W = (mainSet: string, totalMin: number): Session => ({ mainSet, totalMin })
+const W = (mainSet: string, totalMin: number): WalkRunSession => ({ mainSet, totalMin })
 
-/** 주차별 3회차. 1~4·7~9주는 세 회차가 같고 5·6주만 다르다. */
-const C25K: Session[][] = [
+/** 주차별 3회차. 1~4·7~9주는 세 회차가 같고 5·6주만 다르다. 코치 탭 '9주 과정' 시트도 이 표를 그대로 보여준다. */
+export const C25K: WalkRunSession[][] = [
   [W('뛰기 1분 → 걷기 1분 30초를 7번, 마지막에 뛰기 1분', 28.5)],
   [W('뛰기 1분 30초 → 걷기 2분을 5번, 마지막에 뛰기 1분 30초', 29)],
   [W('뛰기 1분 30초 → 걷기 1분 30초 → 뛰기 3분 → 걷기 3분 → 뛰기 1분 30초 → 걷기 1분 30초 → 뛰기 3분', 25)],

@@ -47,6 +47,15 @@ export function formatDateWithWeekday(value: string | null | undefined): string 
   return `${dateText}(${weekdays[date.getDay()]})`
 }
 
+/** "11/30" · 요일을 붙이면 "11/30(월)". 연도 없는 짧은 날짜(카드·시트 안 날짜 범위용). */
+export function formatMonthDay(iso: string, withWeekday = false): string {
+  const [, month, day] = iso.slice(0, 10).split('-')
+  const text = `${Number(month)}/${Number(day)}`
+  if (!withWeekday) return text
+  const weekdays = ['일', '월', '화', '수', '목', '금', '토']
+  return `${text}(${weekdays[new Date(`${iso.slice(0, 10)}T12:00:00`).getDay()]})`
+}
+
 export function formatRunListDate(value: string | null | undefined, today = new Date()): string {
   if (!value) return '-'
   const date = parseDateOnly(value)

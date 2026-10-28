@@ -5254,7 +5254,6 @@ button.run-session-row {
   line-height: var(--text-info-line);
 }
 
-.training-phase-card,
 .progression-criteria-list > li {
   display: grid;
   gap: 8px;
@@ -5262,19 +5261,6 @@ button.run-session-row {
   background: transparent;
 }
 
-.training-phase-card {
-  margin-bottom: 14px;
-  padding: 0 0 14px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.training-phase-card strong {
-  color: var(--color-text);
-  font-size: 17px;
-  line-height: 1.28;
-}
-
-.training-phase-card small,
 .progression-criteria-list small,
 .memory-subsection > small {
   color: var(--color-muted);
@@ -5283,20 +5269,6 @@ button.run-session-row {
   line-height: var(--text-info-line);
 }
 
-.phase-focus-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.phase-focus-list span {
-  border-radius: 999px;
-  background: var(--color-subtle);
-  color: var(--color-text);
-  padding: 5px 9px;
-  font-size: 12px;
-  font-weight: 700;
-}
 
 .progression-criteria-list {
   display: grid;

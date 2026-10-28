@@ -35,11 +35,11 @@ import InjuryBodySelector from '@/shared/ui/InjuryBodySelector.vue'
 import PageLayout from '@/shared/ui/PageLayout.vue'
 import SectionCard from '@/shared/ui/SectionCard.vue'
 import SectionHeader from '@/shared/ui/SectionHeader.vue'
-import SchedulingHelpSheet from '@/shared/ui/SchedulingHelpSheet.vue'
 import StackPage from '@/shared/ui/StackPage.vue'
 
-// 리디자인 ①c: 러너 프로필·업적은 계정 드로어(AppHeader) 소관. 훈련 기준·AI 기억은 인라인 편집에서 drill-in 패널로 분리.
-type MemoryPanel = 'overview' | 'goals' | 'goal-edit' | 'goal-new' | 'injuries' | 'injury-edit' | 'injury-new' | 'training' | 'ai-memory' | 'knowledge' | 'knowledge-request'
+// 리디자인 ①c: 러너 프로필·업적은 계정 드로어(AppHeader) 소관. AI 기억은 인라인 편집에서 drill-in 패널로 분리.
+// '훈련 기준' 패널(저장된 훈련 단계)은 #887 에서 없앴다 — 단계는 플랜에서 계산하고 코치 탭 단계 카드가 보여준다.
+type MemoryPanel = 'overview' | 'goals' | 'goal-edit' | 'goal-new' | 'injuries' | 'injury-edit' | 'injury-new' | 'ai-memory' | 'knowledge' | 'knowledge-request'
 
 const memoryStore = useMemoryStore()
 const runStore = useRunStore()
@@ -54,7 +54,6 @@ const memorySnapshot = ref(JSON.stringify(draft))
 const saving = ref(false)
 const error = ref('')
 const pendingDelete = ref<{ kind: 'goal' | 'injury' | 'memory'; id: string; title: string } | null>(null)
-const schedulingHelpOpen = ref(false)
 const stackTransitionName = ref('stack-slide-forward')
 const knowledge = ref<TrainingKnowledgeCatalog>({ sources: [], methods: [], rules: [], requests: [] })
 const knowledgeLoading = ref(false)
@@ -157,8 +156,6 @@ const stackTitle = computed(() => {
       return '새 부상/주의사항'
     case 'injury-edit':
       return '부상/주의사항 편집'
-    case 'training':
-      return '훈련 기준'
     case 'ai-memory':
       return 'AI 기억'
     case 'knowledge':
@@ -182,7 +179,6 @@ const routineHeartRateModel = computed(() => {
   const observed = deriveObservedMaxHr(runStore.sortedRuns.map((run) => ({ maxHeartRate: run.maxHeartRate, date: run.date })))
   return deriveHeartRateModel(draft.athleteProfile, new Date().getFullYear(), observed)
 })
-const trainingPhase = computed(() => draft.adaptiveTrainingProfile.trainingPhase)
 const progressionCriteria = computed(() => draft.adaptiveTrainingProfile.progressionCriteria)
 /**
  * 코치 장기기억(#806). 이 화면은 그동안 `aiNotes` 만 세어 "장기 메모 0개"라고 표시했는데,
@@ -219,14 +215,13 @@ const basisConstraintMeta = computed(() => {
 const hasInjuryAlert = computed(() => draft.injuryItems.some((item) => item.status === 'active'))
 const goalsNavMeta = computed(() => `${activeGoal.value ? '활성 1개' : '활성 없음'} · 보조 ${secondaryGoals.value.length}개`)
 const injuriesNavMeta = computed(() => (managedInjuries.value.length ? `관리 중 ${managedInjuries.value.length}건` : '관리 항목 없음'))
-const trainingNavMeta = computed(() => trainingPhase.value.currentPhase)
 const aiNavMeta = computed(() => `기억 ${aiMemoryCount.value}개`)
 
 // ── 항목별 저장(리디자인 ①c): 전역 저장 제거 — 패널 그룹별 dirty 판정·부분 커밋 ──
 /**
- * 저장(편집) 섹션. AI 기억·훈련 기준 패널은 **읽는 화면**이라 여기 없다.
+ * 저장(편집) 섹션. AI 기억 패널은 **읽는 화면**이라 여기 없다.
  *
- * 훈련 기준의 자유 텍스트 두 칸(장거리 전략·현재 볼륨 노트)은 2026-09-08 제거했다 — 루틴의 정본은
+ * 옛 훈련 기준의 자유 텍스트 두 칸(장거리 전략·현재 볼륨 노트)은 2026-09-08 제거했다 — 루틴의 정본은
  * 주기화 플랜이고 볼륨은 매 턴 실시간 계산되는데, 손으로 적은 값이 코치 프롬프트에 같이 실려
  * **같은 것에 대한 숫자 두 개**가 가는 구조였다(weeklyPattern·처방 템플릿과 같은 병).
  */
@@ -442,10 +437,6 @@ function askRemoveGoal(goal: TrainingGoal) {
 
 function openInjuries() {
   pushPanel('injuries')
-}
-
-function openTraining() {
-  pushPanel('training')
 }
 
 function openAiMemory() {
@@ -881,7 +872,7 @@ useSheetA11y(computed(() => !!pendingDelete.value), confirmSheetEl, () => { pend
       </div>
     </SectionCard>
 
-    <!-- 관리 항목 nav: 목표 · 몸 상태 · 훈련 기준 · AI 기억 — 편집은 전부 drill-in, 항목별 저장 -->
+    <!-- 관리 항목 nav: 목표 · 몸 상태 · AI 기억 — 편집은 전부 drill-in, 항목별 저장 -->
     <nav class="memory-manage-list" aria-label="코칭 기억 관리">
       <button type="button" class="memory-manage-row" @click="openGoals">
         <span class="memory-manage-main">
@@ -896,13 +887,6 @@ useSheetA11y(computed(() => !!pendingDelete.value), confirmSheetEl, () => { pend
           <small>{{ injuriesNavMeta }}</small>
         </span>
         <span v-if="hasInjuryAlert" class="memory-manage-badge">주의</span>
-        <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
-      </button>
-      <button type="button" class="memory-manage-row" @click="openTraining">
-        <span class="memory-manage-main">
-          <strong>훈련 기준</strong>
-          <small>{{ trainingNavMeta }}</small>
-        </span>
         <svg class="select-chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" /></svg>
       </button>
       <button type="button" class="memory-manage-row" @click="openAiMemory">
@@ -1137,21 +1121,6 @@ useSheetA11y(computed(() => !!pendingDelete.value), confirmSheetEl, () => { pend
           </ActionGroup>
             </FormGrid>
 
-            <div v-else-if="panel === 'training'" class="memory-stack">
-              <SectionHeader title="훈련 단계" compact>
-                <button class="help-icon-button" type="button" aria-label="AI 스케줄링 기준 보기" @click="schedulingHelpOpen = true">?</button>
-              </SectionHeader>
-              <div class="training-phase-card">
-                <span class="context-chip">현재 단계</span>
-                <strong>{{ trainingPhase.currentPhase }} · {{ trainingPhase.goal }}</strong>
-                <small>다음 후보: {{ trainingPhase.nextPhase || '미정' }} · 검토: {{ trainingPhase.reviewAfter }}</small>
-                <div class="phase-focus-list">
-                  <span v-for="focus in trainingPhase.focus" :key="focus">{{ focus }}</span>
-                </div>
-              </div>
-
-            </div>
-
             <div v-else-if="panel === 'ai-memory'" class="memory-stack">
               <div class="memory-ai-summary">
                 <span class="context-chip">기억 {{ aiMemoryCount }}개</span>
@@ -1319,7 +1288,6 @@ useSheetA11y(computed(() => !!pendingDelete.value), confirmSheetEl, () => { pend
           </section>
       </div>
       </Transition>
-      <SchedulingHelpSheet :open="schedulingHelpOpen" @close="schedulingHelpOpen = false" />
     </Teleport>
   </PageLayout>
 </template>

@@ -54,7 +54,8 @@ export function useCoachMoments(week: TrainingWeek) {
     raceProjection,
     restState,
     hasSchedule,
-    adaptiveProgress
+    adaptiveProgress,
+    beginnerWalkRun
   } = week
 
   const runnerProgress = computed(() =>
@@ -119,7 +120,7 @@ export function useCoachMoments(week: TrainingWeek) {
   // 위크 요약(이번 주 단계·포커스·핵심·볼륨·D-day) — "이번 주가 통째로 뭘 위한 주인지"
   const activeArchetype = computed(() => (activeGoal.value ? goalArchetype(activeGoal.value.category) : 'performance'))
   const weekSummary = computed(() =>
-    buildWeekSummary(scheduleStore.sessions, today.value, activeGoal.value?.targetDate ?? null, activeArchetype.value)
+    buildWeekSummary(scheduleStore.sessions, today.value, activeGoal.value?.targetDate ?? null, activeArchetype.value, today.value, beginnerWalkRun.value !== null)
   )
 
   // 플랜 시작일(가장 이른 세션 날짜). 이 날짜 이전 런은 "플랜 없던 시절"이라 추가런 판정에서 제외.

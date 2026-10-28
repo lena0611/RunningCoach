@@ -440,6 +440,22 @@ describe('buildWeekSummary — 보는 주(weekAnchor)', () => {
   })
 })
 
+describe('buildWeekSummary — 입문(걷기·뛰기) 라벨 (#887)', () => {
+  const today = new Date('2026-10-28T09:00:00')
+  const sessions = ['2026-10-28', '2026-10-30', '2026-11-01'].map((date) => session({ date }))
+
+  it('입문 레이스 플랜은 기초기가 아니라 걷기·뛰기, 세션 수를 함께 낸다', () => {
+    const summary = buildWeekSummary(sessions, today, '2027-01-03', 'performance', today, true)
+    expect(summary!.phaseLabel).toBe('걷기·뛰기')
+    expect(summary!.focusLine).toBe('30분 연속 달리기 만들기')
+    expect(summary!.sessionCount).toBe(3)
+  })
+
+  it('입문이 아니면 그대로 기초기', () => {
+    expect(buildWeekSummary(sessions, today, '2027-01-03', 'performance')!.phaseLabel).toBe('기초기')
+  })
+})
+
 /** 생성 플랜을 오늘 기준 7일 롤링 주로 묶어 주간 합(km)과 단계를 낸다(생성기의 주 정의와 같음). */
 function weeklyTotals(drafts: ReturnType<typeof buildPeriodizedSchedule>, today: Date): Array<{ km: number; phase: string }> {
   const start = new Date(today)

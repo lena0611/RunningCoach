@@ -826,7 +826,7 @@ function round1(value: number): number {
   return Math.round(value * 10) / 10
 }
 
-const PHASE_LABEL_KO: Record<TrainingPhaseName, string> = {
+export const PHASE_LABEL_KO: Record<TrainingPhaseName, string> = {
   Base: '기초기',
   Build: '발전기',
   Threshold: '역치기',
@@ -852,6 +852,8 @@ export type WeekSummary = {
   weekKm: number
   /** "D-45" 형식. 목표일 없으면 ''. */
   dDayText: string
+  /** 그 주 세션 수 — 입문(걷기·뛰기)은 km 대신 횟수로 보여준다. */
+  sessionCount: number
 }
 
 /**
@@ -862,6 +864,8 @@ const NON_PERF_SUMMARY: Record<'fat-loss' | 'wellbeing', { label: string; focus:
   'fat-loss': { label: '체중·체형', focus: '존2 유산소 리듬' },
   wellbeing: { label: '건강·습관', focus: '규칙적 유산소' }
 }
+/** 입문(5K 미완주) 레이스 플랜 — 단계 이름도 걷기·뛰기다(#887). 플랜 세션은 'Base' 를 달지만 화면엔 기초기라 부르지 않는다. */
+const ENTRY_SUMMARY = { label: '걷기·뛰기', focus: '30분 연속 달리기 만들기' }
 
 /**
  * "이번 주" 단일 기준(SSOT). 훈련 주는 **월요일 시작–일요일 종료**로 통일한다.
@@ -886,7 +890,9 @@ export function buildWeekSummary(
    * 요약할 주(2026-09-07). 기본은 오늘 주 — 주 넘기기로 **보고 있는 주**를 요약할 때만 다르게 준다.
    * D-day 는 언제나 오늘 기준이다: 다음주를 보는 동안에도 대회까지 남은 날은 그대로여야 한다.
    */
-  weekAnchor: Date = today
+  weekAnchor: Date = today,
+  /** 입문(걷기·뛰기) — 단계 대신 '걷기·뛰기' 라벨(#887). */
+  entryLevel = false
 ): WeekSummary | null {
   const start = startOfDay(today)
   const { start: startStr, end: endStr } = trainingWeekRange(weekAnchor)
@@ -903,10 +909,7 @@ export function buildWeekSummary(
   )
   if (!week.length) return null
 
-  // 단계: (보는 주가 오늘 주면) 오늘 세션 우선, 없으면 그 주 최빈 단계.
-  const todayStr = formatDateOnly(start)
-  const todaySession = week.find((s) => s.date === todayStr)
-  const phase = todaySession?.phase ?? mostCommonPhase(week)
+  const phase = weekPhase(week, formatDateOnly(start))
   const keyCount = week.filter((s) => s.keySession).length
   const weekKm = round1(week.reduce((sum, s) => sum + (s.prescription.distanceKm ?? 0), 0))
 
@@ -918,16 +921,25 @@ export function buildWeekSummary(
     if (days >= 0) dDayText = `D-${days}`
   }
 
-  // 비성과는 단계(기초기 등) 대신 유형 라벨.
-  const nonPerf = archetype !== 'performance' ? NON_PERF_SUMMARY[archetype] : null
+  // 비성과는 단계(기초기 등) 대신 유형 라벨, 입문은 걷기·뛰기.
+  const label = archetype !== 'performance' ? NON_PERF_SUMMARY[archetype] : entryLevel ? ENTRY_SUMMARY : null
   return {
     phase,
-    phaseLabel: nonPerf?.label ?? PHASE_LABEL_KO[phase],
-    focusLine: nonPerf?.focus ?? PHASE_FOCUS_KO[phase],
+    phaseLabel: label?.label ?? PHASE_LABEL_KO[phase],
+    focusLine: label?.focus ?? PHASE_FOCUS_KO[phase],
     keyCount,
     weekKm,
-    dDayText
+    dDayText,
+    sessionCount: week.length
   }
+}
+
+/**
+ * 한 주의 단계 — 그 주에 오늘 세션이 있으면 그 세션의, 없으면 그 주 최빈 단계.
+ * 위크 요약과 코치 탭 단계 카드(planPhases)가 같은 정의를 쓴다(#887 — 단계가 두 개로 갈리지 않게).
+ */
+export function weekPhase(weekSessions: ScheduledSession[], todayIso: string): TrainingPhaseName {
+  return weekSessions.find((s) => s.date === todayIso)?.phase ?? mostCommonPhase(weekSessions)
 }
 
 function mostCommonPhase(sessions: ScheduledSession[]): TrainingPhaseName {

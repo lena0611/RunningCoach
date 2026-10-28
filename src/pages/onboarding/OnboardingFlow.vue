@@ -17,7 +17,7 @@ import { type TrainingGoal, type TrainingInjuryItem, type TrainingMemory } from 
 import { injuryAreaSelectionsFor, summarizeInjuryAreas, type InjurySide } from '@/entities/training-memory/injuryAreas'
 import { vdotFromPerformance, vdotFromVo2Max } from '@/shared/lib/vdotPaces'
 import { distanceClassFromMeters, gradeBandFromVdot, nextDistanceClass } from '@/shared/lib/level/levelModel'
-import { formatDateWithWeekday, formatDuration } from '@/shared/lib/format'
+import { formatDateWithWeekday, formatDuration, formatMonthDay } from '@/shared/lib/format'
 import {
   assessGoalFeasibility,
   buildPeriodizedSchedule,
@@ -426,8 +426,7 @@ function relativeLabel(iso: string) {
   return days < 14 ? `${days}일 뒤` : `${weeksUntil(iso)}주 뒤`
 }
 function shortDate(iso: string) {
-  const [, month, day] = iso.split('-')
-  return `${Number(month)}/${Number(day)}(${WEEKDAYS[new Date(`${iso}T12:00:00`).getDay()]})`
+  return formatMonthDay(iso, true)
 }
 
 const injuryAreaOption = computed(() => INJURY_AREAS.find((area) => area.label === form.injuryArea) ?? null)
