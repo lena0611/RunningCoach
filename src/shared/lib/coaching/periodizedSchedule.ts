@@ -76,6 +76,17 @@ function lowVolumeWeekTypes(runDays: number): RunType[] {
 }
 
 /**
+ * 주행량을 먼저 쌓는 주(#893) — 위 저볼륨 주처럼 핵심 세션 없이 9km 미만인 주. 단계 이름은 그대로라 단계 설명
+ * ("템포를 나눠 뛰며…")이 그 주 세션과 어긋나므로, 위크 요약·단계 카드는 이 주에 다른 설명을 쓴다. 테이퍼는 원래 양을
+ * 줄이는 주라 뺀다. weekSessions 는 그 주의 살아 있는 세션(대체·건너뜀·휴식 제외).
+ */
+export function isVolumeFirstWeek(weekSessions: ScheduledSession[], phase: TrainingPhaseName): boolean {
+  if (phase === 'Taper' || phase === 'Recovery' || !weekSessions.length) return false
+  const km = weekSessions.reduce((sum, s) => sum + (s.prescription.distanceKm ?? 0), 0)
+  return !weekSessions.some((s) => s.keySession) && km < LOW_VOLUME_WEEK_KM
+}
+
+/**
  * 단계 블록 마지막 주에 한계 시험(TT='Race')을 키세션으로 끼운다 — VDOT 재측정·단계 게이트용(#411).
  * 롱런은 보존하고 Tempo 한 개를 TT로 대체(없으면 Easy 계열 하나를 대체). 이미 있으면 그대로.
  */
@@ -879,6 +890,7 @@ const PHASE_FOCUS_KO: Record<TrainingPhaseName, string> = {
   Taper: '볼륨 감량·신선도 회복',
   Recovery: '회복 우선'
 }
+const VOLUME_FIRST_FOCUS_KO = '이지런으로 주행량 쌓기'
 
 /** 이번 주 위크 요약 — 단계·포커스·핵심세션 수·주간 볼륨·D-day(매크로 위치). */
 export type WeekSummary = {
@@ -964,10 +976,12 @@ export function buildWeekSummary(
 
   // 비성과는 단계(기초기 등) 대신 유형 라벨, 입문은 걷기·뛰기.
   const label = recovery ? RECOVERY_SUMMARY : archetype !== 'performance' ? NON_PERF_SUMMARY[archetype] : entryLevel ? ENTRY_SUMMARY : null
+  // 주행량을 먼저 쌓는 주(#893)는 단계 이름은 두되 포커스는 그 주 세션대로.
+  const focus = isVolumeFirstWeek(week, phase) ? VOLUME_FIRST_FOCUS_KO : PHASE_FOCUS_KO[phase]
   return {
     phase,
     phaseLabel: label?.label ?? PHASE_LABEL_KO[phase],
-    focusLine: label?.focus ?? PHASE_FOCUS_KO[phase],
+    focusLine: label?.focus ?? focus,
     keyCount,
     weekKm,
     dDayText,

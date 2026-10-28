@@ -799,3 +799,25 @@ describe('저볼륨 주 구성 — 품질·롱런 없이 이지 (#893)', () => {
     expect(planMatchesEntryLevel(drafts, false)).toBe(true)
   })
 })
+
+// #893: 주행량을 먼저 쌓는 주는 단계 이름은 두되, 포커스는 그 주 세션대로 — "역치 자극 집중"인데 템포가 없지 않게.
+describe('buildWeekSummary — 주행량 먼저 쌓는 주 (#893)', () => {
+  const today = new Date('2026-10-28T09:00:00')
+  const rx = (distanceKm: number) => ({ ...defaultScheduledSessionPrescription(), distanceKm })
+  const easyWeek = (phase: 'Threshold' | 'Taper') =>
+    ['2026-10-28', '2026-10-30', '2026-11-01'].map((date, i) =>
+      session({ date, phase, sessionType: i === 0 ? 'Easy + Strides' : 'Easy', prescription: rx(2) })
+    )
+
+  it('핵심 세션 없이 9km 미만이면 단계 이름은 그대로, 포커스는 주행량 쌓기', () => {
+    const summary = buildWeekSummary(easyWeek('Threshold'), today, '2026-12-01', 'performance')
+    expect(summary!.phaseLabel).toBe(buildWeekSummary([session({ date: '2026-10-28', phase: 'Threshold', keySession: true, sessionType: 'Tempo' })], today, '2026-12-01', 'performance')!.phaseLabel)
+    expect(summary!.focusLine).toBe('이지런으로 주행량 쌓기')
+  })
+
+  it('핵심 세션이 있거나 테이퍼면 원래 단계 포커스', () => {
+    const withTempo = [...easyWeek('Threshold'), session({ date: '2026-10-29', phase: 'Threshold', sessionType: 'Tempo', keySession: true, prescription: rx(2) })]
+    expect(buildWeekSummary(withTempo, today, '2026-12-01', 'performance')!.focusLine).not.toBe('이지런으로 주행량 쌓기')
+    expect(buildWeekSummary(easyWeek('Taper'), today, '2026-12-01', 'performance')!.focusLine).not.toBe('이지런으로 주행량 쌓기')
+  })
+})

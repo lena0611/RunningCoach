@@ -78,6 +78,16 @@ describe('buildPlanPhaseJourney (#887 — 단계의 정본은 플랜)', () => {
     expect(currentPlanPhase(plan, new Date('2026-11-25T09:00:00'))).toBe('Threshold')
   })
 
+  it('이번 주가 핵심 세션 없이 9km 미만이면 주행량 먼저 쌓는 주(#893) — 단계 카드 설명을 바꾼다', () => {
+    const rx = (distanceKm: number) => ({ ...defaultScheduledSessionPrescription(), distanceKm })
+    const withKm = (km: number, key: boolean) =>
+      tenWeekPlan().map((s) => ({ ...s, prescription: rx(km), keySession: key && s.date === '2026-11-26' }))
+    const today = new Date('2026-11-25T09:00:00') // 7주차(역치)
+    expect(buildPlanPhaseJourney(withKm(2, false), today)!.volumeFirstWeek).toBe(true)
+    expect(buildPlanPhaseJourney(withKm(2, true), today)!.volumeFirstWeek).toBe(false)
+    expect(buildPlanPhaseJourney(withKm(4, false), today)!.volumeFirstWeek).toBe(false)
+  })
+
   it('오늘이 플랜 기간 밖이면 null — 카드를 띄우지 않는다', () => {
     expect(buildPlanPhaseJourney(tenWeekPlan(), new Date('2026-12-30T09:00:00'))).toBeNull()
     expect(buildPlanPhaseJourney([], new Date('2026-11-25T09:00:00'))).toBeNull()

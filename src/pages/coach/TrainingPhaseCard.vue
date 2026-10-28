@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import type { TrainingPhaseName } from '@/entities/training-memory/model'
 import type { CoachAdaptiveProgressSummary } from '@/shared/lib/coaching/coachAdaptiveProgress'
 import { PHASE_LABEL_KO } from '@/shared/lib/coaching/periodizedSchedule'
-import { PHASE_PURPOSE_KO, type PlanPhaseJourney } from '@/shared/lib/coaching/planPhases'
+import { PHASE_PURPOSE_KO, VOLUME_FIRST_PURPOSE_KO, type PlanPhaseJourney } from '@/shared/lib/coaching/planPhases'
 import { formatMonthDay } from '@/shared/lib/format'
 
 /**
@@ -72,7 +72,7 @@ const bar = computed(() => {
         <strong class="phase-name">{{ PHASE_LABEL_KO[current.phase] }}</strong>
         <span class="phase-week">{{ current.weeks }}주 중 {{ journey.weekInBlock }}주째</span>
       </span>
-      <p class="phase-purpose">{{ PHASE_PURPOSE_KO[current.phase] }}</p>
+      <p class="phase-purpose">{{ journey.volumeFirstWeek ? VOLUME_FIRST_PURPOSE_KO : PHASE_PURPOSE_KO[current.phase] }}</p>
     </div>
 
     <div class="phase-bar" role="img" :aria-label="`${journey.totalWeeks}주 중 ${journey.weekInPlan}주차, ${PHASE_LABEL_KO[current.phase]}`">

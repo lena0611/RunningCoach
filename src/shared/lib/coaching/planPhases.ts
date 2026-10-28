@@ -1,6 +1,6 @@
 import type { TrainingPhaseName } from '@/entities/training-memory/model'
 import type { ScheduledSession } from '@/entities/training-schedule/model'
-import { trainingWeekRange, weekPhase } from './periodizedSchedule'
+import { isVolumeFirstWeek, trainingWeekRange, weekPhase } from './periodizedSchedule'
 import { RETURN_LONG_LAYOFF_DAYS } from './returnRamp'
 
 /**
@@ -32,6 +32,8 @@ export type PlanPhaseJourney = {
   /** 플랜의 몇째 주인지(1부터). */
   weekInPlan: number
   totalWeeks: number
+  /** 이번 주가 주행량을 먼저 쌓는 주인지(#893, isVolumeFirstWeek) — 단계 설명 대신 VOLUME_FIRST_PURPOSE_KO. */
+  volumeFirstWeek: boolean
 }
 
 /** 단계마다 이번 주에 하는 일 — 생성기 세션 구성(weeklySessionTypes)과 브리핑 템포 처방(tempoMinutesFor)에 맞춘 말. */
@@ -43,6 +45,9 @@ export const PHASE_PURPOSE_KO: Record<TrainingPhaseName, string> = {
   Taper: '양을 줄이고 짧은 템포만 남겨, 대회 날 가벼운 다리로 서요.',
   Recovery: '회복을 먼저 챙겨요.'
 }
+
+/** 주행량을 먼저 쌓는 주(#893) — 단계 이름은 그대로지만 그 단계 훈련(롱런·템포)이 아직 없다. */
+export const VOLUME_FIRST_PURPOSE_KO = '주행량이 아직 적어서 이번 주는 이지런으로만 쌓아요. 주행량이 늘면 이 단계 훈련이 더해져요.'
 
 function weekStartOf(iso: string): string {
   return trainingWeekRange(new Date(`${iso}T12:00:00`)).start
@@ -106,7 +111,15 @@ export function buildPlanPhaseJourney(sessions: ScheduledSession[], today: Date)
     }
   })
 
-  return { blocks, currentIndex, weekInBlock, weekInPlan: currentWeek + 1, totalWeeks: weeks.length }
+  const thisWeek = (byWeek.get(weeks[currentWeek].start) ?? []).filter((s) => s.status !== 'skipped' && s.status !== 'rested')
+  return {
+    blocks,
+    currentIndex,
+    weekInBlock,
+    weekInPlan: currentWeek + 1,
+    totalWeeks: weeks.length,
+    volumeFirstWeek: isVolumeFirstWeek(thisWeek, weeks[currentWeek].phase)
+  }
 }
 
 /**
