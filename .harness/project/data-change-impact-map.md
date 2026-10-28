@@ -481,9 +481,9 @@ MemoryPage addGoal/updateGoal/setActiveGoal/removeGoal (draft만)  MemoryPage.vu
 
 **gotchas:**
 - 지연 저장 함정: 저장 안 하고 대시보드로 가면 아무것도 안 바뀜.
-- 다중 유입경로(스케줄 재생성 트리거): ensureSchedule은 (a)activeGoal.id 전환 watch (b)loaded-watch(immediate) (c)returnFromRestNow (d)route '/' watch에서 호출. ensureInFlight 가드 하나가 이중 골격 방어선 — 가드 우회/직접 doEnsureSchedule 호출 추가 금지.
+- 다중 유입경로(스케줄 재생성 트리거): ensureSchedule은 (a)activeGoal.id 전환 watch (b)loaded-watch(immediate) (c)returnFromRestNow (d)route '/' watch에서 호출. 이중 골격 방어선은 **셋**이다 — ① ensureInFlight(ensure 끼리) ② `scheduleStore.load` 겹침 대기(진행 중 load 를 기다림, 다른 목표면 끝난 뒤 다시 부름) ③ doEnsureSchedule 로드 확인 가드(이 목표 세션을 못 불러왔으면 짓지 않음). ①만 있던 시절 전환 watch 의 **직접 load** 와 겹치면 load 가 그냥 돌아가 빈 세션을 '예정 없음'으로 읽고 콜드스타트가 한 벌 더 깔렸다(#891, 로그인마다 재현). 가드 우회/직접 doEnsureSchedule 호출 추가 금지.
 - 시점 경합(전환 watch는 거리/날짜 변경을 안 봄): watch는 `activeGoal.value?.id`만 추적. 같은 목표에서 distanceKm/targetDate만 바꾸면 이 watch 안 돌고 앵커-드리프트 realign이나 다음 부팅 loaded-watch에 의존 → 즉시 재생성 안 될 수 있음.
-- prev==null 스킵: 전환 watch는 prev==null(초기)을 일부러 건너뜀(:1418, 초기는 loaded-watch 책임). 분리 깨지면 콜드 부팅 이중 생성 또는 미생성.
+- prev==null 스킵: 전환 watch는 prev==null(초기)을 일부러 건너뜀(:1418, 초기는 loaded-watch 책임). 분리 깨지면 콜드 부팅 이중 생성 또는 미생성. ⚠ **캐시가 빈 부팅(로그인 직후·새 기기·캐시 정리)은 prev 가 null 이 아니다** — 기억이 기본 목표('목표 미설정')로 시작했다가 실제 목표로 바뀌므로 전환 watch 가 loaded-watch 와 **같은 순간** 돈다(#891). 위 방어선 ②③이 이 경합을 막는다.
 - archetype 무음 early-return: performance인데 targetDate/distanceKm 비면 :421에서 조용히 return → 스케줄 안 생기는데 expectsSchedule(:614)는 true라 placeholder가 영원히 떠 '로딩 중'처럼 보이는 무음 실패.
 - status만 바뀜 + 낙관적 미러: realign/settle/declareRest/unrestFrom은 DB 호출과 별개로 this.sessions status를 in-place로 바꿈 → DB push 실패 시 화면(낙관적)과 DB 갈림.
 - done이 active 뷰서 빠짐: isActiveSession은 done/superseded/skipped/rested 제외 → 세션 전부 done이면 hasActive=false라 롤링 재생성이 다시 돔. 데이-스트립은 done을 run 존재로 별도 칠해 화면엔 보임.

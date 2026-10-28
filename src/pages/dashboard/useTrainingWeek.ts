@@ -231,6 +231,9 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
     try {
       // 미로딩이거나 '다른 목표'가 로딩돼 있으면 활성 목표 세션으로 재로딩(#398 — 탭 복귀·목표 전환 stale 방지).
       if (!scheduleStore.loaded || scheduleStore.loadedGoalId !== goal.id) await scheduleStore.load(goal.id)
+      // 이 목표의 세션을 실제로 못 불러왔으면 짓지 않는다(#891). 조회 실패로 빈 목록을 '예정 세션 없음'으로 읽으면
+      // 아래 콜드스타트가 플랜을 한 벌 더 깐다. 다음 일정 확인이 다시 불러와 이어간다.
+      if (!scheduleStore.loaded || scheduleStore.error || scheduleStore.loadedGoalId !== goal.id) return
       // #235 후속 G4: self-race 가 점유한 세션·의도를 먼저 비운다(무태그·늦은태깅 잔재 치유, 멱등).
       // ⚠️ 순서 절대조건: heal → reconcile → settle. 또 reconcile/repoint 입력에서 self-race 를 빼야 멱등 수렴한다
       //    (안 그러면 heal 이 떼도 reconcile 이 self-race 를 곧장 다시 붙이는 도돌이).
