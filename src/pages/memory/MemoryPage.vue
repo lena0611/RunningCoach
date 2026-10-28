@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useMemoryStore } from '@/app/stores/memoryStore'
+import { useGoalAdjustStore } from '@/app/stores/goalAdjustStore'
 import { useRunStore } from '@/app/stores/runStore'
 import type { TrainingGoal, TrainingInjuryItem, TrainingMemory } from '@/entities/training-memory/model'
 import {
@@ -42,6 +43,7 @@ import StackPage from '@/shared/ui/StackPage.vue'
 type MemoryPanel = 'overview' | 'goals' | 'goal-edit' | 'goal-new' | 'injuries' | 'injury-edit' | 'injury-new' | 'ai-memory' | 'knowledge' | 'knowledge-request'
 
 const memoryStore = useMemoryStore()
+const goalAdjustStore = useGoalAdjustStore()
 const runStore = useRunStore()
 const route = useRoute()
 const draft = reactive<TrainingMemory>(JSON.parse(JSON.stringify(memoryStore.memory)))
@@ -108,7 +110,8 @@ const goalCategoryOptions = [
 ]
 const goalStatusOptions = [
   { value: 'active', label: '진행 중' },
-  { value: 'paused', label: '보류' },
+  // 쉬는 중 = '잠시 내려놓기'(#889)로 보관한 대회 목표. 코치 탭 '쉬고 있는 목표'에서 다시 시작한다.
+  { value: 'paused', label: '쉬는 중' },
   { value: 'completed', label: '완료' },
   { value: 'archived', label: '보관' }
 ]
@@ -1001,6 +1004,8 @@ useSheetA11y(computed(() => !!pendingDelete.value), confirmSheetEl, () => { pend
             <ClearableField v-model="editingGoal.notes" as="textarea" rows="3" @update:model-value="updateGoal(editingGoal)" />
           </label>
           <ActionGroup full>
+            <!-- 미루기·거리 낮추기·내려놓기(#889) — 날짜를 위 칸에서 직접 바꿔도 플랜은 같은 길로 다시 짜인다 -->
+            <button v-if="editingGoal.category === 'race'" class="ghost" type="button" @click="goalAdjustStore.show(editingGoal.id)">목표 다시 정하기</button>
             <button class="ghost" type="button" @click="setActiveGoal(editingGoal.id)">활성 목표로 지정</button>
             <button class="danger" type="button" :disabled="draft.goals.length <= 1" @click="askRemoveGoal(editingGoal)">삭제</button>
           </ActionGroup>

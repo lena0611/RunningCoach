@@ -177,7 +177,8 @@ ensureSchedule() in-flight 가드                            DashboardPage.vue:3
 - 전체가 `try/catch{}`로 통째 삼킴(:519) → 새 단계 추가 시 silent failure 주의.
 
 **gotchas:**
-- 시점 경합(in-flight 단일화): watch 3개(loaded / activeGoal.id / returnFromRestNow·onDeclareRest)가 한 ensureInFlight로 직렬화. `returnFromRestNow`는 'ensure watcher가 loaded·goalId만 보고 activeRest엔 안 묶인다'는 전제로 drain 후 재호출(:1123). 향후 activeRest를 watcher에 묶으면 가정 붕괴 → 가드 재도입 필요.
+- 목표 날짜·거리 변경(#889): 활성 목표의 `id|targetDate|distanceKm` watch → ensureSchedule. 성과 목표는 목표의 `planBuiltFor`(플랜을 지은 날짜·거리)와 다르면 버전 게이트와 같은 '오늘부터 재빌드' 분기를 탄다(rested 날짜 제외·램프 캡 보존). 처음 보는 목표는 재빌드 없이 기록만. `planBuiltFor`·`feasibilityAcceptedFor`는 **목표 객체**에 둔다 — coach-run 은 목표를 그대로 보존하지만 adaptiveTrainingProfile 은 아는 키만 다시 써서 거기 두면 코치 패치 때 사라진다(scheduleAnchor* 도 같은 위험).
+- 시점 경합(in-flight 단일화): watch 4개(loaded / activeGoal.id / 활성 목표 날짜·거리 / returnFromRestNow·onDeclareRest)가 한 ensureInFlight로 직렬화. `returnFromRestNow`는 'ensure watcher가 loaded·goalId만 보고 activeRest엔 안 묶인다'는 전제로 drain 후 재호출(:1123). 향후 activeRest를 watcher에 묶으면 가정 붕괴 → 가드 재도입 필요.
 - 순서 절대조건 heal→reconcile→repoint→settle: 어긋나면 (a)도돌이 (b)수행 런 missed 오확정 (c)더블 오매칭이 missed로 굳음.
 - reinfer→ensure→ensureTodayIntent 순서(:1406-1408): reinfer 먼저여야 repoint가 새 타입을 봄. ensureTodayIntent가 ensure 뒤여야 램프가 Easy로 낮춘 타입으로 의도 생성 — 아니면 폐기된 'Easy+Strides' 처방으로 디브리핑 채점되는 화석(#473).
 - 스냅샷 화석화: `ensureIntentFor`는 planned 의도만 타입 동기화, completed/skipped/superseded는 안 건드림(소급 변조 금지). 이미 completed된 의도는 옛 타입 영구 박제 — 의도된 동작이나 '왜 어제 채점이 새 타입과 다른가' 혼란의 근원. **→ 복귀 램프의 강도/타입 강등(capReturnSession)과 충돌하는 경로는 [[#6. 휴식 선언 / 복귀 램프 (#473)]]: 강등이 닫힌 의도를 못 고쳐 폐기 강도로 채점된다. 순서 준수로 안 풀린다.**

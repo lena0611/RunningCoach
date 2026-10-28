@@ -105,6 +105,51 @@ export type TrainingGoal = {
   notes: string
   createdAt: string
   updatedAt: string
+  /**
+   * 플랜을 어느 날짜·거리로 지었나(#889). 활성 목표의 날짜·거리가 이것과 다르면 플랜을 오늘부터 다시 짠다 —
+   * 기억 탭에서 날짜를 바꿔도 플랜이 그대로이던 빈틈. 목표에 둔 이유: coach-run 은 목표 객체를 그대로 보존하지만
+   * adaptiveTrainingProfile 은 아는 키만 다시 써서 거기 두면 코치 패치 때마다 사라진다.
+   */
+  planBuiltFor?: GoalPlanKey | null
+  /** 이 날짜·거리로 '그대로 가기'를 골랐다(#886·#889) — 같은 동안 목표 무리 카드를 다시 띄우지 않는다. */
+  feasibilityAcceptedFor?: GoalPlanKey | null
+}
+
+/** 목표의 날짜·거리 — 플랜·수락 기록이 어떤 목표 값에 대한 것인지 대조한다. */
+export type GoalPlanKey = { targetDate: string | null; distanceKm: number | null }
+
+export function goalPlanKey(goal: Pick<TrainingGoal, 'targetDate' | 'distanceKm'>): GoalPlanKey {
+  return { targetDate: goal.targetDate, distanceKm: goal.distanceKm }
+}
+
+/** 두 목표 값이 같은가 — 날짜·거리 중 하나라도 다르면 다른 목표다. */
+export function sameGoalPlanKey(a: GoalPlanKey | null | undefined, b: GoalPlanKey): boolean {
+  return Boolean(a) && a!.targetDate === b.targetDate && a!.distanceKm === b.distanceKm
+}
+
+/**
+ * '잠시 내려놓기'(#889)로 만든 회복 우선 목표. 대회 목표는 status 'paused'(쉬는 중)로 보관하고 이 목표를 활성으로 둔다 —
+ * 건강·습관 리듬(주 3회 가볍게)을 그대로 쓰므로 D-day·예측·단계 카드는 자연히 숨는다.
+ */
+export const RECOVERY_GOAL_ID = 'goal-recovery'
+
+export function createRecoveryGoal(now: string): TrainingGoal {
+  return {
+    id: RECOVERY_GOAL_ID,
+    title: '회복 우선',
+    category: 'health',
+    startDate: now.slice(0, 10),
+    targetDate: null,
+    distanceKm: null,
+    targetDurationSec: null,
+    priority: 1,
+    status: 'active',
+    successCriteria: '',
+    strategyNotes: '',
+    notes: '',
+    createdAt: now,
+    updatedAt: now
+  }
 }
 
 export type TrainingInjuryItem = {
@@ -1018,7 +1063,18 @@ function normalizeGoal(goal: Partial<TrainingGoal>, index: number, now: string):
     strategyNotes: typeof goal.strategyNotes === 'string' ? goal.strategyNotes : '',
     notes: typeof goal.notes === 'string' ? goal.notes : '',
     createdAt: typeof goal.createdAt === 'string' ? goal.createdAt : now,
-    updatedAt: typeof goal.updatedAt === 'string' ? goal.updatedAt : now
+    updatedAt: typeof goal.updatedAt === 'string' ? goal.updatedAt : now,
+    planBuiltFor: normalizeGoalPlanKey(goal.planBuiltFor),
+    feasibilityAcceptedFor: normalizeGoalPlanKey(goal.feasibilityAcceptedFor)
+  }
+}
+
+function normalizeGoalPlanKey(value: unknown): GoalPlanKey | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Partial<GoalPlanKey>
+  return {
+    targetDate: typeof raw.targetDate === 'string' && raw.targetDate ? raw.targetDate : null,
+    distanceKm: normalizeNullableNumber(raw.distanceKm)
   }
 }
 

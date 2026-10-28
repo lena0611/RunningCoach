@@ -15,12 +15,14 @@ import type { ChronicLoadTrend } from '@/shared/lib/runStats'
 import { analyzeExtraRunTrend, buildExtraRunInquiry } from '@/shared/lib/coaching/extraRunTrend'
 import { isRunningLoadGroup, PAIN_GROUP_LABEL, type PainGroup } from '@/features/post-run-interview/buildInterviewRunPatch'
 
-export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'pain-probe' | 'injury-escalation' | 'injury-worsened' | 'extra-run' | 'goal-progress' | 'goal-feasibility' | 'time-trial' | 'weekend-triage' | 'double-suggest' | 'rest-support' | 'rest-return'
+export type CoachMomentKind = 'injury' | 'load-spike' | 'deviation' | 'pain-followup' | 'pain-probe' | 'injury-escalation' | 'injury-worsened' | 'extra-run' | 'goal-progress' | 'goal-feasibility' | 'time-trial' | 'weekend-triage' | 'double-suggest' | 'rest-support' | 'rest-return' | 'goal-adjust' | 'goal-resume'
 
 /** 모먼트가 제안하는 행동(전용 시트 열기 등). 트레이니 확인 후 실행. */
 export type CoachMomentAction = {
   label: string
-  kind: 'open-injury-screening' | 'open-weekend-triage' | 'open-doubles-add' | 'open-rest-extend' | 'open-rest-for-injury'
+  kind: 'open-injury-screening' | 'open-weekend-triage' | 'open-doubles-add' | 'open-rest-extend' | 'open-rest-for-injury' | 'open-goal-adjust'
+  /** 'open-goal-adjust' 가 열 목표(없으면 활성 목표). 쉬던 목표 다시 정하기(#889)가 쓴다. */
+  goalId?: string
 }
 export type CoachMomentSentiment = 'positive' | 'neutral' | 'caution'
 
@@ -169,6 +171,13 @@ export type CoachMomentContext = {
   weekendTriage?: { saveLabel: string; releaseCount: number } | null
   /** 목표 준비도 — '충분'이면 코치가 격려(긍정 소통). */
   goalProgress?: { readinessScore: number; readinessLevel: '충분' | '보통' | '부족'; dDayText: string } | null
+  /**
+   * 휴식 중 목표 다시 정하기(#889) — 대회가 8주 안인데 쉬기 시작했다(휴식 첫 주에만 caller 가 채운다).
+   * 휴식 중엔 목표 경고를 억제하므로, 경고 대신 "쉬는 동안 다시 정해도 된다"는 선택지만 조용히 건넨다.
+   */
+  goalAdjustDuringRest?: { dateLabel: string; distanceLabel: string; weeksLeft: number; injury: boolean } | null
+  /** 내려놓은 대회 목표를 다시 정할 때(#889) — 회복 우선 목표가 활성이고 부상이 가라앉았으면 caller 가 채운다. */
+  goalResume?: { goalId: string; areaLabel: string | null } | null
   /** 목표 실현가능성(#395) — 현재 체력 대비 목표가 무리면 솔직히 경고+대안(message). assessGoalFeasibility 결과 주입. */
   goalFeasibility?: { feasible: boolean; message: string | null } | null
   /** 최근 한계 시험(TT) 결과(#411) — VDOT·등급 갱신 계기. 측정→승급 연결 메시지. daysAgo 작을 때만 노출. */
@@ -380,7 +389,38 @@ function detectGoalFeasibility(ctx: CoachMomentContext): CoachMoment | null {
     kind: 'goal-feasibility',
     priority: 55,
     icon: '🎯',
-    message: f.message
+    message: f.message,
+    action: { label: '목표 다시 정하기', kind: 'open-goal-adjust' }
+  }
+}
+
+/** 휴식 중 목표 다시 정하기(#889) — 닦달이 아니라 선택지. 휴식 첫 주에만, 닫으면 그 휴식 동안 다시 안 뜬다(쿨다운 7일). */
+function detectGoalAdjustDuringRest(ctx: CoachMomentContext): CoachMoment | null {
+  const g = ctx.goalAdjustDuringRest
+  if (!g || !ctx.rest?.active) return null
+  const cause = g.injury ? '이번 부상으로' : '이번 휴식으로'
+  return {
+    key: `goal-adjust:${ctx.rest.windowKey ?? 'current'}`,
+    kind: 'goal-adjust',
+    priority: 70,
+    icon: '🗓️',
+    message: `대회(${g.dateLabel} · ${g.distanceLabel})까지 ${g.weeksLeft}주 남았어요. ${cause} 빠듯하면, 쉬는 동안 목표를 다시 정해도 괜찮아요.`,
+    action: { label: '목표 다시 정하기', kind: 'open-goal-adjust' }
+  }
+}
+
+/** 내려놓은 대회 목표 다시 정하기(#889) — 부상이 가라앉았을 때 코치가 먼저 묻는다. */
+function detectGoalResume(ctx: CoachMomentContext): CoachMoment | null {
+  const r = ctx.goalResume
+  if (!r) return null
+  const lead = r.areaLabel ? `${r.areaLabel} 쪽이 2주째 조용해요.` : '몸이 한결 나아졌어요.'
+  return {
+    key: `goal-resume:${r.goalId}`,
+    kind: 'goal-resume',
+    priority: 50,
+    icon: '🌱',
+    message: `${lead} 쉬고 있던 대회 목표, 다시 정해볼까요?`,
+    action: { label: '목표 정하기', kind: 'open-goal-adjust', goalId: r.goalId }
   }
 }
 
@@ -593,6 +633,8 @@ const DETECTORS: Detector[] = [
   detectDoubleSuggestion,
   detectTimeTrialResult,
   detectGoalFeasibility,
+  detectGoalAdjustDuringRest,
+  detectGoalResume,
   detectExtraRun,
   detectGoalProgress,
   detectRestSupport,
@@ -615,6 +657,7 @@ export function collectCoachMoments(ctx: CoachMomentContext, dismissedKeys: Set<
     moments = moments.filter(
       (m) =>
         m.kind === 'rest-support' ||
+        m.kind === 'goal-adjust' || // 휴식 중 목표 다시 정하기(#889) — 경고가 아니라 선택지
         m.kind === 'injury' ||
         m.kind === 'pain-followup' ||
         m.kind === 'pain-probe' || // 부상 감별 1문항은 닦달이 아니라 "왜 아픈지" 이해 — 휴식 중에도 허용

@@ -8,6 +8,8 @@ import { useSessionDetailStore } from '@/app/stores/sessionDetailStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
+import { useGoalAdjustStore } from '@/app/stores/goalAdjustStore'
+import SecondaryButton from '@/shared/ui/SecondaryButton.vue'
 import { useCoachActionBridgeStore } from '@/app/stores/coachActionBridgeStore'
 import { useCrossTrainingStore } from '@/app/stores/crossTrainingStore'
 import { trainingWeekRange } from '@/shared/lib/coaching/periodizedSchedule'
@@ -117,6 +119,11 @@ const {
 const { topCoachMoment, dismissMoment, onMomentSelect } = useCoachMoments(week)
 // 시트(트리아지·더블)는 코치 탭 소유 — 그런 액션은 코치 탭으로 이동만 하고 dismiss 하지 않는다(코치 탭에서 실행).
 function onDashboardMomentAction(moment: CoachMoment) {
+  if (moment.action?.kind === 'open-goal-adjust') {
+    useGoalAdjustStore().show(moment.action.goalId ?? null)
+    dismissMoment(moment.key)
+    return
+  }
   if (moment.action?.kind === 'open-injury-screening') {
     useInjuryFlowStore().requestScreening()
     dismissMoment(moment.key)
@@ -689,6 +696,11 @@ function closeProjectionDetail() {
   projectionDetailOpen.value = false
 }
 
+function openGoalAdjustFromProjection() {
+  closeProjectionDetail()
+  useGoalAdjustStore().show(null)
+}
+
 function openGoalCard() {
   if (raceProjection.value) {
     openProjectionDetail()
@@ -1194,6 +1206,10 @@ useSheetA11y(computed(() => !!pendingDeleteCard.value), confirmSheetEl, () => { 
     </StackPage>
 
     <StackPage :open="projectionDetailOpen && Boolean(raceProjection)" title="목표 예상" @close="closeProjectionDetail">
+      <!-- 목표 다시 정하기(#889) — 예상을 보고 날짜·거리를 바꾸고 싶을 때 -->
+      <template #footer>
+        <SecondaryButton @click="openGoalAdjustFromProjection">목표 다시 정하기</SecondaryButton>
+      </template>
       <template v-if="raceProjection">
         <SectionGroup title="현재 예상">
           <div class="projection-detail-metric">

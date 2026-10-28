@@ -6,6 +6,10 @@ import { useLevelStore } from '@/app/stores/levelStore'
 import { useSessionIntentStore } from '@/app/stores/sessionIntentStore'
 import { useToastStore } from '@/app/stores/toastStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
+import { useGoalAdjustStore } from '@/app/stores/goalAdjustStore'
+import { RECOVERY_GOAL_ID } from '@/entities/training-memory/model'
+import { pausedGoals } from '@/entities/training-memory/goalChanges'
+import { raceDistanceLabel } from '@/shared/lib/coaching/goalAdjust'
 import { useGlossaryStore } from '@/app/stores/glossaryStore'
 import { useWeatherStore } from '@/app/stores/weatherStore'
 import WeatherCard from '@/widgets/weather-card/WeatherCard.vue'
@@ -56,6 +60,9 @@ const router = useRouter()
 const memoryStore = useMemoryStore()
 const levelStore = useLevelStore()
 const scheduleStore = useTrainingScheduleStore()
+const goalAdjustStore = useGoalAdjustStore()
+// 내려놓은(쉬는 중) 대회 목표(#889) — 회복 우선 목표가 활성일 때만 '쉬고 있는 목표' 카드로 보인다.
+const restingGoals = computed(() => (activeGoal.value?.id === RECOVERY_GOAL_ID ? pausedGoals(memoryStore.memory) : []))
 const sessionIntentStore = useSessionIntentStore()
 const toastStore = useToastStore()
 const glossaryStore = useGlossaryStore()
@@ -332,8 +339,9 @@ const weekMission = computed(() => {
 // 전략적 휴식(#378): 휴식날도 회복·부상관리·근력 보강 안내
 const restGuidance = computed(() => buildRestGuidance(activeInjury.value, chronicLoad.value, runs.value.length === 0))
 
-function onMomentAction(moment: { key: string; action?: { kind: string } }) {
+function onMomentAction(moment: { key: string; action?: { kind: string; goalId?: string } }) {
   if (moment.action?.kind === 'open-injury-screening') useInjuryFlowStore().requestScreening()
+  else if (moment.action?.kind === 'open-goal-adjust') goalAdjustStore.show(moment.action.goalId ?? null)
   else if (moment.action?.kind === 'open-weekend-triage') triageOpen.value = true
   else if (moment.action?.kind === 'open-doubles-add') openDoublesAdd(doubleSuggestionData.value?.amSession ?? null)
   else if (moment.action?.kind === 'open-rest-extend' || moment.action?.kind === 'open-rest-for-injury') {
@@ -845,6 +853,21 @@ const phaseSheet = computed<{ title: string; subtitle: string; rows: PlanStepRow
       <TrainingPhaseCard v-else-if="phaseJourney" :journey="phaseJourney" :checks="adaptiveProgress.criteria" @open="phaseSheetOpen = true" />
     </SectionGroup>
 
+    <!-- 쉬고 있는 목표(#889): 잠시 내려놓은 대회 목표 — 언제든 날짜를 정해 다시 시작한다. -->
+    <SectionGroup v-if="restingGoals.length" title="쉬고 있는 목표" :surface="false">
+      <article v-for="g in restingGoals" :key="g.id" class="resting-goal-card">
+        <span class="resting-goal-head">
+          <strong>{{ g.title }}<template v-if="g.distanceKm"> · {{ raceDistanceLabel(g.distanceKm) }}</template></strong>
+          <span class="resting-goal-chip">쉬는 중 · {{ formatMonthDay(g.updatedAt.slice(0, 10)) }}부터</span>
+        </span>
+        <p>회복 우선 리듬으로 쉬어 가는 중이에요. 준비되면 날짜를 정해 다시 시작하거나 거리를 낮춰 시작해요.</p>
+        <button class="resting-goal-more" type="button" @click="goalAdjustStore.show(g.id)">
+          목표 다시 정하기
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+        </button>
+      </article>
+    </SectionGroup>
+
     <PlanStepsSheet
       :open="phaseSheetOpen"
       :title="phaseSheet.title"
@@ -1102,5 +1125,63 @@ const phaseSheet = computed<{ title: string; subtitle: string; rows: PlanStepRow
   color: var(--color-text);
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.resting-goal-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-card);
+  box-shadow: var(--shadow-card);
+  word-break: keep-all;
+}
+.resting-goal-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+}
+.resting-goal-head strong {
+  font-size: var(--text-body-size);
+  font-weight: var(--font-weight-bold);
+}
+.resting-goal-chip {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-muted);
+  font-size: var(--text-micro-size);
+}
+.resting-goal-card p {
+  margin: 0;
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  color: var(--color-muted);
+}
+.resting-goal-more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: var(--radius-field);
+  background: var(--color-surface);
+  box-shadow: none;
+  text-shadow: none;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--text-caption-size);
+  font-weight: var(--font-weight-bold);
+}
+.resting-goal-more svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--color-muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 </style>
