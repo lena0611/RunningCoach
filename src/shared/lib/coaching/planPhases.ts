@@ -129,10 +129,17 @@ export function buildPlanPhaseJourney(sessions: ScheduledSession[], today: Date)
  * 1주차로 돌아갔다. 단 플랜 중 28일 넘게 안 뛰었으면 쌓은 체력이 사실상 사라진다(SSOT §휴식과 복귀 디트레이닝 4주
  * 경계) — 공백 뒤 첫 런(지금 쉬는 중이면 오늘)을 새 시작으로 본다. 복귀 램프는 처음 몇 세션만 낮추므로, 달력이 이걸
  * 맡지 않으면 5주 쉰 사람이 곧바로 템포를 받는다. 공백은 플랜 시작 전 마지막 런부터(없으면 플랜 시작일부터) 잰다.
- * 오늘부터 나눠야 하면(플랜 없음·오늘 시작) null.
+ * 목표 시작일(goal.startDate)이 첫 세션보다 늦으면 그날부터다 — 쉬던 목표를 다시 시작하면 시작일이 그날로 바뀌어
+ * (goalChanges 'resume') 옛 플랜 첫 세션부터 잇지 않는다. 오늘부터 나눠야 하면(플랜 없음·오늘 시작) null.
  */
-export function phaseCalendarStart(goalSessions: Array<Pick<ScheduledSession, 'date'>>, runDates: string[], todayIso: string): string | null {
-  const planStart = goalSessions.reduce<string | null>((min, s) => (!min || s.date < min ? s.date : min), null)
+export function phaseCalendarStart(
+  goalSessions: Array<Pick<ScheduledSession, 'date'>>,
+  runDates: string[],
+  todayIso: string,
+  goalStartDate: string | null = null
+): string | null {
+  const firstSession = goalSessions.reduce<string | null>((min, s) => (!min || s.date < min ? s.date : min), null)
+  const planStart = firstSession && goalStartDate && goalStartDate > firstSession ? goalStartDate : firstSession
   if (!planStart || planStart >= todayIso) return null
   const days = [...new Set(runDates.map((d) => d.slice(0, 10)))].filter((d) => d <= todayIso).sort()
   const restDays = (from: string, to: string) => diffDays(to, from) - 1

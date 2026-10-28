@@ -56,3 +56,21 @@ describe('goalResumeSignal (#891)', () => {
     expect(goalResumeSignal(resumed, '2026-12-20', QUIET)).toBeNull()
   })
 })
+
+// #893 후속: 쉬던 목표를 다시 시작하면 그날이 새 시작일 — 단계 달력(phaseCalendarStart)이 옛 플랜 첫 세션부터 잇지 않게.
+describe('다시 시작하면 시작일이 그날로 (#893 후속)', () => {
+  it('resume 은 목표 시작일을 다시 시작한 날로 바꾼다', () => {
+    const resumed = applyGoalChange(pausedRace(), 'g5k', { kind: 'resume', targetDate: '2027-03-07' }, '2026-12-01T03:00:00.000Z')
+    expect(resumed.goals.find((g) => g.id === 'g5k')?.startDate).toBe('2026-12-01')
+  })
+
+  it('미루기·거리 낮추기는 시작일을 건드리지 않는다 — 같은 훈련 주기를 이어 간다', () => {
+    const blank = createBlankTrainingMemory()
+    const race = { ...blank.goals[0], id: 'g10k', category: 'race' as const, distanceKm: 10, targetDate: '2026-11-30', startDate: '2026-06-18' }
+    const memory = normalizeTrainingMemory({ ...blank, goals: [race], activeGoalId: 'g10k' })
+    const postponed = applyGoalChange(memory, 'g10k', { kind: 'postpone', targetDate: '2026-12-21' }, '2026-10-28T03:00:00.000Z')
+    const shorter = applyGoalChange(memory, 'g10k', { kind: 'shorter', distanceKm: 5, targetDate: '2026-12-07' }, '2026-10-28T03:00:00.000Z')
+    expect(postponed.goals[0].startDate).toBe('2026-06-18')
+    expect(shorter.goals[0].startDate).toBe('2026-06-18')
+  })
+})
