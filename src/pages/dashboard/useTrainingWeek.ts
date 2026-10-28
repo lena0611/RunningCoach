@@ -31,6 +31,7 @@ import { isReloadingForNewBuild } from '@/shared/lib/buildVersion'
  */
 const SCHEDULE_ANCHOR_LOGIC_VERSION = 5
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
+import { buildPlanPhaseJourney } from '@/shared/lib/coaching/planPhases'
 import { buildPeriodizedSchedule, buildSteadyWeeklyRhythm, buildWeekSummary, goalArchetype, planMatchesEntryLevel, planStartWeeklyKm, prescriptionFor, trainingWeekRange, withObservedEasy } from '@/shared/lib/coaching/periodizedSchedule'
 import { deriveObservedEasyPace } from '@/shared/lib/coaching/observedEasyPace'
 import { buildRealignedSchedule, dropDraftsOnRestedDates } from '@/shared/lib/coaching/scheduleRealign'
@@ -159,8 +160,13 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
   // 휴식 선언 상태(#473): activeRest + 오늘 기준 파생(active·복귀 D-N·복귀일 등). 차분 배너·복귀 컨트롤이 쓴다.
   const restState = computed(() => deriveRestState(memoryStore.memory.activeRest, todayDate.value))
 
-  // #339/#337: 훈련 단계 진행 평가 + 전환 제안(브리핑 progression 입력이자 코치 탭 단계 카드 데이터).
-  const adaptiveProgress = computed(() => buildCoachAdaptiveProgress(runs.value, memoryStore.memory))
+  // 플랜의 단계 여정(#887) — 코치 탭 단계 카드·시트, 그리고 아래 수행 점검의 "지금 단계".
+  const phaseJourney = computed(() => buildPlanPhaseJourney(scheduleStore.sessions, today.value))
+  // 이번 단계에서 보는 수행 점검(#336) — 브리핑 progression 입력이자 코치 탭 단계 카드 데이터.
+  const adaptiveProgress = computed(() => {
+    const journey = phaseJourney.value
+    return buildCoachAdaptiveProgress(runs.value, memoryStore.memory, journey ? journey.blocks[journey.currentIndex].phase : 'Base')
+  })
 
   /** 목표에 targetDate+거리가 있으면 골격 생성, 없으면 재정렬 점검(best-effort, no-op 안전). */
   function ensureSchedule(): Promise<void> {
@@ -492,7 +498,8 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
       today.value,
       activeGoal.value?.targetDate ?? null,
       activeGoal.value ? goalArchetype(activeGoal.value.category) : 'performance',
-      anchor
+      anchor,
+      entryLevel.value
     )
   })
   function navWeek(delta: number) {
@@ -889,6 +896,7 @@ export function useTrainingWeek(options: UseTrainingWeekOptions) {
     nextSession,
     restState,
     adaptiveProgress,
+    phaseJourney,
     // 주간 스트립·세션 상태
     weekOffset,
     weekLabel,

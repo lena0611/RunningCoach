@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest'
 import {
   adaptiveMetricTypes,
   mapAdaptiveMetricRow,
-  mapPhaseHistoryRow,
   toAdaptiveMetricUpsert,
   type AdaptiveMetric
 } from '@/entities/training-memory/adaptivePersistence'
@@ -74,24 +73,6 @@ describe('toAdaptiveMetricUpsert (#328)', () => {
     expect(payload.adopted_value).toBe(3)
     expect(payload.unit).toBe('days')
     expect(typeof payload.updated_at).toBe('string')
-  })
-})
-
-describe('mapPhaseHistoryRow (#328)', () => {
-  it('phase_name을 정규화하고 criteria status map을 거른다', () => {
-    const record = mapPhaseHistoryRow({
-      phase_name: 'Build',
-      started_at: '2026-06-01T00:00:00Z',
-      ended_at: null,
-      transition_reason: 'Easy 안정',
-      progression_criteria_status: { 'easy-hr-stability': 'ready', bogus: 42 }
-    })
-    expect(record.phaseName).toBe('Build')
-    expect(record.progressionCriteriaStatus).toEqual({ 'easy-hr-stability': 'ready' })
-  })
-
-  it('알 수 없는 phase_name은 Base로 떨어진다', () => {
-    expect(mapPhaseHistoryRow({ phase_name: 'Sprint' }).phaseName).toBe('Base')
   })
 })
 

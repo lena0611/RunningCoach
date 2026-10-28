@@ -30,6 +30,7 @@ import { useSettingsStore } from '@/app/stores/settingsStore'
 import BottomSheetSelect from '@/shared/ui/BottomSheetSelect.vue'
 import { summarizeTempoCoaching } from '@/shared/lib/coaching/tempoAdaptation'
 import { buildCoachAdaptiveProgress } from '@/shared/lib/coaching/coachAdaptiveProgress'
+import { currentPlanPhase } from '@/shared/lib/coaching/planPhases'
 import { canIntensifySession } from '@/shared/lib/coaching/scheduleProposalEligibility'
 import { buildSessionExecution } from '@/shared/lib/coaching/sessionBriefing'
 import { beginnerWalkRunStage } from '@/shared/lib/coaching/beginnerWalkRun'
@@ -765,7 +766,12 @@ async function sendCoachRequest(note: string) {
     // 세션 액션 제안(#639)의 대조 대상도 사라진다.
     await ensureScheduleForActiveGoal()
     // 적응 진행 요약은 코치 컨텍스트와 상향 적격 판정이 함께 쓰므로 한 번만 계산한다(판정 근거 일치 보장).
-    const coachAdaptiveProgress = buildCoachAdaptiveProgress(runStore.sortedRuns, memoryStore.memory)
+    // 단계는 플랜의 이번 주 단계(#887) — 코치 탭 단계 카드와 같은 값.
+    const coachAdaptiveProgress = buildCoachAdaptiveProgress(
+      runStore.sortedRuns,
+      memoryStore.memory,
+      currentPlanPhase(scheduleStore.sessions, new Date()) ?? 'Base'
+    )
     const report = await requestCoachRunStream(targetRunId, note, weatherStore.snapshot, {
       signal: controller.signal,
       onDelta: enqueueCoachReveal,

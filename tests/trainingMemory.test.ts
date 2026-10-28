@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { normalizeTrainingMemory } from '@/entities/training-memory/model'
 
 describe('normalizeTrainingMemory', () => {
-  it('fills adaptive training phase and progression criteria', () => {
+  it('fills progression criteria', () => {
     const memory = normalizeTrainingMemory({
       goal: '10km 60분 달성',
       adaptiveTrainingProfile: {
@@ -13,7 +13,6 @@ describe('normalizeTrainingMemory', () => {
       }
     } as any)
 
-    expect(memory.adaptiveTrainingProfile.trainingPhase.currentPhase).toBe('Base')
     expect(memory.adaptiveTrainingProfile.progressionCriteria.length).toBeGreaterThan(0)
   })
 
@@ -45,7 +44,8 @@ describe('normalizeTrainingMemory', () => {
       }
     } as any)
 
-    expect(memory.adaptiveTrainingProfile.trainingPhase.currentPhase).toBe('Threshold')
     expect(memory.adaptiveTrainingProfile.progressionCriteria[0].status).toBe('ready')
+    // 단계는 플랜에서 계산한다(#887) — 옛 저장값은 정규화에서 떨어져 다음 저장 때 사라진다.
+    expect('trainingPhase' in memory.adaptiveTrainingProfile).toBe(false)
   })
 })

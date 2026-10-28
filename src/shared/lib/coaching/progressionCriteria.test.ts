@@ -17,6 +17,12 @@ describe('evaluateProgressionCriteria phase-awareness (#402)', () => {
     expect(evaluateProgressionCriteria([], memory, [], 'Recovery').statusMap['tempo-ceiling-quality']).toBe('n/a')
   })
 
+  it('Taper 단계: 롱런이 없어 롱런 기준은 N/A, 템포는 적용(#887)', () => {
+    const r = evaluateProgressionCriteria([], memory, [], 'Taper')
+    expect(r.statusMap['long-run-durability']).toBe('n/a')
+    expect(r.statusMap['tempo-ceiling-quality']).not.toBe('n/a')
+  })
+
   it('Build 단계: Tempo 기준 적용(데이터 없으면 watch — N/A 아님)', () => {
     const r = evaluateProgressionCriteria([], memory, [], 'Build')
     expect(r.statusMap['tempo-ceiling-quality']).not.toBe('n/a')

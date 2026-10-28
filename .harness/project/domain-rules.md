@@ -164,11 +164,11 @@ PaceLAB를 성장형 RPG로 재구성하는 레벨 도메인. 거리 클래스 �
 - 보강운동 출처는 러닝 부상 재활을 직접 보장하는 권위처럼 쓰지 않는다. 앱은 "러닝 부하 조절을 돕는 참고용 보강운동"으로만 제안하며, 통증이 커지거나 일상 보행 통증, 저림, 붓기, 날카로운 통증이 있으면 운동 처방보다 중단/축소와 전문가 상담을 먼저 안내한다.
 - 부상 체크인 결과가 코칭에서 부상 상태 변경이나 완치 후보를 만들 수 있더라도 자동으로 `injuryItems`를 바꾸지 않는다. AI나 규칙 로직은 제안만 하고, 사용자가 승인한 뒤에만 painLevel, status, lastFlareDate, resolvedAt 같은 상태를 저장한다.
 - 코칭 알고리즘은 문헌 기반 기준선을 먼저 적용하고, 사용자 데이터와 대화로 확인된 반복 패턴만 `adaptiveTrainingProfile`에 저장해 개인화한다. “스스로 진화”는 소스 코드 수정이 아니라 이 구조화된 개인화 프로필 갱신을 의미한다.
-- `adaptiveTrainingProfile`은 `trainingPhase`, `progressionCriteria`, `compliancePatterns`, `sessionGuides`로 구성한다. 훈련 단계는 현재 블록, 승급 조건은 상향/유지/하향 판단 게이트다. 세션 실행 지침(무엇을 어떻게 뛰나)은 여기 저장하지 않는다 — 주기화 플랜과 `sessionBriefing`이 정본이다(2026-09-07 `prescriptionTemplates` 제거).
+- `adaptiveTrainingProfile`은 `progressionCriteria`, `compliancePatterns`, `sessionGuides`로 구성한다. 승급 조건은 상향/유지/하향 판단 게이트다. 훈련 단계는 여기 두지 않는다 — 플랜 세션의 단계가 정본이다(#887, `currentPlanPhase`). 세션 실행 지침(무엇을 어떻게 뛰나)은 여기 저장하지 않는다 — 주기화 플랜과 `sessionBriefing`이 정본이다(2026-09-07 `prescriptionTemplates` 제거).
 - `adaptiveTrainingProfile`은 단일 세션으로 크게 바꾸지 않는다. 같은 유형 2~3회 이상의 반복 준수/이탈, 또는 사용자의 명시 피드백이 있을 때만 갱신한다.
 - `runnerIdentity`와 `coachBeliefs`도 단일 세션 감상으로 과도하게 갱신하지 않는다. 단일 세션은 candidate 근거로만 쓰고, 반복 확인 또는 사용자 명시 피드백이 있을 때 장기 특성/confirmed belief로 승격한다.
 - 5km TT, 10km TT, 크루즈 인터벌, 진짜 인터벌 같은 상위 품질 훈련은 `progressionCriteria`가 ready이고 active injury/회복 게이트가 막히지 않을 때만 처방한다.
-- `progressionCriteria`가 바뀌면 `trainingPhase`도 함께 검토한다. 승급 근거를 남기지 않는 변경은 금지한다.
+- 승급 근거를 남기지 않는 `progressionCriteria` 변경은 금지한다. 기준은 단계를 넘기는 관문이 아니다 — 단계는 날짜대로 넘어간다(#887).
 - 날씨, 동반주, 과거 기록 리뷰, 데이터 부족 같은 일시적 요인은 개인화 경계 변경 근거로 쓰지 않는다.
 - 훈련 지식 보관소는 원문 전문을 저장하지 않는다. 책/유료 콘텐츠/웹 문서를 그대로 복사하지 않고, 출처 메타데이터와 PaceLAB 처방에 필요한 짧은 요약/구조화 규칙만 저장한다.
 - AI 코칭은 `TrainingKnowledge`에서 activeGoal 거리와 selectedRun 세션 타입에 맞는 승인된 규칙을 먼저 검색하고, 그 위에 `adaptiveTrainingProfile`을 얹어 개인화한다.

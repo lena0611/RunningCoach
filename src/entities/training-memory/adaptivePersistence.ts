@@ -1,6 +1,5 @@
 // #328 적응값 영속화 스키마의 도메인 타입과 순수 매퍼.
 // DB row(snake_case) ↔ 도메인 객체(camelCase) 변환만 담당한다. supabase 의존 없음(테스트 가능).
-import { normalizeTrainingPhaseName, type TrainingPhaseName } from './model'
 
 export type AdaptiveMetricType = 'tempo_ceiling' | 'easy_ceiling' | 'long_run_drift' | 'recovery_cycle'
 export type AdaptiveMetricStatus = 'estimated' | 'watch' | 'adopted'
@@ -23,14 +22,6 @@ export type AdaptiveMetric = {
   adoptedAt: string | null
 }
 
-export type PhaseHistoryRecord = {
-  phaseName: TrainingPhaseName
-  startedAt: string | null
-  endedAt: string | null
-  transitionReason: string
-  progressionCriteriaStatus: Record<string, string>
-}
-
 export type AdaptiveMetricRow = {
   metric_type?: unknown
   base_value?: unknown
@@ -39,14 +30,6 @@ export type AdaptiveMetricRow = {
   evidence_run_ids?: unknown
   status?: unknown
   adopted_at?: unknown
-}
-
-export type PhaseHistoryRow = {
-  phase_name?: unknown
-  started_at?: unknown
-  ended_at?: unknown
-  transition_reason?: unknown
-  progression_criteria_status?: unknown
 }
 
 function toNumberOrNull(value: unknown): number | null {
@@ -103,24 +86,5 @@ export function toAdaptiveMetricUpsert(metric: AdaptiveMetric, userId: string) {
     status: metric.status,
     adopted_at: metric.adoptedAt,
     updated_at: new Date().toISOString()
-  }
-}
-
-function toCriteriaStatusMap(value: unknown): Record<string, string> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  const result: Record<string, string> = {}
-  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof raw === 'string' && raw.trim()) result[key] = raw
-  }
-  return result
-}
-
-export function mapPhaseHistoryRow(row: PhaseHistoryRow): PhaseHistoryRecord {
-  return {
-    phaseName: normalizeTrainingPhaseName(row.phase_name, 'Base') ?? 'Base',
-    startedAt: toStringOrNull(row.started_at),
-    endedAt: toStringOrNull(row.ended_at),
-    transitionReason: typeof row.transition_reason === 'string' ? row.transition_reason : '',
-    progressionCriteriaStatus: toCriteriaStatusMap(row.progression_criteria_status)
   }
 }

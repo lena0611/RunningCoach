@@ -421,7 +421,7 @@ PaceLAB 코칭 알고리즘은 다섯 겹으로 동작한다.
    - MAF, Daniels, Hanson 같은 훈련법은 원문이 아니라 적용 조건/처방 규칙/주의 조건으로 구조화한다.
    - 사용자 지식화 검토 요청은 비용 없는 backlog insert다. OpenAI를 써서 조사/요약/규칙화하는 작업은 별도 검토 단계에서만 수행한다.
 4. 개인화 적응 프로필
-   - `trainingMemory.adaptiveTrainingProfile`에 훈련 단계, 승급 조건, 반복 패턴, 세션별 보정 가이드를 저장한다.
+   - `trainingMemory.adaptiveTrainingProfile`에 승급 조건, 반복 패턴, 세션별 보정 가이드를 저장한다(훈련 단계는 플랜이 갖는다 — #887).
    - 소스 코드가 스스로 바뀌는 구조가 아니다. 누적 데이터와 사용자 피드백으로 검증된 개인화 기준만 저장된다.
 5. 러너 정체성/코치 믿음
    - `trainingMemory.runnerIdentity`는 strengths, weaknesses, riskFactors, coachingStyle로 장기 특성을 구조화한다.
@@ -437,8 +437,9 @@ PaceLAB 코칭 알고리즘은 다섯 겹으로 동작한다.
 
 ## 개인화 진화 규칙
 
-- 업데이트 대상은 `adaptiveTrainingProfile.trainingPhase`, `adaptiveTrainingProfile.progressionCriteria`, `adaptiveTrainingProfile.compliancePatterns`, `adaptiveTrainingProfile.sessionGuides`다.
-- `trainingPhase`는 Base/Build/Threshold/Race Specific/Taper/Recovery 중 하나로 현재 훈련 블록을 나타낸다.
+- 업데이트 대상은 `adaptiveTrainingProfile.progressionCriteria`, `adaptiveTrainingProfile.compliancePatterns`, `adaptiveTrainingProfile.sessionGuides`다.
+- **훈련 단계(Base/Build/Threshold/Race Specific/Taper)는 기억에 저장하지 않는다 — 플랜 세션에 붙은 단계가 정본이다(#887, 2026-10-28).** 예전 `adaptiveTrainingProfile.trainingPhase` 는 사용자가 전환 버튼을 누르거나 코치가 고칠 때만 바뀌어, 플랜이 테이퍼인 주에도 코치 탭 카드·AI 코치가 "Base" 를 말했다(두 번째 진실 — 아래 처방 템플릿과 같은 병). 지금 단계는 `currentPlanPhase`(planPhases.ts)가 그 주 세션에서 계산하고, 코치 탭 단계 카드·위크 요약·AI 코치(`adaptiveProgress.currentPhase`)가 같은 값을 본다.
+- **단계는 날짜대로 넘어간다 — 수행 기준이 단계를 막지 않는다(사용자 결정 2026-10-28).** 대회일이 고정이라 단계를 미루면 뒤 단계가 줄어든다. `progressionCriteria`는 "이번 단계에서 보는 것"(그 단계에 있는 세션만 — 템포는 발전기부터, 롱런은 테이퍼 제외)이고, 덜 된 부분은 그 단계 안에서 브리핑(템포 시간·스트라이드 반복)과 코치가 조절한다. 코치는 단계 전환을 제안하거나 미루자고 하지 않는다. 입문(걷기·뛰기) 플랜은 단계 대신 Couch to 5K 진행(뛴 횟수)을 보여준다.
 - `progressionCriteria`는 Easy 심박 안정, Tempo 상한 준수, Long Run 지속성, 부상/회복 게이트처럼 승급/유지/하향 판단 기준을 구조화한다.
 - Tempo 평가는 단순 성공/실패가 아니라 A/B/C/D 등급(자극 확보 × 처방 준수)으로 본다(#301). Tempo 심박 상한은 고정 추정값이 아니라 실제 수행으로 검증해 상향만 적응하며(채택값은 `adaptiveTrainingProfile.tempoCeiling`에 영속), 추정 base 미만으로는 내리지 않는다. 상세는 `ai-coaching-goal.md §적응형 알고리즘 기억`.
 - **세션 실행 지침을 메모리에 따로 저장하지 않는다.** 무엇을 어떻게 뛰는지의 정본은 주기화 플랜(`training_schedule`)과 그 세션을 풀어주는 `sessionBriefing`이다. 코칭 기억에 처방을 복사해 두면 두 번째 진실이 되어 어긋난다 — 옛 `prescriptionTemplates`가 실제로 그렇게 어긋나(스트라이드 고정 8회 인터벌 = §Easy + Strides 위배) 2026-09-07 제거했다.

@@ -1,18 +1,16 @@
 import type { RunLog } from '@/entities/run/model'
-import {
-  getActiveInjuryItem,
-  type TrainingMemory,
-  type TrainingPhaseName
-} from '@/entities/training-memory/model'
+import type { TrainingMemory, TrainingPhaseName } from '@/entities/training-memory/model'
 import type { AdaptiveMetric } from '@/entities/training-memory/adaptivePersistence'
 import { evaluateProgressionCriteria } from '@/shared/lib/coaching/progressionCriteria'
-import { evaluatePhaseTransition } from '@/shared/lib/coaching/phaseTransition'
 import { summarizeAdaptiveModels } from '@/shared/lib/coaching/adaptiveModelsSummary'
 
 /**
  * coach-run 주입용 적응·진행 요약 (#338, client-summary 패턴).
- * 웹이 ProgressionCriteria 평가(#336) + phase 전환 제안(#337) + Phase B 적응값(#333~335)을 묶어
- * coach-run에 전달한다. 서버는 이 요약으로 phase 전환·루틴 진화를 reasoning하고 report에 반영한다.
+ * 웹이 ProgressionCriteria 평가(#336) + Phase B 적응값(#333~335)을 묶어 coach-run 에 전달한다.
+ *
+ * 단계는 **플랜의 이번 주 단계**를 받는다(#887). 예전엔 기억에 저장한 단계와 전환 제안(phaseProposal)을
+ * 실었는데, 플랜은 날짜대로 단계를 넘기므로 둘이 어긋났다. 이제 단계 전환은 제안하지 않는다 —
+ * 기준은 "이번 단계에서 보는 것"이고, 덜 된 부분은 브리핑·코치가 그 단계 안에서 챙긴다.
  */
 
 export type CoachAdaptiveProgressSummary = {
@@ -20,12 +18,6 @@ export type CoachAdaptiveProgressSummary = {
   criteria: Array<{ id: string; label: string; status: 'ready' | 'watch' | 'blocked' | 'n/a'; evidence: string }>
   readyCount: number
   allReady: boolean
-  phaseProposal: {
-    shouldTransition: boolean
-    toPhase: TrainingPhaseName | null
-    reason: string
-    blockers: string[]
-  }
   adapted: {
     easyCeilingBpm: number | null
     longRunDriftTolerancePercent: number
@@ -33,39 +25,15 @@ export type CoachAdaptiveProgressSummary = {
   }
 }
 
-const MS_PER_WEEK = 7 * 86400000
-
-function weeksUntil(dateText: string | null | undefined): number | null {
-  if (!dateText) return null
-  const t = Date.parse(`${dateText.slice(0, 10)}T00:00:00Z`)
-  if (!Number.isFinite(t)) return null
-  const diff = t - Date.now()
-  return Math.round(diff / MS_PER_WEEK)
-}
-
 export function buildCoachAdaptiveProgress(
   runs: RunLog[],
   memory: TrainingMemory,
+  /** 플랜의 이번 주 단계(currentPlanPhase). 플랜이 없으면 'Base' — 비주기화 리듬도 세션에 'Base' 를 단다. */
+  currentPhase: TrainingPhaseName,
   adoptedMetrics: AdaptiveMetric[] = []
 ): CoachAdaptiveProgressSummary {
-  const currentPhase = memory.adaptiveTrainingProfile.trainingPhase.currentPhase
   const evaluated = evaluateProgressionCriteria(runs, memory, adoptedMetrics, currentPhase)
   const models = summarizeAdaptiveModels(runs, memory, adoptedMetrics)
-  const injuryActive = Boolean(getActiveInjuryItem(memory))
-
-  const activeGoal = memory.goals.find((goal) => goal.id === memory.activeGoalId) ?? memory.goals[0] ?? null
-  const weeksToRace = weeksUntil(activeGoal?.targetDate ?? null)
-  // 최근 5km 근처 한계 시험(TT) 수행을 게이트 근거로 본다 — type 'Race' 또는 self-race 태그(가상레이싱). (#411)
-  const hadRecent5kTT = runs.some(
-    (run) =>
-      (run.type === 'Race' || run.tags?.includes('self-race')) && run.distanceKm >= 4.5 && run.distanceKm <= 6
-  )
-
-  const phaseProposal = evaluatePhaseTransition(currentPhase, evaluated, {
-    injuryActive,
-    weeksToRace,
-    hadRecent5kTT
-  })
 
   return {
     currentPhase,
@@ -77,12 +45,6 @@ export function buildCoachAdaptiveProgress(
     })),
     readyCount: evaluated.readyCount,
     allReady: evaluated.allReady,
-    phaseProposal: {
-      shouldTransition: phaseProposal.shouldTransition,
-      toPhase: phaseProposal.toPhase,
-      reason: phaseProposal.reason,
-      blockers: phaseProposal.blockers
-    },
     adapted: {
       easyCeilingBpm: models.easyCeiling.effectiveCeilingBpm,
       longRunDriftTolerancePercent: models.longRunDrift.effectiveTolerancePercent,

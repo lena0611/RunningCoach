@@ -17,7 +17,6 @@ function progress(overrides: Partial<Record<string, Status>> = {}): CoachAdaptiv
     criteria: Object.entries(statuses).map(([id, status]) => ({ id, label: id, status, evidence: '' })),
     readyCount: Object.values(statuses).filter((s) => s === 'ready').length,
     allReady: Object.values(statuses).every((s) => s === 'ready'),
-    phaseProposal: { shouldTransition: false, toPhase: null, reason: '', blockers: [] },
     adapted: { easyCeilingBpm: null, longRunDriftTolerancePercent: 5, recoveryRestDays: 1 }
   }
 }

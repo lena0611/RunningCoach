@@ -435,3 +435,10 @@ performance 전용 코칭을 **3종 아키타입**(성과·체중·체형·건�
 - 결정 4: 경로 판정·안내 문구는 코드(`dataCardAppValueRoute`·`goalBlockReport`)가 낸다 — 모델이 "저장 안 된 값"이라 지어내던 자리.
 - 배포 순서: 웹 먼저 → coach-run(구 웹이 프로필 카드 제안을 받으면 계산이 깨진다).
 - 적용 범위: `supabase/functions/_shared/{dataCard,dataCardProposal}.ts`, `supabase/functions/coach-run/index.ts`, `src/features/coach-session/CoachSessionOverlay.vue`, `src/shared/api/coachRepository.ts`, `src/shared/lib/coaching/dataCardAdapter.ts`, `src/app/stores/dataCardStore.ts`, `src/pages/dashboard/DashboardPage.vue`
+
+## 2026-10-28 - 코치 탭 훈련 단계 = 플랜 단계 하나 (#887)
+- 배경: 코치 탭에 단계가 둘이었다. 위크 요약(플랜)은 날짜대로 기초→발전→역치→레이스 준비→테이퍼로 넘어가는데, 단계 카드·AI 코치는 기억에 따로 저장한 `adaptiveTrainingProfile.trainingPhase`(수동 전환 때만 바뀜)를 봐서 플랜이 테이퍼여도 "Base" 였다. 입문자에겐 롱런·템포 없는 플랜인데 "Long Run 지속성 ⏳"을 9주 내내 보여줬다.
+- 결정 1 (사용자 결정): 점검 기준을 못 채워도 단계는 **날짜대로 넘어간다**. 대회일이 고정이라 단계를 미루면 뒤 단계가 줄어든다. 덜 된 부분은 그 단계 안에서 브리핑·코치가 조절한다.
+- 결정 2 (사용자 결정): 입문자는 위쪽 주간 띠도 '걷기·뛰기'(기초기라 부르지 않는다), 카드는 Couch to 5K 진행(뛴 횟수).
+- 결정 3 (사용자 결정): 기억 탭 '훈련 기준'(저장된 단계) 칸 제거.
+- 따라서: 저장 단계·수동 전환(진행 평가 창·training_phase_history 기록)·AI 코치의 단계 패치·전환 제안(phaseProposal) 제거. 단계는 `currentPlanPhase`(planPhases.ts)가 세션에서 계산. 시안: 훈련 단계 카드 설계 캔버스.

@@ -13,7 +13,6 @@ import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
 import { useCoachActionBridgeStore } from '@/app/stores/coachActionBridgeStore'
 import { destinationActionLabel } from '@/pages/coach/proposalDestination'
 import { useCoachStore } from '@/app/stores/coachStore'
-import type { TrainingPhaseName } from '@/entities/training-memory/model'
 import { isActiveSession, type ScheduledSession } from '@/entities/training-schedule/model'
 import { isSelfRaceRun } from '@/entities/competition/model'
 import { computeIntentFulfillment } from '@/entities/session-intent/computeIntentFulfillment'
@@ -29,7 +28,6 @@ import { weeklyHardLoadGuard } from '@/shared/lib/coaching/weeklyTriage'
 import { buildPmEasyDraft } from '@/shared/lib/coaching/doubleSession'
 import { sessionTypeLabel } from '@/shared/lib/coaching/sessionBriefing'
 import { buildSessionIntentDraft, easierAlternative } from '@/features/build-session-intent/buildSessionIntentDraft'
-import { appendPhaseTransition } from '@/shared/api/adaptiveTrainingRepository'
 import PageLayout from '@/shared/ui/PageLayout.vue'
 import SectionGroup from '@/shared/ui/SectionGroup.vue'
 import CoachMomentCard from './CoachMomentCard.vue'
@@ -39,7 +37,12 @@ import SessionDebriefCard from './SessionDebriefCard.vue'
 import SessionDoublePanel from './SessionDoublePanel.vue'
 import LevelCard from './LevelCard.vue'
 import TrainingPhaseCard from './TrainingPhaseCard.vue'
-import PhaseTransitionModal from './PhaseTransitionModal.vue'
+import WalkRunStageCard from './WalkRunStageCard.vue'
+import PlanStepsSheet, { type PlanStepRow } from './PlanStepsSheet.vue'
+import { PHASE_LABEL_KO } from '@/shared/lib/coaching/periodizedSchedule'
+import { PHASE_PURPOSE_KO } from '@/shared/lib/coaching/planPhases'
+import { C25K } from '@/shared/lib/coaching/beginnerWalkRun'
+import { formatMonthDay } from '@/shared/lib/format'
 import PreRunIntentCard from './PreRunIntentCard.vue'
 import QuestPanel from './QuestPanel.vue'
 import RescheduleSheet from './RescheduleSheet.vue'
@@ -77,6 +80,8 @@ const {
   chronicLoad,
   restState,
   adaptiveProgress,
+  phaseJourney,
+  beginnerWalkRun,
   weekOffset,
   weekLabel,
   viewedWeekSummary,
@@ -616,44 +621,44 @@ async function onRequestAlternative() {
   }
 }
 
-// #339/#337: 훈련 단계 진행 평가 + 전환 제안
-const phaseModalOpen = ref(false)
-const phaseSaving = ref(false)
-
-// Base→Build→Threshold→Race Specific→Taper 다음 단계(전환 후 nextPhase 표시용).
-const PHASE_NEXT: Record<TrainingPhaseName, TrainingPhaseName | null> = {
-  Base: 'Build',
-  Build: 'Threshold',
-  Threshold: 'Race Specific',
-  'Race Specific': 'Taper',
-  Taper: 'Recovery',
-  Recovery: 'Base'
-}
-
-async function applyPhaseTransition() {
-  const proposal = adaptiveProgress.value.phaseProposal
-  if (!proposal.shouldTransition || !proposal.toPhase || phaseSaving.value) return
-  phaseSaving.value = true
-  try {
-    const toPhase = proposal.toPhase
-    const statusMap: Record<string, string> = {}
-    for (const criterion of adaptiveProgress.value.criteria) statusMap[criterion.id] = criterion.status
-
-    const memory = JSON.parse(JSON.stringify(memoryStore.memory))
-    memory.adaptiveTrainingProfile.trainingPhase.currentPhase = toPhase
-    memory.adaptiveTrainingProfile.trainingPhase.startedAt = new Date().toISOString()
-    memory.adaptiveTrainingProfile.trainingPhase.nextPhase = PHASE_NEXT[toPhase] ?? null
-    await memoryStore.update(memory)
-    try {
-      await appendPhaseTransition(toPhase, proposal.reason, statusMap)
-    } catch {
-      /* 이력 저장 실패는 치명적이지 않음 */
+// 훈련 단계(#887) — 플랜 단계 카드와 "대회까지 단계"/"9주 과정" 시트. 단계는 플랜에서 계산하고 저장하지 않는다.
+const phaseSheetOpen = ref(false)
+const nextPlannedDate = computed(() => scheduleStore.upcoming(todayDate.value)[0]?.date ?? null)
+const phaseSheet = computed<{ title: string; subtitle: string; rows: PlanStepRow[]; note: string }>(() => {
+  const stage = beginnerWalkRun.value
+  if (stage) {
+    return {
+      title: `${C25K.length}주 과정`,
+      subtitle: '걷기·뛰기 · 주 3회',
+      rows: C25K.map((runs, i) => {
+        const week = i + 1
+        const distinct = new Set(runs.map((r) => r.mainSet)).size > 1
+        return {
+          key: `w${week}`,
+          title: `${week}주차`,
+          meta: `약 ${Math.round(runs[0].totalMin)}분`,
+          body: distinct ? runs.map((r, n) => `${n + 1}회차 · ${r.mainSet}`).join('\n') : runs[0].mainSet,
+          state: week < stage.week ? 'done' : week === stage.week ? 'now' : 'ahead'
+        }
+      }),
+      note: '영국 NHS의 Couch to 5K 과정이에요. 회차나 주차를 반복해도 괜찮고, 9주보다 오래 걸려도 돼요.'
     }
-    phaseModalOpen.value = false
-  } finally {
-    phaseSaving.value = false
   }
-}
+  const journey = phaseJourney.value
+  const target = activeGoal.value?.targetDate ?? null
+  return {
+    title: '대회까지 단계',
+    subtitle: `${target ? `${formatMonthDay(target, true)} 대회 · ` : ''}${journey?.totalWeeks ?? 0}주 플랜`,
+    rows: (journey?.blocks ?? []).map((block, i) => ({
+      key: block.start,
+      title: PHASE_LABEL_KO[block.phase],
+      meta: `${formatMonthDay(block.start)}~${formatMonthDay(block.end)} · ${block.weeks}주`,
+      body: PHASE_PURPOSE_KO[block.phase],
+      state: i < (journey?.currentIndex ?? 0) ? 'done' : i === journey?.currentIndex ? 'now' : 'ahead'
+    })),
+    note: '단계는 대회 날짜에서 거꾸로 짜여 있어서 날짜가 되면 저절로 넘어가요. 점검이 덜 된 항목이 있으면 그 단계 훈련 안내가 거기에 맞춰 조절돼요.'
+  }
+})
 </script>
 
 <template>
@@ -683,7 +688,8 @@ async function applyPhaseTransition() {
     <div v-if="hasSchedule && viewedWeekSummary" class="week-summary-bar">
       <span class="week-summary-phase">{{ viewedWeekSummary.phaseLabel }}</span>
       <span class="week-summary-focus">{{ viewedWeekSummary.focusLine }}</span>
-      <span class="week-summary-meta"><template v-if="isPerformanceGoal">핵심 {{ viewedWeekSummary.keyCount }} · </template>약 {{ viewedWeekSummary.weekKm }}km<template v-if="viewedWeekSummary.dDayText"> · {{ viewedWeekSummary.dDayText }}</template></span>
+      <!-- 입문(걷기·뛰기)은 거리가 아니라 시간·횟수로 뛴다 — km 대신 주 횟수(#887). -->
+      <span class="week-summary-meta"><template v-if="beginnerWalkRun">주 {{ viewedWeekSummary.sessionCount }}회</template><template v-else><template v-if="isPerformanceGoal">핵심 {{ viewedWeekSummary.keyCount }} · </template>약 {{ viewedWeekSummary.weekKm }}km</template><template v-if="viewedWeekSummary.dDayText"> · {{ viewedWeekSummary.dDayText }}</template></span>
     </div>
 
     <!-- 주 단위 네비(월~일 고정 스트립): 지난주·다음주 조망 -->
@@ -827,17 +833,25 @@ async function applyPhaseTransition() {
       />
     </SectionGroup>
 
-    <!-- 훈련 단계(주기화 전환)는 성과 목표에만 — 비성과는 단계 개념 없음(#398) -->
-    <SectionGroup v-if="isPerformanceGoal" title="훈련 단계" :surface="false">
-      <TrainingPhaseCard :summary="adaptiveProgress" @open="phaseModalOpen = true" />
+    <!-- 훈련 단계는 성과 목표에만 — 비성과는 단계 개념 없음(#398). 입문은 걷기·뛰기 진행, 그 외는 플랜 단계(#887). -->
+    <SectionGroup v-if="isPerformanceGoal && (beginnerWalkRun || phaseJourney)" title="훈련 단계" :surface="false">
+      <WalkRunStageCard
+        v-if="beginnerWalkRun"
+        :stage="beginnerWalkRun"
+        :next-date="nextPlannedDate"
+        :target-date="activeGoal?.targetDate ?? null"
+        @open="phaseSheetOpen = true"
+      />
+      <TrainingPhaseCard v-else-if="phaseJourney" :journey="phaseJourney" :checks="adaptiveProgress.criteria" @open="phaseSheetOpen = true" />
     </SectionGroup>
 
-    <PhaseTransitionModal
-      :open="phaseModalOpen"
-      :summary="adaptiveProgress"
-      :saving="phaseSaving"
-      @confirm="applyPhaseTransition"
-      @close="phaseModalOpen = false"
+    <PlanStepsSheet
+      :open="phaseSheetOpen"
+      :title="phaseSheet.title"
+      :subtitle="phaseSheet.subtitle"
+      :rows="phaseSheet.rows"
+      :note="phaseSheet.note"
+      @close="phaseSheetOpen = false"
     />
 
     <SectionGroup title="내 레벨" :surface="false">

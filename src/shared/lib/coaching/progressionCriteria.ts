@@ -26,9 +26,9 @@ export type CriterionStatus = ProgressionCriterion['status']
 export type EvaluatedProgressionCriteria = {
   criteria: ProgressionCriterion[]
   readyCount: number
-  /** id → status (training_phase_history.progression_criteria_status 스냅샷용). */
+  /** id → status. */
   statusMap: Record<string, CriterionStatus>
-  /** 4기준이 모두 ready인가(phase 전환 1차 게이트). */
+  /** 적용되는 기준이 모두 ready인가. */
   allReady: boolean
 }
 
@@ -63,28 +63,33 @@ function findTemplate(id: string): ProgressionCriterion {
 }
 
 function evaluateEasyStability(runs: RunLog[], effectiveCeiling: number | null): { status: CriterionStatus; evidence: string } {
-  if (effectiveCeiling === null) return { status: 'watch', evidence: 'Easy 심박 상한 미설정 — 평가 보류.' }
+  if (effectiveCeiling === null) return { status: 'watch', evidence: '이지 심박 상한이 아직 없어요 — 정해지면 봐요.' }
   const easy = recentWithin(runs, RECENT_DAYS).filter(
     (run) => (run.type === 'Easy' || run.type === 'Easy + Strides') && run.avgHeartRate !== null
   )
-  if (easy.length < 2) return { status: 'watch', evidence: `최근 ${RECENT_DAYS}일 Easy 표본 ${easy.length}건 — 안정성 판단 보류.` }
+  if (easy.length < 2) return { status: 'watch', evidence: `최근 2주 이지런 심박 기록이 ${easy.length}번뿐이라 아직 판단 전이에요.` }
   const over = easy.filter((run) => (run.avgHeartRate ?? 0) > effectiveCeiling)
-  if (over.length === 0) return { status: 'ready', evidence: `최근 Easy ${easy.length}회 모두 상한 ${effectiveCeiling}bpm 이하 — 안정.` }
+  if (over.length === 0) return { status: 'ready', evidence: `최근 이지런 ${easy.length}번 모두 상한 ${effectiveCeiling}bpm 아래였어요.` }
   if (over.length / easy.length >= 0.5) {
-    return { status: 'blocked', evidence: `최근 Easy ${easy.length}회 중 ${over.length}회 상한 초과 — 안정 미달.` }
+    return { status: 'blocked', evidence: `최근 이지런 ${easy.length}번 중 ${over.length}번 상한 ${effectiveCeiling}bpm 을 넘었어요 — 더 천천히 뛰어요.` }
   }
-  return { status: 'watch', evidence: `최근 Easy ${easy.length}회 중 ${over.length}회 상한 초과 — 관찰.` }
+  return { status: 'watch', evidence: `최근 이지런 ${easy.length}번 중 ${over.length}번 상한 ${effectiveCeiling}bpm 을 넘었어요.` }
 }
 
 function evaluateTempoQuality(runs: RunLog[], effectiveCeiling: number | null): { status: CriterionStatus; evidence: string } {
   const tempo = recentWithin(runs, RECENT_DAYS).filter((run) => run.type === 'Tempo')
-  if (tempo.length < 2) return { status: 'watch', evidence: `최근 ${RECENT_DAYS}일 Tempo 표본 ${tempo.length}건 — 판단 보류.` }
+  if (tempo.length < 2) return { status: 'watch', evidence: `최근 2주 템포 기록이 ${tempo.length}번뿐이라 아직 판단 전이에요.` }
   const grades = tempo.map((run) => gradeTempoRun(run, effectiveCeiling, evaluateLapDrift(run).level))
   const cCount = grades.filter((grade) => grade.grade === 'C').length
   const aOrB = grades.filter((grade) => grade.grade === 'A' || grade.grade === 'B').length
-  if (cCount === 0 && aOrB >= 2) return { status: 'ready', evidence: `최근 Tempo ${tempo.length}회 상한 준수(C등급 없음) — 품질 안정.` }
-  if (cCount / tempo.length >= 0.5) return { status: 'blocked', evidence: `최근 Tempo ${tempo.length}회 중 ${cCount}회 크게 초과(C) — 품질 미달.` }
-  return { status: 'watch', evidence: `최근 Tempo ${tempo.length}회 중 ${cCount}회 경계 초과 — 관찰.` }
+  if (cCount === 0 && aOrB >= 2) return { status: 'ready', evidence: `최근 템포 ${tempo.length}번 모두 심박 상한을 지켰어요.` }
+  if (cCount / tempo.length >= 0.5) return { status: 'blocked', evidence: `최근 템포 ${tempo.length}번 중 ${cCount}번 상한을 크게 넘었어요 — 짧게, 상한부터 지켜요.` }
+  return {
+    status: 'watch',
+    evidence: cCount > 0
+      ? `최근 템포 ${tempo.length}번 중 ${cCount}번 상한을 넘었어요.`
+      : `최근 템포 ${tempo.length}번 중 강도가 덜 올라간 날이 있었어요.`
+  }
 }
 
 function evaluateLongRunDurability(runs: RunLog[], tolerancePercent: number): { status: CriterionStatus; evidence: string } {
@@ -94,32 +99,35 @@ function evaluateLongRunDurability(runs: RunLog[], tolerancePercent: number): { 
   const drifts = longRuns
     .map((run) => lateRunDriftPercent(run))
     .filter((value): value is number => value !== null)
-  if (drifts.length < 2) return { status: 'watch', evidence: `최근 ${LONG_RUN_DAYS}일 Long Run 드리프트 표본 ${drifts.length}건 — 보류.` }
+  if (drifts.length < 2) return { status: 'watch', evidence: `최근 4주 롱런 기록이 ${drifts.length}번뿐이라 아직 판단 전이에요.` }
   const over = drifts.filter((drift) => drift > tolerancePercent)
-  if (over.length === 0) return { status: 'ready', evidence: `최근 Long Run ${drifts.length}회 후반 드리프트 ≤ ${tolerancePercent}% — 지속성 양호.` }
+  if (over.length === 0) return { status: 'ready', evidence: `최근 롱런 ${drifts.length}번 모두 후반에도 페이스를 지켰어요.` }
   if (over.length / drifts.length >= 0.5) {
-    return { status: 'blocked', evidence: `최근 Long Run ${drifts.length}회 중 ${over.length}회 드리프트 초과 — 지속성 미달.` }
+    return { status: 'blocked', evidence: `최근 롱런 ${drifts.length}번 중 ${over.length}번 후반에 페이스가 ${tolerancePercent}% 넘게 처졌어요 — 초반을 더 천천히.` }
   }
-  return { status: 'watch', evidence: `최근 Long Run ${drifts.length}회 중 ${over.length}회 드리프트 초과 — 관찰.` }
+  return { status: 'watch', evidence: `최근 롱런 ${drifts.length}번 중 ${over.length}번 후반에 페이스가 처졌어요.` }
 }
 
 function evaluateInjuryRecoveryGate(
   injuryActive: boolean,
   recovery: { status: string; poorRecoveryCount: number; effectiveRestDays: number }
 ): { status: CriterionStatus; evidence: string } {
-  if (injuryActive) return { status: 'blocked', evidence: 'active/monitoring 부상 — 승급 보류, 회복 우선.' }
+  if (injuryActive) return { status: 'blocked', evidence: '부상을 관리하는 중이라 회복을 먼저 챙겨요.' }
   if (recovery.status === 'watch' || recovery.poorRecoveryCount > 0) {
-    return { status: 'watch', evidence: `최근 고강도 후 회복 신호 주의(권장 휴식 ${recovery.effectiveRestDays}일) — 관찰.` }
+    return { status: 'watch', evidence: `최근 강한 훈련 뒤 회복이 더뎠어요 — 그 뒤엔 ${recovery.effectiveRestDays}일 쉬어 가요.` }
   }
-  return { status: 'ready', evidence: `부상 없음 + 회복 양호(권장 휴식 ${recovery.effectiveRestDays}일) — 게이트 통과.` }
+  return { status: 'ready', evidence: '부상 없고 회복도 좋아요.' }
 }
 
 /** Tempo 세션이 처방되는 단계(주기화 weeklySessionTypes 기준). Base·Recovery엔 Tempo가 없어 Tempo 기준은 N/A. */
 const TEMPO_PHASES: ReadonlySet<TrainingPhaseName> = new Set(['Build', 'Threshold', 'Race Specific', 'Taper'])
+/** 롱런이 처방되는 단계 — Taper(템포만 남김)·Recovery 엔 롱런이 없다(#887). */
+const LONG_RUN_PHASES: ReadonlySet<TrainingPhaseName> = new Set(['Base', 'Build', 'Threshold', 'Race Specific'])
 
 /** 현재 단계에 해당 기준이 적용되는가. 미적용이면 'n/a'로 표시·집계 제외(#402). */
 function criterionApplies(id: string, phase: TrainingPhaseName | null): boolean {
   if (id === 'tempo-ceiling-quality') return phase === null || TEMPO_PHASES.has(phase)
+  if (id === 'long-run-durability') return phase === null || LONG_RUN_PHASES.has(phase)
   return true
 }
 
@@ -143,7 +151,7 @@ export function evaluateProgressionCriteria(
 
   const criteria: ProgressionCriterion[] = defaultProgressionCriteria.map((template) => {
     if (!criterionApplies(template.id, currentPhase)) {
-      return { ...template, status: 'n/a' as CriterionStatus, evidence: '이 단계에선 해당 세션이 없어 다음 단계에서 평가해요.' }
+      return { ...template, status: 'n/a' as CriterionStatus, evidence: '이 단계엔 이 세션이 없어 보지 않아요.' }
     }
     const evaluated = evaluations[template.id] ?? { status: template.status, evidence: template.evidence }
     return { ...template, status: evaluated.status, evidence: evaluated.evidence }

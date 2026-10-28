@@ -9,9 +9,8 @@ describe('createBlankTrainingMemory (#332)', () => {
     expect(memory.goal).not.toContain('10km 60분')
   })
 
-  it('구조 기본값(훈련 단계·승급 조건)은 유지한다', () => {
+  it('구조 기본값(승급 조건)은 유지한다', () => {
     const memory = createBlankTrainingMemory()
-    expect(memory.adaptiveTrainingProfile.trainingPhase.currentPhase).toBe('Base')
     expect(memory.adaptiveTrainingProfile.progressionCriteria.length).toBeGreaterThan(0)
   })
 
