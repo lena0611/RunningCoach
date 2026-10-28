@@ -1,4 +1,4 @@
-import { createRecoveryGoal, goalPlanKey, RECOVERY_GOAL_ID, type TrainingGoal, type TrainingMemory } from './model'
+import { createRecoveryGoal, getActiveGoal, getActiveInjuryItem, goalPlanKey, RECOVERY_GOAL_ID, type TrainingGoal, type TrainingMemory } from './model'
 
 /**
  * '목표 다시 정하기'(#889)가 메모리에 남기는 변경. 플랜 재구성은 여기서 하지 않는다 — 활성 목표의 날짜·거리가
@@ -65,4 +65,38 @@ export function applyGoalChange(memory: TrainingMemory, goalId: string, change: 
 /** 쉬는 중(내려놓은) 대회 목표들 — 회복 우선 목표가 활성일 때 코치 탭 '쉬고 있는 목표'에 보인다. */
 export function pausedGoals(memory: TrainingMemory): TrainingGoal[] {
   return memory.goals.filter((goal) => goal.status === 'paused' && goal.id !== RECOVERY_GOAL_ID)
+}
+
+/** 쉬던 대회 목표를 다시 정하자고 물을 이유. pausedOnly = 부상과 무관하게 내려놓았던 목표 — 몸 얘기를 하지 않는다. */
+export type GoalResumeSignal = { goalId: string; areaLabel: string | null; pausedOnly?: boolean }
+
+/**
+ * 쉬던 대회 목표를 다시 정하자고 물을 때인가(#889) — 회복 우선 목표가 활성일 때만.
+ * - 부상 중이면 마지막으로 아픈 날에서 quietDays 가 지나야.
+ * - 내려놓은 뒤 부상이 해소됐으면 바로.
+ * - 부상과 무관하게 내려놓았으면 쉰 지 quietDays 가 지나야 — 예전엔 부상이 없으면 곧장 참이라, 내려놓자마자
+ *   "몸이 한결 나아졌어요. 다시 정해볼까요?"가 떴다(#891 라이브 QA).
+ * 내려놓은 날은 목표의 updatedAt('쉬고 있는 목표' 카드의 "~부터"와 같은 기준). 선언한 휴식 중엔 묻지 않는다(닦달 금지).
+ */
+export function goalResumeSignal(memory: TrainingMemory, todayIso: string, quietDays: number): GoalResumeSignal | null {
+  if (getActiveGoal(memory).id !== RECOVERY_GOAL_ID) return null
+  if (memory.activeRest && memory.activeRest.untilDate >= todayIso) return null
+  const goal = pausedGoals(memory)[0]
+  if (!goal) return null
+  const injury = getActiveInjuryItem(memory)
+  if (injury) {
+    const lastPain = injury.lastFlareDate ?? injury.onsetDate
+    if (!lastPain || daysBetween(lastPain, todayIso) < quietDays) return null
+    return { goalId: goal.id, areaLabel: injury.area }
+  }
+  const pausedOn = goal.updatedAt.slice(0, 10)
+  if (memory.injuryItems.some((item) => item.resolvedAt && item.resolvedAt.slice(0, 10) >= pausedOn)) {
+    return { goalId: goal.id, areaLabel: null }
+  }
+  if (daysBetween(pausedOn, todayIso) < quietDays) return null
+  return { goalId: goal.id, areaLabel: null, pausedOnly: true }
+}
+
+function daysBetween(fromIso: string, toIso: string): number {
+  return Math.round((new Date(`${toIso.slice(0, 10)}T00:00:00`).getTime() - new Date(`${fromIso.slice(0, 10)}T00:00:00`).getTime()) / 86_400_000)
 }

@@ -473,4 +473,9 @@ describe('목표 다시 정하기 모먼트 (#889)', () => {
     expect(m?.message).toBe('발바닥 쪽이 2주째 조용해요. 쉬고 있던 대회 목표, 다시 정해볼까요?')
     expect(m?.action).toEqual({ label: '목표 정하기', kind: 'open-goal-adjust', goalId: 'g10k' })
   })
+
+  it('부상과 무관하게 내려놓았던 목표엔 몸 얘기를 하지 않는다 (#891)', () => {
+    const m = collectCoachMoments(ctx({ goalResume: { goalId: 'g10k', areaLabel: null, pausedOnly: true } })).find((x) => x.kind === 'goal-resume')
+    expect(m?.message).toBe('대회 목표를 쉰 지 2주가 지났어요. 쉬고 있던 대회 목표, 다시 정해볼까요?')
+  })
 })

@@ -176,8 +176,11 @@ export type CoachMomentContext = {
    * 휴식 중엔 목표 경고를 억제하므로, 경고 대신 "쉬는 동안 다시 정해도 된다"는 선택지만 조용히 건넨다.
    */
   goalAdjustDuringRest?: { dateLabel: string; distanceLabel: string; weeksLeft: number; injury: boolean } | null
-  /** 내려놓은 대회 목표를 다시 정할 때(#889) — 회복 우선 목표가 활성이고 부상이 가라앉았으면 caller 가 채운다. */
-  goalResume?: { goalId: string; areaLabel: string | null } | null
+  /**
+   * 내려놓은 대회 목표를 다시 정할 때(#889) — 회복 우선 목표가 활성이고 부상이 가라앉았으면 caller 가 채운다.
+   * pausedOnly = 부상과 무관하게 내려놓고 2주가 지남 — "몸이 나아졌다"고 말하지 않는다(#891).
+   */
+  goalResume?: { goalId: string; areaLabel: string | null; pausedOnly?: boolean } | null
   /** 목표 실현가능성(#395) — 현재 체력 대비 목표가 무리면 솔직히 경고+대안(message). assessGoalFeasibility 결과 주입. */
   goalFeasibility?: { feasible: boolean; message: string | null } | null
   /** 최근 한계 시험(TT) 결과(#411) — VDOT·등급 갱신 계기. 측정→승급 연결 메시지. daysAgo 작을 때만 노출. */
@@ -413,7 +416,7 @@ function detectGoalAdjustDuringRest(ctx: CoachMomentContext): CoachMoment | null
 function detectGoalResume(ctx: CoachMomentContext): CoachMoment | null {
   const r = ctx.goalResume
   if (!r) return null
-  const lead = r.areaLabel ? `${r.areaLabel} 쪽이 2주째 조용해요.` : '몸이 한결 나아졌어요.'
+  const lead = r.pausedOnly ? '대회 목표를 쉰 지 2주가 지났어요.' : r.areaLabel ? `${r.areaLabel} 쪽이 2주째 조용해요.` : '몸이 한결 나아졌어요.'
   return {
     key: `goal-resume:${r.goalId}`,
     kind: 'goal-resume',
