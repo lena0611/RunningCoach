@@ -302,27 +302,28 @@ export type AdaptiveSessionGuide = {
 export const defaultGoalId = 'goal-10k-60'
 export const defaultInjuryItemId = 'injury-left-hamstring'
 
+// 문구는 coach-run defaultProgressionCriteria 와 같게 둔다(#878 B1 — 예전엔 개발자 루틴 145/165bpm·격주 롱런·10km 였다).
 export const defaultProgressionCriteria: ProgressionCriterion[] = [
   {
     id: 'easy-hr-stability',
     label: 'Easy 심박 안정',
     status: 'watch',
-    evidence: 'Easy는 페이스보다 심박을 우선하며 145bpm 이하 유지가 기준이다.',
+    evidence: 'Easy는 페이스보다 심박을 우선하며 개인 Easy 상한 이하 유지가 기준이다.',
     action: '2~3회 연속 안정되면 Easy 볼륨 또는 Strides 품질 상향 후보로 본다.'
   },
   {
     id: 'tempo-ceiling-quality',
     label: 'Tempo 상한 준수',
     status: 'watch',
-    evidence: 'Tempo는 최대 심박 165bpm을 넘기지 않고 후반 급락이 없어야 한다.',
+    evidence: 'Tempo는 최대 심박이 개인 Tempo 상한을 넘지 않고 후반 급락이 없어야 한다.',
     action: '2회 이상 안정되면 지속 시간 소폭 증가 또는 구간형 Tempo를 검토한다.'
   },
   {
     id: 'long-run-durability',
     label: 'Long Run 지속성',
     status: 'watch',
-    evidence: '10km 이상 세션은 후반 페이스 급락, 심박 드리프트, 다음날 회복 반응을 함께 본다.',
-    action: '회복이 안정되면 격주 Steady Long 비중을 조금 올린다.'
+    evidence: '롱런은 후반 페이스 급락, 심박 드리프트, 다음날 회복 반응을 함께 본다.',
+    action: '회복이 안정되면 롱런 후반 steady 비중을 조금 올린다.'
   },
   {
     id: 'injury-recovery-gate',
@@ -997,6 +998,23 @@ function normalizeProgressionCriteria(value: unknown): ProgressionCriterion[] {
   return items.length ? items : cloneMemory(defaultProgressionCriteria)
 }
 
+// 예전 기본 문구 → 지금 기본 문구(#878 B1). 이 층은 코치가 써 본 적이 없어(SSOT §알고리즘 레이어) 저장값이 곧 가입 때 기본값이다.
+// 웹 원본(5/27~) + coach-run 변형(6/4~, heartRateModel 필드명이 기억 탭에 그대로 보였다).
+// 숫자만 지운 채("이지 상한 이하") 다시 저장된 계정도 있어 키는 stripStaleHeartRateCeilings 를 거친 형태로 맞춘다.
+const LEGACY_CRITERION_TEXT = new Map<string, string>(([
+  ['Easy는 페이스보다 심박을 우선하며 145bpm 이하 유지가 기준이다.', 'Easy는 페이스보다 심박을 우선하며 개인 Easy 상한 이하 유지가 기준이다.'],
+  ['Easy는 페이스보다 심박을 우선하며 heartRateModel.easyCeilingBpm(이지 상한) 이하 유지가 기준이다.', 'Easy는 페이스보다 심박을 우선하며 개인 Easy 상한 이하 유지가 기준이다.'],
+  ['Tempo는 최대 심박 165bpm을 넘기지 않고 후반 급락이 없어야 한다.', 'Tempo는 최대 심박이 개인 Tempo 상한을 넘지 않고 후반 급락이 없어야 한다.'],
+  ['Tempo는 최대 심박이 heartRateModel.tempoCeilingBpm(템포 상한)을 넘기지 않고 후반 급락이 없어야 한다.', 'Tempo는 최대 심박이 개인 Tempo 상한을 넘지 않고 후반 급락이 없어야 한다.'],
+  ['10km 이상 세션은 후반 페이스 급락, 심박 드리프트, 다음날 회복 반응을 함께 본다.', '롱런은 후반 페이스 급락, 심박 드리프트, 다음날 회복 반응을 함께 본다.'],
+  ['회복이 안정되면 격주 Steady Long 비중을 조금 올린다.', '회복이 안정되면 롱런 후반 steady 비중을 조금 올린다.']
+] as const).map(([legacy, current]) => [stripStaleHeartRateCeilings(legacy), current]))
+
+function normalizeCriterionText(text: string): string {
+  const stripped = stripStaleHeartRateCeilings(text)
+  return LEGACY_CRITERION_TEXT.get(stripped) ?? stripped
+}
+
 function normalizeProgressionCriterion(value: Partial<ProgressionCriterion>, index: number): ProgressionCriterion | null {
   const label = typeof value.label === 'string' ? value.label.trim() : ''
   const evidence = typeof value.evidence === 'string' ? value.evidence.trim() : ''
@@ -1006,8 +1024,8 @@ function normalizeProgressionCriterion(value: Partial<ProgressionCriterion>, ind
     id: typeof value.id === 'string' && value.id.trim() ? value.id.trim() : `criterion-${index + 1}`,
     label,
     status: normalizeProgressionStatus(value.status),
-    evidence: stripStaleHeartRateCeilings(evidence),
-    action: stripStaleHeartRateCeilings(action)
+    evidence: normalizeCriterionText(evidence),
+    action: normalizeCriterionText(action)
   }
 }
 

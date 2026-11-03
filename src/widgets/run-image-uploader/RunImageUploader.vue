@@ -39,7 +39,7 @@ defineExpose({ clear })
     <label class="upload-box">
       <input type="file" accept=".fit,application/octet-stream" @change="onFileChange" />
       <span class="upload-icon">FIT</span>
-      <strong>Workoutdoors FIT 파일 선택</strong>
+      <strong>FIT 파일 선택</strong>
       <small>FIT 파일을 브라우저에서 로컬 분석합니다. 원본 파일명과 파일 내용은 저장하지 않습니다.</small>
     </label>
     <div v-if="fileName" class="preview file-preview">
