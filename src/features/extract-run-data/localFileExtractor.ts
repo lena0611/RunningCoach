@@ -13,7 +13,7 @@ export async function extractRunDataFromFile(
   const lowerName = file.name.toLowerCase()
 
   if (!lowerName.endsWith('.fit')) {
-    throw new Error('현재는 Workoutdoors FIT 파일만 지원합니다.')
+    throw new Error('.fit 파일만 올릴 수 있어요.')
   }
 
   return extractFromFit(await file.arrayBuffer(), heartRateModel, easyPaceSec)

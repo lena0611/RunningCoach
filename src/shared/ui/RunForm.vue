@@ -129,7 +129,7 @@ function setNumber(key: keyof ExtractedRunData, value: string | number | null) {
     </label>
     <label class="full">
       통증/불편
-      <ClearableField v-model="model.painNote" as="textarea" rows="2" placeholder="예: 좌측 햄스트링 이상 없음" />
+      <ClearableField v-model="model.painNote" as="textarea" rows="2" placeholder="예: 없음 / 무릎 바깥쪽이 살짝 뻐근함" />
     </label>
     <label class="full">
       메모

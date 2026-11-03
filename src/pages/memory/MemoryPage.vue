@@ -946,7 +946,7 @@ useSheetA11y(computed(() => !!pendingDelete.value), confirmSheetEl, () => { pend
           </label>
           <label>
             목표 기록(초)
-            <ClearableField v-model="newGoal.targetDurationSec" type="number" inputmode="numeric" placeholder="예: 3599" number />
+            <ClearableField v-model="newGoal.targetDurationSec" type="number" inputmode="numeric" placeholder="예: 1800 (30분)" number />
           </label>
           <label>
             우선순위
@@ -958,7 +958,7 @@ useSheetA11y(computed(() => !!pendingDelete.value), confirmSheetEl, () => { pend
           </label>
           <label class="full">
             목표 전략
-            <ClearableField v-model="newGoal.strategyNotes" as="textarea" rows="3" placeholder="예: Easy 기반 + 목요일 Tempo + 토요일 격주 롱런" />
+            <ClearableField v-model="newGoal.strategyNotes" as="textarea" rows="3" placeholder="예: 주 3회 Easy로 기반을 쌓고, 익숙해지면 롱런을 조금씩 늘리기" />
           </label>
           <label class="full">
             목표 메모
@@ -985,7 +985,7 @@ useSheetA11y(computed(() => !!pendingDelete.value), confirmSheetEl, () => { pend
           </label>
           <label>
             목표 기록(초)
-            <ClearableField v-model="editingGoal.targetDurationSec" type="number" inputmode="numeric" placeholder="예: 3599" number @update:model-value="updateGoal(editingGoal)" />
+            <ClearableField v-model="editingGoal.targetDurationSec" type="number" inputmode="numeric" placeholder="예: 1800 (30분)" number @update:model-value="updateGoal(editingGoal)" />
           </label>
           <label>
             우선순위
@@ -997,7 +997,7 @@ useSheetA11y(computed(() => !!pendingDelete.value), confirmSheetEl, () => { pend
           </label>
           <label class="full">
             목표 전략
-            <ClearableField v-model="editingGoal.strategyNotes" as="textarea" rows="3" placeholder="예: Easy 기반 + 목요일 Tempo + 토요일 격주 롱런" @update:model-value="updateGoal(editingGoal)" />
+            <ClearableField v-model="editingGoal.strategyNotes" as="textarea" rows="3" placeholder="예: 주 3회 Easy로 기반을 쌓고, 익숙해지면 롱런을 조금씩 늘리기" @update:model-value="updateGoal(editingGoal)" />
           </label>
           <label class="full">
             목표 메모

@@ -84,7 +84,7 @@ export const GLOSSARY_FALLBACK_TERMS: GlossaryTerm[] = [
     category: 'heart_rate',
     shortDef: '심박을 강도별로 나눈 구간.',
     detail:
-      '기본값은 Z1 회복 100~130, Z2 이지 131~145, Z3 146~155, Z4 템포 156~165, Z5 고강도 166bpm 이상입니다. 개인 역치심박이 입력되면 개인화한 존을 우선합니다.',
+      '고정 숫자가 아니라 내 역치심박(LTHR)을 기준으로 사람마다 다르게 계산합니다. Z0은 역치의 60% 이하(훈련 전 단계), Z1 회복 61~79%, Z2 이지 80~88%, Z3 89~94%, Z4 템포 95~100%, Z5 고강도는 역치보다 높은 구간입니다. 역치를 직접 넣지 않으면 나이와 실제 최고 심박으로 추정하고, 그것도 없으면 심박 대신 페이스·체감강도로 봅니다.',
     relatedSlugs: ['lthr', 'tempo-ceiling'],
     orderIndex: 10
   },
