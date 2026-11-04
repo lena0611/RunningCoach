@@ -215,6 +215,18 @@ PaceLAB 코칭의 정당성은 "우리가 똑똑해서"가 아니라 **외부의
 - **정적 스트레칭**: 운동 후 회복(DOMS·ROM) 근거 약함 → "선택"으로만 표기, 쿨다운의 본질은 조깅. 근거: Frontiers 2021 메타분석.
 - 근거(딥리서치 2026-06-18): Daniels' Running Formula, Pfitzinger Advanced Marathoning(역치 웜업 15~20분), RAMP 웜업 프로토콜, 스트라이드 정의(Marathon Handbook/RunnersConnect), 정적스트레칭 회복효과 메타분석 https://www.frontiersin.org/articles/10.3389/fphys.2021.677581/full .
 
+## 러닝 폼 — 착지 폭·팔치기 (#898, 2026-11-04)
+
+브리핑 영상이 러너를 그리거나 코치가 폼을 말할 때의 기준. 앱은 걸음 폭·팔 궤적을 **측정하지 않는다**(센서 없음) → 이 절은 **묘사·말 큐의 기준**이지 채점 기준이 아니다. 폼을 근거로 점수를 깎거나 위험을 올리지 않는다.
+
+- **착지 폭(step width) — 중앙선 가까이, 넘지는 않게.** 러너는 걸음 폭이 거의 0에 가까운 쪽을 스스로 고른다(Arellano & Kram 2011 J Biomech, 2014 리뷰에서 재인용). 발은 고관절 바로 밑이 아니라 몸 중앙선 가까이 떨어진다. 단 **중앙선을 넘는 착지(크로스오버)는 아니다** — 걸음 폭이 좁을수록 정강이 안쪽·뒤쪽 압박이 커지고(Meardon & Derrick 2014) 장경인대 긴장도 커진다(Meardon, Campbell & Derrick 2012).
+  - 묘사 기준: 발목 중심이 중앙선에서 ~4cm(걸음 폭 ~8cm, 다리 길이의 ~10%) — 신발 안쪽 날이 중앙선에 닿을락 말락. 서기·걷기는 원래 폭.
+  - 여성: 골반이 넓어도 착지는 중앙 쪽이다 — 여성 러너는 남성보다 고관절 내전·내회전·무릎 외반이 크다(Ferber, Davis & Williams 2003, 남녀 각 20명). 성별 고유 걸음 폭 수치는 찾지 못했다 → 같은 목표값을 쓴다.
+  - **코칭 큐는 "좁혀라"가 아니다.** 보이는 크로스오버가 있거나 ITBS·정강이 피로(MTSS·피로골절) 이력이 있으면 큐는 "**조금 넓게**"(Meardon & Derrick 2014: 넓히면 정강이 부하↓). `running-injury-knowledge.md` 의 ITBS 케이던스 큐(고관절 내전↓)와 같은 방향이다. 성별·정적 생체역학을 위험 가중치로 쓰지 않는다(RRI 가드).
+- **팔치기 — 앞으로 올 때 손이 중앙 쪽으로, 중앙선은 넘지 않게.** 앞뒤 흔들기가 기본이되 손은 엉덩이 옆 → 가슴 앞으로 살짝 안쪽 호를 그린다. 어깨선 그대로 앞뒤로만 흔드는 것도, 몸 앞을 가로지르는 것도 아니다. 팔꿈치는 ~90° 안팎, 앞에서 더 접고 뒤에서 조금 편다.
+  - 근거 등급: **코칭 공통 기준**(러닝 매체 가이드). 팔치기가 좌우 균형·에너지에 주는 효과는 연구가 엇갈린다(Arellano & Kram 2011은 도움 시사, 외부 측면 안정화 후속 연구는 걸음 폭 조절이 주 수단이라 봄) → **"이렇게 흔들면 빨라진다"로 말하지 않는다.** 상체가 과하게 비틀려 손이 중앙선을 넘을 때만 "앞뒤로" 교정 큐.
+  - 묘사 기준(#898 PoC 실측): 손목이 엉덩이 옆 15~18cm → 가슴 높이에서 중앙 4~7cm.
+
 ## 외부 조건(더위·습도·추위) 코칭 — 강도 판정과 사후 평가 (#712)
 
 날씨는 표시용 데이터가 아니라 **강도 판정과 사후 평가의 1급 입력**이다. 감안하지 않으면 두 가지가 동시에 깨진다 — 뛰는 중에는 "이 처방이 오늘 조건에 맞나" 의문이 해소되지 않아 집중력이 새고, 뛰고 나서는 "더위를 감안한다"고 말해놓고 채점은 그대로 깎는 자가당착이 된다(§brief-debrief 일관성 위반).
@@ -498,3 +510,9 @@ PaceLAB 코칭 알고리즘은 다섯 겹으로 동작한다.
 - Hofmann and Tschakert, “Intensity- and Duration-Based Options to Regulate Endurance Training.” Frontiers. https://www.frontiersin.org/articles/10.3389/fphys.2017.00337/full
 - World Athletics, “The importance of rest and recovery.”
 - ACSM Guidelines for Exercise Testing and Prescription.
+- Arellano & Kram, "The effects of step width and arm swing on energetic cost and lateral balance during running." J Biomech 2011. https://vivo.colorado.edu/display/pubid_34537
+- Arellano & Kram, "Partitioning the Metabolic Cost of Human Running: A Task-by-Task Approach." Integr Comp Biol 54(6), 2014(러너는 걸음 폭 ~0 선호 — 2011 연구 재인용). https://pmc.ncbi.nlm.nih.gov/articles/PMC4296200
+- "The energetic cost of maintaining lateral balance during human running." (외부 측면 안정화 — 걸음 폭 조절이 주 균형 수단) https://lida.sport-iat.de/ta/Record/4024352?lng=de
+- Meardon & Derrick, "Effect of step width manipulation on tibial stress during running." J Biomech 2014. https://pubmed.ncbi.nlm.nih.gov/24935171/
+- Ferber, Davis & Williams, "Gender differences in lower extremity mechanics during running." Clin Biomech 2003. https://read.qxmd.com/read/12689785/gender-differences-in-lower-extremity-mechanics-during-running
+- "A runner's guide to proper arm swing." Canadian Running. https://runningmagazine.ca/?p=78687
