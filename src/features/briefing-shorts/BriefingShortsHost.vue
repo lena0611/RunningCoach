@@ -118,6 +118,7 @@ function onFailed() {
 
 function close() {
   store.open = false
+  shown.value = null
 }
 
 onBeforeUnmount(() => window.clearTimeout(deadlineTimer))
@@ -125,31 +126,15 @@ onBeforeUnmount(() => window.clearTimeout(deadlineTimer))
 
 <template>
   <Teleport to="body">
-    <Transition name="briefing-shorts-fade" @after-leave="shown = null">
-      <BriefingShortsPopup
-        v-if="store.open && shown"
-        :payload="shown.payload"
-        :options="shown.options"
-        :weather-chip="shown.weatherChip"
-        @ready="onReady"
-        @failed="onFailed"
-        @done="close"
-      />
-    </Transition>
+    <!-- 페이드아웃은 팝업 안에서 한다(바깥 Transition 이면 leave 시작에 언마운트돼 3D 가 먼저 꺼진다) -->
+    <BriefingShortsPopup
+      v-if="store.open && shown"
+      :payload="shown.payload"
+      :options="shown.options"
+      :weather-chip="shown.weatherChip"
+      @ready="onReady"
+      @failed="onFailed"
+      @done="close"
+    />
   </Teleport>
 </template>
-
-<style scoped>
-/* 브리핑이 끝나 러너가 멀어지는 동안 팝업 전체가 천천히 사라지고, 다 사라진 뒤 지운다(사용자 결정). */
-.briefing-shorts-fade-leave-active {
-  transition: opacity 1.2s ease;
-}
-.briefing-shorts-fade-leave-to {
-  opacity: 0;
-}
-@media (prefers-reduced-motion: reduce) {
-  .briefing-shorts-fade-leave-active {
-    transition-duration: 0.3s;
-  }
-}
-</style>

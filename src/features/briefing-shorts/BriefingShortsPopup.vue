@@ -31,11 +31,16 @@ const emit = defineEmits<{
 
 /** 러너가 떠나기 시작해서 팝업이 사라지기 시작할 때까지 — 뒤로 돌기 1.1초 + 가속 1.4초 즈음(러너가 멀어지는 게 보인 뒤) */
 const FADE_AFTER_RUN_OFF_MS = 2600
+/** 팝업 전체가 사라지는 시간. 건너뛰기는 짧게 */
+const FADE_OUT_MS = 1200
+const SKIP_FADE_OUT_MS = 350
 const LINE_GAP_MS = 250
 
 type Phase = 'loading' | 'running' | 'stopping' | 'talking' | 'leaving'
 const phase = ref<Phase>('loading')
 const subtitle = ref('')
+/** 사라지는 중이면 그 시간(ms). 다 사라진 뒤에야 done 을 보낸다 — 장면은 끝까지 그려야 같이 사라진다 */
+const fadeMs = ref(0)
 const canvasEl = ref<HTMLCanvasElement | null>(null)
 const abort = new AbortController()
 let scene: BriefingScene | null = null
@@ -98,14 +103,21 @@ async function readAloud() {
   phase.value = 'leaving'
   scene.runOff()
   await wait(FADE_AFTER_RUN_OFF_MS)
-  finish()
+  finish(FADE_OUT_MS)
 }
 
-function finish() {
+/**
+ * 팝업 전체를 페이드아웃하고, 완전히 투명해진 뒤 done(= 지우기).
+ * 페이드를 바깥 <Transition> 에 맡기면 Vue 가 leave 시작과 동시에 이 컴포넌트를 언마운트해
+ * 3D 캔버스(WebGL)가 먼저 꺼진다 — 시뮬레이터 녹화에서 장면만 툭 사라지는 걸로 확인(2026-11-04).
+ */
+function finish(ms = SKIP_FADE_OUT_MS) {
   if (finished) return
   finished = true
   stopSpeech()
-  emit('done')
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  fadeMs.value = reduce ? Math.min(ms, 300) : ms
+  window.setTimeout(() => emit('done'), fadeMs.value)
 }
 
 onBeforeUnmount(() => {
@@ -118,7 +130,15 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="briefing-shorts" role="dialog" aria-modal="true" aria-label="오늘 훈련 브리핑" data-no-swipe>
+  <div
+    class="briefing-shorts"
+    :class="{ 'is-fading': fadeMs > 0 }"
+    :style="fadeMs > 0 ? { transitionDuration: `${fadeMs}ms` } : undefined"
+    role="dialog"
+    aria-modal="true"
+    aria-label="오늘 훈련 브리핑"
+    data-no-swipe
+  >
     <div class="briefing-shorts-frame">
       <header class="briefing-shorts-bar briefing-shorts-top">
         <p class="briefing-shorts-title">
@@ -152,7 +172,7 @@ onBeforeUnmount(() => {
           <template v-if="subtitle">{{ subtitle }}</template>
           <span v-else-if="phase === 'running'" class="briefing-shorts-hint">러너를 눌러 말 걸기</span>
         </p>
-        <button v-if="phase !== 'leaving'" class="briefing-shorts-skip" type="button" @click="finish">건너뛰기</button>
+        <button v-if="phase !== 'leaving'" class="briefing-shorts-skip" type="button" @click="finish()">건너뛰기</button>
       </footer>
     </div>
   </div>
@@ -167,6 +187,7 @@ onBeforeUnmount(() => {
 }
 
 .briefing-shorts {
+  transition: opacity ease;
   position: fixed;
   inset: 0;
   z-index: var(--z-briefing-shorts);
@@ -178,6 +199,12 @@ onBeforeUnmount(() => {
   touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
+}
+
+/* 사라지는 동안 3D 는 계속 그린다(러너가 멀어지는 게 같이 흐려진다). 시간은 인라인 transitionDuration */
+.briefing-shorts.is-fading {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .briefing-shorts-frame {
