@@ -29,8 +29,8 @@ const emit = defineEmits<{
   done: []
 }>()
 
-/** 러너가 떠나기 시작해서 팝업이 사라지기 시작할 때까지 — 뒤로 돌기 1.1초 + 가속 1.4초 즈음(러너가 멀어지는 게 보인 뒤) */
-const FADE_AFTER_RUN_OFF_MS = 2600
+/** 러너가 다시 달리기 시작해서 팝업이 사라지기 시작할 때까지 — 돌아서기 0.5초 + 가속 1.4초 + 카메라 옆을 지나 멀어지는 모습 */
+const FADE_AFTER_RUN_OFF_MS = 3200
 /** 팝업 전체가 사라지는 시간. 건너뛰기는 짧게 */
 const FADE_OUT_MS = 1200
 const SKIP_FADE_OUT_MS = 350

@@ -53,7 +53,9 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     back: { yaw: Math.PI - 0.35, dist: 3.2, h: 1.5, look: 1.0, fov: 34, roll: 0 }, // 뒤따라가기
     top: { yaw: 0.6, dist: 2.2, h: 3.4, look: 0.7, fov: 34, roll: 0 },          // 내려다보기
     low: { yaw: 0.5, dist: 2.0, h: 0.12, look: 1.25, fov: 42, roll: -0.08 },   // 바닥에서 올려다보기
-    talk: { yaw: 0.35, dist: 1.2, h: 1.46, look: 1.44, fov: 32, roll: 0 },     // 브리핑: 얼굴 클로즈업
+    // 브리핑: 얼굴 클로즈업. 진행 방향에서 57° 옆에 선다 — 말이 끝나면 러너가 가던 방향으로 다시 달려 카메라 옆 약 1m 를
+    // 지나간다(PoC 의 0.35 는 40cm 로 스쳐 얼굴이 화면을 꽉 채웠다, 2026-11-04 사용자 결정: 가던 방향 + 카메라가 지켜본다)
+    talk: { yaw: 1.0, dist: 1.2, h: 1.46, look: 1.44, fov: 32, roll: 0 },
   };
   const CUTS = ['hero', 'face', 'side', 'back']; // ?cam=cuts → 2.5초마다 끊어 붙인다
   const CUT_SEC = 2.5;
@@ -2253,17 +2255,13 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   const STOP_SEC = 2.6, START_SEC = 1.4;
   // 몸 돌리기: 브리핑이면 감속 후반에 카메라 쪽으로 돌아 서서 정면으로 말하고, 끝나면 먼저 돌아선 뒤 출발한다
   const TURN_BACK = 0.5;
-  // 떠날 때(runOff)는 뒤로 돌아(약 160°) 왔던 길로 달려간다 → 제자리 카메라에서 러너가 멀어진다(사용자 결정 2026-11-04).
-  // 다리는 body 틀(러너가 향한 쪽)로 움직이므로 세상만 거꾸로 흘리면 된다(reverse → dz 부호 반전)
-  const TURN_AROUND = 1.1;
-  let runTurn = 0, turnDur = TURN_BACK, reverse = false;
   let turnNow = 0, turnFrom = 0, turnT = 0, headLook = 0; // headLook = 고개가 몸보다 먼저 카메라 쪽으로 돈 양(rad)
   function turnAt(t) {
     const face = CAMERAS.talk.yaw, tt = t - modeT;
     if (mode === 'stop') return stopFor === 'talk' ? face * ease((tt - STOP_SEC * 0.55) / (STOP_SEC * 0.45 + 0.3)) : 0;
     if (mode === 'talk') return face;
-    if (mode === 'resume' || mode === 'hold') return turnFrom + (runTurn - turnFrom) * ease((t - turnT) / turnDur);
-    return runTurn;
+    if (mode === 'resume' || mode === 'hold') return turnFrom * (1 - ease((t - turnT) / TURN_BACK));
+    return 0;
   }
   // 사용자 카메라(컨트롤러): 앵글 = 위아래(0° 눈높이 ~ 89° 바로 위), 포지션 = 러너 둘레 방향, 디스턴스 = 거리. 몸 가운데를 본다
   const CAM_LOOK = 0.9;
@@ -2319,8 +2317,8 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     speaking = Boolean(next.speaking);
     lineIsLast = Boolean(next.last);
   }
-  // 떠날 때 카메라: 서 있던 자리(수평 위치)는 그대로, 높이만 바닥(3cm)까지 천천히 내린다(사용자 결정 2026-11-04).
-  // 시선은 러너 몸 가운데로 옮겨 가며 멀어지는 러너를 바닥에서 올려다본다
+  // 떠날 때: 러너는 가던 방향으로 다시 달리고, 카메라는 그 자리(수평 위치)에서 높이만 바닥(3cm)까지 천천히 내리며
+  // 러너를 계속 바라본다(lookAt) — 옆을 지나 멀어지는 러너를 바닥에서 올려다본다(사용자 결정 2026-11-04)
   const RUN_OFF_CAM_SEC = 3.6;
   function runOff() {
     const t = clock.getElapsedTime();
@@ -2329,7 +2327,6 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     camAnchor = 0;
     mode = 'resume'; modeT = t;
     turnFrom = turnNow; turnT = t;
-    runTurn = Math.PI; turnDur = TURN_AROUND; reverse = true;
     const now = camAt(t);
     moveCam({ ...now, h: 0.03, look: CAM_LOOK }, t, RUN_OFF_CAM_SEC);
   }
@@ -2556,7 +2553,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       } else if (mode === 'hold') {
         speed = 0;
       } else if (mode === 'resume') {
-        const x = (t - modeT - turnDur) / START_SEC; // 먼저 돌아선 뒤 출발
+        const x = (t - modeT - TURN_BACK) / START_SEC; // 먼저 돌아선 뒤 출발
         speed = ease(x);
         lean = 0.1 * Math.sin(Math.PI * Math.min(Math.max(x, 0), 1)); // 출발할 때 몸을 앞으로 기울여 가속
         if (x >= 1) mode = 'run';
@@ -2580,7 +2577,6 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       body.updateMatrixWorld();
       pose(phase, amp, st, lean, freq);
       dz = settled ? 0 : groundStep(dt, amp, freq);
-      if (reverse) dz = -dz; // 왔던 길로 돌아 달린다 → 세상이 반대로 흐른다
       if (STORY && !follow) camAnchor -= dz; // 브리핑 뒤: 카메라는 길에 남고 러너만 멀어진다(팝업이 그사이 사라진다)
       stepSnow?.(dt, dz, st);
       mouth(st, dt);
