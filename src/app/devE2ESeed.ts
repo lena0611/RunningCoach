@@ -430,3 +430,25 @@ export function coachProposalBridgeState(): { restRequest: string | null; restUn
     focusDate: useCoachActionBridgeStore().focusDate
   }
 }
+
+/**
+ * 브리핑 쇼츠 팝업(#898) QA 용 — 요약 탭 대신 "오늘 값"을 결정론으로 넣는다(서버에 아무것도 쓰지 않는다).
+ * 팝업 판정은 부팅 직후 한 번이라, 페이지를 연 뒤 판정 마감(10초) 안에 불러야 한다. state 로 'done'·'rested' 등
+ * 안 뜨는 날도 흉내 낸다. 문구는 실제와 같은 buildSessionBriefing 을 지난다.
+ */
+export async function seedBriefingShortsToday(sessionType: ScheduledSession['sessionType'] = 'Easy', state = 'today') {
+  const { useBriefingShortsStore } = await import('@/app/stores/briefingShortsStore')
+  const { buildSessionBriefing, sessionTypeLabel } = await import('@/shared/lib/coaching/sessionBriefing')
+  const { defaultScheduledSessionPrescription } = await import('@/entities/training-schedule/model')
+  const date = isoOffset(0)
+  const session: ScheduledSession = {
+    id: 'e2e-briefing-shorts', userId: 'e2e', goalId: null, date, phase: 'Build', sessionType, slot: null, keySession: false,
+    prescription: { ...defaultScheduledSessionPrescription(), distanceKm: 8, durationMin: 50, paceRange: '6:10~6:40/km' },
+    status: 'planned', source: 'generator', runId: null, createdAt: '', updatedAt: ''
+  }
+  const briefing = buildSessionBriefing(session, { goal: null, injury: null, chronic: null, vdot: 45 })
+  useBriefingShortsStore().publishToday(
+    { date, dayState: state, sessionType, title: sessionTypeLabel(sessionType), distanceKm: 8, metaLine: '6:10~6:40/km', briefing },
+    true
+  )
+}

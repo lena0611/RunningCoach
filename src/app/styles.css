@@ -155,6 +155,15 @@
   --z-session: 880;
   --z-coach: 900;
   --z-confirm-sheet: 1100;
+  /* 오늘 훈련 브리핑 쇼츠(#898): 인트로 뒤 전체 화면 팝업 — 시트·확인 시트 위, 토스트 아래 */
+  --z-briefing-shorts: 1150;
+  /* 브리핑 쇼츠 화면은 영상처럼 늘 어두운 한 톤(앱 표면 토큰과 별개 — 3D 장면 위 자막 대비용) */
+  --briefing-shorts-frame: #000;
+  --briefing-shorts-ink: #fff;
+  --briefing-shorts-ink-soft: #d6d6d6;
+  --briefing-shorts-ink-dim: #8d8d9c;
+  --briefing-shorts-accent: #ff4d57;
+  --briefing-shorts-cool: #8ec5ff;
   /* ── Tab Patterns 토큰 (.harness/project/tab-patterns.md · SegmentTabs/WeekStrip 전용) ──
      스펙 방언 매핑: --ok→--color-primary · --accent→--color-accent · --warning→--color-warning
      --surface-2→--color-surface-2 · --text-3→--color-muted-2 · --border→--color-border */

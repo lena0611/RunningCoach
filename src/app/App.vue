@@ -21,6 +21,7 @@ import AchievementsSection from '@/features/achievements/AchievementsSection.vue
 import AppShell from '@/shared/ui/AppShell.vue'
 import CoachSessionOverlay from '@/features/coach-session/CoachSessionOverlay.vue'
 import SessionDetailOverlay from '@/features/session-detail/SessionDetailOverlay.vue'
+import BriefingShortsHost from '@/features/briefing-shorts/BriefingShortsHost.vue'
 import StackPage from '@/shared/ui/StackPage.vue'
 import { useCoachStore } from '@/app/stores/coachStore'
 import { useSessionDetailStore } from '@/app/stores/sessionDetailStore'
@@ -1026,6 +1027,8 @@ function animateTabRelease(targetOffset: number, targetRoute: string | null) {
     <ToastHost />
     <CoachSessionOverlay />
     <SessionDetailOverlay />
+    <!-- 오늘 훈련 브리핑 쇼츠(#898): 인트로 뒤 하루 한 번 뜨는 전체 화면 팝업(body teleport) -->
+    <BriefingShortsHost />
     <!-- 업적(리디자인 ①c): 계정 드로어 위에 얹히는 2차 스택 — 닫으면 드로어(계정 정보)로 복귀 -->
     <StackPage :open="achievementsOpen" title="업적" back dismiss-label="계정 정보로 돌아가기" layer-class="stack-layer-top" @close="achievementsOpen = false">
       <AchievementsSection :runs="runStore.sortedRuns" />

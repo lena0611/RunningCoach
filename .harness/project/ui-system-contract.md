@@ -41,7 +41,7 @@ PaceLAB은 외부 UI 라이브러리를 전면 도입하지 않는다. 대신 �
   - **폰트 하한/스케일 점검은 선언 형태 전부를 본다:** `font-size: NNpx`뿐 아니라 **`font:` shorthand**(`font: 700 10px/1 ...`), **rem/em**(0.875rem 미만=<14px, 0.75rem=12px), 브라우저 기본 `<small>`(상속으로 <14 될 수 있음)까지 포함한다. `font-size: px`만 grep하면 shorthand·rem·상속 케이스를 놓친다(#609 후속에서 트로피/레이스/용어집이 이렇게 누락됨). 확실히 하려면 정적 grep + **라이브 computed 스캔**을 함께 쓴다. **예외:** SVG 내부 `text{font-size}`는 viewBox 스케일되는 userspace 단위라 CSS px 하한(12px) 대상 아님.
 - 숫자 표시: 사용자-facing 숫자는 `src/shared/lib/format.ts`의 공통 포맷터를 거쳐 3자리 쉼표를 적용한다. 정수는 `formatInteger`, 소수 고정 자리 숫자는 `formatNumberWithCommas`를 사용하고, 단위는 `UnitValue` 또는 같은 숫자/단위 분리 패턴으로 렌더링한다. 날짜, 시간, 페이스처럼 콜론/따옴표 기반 도메인 포맷은 각 전용 포맷터를 따른다.
 - elevation: `--shadow-card`, `--shadow-float`, `--shadow-button`
-- layer: `--z-toast`, `--z-bottom-sheet`, `--z-stack`, `--z-confirm-sheet`
+- layer: `--z-toast`, `--z-bottom-sheet`, `--z-stack`, `--z-confirm-sheet`, `--z-briefing-shorts`(#898 인트로 뒤 전체 화면 브리핑 팝업 — 확인 시트 위·토스트 아래, body teleport)
 
 새 색상이나 고정 수치가 필요하면 먼저 토큰으로 승격할 수 있는지 검토한다. 화면 CSS에 hex, 임의 shadow, 임의 z-index를 새로 흩뿌리지 않는다.
 

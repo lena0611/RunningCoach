@@ -10,12 +10,17 @@ import { useLevelStore } from '@/app/stores/levelStore'
 import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { canUseAppFeatures } from '@/shared/lib/runtime'
 import { watchForNewBuild } from '@/shared/lib/buildVersion'
+import { holdNativeIntro } from '@/features/briefing-shorts/introBridge'
 import './app/styles.css'
 
 const pinia = createPinia()
 const app = createApp(App)
 app.use(pinia)
 const isE2ERouteSmoke = import.meta.env.DEV && import.meta.env.VITE_E2E_ROUTE_SMOKE === 'true'
+
+// 인트로(네이티브 스플래시)를 붙잡는다(#898) — 오늘 브리핑 팝업이 그려지거나 띄울 게 없다고 판정되면 웹이 걷는다.
+// 첫 await 보다 먼저 보내야 네이티브의 '로드 끝 → 자동으로 걷기'보다 앞선다. 구버전 앱(능력 없음)엔 아무것도 안 보낸다.
+holdNativeIntro()
 
 // WKWebView에서 serviceWorker.getRegistrations()/caches가 멈추면 부팅이 무한정 막혀
 // 스플래시가 영원히 남을 수 있다(타임아웃 없는 await). 2초 가드로 부팅을 보장한다.
@@ -85,7 +90,8 @@ if (import.meta.env.DEV) {
       openLapSplitPreview: m.openLapSplitPreview,
       coachProposalRestBridge: m.coachProposalRestBridge,
       coachProposalSessionBridge: m.coachProposalSessionBridge,
-      coachProposalBridgeState: m.coachProposalBridgeState
+      coachProposalBridgeState: m.coachProposalBridgeState,
+      seedBriefingShortsToday: m.seedBriefingShortsToday
     }
   })
 }
