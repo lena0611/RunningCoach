@@ -137,6 +137,10 @@ declare global {
         runContextWatchRace?: {
           postMessage: (message: unknown) => void
         }
+        /** 인트로(네이티브 스플래시) 걷기 시점 조율(#898) — 능력 'closeIntro' 를 확인하고 보낸다. */
+        runContextIntro?: {
+          postMessage: (message: unknown) => void
+        }
       }
     }
   }

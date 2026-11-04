@@ -9,6 +9,7 @@ import { useToastStore } from '@/app/stores/toastStore'
 import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
 import { useGoalAdjustStore } from '@/app/stores/goalAdjustStore'
+import { useBriefingShortsStore } from '@/app/stores/briefingShortsStore'
 import SecondaryButton from '@/shared/ui/SecondaryButton.vue'
 import { useCoachActionBridgeStore } from '@/app/stores/coachActionBridgeStore'
 import { useCrossTrainingStore } from '@/app/stores/crossTrainingStore'
@@ -412,6 +413,30 @@ const todayHero = computed(() => {
     keyPoint: activeBriefing.value?.keyPoint ?? ''
   }
 })
+/*
+  오늘 훈련 브리핑 쇼츠 팝업(#898)에 오늘 값을 넘긴다 — 팝업은 따로 계산하지 않고 이 히어로·브리핑을 그대로 쓴다.
+  "아직 안 뛰었다" = 데이-스트립 오늘 상태 'today'(planned 세션 + 오늘 훈련 런 없음). 다른 주를 보는 중이면
+  activeBriefing 이 그 주 날짜를 가리키므로 넘기지 않는다(마지막 값 유지).
+*/
+const briefingShortsStore = useBriefingShortsStore()
+watch(
+  () => {
+    if (weekOffset.value !== 0 || activeDayIndex.value !== todayWeekdayIndex.value) return null
+    const day = scheduleDays.value[todayWeekdayIndex.value]
+    const hero = todayHero.value
+    const briefing = activeBriefing.value
+    const settled = scheduleStore.loaded && runStore.loaded && memoryStore.loaded && !scheduleLoadingPlaceholder.value
+    const payload =
+      day && hero && briefing && day.state === 'today'
+        ? { date: day.date, dayState: day.state, sessionType: hero.sessionType, title: hero.title, distanceKm: hero.distanceKm, metaLine: hero.metaLine, briefing }
+        : null
+    return { payload, settled }
+  },
+  (next) => {
+    if (next) briefingShortsStore.publishToday(next.payload, next.settled)
+  },
+  { immediate: true }
+)
 /** 아직 한 번도 안 뛴 신규 사용자의 첫 훈련(#870) — 오늘 세션이 없을 때 히어로가 "오늘은 휴식" 대신 이걸 보인다. */
 const firstSessionAhead = computed(() => {
   if (runs.value.length > 0) return null

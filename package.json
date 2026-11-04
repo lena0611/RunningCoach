@@ -33,6 +33,7 @@
     "harness:changelog": "node .harness/bin/check-node-version.mjs && node .harness/bin/changelog-delta.mjs"
   },
   "dependencies": {
+    "@pixiv/three-vrm": "3.5.5",
     "@supabase/supabase-js": "^2.106.1",
     "@vitejs/plugin-vue": "^6.0.3",
     "echarts": "^6.1.0",
@@ -40,6 +41,7 @@
     "hover-tilt": "^1.0.0",
     "nanoid": "^5.1.6",
     "pinia": "^3.0.4",
+    "three": "0.180.0",
     "typescript": "~5.9.3",
     "vite": "^7.2.4",
     "vue": "^3.5.25",

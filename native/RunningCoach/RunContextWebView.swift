@@ -204,6 +204,7 @@ struct RunContextWebView: UIViewRepresentable {
         contentController.add(context.coordinator, name: "runContextLiveRun")
         contentController.add(context.coordinator, name: "runContextWatchRace")
         contentController.add(context.coordinator, name: "runContextLog")
+        contentController.add(context.coordinator, name: "runContextIntro")
         contentController.addUserScript(WKUserScript(
             source: """
             window.addEventListener('error', function(event) {
@@ -215,7 +216,8 @@ struct RunContextWebView: UIViewRepresentable {
             // 네이티브 능력 선언(#739). 웹은 자동배포되지만 앱은 수동 설치라, 웹이 먼저 나가면
             // 구버전 앱이 모르는 브리지 요청을 받고 "지원하지 않는 요청입니다" 를 띄운다(#719 계열).
             // 새 브리지 요청은 반드시 여기 이름을 확인하고 보낸다. 구버전엔 이 배열이 없다.
-            window.RunContextNativeCapabilities = ['crossTraining'];
+            // closeIntro(#898): 웹이 인트로를 붙잡았다가(hold) 오늘 브리핑 팝업을 그린 뒤 걷는다(close).
+            window.RunContextNativeCapabilities = ['crossTraining', 'closeIntro'];
             """,
             injectionTime: .atDocumentStart,
             forMainFrameOnly: false
@@ -271,6 +273,10 @@ struct RunContextWebView: UIViewRepresentable {
         private let minimumSplashDuration: TimeInterval = 1.5
         private let startedAt = Date()
         private var didSignalReady = false
+        /// 웹이 인트로를 붙잡았나(#898). 붙잡았으면 로드가 끝나도 스스로 걷지 않고 웹의 `close` 를 기다린다.
+        private var introHeldByWeb = false
+        /// 웹이 붙잡고 `close` 를 못 보내는 경우(멈춤·오류)의 안전 시간. 웹 쪽 마감(6초)보다 넉넉히 둔다.
+        private let introHoldSafetyTimeout: TimeInterval = 10
 
         init(onReady: @escaping () -> Void) {
             self.onReady = onReady
@@ -384,6 +390,11 @@ struct RunContextWebView: UIViewRepresentable {
 
             if message.name == "runContextWatchRace" {
                 handleWatchRaceMessage(message)
+                return
+            }
+
+            if message.name == "runContextIntro" {
+                handleIntroMessage(message)
                 return
             }
 
@@ -877,6 +888,8 @@ struct RunContextWebView: UIViewRepresentable {
                         return
                     }
 
+                    // 웹이 인트로를 붙잡았으면 웹의 close(또는 안전 시간)가 걷는다(#898).
+                    if self?.introHeldByWeb == true { return }
                     self?.signalReadyAfterMinimumDuration()
                 }
             }
@@ -981,6 +994,8 @@ struct RunContextWebView: UIViewRepresentable {
         }
 
         private func loadDiagnosticPage(in webView: WKWebView, reason: String) {
+            // 진단 화면은 웹이 걷어 줄 수 없다 — 붙잡힘을 풀어 진단 화면 로드가 끝나면 바로 보이게 한다.
+            introHeldByWeb = false
             let resources = Bundle.main.urls(forResourcesWithExtension: nil, subdirectory: nil)?
                 .map { $0.lastPathComponent }
                 .sorted()
@@ -1006,6 +1021,29 @@ struct RunContextWebView: UIViewRepresentable {
             </html>
             """
             webView.loadHTMLString(html, baseURL: nil)
+        }
+
+        // MARK: - #898 인트로 걷기 시점(웹 introBridge.ts 미러)
+        //
+        // 예전엔 로드 끝(+최소 1.5초)에 스스로 걷었다. 지금은 웹이 hold 를 보내면 웹의 close 를 기다린다 —
+        // 오늘 브리핑 팝업이 그려진 뒤 인트로가 걷히게 하려는 것이다.
+        // 구버전 웹(hold 안 보냄)·팝업 없는 날(웹이 바로 close)·웹 멈춤(안전 시간) 모두 결국 걷힌다.
+        private func handleIntroMessage(_ message: WKScriptMessage) {
+            guard let body = message.body as? [String: Any],
+                  let type = body["type"] as? String else { return }
+            switch type {
+            case "hold":
+                guard !didSignalReady else { return }
+                introHeldByWeb = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + introHoldSafetyTimeout) { [weak self] in
+                    self?.signalReadyAfterMinimumDuration()
+                }
+            case "close":
+                introHeldByWeb = false
+                signalReadyAfterMinimumDuration()
+            default:
+                return
+            }
         }
 
         private func signalReadyAfterMinimumDuration() {
