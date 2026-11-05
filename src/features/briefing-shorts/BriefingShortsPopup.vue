@@ -12,8 +12,9 @@
  *  언제든 "건너뛰기"로 바로 닫는다. 다시 보기 입구는 없다(하루 한 번).
  *
  * 쇼츠처럼(사용자 결정 2026-11-05): 영상 오른쪽 아래에 아이콘 줄(날씨 · 체감온도 · 건너뛰기, 예전 말 걸기 자리 — 글자는 기온 숫자만),
- * 오른쪽 위에 스피커. 소리는 기본 끔(자막만) — 스피커를 누르면 읽던 문장부터 목소리로 다시 읽는다.
- * 설정 '소리 켜고 시작'이면 켜진 채로 시작한다(무음 스위치는 따른다). 직접 눌러 켜면 무음 모드여도 들린다.
+ * 오른쪽 위에 스피커. 소리는 처음엔 끔(자막만) — 스피커를 누르면 읽던 문장부터 목소리로 다시 읽는다.
+ * 켜고 끈 건 설정 '소리 켜고 시작'에 그대로 저장돼 다음 브리핑에도 이어진다(사용자 결정: 한 번 켰으면 다음부터 나와야 한다).
+ * 켜져 있으면 무음 모드여도 들린다 — 사용자가 직접 켠 소리다(앱이라 브라우저처럼 막히지도 않는다).
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { TodayBriefingPayload } from '@/app/stores/briefingShortsStore'
@@ -63,10 +64,8 @@ const badge = computed(() => weatherBadge(props.weather, props.options.wx, props
 const feltC = computed(() => props.weather?.feltC ?? null)
 
 const settingsStore = useSettingsStore()
-/** 이번 영상의 소리. 시작값 = 설정, 스피커를 누르면 이번에만 바뀐다 */
+/** 이 영상의 소리. 시작값 = 설정, 스피커를 누르면 설정에도 저장한다(다음 브리핑도 같은 상태로) */
 const soundOn = ref(settingsStore.briefingSound)
-/** 사용자가 스피커를 직접 눌러 켰다 → 앱은 무음 스위치를 넘어 들려준다 */
-let loud = false
 /** 읽던 문장을 새 소리 상태로 처음부터 다시 */
 let restartLine: (() => void) | null = null
 const meta = computed(() => buildShortsMeta(props.payload))
@@ -111,7 +110,7 @@ async function sayLine(line: ScriptLine, last: boolean) {
         resolve()
       }
     })
-    await Promise.race([speak(line.speech, () => scene?.setSpeech({ speaking: true, last }), { muted: !soundOn.value, loud }), restarted])
+    await Promise.race([speak(line.speech, () => scene?.setSpeech({ speaking: true, last }), { muted: !soundOn.value, loud: soundOn.value }), restarted])
     restartLine = null
     if (!again || finished) return
     stopSpeech()
@@ -120,10 +119,8 @@ async function sayLine(line: ScriptLine, last: boolean) {
 
 function toggleSound() {
   soundOn.value = !soundOn.value
-  if (soundOn.value) {
-    loud = true
-    unlockSpeech() // 브라우저는 이 탭 안에서 소리를 열어야 이후 발화가 난다
-  }
+  settingsStore.setBriefingSound(soundOn.value)
+  if (soundOn.value) unlockSpeech() // 브라우저는 이 탭 안에서 소리를 열어야 이후 발화가 난다(앱은 필요 없다)
   restartLine?.()
 }
 

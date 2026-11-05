@@ -835,7 +835,7 @@ function openSettingsPanel(focus: SettingsPanelFocus | null = null) {
       <div class="settings-row">
         <div>
           <strong>소리 켜고 시작</strong>
-          <span>앱을 열 때 뜨는 브리핑 영상을 목소리와 함께 시작합니다. 끄면 자막만 나오고, 영상 오른쪽 위 스피커를 눌러 켤 수 있어요.</span>
+          <span>앱을 열 때 뜨는 브리핑 영상을 목소리와 함께 시작합니다. 끄면 자막만 나와요.</span>
         </div>
         <button
           class="switch-control"
@@ -849,7 +849,7 @@ function openSettingsPanel(focus: SettingsPanelFocus | null = null) {
           <span />
         </button>
       </div>
-      <p class="helper">소리 켜고 시작해도 iPhone 무음 모드에서는 자막만 나와요. 스피커를 직접 누르면 무음 모드여도 들려요.</p>
+      <p class="helper">영상 오른쪽 위 스피커로 켜고 끈 것도 여기에 그대로 저장돼 다음 브리핑에 이어져요. 켜 두면 무음 모드여도 소리가 나요.</p>
     </section>
 
     <section class="settings-section" data-settings-section="coaching-model">

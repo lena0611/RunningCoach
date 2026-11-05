@@ -57,7 +57,7 @@ export const useSettingsStore = defineStore('settingsStore', {
   state: () => ({
     notificationSettings: loadSettings().notificationSettings,
     coachingModel: loadSettings().coachingModel,
-    /** 브리핑 영상(#898)을 소리 켜고 시작한다. 기본은 끔 — 쇼츠처럼 자막만 나오고 스피커를 눌러 켠다(사용자 결정 2026-11-05) */
+    /** 브리핑 영상(#898)을 소리 켜고 시작한다. 기본은 끔(쇼츠처럼 자막만). 영상의 스피커로 켜고 끈 것도 여기에 저장된다(사용자 결정 2026-11-05) */
     briefingSound: loadSettings().briefingSound,
     settingsPanelRequestId: 0,
     settingsPanelFocus: null as SettingsPanelFocus | null
