@@ -179,6 +179,13 @@ onBeforeUnmount(() => {
     aria-label="오늘 훈련 브리핑"
     data-no-swipe
   >
+    <!-- 닫기(사용자 요청: 위쪽 검은 띠 오른쪽 위에 앱 닫기 X — 직관적으로 닫게). 불러오는 중에도 닫을 수 있다 -->
+    <button class="briefing-shorts-close" type="button" aria-label="브리핑 닫기" @click="finish()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <path d="M6 6l12 12M18 6L6 18" />
+      </svg>
+    </button>
+
     <div class="briefing-shorts-frame">
       <header class="briefing-shorts-top">
         <p class="briefing-shorts-title">오늘은 {{ payload.title }} <span aria-hidden="true">{{ sfx }}</span></p>
@@ -289,6 +296,32 @@ onBeforeUnmount(() => {
 .briefing-shorts.is-fading {
   opacity: 0;
   pointer-events: none;
+}
+
+/* 닫기 X: 화면 오른쪽 위(위쪽 검은 띠 — 상태 표시줄 아래). 틀 밖이라 영상·제목을 가리지 않는다(위 띠가 없는 화면에선 제목 칸 오른쪽 위) */
+.briefing-shorts-close {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 6px);
+  right: 8px;
+  z-index: 2;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--briefing-shorts-ink);
+}
+
+.briefing-shorts-close svg {
+  width: 26px;
+  height: 26px;
+}
+
+.briefing-shorts-close:focus-visible {
+  outline: 2px solid var(--briefing-shorts-cool);
+  outline-offset: 2px;
 }
 
 /* 9:16 틀 = 위 15% 제목 · 55% 영상 · 30% 코멘트·프로필·설명·진행 막대. 아이콘 줄은 틀 기준(영상 아래쪽~밑 검은 칸) */

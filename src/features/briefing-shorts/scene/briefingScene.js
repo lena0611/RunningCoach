@@ -21,8 +21,8 @@ const RUNS = {
 }
 // sx 성별 · rn 러닝 타입 · st 주법 · pc 페이스(0 = 타입 기본) · cd 케이던스(0 = 타입 기본) · wt 체중(0 = 모델 기본)
 // dy 날짜(1~365) · tm 시간(시) · wx 날씨 · tp 옷(계절) · ac 악세사리(- 로 잇는다) · df 심도(0 = 끔)
-// el·az·ds 달릴 때 카메라 앵글·포지션·디스턴스 · mv 뛰기(1)/멈추기(0)
-export const SCENE_DEFAULTS = { sx: 'f', rn: 'easy', st: 'rear', pc: 0, cd: 0, wt: 0, dy: 308, df: 0, tm: 9, wx: 'clear', tp: 'mild', ac: 'cap-watch', el: 6, az: 54, ds: 3.4, mv: 1 }
+// el·az·ds 달릴 때 카메라 앵글·포지션·디스턴스 · mv 뛰기(1)/멈추기(0) · ol 검은 외곽선(먹선) 1 = 그림 / 0 = 뺌(기본, 사용자 요청 2026-11-05)
+export const SCENE_DEFAULTS = { sx: 'f', rn: 'easy', st: 'rear', pc: 0, cd: 0, wt: 0, dy: 308, df: 0, tm: 9, wx: 'clear', tp: 'mild', ac: 'cap-watch', el: 6, az: 54, ds: 3.4, mv: 1, ol: 0 }
 // 체중 기준(kg): 모델 기본 체형 = BMI 20 안팎의 마른 몸(여 키 1.57m → 50kg, 남 1.70m → 60kg). wt = 0 이면 이 값
 const WT_BASE = { f: 50, m: 60 }
 const STOPS = [0, 16, 11, 8, 5.6, 4, 2.8, 2, 1.4] // 조리개 단계 → f값
@@ -1211,6 +1211,143 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       edge: (p) => { p.y = topY; },
     });
   }
+  // ---- 러닝화(사용자 요청 2026-11-05: "지금 신발은 일반 스니커즈 같다") ----
+  // 모델 운동화(코트 스니커즈: 얇은 컵솔·옆 줄무늬)를 겉모양만 러닝화로 바꾼다 — 메시는 그대로 두고 모양을 조금 손보고 그림을 새로 칠한다.
+  // 러닝화 겉 특징 — 상상 말고 실측·사진에서 추렸다(사용자 요청, 2026-11-05 RunRepeat 랩 테스트: 489켤레 평균 뒤꿈치 스택 35.6mm·앞 27.2mm·드롭 8.4mm,
+  // 데일리 트레이너 단면·옆 사진): 두꺼운 미드솔 폼(뒤꿈치 > 앞) · 앞 25~35% 부터 바닥이 휘어 오르는 포어풋 로커(앞코 들림) ·
+  // 뒤꿈치 밑을 크게 깎아 올린 리어 로커(힐 베벨) · 밑으로 갈수록 벌어지는 미드솔 · 바닥 고무는 뒤꿈치·앞쪽만(가운데는 폼 노출) ·
+  // 니트(메시) 갑피 · 힐 카운터 · 뒤로 젖혀진 뒤꿈치 탭 · 반사 포인트. 모양 특징만 쓰고 특정 브랜드 디자인·로고는 따라 하지 않는다.
+  // 모델 신발은 길이 21cm(실제 29cm 의 0.73배)라 실측을 그대로 줄이면 얇아 보여 맥스 쿠션 쪽으로 잡았다. 사용자가 보낸 맥스 스택 레이싱화 사진:
+  // 미드솔이 신발 높이의 절반 가까이 · 바닥 전체가 배처럼 휘어 앞뒤가 크게 들림 · 낮고 날렵한 갑피 · 두 겹 미드솔(밑층이 밝다) · 뒤꿈치 폼이 갑피 뒤로 튀어나옴 ·
+  // (위·바닥 사진) 미드솔이 갑피보다 사방으로 넓고 가운데(아치)가 잘록 · 바닥은 밝은 폼에 가로 홈이 촘촘하고 가운데 세로 홈 · 미드솔 윗선이 뒤꿈치·앞코에서 올라간다.
+  // 원래 밑창 위로만 칠하면 갑피가 줄어들어서, 바닥을 STACK 만큼 아래로 늘리고 캐릭터를 그만큼 들어 올린다(옷을 다 지은 뒤 — 옷은 들기 전 좌표로 짓는다)
+  // 그림은 신발 메시의 삼각형마다 UV 자리에 그 점의 3D 위치(발 기준 높이·앞뒤·좌우)로 색을 정해 칠한다(텍스처 굽기) — 경계가 메시와 상관없이 매끈하다.
+  // 끈은 발등 가운데에 사다리 끈으로 새로 칠한다(원래 그림 밝기를 쓰면 검은 혀가 얼룩처럼 남았다). 밑창 무늬(육각 트레드)는 밝기만 살린다(달리면 발바닥이 보인다)
+  const SHOES = {
+    female: { upper: '#dfe2ea', upperDark: '#8a90a0', lace: '#f7f7f4', midsole: '#f5f2ea', midsoleLine: '#cfc9bb', midsoleBase: '#c9cde0', accent: '#c6f432', shade: '#aab0bf' },
+    male: { upper: '#545963', upperDark: '#202328', lace: '#e9eaec', midsole: '#2a2d33', midsoleLine: '#c9c3b2', midsoleBase: '#e7e2d4', accent: '#ff6a1a', shade: '#9aa0ae' }, // 회색 메시 갑피 · 검은 미드솔 · 크림 밑층
+  };
+  const STACK = 0.012; // 바닥을 아래로 늘린 만큼(캐릭터를 그만큼 든다)
+  function runningShoes(c) {
+    const shoe = meshes.find((o) => /Shoes_\d+_CLOTH/.test([o.material].flat()[0].name));
+    const srcMap = shoe && [shoe.material].flat().find((m) => m.map)?.map;
+    if (!shoe || !srcMap?.image || typeof document === 'undefined') return;
+    const g = shoe.geometry, pa = g.attributes.position, uv = g.attributes.uv, idx = g.index.array, toLocal = shoe.matrixWorld.clone().invert();
+    const used = [...new Set(idx)], W = new Map();
+    for (const i of used) W.set(i, new THREE.Vector3().fromBufferAttribute(pa, i).applyMatrix4(shoe.matrixWorld));
+    // 발마다 틀: 앞(dir) = 발목뼈→발가락뼈 수평, 옆(side) = 발의 왼쪽. t = 뒤꿈치 0 ~ 앞코 1, h = 바닥에서 높이, x = 발 가운데선에서 옆으로
+    const feet = ['left', 'right'].map((sd) => {
+      const ankle = RB(`${sd}Foot`), toe = RB(`${sd}Toes`) ?? ankle.clone().addScaledVector(facing, 0.12);
+      const dir = toe.clone().sub(ankle).setY(0).normalize();
+      return { ankle, dir, side: new THREE.Vector3().crossVectors(UP, dir), lo: Infinity, hi: -Infinity, ground: Infinity, xl: Infinity, xh: -Infinity };
+    });
+    const footOf = new Map();
+    for (const [i, p] of W) {
+      const f = feet.reduce((a, b) => (p.clone().sub(a.ankle).setY(0).length() <= p.clone().sub(b.ankle).setY(0).length() ? a : b));
+      footOf.set(i, f);
+      const a = p.clone().sub(f.ankle).dot(f.dir), x = p.clone().sub(f.ankle).dot(f.side);
+      f.lo = Math.min(f.lo, a); f.hi = Math.max(f.hi, a); f.ground = Math.min(f.ground, p.y); f.xl = Math.min(f.xl, x); f.xh = Math.max(f.xh, x);
+    }
+    const local = (f, p) => {
+      const d = p.clone().sub(f.ankle);
+      return { t: (d.dot(f.dir) - f.lo) / (f.hi - f.lo), h: p.y - f.ground, x: d.dot(f.side) - (f.xl + f.xh) / 2 };
+    };
+    // 모양: 스택(바닥을 아래로 STACK 늘림) · 포어풋 로커(앞 40% 를 위로 최대 22mm — 발구름이 굴러가게 앞코가 들린다, 사용자 지적 "러닝화는 앞이 들려 있다") ·
+    // 리어 로커(뒤 25% 의 아랫부분을 위로 최대 18mm — "뒤에도 마찬가지") · 미드솔 벌어짐(바닥 쪽을 옆으로 최대 5mm, 뒤꿈치는 뒤로 최대 8mm)
+    for (const [i, p] of W) {
+      const f = footOf.get(i), { t, h, x } = local(f, p);
+      if (h < 0.03) p.y -= STACK * (1 - h / 0.03);
+      if (t > 0.6) p.y += 0.022 * ((t - 0.6) / 0.4) ** 2;
+      if (t < 0.25) p.y += 0.018 * ((0.25 - t) / 0.25) ** 2 * (1 - ease(h / 0.05));
+      if (h < 0.03) { // 미드솔이 갑피보다 넓게 — 뒤꿈치·앞발은 넓고 아치(가운데)는 잘록
+        const k = 1 - h / 0.03, waist = 1 - 0.5 * Math.exp(-(((t - 0.45) / 0.12) ** 2));
+        p.addScaledVector(f.side, Math.sign(x) * 0.008 * k * waist);
+        if (t < 0.15) p.addScaledVector(f.dir, -0.008 * k * (1 - t / 0.15));
+      }
+      pa.setXYZ(i, ...p.clone().applyMatrix4(toLocal).toArray());
+    }
+    pa.needsUpdate = true;
+    for (const f of feet) f.ground -= STACK; // 높이는 늘어난 바닥에서 잰다
+    // 그림 굽기
+    const R = 1024, cv = document.createElement('canvas');
+    cv.width = cv.height = R;
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(srcMap.image, 0, 0, R, R);
+    const img = ctx.getImageData(0, 0, R, R), src = img.data.slice(), out = img.data, painted = new Uint8Array(R * R);
+    const rgb = (hex) => [1, 3, 5].map((k) => parseInt(hex.slice(k, k + 2), 16)); // sRGB 그대로(그림은 sRGB 텍스처 — THREE.Color 는 선형으로 바꿔 어두워진다)
+    const C = Object.fromEntries(Object.entries(c).map(([k, v]) => [k, rgb(v)]));
+    const mix = (a, b, k) => a.map((v, j) => v + (b[j] - v) * k);
+    const A = new THREE.Vector3(), B = new THREE.Vector3(), Cc = new THREE.Vector3(), n = new THREE.Vector3(), p = new THREE.Vector3();
+    const colorAt = (f, q, ny, px) => {
+      const { t, h, x } = local(f, q), lum = (src[px] + src[px + 1] + src[px + 2]) / 765;
+      const hm = STACK + 0.036 - 0.01 * ease((t - 0.2) / 0.6) + 0.006 * (1 - ease(t / 0.15)) + 0.005 * ease((t - 0.86) / 0.14); // 미드솔 윗선: 뒤꿈치 48mm(뒤로 갈수록 더 올라감) → 앞 38mm(드롭 10mm), 앞코에서 감싸 올라간다
+      if (ny < -0.6) { // 바닥: 밝은 폼 + 가로 홈 + 가운데 세로 홈
+        if (Math.abs(x) < 0.0035 && t > 0.3 && t < 0.62) return C.upperDark;
+        return Math.sin(t * Math.PI * 46) > 0.55 ? C.midsoleLine : C.midsoleBase;
+      }
+      if (h < hm * 0.34) return C.midsoleBase; // 두 겹 미드솔의 밑층
+      if (h < hm) return C.midsole; // 윗층 폼
+      if (t < 0.035 && Math.abs(x) < 0.007 && h > hm + 0.012 && h < 0.062) return [226, 230, 236]; // 뒤꿈치 반사 포인트
+      if (t < 0.1 - 0.05 * ease((h - hm) / 0.035) && h < hm + 0.035) return C.accent; // 힐 카운터(위로 갈수록 좁아지는 뒤꿈치 컵)
+      if (ny > 0.5 && t > 0.42 && t < 0.82 && h > 0.045) { // 발등: 사다리 끈 + 양옆 끈구멍 줄
+        const ax = Math.abs(x);
+        if (ax < 0.014) return ((t - 0.42) / 0.055) % 1 < 0.38 ? C.lace : C.upperDark;
+        if (ax < 0.019) return C.upperDark;
+      }
+      const knit = 0.94 + 0.06 * (Math.sin(q.x * 1700) * Math.sin(q.y * 1700) * Math.sin(q.z * 1700) > 0 ? 1 : 0); // 니트 결(약 2mm)
+      return C.upper.map((v) => v * knit);
+    };
+    for (let tri = 0; tri < idx.length; tri += 3) {
+      const ia = idx[tri], ib = idx[tri + 1], ic = idx[tri + 2], f = footOf.get(ia);
+      A.copy(W.get(ia)); B.copy(W.get(ib)); Cc.copy(W.get(ic));
+      n.subVectors(B, A).cross(p.subVectors(Cc, A)).normalize();
+      const ua = [uv.getX(ia) * R, uv.getY(ia) * R], ub = [uv.getX(ib) * R, uv.getY(ib) * R], uc = [uv.getX(ic) * R, uv.getY(ic) * R];
+      const den = (ub[1] - uc[1]) * (ua[0] - uc[0]) + (uc[0] - ub[0]) * (ua[1] - uc[1]);
+      if (Math.abs(den) < 1e-9) continue;
+      const x0 = Math.max(0, Math.floor(Math.min(ua[0], ub[0], uc[0]))), x1 = Math.min(R - 1, Math.ceil(Math.max(ua[0], ub[0], uc[0])));
+      const y0 = Math.max(0, Math.floor(Math.min(ua[1], ub[1], uc[1]))), y1 = Math.min(R - 1, Math.ceil(Math.max(ua[1], ub[1], uc[1])));
+      for (let y = y0; y <= y1; y++) for (let xx = x0; xx <= x1; xx++) {
+        const sx = xx + 0.5, sy = y + 0.5;
+        const w0 = ((ub[1] - uc[1]) * (sx - uc[0]) + (uc[0] - ub[0]) * (sy - uc[1])) / den, w1 = ((uc[1] - ua[1]) * (sx - uc[0]) + (ua[0] - uc[0]) * (sy - uc[1])) / den, w2 = 1 - w0 - w1;
+        if (w0 < -0.02 || w1 < -0.02 || w2 < -0.02) continue;
+        p.set(0, 0, 0).addScaledVector(A, w0).addScaledVector(B, w1).addScaledVector(Cc, w2);
+        const px = (y * R + xx) * 4, col = colorAt(f, p, n.y, px);
+        out[px] = col[0]; out[px + 1] = col[1]; out[px + 2] = col[2]; out[px + 3] = 255;
+        painted[y * R + xx] = 1;
+      }
+    }
+    for (let it = 0; it < 3; it++) { // 섬 가장자리 바깥으로 3px 번지게(이음매에서 원래 그림 색이 새지 않게)
+      const add = [];
+      for (let y = 1; y < R - 1; y++) for (let xx = 1; xx < R - 1; xx++) {
+        const k = y * R + xx;
+        if (painted[k]) continue;
+        const nb = [k - 1, k + 1, k - R, k + R].find((j) => painted[j] === 1);
+        if (nb !== undefined) add.push([k, nb]);
+      }
+      for (const [k, j] of add) { out.set(out.subarray(j * 4, j * 4 + 4), k * 4); painted[k] = 2; }
+      for (const [k] of add) painted[k] = 1;
+    }
+    ctx.putImageData(img, 0, 0);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.flipY = srcMap.flipY;
+    tex.colorSpace = srcMap.colorSpace;
+    tex.wrapS = srcMap.wrapS; tex.wrapT = srcMap.wrapT;
+    tex.anisotropy = 4;
+    shoe.material = dress([shoe.material].flat(), '#ffffff', c.shade, tex);
+    // 뒤꿈치 당김 탭: 힐 칼라 뒤 위에서 뒤로 살짝 젖힌 고리(mm 틀)
+    const footBones = { left: vrm.humanoid.getRawBoneNode('leftFoot'), right: vrm.humanoid.getRawBoneNode('rightFoot') };
+    feet.forEach((f, k) => {
+      let top = null, topH = -1;
+      for (const [i, q] of W) if (footOf.get(i) === f) { const l = local(f, q); if (l.t < 0.06 && l.h > topH) { topH = l.h; top = q; } }
+      if (!top) return;
+      const back = f.dir.clone().negate(), at = top.clone().addScaledVector(back, 0.002).addScaledVector(UP, -0.006);
+      const tab = new THREE.Group();
+      tab.add(wear(new THREE.BoxGeometry(14, 24, 2.6).translate(0, 9, 0).rotateX(-0.6), dress(CLOTH, c.accent, c.shade))); // 뒤로 젖혀진 아킬레스 탭
+      attach(footBones[k ? 'right' : 'left'], frameOf(at, f.side, UP, f.dir), tab); // 오른손 틀(옆 × 위 = 앞) — 뒤집힌 틀이면 면이 안쪽을 향해 안 보인다
+    });
+  }
+  runningShoes(SHOES[CHAR]);
+
   // 옷(계절): 두 모델 모두 속옷만 입은 몸이라 옷을 전부 피부 껍질로 짓는다(원래 옷에 기대지 않는다 — 어떤 모델이든 같게)
   // 디자인 = 2025~26 러닝복 흐름에서 여러 브랜드가 함께 쓰는 요소만(특정 브랜드 디자인·로고는 따라 하지 않는다, 사용자 요청 2026-11-05):
   // 크롭 싱글렛·짧은 스플릿 쇼츠·바이크 쇼츠·하프집 하이넥 + 옆선 배색·소매 줄·가슴 띠·어깨 요크·반사띠, 올블랙 대신 어스톤 + 네온 포인트
@@ -1334,6 +1471,9 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     }
   }
   applyTuck();
+  // 먹선(MToon 외곽선 — 몸·옷·머리 둘레의 검은 테): 기본은 뺀다(사용자 요청 "인체에 먹선이 있는데 빼는 건 가능해?"). 외곽선 재질만 숨긴다
+  if (!OPT.ol) vrm.scene.traverse((o) => { if (o.isMesh) [o.material].flat().forEach((m) => { if (m.isOutline) m.visible = false; }); });
+  vrm.scene.position.y += STACK; // 러닝화 바닥을 늘린 만큼 든다(옷·장신구를 다 지은 뒤 — 그 전엔 원래 좌표로 짓는다)
   vrm.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
   // ---- 배경: 수변 산책로 ----
