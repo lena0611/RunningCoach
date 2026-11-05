@@ -54,6 +54,38 @@ describe('speech', () => {
     expect(done).toBe(true)
   })
 
+  it('소리 끔: 브리지로 보내지 않고 바로 입을 움직이며, 자막 길이만큼 뒤에 넘어간다', async () => {
+    window.RunContextNativeCapabilities = ['briefingSpeech']
+    const { speak, estimateSpeechSec } = await import('./speech')
+    const onStart = vi.fn()
+    let done = false
+    const text = '오늘은 이지 8km예요.'
+    void speak(text, onStart, { muted: true }).then(() => { done = true })
+    expect(postMessage).not.toHaveBeenCalled()
+    expect(onStart).toHaveBeenCalledOnce()
+    await vi.advanceTimersByTimeAsync(estimateSpeechSec(text) * 1000 - 50)
+    expect(done).toBe(false)
+    await vi.advanceTimersByTimeAsync(100)
+    expect(done).toBe(true)
+  })
+
+  it('소리 끔으로 기다리던 문장도 멈춤으로 바로 끝난다(스피커를 켜면 그 문장을 다시 읽는다)', async () => {
+    window.RunContextNativeCapabilities = ['briefingSpeech']
+    const { speak, stopSpeech } = await import('./speech')
+    let done = false
+    void speak('자, 출발!', undefined, { muted: true }).then(() => { done = true })
+    stopSpeech()
+    await Promise.resolve()
+    expect(done).toBe(true)
+  })
+
+  it('스피커를 직접 눌러 켰으면 무음 스위치를 넘어 읽으라고(loud) 보낸다', async () => {
+    window.RunContextNativeCapabilities = ['briefingSpeech']
+    const { speak } = await import('./speech')
+    void speak('오늘은 이지예요.', undefined, { loud: true })
+    expect(postMessage).toHaveBeenCalledWith({ type: 'speak', id: expect.any(String), text: '오늘은 이지예요.', loud: true })
+  })
+
   it('구버전 앱(능력 없음): 브리지로 보내지 않는다', async () => {
     window.RunContextNativeCapabilities = ['crossTraining', 'closeIntro']
     const { speak } = await import('./speech')

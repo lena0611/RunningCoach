@@ -5,7 +5,8 @@
 //  #898 브리핑 쇼츠 목소리(웹 src/features/briefing-shorts/speech.ts 미러).
 //  웹이 문장마다 `runContextSpeech` 로 speak 를 보내면 읽고, 시작·끝을 웹에 알린다(입 모양·자막 넘김).
 //  말 걸기 탭을 없앤 연출(2026-11-05)이라 사용자 동작 없이 읽어야 한다 — 웹 음성은 사용자 탭 전엔 막힐 수 있어 네이티브로 읽는다.
-//  무음 스위치를 따른다(.ambient): 저절로 뜨는 팝업이라 무음 모드면 자막만. 러닝 안내(SpeechManager)가 내비처럼 무음을 무시하는 것과 다르다.
+//  저절로 켤 땐 무음 스위치를 따른다(.ambient): 저절로 뜨는 팝업이라 무음 모드면 자막만. 러닝 안내(SpeechManager)가 내비처럼 무음을 무시하는 것과 다르다.
+//  사용자가 영상의 스피커를 직접 눌러 켰으면(loud) 무음 모드여도 들려준다(.playback, 다른 소리와 섞어 음악을 끊지 않는다).
 //
 
 import AVFoundation
@@ -22,11 +23,14 @@ final class BriefingSpeaker: NSObject {
         synth.delegate = self
     }
 
-    func speak(id: String, text: String) {
+    func speak(id: String, text: String, loud: Bool = false) {
         #if os(iOS)
         let session = AVAudioSession.sharedInstance()
-        // 라이브 러닝 안내가 .playback 으로 세션을 쓰고 있으면 건드리지 않는다
-        if session.category != .playback {
+        if loud {
+            try? session.setCategory(.playback, mode: .spokenAudio, options: [.mixWithOthers])
+            try? session.setActive(true)
+        } else if session.category != .playback {
+            // 라이브 러닝 안내가 .playback 으로 세션을 쓰고 있으면 건드리지 않는다
             try? session.setCategory(.ambient, mode: .spokenAudio)
             try? session.setActive(true)
         }

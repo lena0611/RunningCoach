@@ -35,6 +35,7 @@ describe('settingsStore', () => {
         workoutMorning: true
       },
       coachingModel: DEFAULT_COACH_MODEL,
+      briefingSound: false, // #898 브리핑 영상 소리(기본 끔)
       // 무료 모델 일회성 이관 플래그 — 한 번 저장되면 사용자가 고른 무료 모델을 다시 덮지 않는다.
       freeModelMigrated: true
     })

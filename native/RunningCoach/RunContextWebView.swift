@@ -1066,7 +1066,7 @@ struct RunContextWebView: UIViewRepresentable {
             switch type {
             case "speak":
                 guard let id = body["id"] as? String, let text = body["text"] as? String else { return }
-                briefingSpeaker.speak(id: id, text: text)
+                briefingSpeaker.speak(id: id, text: text, loud: body["loud"] as? Bool ?? false) // loud = 사용자가 스피커를 직접 켬(무음 모드여도)
             case "stop":
                 briefingSpeaker.stop()
             default:

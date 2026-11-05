@@ -7,12 +7,17 @@
  *  2. 다가오면 카메라맨이 5m 앞에서 뒤돌아 찍으며 같이 뛴다 — 이때부터 문장마다 기기 TTS 로 읽고 그 문장을 자막으로 띄운다
  *  3. 다 읽으면 카메라맨이 서서히 멈추고, 옆을 지나 멀어지는 러너를 바라보며 살짝 내려간다. 그사이 팝업이 천천히 사라진다
  *  언제든 "건너뛰기"로 바로 닫는다. 다시 보기 입구는 없다(하루 한 번).
+ *
+ * 쇼츠처럼(사용자 결정 2026-11-05): 영상 오른쪽 아래에 아이콘 줄(날씨 · 체감온도 · 건너뛰기, 예전 말 걸기 자리),
+ * 오른쪽 위에 스피커. 소리는 기본 끔(자막만) — 스피커를 누르면 읽던 문장부터 목소리로 다시 읽는다.
+ * 설정 '소리 켜고 시작'이면 켜진 채로 시작한다(무음 스위치는 따른다). 직접 눌러 켜면 무음 모드여도 들린다.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { TodayBriefingPayload } from '@/app/stores/briefingShortsStore'
-import { buildBriefingScript } from './briefingScript'
-import { sceneSfx } from './sceneOptions'
-import { speak, stopSpeech } from './speech'
+import { useSettingsStore } from '@/app/stores/settingsStore'
+import { buildBriefingScript, type ScriptLine } from './briefingScript'
+import { sceneSfx, weatherBadge, type BriefingWeather } from './sceneOptions'
+import { speak, stopSpeech, unlockSpeech } from './speech'
 import type { BriefingScene, BriefingSceneOptions } from './scene/briefingScene'
 import femaleModelUrl from './assets/female.vrm?url'
 import maleModelUrl from './assets/male.vrm?url'
@@ -20,7 +25,7 @@ import maleModelUrl from './assets/male.vrm?url'
 const props = defineProps<{
   payload: TodayBriefingPayload
   options: BriefingSceneOptions
-  weatherChip: string
+  weather: BriefingWeather | null
 }>()
 
 const emit = defineEmits<{
@@ -50,6 +55,16 @@ const script = computed(() =>
   buildBriefingScript({ title: props.payload.title, distanceKm: props.payload.distanceKm, briefing: props.payload.briefing })
 )
 const sfx = computed(() => sceneSfx(props.options.rn))
+const badge = computed(() => weatherBadge(props.weather, props.options.wx, props.options.tm))
+const feltC = computed(() => props.weather?.feltC ?? null)
+
+const settingsStore = useSettingsStore()
+/** 이번 영상의 소리. 시작값 = 설정, 스피커를 누르면 이번에만 바뀐다 */
+const soundOn = ref(settingsStore.briefingSound)
+/** 사용자가 스피커를 직접 눌러 켰다 → 앱은 무음 스위치를 넘어 들려준다 */
+let loud = false
+/** 읽던 문장을 새 소리 상태로 처음부터 다시 */
+let restartLine: (() => void) | null = null
 const subLine = computed(() =>
   [props.payload.distanceKm ? `${props.payload.distanceKm}km` : '', props.payload.metaLine].filter(Boolean).join(' · ')
 )
@@ -79,6 +94,32 @@ onMounted(async () => {
   }
 })
 
+/** 한 문장: 소리 상태대로 읽는다(끔이면 자막 길이만큼). 도중에 스피커를 누르면 그 문장을 새 상태로 다시 */
+async function sayLine(line: ScriptLine, last: boolean) {
+  for (;;) {
+    let again = false
+    const restarted = new Promise<void>((resolve) => {
+      restartLine = () => {
+        again = true
+        resolve()
+      }
+    })
+    await Promise.race([speak(line.speech, () => scene?.setSpeech({ speaking: true, last }), { muted: !soundOn.value, loud }), restarted])
+    restartLine = null
+    if (!again || finished) return
+    stopSpeech()
+  }
+}
+
+function toggleSound() {
+  soundOn.value = !soundOn.value
+  if (soundOn.value) {
+    loud = true
+    unlockSpeech() // 브라우저는 이 탭 안에서 소리를 열어야 이후 발화가 난다
+  }
+  restartLine?.()
+}
+
 async function readAloud() {
   if (finished || !scene) return
   phase.value = 'talking'
@@ -87,7 +128,7 @@ async function readAloud() {
     if (finished) return
     const last = i === lines.length - 1
     subtitle.value = lines[i].text
-    await speak(lines[i].speech, () => scene?.setSpeech({ speaking: true, last }))
+    await sayLine(lines[i], last)
     scene?.setSpeech({ speaking: false, last })
     if (!last) await wait(LINE_GAP_MS)
   }
@@ -137,20 +178,70 @@ onBeforeUnmount(() => {
         <p class="briefing-shorts-title">
           <span>오늘은 {{ payload.title }}</span><span class="briefing-shorts-sfx" aria-hidden="true">{{ sfx }}</span>
         </p>
-        <p v-if="subLine || weatherChip" class="briefing-shorts-sub">
-          <span v-if="weatherChip" class="briefing-shorts-chip">{{ weatherChip }}</span>
-          <span v-if="subLine">{{ subLine }}</span>
-        </p>
+        <p v-if="subLine" class="briefing-shorts-sub">{{ subLine }}</p>
       </header>
 
       <div class="briefing-shorts-stage">
         <canvas ref="canvasEl" class="briefing-shorts-canvas" :class="{ on: phase !== 'loading' }" />
         <p v-if="phase === 'loading'" class="briefing-shorts-loading">러너가 오고 있어요…</p>
+
+        <!-- 스피커(오른쪽 위): 기본 끔 — 누르면 읽던 문장부터 목소리로 -->
+        <button
+          v-if="phase !== 'loading'"
+          class="briefing-shorts-sound"
+          type="button"
+          :aria-label="soundOn ? '소리 끄기' : '소리 켜기'"
+          :aria-pressed="soundOn"
+          @click="toggleSound"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 9.5h3.2L12 5.5v13l-4.8-4H4z" />
+            <template v-if="soundOn">
+              <path d="M15.5 9a4.2 4.2 0 0 1 0 6" />
+              <path d="M18.2 6.5a8 8 0 0 1 0 11" />
+            </template>
+            <template v-else>
+              <path d="M16 9.5l5 5M21 9.5l-5 5" />
+            </template>
+          </svg>
+        </button>
+
+        <!-- 아이콘 줄(쇼츠 오른쪽 레일, 예전 말 걸기 자리): 날씨 · 체감온도 · 건너뛰기 -->
+        <div v-if="phase !== 'loading'" class="briefing-shorts-rail">
+          <div v-if="weather" class="briefing-shorts-rail-item" role="img" :aria-label="`날씨 ${badge.label}`">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <template v-if="badge.icon === 'clear'">
+                <circle cx="12" cy="12" r="4.2" />
+                <path d="M12 2.8v2.2M12 19v2.2M2.8 12h2.2M19 12h2.2M5.5 5.5l1.6 1.6M16.9 16.9l1.6 1.6M5.5 18.5l1.6-1.6M16.9 7.1l1.6-1.6" />
+              </template>
+              <path v-else-if="badge.icon === 'night'" d="M19.5 14.6A8 8 0 0 1 9.4 4.5a8 8 0 1 0 10.1 10.1z" />
+              <template v-else>
+                <path d="M7 17.5h10.2a4 4 0 0 0 .5-8 5.6 5.6 0 0 0-10.9 1.3A3.4 3.4 0 0 0 7 17.5z" :transform="badge.icon === 'cloudy' ? undefined : 'translate(0 -2.5)'" />
+                <path v-if="badge.icon === 'rain'" d="M8.5 18.5l-1 2.5M12.5 18.5l-1 2.5M16.5 18.5l-1 2.5" />
+                <path v-if="badge.icon === 'snow'" d="M8 19.5h.01M12 21h.01M16 19.5h.01M10 22h.01M14 22h.01" stroke-width="2.6" />
+              </template>
+            </svg>
+            <span>{{ badge.label }}</span>
+          </div>
+          <div v-if="feltC !== null" class="briefing-shorts-rail-item" role="img" :aria-label="`체감 ${feltC}도`">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M10 4.5a2 2 0 0 1 4 0v9.3a4 4 0 1 1-4 0z" />
+              <path d="M12 9v7.2" />
+            </svg>
+            <span>{{ feltC }}°</span>
+          </div>
+          <button v-if="phase !== 'leaving'" class="briefing-shorts-rail-item" type="button" @click="finish()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M5 5.5l9 6.5-9 6.5z" />
+              <path d="M18.5 5.5v13" />
+            </svg>
+            <span>건너뛰기</span>
+          </button>
+        </div>
       </div>
 
       <footer class="briefing-shorts-bar briefing-shorts-bottom">
         <p class="briefing-shorts-subtitle" aria-live="polite">{{ subtitle }}</p>
-        <button v-if="phase !== 'leaving'" class="briefing-shorts-skip" type="button" @click="finish()">건너뛰기</button>
       </footer>
     </div>
   </div>
@@ -226,14 +317,8 @@ onBeforeUnmount(() => {
 
 .briefing-shorts-sub {
   margin: 0;
-  display: flex;
-  gap: 2cqw;
   font-size: max(var(--text-caption-size), 3.6cqw);
   color: var(--briefing-shorts-ink-soft);
-}
-
-.briefing-shorts-chip {
-  color: var(--briefing-shorts-cool);
 }
 
 .briefing-shorts-stage {
@@ -287,17 +372,62 @@ onBeforeUnmount(() => {
   word-break: keep-all;
 }
 
-.briefing-shorts-skip {
-  align-self: flex-end;
-  min-height: 44px;
-  padding: 0 2cqw;
+/* 영상 위 아이콘: 흰 선 아이콘 + 옅은 그림자(낮 하늘에서도 보이게), 쇼츠처럼 배경 없이 */
+.briefing-shorts-sound,
+.briefing-shorts-rail-item {
+  padding: 0;
   background: none;
   border: 0;
-  color: var(--briefing-shorts-ink-soft);
-  font-size: max(var(--text-caption-size), 3.8cqw);
+  color: var(--briefing-shorts-ink);
+  filter: drop-shadow(var(--shadow-text));
 }
 
-.briefing-shorts-skip:focus-visible {
+.briefing-shorts-sound {
+  position: absolute;
+  top: 3cqw;
+  right: 3cqw;
+  width: max(44px, 11cqw);
+  height: max(44px, 11cqw);
+  display: grid;
+  place-items: center;
+}
+
+.briefing-shorts-sound svg {
+  width: 70%;
+  height: 70%;
+}
+
+.briefing-shorts-rail {
+  position: absolute;
+  right: 2cqw;
+  bottom: 4cqw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4cqw;
+}
+
+.briefing-shorts-rail-item {
+  min-width: max(44px, 13cqw);
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8cqw;
+  font: inherit;
+  font-size: max(var(--text-micro-size), 3.3cqw);
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.briefing-shorts-rail-item svg {
+  width: max(28px, 8.5cqw);
+  height: max(28px, 8.5cqw);
+}
+
+.briefing-shorts-sound:focus-visible,
+.briefing-shorts-rail-item:focus-visible {
   outline: 2px solid var(--briefing-shorts-cool);
   outline-offset: 2px;
 }

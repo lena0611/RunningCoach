@@ -53,3 +53,20 @@ describe('resolveStoredCoachModel (무료 모델 일회성 이관)', () => {
     expect(resolveStoredCoachModel('openai', true)).toBe('openai')
   })
 })
+
+// #898 브리핑 영상 소리: 기본은 끔(쇼츠처럼 자막만), 설정에서 켜 두면 소리 켜고 시작한다
+describe('briefingSound', () => {
+  it('저장값이 없으면 끔, 켜면 저장되고 다시 열어도 켜져 있다', async () => {
+    const { setActivePinia, createPinia } = await import('pinia')
+    localStorage.removeItem('runcontext.settings')
+    setActivePinia(createPinia())
+    const { useSettingsStore } = await import('./settingsStore')
+    const store = useSettingsStore()
+    expect(store.briefingSound).toBe(false)
+    store.setBriefingSound(true)
+    expect(JSON.parse(localStorage.getItem('runcontext.settings') ?? '{}').briefingSound).toBe(true)
+    setActivePinia(createPinia())
+    expect(useSettingsStore().briefingSound).toBe(true)
+    localStorage.removeItem('runcontext.settings')
+  })
+})

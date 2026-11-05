@@ -57,6 +57,8 @@ export const useSettingsStore = defineStore('settingsStore', {
   state: () => ({
     notificationSettings: loadSettings().notificationSettings,
     coachingModel: loadSettings().coachingModel,
+    /** 브리핑 영상(#898)을 소리 켜고 시작한다. 기본은 끔 — 쇼츠처럼 자막만 나오고 스피커를 눌러 켠다(사용자 결정 2026-11-05) */
+    briefingSound: loadSettings().briefingSound,
     settingsPanelRequestId: 0,
     settingsPanelFocus: null as SettingsPanelFocus | null
   }),
@@ -79,6 +81,10 @@ export const useSettingsStore = defineStore('settingsStore', {
       this.coachingModel = model
       this.persist()
     },
+    setBriefingSound(enabled: boolean) {
+      this.briefingSound = enabled
+      this.persist()
+    },
     requestSettingsPanel(focus: SettingsPanelFocus | null = null) {
       this.settingsPanelFocus = focus
       this.settingsPanelRequestId += 1
@@ -87,6 +93,7 @@ export const useSettingsStore = defineStore('settingsStore', {
       localStorage.setItem(storageKey, JSON.stringify({
         notificationSettings: this.notificationSettings,
         coachingModel: this.coachingModel,
+        briefingSound: this.briefingSound,
         // 한 번 저장되면 무료 모델 이관을 다시 적용하지 않는다(위 resolveStoredCoachModel).
         freeModelMigrated: true
       }))
@@ -101,22 +108,24 @@ export function getDisabledNotificationItems(settings: NotificationSettings): Di
   return notificationSettingRows.filter((row) => !settings[row.key])
 }
 
-function loadSettings(): { notificationSettings: NotificationSettings; coachingModel: CoachModelId } {
+function loadSettings(): { notificationSettings: NotificationSettings; coachingModel: CoachModelId; briefingSound: boolean } {
   if (typeof localStorage === 'undefined') {
-    return { notificationSettings: defaultNotificationSettings, coachingModel: DEFAULT_COACH_MODEL }
+    return { notificationSettings: defaultNotificationSettings, coachingModel: DEFAULT_COACH_MODEL, briefingSound: false }
   }
   try {
     const parsed = JSON.parse(localStorage.getItem(storageKey) || '{}') as {
       notificationSettings?: Partial<NotificationSettings>
       coachingModel?: unknown
       freeModelMigrated?: unknown
+      briefingSound?: unknown
     }
     return {
       notificationSettings: normalizeNotificationSettings(parsed.notificationSettings),
-      coachingModel: resolveStoredCoachModel(parsed.coachingModel, parsed.freeModelMigrated === true)
+      coachingModel: resolveStoredCoachModel(parsed.coachingModel, parsed.freeModelMigrated === true),
+      briefingSound: parsed.briefingSound === true
     }
   } catch {
-    return { notificationSettings: defaultNotificationSettings, coachingModel: DEFAULT_COACH_MODEL }
+    return { notificationSettings: defaultNotificationSettings, coachingModel: DEFAULT_COACH_MODEL, briefingSound: false }
   }
 }
 
