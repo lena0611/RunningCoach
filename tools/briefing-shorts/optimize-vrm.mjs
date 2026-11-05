@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 // 브리핑 쇼츠(#898) 캐릭터 모델 경량화.
 //
-// 원본 VRM 은 여 10.8MB · 남 13.1MB 인데 그중 상당 부분이 화면에 안 쓰이거나 과한 텍스처다.
+// 원본 VRM 은 10MB 남짓인데 그중 상당 부분이 화면에 안 쓰이거나 과한 텍스처다.
 //   - Thumbnail(2048²): 렌더에 안 쓰인다 → 8×8 로 바꾼다(메타가 가리키는 자리는 남긴다).
 //   - 2048² 텍스처(몸 색·몸 노멀·상의): 무대 렌더가 720×819 라 1024² 로 충분하다.
 // 그 외(얼굴·눈·머리)는 손대지 않는다 — 말할 때 얼굴 클로즈업이라 화질이 보인다.
+//   - 표정 모프의 노멀 변화량: 툰 셰이딩이라 티가 안 난다 → 뺀다(VRoid 2.x 모델은 3MB 넘게 준다).
 //
 // 사용: node tools/briefing-shorts/optimize-vrm.mjs <입력.vrm> <출력.vrm>
 // macOS `sips` 로 PNG 를 줄인다(추가 의존성 없음).
@@ -27,6 +28,42 @@ const json = JSON.parse(glb.subarray(20, 20 + jsonLength).toString('utf8'))
 const binHeader = 20 + jsonLength
 const binLength = glb.readUInt32LE(binHeader)
 const bin = glb.subarray(binHeader + 8, binHeader + 8 + binLength)
+
+// 표정 모프의 노멀 변화량을 뺀다: 툰 셰이딩이라 표정 때 면 방향이 안 바뀌어도 티가 안 나는데,
+// VRoid 2.x 모델은 이게 모프 위치와 같은 크기(3MB 넘게)다
+for (const mesh of json.meshes ?? []) {
+  for (const prim of mesh.primitives) for (const target of prim.targets ?? []) { delete target.NORMAL; delete target.TANGENT }
+}
+// 그래서 안 쓰게 된 접근자·버퍼뷰를 걷어 내고 번호를 다시 매긴다
+function compact(list, used, refs) {
+  const map = new Map()
+  const kept = list.filter((_, index) => used.has(index) && (map.set(index, map.size), true))
+  for (const [owner, key] of refs) owner[key] = map.get(owner[key])
+  return kept
+}
+{
+  const refs = []
+  const ref = (owner, key) => { if (owner?.[key] !== undefined) refs.push([owner, key]) }
+  for (const mesh of json.meshes ?? []) {
+    for (const prim of mesh.primitives) {
+      for (const key of Object.keys(prim.attributes)) ref(prim.attributes, key)
+      ref(prim, 'indices')
+      for (const target of prim.targets ?? []) for (const key of Object.keys(target)) ref(target, key)
+    }
+  }
+  for (const skin of json.skins ?? []) ref(skin, 'inverseBindMatrices')
+  for (const animation of json.animations ?? []) for (const sampler of animation.samplers) { ref(sampler, 'input'); ref(sampler, 'output') }
+  json.accessors = compact(json.accessors, new Set(refs.map(([owner, key]) => owner[key])), refs)
+}
+{
+  const refs = []
+  for (const accessor of json.accessors) {
+    if (accessor.bufferView !== undefined) refs.push([accessor, 'bufferView'])
+    if (accessor.sparse) refs.push([accessor.sparse.indices, 'bufferView'], [accessor.sparse.values, 'bufferView'])
+  }
+  for (const image of json.images ?? []) if (image.bufferView !== undefined) refs.push([image, 'bufferView'])
+  json.bufferViews = compact(json.bufferViews, new Set(refs.map(([owner, key]) => owner[key])), refs)
+}
 
 const work = mkdtempSync(join(tmpdir(), 'vrm-opt-'))
 const pngSize = (data) => ({ w: data.readUInt32BE(16), h: data.readUInt32BE(20) })
