@@ -44,12 +44,28 @@ export function sceneOutfit(feltC: number | null, month: number): SceneOutfit {
   return 'mild'
 }
 
+/**
+ * 겉옷(사용자 요청 2026-11-05 — "가을·겨울엔 바람막이를 걸치고, 겨울엔 조끼도 입는다"):
+ * - 바람막이(jacket): 쌀쌀한 봄가을(체감 14°C 미만) · 영하 · 비나 눈(여름 제외 — 비 오는 날 겉옷)
+ * - 패딩 조끼(padvest): 그 밖의 겨울(체감 0~8°C) — 하프집 긴팔 위에
+ * 날씨를 못 받았으면(체감 null) 봄가을은 긴팔만, 겨울은 조끼.
+ */
+export function sceneOuterwear(input: { feltC: number | null; weather: SceneWeather; outfit: SceneOutfit }): 'jacket' | 'padvest' | null {
+  const { feltC, weather, outfit } = input
+  if (outfit === 'summer') return null
+  const wet = weather === 'rain' || weather === 'snow'
+  if (wet || (feltC !== null && (outfit === 'mild' ? feltC < 14 : feltC < 0))) return 'jacket'
+  return outfit === 'winter' ? 'padvest' : null
+}
+
 export function sceneAccessories(input: { feltC: number | null; weather: SceneWeather; hour: number; run: SceneRunKind; outfit: SceneOutfit }): string {
   const items = ['cap', 'watch']
   if (input.weather === 'clear' && input.outfit !== 'winter' && input.hour >= 9 && input.hour < 17) items.push('sun')
   if (input.feltC !== null && input.feltC <= 5) items.push('glove')
   if (input.feltC !== null && input.feltC <= 0) items.push('buff')
-  if (input.run === 'lsd') items.push('vest')
+  const outer = sceneOuterwear(input)
+  if (outer) items.push(outer)
+  if (input.run === 'lsd') items.push('vest') // 물병 조끼는 겉옷 위에
   return items.join('-')
 }
 

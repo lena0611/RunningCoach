@@ -677,7 +677,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       ry = Math.max(ry, Math.abs(p.dot(dorsal)));
       rz = Math.max(rz, Math.abs(p.dot(across)));
     }
-    const sleeveOff = SEASON === 'winter' ? 7.5 : 0; // 겨울은 긴팔(띄움 6.5mm) 위에 찬다
+    const sleeveOff = ACC.has('jacket') ? 10.5 : SEASON === 'winter' ? 7.5 : 0; // 겨울은 긴팔(띄움 6.5mm) 위, 바람막이면 소매 고무단(9mm) 위에 찬다
     ry = ry * 1000 + 1.2 + sleeveOff;
     rz = rz * 1000 + 1.2 + sleeveOff;
     // 줄: 손목 단면 타원을 따라 납작한 띠(폭 20mm·두께 2.6mm)를 두른다
@@ -998,6 +998,207 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       edge: (p) => { p.y = Math.min(Math.max(p.y, hem), waist); },
     });
   }
+  // ---- 헐렁한 겉옷(바람막이·패딩 조끼) — 사용자 요청 2026-11-05: "다 몸에 달라붙는 옷뿐, 가을·겨울엔 바람막이를 걸치고 겨울엔 조끼도 입는다" ----
+  // 몸에 붙는 옷과 달리 피부에서 1~2cm 띄우고, 띄운 면을 이웃끼리 고르게 펴서(Taubin 평활) 가슴 밑·허리 잘록·쇄골 같은 몸 굴곡을 따라가지 않게 한다.
+  // 같은 자리 점(무늬 이음매)은 하나로 묶어 띄우고 편다 — 따로 하면 멀리 띄운 만큼 이음매가 갈라진다. 편 뒤에도 피부에서 minOff 보다 가까워지지 않게(안에 입은 옷이 뚫고 나오지 않게) 되민다.
+  // drape: 몸통 천이 위에서 아래로 떨어진다 — 가슴(여자)·견갑골에서 내려오며 허리 잘록·허리 오목을 메운다(둘레 방향마다 위쪽 가장 먼 반경에서 taper 만큼만 안으로).
+  // off(p, w) = 띄울 거리(m, p = 쉬는 자세 월드 위치). 팔 뼈 가중치는 그대로 — 안에 입은 옷과 같이 움직여야 겨드랑이 쪽에서 안옷이 뚫고 나오지 않는다.
+  // 끝단은 clipShell 로 오려 매끈하게 한다(이 껍질은 넉넉히 덮는 밑감)
+  function looseShell({ pick, edge, off, color, shade, relax = 16, minOff = 0.0095, drape = BM.shoulderY - 0.08, taper = 0.18, split = 1 }) {
+    const made = [];
+    for (const skin of SKINS) {
+      const g = skin.geometry, sp = g.attributes.position, sn = g.attributes.normal, n = sp.count, idx = g.index.array;
+      const toLocal = skin.matrixWorld.clone().invert(), p = new THREE.Vector3(), w = {};
+      const id = new Int32Array(n), ids = new Map();
+      for (let i = 0; i < n; i++) {
+        const k = `${Math.round(sp.getX(i) * 1e4)},${Math.round(sp.getY(i) * 1e4)},${Math.round(sp.getZ(i) * 1e4)}`;
+        if (!ids.has(k)) ids.set(k, ids.size);
+        id[i] = ids.get(k);
+      }
+      const U = ids.size, rep = new Int32Array(U).fill(-1), nrm = new Float32Array(U * 3), base = new Float32Array(U * 3), pos = new Float32Array(U * 3), keep = new Uint8Array(U), torso = new Uint8Array(U);
+      for (let i = 0; i < n; i++) { const u = id[i]; if (rep[u] < 0) rep[u] = i; for (let c = 0; c < 3; c++) nrm[u * 3 + c] += sn.getComponent(i, c); }
+      for (let u = 0; u < U; u++) {
+        weightsOf(skin, rep[u], w);
+        p.fromBufferAttribute(sp, rep[u]).applyMatrix4(skin.matrixWorld);
+        keep[u] = pick(p, w) ? 1 : 0;
+        if (!keep[u]) edge?.(p, w);
+        torso[u] = wsum(w, ARMS) < 0.2 ? 1 : 0;
+        const o = off(p, w), l = Math.hypot(nrm[u * 3], nrm[u * 3 + 1], nrm[u * 3 + 2]) || 1;
+        p.applyMatrix4(toLocal);
+        for (let c = 0; c < 3; c++) { nrm[u * 3 + c] /= l; base[u * 3 + c] = p.getComponent(c); pos[u * 3 + c] = base[u * 3 + c] + nrm[u * 3 + c] * o; }
+      }
+      const tris = [];
+      for (let t = 0; t < idx.length; t += 3) {
+        const k = keep[id[idx[t]]] + keep[id[idx[t + 1]]] + keep[id[idx[t + 2]]];
+        if (edge ? k > 0 : k === 3) tris.push(idx[t], idx[t + 1], idx[t + 2]);
+      }
+      if (!tris.length) continue;
+      const nb = new Map(), link = (a, b) => { if (a !== b) (nb.get(a) ?? nb.set(a, new Set()).get(a)).add(b); };
+      for (let t = 0; t < tris.length; t += 3) {
+        const a = id[tris[t]], b = id[tris[t + 1]], c = id[tris[t + 2]];
+        link(a, b); link(b, a); link(b, c); link(c, b); link(c, a); link(a, c);
+      }
+      const used = [...nb.keys()], tmp = new Float32Array(U * 3);
+      if (drape) { // 둘레 각 10°·높이 1cm 칸마다 가장 먼 반경 → 위에서부터 내려오며 taper 만큼만 줄어드는 '떨어지는 천' 반경 아래로는 안 들어가게
+        const W = new THREE.Vector3(), toWorld = skin.matrixWorld, NA = 36, H = 0.01, yLo = BM.hips.y - 0.2, NY = Math.ceil((drape - yLo) / H) + 1;
+        const R = new Float32Array(NA * NY), cell = new Int32Array(U).fill(-1), rad = new Float32Array(U);
+        for (const u of used) {
+          if (!torso[u]) continue;
+          W.fromArray(pos, u * 3).applyMatrix4(toWorld);
+          const d = W.clone().sub(BM.hips), x = d.dot(ACROSS), z = d.dot(facing), a = Math.floor(((Math.atan2(x, z) / (2 * Math.PI)) + 1) % 1 * NA), yi = Math.floor((W.y - yLo) / H);
+          if (yi < 0 || yi >= NY) continue; // 어깨(drape) 위는 재지도 밀지도 않는다
+          rad[u] = Math.hypot(x, z);
+          cell[u] = a * NY + yi;
+          R[cell[u]] = Math.max(R[cell[u]], rad[u]);
+        }
+        for (let a = 0; a < NA; a++) for (let yi = NY - 2; yi >= 0; yi--) R[a * NY + yi] = Math.max(R[a * NY + yi], R[a * NY + yi + 1] - taper * H);
+        for (const u of used) {
+          if (cell[u] < 0) continue;
+          const need = R[cell[u]] - rad[u];
+          if (need <= 0) continue;
+          W.fromArray(pos, u * 3).applyMatrix4(toWorld);
+          const d = W.clone().sub(BM.hips), out = ACROSS.clone().multiplyScalar(d.dot(ACROSS)).addScaledVector(facing, d.dot(facing)).normalize();
+          W.addScaledVector(out, need).applyMatrix4(toLocal).toArray(pos, u * 3);
+        }
+      }
+      for (let it = 0; it < relax; it++) for (const lam of [0.5, -0.53]) { // 줄였다 되부풀리기(Taubin) — 그냥 평균만 내면 옷이 쪼그라든다
+        for (const u of used) {
+          let x = 0, y = 0, z = 0;
+          for (const v of nb.get(u)) { x += pos[v * 3]; y += pos[v * 3 + 1]; z += pos[v * 3 + 2]; }
+          const m = nb.get(u).size;
+          tmp[u * 3] = pos[u * 3] + lam * (x / m - pos[u * 3]);
+          tmp[u * 3 + 1] = pos[u * 3 + 1] + lam * (y / m - pos[u * 3 + 1]);
+          tmp[u * 3 + 2] = pos[u * 3 + 2] + lam * (z / m - pos[u * 3 + 2]);
+        }
+        for (const u of used) for (let c = 0; c < 3; c++) pos[u * 3 + c] = tmp[u * 3 + c];
+      }
+      for (const u of used) { // 피부에서 minOff 안쪽으로 들어온 점은 되민다
+        let d = 0;
+        for (let c = 0; c < 3; c++) d += (pos[u * 3 + c] - base[u * 3 + c]) * nrm[u * 3 + c];
+        if (d < minOff) for (let c = 0; c < 3; c++) pos[u * 3 + c] += nrm[u * 3 + c] * (minOff - d);
+      }
+      const faceNormals = () => { // 묶은 점마다 둘레 면 법선(이음매 양쪽이 같은 법선 — 갈라져 보이지 않게)
+        const fn = new Float32Array(U * 3), A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3();
+        for (let t = 0; t < tris.length; t += 3) {
+          const a = id[tris[t]], b = id[tris[t + 1]], c = id[tris[t + 2]];
+          A.fromArray(pos, a * 3); B.fromArray(pos, b * 3).sub(A); C.fromArray(pos, c * 3).sub(A); B.cross(C);
+          for (const v of [a, b, c]) { fn[v * 3] += B.x; fn[v * 3 + 1] += B.y; fn[v * 3 + 2] += B.z; }
+        }
+        for (const u of used) { const l = Math.hypot(fn[u * 3], fn[u * 3 + 1], fn[u * 3 + 2]) || 1; for (let c = 0; c < 3; c++) fn[u * 3 + c] /= l; }
+        return fn;
+      };
+      const fn = faceNormals();
+      const P = new Float32Array(n * 3), N = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) for (let c = 0; c < 3; c++) { P[i * 3 + c] = pos[id[i] * 3 + c]; N[i * 3 + c] = fn[id[i] * 3 + c]; }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(P, 3));
+      geo.setAttribute('normal', new THREE.BufferAttribute(N, 3));
+      geo.setAttribute('uv', g.attributes.uv);
+      geo.setAttribute('skinIndex', g.attributes.skinIndex);
+      geo.setAttribute('skinWeight', g.attributes.skinWeight);
+      geo.setIndex(tris);
+      const mats = dress(CLOTH, color, shade);
+      mats.forEach((_, i) => geo.addGroup(0, Infinity, i));
+      let fineGeo = geo; // split 번 쪼갠다(오릴 때 또 쪼개지 않게 fine) — 바람막이를 두 번 쪼개면 6만 삼각형, 준비가 0.5초 늘었다. 패딩 칸은 촘촘해야 해 두 번
+      for (let k = 0; k < split; k++) fineGeo = subdivide(fineGeo);
+      const mesh = new THREE.SkinnedMesh(fineGeo, mats);
+      mesh.geometry.clearGroups();
+      mats.forEach((_, i) => mesh.geometry.addGroup(0, Infinity, i));
+      mesh.userData.fine = true;
+      mesh.frustumCulled = false;
+      mesh.position.copy(skin.position);
+      mesh.quaternion.copy(skin.quaternion);
+      mesh.scale.copy(skin.scale);
+      skin.parent.add(mesh);
+      mesh.bind(skin.skeleton, skin.bindMatrix);
+      mesh.updateMatrixWorld(true);
+      made.push(mesh);
+    }
+    return made;
+  }
+  // 겉감은 양면을 그린다 — 앞섶·밑단·소매 사이로 안감(그늘색)이 보여야 얇은 천 한 겹으로 읽힌다.
+  // sheen: 나일론 겉감의 윤기 — 가장자리(빛을 비스듬히 받는 쪽)에 밝은 테두리(림 라이트)
+  const twoSided = (shells, sheen = 0) => shells.forEach((o) => [o.material].flat().forEach((m) => {
+    if (m.isOutline) return;
+    m.side = THREE.DoubleSide;
+    if (sheen) { m.parametricRimColorFactor?.setScalar(sheen); m.parametricRimFresnelPowerFactor = 3.5; m.parametricRimLiftFactor = 0; m.rimLightingMixFactor = 1; }
+    m.needsUpdate = true;
+  }));
+  // 패딩 칸: 잘게 쪼갠 겉감을 법선 방향으로 bulge(p)만큼 부풀리고 법선을 다시 잰다(같은 자리 점은 한 법선 — 이음매가 갈라지지 않게).
+  // 오린 뒤(쪼갠 뒤)에 해야 칸이 매끈하다 — 원래 몸 메시는 칸 하나에 꼭짓점이 두세 줄뿐이라 부풀림이 뭉개졌다
+  function quilt(shells, bulge) {
+    const p = new THREE.Vector3(), A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3();
+    for (const o of shells) {
+      const g = o.geometry, pa = g.attributes.position, na = g.attributes.normal, idx = g.index.array;
+      for (let i = 0; i < pa.count; i++) {
+        const b = bulge(p.fromBufferAttribute(pa, i).applyMatrix4(o.matrixWorld));
+        pa.setXYZ(i, pa.getX(i) + na.getX(i) * b, pa.getY(i) + na.getY(i) * b, pa.getZ(i) + na.getZ(i) * b);
+      }
+      const key = (i) => `${Math.round(pa.getX(i) * 1e4)},${Math.round(pa.getY(i) * 1e4)},${Math.round(pa.getZ(i) * 1e4)}`, sum = new Map();
+      for (let t = 0; t < idx.length; t += 3) {
+        A.fromBufferAttribute(pa, idx[t]); B.fromBufferAttribute(pa, idx[t + 1]).sub(A); C.fromBufferAttribute(pa, idx[t + 2]).sub(A); B.cross(C);
+        for (let c = 0; c < 3; c++) { const k = key(idx[t + c]), v = sum.get(k) ?? [0, 0, 0]; v[0] += B.x; v[1] += B.y; v[2] += B.z; sum.set(k, v); }
+      }
+      for (let i = 0; i < pa.count; i++) { const v = sum.get(key(i)); if (!v) continue; const l = Math.hypot(...v) || 1; na.setXYZ(i, v[0] / l, v[1] / l, v[2] / l); }
+      pa.needsUpdate = na.needsUpdate = true;
+    }
+  }
+  const neckAlong = (p) => p.clone().sub(BM.neck).dot(NECK_DIR); // 목 밑동에서 목을 따라 올라간 높이(m)
+  // 바람막이: 안에 입은 옷 위에 걸친다. 지퍼를 가슴까지 내려 안에 입은 옷 목이 V 로 보이고, 깃(collar)은 목을 감싸 선다.
+  // 밑단·소매 끝은 고무단(덜 띄워 몸에 붙는다), 소매는 손목까지 — 워치는 소매 위에 찬다(워치 쪽 JACKET_CUFF_MM)
+  function windJacket({ color, shade, trim, trimShade, zip = '#17181c', hem = HEM - 0.01, open = 0.13, collar = 0.045 }) {
+    const sleeve = WRIST - 0.004, margin = 0.03, yV = BM.neck.y - open;
+    const loose = looseShell({
+      color, shade,
+      pick: (p, w) => wsum(w, HANDS) < 0.3 && wsum(w, LEGS_RE) < 0.5 && wsum(w, /C_Head$/) < 0.5 && p.y > hem - margin && neckAlong(p) < collar + margin && armT(p) < sleeve + margin,
+      edge: (p) => { p.y = Math.max(p.y, hem - margin); clampArm(p, -1, sleeve + margin); const a = neckAlong(p) - collar - margin; if (a > 0) p.addScaledVector(NECK_DIR, -a); },
+      off: (p, w) => {
+        const arm = Math.min(1, wsum(w, ARMS) * 1.4), t = armT(p);
+        const body = 0.021 - 0.009 * ease((p.y - (BM.shoulderY - 0.07)) / 0.08) - 0.008 * (1 - ease((p.y - hem) / 0.06)); // 가슴·배·등 2.1cm, 어깨 위 1.2cm, 밑단 고무단 1.3cm
+        const sl = 0.013 + 0.007 * ease(t / BM.arm[0].elbowT) - 0.011 * ease((t - (sleeve - 0.075)) / 0.04); // 위팔 1.3 → 팔꿈치 2.0 → 소매 고무단 0.9cm
+        return body * (1 - arm) + sl * arm;
+      },
+    });
+    const Vf = (p) => (p.clone().sub(BM.neck).dot(facing) > -0.02 ? lat(p) - (p.y - yV) * 0.24 : 1); // 앞섶 V(+ = 옷): 꼭지점 yV 에서 위로 벌어진다
+    const topF = (p) => collar - neckAlong(p);
+    const F = (p) => Math.min(p.y - hem, topF(p), sleeve - armT(p), Vf(p));
+    loose.forEach((o) => { o.visible = false; });
+    const shell = clipShell({ src: loose, field: F, off: 0, color, shade });
+    twoSided(shell, 0.35);
+    // 가장자리 띠는 이미 오린 끝단에서 안쪽으로 한쪽만 잰다(0.007 - f) — 양쪽(min(f, 0.007 - f))으로 재면 띠가 삼각형보다 좁아 군데군데 끊겼다
+    panel(shell, (p) => Math.min(0.007 - Vf(p), p.y - yV + 0.004), zip, zip); // 열린 섶 지퍼 테이프
+    panel(shell, (p) => Math.min(0.0035 - lat(p), yV - p.y, front(p) ? 1 : -1), zip, zip); // 잠긴 지퍼(앞 가운데 꼭짓점 줄을 따라간다)
+    panel(shell, (p) => 0.008 - topF(p), trim, trimShade); // 깃 끝
+    panel(shell, (p) => hem + 0.022 - p.y, trim, trimShade); // 밑단 고무단
+    panel(shell, (p, w) => Math.min(wsum(w, ARMS) - 0.5, armT(p) - (sleeve - 0.025)), trim, trimShade); // 소매 고무단
+    panel(shell, (p) => Math.min(0.007 - Math.abs(p.y - (BM.shoulderY - 0.1)), 0.12 - lat(p), p.clone().sub(BM.hips).dot(facing) < BM.chestZ - 0.08 ? 1 : -1), '#e3e7ee', '#a9b0bc'); // 등 반사띠(1.4cm — 더 좁으면 삼각형 사이로 끊긴다)
+    OUTER = shell;
+  }
+  // 패딩 조끼: 안에 입은 긴팔 위, 몸통만(진동은 크게 판다). 가로 칸(q)마다 부풀리고 박음선은 눌려 그늘이 진다. 높은 깃 + 앞 지퍼 끝까지
+  function padVest({ color, shade, trim, trimShade, zip = '#17181c', hem = HEM + 0.01, collar = 0.05, q = 0.068, base = 0.016 }) {
+    const margin = 0.03, armpit = BM.shoulderY - 0.1, edgeLat = lat(BM.arm[0].sh) - 0.04, k = 0.04;
+    const smax = (a, b) => 0.5 * (a + b + Math.sqrt((a - b) ** 2 + k * k)), smin = (a, b) => -smax(-a, -b);
+    const loose = looseShell({
+      color, shade, minOff: base - 0.004, split: 2,
+      pick: (p, w) => wsum(w, ARMS) < 0.5 && armT(p) < 0.03 && wsum(w, LEGS_RE) < 0.5 && wsum(w, /C_Head$/) < 0.5 && p.y > hem - margin && neckAlong(p) < collar + margin,
+      edge: (p) => { p.y = Math.max(p.y, hem - margin); clampArm(p, -1, 0.03); const a = neckAlong(p) - collar - margin; if (a > 0) p.addScaledVector(NECK_DIR, -a); },
+      off: (p) => base - 0.003 * ease((p.y - (BM.shoulderY - 0.06)) / 0.08) - 0.005 * (1 - ease((p.y - hem) / 0.05)),
+    });
+    const armF = (p) => smax(armpit - p.y, edgeLat - lat(p)); // 진동(+ = 옷): 겨드랑이 밑은 몸통 전체, 그 위는 어깨 끝 안쪽만 — 모서리를 둥글게
+    const topF = (p) => collar - neckAlong(p);
+    const F = (p) => smin(Math.min(p.y - hem, topF(p)), armF(p));
+    loose.forEach((o) => { o.visible = false; });
+    const shell = clipShell({ src: loose, field: F, off: 0, color, shade });
+    twoSided(shell);
+    const fr = (p) => ((((p.y - hem) / q) % 1) + 1) % 1, quilted = (p) => 1 - ease((p.y - (BM.shoulderY - 0.03)) / 0.04); // 칸 안 위치(0~1) · 어깨 위(깃)는 칸 없음
+    quilt(shell, (p) => 0.011 * Math.sin(Math.PI * fr(p)) ** 0.6 * quilted(p));
+    panel(shell, (p) => Math.min(0.0015 - Math.min(fr(p), 1 - fr(p)) * q, quilted(p) - 0.5, p.y - hem - 0.02), shade, shade); // 박음선
+    panel(shell, (p) => Math.min(0.003 - lat(p), front(p) ? 1 : -1), zip, zip); // 앞 지퍼
+    panel(shell, (p) => 0.008 - topF(p), trim, trimShade); // 깃 끝(오린 끝단에서 안쪽으로 한쪽만)
+    panel(shell, (p) => hem + 0.012 - p.y, trim, trimShade); // 밑단 바이어스
+    panel(shell, (p) => Math.min(0.008 - armF(p), p.y - armpit + 0.03), trim, trimShade); // 진동 바이어스
+    OUTER = shell;
+  }
   // 양말: 발목뼈 위 above(m) 까지. 신발 속(피부 바로 바깥에 신발 면)은 띄우지 않아 신발을 뚫고 비치지 않는다
   function socks(above, color = '#f7f7f4', shade = '#c8cbd5') {
     const topY = BM.ankle + above, shoe = meshes.find((o) => /Shoes_\d+_CLOTH/.test([o.material].flat()[0].name));
@@ -1064,6 +1265,19 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     },
   };
   WEAR[CHAR][SEASON]?.();
+  // 겉옷(악세사리 jacket·padvest — 체감온도·비로 앱이 고른다, sceneOptions.ts): 계절 옷 위에 걸친다. 색은 안에 입은 옷과 어울리게
+  const OUTERWEAR = {
+    female: {
+      jacket: { color: '#e4ddcf', shade: '#b3aa98', trim: '#3b3f46', trimShade: '#25282d' }, // 스톤 + 차콜 고무단
+      padvest: { color: '#eee8dc', shade: '#c2b9a7', trim: '#5a3e36', trimShade: '#3e2a24' }, // 아이보리 + 모카(안에 입은 하프집과 같은 색)
+    },
+    male: {
+      jacket: { color: '#2d5bb0', shade: '#1d3d7a', trim: '#1f2a44', trimShade: '#141c2e' }, // 코발트 + 네이비 고무단
+      padvest: { color: '#2b2e35', shade: '#191b20', trim: '#b3322e', trimShade: '#7f2320', zip: '#b3322e' }, // 차콜 + 레드(어깨 요크·타이츠 옆선과 같은 색)
+    },
+  };
+  if (ACC.has('jacket')) windJacket(OUTERWEAR[CHAR].jacket);
+  if (ACC.has('padvest')) padVest({ ...OUTERWEAR[CHAR].padvest, base: ACC.has('jacket') ? 0.03 : 0.016 });
 
   // ---- 악세사리(피부 위): 장갑·마스크·넥워머·조끼 ----
   const faceY = (p) => p.clone().applyMatrix4(HEAD_INV); // 머리 틀(mm)

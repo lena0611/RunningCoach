@@ -14,7 +14,7 @@ export type BriefingSceneOptions = {
   tm: number
   wx: SceneWeather
   tp: SceneOutfit
-  /** 악세사리를 '-' 로 이은 것(cap·sun·watch·glove·mask·buff·vest), 빈 문자열 = 없음 */
+  /** 악세사리를 '-' 로 이은 것(cap·sun·watch·glove·mask·buff·vest=물병 조끼 · 겉옷 jacket=바람막이·padvest=패딩 조끼), 빈 문자열 = 없음 */
   ac: string
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildSceneOptions, sceneOutfit, sceneRunKind, sceneSex, sceneWeather } from './sceneOptions'
+import { buildSceneOptions, sceneOuterwear, sceneOutfit, sceneRunKind, sceneSex, sceneWeather } from './sceneOptions'
 
 describe('sceneOptions', () => {
   it('성별: 여성만 여자 모델, 나머지(남성·기타·선택 안 함)는 남자 모델', () => {
@@ -45,7 +45,29 @@ describe('sceneOptions', () => {
       now: new Date(2026, 0, 15, 20, 30)
     })
     expect(o).toMatchObject({ sx: 'm', rn: 'tempo', wx: 'clear', tp: 'winter', tm: 20.5, dy: 15 })
-    expect(o.ac.split('-')).toEqual(['cap', 'watch', 'glove', 'buff'])
+    expect(o.ac.split('-')).toEqual(['cap', 'watch', 'glove', 'buff', 'jacket'])
+  })
+
+  it('겉옷: 쌀쌀한 봄가을·영하·비눈엔 바람막이, 그 밖의 겨울엔 패딩 조끼, 여름엔 없음', () => {
+    expect(sceneOuterwear({ feltC: 16, weather: 'clear', outfit: 'mild' })).toBeNull()
+    expect(sceneOuterwear({ feltC: 11, weather: 'clear', outfit: 'mild' })).toBe('jacket')
+    expect(sceneOuterwear({ feltC: 17, weather: 'rain', outfit: 'mild' })).toBe('jacket')
+    expect(sceneOuterwear({ feltC: 4, weather: 'cloudy', outfit: 'winter' })).toBe('padvest')
+    expect(sceneOuterwear({ feltC: -4, weather: 'clear', outfit: 'winter' })).toBe('jacket')
+    expect(sceneOuterwear({ feltC: 3, weather: 'snow', outfit: 'winter' })).toBe('jacket')
+    expect(sceneOuterwear({ feltC: 24, weather: 'rain', outfit: 'summer' })).toBeNull()
+    expect(sceneOuterwear({ feltC: null, weather: 'clear', outfit: 'mild' })).toBeNull()
+    expect(sceneOuterwear({ feltC: null, weather: 'clear', outfit: 'winter' })).toBe('padvest')
+  })
+
+  it('쌀쌀한 아침 LSD: 바람막이 위에 물병 조끼', () => {
+    const o = buildSceneOptions({
+      sex: 'male',
+      sessionType: 'LSD',
+      weather: { condition: '흐림', symbolName: 'cloud', apparentTemperatureC: 10, temperatureC: 12 },
+      now: new Date(2026, 9, 25, 7, 0)
+    })
+    expect(o.ac).toBe('cap-watch-jacket-vest')
   })
 
   it('맑은 낮 이지: 선글라스', () => {
