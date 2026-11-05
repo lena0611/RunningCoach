@@ -53,16 +53,13 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     back: { yaw: Math.PI - 0.35, dist: 3.2, h: 1.5, look: 1.0, fov: 34, roll: 0 }, // 뒤따라가기
     top: { yaw: 0.6, dist: 2.2, h: 3.4, look: 0.7, fov: 34, roll: 0 },          // 내려다보기
     low: { yaw: 0.5, dist: 2.0, h: 0.12, look: 1.25, fov: 42, roll: -0.08 },   // 바닥에서 올려다보기
-    // 브리핑: 얼굴 클로즈업. 진행 방향에서 57° 옆에 선다 — 말이 끝나면 러너가 가던 방향으로 다시 달려 카메라 옆 약 1m 를
-    // 지나간다(PoC 의 0.35 는 40cm 로 스쳐 얼굴이 화면을 꽉 채웠다, 2026-11-04 사용자 결정: 가던 방향 + 카메라가 지켜본다)
-    talk: { yaw: 1.0, dist: 1.2, h: 1.46, look: 1.44, fov: 32, roll: 0 },
   };
   const CUTS = ['hero', 'face', 'side', 'back']; // ?cam=cuts → 2.5초마다 끊어 붙인다
   const CUT_SEC = 2.5;
 
   const FX = false; // 페인터리 후처리는 PoC 옵션 — 앱은 VRoid 원본 렌더(사용자 결정)
   const CAM = 'hero';
-  const STORY = true; // '달리다 멈춰서 브리핑' 연출
+  const STORY = true; // 브리핑 연출(러너가 다가오면 카메라맨이 앞서 뛰며 찍는다 — 아래 '브리핑 연출')
 
   const RUN = RUNS[OPT.rn]; // 지금 러닝 타입
 
@@ -1598,13 +1595,13 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     let next = 0, lastBeat = -9, lastCycle = 0, burstUntil = -1, burstRate = 0, carry = 0;
     const tmp = new THREE.Vector3();
     stepBreath = (dt, dz, t) => {
-      const cycle = Math.floor(phase / (Math.PI * 2)), talkNow = mode === 'talk' && speaking;
+      const cycle = Math.floor(phase / (Math.PI * 2)), talkNow = reading && speaking;
       const exhale = speed > 0.3 ? cycle !== lastCycle : t - lastBeat > (talkNow ? 0.7 : 3);
       lastCycle = cycle;
       if (exhale) { lastBeat = t; burstUntil = t + (talkNow ? 0.18 : BREATH.burst); burstRate = BREATH.rate * (talkNow ? 0.6 : 1); }
       if (t < burstUntil) { // 뿜는 동안 덩이를 흘려보낸다
         carry += burstRate * dt;
-        const fwd = new THREE.Vector3(0, 0, 1).applyAxisAngle(Y_AXIS, turnNow); // 얼굴 쪽(브리핑 땐 돌아선 쪽)
+        const fwd = new THREE.Vector3(0, 0, 1); // 얼굴 쪽(달리는 방향)
         const side = new THREE.Vector3().crossVectors(Y_AXIS, fwd);
         for (; carry >= 1; carry--) {
           const q = P[next];
@@ -2034,19 +2031,9 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
 
   // ---- 연출: 달리다 → 클릭하면 감속해 서고 카메라가 얼굴로 → 브리핑 → 카메라가 되감기며 다시 출발 ----
   const lerpCam = (a, b, x) => Object.fromEntries(Object.keys(a).map((key) => [key, a[key] + (b[key] - a[key]) * x]));
-  // mode: run → stop(감속) → talk(브리핑) 또는 hold(멈추기) → resume(다시 출발). stopFor = 멈추는 까닭
-  let mode = OPT.mv ? 'run' : 'hold', modeT = 0, speed = OPT.mv ? 1 : 0, phase = 0, stopFor = 'talk'; // 멈추기로 열면 처음부터 서 있다
-  const STOP_SEC = 2.6, START_SEC = 1.4;
-  // 몸 돌리기: 브리핑이면 감속 후반에 카메라 쪽으로 돌아 서서 정면으로 말하고, 끝나면 먼저 돌아선 뒤 출발한다
-  const TURN_BACK = 0.5;
-  let turnNow = 0, turnFrom = 0, turnT = 0, headLook = 0; // headLook = 고개가 몸보다 먼저 카메라 쪽으로 돈 양(rad)
-  function turnAt(t) {
-    const face = CAMERAS.talk.yaw, tt = t - modeT;
-    if (mode === 'stop') return stopFor === 'talk' ? face * ease((tt - STOP_SEC * 0.55) / (STOP_SEC * 0.45 + 0.3)) : 0;
-    if (mode === 'talk') return face;
-    if (mode === 'resume' || mode === 'hold') return turnFrom * (1 - ease((t - turnT) / TURN_BACK));
-    return 0;
-  }
+  // mode: run(달린다) 또는 hold(서 있다 — 컨트롤러로 연 정지 화면). 브리핑 중에도 러너는 멈추지 않는다
+  let mode = OPT.mv ? 'run' : 'hold', speed = OPT.mv ? 1 : 0, phase = 0;
+  let headLook = 0; // 고개가 카메라 쪽으로 돈 양(rad) — 브리핑을 읽는 동안 카메라를 본다
   // 사용자 카메라(컨트롤러): 앵글 = 위아래(0° 눈높이 ~ 89° 바로 위), 포지션 = 러너 둘레 방향, 디스턴스 = 거리. 몸 가운데를 본다
   const CAM_LOOK = 0.9;
   function userCam() {
@@ -2056,19 +2043,18 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     const e = (Math.min(OPT.el, 89) * Math.PI) / 180;
     return { yaw: (OPT.az * Math.PI) / 180, dist: OPT.ds * Math.cos(e), h: CAM_LOOK + OPT.ds * Math.sin(e), look: CAM_LOOK, fov: 34, roll: 0 };
   }
-  // 같이 뛰기를 끄면 카메라가 길(세상)에 서 있다: 땅과 함께 뒤로 밀리고, 러너가 FIX_RANGE 만큼 앞서 가면 앞쪽에 다시 선다
-  const FIX_RANGE = 12;
-  let camAnchor = 0;
-  // 멈출 때 관성: 감속 후반에 상체가 앞으로 쏠렸다가, 선 뒤엔 잦아드는 출렁임
-  function brakeLean(tt) {
-    if (tt < STOP_SEC) return 0.14 * Math.sin(Math.PI * (tt / STOP_SEC) ** 2);
-    const u = tt - STOP_SEC;
-    return 0.05 * Math.exp(-3 * u) * Math.sin(8 * u);
-  }
-  let camFrom = userCam(), camTo = camFrom, camT0 = 0, camDur = 1;
+  // ---- 브리핑 연출(사용자 결정 2026-11-05) ----
+  // 1. 카메라는 길에 서 있고, 러너가 멀리서 카메라 쪽으로 달려온다
+  // 2. 러너가 다가오면 카메라맨도 뛰기 시작해 러너 5m 앞에서 뒤돌아 찍으며 같이 달린다 → 자리를 잡으면 onReadyToTalk() (앱이 문장별 TTS·자막)
+  // 3. finish(): 다 읽으면 카메라맨이 서서히 멈추고, 옆을 지나 멀어지는 러너를 계속 바라보며 살짝 내려간다
+  // camAnchor = 카메라가 '같이 뛰는 자리'보다 앞(+)·뒤(-)에 있는 거리(m), camRun = 카메라맨 속도 ÷ 러너 속도
+  // 5m 앞에서 옆으로 2.2m 비켜 선다(멈출 때 러너가 옆을 지나간다). 망원(화각 22°)이라 5m 에서도 러너가 화면을 채운다 — 30° 면 얼굴이 작았다
+  const LEAD = { yaw: 0.45, dist: 5, h: 1.35, look: 1.05, fov: 22, roll: 0 };
+  const APPROACH_M = 12, CATCH_M = 3, STOP_CAM_SEC = 2.4;
+  let camAnchor = STORY && OPT.mv ? APPROACH_M : 0, camRun = 0, stopT = -1, reading = false;
+  let camFrom = STORY ? LEAD : userCam(), camTo = camFrom, camT0 = 0, camDur = 1;
   const camAt = (t) => lerpCam(camFrom, camTo, ease((t - camT0) / camDur));
   function moveCam(to, t, dur) { camFrom = camAt(t); camTo = to; camT0 = t; camDur = dur; }
-  const talking = () => mode === 'talk' || (mode === 'stop' && stopFor === 'talk');
 
   // 주먹: 네 손가락을 끝까지 말아 쥐고 엄지는 검지·중지 가운데 마디 위에 얹는다(손가락에 붙인다 — 힘줘 쥐지는 않는다)
   // (T포즈 손바닥이 아래 → 왼손은 -Z, 오른손은 +Z 로 말아 쥔다. 엄지 Y·Z 는 좌우 반대)
@@ -2086,33 +2072,21 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   }
 
   // ---- 브리핑 진행(앱이 부른다) ----
-  // beginTalk(): 감속해 서고 카메라가 얼굴로 → 다 서면 onReadyToTalk() (앱이 문장별 TTS·자막을 시작)
   // setSpeech(): 지금 문장을 말하는 중인지 · 마지막 문장인지(입모양·웃음)
-  // runOff(): 돌아서서 다시 출발. 카메라는 따라 뛰지 않고 그 자리(길)에 남는다 → 러너가 멀어진다(사용자 결정)
-  let lineIsLast = false, speaking = false, follow = true;
-  function beginTalk() {
-    if (mode !== 'run' && mode !== 'hold') return;
-    const t = clock.getElapsedTime(), held = mode === 'hold';
-    mode = 'stop'; stopFor = 'talk'; modeT = held ? t - STOP_SEC * 0.55 : t;
-    camAnchor = 0;
-    moveCam(CAMERAS.talk, t, held ? 1.6 : STOP_SEC + 0.2);
-  }
+  // finish(): 다 읽었다 — 카메라맨이 서서히 멈춘다(위 '브리핑 연출' 3)
+  let lineIsLast = false, speaking = false;
   function setSpeech(next) {
     speaking = Boolean(next.speaking);
     lineIsLast = Boolean(next.last);
   }
-  // 떠날 때: 러너는 가던 방향으로 다시 달리고, 카메라는 그 자리(수평 위치)에서 높이만 바닥(3cm)까지 천천히 내리며
-  // 러너를 계속 바라본다(lookAt) — 옆을 지나 멀어지는 러너를 바닥에서 올려다본다(사용자 결정 2026-11-04)
-  const RUN_OFF_CAM_SEC = 3.6;
-  function runOff() {
+  function finish() {
+    if (stopT >= 0) return;
     const t = clock.getElapsedTime();
+    reading = false;
     speaking = false;
-    follow = false;
-    camAnchor = 0;
-    mode = 'resume'; modeT = t;
-    turnFrom = turnNow; turnT = t;
-    const now = camAt(t);
-    moveCam({ ...now, h: 0.03, look: CAM_LOOK }, t, RUN_OFF_CAM_SEC);
+    stopT = t;
+    // 서면서 살짝 내려 지나가는 러너를 올려다본다. 화각을 넓혀야 옆을 지날 때 몸이 화면을 꽉 채우지 않는다
+    moveCam({ ...LEAD, h: 0.75, look: CAM_LOOK, fov: 38 }, t, STOP_CAM_SEC + 1.2);
   }
 
   // 표정: 브리핑 땐 웃는 얼굴(마지막 '출발!'은 더 활짝), 이지런은 달릴 때도 편하게 살짝 웃는다
@@ -2123,8 +2097,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     let v = 0;
     // 기기 TTS 는 소리 크기를 읽을 수 없어서, 말하는 동안 입을 말하는 흉내로 움직인다
     if (speaking) v = Math.max(0, 0.3 + 0.5 * Math.sin(t * 15) * Math.sin(t * 4.7));
-    const talkingNow = mode === 'talk';
-    const target = talkingNow ? (lineIsLast ? 0.6 : 0.4) : OPT.rn === 'easy' || OPT.rn === 'lsd' ? 0.15 : 0;
+    const target = reading ? (lineIsLast ? 0.6 : 0.4) : OPT.rn === 'easy' || OPT.rn === 'lsd' ? 0.15 : 0;
     const k = Math.min(1, dt * 4);
     smile += (target - smile) * k;
     const em = vrm.expressionManager;
@@ -2134,8 +2107,8 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     em.setValue('aa', open);
     em.setValue('oh', open * 0.35);
     em.setValue('blink', (t % 3.2) < 0.12 ? 1 : 0);
-    talk.nod += ((talkingNow ? 0.07 * v : 0) - talk.nod) * Math.min(1, dt * 10);
-    talk.tilt += ((talkingNow ? 0.06 * Math.sin(t * 0.8) : 0) - talk.tilt) * k;
+    talk.nod += ((reading ? 0.07 * v : 0) - talk.nod) * Math.min(1, dt * 10);
+    talk.tilt += ((reading ? 0.06 * Math.sin(t * 0.8) : 0) - talk.tilt) * k;
   }
 
   // ---- 페인터리 후처리 ----
@@ -2316,7 +2289,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     const yaw = FACING + cam.yaw + 0.015 * Math.sin(t * 0.7);
     if (camera.fov !== cam.fov) { camera.fov = cam.fov; camera.updateProjectionMatrix(); }
     camera.position.set(Math.sin(yaw) * d, cam.h * k, Math.cos(yaw) * d);
-    if (STORY && !follow) camera.position.add(new THREE.Vector3(Math.sin(FACING), 0, Math.cos(FACING)).multiplyScalar(camAnchor)); // 길에 선 카메라
+    if (STORY) camera.position.add(new THREE.Vector3(Math.sin(FACING), 0, Math.cos(FACING)).multiplyScalar(camAnchor)); // 카메라맨이 러너보다 앞·뒤에 있는 만큼
     camera.lookAt(0, cam.look * k, 0);
     camera.rotateZ(cam.roll);
     camera.updateMatrixWorld();
@@ -2326,42 +2299,29 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     if (st !== lastStep) {
       const dt = lastStep < 0 ? 0 : Math.min(st - lastStep, 0.1);
       lastStep = st;
-      let lean = 0;
-      if (mode === 'stop' || mode === 'talk') {
-        speed = Math.min(speed, 1 - ease((t - modeT) / STOP_SEC)); // 이미 서 있었으면 그대로 0
-        lean = brakeLean(t - modeT);
-        if (mode === 'stop' && t - modeT >= STOP_SEC + 0.3) {
-          if (stopFor === 'talk') { if (t - modeT >= STOP_SEC + 0.65) { mode = 'talk'; onReadyToTalk?.(); } } // 몸까지 다 돈 뒤 한 박자(0.35초) 쉬고 말한다
-          else { mode = 'hold'; turnFrom = 0; turnT = t; }
-        }
-      } else if (mode === 'hold') {
-        speed = 0;
-      } else if (mode === 'resume') {
-        const x = (t - modeT - TURN_BACK) / START_SEC; // 먼저 돌아선 뒤 출발
-        speed = ease(x);
-        lean = 0.1 * Math.sin(Math.PI * Math.min(Math.max(x, 0), 1)); // 출발할 때 몸을 앞으로 기울여 가속
-        if (x >= 1) mode = 'run';
-      }
-      // 멈추기: 달리다 → 걷기로 넘어가며(speed 0.75 → 0.3) 걸음이 느려지고 → 마지막 발이 닿아 두 발이 다 디딘 순간 박자를 세운다.
-      // 다시 출발도 거꾸로 걷기부터. (예전엔 박자는 그대로 두고 보폭만 0 으로 줄여 마지막 1초가 제자리 종종걸음 같았다)
+      if (mode === 'hold') speed = 0;
+      // 서 있을 땐(hold) 걷기 자세로 넘어가 두 발이 다 디딘 순간 박자를 세운다
       stopWalk = 1 - ease((speed - 0.3) / 0.45);
       updateGait(st);
       tuneGait();
       const amp = Math.min(1, (speed * S.speedBase) / S.speed); // 실제 속도 = 달리던 속도 × speed → 걷기 보폭으로 환산
       const freq = S.cadence * (0.5 + 0.5 * Math.min(1, amp / 0.5));
-      const settled = mode !== 'run' && mode !== 'resume' && speed < 0.15 && LEGS.every((l) => l.stance);
+      const settled = mode === 'hold' && LEGS.every((l) => l.stance);
       if (!settled) phase += dt * Math.PI * 2 * freq;
-      const turn = (turnNow = turnAt(t));
-      // 브리핑하려고 멈출 땐 눈·고개가 먼저 카메라를 찾고(최대 43°, 카메라가 뒤면 어깨 너머로) 몸이 따라 돈다 — 몸이 카메라를 향하면 고개는 저절로 가운데로
-      const lookW = talking() ? ease((t - modeT) / (STOP_SEC * 0.45)) : 0;
-      const camRel = STORY ? camAt(t).yaw - turn : 0;
-      headLook += (Math.max(-0.75, Math.min(0.75, camRel)) * lookW - headLook) * Math.min(1, dt * 6);
-      vrm.scene.rotation.y = baseYaw + turn;
-      body.rotation.y = FACING + turn;
+      // 브리핑을 읽는 동안 고개를 카메라 쪽으로(최대 43°)
+      const camRel = STORY ? camAt(t).yaw : 0;
+      headLook += (Math.max(-0.75, Math.min(0.75, camRel)) * (reading ? 1 : 0) - headLook) * Math.min(1, dt * 3);
+      vrm.scene.rotation.y = baseYaw;
+      body.rotation.y = FACING;
       body.updateMatrixWorld();
-      pose(phase, amp, st, lean, freq);
+      pose(phase, amp, st, 0, freq);
       dz = settled ? 0 : groundStep(dt, amp, freq);
-      if (STORY && !follow) camAnchor -= dz; // 브리핑 뒤: 카메라는 길에 남고 러너만 멀어진다(팝업이 그사이 사라진다)
+      if (STORY && OPT.mv) {
+        // 다가올수록 카메라맨이 점점 빨리 뛰어 5m 앞 자리에 붙는다 / 다 읽으면 서서히 멈춘다(러너가 옆을 지나 멀어진다)
+        camRun = stopT < 0 ? Math.min(1, Math.max(0, 1 - camAnchor / CATCH_M)) : 1 - ease((t - stopT) / STOP_CAM_SEC);
+        camAnchor -= dz * (1 - camRun);
+        if (!reading && stopT < 0 && camAnchor < 0.5) { reading = true; onReadyToTalk?.(); }
+      }
       stepSnow?.(dt, dz, st);
       mouth(st, dt);
       const n = FX ? 5 : 1; // 12fps 로 끊을 땐 흔들림 물리를 잘게 나눠 돌린다
@@ -2415,5 +2375,5 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   }
   signal?.addEventListener('abort', dispose)
 
-  return { beginTalk, setSpeech, runOff, dispose }
+  return { setSpeech, finish, dispose }
 }

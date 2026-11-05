@@ -2,17 +2,17 @@
 /**
  * 브리핑 쇼츠 화면(#898) — 쇼츠식 9:16 틀(위 16% 타이틀 · 가운데 3D 무대 · 아래 20% 자막).
  *
- * 흐름(사용자 결정 2026-11-04):
- *  1. 러너가 달리고 있다. 러너(무대)를 탭하면 = 말을 걸면
- *  2. 감속해 서서 카메라를 보고, 문장마다 기기 TTS 로 읽으며 그 문장을 자막으로 띄운다
- *  3. 다 읽으면 돌아서 다시 달려 나간다. 카메라는 그 자리에서 바닥까지 내려가고, 팝업이 천천히 사라진다
+ * 흐름(사용자 결정 2026-11-05 — 말 걸기 탭은 없앴다):
+ *  1. 카메라는 길에 서 있고, 러너가 멀리서 카메라 쪽으로 달려온다
+ *  2. 다가오면 카메라맨이 5m 앞에서 뒤돌아 찍으며 같이 뛴다 — 이때부터 문장마다 기기 TTS 로 읽고 그 문장을 자막으로 띄운다
+ *  3. 다 읽으면 카메라맨이 서서히 멈추고, 옆을 지나 멀어지는 러너를 바라보며 살짝 내려간다. 그사이 팝업이 천천히 사라진다
  *  언제든 "건너뛰기"로 바로 닫는다. 다시 보기 입구는 없다(하루 한 번).
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { TodayBriefingPayload } from '@/app/stores/briefingShortsStore'
 import { buildBriefingScript } from './briefingScript'
 import { sceneSfx } from './sceneOptions'
-import { speak, stopSpeech, unlockSpeech } from './speech'
+import { speak, stopSpeech } from './speech'
 import type { BriefingScene, BriefingSceneOptions } from './scene/briefingScene'
 import femaleModelUrl from './assets/female.vrm?url'
 import maleModelUrl from './assets/male.vrm?url'
@@ -29,14 +29,14 @@ const emit = defineEmits<{
   done: []
 }>()
 
-/** 러너가 다시 달리기 시작해서 팝업이 사라지기 시작할 때까지 — 돌아서기 0.5초 + 가속 1.4초 + 카메라 옆을 지나 멀어지는 모습 */
-const FADE_AFTER_RUN_OFF_MS = 3200
+/** 다 읽은 뒤 팝업이 사라지기 시작할 때까지 — 카메라맨이 서는 동안(2.4초) 러너가 옆을 지나(~3초) 멀어지는 뒷모습까지 */
+const FADE_AFTER_FINISH_MS = 4800
 /** 팝업 전체가 사라지는 시간. 건너뛰기는 짧게 */
 const FADE_OUT_MS = 1200
 const SKIP_FADE_OUT_MS = 350
 const LINE_GAP_MS = 250
 
-type Phase = 'loading' | 'running' | 'stopping' | 'talking' | 'leaving'
+type Phase = 'loading' | 'approaching' | 'talking' | 'leaving'
 const phase = ref<Phase>('loading')
 const subtitle = ref('')
 /** 사라지는 중이면 그 시간(ms). 다 사라진 뒤에야 done 을 보낸다 — 장면은 끝까지 그려야 같이 사라진다 */
@@ -69,7 +69,7 @@ onMounted(async () => {
       onReadyToTalk: () => void readAloud(),
       signal: abort.signal
     })
-    phase.value = 'running'
+    phase.value = 'approaching'
     await nextPaint()
     emit('ready')
   } catch (error) {
@@ -78,13 +78,6 @@ onMounted(async () => {
     emit('failed')
   }
 })
-
-function talk() {
-  if (phase.value !== 'running' || !scene) return
-  unlockSpeech() // iOS 는 탭 안에서 소리를 한 번 열어야 이후 발화가 난다
-  phase.value = 'stopping'
-  scene.beginTalk()
-}
 
 async function readAloud() {
   if (finished || !scene) return
@@ -101,8 +94,8 @@ async function readAloud() {
   if (finished) return
   subtitle.value = ''
   phase.value = 'leaving'
-  scene.runOff()
-  await wait(FADE_AFTER_RUN_OFF_MS)
+  scene.finish()
+  await wait(FADE_AFTER_FINISH_MS)
   finish(FADE_OUT_MS)
 }
 
@@ -150,28 +143,13 @@ onBeforeUnmount(() => {
         </p>
       </header>
 
-      <div class="briefing-shorts-stage" @click="talk">
+      <div class="briefing-shorts-stage">
         <canvas ref="canvasEl" class="briefing-shorts-canvas" :class="{ on: phase !== 'loading' }" />
         <p v-if="phase === 'loading'" class="briefing-shorts-loading">러너가 오고 있어요…</p>
-        <button
-          v-if="phase === 'running'"
-          class="briefing-shorts-talk"
-          type="button"
-          aria-label="러너에게 말 걸기"
-          @click.stop="talk"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M20.5 11.6a8.4 8.4 0 0 1-12.2 7.5L3.5 20.5l1.4-4.6a8.4 8.4 0 1 1 15.6-4.3z" />
-            <path d="M8.6 11.8h.01M12.1 11.8h.01M15.6 11.8h.01" />
-          </svg>
-        </button>
       </div>
 
       <footer class="briefing-shorts-bar briefing-shorts-bottom">
-        <p class="briefing-shorts-subtitle" aria-live="polite">
-          <template v-if="subtitle">{{ subtitle }}</template>
-          <span v-else-if="phase === 'running'" class="briefing-shorts-hint">러너를 눌러 말 걸기</span>
-        </p>
+        <p class="briefing-shorts-subtitle" aria-live="polite">{{ subtitle }}</p>
         <button v-if="phase !== 'leaving'" class="briefing-shorts-skip" type="button" @click="finish()">건너뛰기</button>
       </footer>
     </div>
@@ -262,7 +240,6 @@ onBeforeUnmount(() => {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
-  cursor: pointer;
   background: var(--briefing-shorts-frame);
 }
 
@@ -289,33 +266,6 @@ onBeforeUnmount(() => {
   font-size: max(var(--text-caption-size), 4cqw);
 }
 
-/* 말 걸기: 영상 안 오른쪽 아래, 흰 선 아이콘만. 낮 배경에서도 보이게 옅은 그림자 */
-.briefing-shorts-talk {
-  position: absolute;
-  right: 4cqw;
-  bottom: 4cqw;
-  width: max(44px, 11cqw);
-  height: max(44px, 11cqw);
-  padding: 0;
-  background: none;
-  border: 0;
-  color: var(--briefing-shorts-ink);
-  filter: drop-shadow(var(--shadow-text));
-  animation: briefing-shorts-pulse 1.2s ease-in-out infinite;
-}
-
-.briefing-shorts-talk svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-@keyframes briefing-shorts-pulse {
-  50% {
-    opacity: 0.4;
-  }
-}
-
 .briefing-shorts-bottom {
   height: 20%;
   display: flex;
@@ -337,11 +287,6 @@ onBeforeUnmount(() => {
   word-break: keep-all;
 }
 
-.briefing-shorts-hint {
-  color: var(--briefing-shorts-ink-dim);
-  font-size: max(var(--text-caption-size), 4cqw);
-}
-
 .briefing-shorts-skip {
   align-self: flex-end;
   min-height: 44px;
@@ -352,16 +297,8 @@ onBeforeUnmount(() => {
   font-size: max(var(--text-caption-size), 3.8cqw);
 }
 
-.briefing-shorts-talk:focus-visible,
 .briefing-shorts-skip:focus-visible {
   outline: 2px solid var(--briefing-shorts-cool);
   outline-offset: 2px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .briefing-shorts-talk {
-    animation: none;
-    opacity: 0.7;
-  }
 }
 </style>

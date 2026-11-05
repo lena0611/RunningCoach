@@ -205,6 +205,7 @@ struct RunContextWebView: UIViewRepresentable {
         contentController.add(context.coordinator, name: "runContextWatchRace")
         contentController.add(context.coordinator, name: "runContextLog")
         contentController.add(context.coordinator, name: "runContextIntro")
+        contentController.add(context.coordinator, name: "runContextSpeech")
         contentController.addUserScript(WKUserScript(
             source: """
             window.addEventListener('error', function(event) {
@@ -217,7 +218,8 @@ struct RunContextWebView: UIViewRepresentable {
             // 구버전 앱이 모르는 브리지 요청을 받고 "지원하지 않는 요청입니다" 를 띄운다(#719 계열).
             // 새 브리지 요청은 반드시 여기 이름을 확인하고 보낸다. 구버전엔 이 배열이 없다.
             // closeIntro(#898): 웹이 인트로를 붙잡았다가(hold) 오늘 브리핑 팝업을 그린 뒤 걷는다(close).
-            window.RunContextNativeCapabilities = ['crossTraining', 'closeIntro'];
+            // briefingSpeech(#898): 브리핑 쇼츠 문장을 네이티브 음성으로 읽는다(runContextSpeech).
+            window.RunContextNativeCapabilities = ['crossTraining', 'closeIntro', 'briefingSpeech'];
             """,
             injectionTime: .atDocumentStart,
             forMainFrameOnly: false
@@ -277,6 +279,8 @@ struct RunContextWebView: UIViewRepresentable {
         private var introHeldByWeb = false
         /// 웹이 붙잡고 `close` 를 못 보내는 경우(멈춤·오류)의 안전 시간. 웹 쪽 마감(6초)보다 넉넉히 둔다.
         private let introHoldSafetyTimeout: TimeInterval = 10
+        /// 브리핑 쇼츠 목소리(#898) — 웹 speech.ts 가 문장마다 부른다.
+        private let briefingSpeaker = BriefingSpeaker()
 
         init(onReady: @escaping () -> Void) {
             self.onReady = onReady
@@ -292,6 +296,9 @@ struct RunContextWebView: UIViewRepresentable {
             watchRelay.activate()
             watchRelay.onQueueChanged = { [weak self] in
                 self?.drainWatchResults()
+            }
+            briefingSpeaker.onEvent = { [weak self] id, event in
+                self?.sendSpeechEvent(id: id, event: event)
             }
         }
 
@@ -395,6 +402,11 @@ struct RunContextWebView: UIViewRepresentable {
 
             if message.name == "runContextIntro" {
                 handleIntroMessage(message)
+                return
+            }
+
+            if message.name == "runContextSpeech" {
+                handleSpeechMessage(message)
                 return
             }
 
@@ -1044,6 +1056,29 @@ struct RunContextWebView: UIViewRepresentable {
             default:
                 return
             }
+        }
+
+        // MARK: - #898 브리핑 쇼츠 목소리(웹 speech.ts 미러)
+
+        private func handleSpeechMessage(_ message: WKScriptMessage) {
+            guard let body = message.body as? [String: Any],
+                  let type = body["type"] as? String else { return }
+            switch type {
+            case "speak":
+                guard let id = body["id"] as? String, let text = body["text"] as? String else { return }
+                briefingSpeaker.speak(id: id, text: text)
+            case "stop":
+                briefingSpeaker.stop()
+            default:
+                return
+            }
+        }
+
+        private func sendSpeechEvent(id: String, event: String) {
+            guard let webView,
+                  let data = try? JSONSerialization.data(withJSONObject: ["id": id, "event": event]),
+                  let json = String(data: data, encoding: .utf8) else { return }
+            webView.evaluateJavaScript("window.RunContextSpeech?.receiveEvent(\(json));")
         }
 
         private func signalReadyAfterMinimumDuration() {
