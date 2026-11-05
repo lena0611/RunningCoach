@@ -954,7 +954,9 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   // 바이어스는 오린 끝단에서 안쪽으로 한쪽만 잰다(양쪽 거리로 재면 띠가 삼각형보다 좁아 군데군데 끊겼다)
   // 띠 폭은 F 값이 아니라 옷 표면 위 실제 거리로 잰다(surfaceDist) — F 는 높이·옆거리를 섞은 값이라 1 단위가 곳마다 달라
   // V넥 옆(가파른 파임)은 3mm 로 얇고 어깨 위(평평)·둥글린 모서리는 1cm 넘게 두꺼워 삐뚤빼뚤했다(사용자 지적 2026-11-05)
-  function tankTop({ color, shade, trim, trimShade, hem = HEM }) {
+  // loose(m): 가슴 밑부터 밑단까지 몸에서 떨어지는 거리 — 0 이면 몸에 붙는 껍질. 레이싱 싱글렛은 가슴·어깨에 걸치고 그 밑은 떨어져 흔들린다
+  // (예전엔 전부 몸에 붙여 배·허리 굴곡이 그대로 비치고 뛰어도 천이 안 움직였다 — 사용자 지적 2026-11-05 "구현 쉬운 쪽만 골랐다")
+  function tankTop({ color, shade, trim, trimShade, hem = HEM, loose = 0 }) {
     const n = BM.neck, armpit = BM.shoulderY - 0.075, inner = 0.065, k = 0.014;
     const smax = (a, b) => 0.5 * (a + b + Math.sqrt((a - b) ** 2 + k * k)), smin = (a, b) => -smax(-a, -b);
     const F = (p) => {
@@ -965,12 +967,21 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       const arm = smax(armpit - p.y, outer - l); // + = 겨드랑이 아래거나 끈 바깥선 안
       return smin(neck, arm); // + = 옷이 남는 쪽
     };
-    top({ sleeve: -0.005, hem, neck: -0.09, off: 0.0055, color, shade });
+    if (loose) { // 가슴 밑(drop)에서 떨어지기 시작해 밑단에서 loose 만큼 — 위는 몸에 붙는 상의와 같은 5.5mm
+      const neckY = BM.neck.y + 0.09, sleeve = -0.005, drop = BM.shoulderY - 0.15;
+      OUTER = looseShell({
+        color, shade, minOff: 0.0055, drape: BM.shoulderY - 0.12, taper: 0.12, relax: 10, split: 2, tuck: 0.003,
+        pick: (p, w) => wsum(w, HANDS) < 0.3 && wsum(w, LEGS_RE) < 0.5 && wsum(w, /C_Head$/) < 0.5 && p.y < neckY && p.y > hem && armT(p) < sleeve,
+        edge: (p) => { p.y = Math.min(Math.max(p.y, hem), neckY); clampArm(p, -1, sleeve); },
+        off: (p) => 0.0055 + loose * ease((drop - p.y) / (drop - hem)),
+      });
+    } else top({ sleeve: -0.005, hem, neck: -0.09, off: 0.0055, color, shade });
     const src = OUTER;
     src.forEach((o) => { o.visible = false; });
     OUTER = clipShell({ src, field: F, off: 0, color, shade });
     const D = surfaceDist(F);
-    clipShell({ src: OUTER, field: (p, w, nrm) => 0.008 - D(p, nrm), off: 0.0012, color: trim, shade: trimShade }); // 바이어스 8mm
+    const bias = clipShell({ src: OUTER, field: (p, w, nrm) => 0.008 - D(p, nrm), off: 0.0012, color: trim, shade: trimShade }); // 바이어스 8mm
+    return [...OUTER, ...bias];
   }
   // 거리장 F(+ 안 · − 밖)를 끝단(F = 0)까지의 표면 위 거리(m)로 바꾼다: F ÷ |표면을 따라 잰 기울기|(중앙차분 1mm, 법선 성분은 뺀다).
   // 0 선은 그대로라 옷 모양은 안 바뀌고, 그 선에서 잰 띠 폭만 어디서나 같아진다. 기울기가 거의 0 인 곳(평평한 데서 높이만 보는 값)은 4배까지만 늘린다.
@@ -1011,8 +1022,15 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   const yoke = (src, y0, color, shade) => panel(src, (p, w) => (wsum(w, ARMS) > 0.5 ? 0.1 - armT(p) : p.y - y0), color, shade);
   const reflectBand = (src, y, width = 0.008) => panel(src, (p) => width / 2 - Math.abs(p.y - y), '#e3e7ee', '#a9b0bc', 0.001); // 반사띠(밤엔 빛을 받아 밝다)
   // 스플릿 쇼츠: 다리 바깥 옆선 밑단을 ㅅ자로 튼다(트임 높이 h, 폭 = 바깥 각 ±half)
-  function splitShorts({ hem, off = 0.003, color, shade, h = 0.04, half = 0.32 }) {
-    const src = bottom({ hem, off, color, shade });
+  // flare = { out, in }(m): 가랑이 밑에서 밑단까지 다리에서 벌어지는 거리(바깥 옆선 쪽 out, 안쪽 in) — 스플릿 쇼츠는 통이 넓어 뛰면 나풀거린다
+  function splitShorts({ hem, off = 0.003, color, shade, h = 0.04, half = 0.32, flare = null }) {
+    const crotch = LEG_C[0].y - 0.06;
+    const src = flare ? looseShell({
+      color, shade, drape: 0, relax: 6, minOff: off, split: 1, tuck: Math.min(off, 0.003),
+      pick: (p, w) => p.y < BM.hips.y + 0.07 && p.y > hem && wsum(w, ARMS) < 0.3 && wsum(w, /Foot|Toe/) < 0.5,
+      edge: (p) => { p.y = Math.min(Math.max(p.y, hem), BM.hips.y + 0.07); },
+      off: (p) => { const k = ease((crotch - p.y) / (crotch - hem)), a = legOutAng(p) / Math.PI; return off + k * (flare.out * (1 - a) + flare.in * a); },
+    }) : bottom({ hem, off, color, shade });
     src.forEach((o) => { o.visible = false; });
     return clipShell({ src, field: (p) => Math.max((legOutAng(p) - half) * 0.08, p.y - hem - h * (1 - legOutAng(p) / half)), off: 0, color, shade });
   }
@@ -1030,7 +1048,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   // drape: 몸통 천이 위에서 아래로 떨어진다 — 가슴(여자)·견갑골에서 내려오며 허리 잘록·허리 오목을 메운다(둘레 방향마다 위쪽 가장 먼 반경에서 taper 만큼만 안으로).
   // off(p, w) = 띄울 거리(m, p = 쉬는 자세 월드 위치). 팔 뼈 가중치는 그대로 — 안에 입은 옷과 같이 움직여야 겨드랑이 쪽에서 안옷이 뚫고 나오지 않는다.
   // 끝단은 clipShell 로 오려 매끈하게 한다(이 껍질은 넉넉히 덮는 밑감)
-  function looseShell({ pick, edge, off, color, shade, relax = 16, minOff = 0.0095, drape = BM.shoulderY - 0.08, taper = 0.18, split = 1 }) {
+  function looseShell({ pick, edge, off, color, shade, relax = 16, minOff = 0.0095, drape = BM.shoulderY - 0.08, taper = 0.18, split = 1, tuck = 0 }) {
     const made = [];
     for (const skin of SKINS) {
       const g = skin.geometry, sp = g.attributes.position, sn = g.attributes.normal, n = sp.count, idx = g.index.array;
@@ -1053,6 +1071,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
         p.applyMatrix4(toLocal);
         for (let c = 0; c < 3; c++) { nrm[u * 3 + c] /= l; base[u * 3 + c] = p.getComponent(c); pos[u * 3 + c] = base[u * 3 + c] + nrm[u * 3 + c] * o; }
       }
+      if (tuck) for (let i = 0; i < n; i++) if (keep[id[i]]) tuckAt(skin, i, tuck); // 몸에 가까운 옷(싱글렛·쇼츠)은 밑 피부를 눌러 넣는다 — 움직일 때 피부가 뚫고 나오지 않게
       const tris = [];
       for (let t = 0; t < idx.length; t += 3) {
         const k = keep[id[idx[t]]] + keep[id[idx[t + 1]]] + keep[id[idx[t + 2]]];
@@ -1374,6 +1393,128 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   }
   runningShoes(SHOES[CHAR]);
 
+  // ---- 흔들리는 옷: 밑단에 흔들림 뼈를 둘러 달아 달릴 때 천이 출렁이게 ----
+  // 사용자 지적(2026-11-05): "구현이 쉬운 찰싹 붙는 옷만 골라 나풀거림이 없다 — 어색하다".
+  // 둘레를 n 칸으로 나눠 칸마다 [위 고정점 → 밑단] 뼈 하나: 고정점은 부모 뼈(골반·허벅지)에 붙고 밑단 끝은 관성·맞바람으로 늦게 따라온다.
+  // 꼭짓점은 높이에 따라 흔들림 뼈 몫이 0(고정점 높이) → 1(밑단)로 늘고, 둘레 방향으로 이웃한 두 뼈에 나눠 붙는다(천이 찢어지지 않게).
+  // 물리는 직접 푼다(stepSway): VRM 스프링 본은 밑단 끝 점만 충돌을 봐서, 맞바람에 밀린 앞판 위쪽으로 허벅지가 뚫고 나왔다 →
+  // 밑단 끝이 그 칸 피부에서 minGap 안쪽으로는 못 들어오게(축에서 잰 반경) + 쉬는 방향에서 maxAng 까지만 기울게 막는다.
+  // 러너는 제자리에서 뛰고 세상이 흐르므로(트레드밀) 맞바람은 실제 이동이 아니라 '달리는 반대쪽으로 미는 힘'으로 넣는다
+  const SWAY = []; // 흔들림 뼈 마디(부모 기준 쉬는 방향·길이·최소 반경 + 월드 밑단 끝 위치·이전 위치)
+  const skinNow = (o, i, v) => v.fromBufferAttribute(o.geometry.attributes.position, i).applyMatrix4(o.matrixWorld); // 쉬는 자세 월드 위치
+  // axisAt(y) = 둘레 각·반경을 잴 축 위 점(그 높이, 쉬는 자세 월드), keep(p) = 이 고리에 붙일 꼭짓점인가(다리는 제 쪽만)
+  // k = 스프링 세기(1/s², 고유 진동 √k/2π Hz — 달리기 박자 2.8Hz 근처(k≈300)면 공명해 매 걸음 최대 각까지 휘둘렸다), drag = 초당 속도 감쇠,
+  // wind = 맞바람 가속(m/s², 달리기 속도 1 기준), sPow = 흔들림 몫 곡선(클수록 밑단에 몰리고 위쪽은 몸을 그대로 따라간다)
+  function swayRig({ meshes, parent, axisAt, keep = () => true, n, top, hem, k = 600, drag = 5, wind = 6, minGap = 0.006, maxAng = 0.35, sPow = 1 }) {
+    const v = new THREE.Vector3(), rel = (p) => p.clone().sub(axisAt(p.y));
+    const angOf = (p) => { const d = rel(p); return (Math.atan2(d.dot(ACROSS), d.dot(facing)) + 2 * Math.PI) % (2 * Math.PI); };
+    const radOf = (p) => { const d = rel(p); return Math.hypot(d.dot(ACROSS), d.dot(facing)); };
+    const sector = (p) => Math.round((angOf(p) / (2 * Math.PI)) * n) % n;
+    // 칸마다 평균 반경: 고정점 높이(±2cm)·밑단(3cm 위까지)의 옷, 밑단 높이 피부(±1.5cm)
+    const acc = () => ({ r: new Float32Array(n), c: new Float32Array(n) }), rTop = acc(), rHem = acc(), rSkin = acc();
+    const add = (a, p) => { const s = sector(p); a.r[s] += radOf(p); a.c[s]++; };
+    for (const o of meshes) for (let i = 0; i < o.geometry.attributes.position.count; i++) {
+      skinNow(o, i, v);
+      if (!keep(v)) continue;
+      if (Math.abs(v.y - top) < 0.02) add(rTop, v);
+      if (v.y < hem + 0.03) add(rHem, v);
+    }
+    for (const o of SKINS) for (let i = 0; i < o.geometry.attributes.position.count; i++) {
+      skinNow(o, i, v);
+      if (Math.abs(v.y - hem) < 0.015 && keep(v) && radOf(v) < 0.2) add(rSkin, v);
+    }
+    const avg = (a, s) => { for (let d = 0; d < n; d++) for (const j of [(s + d) % n, (s - d + n) % n]) if (a.c[j]) return a.r[j] / a.c[j]; return 0.1; };
+    parent.updateWorldMatrix(true, false);
+    const pivots = [];
+    for (let s = 0; s < n; s++) {
+      const a = (s / n) * 2 * Math.PI, dir = ACROSS.clone().multiplyScalar(Math.sin(a)).addScaledVector(facing, Math.cos(a));
+      const pivotW = axisAt(top).addScaledVector(dir, avg(rTop, s)), tipW = axisAt(hem).addScaledVector(dir, avg(rHem, s));
+      const pivot = new THREE.Bone();
+      pivot.name = `sway_${parent.name}_${s}`;
+      parent.add(pivot);
+      pivot.position.copy(parent.worldToLocal(pivotW.clone()));
+      pivot.updateMatrixWorld(true);
+      const tipL = parent.worldToLocal(tipW.clone()), axO = parent.worldToLocal(axisAt(hem)), axD = parent.worldToLocal(axisAt(hem + 1)).sub(axO).normalize();
+      SWAY.push({
+        pivot, parent, len: tipL.distanceTo(pivot.position), dir: tipL.clone().sub(pivot.position).normalize(), axO, axD,
+        minRad: Math.min(avg(rSkin, s) + minGap, avg(rHem, s)), k, drag, wind, maxAng, tail: new THREE.Vector3(), prev: new THREE.Vector3(), ph: (SWAY.length * 2.399) % (2 * Math.PI),
+      });
+      pivots.push(pivot);
+    }
+    // 옷 메시마다 뼈대에 흔들림 뼈를 더하고(쉬는 자세에서 안 움직이게 역행렬을 맞춘다: 새 뼈⁻¹ × 메시 월드 × 바인드⁻¹) 꼭짓점 가중치를 나눈다
+    for (const o of meshes) {
+      o.updateMatrixWorld(true);
+      const bindInv = o.bindMatrix.clone().invert(), base = o.skeleton.bones.length;
+      const inv = pivots.map((b) => b.matrixWorld.clone().invert().multiply(o.matrixWorld).multiply(bindInv));
+      o.bind(new THREE.Skeleton([...o.skeleton.bones, ...pivots], [...o.skeleton.boneInverses, ...inv]), o.bindMatrix);
+      const g = o.geometry, si = g.attributes.skinIndex.clone(), sw = g.attributes.skinWeight.clone();
+      for (let i = 0; i < si.count; i++) {
+        skinNow(o, i, v);
+        if (!keep(v)) continue;
+        const s = ease((top - v.y) / (top - hem)) ** sPow;
+        if (s < 0.002) continue;
+        const t = (angOf(v) / (2 * Math.PI)) * n, k0 = Math.floor(t) % n, f = t - Math.floor(t);
+        const old = [0, 1, 2, 3].map((c) => [si.getComponent(i, c), sw.getComponent(i, c)]).filter(([, x]) => x > 0).sort((x, y) => y[1] - x[1]).slice(0, 2);
+        const sum = old.reduce((q, [, x]) => q + x, 0) || 1;
+        const out = [...old.map(([b, x]) => [b, (x / sum) * (1 - s)]), [base + k0, s * (1 - f)], [base + ((k0 + 1) % n), s * f]];
+        for (let c = 0; c < 4; c++) { si.setComponent(i, c, out[c]?.[0] ?? 0); sw.setComponent(i, c, out[c]?.[1] ?? 0); }
+      }
+      g.setAttribute('skinIndex', si);
+      g.setAttribute('skinWeight', sw);
+    }
+  }
+  // 한 걸음(dt): 밑단 끝을 Verlet 으로 움직이고(스프링 → 쉬는 자리, 맞바람, 감쇠) 길이·최소 반경·최대 각으로 막은 뒤 고정점 뼈를 그쪽으로 돌린다
+  const SW = { P: new THREE.Vector3(), rest: new THREE.Vector3(), next: new THREE.Vector3(), q: new THREE.Vector3(), d: new THREE.Vector3(), rot: new THREE.Quaternion(), inv: new THREE.Matrix4() };
+  // 맞바람은 고르지 않다(돌풍): 칸마다 위상이 다른 두 박자로 세기를 흔들어 밑단을 따라 물결이 돈다 — 고른 바람이면 밀린 채 멈춰 있었다
+  function stepSway(dt, windW, reset = false, t = 0) {
+    const { P, rest, next, q, d, rot, inv } = SW;
+    const parents = new Set(SWAY.map((s) => s.parent));
+    parents.forEach((b) => b.updateWorldMatrix(true, false));
+    for (const s of SWAY) {
+      const M = s.parent.matrixWorld;
+      P.copy(s.pivot.position).applyMatrix4(M);
+      rot.setFromRotationMatrix(M);
+      rest.copy(s.dir).applyQuaternion(rot).multiplyScalar(s.len).add(P);
+      if (reset) { s.tail.copy(rest); s.prev.copy(rest); }
+      const damp = Math.exp(-s.drag * dt);
+      next.copy(s.tail).sub(s.prev).multiplyScalar(damp).add(s.tail)
+        .addScaledVector(q.copy(rest).sub(s.tail), Math.min(1, s.k * dt * dt))
+        .addScaledVector(windW, s.wind * (1 + 0.55 * Math.sin(2 * Math.PI * 1.6 * t + s.ph) + 0.3 * Math.sin(2 * Math.PI * 4.1 * t + 2.3 * s.ph)) * dt * dt);
+      // 최소 반경: 부모 틀에서 축까지 잰 거리가 minRad 보다 작으면 바깥으로 민다(피부를 뚫지 않게)
+      inv.copy(M).invert();
+      q.copy(next).applyMatrix4(inv).sub(s.axO);
+      d.copy(q).addScaledVector(s.axD, -q.dot(s.axD));
+      const r = d.length();
+      if (r < s.minRad && r > 1e-6) { q.addScaledVector(d, s.minRad / r - 1); next.copy(q.add(s.axO)).applyMatrix4(M); }
+      // 길이 그대로 · 쉬는 방향에서 maxAng 까지만
+      d.copy(next).sub(P).normalize();
+      q.copy(rest).sub(P).normalize();
+      const ang = Math.acos(Math.max(-1, Math.min(1, d.dot(q))));
+      if (ang > s.maxAng) d.lerp(q, 1 - s.maxAng / ang).normalize();
+      next.copy(P).addScaledVector(d, s.len);
+      s.prev.copy(s.tail);
+      s.tail.copy(next);
+      // 고정점 뼈: 부모 틀에서 쉬는 방향 → 지금 방향
+      d.transformDirection(inv);
+      s.pivot.quaternion.setFromUnitVectors(s.dir, d);
+    }
+  }
+  // 싱글렛 밑단: 골반에 매달린 8칸 — 가슴에 매달면 골반이 따로 돌 때 쇼츠 허리가 밑단을 뚫고 나왔다
+  function swayTop(meshes, hem) {
+    swayRig({ meshes, parent: vrm.humanoid.getRawBoneNode('hips'), n: 8, top: BM.shoulderY - 0.15, hem, axisAt: (y) => BM.hips.clone().setY(y), k: 900, drag: 2.2, wind: 16, minGap: 0.016, sPow: 1.3 }); // 밑단이 안에 입은 쇼츠 허리(피부 + 3mm)보다 바깥에
+  }
+  // 쇼츠 밑단: 다리마다 허벅지뼈에 매달린 6칸(축 = 고관절 → 무릎)
+  function swayShorts(meshes, hem) {
+    const top = LEG_C[0].y - 0.06;
+    for (const sd of [0, 1]) {
+      const hip = LEG_C[sd], knee = RB(`${['left', 'right'][sd]}LowerLeg`);
+      swayRig({
+        meshes, parent: vrm.humanoid.getRawBoneNode(`${['left', 'right'][sd]}UpperLeg`), n: 6, top, hem,
+        axisAt: (y) => hip.clone().lerp(knee, (hip.y - y) / (hip.y - knee.y)), keep: (p) => sideOf(p) === sd, k: 1100, drag: 6, wind: 6, minGap: 0.008, sPow: 2,
+      });
+    }
+  }
+
   // 옷(계절): 두 모델 모두 속옷만 입은 몸이라 옷을 전부 피부 껍질로 짓는다(원래 옷에 기대지 않는다 — 어떤 모델이든 같게)
   // 디자인 = 2025~26 러닝복 흐름에서 여러 브랜드가 함께 쓰는 요소만(특정 브랜드 디자인·로고는 따라 하지 않는다, 사용자 요청 2026-11-05):
   // 크롭 싱글렛·짧은 스플릿 쇼츠·바이크 쇼츠·하프집 하이넥 + 옆선 배색·소매 줄·가슴 띠·어깨 요크·반사띠, 올블랙 대신 어스톤 + 네온 포인트
@@ -1404,8 +1545,11 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     },
     male: {
       summer: () => { // 네온 싱글렛(네이비 바이어스) + 짧은 스플릿 쇼츠(네이비 · 흰 옆선)
-        tankTop({ color: '#ff6a1a', shade: '#c24c0c', trim: '#1f2a44', trimShade: '#141c2e' });
-        legStripe(splitShorts({ hem: BM.knee + 0.19, color: '#1f2a44', shade: '#141c2e' }), '#f4f4f2', '#c9cbd0', 0.1);
+        const under = ACC.has('jacket') || ACC.has('padvest'); // 겉옷 밑이면 몸에 붙인다(헐렁한 밑단이 겉옷 밑으로 삐져나왔다)
+        const shirt = tankTop({ color: '#ff6a1a', shade: '#c24c0c', trim: '#1f2a44', trimShade: '#141c2e', loose: under ? 0 : 0.022 });
+        if (!under) swayTop(shirt, HEM);
+        const hem = BM.knee + 0.19, shorts = splitShorts({ hem, color: '#1f2a44', shade: '#141c2e', flare: { out: 0.026, in: 0.01 } });
+        swayShorts([...shorts, ...legStripe(shorts, '#f4f4f2', '#c9cbd0', 0.1)], hem);
         socks(0.085);
       },
       mild: () => { // 몸에 붙는 긴팔(세이지 · 오프화이트 가슴 띠) + 무릎 하프 타이츠 위 쇼츠(슬레이트)
@@ -1501,6 +1645,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   // 얼굴·머리카락은 남긴다 — 얼굴 테까지 빼면 턱선이 목과 한 덩어리가 돼 얼굴 모양이 무너졌다(사용자 지적 "얼굴은 왜 저 모양이")
   if (!OPT.ol) vrm.scene.traverse((o) => { if (o.isMesh) [o.material].flat().forEach((m) => { if (m.isOutline && !/Face|Hair/.test(m.name)) m.visible = false; }); });
   vrm.scene.position.y += STACK; // 러닝화 바닥을 늘린 만큼 든다(옷·장신구를 다 지은 뒤 — 그 전엔 원래 좌표로 짓는다)
+  if (SWAY.length) { vrm.scene.updateMatrixWorld(true); stepSway(0, new THREE.Vector3(), true); } // 든 자리에서 흔들림을 시작한다(밑단 끝을 쉬는 자리에)
   vrm.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
   // ---- 배경: 수변 산책로 ----
@@ -2481,6 +2626,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   // 5m 앞에서 옆으로 2.2m 비켜 선다(멈출 때 러너가 옆을 지나간다). 망원(화각 22°)이라 5m 에서도 러너가 화면을 채운다 — 30° 면 얼굴이 작았다
   const LEAD = { yaw: 0.45, dist: 5, h: 1.35, look: 1.05, fov: 22, roll: 0 };
   const APPROACH_M = 12, CATCH_M = 3, STOP_CAM_SEC = 2.4;
+  const WIND_W = new THREE.Vector3(); // 흔들리는 옷 맞바람 방향 × 달리기 속도(0~1)
   let camAnchor = STORY && OPT.mv ? APPROACH_M : 0, camRun = 0, stopT = -1, reading = false;
   let camFrom = STORY ? LEAD : userCam(), camTo = camFrom, camT0 = 0, camDur = 1;
   const camAt = (t) => lerpCam(camFrom, camTo, ease((t - camT0) / camDur));
@@ -2758,6 +2904,12 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       mouth(st, dt);
       const n = FX ? 5 : 1; // 12fps 로 끊을 땐 흔들림 물리를 잘게 나눠 돌린다
       for (let i = 0; i < n; i++) vrm.update(dt / n);
+      if (SWAY.length) { // 흔들리는 옷: 맞바람 = 달리는 반대쪽 × 속도. 몸 자세가 다 정해진 뒤에 푼다(잘게 나눠 — 프레임이 늘어져도 안 튀게)
+        WIND_W.set(-Math.sin(FACING), 0, -Math.cos(FACING)).multiplyScalar(speed);
+        const m = Math.max(n, Math.ceil(Math.min(dt, 0.1) / (1 / 60)));
+        const h = Math.min(dt, 0.1) / m;
+        for (let i = 0; i < m; i++) stepSway(h, WIND_W, false, t - (m - 1 - i) * h);
+      }
       stepBreath?.(dt, dz, st);
       post.uniforms.stepT.value = st;
     }
