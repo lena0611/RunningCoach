@@ -123,7 +123,9 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       watch: { strap: '#ff6f5e', strapShade: '#c4503f', case: '#2a2c33', face: '#0d1015', ring: '#3ee08f' },
     },
     male: {
-      cap: { c: [0, 100, 0], r: [103, 113, 114], front: 106, back: 60, brim: 70, color: '#24262c', shade: '#131418' }, // 여자와 같은 VRoid 머리틀
+      // 여자와 같은 VRoid 머리틀. 예전 검정 모자는 정면에서 챙이 돔과 한 덩어리로 보여 바가지(헬멧) 같았다(사용자 지적 2026-11-05) →
+      // 밝은 회색 + 챙 밑 진회색(정면에서 챙 끝선이 또렷), 옆폭 103 → 96(옆으로 부푼 헬멧 실루엣을 줄인다 — 머리카락도 같은 돔으로 눌러 안 샌다)
+      cap: { c: [0, 100, 0], r: [96, 113, 114], front: 106, back: 60, brim: 70, color: '#d9dce1', shade: '#a9adb6', brimUnder: '#3b3f47', brimUnderShade: '#25282e' },
       trim: { fringe: 0.5, rest: 0.6 }, // 가닥 길이 비율: 앞머리는 눈썹 위로, 옆은 귀 중간·뒤는 목덜미 위로
       side: 0.45, // 귀 앞 옆머리를 짧은 구레나룻으로
       bare: { trim: { fringe: 0.65, rest: 0.6 }, side: 0.6 }, // 모자를 안 쓸 때: 앞머리는 눈썹 위까지만 줄인다
@@ -527,7 +529,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     return geometry(pos, uv, index, normal);
   }
   // 앞챙: 테두리 앞쪽 ±56° 를 따라 붙어 앞으로 뻗고 14° 숙인다(양끝은 더 숙여 둥글게 감싼다). 가운데가 가장 길고 양끝은 돔에 녹아든다. 두께 3mm
-  function brimGeometry() {
+  function brimGeometry(part = 'all') { // part: 'top' = 윗면만, 'under' = 아랫면·가장자리(챙 밑을 다른 색으로)
     const TH = 0.98, NI = 24, NJ = 6, T = 3, pos = [], uv = [], index = [];
     const at = (th, s, dy) => {
       const sn = Math.sin(th), cs = Math.cos(th), rim = rimAt(cs);
@@ -543,11 +545,11 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     for (let i = 0; i < NI; i++) {
       for (let j = 0; j < NJ; j++) {
         const a = i * row + j, b = a + row;
-        index.push(a, a + 1, b, b, a + 1, b + 1); // 윗면
-        index.push(half + a, half + b, half + a + 1, half + b, half + b + 1, half + a + 1); // 아랫면
+        if (part !== 'under') index.push(a, a + 1, b, b, a + 1, b + 1); // 윗면
+        if (part !== 'top') index.push(half + a, half + b, half + a + 1, half + b, half + b + 1, half + a + 1); // 아랫면
       }
       const a = i * row + NJ, b = a + row; // 바깥 가장자리
-      index.push(a, half + a, b, b, half + a, half + b);
+      if (part !== 'top') index.push(a, half + a, b, b, half + a, half + b);
     }
     return geometry(pos, uv, index);
   }
@@ -556,7 +558,9 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     domeMats[0].side = THREE.DoubleSide; // 밑에서 보면 안감이 보인다
     const button = new THREE.SphereGeometry(7, 12, 6).scale(1, 0.45, 1).translate(CC.x, CC.y + CR.y, CC.z);
     const group = new THREE.Group();
-    group.add(wear(domeGeometry(), domeMats), wear(brimGeometry(), dress(CLOTH, cap.color, cap.shade)), wear(button, dress(CLOTH, cap.color, cap.shade)));
+    // 챙 밑·가장자리는 다른 색(brimUnder) — 같은 색이면 정면에서 챙이 안 보여 모자가 바가지(헬멧)처럼 보였다(사용자 지적 2026-11-05)
+    const brimUnder = dress(CLOTH, cap.brimUnder ?? cap.color, cap.brimUnderShade ?? cap.shade);
+    group.add(wear(domeGeometry(), domeMats), wear(brimGeometry('top'), dress(CLOTH, cap.color, cap.shade)), wear(brimGeometry('under'), brimUnder), wear(button, dress(CLOTH, cap.color, cap.shade)));
     attach(headBone, HEAD, group);
   }
 
@@ -942,22 +946,27 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     clipShell({ src, field: (p) => { const f = F(p); return Math.min(f, 0.01 - f); }, off: 0.0012, color: rib, shade: ribShade });
     panel(OUTER, (p) => Math.min(0.0032 - lat(p), p.y - (BM.neck.y - 0.13), front(p) ? 1 : -1), zip, zip, 0.0015);
   }
-  // 민소매(러닝 싱글렛): 목 위까지 덮은 상의를 거리장으로 오려 어깨끈·앞목(깊게)·뒷목·겨드랑이 구멍을 낸다(끝단이 매끈) + 가장자리 바이어스.
-  // 겨드랑이 높이(어깨관절 7.5cm 아래) 밑은 몸통 전체, 그 위는 끈 바깥선(옆 11cm) 안쪽만 — 목둘레는 U자로 앞 10cm·뒤 5cm 파고, 끈 자리(옆 7.5cm~)는 어깨 위까지 덮는다.
-  // 예전엔 꼭짓점을 골라 입혀 끈이 앞목 높이에서 잘려 튜브톱처럼 되고 목선이 계단처럼 깨졌다
+  // 민소매(러닝 싱글렛): 목 위까지 덮은 상의를 거리장으로 오려 목 구멍·진동(팔 구멍)을 내고 가장자리에 바이어스를 두른다.
+  // 끈 = 옆 6.5~11.2cm 띠 — 높이와 상관없이 남겨 어깨 위로 넘어가 앞·뒤판을 잇는다. 목 구멍은 끈 안쪽에서만 U자로(앞 9cm·뒤 4cm 파임),
+  // 진동은 겨드랑이 위에서 끈 바깥선 밖을 판다(겨드랑이 쪽은 둥글게 넓어진다).
+  // 예전엔 목 파임을 '목뼈 높이 수평선'으로 잘라 어깨 위(목뼈보다 높은 승모근)에서 끈이 끊겨 앞뒤가 안 이어지고, 바이어스가 갈고리처럼 말렸다(사용자 지적 2026-11-05).
+  // 바이어스는 오린 끝단에서 안쪽으로 한쪽만 잰다(양쪽 거리로 재면 띠가 삼각형보다 좁아 군데군데 끊겼다)
   function tankTop({ color, shade, trim, trimShade, hem = HEM }) {
-    const n = BM.neck, armpit = BM.shoulderY - 0.075, k = 0.012;
+    const n = BM.neck, armpit = BM.shoulderY - 0.075, inner = 0.065, k = 0.014;
     const smax = (a, b) => 0.5 * (a + b + Math.sqrt((a - b) ** 2 + k * k)), smin = (a, b) => -smax(-a, -b);
     const F = (p) => {
       const l = lat(p), s = ease((p.clone().sub(n).dot(facing) + 0.02) / 0.04); // s: 0 = 등, 1 = 가슴
-      const neckline = n.y - (0.05 + 0.05 * s) * (1 - ease((l - 0.01) / 0.065)); // 가운데가 가장 깊은 U자, 옆 7.5cm 부터 끈
-      return smax(armpit - p.y, smin(0.11 - l, neckline - p.y)); // + = 옷이 남는 쪽
+      const depth = (0.04 + 0.05 * s) * (1 - ease(l / inner)); // 목 파임: 가운데가 가장 깊고 끈 안쪽선에서 0
+      const neck = smax(n.y - depth - p.y, l - inner); // + = 목 파임 아래거나 끈 자리
+      const outer = 0.112 + 0.03 * (1 - ease((p.y - armpit) / 0.06)); // 끈 바깥선 — 겨드랑이 쪽은 둥글게 넓어진다
+      const arm = smax(armpit - p.y, outer - l); // + = 겨드랑이 아래거나 끈 바깥선 안
+      return smin(neck, arm); // + = 옷이 남는 쪽
     };
     top({ sleeve: -0.005, hem, neck: -0.09, off: 0.0055, color, shade });
     const src = OUTER;
     src.forEach((o) => { o.visible = false; });
     OUTER = clipShell({ src, field: F, off: 0, color, shade });
-    clipShell({ src, field: (p) => { const f = F(p); return Math.min(f, 0.008 - f); }, off: 0.0012, color: trim, shade: trimShade }); // 바이어스 8mm
+    clipShell({ src: OUTER, field: (p) => 0.008 - F(p), off: 0.0012, color: trim, shade: trimShade }); // 바이어스 8mm
   }
   // ---- 배색·무늬: 이미 입힌 옷 위에 살짝 띄워 다른 색 조각을 거리장으로 오려 붙인다(+ = 칠하는 쪽, 끝단이 매끈) ----
   function panel(src, field, color, shade = color, off = 0.0008) {
@@ -1471,8 +1480,9 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     }
   }
   applyTuck();
-  // 먹선(MToon 외곽선 — 몸·옷·머리 둘레의 검은 테): 기본은 뺀다(사용자 요청 "인체에 먹선이 있는데 빼는 건 가능해?"). 외곽선 재질만 숨긴다
-  if (!OPT.ol) vrm.scene.traverse((o) => { if (o.isMesh) [o.material].flat().forEach((m) => { if (m.isOutline) m.visible = false; }); });
+  // 먹선(MToon 외곽선 — 몸·옷 둘레의 검은 테): 기본은 뺀다(사용자 요청 "인체에 먹선이 있는데 빼는 건 가능해?"). 외곽선 재질만 숨긴다.
+  // 얼굴·머리카락은 남긴다 — 얼굴 테까지 빼면 턱선이 목과 한 덩어리가 돼 얼굴 모양이 무너졌다(사용자 지적 "얼굴은 왜 저 모양이")
+  if (!OPT.ol) vrm.scene.traverse((o) => { if (o.isMesh) [o.material].flat().forEach((m) => { if (m.isOutline && !/Face|Hair/.test(m.name)) m.visible = false; }); });
   vrm.scene.position.y += STACK; // 러닝화 바닥을 늘린 만큼 든다(옷·장신구를 다 지은 뒤 — 그 전엔 원래 좌표로 짓는다)
   vrm.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
@@ -2461,7 +2471,9 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
 
   // 주먹: 네 손가락을 끝까지 말아 쥐고 엄지는 검지·중지 가운데 마디 위에 얹는다(손가락에 붙인다 — 힘줘 쥐지는 않는다)
   // (T포즈 손바닥이 아래 → 왼손은 -Z, 오른손은 +Z 로 말아 쥔다. 엄지 Y·Z 는 좌우 반대)
-  // 예전엔 엄지 뿌리(three-vrm 이름 ThumbMetacarpal — VRM0 의 thumbProximal)를 안 돌려 엄지가 주먹 밖으로 삐죽 나와 덜렁거렸다
+  // 예전엔 엄지 뿌리(three-vrm 이름 ThumbMetacarpal — VRM0 의 thumbProximal)를 안 돌려 엄지가 주먹 밖으로 삐죽 나와 덜렁거렸다.
+  // 사용자 모델(VRoid Studio 2.x)로 바꾼 뒤 옛 값으론 엄지가 앞으로 쭉 뻗어 '손가락으로 가리키는' 손이 됐다(사용자 지적 2026-11-05) →
+  // 후보 각도를 달리는 자세 같은 프레임으로 찍어 비교해 엄지가 주먹 안쪽으로 감기는 값으로 다시 잡았다(뿌리를 손바닥 쪽으로 크게 틀고 마디를 감는다)
   for (const side of ['left', 'right']) {
     const k = side === 'left' ? -1 : 1, m = -k;
     for (const f of ['Index', 'Middle', 'Ring', 'Little']) {
@@ -2469,9 +2481,9 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       rot(`${side}${f}Intermediate`, 0, 0, 1.45 * k);
       rot(`${side}${f}Distal`, 0, 0, 1.05 * k);
     }
-    rot(`${side}ThumbMetacarpal`, 0.5, 0, -0.6 * m);
-    rot(`${side}ThumbProximal`, 0.85, 0, -0.2 * m);
-    rot(`${side}ThumbDistal`, 0.85, 0, 0);
+    rot(`${side}ThumbMetacarpal`, 0.9, 1.2 * m, -0.2 * m);
+    rot(`${side}ThumbProximal`, 0.6, 0, -0.9 * m);
+    rot(`${side}ThumbDistal`, 0.4, 0, -0.8 * m);
   }
 
   // ---- 브리핑 진행(앱이 부른다) ----
