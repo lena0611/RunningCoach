@@ -94,6 +94,17 @@ export function buildSceneOptions(input: {
   }
 }
 
+/** 영상 오른쪽 아이콘 줄(쇼츠식)의 날씨 — label = 기상청 상태 문구(없으면 빈 문자열), feltC = 체감온도(반올림) */
+export type BriefingWeather = { label: string; feltC: number | null }
+
+const WEATHER_WORD: Record<SceneWeather, string> = { clear: '맑음', cloudy: '흐림', rain: '비', snow: '눈' }
+
+/** 아이콘 줄 날씨 아이콘·글자. 맑은 밤은 달. 상태 문구가 없으면 장면 날씨 이름으로 */
+export function weatherBadge(weather: BriefingWeather | null, wx: SceneWeather, hour: number): { icon: SceneWeather | 'night'; label: string } {
+  const night = hour < 6 || hour >= 19
+  return { icon: wx === 'clear' && night ? 'night' : wx, label: weather?.label || WEATHER_WORD[wx] }
+}
+
 /** 타이틀 옆 효과음 글자(러닝 타입별, PoC 그대로) */
 export function sceneSfx(run: SceneRunKind): string {
   return { easy: 'GO!', tempo: 'STEADY!', lsd: 'LONG!', race: 'RACE!', interval: 'PUSH!' }[run]

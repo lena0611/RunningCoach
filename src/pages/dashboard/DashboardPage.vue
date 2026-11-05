@@ -428,7 +428,16 @@ watch(
     const settled = scheduleStore.loaded && runStore.loaded && memoryStore.loaded && !scheduleLoadingPlaceholder.value
     const payload =
       day && hero && briefing && day.state === 'today'
-        ? { date: day.date, dayState: day.state, sessionType: hero.sessionType, title: hero.title, distanceKm: hero.distanceKm, metaLine: hero.metaLine, briefing }
+        ? {
+            date: day.date,
+            dayState: day.state,
+            sessionType: hero.sessionType,
+            title: hero.title,
+            distanceKm: hero.distanceKm,
+            metaLine: hero.metaLine,
+            briefing,
+            goal: activeGoal.value ? { title: activeGoal.value.title, targetDate: activeGoal.value.targetDate } : null
+          }
         : null
     return { payload, settled }
   },

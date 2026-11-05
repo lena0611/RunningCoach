@@ -20,7 +20,7 @@ import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import { briefingVerdict, type BriefingVerdict } from './briefingGate'
 import { closeNativeIntro } from './introBridge'
-import { buildSceneOptions } from './sceneOptions'
+import { buildSceneOptions, type BriefingWeather } from './sceneOptions'
 import type { BriefingSceneOptions } from './scene/briefingScene'
 import BriefingShortsPopup from './BriefingShortsPopup.vue'
 
@@ -37,7 +37,7 @@ const store = useBriefingShortsStore()
 const bootAt = Date.now() - performance.now()
 
 const decided = ref(false)
-const shown = ref<{ payload: TodayBriefingPayload; options: BriefingSceneOptions; weatherChip: string } | null>(null)
+const shown = ref<{ payload: TodayBriefingPayload; options: BriefingSceneOptions; weather: BriefingWeather | null } | null>(null)
 
 const healthKitSettled = computed(() => {
   if (!hasNativeBridge()) return true
@@ -59,12 +59,15 @@ const verdict = computed<BriefingVerdict>(() =>
   })
 )
 
-function weatherChipText(): string {
+/** 영상 오른쪽 아이콘 줄의 날씨·체감온도. 날씨를 못 받았으면 없음(아이콘 줄엔 건너뛰기만) */
+function briefingWeather(): BriefingWeather | null {
   const current = weatherStore.current
-  if (!current) return ''
+  if (!current) return null
   const felt = current.apparentTemperatureC ?? current.temperatureC
-  const temp = felt === null ? '' : ` ${Math.round(felt)}°`
-  return current.condition && current.condition !== '정보 없음' ? `${current.condition}${temp}` : temp.trim()
+  return {
+    label: current.condition && current.condition !== '정보 없음' ? current.condition : '',
+    feltC: felt === null ? null : Math.round(felt)
+  }
 }
 
 function decide(next: BriefingVerdict) {
@@ -84,7 +87,7 @@ function decide(next: BriefingVerdict) {
       weather: weatherStore.current,
       now: new Date()
     }),
-    weatherChip: weatherChipText()
+    weather: briefingWeather()
   }
   store.markShown(authStore.user?.id ?? 'local', payload.date)
   store.open = true
@@ -131,7 +134,7 @@ onBeforeUnmount(() => window.clearTimeout(deadlineTimer))
       v-if="store.open && shown"
       :payload="shown.payload"
       :options="shown.options"
-      :weather-chip="shown.weatherChip"
+      :weather="shown.weather"
       @ready="onReady"
       @failed="onFailed"
       @done="close"
