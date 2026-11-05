@@ -837,10 +837,11 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     const split = fine && !src.every((o) => o.userData.fine);
     for (const skin of split ? src.map((o) => fineCopy(o)) : src) {
       const g = skin.geometry, sp = g.attributes.position, sn = g.attributes.normal, su = g.attributes.uv, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
-      const p = new THREE.Vector3(), w = {}, F = new Float32Array(sp.count);
+      const p = new THREE.Vector3(), nw = new THREE.Vector3(), w = {}, F = new Float32Array(sp.count);
       const pos = [], nor = [], uv = [], bi = [], bw = [];
       for (let i = 0; i < sp.count; i++) {
-        F[i] = field(p.fromBufferAttribute(sp, i).applyMatrix4(skin.matrixWorld), weightsOf(skin, i, w));
+        nw.fromBufferAttribute(sn, i).transformDirection(skin.matrixWorld);
+        F[i] = field(p.fromBufferAttribute(sp, i).applyMatrix4(skin.matrixWorld), weightsOf(skin, i, w), nw);
         for (let c = 0; c < 3; c++) { pos.push(sp.getComponent(i, c) + sn.getComponent(i, c) * off); nor.push(sn.getComponent(i, c)); }
         if (su) uv.push(su.getX(i), su.getY(i));
         for (let c = 0; c < 4; c++) { bi.push(si.getComponent(i, c)); bw.push(sw.getComponent(i, c)); }
@@ -951,6 +952,8 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   // 진동은 겨드랑이 위에서 끈 바깥선 밖을 판다(겨드랑이 쪽은 둥글게 넓어진다).
   // 예전엔 목 파임을 '목뼈 높이 수평선'으로 잘라 어깨 위(목뼈보다 높은 승모근)에서 끈이 끊겨 앞뒤가 안 이어지고, 바이어스가 갈고리처럼 말렸다(사용자 지적 2026-11-05).
   // 바이어스는 오린 끝단에서 안쪽으로 한쪽만 잰다(양쪽 거리로 재면 띠가 삼각형보다 좁아 군데군데 끊겼다)
+  // 띠 폭은 F 값이 아니라 옷 표면 위 실제 거리로 잰다(surfaceDist) — F 는 높이·옆거리를 섞은 값이라 1 단위가 곳마다 달라
+  // V넥 옆(가파른 파임)은 3mm 로 얇고 어깨 위(평평)·둥글린 모서리는 1cm 넘게 두꺼워 삐뚤빼뚤했다(사용자 지적 2026-11-05)
   function tankTop({ color, shade, trim, trimShade, hem = HEM }) {
     const n = BM.neck, armpit = BM.shoulderY - 0.075, inner = 0.065, k = 0.014;
     const smax = (a, b) => 0.5 * (a + b + Math.sqrt((a - b) ** 2 + k * k)), smin = (a, b) => -smax(-a, -b);
@@ -966,7 +969,21 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     const src = OUTER;
     src.forEach((o) => { o.visible = false; });
     OUTER = clipShell({ src, field: F, off: 0, color, shade });
-    clipShell({ src: OUTER, field: (p) => 0.008 - F(p), off: 0.0012, color: trim, shade: trimShade }); // 바이어스 8mm
+    const D = surfaceDist(F);
+    clipShell({ src: OUTER, field: (p, w, nrm) => 0.008 - D(p, nrm), off: 0.0012, color: trim, shade: trimShade }); // 바이어스 8mm
+  }
+  // 거리장 F(+ 안 · − 밖)를 끝단(F = 0)까지의 표면 위 거리(m)로 바꾼다: F ÷ |표면을 따라 잰 기울기|(중앙차분 1mm, 법선 성분은 뺀다).
+  // 0 선은 그대로라 옷 모양은 안 바뀌고, 그 선에서 잰 띠 폭만 어디서나 같아진다. 기울기가 거의 0 인 곳(평평한 데서 높이만 보는 값)은 4배까지만 늘린다.
+  // 끝단에서 먼 곳(F > far — 기울기가 아무리 커도 띠 밖)은 기울기를 안 잰다(옷 꼭짓점 대부분 — 로딩 시간)
+  function surfaceDist(F, far = 0.03, h = 0.001) {
+    const q = new THREE.Vector3(), g = new THREE.Vector3();
+    return (p, nrm) => {
+      const f = F(p);
+      if (f > far) return f;
+      for (const ax of ['x', 'y', 'z']) { q.copy(p); q[ax] += h; const a = F(q); q[ax] -= 2 * h; g[ax] = (a - F(q)) / (2 * h); }
+      if (nrm) g.addScaledVector(nrm, -g.dot(nrm));
+      return f / Math.max(g.length(), 0.25);
+    };
   }
   // ---- 배색·무늬: 이미 입힌 옷 위에 살짝 띄워 다른 색 조각을 거리장으로 오려 붙인다(+ = 칠하는 쪽, 끝단이 매끈) ----
   function panel(src, field, color, shade = color, off = 0.0008) {
