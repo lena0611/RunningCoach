@@ -53,16 +53,13 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     back: { yaw: Math.PI - 0.35, dist: 3.2, h: 1.5, look: 1.0, fov: 34, roll: 0 }, // 뒤따라가기
     top: { yaw: 0.6, dist: 2.2, h: 3.4, look: 0.7, fov: 34, roll: 0 },          // 내려다보기
     low: { yaw: 0.5, dist: 2.0, h: 0.12, look: 1.25, fov: 42, roll: -0.08 },   // 바닥에서 올려다보기
-    // 브리핑: 얼굴 클로즈업. 진행 방향에서 57° 옆에 선다 — 말이 끝나면 러너가 가던 방향으로 다시 달려 카메라 옆 약 1m 를
-    // 지나간다(PoC 의 0.35 는 40cm 로 스쳐 얼굴이 화면을 꽉 채웠다, 2026-11-04 사용자 결정: 가던 방향 + 카메라가 지켜본다)
-    talk: { yaw: 1.0, dist: 1.2, h: 1.46, look: 1.44, fov: 32, roll: 0 },
   };
   const CUTS = ['hero', 'face', 'side', 'back']; // ?cam=cuts → 2.5초마다 끊어 붙인다
   const CUT_SEC = 2.5;
 
   const FX = false; // 페인터리 후처리는 PoC 옵션 — 앱은 VRoid 원본 렌더(사용자 결정)
   const CAM = 'hero';
-  const STORY = true; // '달리다 멈춰서 브리핑' 연출
+  const STORY = true; // 브리핑 연출(러너가 다가오면 카메라맨이 앞서 뛰며 찍는다 — 아래 '브리핑 연출')
 
   const RUN = RUNS[OPT.rn]; // 지금 러닝 타입
 
@@ -113,28 +110,24 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   // ---- 러닝 차림: 옷(계절)·악세사리·묶은 머리 ----
   // 모델 파일은 그대로 두고 불러온 뒤 덧입힌다. 치수는 머리 틀(mm): 원점 = 머리뼈, x 왼쪽·y 위·z 앞(쉬는 자세)
   //  - 모자: 타원체 돔 + 앞챙. 러너처럼 눈썹 바로 위까지 푹 눌러쓴다. 모자 속 머리카락은 돔 안으로 눌러 넣고, 테두리 밑으로는 눌린 채 흘러나오게 한다
-  //  - 여자: 긴 머리 가닥을 걷어 내고 모자 뒤로 묶은 포니테일(달릴 때 흔들린다) + 왼손목 워치 + 흰 중목 양말
+  //  - 여자: 모델이 묶은 포니테일을 그대로 모자 뒤 구멍으로 빼서 흔들리게 + 왼손목 워치 + 흰 중목 양말
   //  - 남자: 머리 가닥을 뿌리부터 줄여 짧고 단정하게
   const OUTFITS = {
     female: {
       cap: { c: [0, 100, 0], r: [103, 113, 114], front: 106, back: 60, brim: 70, color: '#f2f0eb', shade: '#c3c2cc' },
-      cut: /^J_Sec_Hair\d_(0[235-9]|1[0-2])$/, // 뒤·옆·앞으로 늘어진 긴 가닥 8줄 + 앞머리 2줄(02·03 — 챙 밑에서 이마를 가로질러 달랑거렸다, 포니테일로 넘긴 머리)
-      side: 0.5, // 귀 앞 옆머리 길이·굵기 비율 — 볼까지 덮던 덩어리를 잔머리 한 가닥처럼
-      // 모자를 안 쓸 때: 옆으로 넘긴 앞머리(02·03)는 그대로 두고, 긴 가닥은 지우는 대신 뿌리 쪽으로 12%까지 줄인다.
-      // 지우면 그 위 바깥 머리층 끝단이 톱니처럼 뜯긴 채 버섯 갓처럼 떠 보였다 — 줄이면 끝단이 두피 쪽으로 끌려 들어가 귀 위를 매끈하게 덮는다
-      bare: { cut: null, shrink: { re: /^J_Sec_Hair\d_(0[5-9]|1[0-2])$/, s: 0.12 } },
-      tail: { root: [0, 92, -104], len: 280, hair: ['#614233', '#6b4939', '#7e5744'], tie: '#ff6f5e' },
-      watch: { strap: '#ff6f5e', case: '#2a2c33', face: '#0d1015', ring: '#3ee08f' },
+      cut: /^J_Sec_Hair\d_01$/, // 정수리 바보털 — 모자 꼭대기를 뚫고 솟는다
+      // 묶은 꼬리: 모자에 눌러 넣지 않고 원래 흔들림(스프링 뼈)을 살린다. 모델은 정수리 뒤에 높이 묶어서 모자를 쓰면 꼬리가 모자 위에 얹혀 보인다
+      // → 모자를 쓰면 러너처럼 뒤 구멍(뒤 테두리 위 3~4cm) 높이로 꼬리째 내려 묶는다(root = 묶은 뿌리 새 자리)
+      ponytail: { re: /^J_Sec_Hair\d_02$/, root: [0, 96, -120] },
+      bare: { cut: null }, // 모자를 안 쓰면 머리는 그대로
+      watch: { strap: '#ff6f5e', strapShade: '#c4503f', case: '#2a2c33', face: '#0d1015', ring: '#3ee08f' },
     },
     male: {
-      cap: { c: [0, 98, 0], r: [99, 107, 114], front: 110, back: 56, brim: 72, color: '#24262c', shade: '#131418' },
+      cap: { c: [0, 100, 0], r: [103, 113, 114], front: 106, back: 60, brim: 70, color: '#24262c', shade: '#131418' }, // 여자와 같은 VRoid 머리틀
       trim: { fringe: 0.5, rest: 0.6 }, // 가닥 길이 비율: 앞머리는 눈썹 위로, 옆은 귀 중간·뒤는 목덜미 위로
       side: 0.45, // 귀 앞 옆머리를 짧은 구레나룻으로
-      // 모자를 안 쓸 때: 앞머리는 폭을 그대로 두고 길이만 줄여 눈썹 위까지. 통째로 줄이면 정수리에서 내려오는 앞머리 덩어리 폭까지 좁아져 이마 양옆이 드러났다(M자)
-      // 가르마 4:6: 앞머리 덩어리(정수리 뿌리) 가장자리가 이마 머리선에서 x ≈ +15mm(머리 폭의 43:57) — 그 덩어리를 뿌리째 오른쪽(-x)으로 돌리고 기울여
-      // 가르마 쪽은 들리고 반대편으로 사선으로 내려오게, 가운데 뾰족한 가닥도 같은 쪽으로 눕힌다. [x, y, z] rad(뼈 축 = 머리 축)
-      bare: { trim: { fringe: [1, 0.65, 0.65], rest: 0.6 }, side: 0.6, part: { '6c896f34': [0, -0.4, -0.25], '437e40b7': [0, 0, -0.6] } },
-      watch: { strap: '#22252b', case: '#2a2c33', face: '#0d1015', ring: '#ffb547' },
+      bare: { trim: { fringe: 0.65, rest: 0.6 }, side: 0.6 }, // 모자를 안 쓸 때: 앞머리는 눈썹 위까지만 줄인다
+      watch: { strap: '#22252b', strapShade: '#131418', case: '#2a2c33', face: '#0d1015', ring: '#ffb547' }, // 그늘색도 줄 색 계열(여자 주황 그늘이면 검은 줄이 그늘에서 주황으로 보였다)
     },
   };
   const SEASON = OPT.tp, ACC = new Set(String(OPT.ac).split('-').filter(Boolean)); // 옷(계절)·악세사리(컨트롤러)
@@ -339,8 +332,12 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   const UV_MAPS = ['map', 'normalMap', 'emissiveMap', 'shadeMultiplyTexture', 'shadingShiftTexture', 'rimMultiplyTexture', 'outlineWidthMultiplyTexture', 'uvAnimationMaskTexture'];
   const meshes = [];
   vrm.scene.traverse((o) => { if (o.isMesh) meshes.push(o); });
-  const matsOf = (re) => [meshes.find((o) => re.test([o.material].flat()[0].name)).material].flat();
-  const CLOTH = matsOf(/Tops_\d+_CLOTH/), HAIR = matsOf(/Hair_00_HAIR/);
+  const matsOf = (re) => {
+    const mesh = meshes.find((o) => re.test([o.material].flat()[0].name));
+    return mesh ? [mesh.material].flat() : null;
+  };
+  // 옷 재질의 바탕: 속옷만 입힌 모델은 상의가 없어서 신발 재질을 쓴다(같은 옷 셰이더)
+  const CLOTH = matsOf(/Tops_\d+_CLOTH/) ?? matsOf(/Shoes_\d+_CLOTH/);
   function dress(src, color, shade = color, tex = null) {
     return src.map((m) => {
       const c = m.clone();
@@ -386,11 +383,30 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     p.sub(CC).multiplyScalar((n + (0.965 - n) * w) / n).add(CC);
     return true;
   }
+  const tailRoot = OUT.ponytail ? headBone.children.find((b) => OUT.ponytail.re.test(b.name)) ?? null : null;
+  if (tailRoot && ACC.has('cap')) {
+    // 꼬리 밑동(머리뼈에도 걸친 꼭짓점)을 뿌리 뼈에만 붙인다 → 뿌리를 옮기면 꼬리 전체가 늘어나지 않고 통째로 따라온다
+    for (const mesh of meshes) {
+      if (!mesh.isSkinnedMesh || !/HAIR/.test([mesh.material].flat()[0].name)) continue;
+      const bones = mesh.skeleton.bones, rootIndex = bones.indexOf(tailRoot), si = mesh.geometry.attributes.skinIndex, sw = mesh.geometry.attributes.skinWeight;
+      if (rootIndex < 0) continue;
+      for (let i = 0; i < si.count; i++) {
+        let on = false;
+        for (let c = 0; c < 4; c++) if (sw.getComponent(i, c) > 0.05 && OUT.ponytail.re.test(bones[si.getComponent(i, c)].name)) on = true;
+        if (!on) continue;
+        for (let c = 0; c < 4; c++) if (sw.getComponent(i, c) && !OUT.ponytail.re.test(bones[si.getComponent(i, c)].name)) si.setComponent(i, c, rootIndex);
+      }
+      si.needsUpdate = true;
+    }
+    tailRoot.position.copy(tailRoot.parent.worldToLocal(new THREE.Vector3(...OUT.ponytail.root).applyMatrix4(HEAD)));
+    vrm.scene.updateMatrixWorld(true);
+    vrm.springBoneManager?.setInitState?.();
+  }
   if (OUT.trim) {
     for (const root of headBone.children.filter((b) => /Hair/.test(b.name))) {
       const z = root.getWorldPosition(new THREE.Vector3()).applyMatrix4(HEAD_INV).z;
       const f = z > 80 ? OUT.trim.fringe : OUT.trim.rest;
-      if (Array.isArray(f)) root.scale.set(...f); else root.scale.setScalar(f); // [폭, 길이(아래), 앞] — 뼈 축이 머리 축과 같다
+      root.scale.setScalar(f);
     }
     vrm.scene.updateMatrixWorld(true);
     vrm.springBoneManager?.setInitState?.(); // 줄인 길이로 흔들림 기준을 다시 잡는다
@@ -404,23 +420,8 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     vrm.scene.updateMatrixWorld(true);
     vrm.springBoneManager?.setInitState?.();
   }
-  // 가르마: 앞머리 가닥을 뿌리째 돌린다(모자를 안 쓸 때)
-  if (OUT.part) {
-    for (const root of headBone.children.filter((b) => /Hair/.test(b.name))) {
-      const r = Object.entries(OUT.part).find(([k]) => root.name.includes(k))?.[1];
-      if (r) root.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...r, 'YZX')));
-    }
-    vrm.scene.updateMatrixWorld(true);
-    vrm.springBoneManager?.setInitState?.();
-  }
-  // 긴 가닥을 뿌리 쪽으로 줄인다(지우는 대신 — 모자를 안 쓸 때)
-  if (OUT.shrink) {
-    for (const root of headBone.children.filter((b) => OUT.shrink.re.test(b.name))) root.scale.multiplyScalar(OUT.shrink.s);
-    vrm.scene.updateMatrixWorld(true);
-    vrm.springBoneManager?.setInitState?.();
-  }
   for (const joint of vrm.springBoneManager?.joints ?? []) {
-    if (!/Hair/.test(joint.bone.name)) continue;
+    if (!/Hair/.test(joint.bone.name) || OUT.ponytail?.re.test(joint.bone.name)) continue; // 포니테일은 원래 흔들림·충돌 그대로
     Object.assign(joint.settings, { stiffness: 4, dragForce: 1, gravityPower: 0 }); // 모자가 누르고 있어 거의 안 흔들린다
     joint.colliderGroups = []; // 머리를 줄이면 머리 충돌 구가 상대적으로 커져 앞머리를 챙 위로 밀어낸다
   }
@@ -428,7 +429,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     const skinM = new THREE.Matrix4(), boneM = new THREE.Matrix4(), toWorld = new THREE.Matrix4(), toBind = new THREE.Matrix4(), v = new THREE.Vector3();
     for (const mesh of meshes) {
       const kind = [mesh.material].flat()[0].name;
-      const hair = /HAIR/.test(kind);
+      const hair = /HAIR/.test(kind), tail = hair && OUT.ponytail?.re;
       if (!mesh.isSkinnedMesh || !(hair || /_SKIN/.test(kind))) continue; // 몸 메시엔 뒤통수 피부도 있어서 함께 눌러 넣는다
       const g = mesh.geometry, pos = g.attributes.position, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
       const bones = mesh.skeleton.bones, inverses = mesh.skeleton.boneInverses;
@@ -444,6 +445,11 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       }
       // 쉬는 자세의 실제 자리(줄인 가닥 포함)에서 눌러 넣고, 그 자리로 가게 원래 좌표를 고쳐 쓴다
       for (let i = 0; i < pos.count; i++) {
+        if (tail) { // 포니테일에 조금이라도 붙은 꼭짓점은 그대로(모자 뒤 구멍으로 나와 있다)
+          let on = false;
+          for (let c = 0; c < 4; c++) if (sw.getComponent(i, c) > 0.05 && tail.test(bones[si.getComponent(i, c)].name)) on = true;
+          if (on) continue;
+        }
         skinM.elements.fill(0);
         for (let c = 0; c < 4; c++) {
           const w = sw.getComponent(i, c);
@@ -463,6 +469,11 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   }
 
   // ---- 모자: 6쪽 돔(솔기·통풍 구멍) + 앞챙 + 꼭지 단추 ----
+  // 포니테일이 모자를 빠져나오는 높이: 묶은 뿌리를 돔 중심에서 바깥으로 비춘 자리(뒤 가운데)
+  const holeY = tailRoot ? (() => {
+    const p = tailRoot.getWorldPosition(new THREE.Vector3()).applyMatrix4(HEAD_INV).sub(CC);
+    return CC.y + p.y / Math.hypot(p.x / CR.x, p.y / CR.y, p.z / CR.z);
+  })() : null;
   function capTexture() {
     const cv = document.createElement('canvas');
     cv.width = 512;
@@ -483,9 +494,9 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     }
     x.fillStyle = 'rgba(0,0,0,0.1)'; // 테두리 바이어스
     x.fillRect(0, 59, 512, 5);
-    if (OUT.tail) { // 뒤 구멍: 포니테일이 빠져나오는 자리
+    if (holeY !== null) { // 뒤 구멍: 포니테일이 빠져나오는 자리
       const vOf = (y) => Math.acos((y - CC.y) / CR.y) / Math.acos((cap.back - CC.y) / CR.y);
-      const y0 = OUT.tail.root[1], v0 = vOf(y0 + 16) * 64, v1 = vOf(y0 - 14) * 64, du = (26 / (2 * Math.PI * CR.z)) * 512;
+      const y0 = holeY, v0 = vOf(y0 + 16) * 64, v1 = vOf(y0 - 14) * 64, du = (26 / (2 * Math.PI * CR.z)) * 512;
       x.fillStyle = '#3a261e';
       for (const u of [0, 512]) { x.beginPath(); x.ellipse(u, (v0 + v1) / 2, du, (v1 - v0) / 2, 0, 0, Math.PI * 2); x.fill(); }
     }
@@ -547,97 +558,6 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     const group = new THREE.Group();
     group.add(wear(domeGeometry(), domeMats), wear(brimGeometry(), dress(CLOTH, cap.color, cap.shade)), wear(button, dress(CLOTH, cap.color, cap.shade)));
     attach(headBone, HEAD, group);
-  }
-
-  // ---- 포니테일: 모자 뒤 구멍으로 빼서 묶은 꼬리 ----
-  // 뿌리는 묶은 방향으로 뻗고 끝으로 갈수록 중력 쪽으로 처진다. 달리면 한 걸음 주기로 좌우로, 발 디딤마다 위아래로
-  // 흔들리고(끝으로 갈수록 늦게) 공기 저항에 뒤로 날린다. 서 있을 땐 바람에 살랑인다
-  function strandTexture([dark, mid, light]) {
-    const cv = document.createElement('canvas');
-    cv.width = 64;
-    cv.height = 256;
-    const x = cv.getContext('2d');
-    const grad = x.createLinearGradient(0, 0, 0, 256);
-    grad.addColorStop(0, dark);
-    grad.addColorStop(0.45, mid);
-    grad.addColorStop(1, light);
-    x.fillStyle = grad;
-    x.fillRect(0, 0, 64, 256);
-    let seed = 7;
-    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    for (let i = 0; i < 30; i++) { x.fillStyle = `rgba(30,16,10,${0.06 + 0.12 * rnd()})`; x.fillRect(rnd() * 64, 0, 1 + rnd() * 2, 256); } // 결
-    const shine = x.createLinearGradient(0, 30, 0, 80); // 뿌리 가까이 하이라이트(경계가 딱딱하면 마디처럼 끊겨 보여서 번지게)
-    shine.addColorStop(0, 'rgba(255,232,214,0)');
-    shine.addColorStop(0.5, 'rgba(255,232,214,0.2)');
-    shine.addColorStop(1, 'rgba(255,232,214,0)');
-    x.fillStyle = shine;
-    x.fillRect(0, 30, 64, 50);
-    const tex = new THREE.CanvasTexture(cv);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.wrapS = THREE.RepeatWrapping;
-    return tex;
-  }
-  let swayTail = null;
-  if (OUT.tail) {
-    const TL = OUT.tail, N = 22, M = 14, ROW = M + 1;
-    const root = new THREE.Vector3(...TL.root), d0 = new THREE.Vector3(0, 0.25, -1).normalize(); // 뿌리는 모자 속 → 끈 자리에서 밖으로
-    const SIDE = new THREE.Vector3(1, 0, 0), BACK = new THREE.Vector3(0, 0, -1);
-    const TIE = 0.06; // 끈 자리(꼬리 길이 대비) — 모자 밖 7mm
-    const radius = (u) => (u < TIE ? 10 + 4 * (u / TIE) : u < 0.2 ? 14 + 10 * ease((u - TIE) / (0.2 - TIE)) : 24 * (1 - ((u - 0.2) / 0.8) ** 1.4) + 1.5);
-    const pos = new Float32Array(((N + 1) * ROW + 1) * 3), uv = [], index = [];
-    for (let i = 0; i <= N; i++) for (let j = 0; j <= M; j++) uv.push(j / M, 1 - i / N);
-    uv.push(0.5, 0);
-    for (let i = 0; i < N; i++) {
-      for (let j = 0; j < M; j++) {
-        const a = i * ROW + j, b = a + ROW;
-        index.push(a, a + 1, b, b, a + 1, b + 1);
-      }
-    }
-    const tip = (N + 1) * ROW;
-    for (let j = 0; j < M; j++) index.push(N * ROW + j, N * ROW + j + 1, tip);
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-    geo.setIndex(index);
-    const group = attach(headBone, HEAD, new THREE.Group());
-    const tie = wear(new THREE.TorusGeometry(13, 4, 8, 20), dress(CLOTH, TL.tie));
-    tie.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), d0);
-    tie.position.copy(root).addScaledVector(d0, TIE * TL.len);
-    group.add(wear(geo, dress(HAIR, '#ffffff', '#cdbfb8', strandTexture(TL.hair))), tie);
-
-    const pts = Array.from({ length: N + 1 }, () => new THREE.Vector3());
-    const inv = new THREE.Matrix4(), down = new THREE.Vector3(), dir = new THREE.Vector3();
-    const tan = new THREE.Vector3(), n1 = new THREE.Vector3(), n2 = new THREE.Vector3(), q = new THREE.Vector3();
-    swayTail = (phase, speed, time) => {
-      group.updateWorldMatrix(true, false);
-      down.set(0, -1, 0).transformDirection(inv.copy(group.matrixWorld).invert());
-      pts[0].copy(root);
-      for (let i = 1; i <= N; i++) {
-        const u = i / N, g = ease(u / 0.45);
-        const swing = speed * Math.sin(phase - 1 - 2.2 * u) + 0.08 * Math.sin(time * 1.6 - 2 * u);
-        dir.copy(d0).multiplyScalar(1 - g).addScaledVector(down, g)
-          .addScaledVector(BACK, 0.35 * speed * g)
-          .addScaledVector(SIDE, 0.5 * swing * u)
-          .addScaledVector(down, -0.3 * speed * Math.sin(2 * phase - 0.6 - 2 * u) * u)
-          .normalize();
-        pts[i].copy(pts[i - 1]).addScaledVector(dir, TL.len / N);
-      }
-      for (let i = 0; i <= N; i++) {
-        tan.subVectors(pts[Math.min(i + 1, N)], pts[Math.max(i - 1, 0)]).normalize();
-        n1.copy(SIDE).addScaledVector(tan, -SIDE.dot(tan)).normalize();
-        n2.crossVectors(tan, n1);
-        const u = i / N, r = radius(u);
-        for (let j = 0; j <= M; j++) {
-          const a = (j / M) * Math.PI * 2, lobe = 1 + 0.08 * Math.cos(6 * a + 3 * u);
-          q.copy(pts[i]).addScaledVector(n1, 1.1 * r * lobe * Math.cos(a)).addScaledVector(n2, 0.95 * r * lobe * Math.sin(a));
-          q.toArray(pos, (i * ROW + j) * 3);
-        }
-      }
-      q.copy(pts[N]).addScaledVector(tan, 4).toArray(pos, tip * 3);
-      geo.attributes.position.needsUpdate = true;
-      geo.computeVertexNormals();
-    };
-    swayTail(0, 0, 0);
   }
 
   // ---- 선글라스: 얼굴 앞을 감싸는 스포츠 고글형 렌즈 한 장 + 위 테 + 귀까지 다리. 눈 높이·얼굴 앞은 쉬는 자세에서 잰다 ----
@@ -757,7 +677,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       ry = Math.max(ry, Math.abs(p.dot(dorsal)));
       rz = Math.max(rz, Math.abs(p.dot(across)));
     }
-    const sleeveOff = CHAR === 'male' && SEASON === 'winter' ? 9 : 0; // 남자 겨울은 소매 시보리 위에 찬다
+    const sleeveOff = SEASON === 'winter' ? 7.5 : 0; // 겨울은 긴팔(띄움 6.5mm) 위에 찬다
     ry = ry * 1000 + 1.2 + sleeveOff;
     rz = rz * 1000 + 1.2 + sleeveOff;
     // 줄: 손목 단면 타원을 따라 납작한 띠(폭 20mm·두께 2.6mm)를 두른다
@@ -780,7 +700,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     const bezel = new THREE.TorusGeometry(15.6, 1.4, 6, 32).rotateX(-Math.PI / 2).translate(0, top + 8, 0);
     const screen = new THREE.Mesh(new THREE.CircleGeometry(14.2, 32).rotateX(-Math.PI / 2).translate(0, top + 8.2, 0), new THREE.MeshBasicMaterial({ color: WA.face }));
     const ring = new THREE.Mesh(new THREE.RingGeometry(10.5, 12.5, 40, 1, Math.PI / 2, Math.PI * 1.4).rotateX(-Math.PI / 2).translate(0, top + 8.4, 0), new THREE.MeshBasicMaterial({ color: WA.ring }));
-    watch.add(wear(geometry(pos, uv, index), dress(CLOTH, WA.strap, '#c4503f')), wear(caseGeo, dress(CLOTH, WA.case, '#16171b')), wear(bezel, dress(CLOTH, '#5a5f6a', '#30333a')), screen, ring);
+    watch.add(wear(geometry(pos, uv, index), dress(CLOTH, WA.strap, WA.strapShade)), wear(caseGeo, dress(CLOTH, WA.case, '#16171b')), wear(bezel, dress(CLOTH, '#5a5f6a', '#30333a')), screen, ring);
     attach(arm, frameOf(at, ax, dorsal, across), watch);
   }
 
@@ -788,7 +708,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   // 같은 뼈대로 움직여 몸에 딱 붙고(여자 가슴 라인도 그대로 드러난다), 팔을 흔들어도 접히거나 뚫리지 않는다.
   // pick(p, w): 입힐 꼭짓점인가(p = 쉬는 자세 월드 위치, w = 뼈 이름별 가중치). edge(p): 경계 밖 꼭짓점을 단으로 되민다(단이 반듯하다).
   // off: 피부에서 띄우는 거리(m) — 겹쳐 입는 순서대로 커진다(맨살 1.5 < 상의·하의 3 < 양말 3.5 < 시보리 8 < 겉옷 9 < 넥워머·조끼 12)
-  // 두 모델 모두 옷 밑 피부가 남아 있다(남: 짙은 티·검은 타이츠, 여: 스포츠 브라·쇼츠가 그려져 있다)
+  // 두 모델 모두 속옷만 입은 몸이다(속옷은 몸 텍스처 그림 — 피부가 다 남아 있다)
   const SKINS = meshes.filter((o) => o.isSkinnedMesh && /Body_00_SKIN/.test([o.material].flat()[0].name));
   const FACES = meshes.filter((o) => o.isSkinnedMesh && /Face_00_SKIN/.test([o.material].flat()[0].name));
   const wsum = (w, re) => Object.entries(w).reduce((a, [k, v]) => a + (re.test(k) ? v : 0), 0);
@@ -818,17 +738,9 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     }
     return w;
   };
-  // 고른 자리 피부를 d 만큼 밀어 넣는다(옷을 피부 껍질로 안 짓는 곳 — 여자 티셔츠 밑)
-  function tuckWhere(pick, d) {
-    const p = new THREE.Vector3(), w = {};
-    for (const skin of SKINS) {
-      const sp = skin.geometry.attributes.position;
-      for (let i = 0; i < sp.count; i++) if (pick(p.fromBufferAttribute(sp, i).applyMatrix4(skin.matrixWorld), weightsOf(skin, i, w))) tuckAt(skin, i, d);
-    }
-  }
   let OUTER = SKINS; // 몸통 가장 바깥 옷(조끼·물병을 그 위에 얹는다): 옷을 입힐 때마다 갈아 끼운다
   // 잘게 쪼개기: 삼각형 하나를 넷으로(가장자리 가운데 점은 이웃과 같이 쓴다, 뼈 가중치는 두 끝점을 섞는다)
-  // — 성긴 옷(여자 티셔츠 삼각형 3~4cm) 위에 무늬(조끼)를 오려 낼 때 가장자리가 계단처럼 깨지지 않게
+  // — 성긴 옷(삼각형 3~4cm) 위에 무늬(조끼)를 오려 낼 때 가장자리가 계단처럼 깨지지 않게
   function subdivide(g) {
     const pos = Array.from(g.attributes.position.array), nor = Array.from(g.attributes.normal.array), uv = g.attributes.uv ? Array.from(g.attributes.uv.array) : null;
     const si = Array.from(g.attributes.skinIndex.array), sw = Array.from(g.attributes.skinWeight.array), mids = new Map(), out = [], idx = g.index.array;
@@ -993,14 +905,13 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   const front = (p) => p.clone().sub(BM.hips).dot(facing) > BM.chestZ - 0.02;
   const WRIST = BM.arm[0].wristT;
   // 상의: sleeve = 소매 길이(어깨관절에서 m, 손목 = WRIST), hem = 밑단 높이(월드 y), neck = 목 밑으로 내린 깊이, scoop = 앞목을 더 판다
-  // singlet = 소매 없이 어깨끈만(겨드랑이 위는 끈 폭만 남긴다)
-  function top({ sleeve = 0, hem, neck = 0.035, scoop = 0, singlet = false, off = 0.003, color, shade }) {
+  function top({ sleeve = 0, hem, neck = 0.035, scoop = 0, off = 0.003, color, shade }) {
     const neckY = (p) => BM.neck.y - neck - (front(p) ? scoop : 0);
     return OUTER = skinShell({
       off, color, shade,
-      pick: (p, w) => wsum(w, HANDS) < 0.3 && wsum(w, LEGS_RE) < 0.5 && p.y < neckY(p) && p.y > hem
-        && (singlet ? armT(p) < -0.025 && !(p.y > BM.shoulderY - 0.07 && lat(p) > 0.085) : armT(p) < sleeve),
-      edge: (p) => { p.y = Math.min(Math.max(p.y, hem), neckY(p)); if (!singlet) clampArm(p, -1, sleeve); },
+      // 머리뼈에 붙은 피부(머리카락 밑 뒤통수)는 뺀다 — 목 위로 넉넉히 덮은 뒤 크루넥으로 자르는데, 뒤통수는 목 축에서 멀어 잘리지 않고 남아 뒷머리 끝 사이로 비쳤다
+      pick: (p, w) => wsum(w, HANDS) < 0.3 && wsum(w, LEGS_RE) < 0.5 && wsum(w, /C_Head$/) < 0.5 && p.y < neckY(p) && p.y > hem && armT(p) < sleeve,
+      edge: (p) => { p.y = Math.min(Math.max(p.y, hem), neckY(p)); clampArm(p, -1, sleeve); },
     });
   }
   // 둥근 목(크루넥): 상의를 목 위까지 덮어 만든 OUTER 를 목 둘레를 따라 둥글게 잘라 낸다(거리장이라 끝단이 매끈) + 목 시보리.
@@ -1018,6 +929,23 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     src.forEach((o) => { o.visible = false; });
     OUTER = clipShell({ src, field: F, off: 0, color, shade });
     clipShell({ src, field: (p) => { const f = F(p); return Math.min(f, 0.014 - f); }, off: 0.0012, color: rib, shade: ribShade }); // 시보리 1.4cm
+  }
+  // 민소매(러닝 싱글렛): 목 위까지 덮은 상의를 거리장으로 오려 어깨끈·앞목(깊게)·뒷목·겨드랑이 구멍을 낸다(끝단이 매끈) + 가장자리 바이어스.
+  // 겨드랑이 높이(어깨관절 7.5cm 아래) 밑은 몸통 전체, 그 위는 끈 바깥선(옆 11cm) 안쪽만 — 목둘레는 U자로 앞 10cm·뒤 5cm 파고, 끈 자리(옆 7.5cm~)는 어깨 위까지 덮는다.
+  // 예전엔 꼭짓점을 골라 입혀 끈이 앞목 높이에서 잘려 튜브톱처럼 되고 목선이 계단처럼 깨졌다
+  function tankTop({ color, shade, trim, trimShade }) {
+    const n = BM.neck, armpit = BM.shoulderY - 0.075, k = 0.012;
+    const smax = (a, b) => 0.5 * (a + b + Math.sqrt((a - b) ** 2 + k * k)), smin = (a, b) => -smax(-a, -b);
+    const F = (p) => {
+      const l = lat(p), s = ease((p.clone().sub(n).dot(facing) + 0.02) / 0.04); // s: 0 = 등, 1 = 가슴
+      const neckline = n.y - (0.05 + 0.05 * s) * (1 - ease((l - 0.01) / 0.065)); // 가운데가 가장 깊은 U자, 옆 7.5cm 부터 끈
+      return smax(armpit - p.y, smin(0.11 - l, neckline - p.y)); // + = 옷이 남는 쪽
+    };
+    top({ sleeve: -0.005, hem: HEM, neck: -0.09, off: 0.0055, color, shade });
+    const src = OUTER;
+    src.forEach((o) => { o.visible = false; });
+    OUTER = clipShell({ src, field: F, off: 0, color, shade });
+    clipShell({ src, field: (p) => { const f = F(p); return Math.min(f, 0.008 - f); }, off: 0.0012, color: trim, shade: trimShade }); // 바이어스 8mm
   }
   // 하의: 허리(waist)에서 hem 높이까지. 반바지는 허벅지 중간, 타이츠는 발목
   function bottom({ hem, waist = BM.hips.y + 0.07, off = 0.003, color, shade }) {
@@ -1039,197 +967,50 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       edge: (p) => { p.y = topY; },
     });
   }
-  // 맨살 덧칠: 몸에 그려진 타이츠·티·장갑을 덮어 맨다리·맨팔·맨손으로(남자). 색은 몸 텍스처의 목 위쪽에서 읽는다(손등엔 장갑이 그려져 있다)
-  function skinTone() {
-    for (const skin of SKINS) {
-      const img = [skin.material].flat()[0].map?.image, g = skin.geometry, uv = g.attributes.uv, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
-      if (!img || !uv) continue;
-      const cv = document.createElement('canvas');
-      cv.width = img.width;
-      cv.height = img.height;
-      const x = cv.getContext('2d');
-      x.drawImage(img, 0, 0);
-      const sum = [0, 0, 0];
-      let n = 0;
-      for (let i = 0; i < uv.count && n < 60; i++) {
-        if (sw.getX(i) < 0.9 || !/Neck$/.test(skin.skeleton.bones[si.getX(i)].name) || new THREE.Vector3().fromBufferAttribute(g.attributes.position, i).applyMatrix4(skin.matrixWorld).y < BM.neck.y + 0.02) continue;
-        const d = x.getImageData(Math.floor(uv.getX(i) * img.width), Math.floor(uv.getY(i) * img.height), 1, 1).data;
-        sum[0] += d[0]; sum[1] += d[1]; sum[2] += d[2]; n++;
-      }
-      if (n) return `rgb(${sum.map((c) => Math.round(c / n)).join(',')})`;
-    }
-    return '#f2c8b2';
-  }
-  function bare({ legsFrom, legsTo, arms, hands }) {
-    const tone = skinTone(), shade = new THREE.Color(tone).multiplyScalar(0.82).getStyle();
-    if (legsFrom) skinShell({ off: 0.0015, color: tone, shade, pick: (p, w) => wsum(w, LEGS_RE) > 0.5 && p.y < legsFrom && p.y > legsTo });
-    if (arms) skinShell({ off: 0.0015, color: tone, shade, pick: (p, w) => wsum(w, ARMS) > 0.5 && wsum(w, HANDS) < 0.5 && armT(p) > arms });
-    if (hands) skinShell({ off: 0.0012, color: tone, shade, pick: (p, w) => wsum(w, HANDS) > 0.3 }); // 그려진 손가락 없는 장갑을 덮는다
-  }
-  const hideOrig = (re) => meshes.forEach((o) => { if (o.isSkinnedMesh && re.test([o.material].flat()[0].name)) o.visible = false; });
-  // 남자 겨울: 후드 소매를 손목에서 끊고(손등까지 덮던 것) 시보리(손목 고무단)로 마감한다. 소매 끝 6cm 는 시보리 쪽으로 오므린다
-  function trimSleeves(rib = '#1b1d22') {
-    const end = WRIST - 0.012;
-    for (const o of meshes.filter((m) => m.isSkinnedMesh && /Tops_\d+_CLOTH/.test([m.material].flat()[0].name))) {
-      const g = o.geometry, sp = g.attributes.position, p = new THREE.Vector3(), toLocal = o.matrixWorld.clone().invert();
-      const over = new Uint8Array(sp.count);
-      for (let i = 0; i < sp.count; i++) {
-        p.fromBufferAttribute(sp, i).applyMatrix4(o.matrixWorld);
-        const t = armT(p);
-        if (t < end - 0.06 || lat(p) < 0.12) continue; // 팔 쪽만
-        const a = BM.arm[sideOf(p)], along = a.sh.clone().addScaledVector(a.axis, Math.min(t, end));
-        const radial = p.clone().sub(a.sh).addScaledVector(a.axis, -t);
-        const k = 1 - 0.3 * ease((Math.min(t, end) - (end - 0.06)) / 0.06); // 끝으로 갈수록 30% 오므린다
-        over[i] = t > end ? 1 : 0;
-        along.addScaledVector(radial, k).applyMatrix4(toLocal);
-        sp.setXYZ(i, along.x, along.y, along.z);
-      }
-      const idx = g.index.array;
-      for (let t = 0; t < idx.length; t += 3) if (over[idx[t]] && over[idx[t + 1]] && over[idx[t + 2]]) idx[t + 1] = idx[t + 2] = idx[t];
-      g.index.needsUpdate = true;
-      sp.needsUpdate = true;
-    }
-    skinShell({ off: 0.008, color: rib, shade: '#0e0f12', pick: (p, w) => wsum(w, ARMS) > 0.5 && armT(p) > end - 0.04 && armT(p) < end + 0.004 });
-  }
-  // 여자 상의: 이 모델은 원래 티셔츠 밑 가슴께(겨드랑이~명치, 앞뒤 모두) 피부가 지워져 있어 피부 껍질로는 못 입힌다.
-  // 원래 티셔츠를 복제해 몸에 붙게 줄인다 — 피부(와 반바지)가 있는 곳은 안쪽으로 쏴서 닿은 자리 + off 로 당기고,
-  // 가슴 앞(닿는 곳 없음)은 그대로 둔다(가슴 모양은 티셔츠가 갖고 있다). 나머지 빈 곳(옆구리·등)은 이웃 변위를 고르게 퍼뜨린다
-  // → 가슴 아래·옆이 들어가 가슴선이 드러나고, 각진 어깨·소매가 팔에 붙는다
-  // sleeve = 소매 길이(어깨관절에서 m, 음수 = 민소매), scoop = 앞목을 더 판다, hem = 밑단(월드 y, 없으면 원래대로)
-  const FIT_TARGETS = meshes.filter((o) => o.isSkinnedMesh && o.visible && /Body_00_SKIN|Bottoms_\d+_CLOTH/.test([o.material].flat()[0].name)).map((o) => {
-    const m = new THREE.Mesh(o.geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
-    m.matrixAutoUpdate = false;
-    m.matrixWorld.copy(o.matrixWorld);
-    m.userData.shorts = /Bottoms/.test([o.material].flat()[0].name);
-    return m;
-  });
-  function fitTee({ sleeve, scoop = 0, hem = null, off = 0.004, color, shade }) {
-    const orig = meshes.find((o) => o.isSkinnedMesh && /Tops_\d+_CLOTH/.test([o.material].flat()[0].name));
-    orig.visible = false;
-    const g = orig.geometry.clone(), sp = g.attributes.position, sn = g.attributes.normal;
-    const nm = new THREE.Matrix3().getNormalMatrix(orig.matrixWorld), toLocal = orig.matrixWorld.clone().invert();
-    // 같은 자리 꼭짓점(UV 이음매)은 한 점으로 묶는다 → 이음매가 벌어지지 않는다
-    const keyOf = new Map(), node = new Int32Array(sp.count), P = [], N = [];
-    const p = new THREE.Vector3(), n = new THREE.Vector3();
-    for (let i = 0; i < sp.count; i++) {
-      p.fromBufferAttribute(sp, i).applyMatrix4(orig.matrixWorld);
-      n.fromBufferAttribute(sn, i).applyMatrix3(nm).normalize();
-      const k = `${Math.round(p.x * 1e4)},${Math.round(p.y * 1e4)},${Math.round(p.z * 1e4)}`;
-      let id = keyOf.get(k);
-      if (id === undefined) { keyOf.set(k, (id = P.length)); P.push(p.clone()); N.push(new THREE.Vector3()); }
-      node[i] = id;
-      N[id].add(n);
-    }
-    const M = P.length, nb = Array.from({ length: M }, () => new Set()), idx = g.index.array;
-    for (let t = 0; t < idx.length; t += 3) for (let a = 0; a < 3; a++) {
-      const u = node[idx[t + a]], v = node[idx[t + ((a + 1) % 3)]];
-      if (u !== v) { nb[u].add(v); nb[v].add(u); }
-    }
-    const D = P.map(() => new THREE.Vector3()), hitAt = new Uint8Array(M), ray = new THREE.Raycaster();
-    ray.far = 0.08;
-    for (let id = 0; id < M; id++) {
-      const q = P[id], dir = N[id].normalize().clone().negate();
-      ray.set(q.clone().addScaledVector(dir, -0.01), dir);
-      const hit = ray.intersectObjects(FIT_TARGETS, false)[0];
-      if (hit) { D[id].copy(hit.point).addScaledVector(dir, -(off + (hit.object.userData.shorts ? 0.004 : 0))).sub(q); hitAt[id] = 1; } // 반바지 위는 외곽선만큼 더 띄운다
-    }
-    // 가슴 무게(1 = 티셔츠 모양 그대로): 앞 가운데·가슴 높이에서 1, 옆·아래·위로 갈수록 부드럽게 0 → 가슴 아래는 갈비뼈로 서서히 내려앉는다
-    const W = P.map((q) => (1 - ease((lat(q) - 0.06) / 0.05)) * ease((q.y - BM.hips.y - 0.12) / 0.07)
-      * (1 - ease((q.y - BM.shoulderY + 0.01) / 0.04)) * ease((q.clone().sub(BM.hips).dot(facing) - BM.chestZ + 0.01) / 0.04));
-    const avg = (id, out) => { out.set(0, 0, 0); for (const j of nb[id]) out.add(D[j]); return out.divideScalar(nb[id].size || 1); };
-    const tmp = new THREE.Vector3();
-    for (let it = 0; it < 120; it++) for (let id = 0; id < M; id++) if (!hitAt[id]) D[id].copy(avg(id, tmp)).multiplyScalar(1 - W[id]); // 안 닿은 곳 채우기
-    for (let id = 0; id < M; id++) if (hitAt[id]) D[id].multiplyScalar(1 - W[id]);
-    for (let it = 0; it < 6; it++) { // 접힘 없게 전체를 고르게
-      const next = D.map((d, id) => avg(id, new THREE.Vector3()).add(d).multiplyScalar(0.5 * (1 - W[id])));
-      next.forEach((d, id) => D[id].copy(d));
-    }
-    // 소매·목·밑단 손질 후 제자리(메시 공간)로
-    const over = new Uint8Array(M), neckY = BM.neck.y - scoop;
-    let end = -1, hemY = Infinity;
-    for (let id = 0; id < M; id++) {
-      const q = P[id].add(D[id]);
-      if (armT(q) > sleeve && lat(q) > 0.1 && q.y > BM.shoulderY - 0.09) { clampArm(q, -1, sleeve); over[id] = 1; } // 소매(겨드랑이 위)만
-      if (scoop && front(q) && lat(q) < 0.075 && q.y > neckY) { q.y = neckY; over[id] = 1; }
-      if (hem !== null && q.y < hem) { q.y = hem; over[id] = 1; }
-      if (lat(q) > 0.1) end = Math.max(end, armT(q));
-      hemY = Math.min(hemY, q.y);
-    }
-    for (let i = 0; i < sp.count; i++) {
-      p.copy(P[node[i]]).applyMatrix4(toLocal);
-      sp.setXYZ(i, p.x, p.y, p.z);
-    }
-    for (let t = 0; t < idx.length; t += 3) if (over[node[idx[t]]] && over[node[idx[t + 1]]] && over[node[idx[t + 2]]]) idx[t + 1] = idx[t + 2] = idx[t];
-    g.computeVertexNormals();
-    const mesh = new THREE.SkinnedMesh(g, dress(CLOTH, color, shade));
-    mesh.frustumCulled = false;
-    mesh.position.copy(orig.position);
-    mesh.quaternion.copy(orig.quaternion);
-    mesh.scale.copy(orig.scale);
-    orig.parent.add(mesh);
-    mesh.bind(orig.skeleton, orig.bindMatrix);
-    mesh.updateMatrixWorld(true);
-    // 티셔츠 밑에 덮인 반바지 허리(옆으로 불룩)는 피부 쪽으로 붙인다 — 맞춘 티셔츠를 뚫고 나오지 않게(밑단 1~3.5cm 위부터 서서히)
-    const skinOnly = FIT_TARGETS.filter((m) => !m.userData.shorts);
-    for (const o of meshes.filter((m) => m.isSkinnedMesh && /Bottoms_\d+_CLOTH/.test([m.material].flat()[0].name))) {
-      const bp = o.geometry.attributes.position, bn = o.geometry.attributes.normal;
-      const nmB = new THREE.Matrix3().getNormalMatrix(o.matrixWorld), inv = o.matrixWorld.clone().invert();
-      for (let i = 0; i < bp.count; i++) {
-        p.fromBufferAttribute(bp, i).applyMatrix4(o.matrixWorld);
-        const k = ease((p.y - hemY - 0.01) / 0.025);
-        if (!k) continue;
-        const dir = n.fromBufferAttribute(bn, i).applyMatrix3(nmB).normalize().negate();
-        ray.set(p.clone().addScaledVector(dir, -0.002), dir);
-        const hit = ray.intersectObjects(skinOnly, false)[0];
-        if (!hit) continue;
-        p.lerp(hit.point.addScaledVector(dir, -0.0015), k).applyMatrix4(inv);
-        bp.setXYZ(i, p.x, p.y, p.z);
-      }
-      bp.needsUpdate = true;
-    }
-    // 옷 밑 피부(배·어깨·위팔, 목 옆 어깨 위까지)를 밀어 넣는다
-    tuckWhere((q, w) => wsum(w, HANDS) < 0.3 && wsum(w, LEGS_RE) < 0.5 && q.y > hemY + 0.01 && armT(q) < end - 0.008
-      && (q.y < BM.neck.y - 0.01 || (q.y < BM.neck.y + 0.015 && lat(q) > 0.045)), 0.003);
-    OUTER = [mesh];
-    return { mesh, end };
-  }
-  // 긴 소매(여자): 티셔츠 소매 속(어깨관절 4cm)부터 손목까지 팔 피부 위에 — 소매 끝이 비스듬해도 틈이 안 나게 소매 밑으로 겹치고, 겹친 곳은 조금 덜 띄워 소매가 덮는다
-  const longSleeve = (off, color, shade, from = 0.04) => skinShell({ off: off - 0.0012, color, shade, pick: (p, w) => wsum(w, HANDS) < 0.5 && wsum(w, /Spine|Chest|Neck|Head/) < 0.5 && armT(p) > from, edge: (p) => clampArm(p, from, WRIST - 0.008) });
-  // 옷(계절): 여자는 원래 반바지는 두고 상의를 몸에 붙는 옷으로, 남자는 원래 후드·바지(겨울) 또는 몸에 그려진 티·타이츠 위에 입힌다
+  // 옷(계절): 두 모델 모두 속옷만 입은 몸이라 옷을 전부 피부 껍질로 짓는다(원래 옷에 기대지 않는다 — 어떤 모델이든 같게)
   const HEM = BM.hips.y - 0.02;
+  // 여자 러닝 쇼츠: 허벅지 위 1/3 까지. 상의 밑단(띄움 5.5mm)이 쇼츠 허리(3mm) 위로 덮인다
+  const shorts = (off = 0.003) => bottom({ hem: BM.knee + 0.2, off, color: '#1d1f24', shade: '#111216' });
   const WEAR = {
     female: {
-      summer: () => { fitTee({ sleeve: -0.012, scoop: 0.05, color: '#ff8a7a', shade: '#d4675b' }); socks(0.03); }, // 민소매
-      mild: () => { fitTee({ sleeve: 0.11, scoop: 0.012, color: '#f6f6f3', shade: '#c9ccd6' }); socks(0.085); }, // 몸에 붙는 반팔
-      winter: () => { // 긴 타이츠(반바지 안) + 몸에 붙는 긴팔 바람막이
+      summer: () => { // 민소매 싱글렛 + 쇼츠
+        tankTop({ color: '#ff8a7a', shade: '#d4675b', trim: '#f2766a', trimShade: '#c45a50' });
+        shorts();
+        socks(0.03);
+      },
+      mild: () => { // 몸에 붙는 반팔 + 쇼츠
+        top({ sleeve: 0.11, hem: HEM, neck: -0.09, off: 0.0055, color: '#f6f6f3', shade: '#c9ccd6' });
+        crewNeck({ color: '#f6f6f3', shade: '#c9ccd6', rib: '#e8e8e3', ribShade: '#bcbfca' });
+        shorts();
+        socks(0.085);
+      },
+      winter: () => { // 긴 타이츠 위에 쇼츠를 겹쳐 입고 + 몸에 붙는 긴팔 바람막이
         bottom({ hem: BM.ankle + 0.03, off: 0.002, color: '#1d1f26', shade: '#121318' });
-        // 소매는 어깨에서 자르고 팔은 통째로 피부 위 긴소매로 — 티셔츠 소매를 살리면 팔을 뒤로 흔들 때 겨드랑이가 지느러미처럼 접혀 나왔다
-        fitTee({ sleeve: 0.035, off: 0.006, color: '#2d7f8c', shade: '#1d5761' });
-        longSleeve(0.006, '#2d7f8c', '#1d5761', 0.01);
+        shorts(0.0045);
+        top({ sleeve: WRIST - 0.008, hem: HEM, neck: -0.09, off: 0.0065, color: '#2d7f8c', shade: '#1d5761' });
+        crewNeck({ color: '#2d7f8c', shade: '#1d5761', rib: '#267080', ribShade: '#184a53' });
         socks(0.085);
       },
     },
     male: {
-      summer: () => {
-        hideOrig(/Tops_\d+_CLOTH|Bottoms_\d+_CLOTH/);
-        const shortsHem = BM.knee + 0.12;
-        bare({ legsFrom: shortsHem + 0.02, legsTo: BM.ankle - 0.02, arms: 0.08, hands: !ACC.has('glove') }); // 맨팔은 소매 속부터
-        top({ sleeve: 0.15, hem: HEM, neck: -0.09, off: 0.0055, color: '#3d7be0', shade: '#2a58a6' }); // 반바지 허리 위로 덮는다(목은 크루넥으로 잘라 낸다)
+      summer: () => { // 반팔 티(쇼츠 허리 위로 덮는다) + 쇼츠
+        top({ sleeve: 0.15, hem: HEM, neck: -0.09, off: 0.0055, color: '#3d7be0', shade: '#2a58a6' });
         crewNeck({ color: '#3d7be0', shade: '#2a58a6', rib: '#356fcc', ribShade: '#244e94' });
-        bottom({ hem: shortsHem, color: '#1d1f24', shade: '#111216' });
+        bottom({ hem: BM.knee + 0.12, color: '#1d1f24', shade: '#111216' });
         socks(0.085);
       },
-      mild: () => { // 그려진 검은 타이츠 위에 반바지(색을 달리해 겹쳐 입은 게 보이게) + 반팔 티
-        hideOrig(/Tops_\d+_CLOTH|Bottoms_\d+_CLOTH/);
-        bare({ arms: 0.07, hands: !ACC.has('glove') }); // 소매 속까지 겹쳐 덮는다(틈이 나면 몸에 그려진 검붉은 띠가 비친다)
+      mild: () => { // 반팔 티 + 쇼츠
         top({ sleeve: 0.13, hem: HEM, neck: -0.09, off: 0.0055, color: '#59606b', shade: '#3c424b' });
         crewNeck({ color: '#59606b', shade: '#3c424b', rib: '#4e545e', ribShade: '#353a42' });
-        bottom({ hem: BM.knee + 0.13, off: 0.0045, color: '#2c3a52', shade: '#1d2738' });
+        bottom({ hem: BM.knee + 0.13, color: '#2c3a52', shade: '#1d2738' });
+        socks(0.085);
       },
-      winter: () => { // 원래 후드·바지 + 소매를 손목에서 끊고 시보리
-        OUTER = meshes.filter((o) => o.isSkinnedMesh && o.visible && /Tops_\d+_CLOTH/.test([o.material].flat()[0].name));
-        trimSleeves();
-        if (!ACC.has('glove')) bare({ hands: true });
+      winter: () => { // 긴 타이츠 위에 쇼츠 + 긴팔
+        bottom({ hem: BM.ankle + 0.03, off: 0.002, color: '#1b1d22', shade: '#101114' });
+        bottom({ hem: BM.knee + 0.13, off: 0.0045, color: '#2c3a52', shade: '#1d2738' });
+        top({ sleeve: WRIST - 0.008, hem: HEM, neck: -0.09, off: 0.0065, color: '#3a3f4a', shade: '#262a32' });
+        crewNeck({ color: '#3a3f4a', shade: '#262a32', rib: '#30343d', ribShade: '#1e2128' });
+        socks(0.085);
       },
     },
   };
@@ -1814,13 +1595,13 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     let next = 0, lastBeat = -9, lastCycle = 0, burstUntil = -1, burstRate = 0, carry = 0;
     const tmp = new THREE.Vector3();
     stepBreath = (dt, dz, t) => {
-      const cycle = Math.floor(phase / (Math.PI * 2)), talkNow = mode === 'talk' && speaking;
+      const cycle = Math.floor(phase / (Math.PI * 2)), talkNow = reading && speaking;
       const exhale = speed > 0.3 ? cycle !== lastCycle : t - lastBeat > (talkNow ? 0.7 : 3);
       lastCycle = cycle;
       if (exhale) { lastBeat = t; burstUntil = t + (talkNow ? 0.18 : BREATH.burst); burstRate = BREATH.rate * (talkNow ? 0.6 : 1); }
       if (t < burstUntil) { // 뿜는 동안 덩이를 흘려보낸다
         carry += burstRate * dt;
-        const fwd = new THREE.Vector3(0, 0, 1).applyAxisAngle(Y_AXIS, turnNow); // 얼굴 쪽(브리핑 땐 돌아선 쪽)
+        const fwd = new THREE.Vector3(0, 0, 1); // 얼굴 쪽(달리는 방향)
         const side = new THREE.Vector3().crossVectors(Y_AXIS, fwd);
         for (; carry >= 1; carry--) {
           const q = P[next];
@@ -2250,19 +2031,9 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
 
   // ---- 연출: 달리다 → 클릭하면 감속해 서고 카메라가 얼굴로 → 브리핑 → 카메라가 되감기며 다시 출발 ----
   const lerpCam = (a, b, x) => Object.fromEntries(Object.keys(a).map((key) => [key, a[key] + (b[key] - a[key]) * x]));
-  // mode: run → stop(감속) → talk(브리핑) 또는 hold(멈추기) → resume(다시 출발). stopFor = 멈추는 까닭
-  let mode = OPT.mv ? 'run' : 'hold', modeT = 0, speed = OPT.mv ? 1 : 0, phase = 0, stopFor = 'talk'; // 멈추기로 열면 처음부터 서 있다
-  const STOP_SEC = 2.6, START_SEC = 1.4;
-  // 몸 돌리기: 브리핑이면 감속 후반에 카메라 쪽으로 돌아 서서 정면으로 말하고, 끝나면 먼저 돌아선 뒤 출발한다
-  const TURN_BACK = 0.5;
-  let turnNow = 0, turnFrom = 0, turnT = 0, headLook = 0; // headLook = 고개가 몸보다 먼저 카메라 쪽으로 돈 양(rad)
-  function turnAt(t) {
-    const face = CAMERAS.talk.yaw, tt = t - modeT;
-    if (mode === 'stop') return stopFor === 'talk' ? face * ease((tt - STOP_SEC * 0.55) / (STOP_SEC * 0.45 + 0.3)) : 0;
-    if (mode === 'talk') return face;
-    if (mode === 'resume' || mode === 'hold') return turnFrom * (1 - ease((t - turnT) / TURN_BACK));
-    return 0;
-  }
+  // mode: run(달린다) 또는 hold(서 있다 — 컨트롤러로 연 정지 화면). 브리핑 중에도 러너는 멈추지 않는다
+  let mode = OPT.mv ? 'run' : 'hold', speed = OPT.mv ? 1 : 0, phase = 0;
+  let headLook = 0; // 고개가 카메라 쪽으로 돈 양(rad) — 브리핑을 읽는 동안 카메라를 본다
   // 사용자 카메라(컨트롤러): 앵글 = 위아래(0° 눈높이 ~ 89° 바로 위), 포지션 = 러너 둘레 방향, 디스턴스 = 거리. 몸 가운데를 본다
   const CAM_LOOK = 0.9;
   function userCam() {
@@ -2272,19 +2043,18 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     const e = (Math.min(OPT.el, 89) * Math.PI) / 180;
     return { yaw: (OPT.az * Math.PI) / 180, dist: OPT.ds * Math.cos(e), h: CAM_LOOK + OPT.ds * Math.sin(e), look: CAM_LOOK, fov: 34, roll: 0 };
   }
-  // 같이 뛰기를 끄면 카메라가 길(세상)에 서 있다: 땅과 함께 뒤로 밀리고, 러너가 FIX_RANGE 만큼 앞서 가면 앞쪽에 다시 선다
-  const FIX_RANGE = 12;
-  let camAnchor = 0;
-  // 멈출 때 관성: 감속 후반에 상체가 앞으로 쏠렸다가, 선 뒤엔 잦아드는 출렁임
-  function brakeLean(tt) {
-    if (tt < STOP_SEC) return 0.14 * Math.sin(Math.PI * (tt / STOP_SEC) ** 2);
-    const u = tt - STOP_SEC;
-    return 0.05 * Math.exp(-3 * u) * Math.sin(8 * u);
-  }
-  let camFrom = userCam(), camTo = camFrom, camT0 = 0, camDur = 1;
+  // ---- 브리핑 연출(사용자 결정 2026-11-05) ----
+  // 1. 카메라는 길에 서 있고, 러너가 멀리서 카메라 쪽으로 달려온다
+  // 2. 러너가 다가오면 카메라맨도 뛰기 시작해 러너 5m 앞에서 뒤돌아 찍으며 같이 달린다 → 자리를 잡으면 onReadyToTalk() (앱이 문장별 TTS·자막)
+  // 3. finish(): 다 읽으면 카메라맨이 서서히 멈추고, 옆을 지나 멀어지는 러너를 계속 바라보며 살짝 내려간다
+  // camAnchor = 카메라가 '같이 뛰는 자리'보다 앞(+)·뒤(-)에 있는 거리(m), camRun = 카메라맨 속도 ÷ 러너 속도
+  // 5m 앞에서 옆으로 2.2m 비켜 선다(멈출 때 러너가 옆을 지나간다). 망원(화각 22°)이라 5m 에서도 러너가 화면을 채운다 — 30° 면 얼굴이 작았다
+  const LEAD = { yaw: 0.45, dist: 5, h: 1.35, look: 1.05, fov: 22, roll: 0 };
+  const APPROACH_M = 12, CATCH_M = 3, STOP_CAM_SEC = 2.4;
+  let camAnchor = STORY && OPT.mv ? APPROACH_M : 0, camRun = 0, stopT = -1, reading = false;
+  let camFrom = STORY ? LEAD : userCam(), camTo = camFrom, camT0 = 0, camDur = 1;
   const camAt = (t) => lerpCam(camFrom, camTo, ease((t - camT0) / camDur));
   function moveCam(to, t, dur) { camFrom = camAt(t); camTo = to; camT0 = t; camDur = dur; }
-  const talking = () => mode === 'talk' || (mode === 'stop' && stopFor === 'talk');
 
   // 주먹: 네 손가락을 끝까지 말아 쥐고 엄지는 검지·중지 가운데 마디 위에 얹는다(손가락에 붙인다 — 힘줘 쥐지는 않는다)
   // (T포즈 손바닥이 아래 → 왼손은 -Z, 오른손은 +Z 로 말아 쥔다. 엄지 Y·Z 는 좌우 반대)
@@ -2302,33 +2072,21 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   }
 
   // ---- 브리핑 진행(앱이 부른다) ----
-  // beginTalk(): 감속해 서고 카메라가 얼굴로 → 다 서면 onReadyToTalk() (앱이 문장별 TTS·자막을 시작)
   // setSpeech(): 지금 문장을 말하는 중인지 · 마지막 문장인지(입모양·웃음)
-  // runOff(): 돌아서서 다시 출발. 카메라는 따라 뛰지 않고 그 자리(길)에 남는다 → 러너가 멀어진다(사용자 결정)
-  let lineIsLast = false, speaking = false, follow = true;
-  function beginTalk() {
-    if (mode !== 'run' && mode !== 'hold') return;
-    const t = clock.getElapsedTime(), held = mode === 'hold';
-    mode = 'stop'; stopFor = 'talk'; modeT = held ? t - STOP_SEC * 0.55 : t;
-    camAnchor = 0;
-    moveCam(CAMERAS.talk, t, held ? 1.6 : STOP_SEC + 0.2);
-  }
+  // finish(): 다 읽었다 — 카메라맨이 서서히 멈춘다(위 '브리핑 연출' 3)
+  let lineIsLast = false, speaking = false;
   function setSpeech(next) {
     speaking = Boolean(next.speaking);
     lineIsLast = Boolean(next.last);
   }
-  // 떠날 때: 러너는 가던 방향으로 다시 달리고, 카메라는 그 자리(수평 위치)에서 높이만 바닥(3cm)까지 천천히 내리며
-  // 러너를 계속 바라본다(lookAt) — 옆을 지나 멀어지는 러너를 바닥에서 올려다본다(사용자 결정 2026-11-04)
-  const RUN_OFF_CAM_SEC = 3.6;
-  function runOff() {
+  function finish() {
+    if (stopT >= 0) return;
     const t = clock.getElapsedTime();
+    reading = false;
     speaking = false;
-    follow = false;
-    camAnchor = 0;
-    mode = 'resume'; modeT = t;
-    turnFrom = turnNow; turnT = t;
-    const now = camAt(t);
-    moveCam({ ...now, h: 0.03, look: CAM_LOOK }, t, RUN_OFF_CAM_SEC);
+    stopT = t;
+    // 서면서 살짝 내려 지나가는 러너를 올려다본다. 화각을 넓혀야 옆을 지날 때 몸이 화면을 꽉 채우지 않는다
+    moveCam({ ...LEAD, h: 0.75, look: CAM_LOOK, fov: 38 }, t, STOP_CAM_SEC + 1.2);
   }
 
   // 표정: 브리핑 땐 웃는 얼굴(마지막 '출발!'은 더 활짝), 이지런은 달릴 때도 편하게 살짝 웃는다
@@ -2339,8 +2097,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     let v = 0;
     // 기기 TTS 는 소리 크기를 읽을 수 없어서, 말하는 동안 입을 말하는 흉내로 움직인다
     if (speaking) v = Math.max(0, 0.3 + 0.5 * Math.sin(t * 15) * Math.sin(t * 4.7));
-    const talkingNow = mode === 'talk';
-    const target = talkingNow ? (lineIsLast ? 0.6 : 0.4) : OPT.rn === 'easy' || OPT.rn === 'lsd' ? 0.15 : 0;
+    const target = reading ? (lineIsLast ? 0.6 : 0.4) : OPT.rn === 'easy' || OPT.rn === 'lsd' ? 0.15 : 0;
     const k = Math.min(1, dt * 4);
     smile += (target - smile) * k;
     const em = vrm.expressionManager;
@@ -2350,8 +2107,8 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     em.setValue('aa', open);
     em.setValue('oh', open * 0.35);
     em.setValue('blink', (t % 3.2) < 0.12 ? 1 : 0);
-    talk.nod += ((talkingNow ? 0.07 * v : 0) - talk.nod) * Math.min(1, dt * 10);
-    talk.tilt += ((talkingNow ? 0.06 * Math.sin(t * 0.8) : 0) - talk.tilt) * k;
+    talk.nod += ((reading ? 0.07 * v : 0) - talk.nod) * Math.min(1, dt * 10);
+    talk.tilt += ((reading ? 0.06 * Math.sin(t * 0.8) : 0) - talk.tilt) * k;
   }
 
   // ---- 페인터리 후처리 ----
@@ -2532,7 +2289,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     const yaw = FACING + cam.yaw + 0.015 * Math.sin(t * 0.7);
     if (camera.fov !== cam.fov) { camera.fov = cam.fov; camera.updateProjectionMatrix(); }
     camera.position.set(Math.sin(yaw) * d, cam.h * k, Math.cos(yaw) * d);
-    if (STORY && !follow) camera.position.add(new THREE.Vector3(Math.sin(FACING), 0, Math.cos(FACING)).multiplyScalar(camAnchor)); // 길에 선 카메라
+    if (STORY) camera.position.add(new THREE.Vector3(Math.sin(FACING), 0, Math.cos(FACING)).multiplyScalar(camAnchor)); // 카메라맨이 러너보다 앞·뒤에 있는 만큼
     camera.lookAt(0, cam.look * k, 0);
     camera.rotateZ(cam.roll);
     camera.updateMatrixWorld();
@@ -2542,47 +2299,33 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     if (st !== lastStep) {
       const dt = lastStep < 0 ? 0 : Math.min(st - lastStep, 0.1);
       lastStep = st;
-      let lean = 0;
-      if (mode === 'stop' || mode === 'talk') {
-        speed = Math.min(speed, 1 - ease((t - modeT) / STOP_SEC)); // 이미 서 있었으면 그대로 0
-        lean = brakeLean(t - modeT);
-        if (mode === 'stop' && t - modeT >= STOP_SEC + 0.3) {
-          if (stopFor === 'talk') { if (t - modeT >= STOP_SEC + 0.65) { mode = 'talk'; onReadyToTalk?.(); } } // 몸까지 다 돈 뒤 한 박자(0.35초) 쉬고 말한다
-          else { mode = 'hold'; turnFrom = 0; turnT = t; }
-        }
-      } else if (mode === 'hold') {
-        speed = 0;
-      } else if (mode === 'resume') {
-        const x = (t - modeT - TURN_BACK) / START_SEC; // 먼저 돌아선 뒤 출발
-        speed = ease(x);
-        lean = 0.1 * Math.sin(Math.PI * Math.min(Math.max(x, 0), 1)); // 출발할 때 몸을 앞으로 기울여 가속
-        if (x >= 1) mode = 'run';
-      }
-      // 멈추기: 달리다 → 걷기로 넘어가며(speed 0.75 → 0.3) 걸음이 느려지고 → 마지막 발이 닿아 두 발이 다 디딘 순간 박자를 세운다.
-      // 다시 출발도 거꾸로 걷기부터. (예전엔 박자는 그대로 두고 보폭만 0 으로 줄여 마지막 1초가 제자리 종종걸음 같았다)
+      if (mode === 'hold') speed = 0;
+      // 서 있을 땐(hold) 걷기 자세로 넘어가 두 발이 다 디딘 순간 박자를 세운다
       stopWalk = 1 - ease((speed - 0.3) / 0.45);
       updateGait(st);
       tuneGait();
       const amp = Math.min(1, (speed * S.speedBase) / S.speed); // 실제 속도 = 달리던 속도 × speed → 걷기 보폭으로 환산
       const freq = S.cadence * (0.5 + 0.5 * Math.min(1, amp / 0.5));
-      const settled = mode !== 'run' && mode !== 'resume' && speed < 0.15 && LEGS.every((l) => l.stance);
+      const settled = mode === 'hold' && LEGS.every((l) => l.stance);
       if (!settled) phase += dt * Math.PI * 2 * freq;
-      const turn = (turnNow = turnAt(t));
-      // 브리핑하려고 멈출 땐 눈·고개가 먼저 카메라를 찾고(최대 43°, 카메라가 뒤면 어깨 너머로) 몸이 따라 돈다 — 몸이 카메라를 향하면 고개는 저절로 가운데로
-      const lookW = talking() ? ease((t - modeT) / (STOP_SEC * 0.45)) : 0;
-      const camRel = STORY ? camAt(t).yaw - turn : 0;
-      headLook += (Math.max(-0.75, Math.min(0.75, camRel)) * lookW - headLook) * Math.min(1, dt * 6);
-      vrm.scene.rotation.y = baseYaw + turn;
-      body.rotation.y = FACING + turn;
+      // 브리핑을 읽는 동안 고개를 카메라 쪽으로(최대 43°)
+      const camRel = STORY ? camAt(t).yaw : 0;
+      headLook += (Math.max(-0.75, Math.min(0.75, camRel)) * (reading ? 1 : 0) - headLook) * Math.min(1, dt * 3);
+      vrm.scene.rotation.y = baseYaw;
+      body.rotation.y = FACING;
       body.updateMatrixWorld();
-      pose(phase, amp, st, lean, freq);
+      pose(phase, amp, st, 0, freq);
       dz = settled ? 0 : groundStep(dt, amp, freq);
-      if (STORY && !follow) camAnchor -= dz; // 브리핑 뒤: 카메라는 길에 남고 러너만 멀어진다(팝업이 그사이 사라진다)
+      if (STORY && OPT.mv) {
+        // 다가올수록 카메라맨이 점점 빨리 뛰어 5m 앞 자리에 붙는다 / 다 읽으면 서서히 멈춘다(러너가 옆을 지나 멀어진다)
+        camRun = stopT < 0 ? Math.min(1, Math.max(0, 1 - camAnchor / CATCH_M)) : 1 - ease((t - stopT) / STOP_CAM_SEC);
+        camAnchor -= dz * (1 - camRun);
+        if (!reading && stopT < 0 && camAnchor < 0.5) { reading = true; onReadyToTalk?.(); }
+      }
       stepSnow?.(dt, dz, st);
       mouth(st, dt);
       const n = FX ? 5 : 1; // 12fps 로 끊을 땐 흔들림 물리를 잘게 나눠 돌린다
       for (let i = 0; i < n; i++) vrm.update(dt / n);
-      swayTail?.(phase, speed, st);
       stepBreath?.(dt, dz, st);
       post.uniforms.stepT.value = st;
     }
@@ -2632,5 +2375,5 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   }
   signal?.addEventListener('abort', dispose)
 
-  return { beginTalk, setSpeech, runOff, dispose }
+  return { setSpeech, finish, dispose }
 }

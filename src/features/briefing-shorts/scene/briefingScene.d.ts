@@ -19,12 +19,10 @@ export type BriefingSceneOptions = {
 }
 
 export type BriefingScene = {
-  /** 감속해 서서 카메라를 본다. 다 서면 onReadyToTalk 가 불린다. */
-  beginTalk(): void
   /** 지금 말하는 중인지(입모양)·마지막 문장인지(더 활짝 웃음) */
   setSpeech(state: { speaking: boolean; last: boolean }): void
-  /** 돌아서서 다시 달려 나간다. 카메라는 그 자리에 남는다. */
-  runOff(): void
+  /** 다 읽었다 — 카메라맨이 서서히 멈추고, 옆을 지나 멀어지는 러너를 바라보며 살짝 내려간다. */
+  finish(): void
   dispose(): void
 }
 
@@ -38,6 +36,7 @@ export function createBriefingScene(args: {
   canvas: HTMLCanvasElement
   modelUrl: string
   options: BriefingSceneOptions
+  /** 러너가 카메라까지 달려와 카메라맨이 5m 앞에서 같이 뛰기 시작하면 — 이때부터 읽는다 */
   onReadyToTalk?: () => void
   signal?: AbortSignal
 }): Promise<BriefingScene>

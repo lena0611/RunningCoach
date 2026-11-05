@@ -109,6 +109,10 @@ declare global {
       receiveVo2MaxError: (message: string) => void
       receiveCrossTraining: (sessions: HealthKitCrossTrainingCandidate[]) => void
     }
+    /** 브리핑 쇼츠 음성(#898): 네이티브가 문장마다 시작·끝을 알린다. */
+    RunContextSpeech?: {
+      receiveEvent: (event: { id: string; event: 'start' | 'end' }) => void
+    }
     /** 네이티브가 document-start 에 주입하는 지원 기능 목록(#739). 구버전 앱엔 없다. */
     RunContextNativeCapabilities?: string[]
     webkit?: {
@@ -139,6 +143,10 @@ declare global {
         }
         /** 인트로(네이티브 스플래시) 걷기 시점 조율(#898) — 능력 'closeIntro' 를 확인하고 보낸다. */
         runContextIntro?: {
+          postMessage: (message: unknown) => void
+        }
+        /** 브리핑 쇼츠 음성(#898) — 능력 'briefingSpeech' 를 확인하고 보낸다. */
+        runContextSpeech?: {
           postMessage: (message: unknown) => void
         }
       }
