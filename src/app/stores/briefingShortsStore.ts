@@ -19,6 +19,8 @@ export type TodayBriefingPayload = {
   /** 페이스 범위 또는 "약 N분" */
   metaLine: string
   briefing: SessionBriefing
+  /** 활성 목표(쇼츠 프로필 줄의 D-day·해시태그). 없으면 null */
+  goal: { title: string; targetDate: string | null } | null
 }
 
 const SHOWN_KEY_PREFIX = 'pacelab:briefing-shorts:shown:'

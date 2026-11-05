@@ -164,6 +164,9 @@
   --briefing-shorts-ink-dim: #8d8d9c;
   --briefing-shorts-accent: #ff4d57;
   --briefing-shorts-cool: #8ec5ff;
+  /* 쇼츠처럼(#898): 노란 굵은 제목 · 영상 위 자막의 검은 테 */
+  --briefing-shorts-title: #ffd426;
+  --briefing-shorts-outline: #000;
   /* ── Tab Patterns 토큰 (.harness/project/tab-patterns.md · SegmentTabs/WeekStrip 전용) ──
      스펙 방언 매핑: --ok→--color-primary · --accent→--color-accent · --warning→--color-warning
      --surface-2→--color-surface-2 · --text-3→--color-muted-2 · --border→--color-border */

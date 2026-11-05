@@ -448,7 +448,7 @@ export async function seedBriefingShortsToday(sessionType: ScheduledSession['ses
   }
   const briefing = buildSessionBriefing(session, { goal: null, injury: null, chronic: null, vdot: 45 })
   useBriefingShortsStore().publishToday(
-    { date, dayState: state, sessionType, title: sessionTypeLabel(sessionType), distanceKm: 8, metaLine: '6:10~6:40/km', briefing },
+    { date, dayState: state, sessionType, title: sessionTypeLabel(sessionType), distanceKm: 8, metaLine: '6:10~6:40/km', briefing, goal: { title: '가을 하프 마라톤', targetDate: isoOffset(23) } },
     true
   )
 }
