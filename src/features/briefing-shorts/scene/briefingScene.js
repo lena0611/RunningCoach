@@ -1601,8 +1601,10 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
         col = mix(col, vec3(0.06, 0.07, 0.15), bv * anti * (1.0 - smoothstep(sh * 0.6, sh, el)) * 0.6);
         col = mix(col, vec3(0.55, 0.24, 0.30), bv * anti * smoothstep(sh * 0.8, sh * 1.3, el) * (1.0 - smoothstep(sh * 1.6, sh * 3.2, el)) * 0.55);
         if (stars > 0.0 && el > 0.02) {
-          float s = h3(floor(d * 300.0));
-          col += vec3(smoothstep(0.9965, 1.0, s) * 3.0) * stars * smoothstep(0.02, 0.25, el);
+          // 도심 강변 밤하늘: 가로등·빛 공해로 별은 적고 흐리다(사용자 지적 2026-11-06 "별이 너무 밝다" — 예전엔 칸의 0.35%가 흰색 3배로 하얗게 날았다).
+          // 보이는 칸 0.12%(예전의 1/3), 밝기는 제곱으로 깔아 대부분 희미하고 밝은 별 몇 개만(최대 0.8), 지평선 쪽(빛 공해)은 안 보인다
+          float s = h3(floor(d * 300.0)), mag = smoothstep(0.9988, 1.0, s);
+          col += vec3(0.85, 0.9, 1.0) * mag * mag * 0.8 * stars * smoothstep(0.08, 0.4, el);
         }
         if (clouds > 0.0 && el > 0.0) {
           float cl = smoothstep(0.58, 0.8, fbm(d.xz / (d.y + 0.12) * 1.1 + 3.7)) * clouds * smoothstep(0.0, 0.12, el);
