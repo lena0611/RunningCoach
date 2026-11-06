@@ -1344,14 +1344,14 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
         if (al < collar - 0.02 || al > collar + 0.004) continue;
         q.sub(BM.neck).addScaledVector(NECK_DIR, -al);
         const b = Math.floor((((Math.atan2(q.dot(Xl), q.dot(Zf)) / (2 * Math.PI)) + 1) % 1) * NB);
-        rad[b] = Math.max(rad[b], q.length());
+        if (q.length() < 0.1) rad[b] = Math.max(rad[b], q.length()); // 어깨(목에서 10cm 밖)는 빼고 깃만
       }
     }
     for (let b = 0; b < NB; b++) if (!rad[b]) rad[b] = Math.max(rad[(b + NB - 1) % NB], rad[(b + 1) % NB]);
-    const ends = 1.3, N = 40, pts = [], radii = []; // 앞 75° 에서 끝난다(더 앞까지 감으면 끝이 지퍼 옆에 뿔처럼 솟았다)
+    const ends = 1.75, N = 40, pts = [], radii = []; // 앞 100° 에서 끝난다(더 앞까지 감으면 끝이 목 옆에 뿔처럼 솟았다)
     for (let k = 0; k <= N; k++) {
       const phi = ends + (k / N) * (2 * Math.PI - 2 * ends), sdeg = 1 - Math.abs(phi - Math.PI) / (Math.PI - ends); // sdeg 1 = 등 가운데
-      const r = 0.009 + 0.011 * ease(sdeg / 0.55), R = rad[Math.floor((phi / (2 * Math.PI)) * NB) % NB];
+      const r = 0.006 + 0.014 * ease(sdeg / 0.6), R = rad[Math.floor((phi / (2 * Math.PI)) * NB) % NB];
       pts.push(O.clone().addScaledVector(Zf, Math.cos(phi) * (R + r * 0.55)).addScaledVector(Xl, Math.sin(phi) * (R + r * 0.55)).addScaledVector(NECK_DIR, r * 0.25));
       radii.push(r);
     }
@@ -1613,7 +1613,8 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   };
   const midZip = ({ color, shade, rib = color, ribShade = shade }) => { // 하프집 미드(모크넥 깃 3.2cm + 가슴 중앙까지 지퍼)
     top({ sleeve: WRIST - 0.008, hem: HEM, neck: -0.09, off: 0.0065, color, shade });
-    halfZip({ color, shade, rib, ribShade });
+    // 보온 재킷(지퍼를 깃 끝까지 올린다) 밑이면 깃을 낮춘다 — 어차피 가려지는데 재킷 깃 앞으로 검은 얼룩처럼 비쳐 나왔다
+    halfZip({ color, shade, rib, ribShade, ...(SHELL === 'thermo' && { collar: 0.01 }) });
   };
   const tights = ({ color = '#1b1c20', shade = '#0e0f12', hem = BM.ankle + 0.03, waist } = {}) => bottom({ hem, off: 0.002, color, shade, ...(waist && { waist }) });
   const RF = ['#c9ced6', '#9aa1ad']; // 반사(중간 회색)
@@ -1794,9 +1795,10 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       skinShell({ src: FACES, off: 0.009, color: '#f4f5f7', shade: '#c7cad1', pick: (p) => { const q = faceY(p); return q.y < ey - 16 && q.y > -46 && q.z > ez - 25 && Math.abs(q.x) < 66; } });
     }
     if (ACC.has('buff')) { // 넥워머(추위): 목을 턱 밑선까지 감싼다. 턱·입은 덮지 않는다 — 브리핑은 말하는 입이 보여야 하고, 턱을 덮으면 멀리선 수염처럼 보였다(실측 입 -15~10mm·턱끝 -45mm, 머리뼈 기준)
-      const top = -50;
-      skinShell({ src: FACES, off: 0.012, color: '#3a404c', shade: '#232831', pick: (p) => { const q = faceY(p); return q.y < top && q.y > -60 && Math.abs(q.x) < 92; } });
-      skinShell({ off: 0.012, color: '#3a404c', shade: '#232831', pick: (p, w) => wsum(w, /Neck|Head/) > 0.4 && faceY(p).y < top && p.y > BM.shoulderY - 0.01 });
+      // 겉옷(깃 4.5cm)을 입으면 넥워머는 깃 안으로 넣는다: 깃 위로 나온 부분만 짓고 덜 띄운다 — 같은 두께면 깃을 뚫고 검은 얼룩처럼 비쳤다
+      const top = -50, off = SHELL ? 0.008 : 0.012, above = SHELL ? 0.025 : -1;
+      skinShell({ src: FACES, off, color: '#3a404c', shade: '#232831', pick: (p) => { const q = faceY(p); return q.y < top && q.y > -60 && Math.abs(q.x) < 92; } });
+      skinShell({ off, color: '#3a404c', shade: '#232831', pick: (p, w) => wsum(w, /Neck|Head/) > 0.4 && faceY(p).y < top && p.y > BM.shoulderY - 0.01 && neckAlong(p) > above });
     }
   }
   if (ACC.has('vest')) { // LSD 조끼: 등판 + 어깨끈 + 앞끈, 가슴에 물병(소프트 플라스크) 두 개 — 피부가 아니라 몸통 가장 바깥 옷 위에
