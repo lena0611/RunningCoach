@@ -36,6 +36,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
+          # Node 버전은 .nvmrc 한 곳에서만 정한다(현재 v24.22.2 — CVE 보안 패치, 2026-11-06). 여기에 숫자를 따로 적지 않는다
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
