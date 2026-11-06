@@ -1,7 +1,7 @@
 import type { RunType } from '@/entities/run/model'
 import type { AthleteProfile } from '@/entities/training-memory/model'
 import type { WeatherSnapshot } from '@/features/import-weatherkit/weatherKitBridge'
-import type { BriefingSceneOptions, SceneOutfit, SceneRunKind, SceneWeather } from './scene/briefingScene'
+import type { BriefingSceneOptions, SceneBand, SceneRunKind, SceneWeather } from './scene/briefingScene'
 
 /**
  * 앱 데이터 → 3D 장면 옵션(#898). 전부 **표현**이다 — 처방·판정에는 쓰지 않는다.
@@ -36,39 +36,60 @@ export function sceneWeather(current: Pick<WeatherSnapshot['current'], 'conditio
   return 'clear'
 }
 
-/** 체감온도로 계절 옷. 날씨를 아직 못 받았으면 달로 고른다. */
-export function sceneOutfit(feltC: number | null, month: number): SceneOutfit {
-  if (feltC === null) return month >= 6 && month <= 9 ? 'summer' : month === 12 || month <= 2 ? 'winter' : 'mild'
-  if (feltC >= 20) return 'summer'
-  if (feltC < 8) return 'winter'
-  return 'mild'
+/**
+ * 옷 단계 = 체감온도 5°C 단위 10단계(-10 … 35, 경계 ±2.5°C — 사용자 요청 2026-11-06).
+ * 어떤 단계에 무엇을 입는지는 `.harness/project/running-apparel-style-guide.md` 1장 매트릭스(러너는 얇은 옷을 겹쳐 입는다).
+ * 날씨를 아직 못 받았으면 달로: 6~9월 25°C · 12~2월 0°C · 그 밖 15°C.
+ */
+export function sceneBand(feltC: number | null, month: number): SceneBand {
+  if (feltC === null) return month >= 6 && month <= 9 ? 25 : month === 12 || month <= 2 ? 0 : 15
+  return Math.max(-10, Math.min(35, Math.round(feltC / 5) * 5)) as SceneBand
+}
+
+/** 강한 바람(m/s) — 체감 11°C 이상이면 체감온도에 바람이 안 들어가 겉옷을 따로 더한다(10°C 이하는 이미 반영). 출처: 가이드 6.3 */
+export const WIND_SHELL_MPS = 5.5
+/** 아주 강한 바람 — 모자 위로 후드를 올려 쓴다(사용자 요청 2026-11-06 "바람 세면 모자 쓰고 그 위에 후드") */
+export const WIND_HOOD_MPS = 8
+
+/**
+ * 겉옷 한 벌(후드 달린 겉옷만 후드를 올릴 수 있다):
+ * - thermo(보온 재킷 — 후드·가슴 V 반사): 0°C 이하, 눈
+ * - jacket(얇은 바람막이 — 후드): 5°C, 비(25°C 미만), 강풍(10~20°C)
+ * - padvest(경량 패딩 조끼): 10°C (바람·비면 바람막이로)
+ */
+export function sceneOuterwear(input: { band: SceneBand; weather: SceneWeather; windMps: number | null }): 'thermo' | 'jacket' | 'padvest' | null {
+  const { band, weather } = input
+  const windy = (input.windMps ?? 0) >= WIND_SHELL_MPS
+  if (band <= 0 || weather === 'snow') return 'thermo'
+  if (band === 5) return 'jacket'
+  if (band >= 25) return null // 더운 비는 그냥 맞는다(안에 땀이 찬다)
+  if (weather === 'rain' || windy) return 'jacket'
+  return band === 10 ? 'padvest' : null
+}
+
+/** 후드를 올린다: 아주 강한 바람 · -10°C · 영하 바람 · 추운 비(10°C 미만) · 영하 눈 — 후드 달린 겉옷일 때만 */
+export function sceneHoodUp(input: { band: SceneBand; weather: SceneWeather; windMps: number | null; outer: ReturnType<typeof sceneOuterwear> }): boolean {
+  if (input.outer !== 'thermo' && input.outer !== 'jacket') return false
+  const wind = input.windMps ?? 0
+  if (wind >= WIND_HOOD_MPS || input.band <= -10) return true
+  if (input.band <= -5 && (wind >= 4 || input.weather === 'snow')) return true
+  return input.weather === 'rain' && input.band < 10
 }
 
 /**
- * 겉옷(사용자 요청 2026-11-05 — "가을·겨울엔 바람막이를 걸치고, 겨울엔 조끼도 입는다"):
- * - 바람막이(jacket): 쌀쌀한 봄가을(체감 14°C 미만) · 영하 · 비나 눈(여름 제외 — 비 오는 날 겉옷)
- * - 패딩 조끼(padvest): 그 밖의 겨울(체감 0~8°C) — 하프집 긴팔 위에
- * 날씨를 못 받았으면(체감 null) 봄가을은 긴팔만, 겨울은 조끼.
+ * 머리·눈·손·목 + 겉옷:
+ * - 모자: 5°C 이하 비니(귀 위까지 덮는 니트), 그 위는 러닝캡. 바람 세면 그 위로 후드(hood)
+ * - 선글라스: 맑은 낮(9~17시)이면 겨울에도 — 비니·선글라스·장갑을 함께 쓰는 겨울 러너(사용자 참고 사진 2026-11-06)
+ * - 장갑 5°C 이하, 넥워머 0°C 이하
  */
-export function sceneOuterwear(input: { feltC: number | null; weather: SceneWeather; outfit: SceneOutfit }): 'jacket' | 'padvest' | null {
-  const { feltC, weather, outfit } = input
-  if (outfit === 'summer') return null
-  const wet = weather === 'rain' || weather === 'snow'
-  if (wet || (feltC !== null && (outfit === 'mild' ? feltC < 14 : feltC < 0))) return 'jacket'
-  return outfit === 'winter' ? 'padvest' : null
-}
-
-/**
- * 모자: 겨울엔 비니(귀 위까지 덮는 니트), 그 밖엔 러닝캡.
- * 선글라스: 맑은 낮이면 겨울에도 쓴다 — 비니·선글라스·장갑을 함께 쓰는 겨울 러너 차림(사용자 요청 2026-11-06)
- */
-export function sceneAccessories(input: { feltC: number | null; weather: SceneWeather; hour: number; run: SceneRunKind; outfit: SceneOutfit }): string {
-  const items = [input.outfit === 'winter' ? 'beanie' : 'cap', 'watch']
+export function sceneAccessories(input: { band: SceneBand; weather: SceneWeather; windMps: number | null; hour: number; run: SceneRunKind }): string {
+  const items = [input.band <= 5 ? 'beanie' : 'cap', 'watch']
   if (input.weather === 'clear' && input.hour >= 9 && input.hour < 17) items.push('sun')
-  if (input.feltC !== null && input.feltC <= 5) items.push('glove')
-  if (input.feltC !== null && input.feltC <= 0) items.push('buff')
+  if (input.band <= 5) items.push('glove')
+  if (input.band <= 0) items.push('buff')
   const outer = sceneOuterwear(input)
   if (outer) items.push(outer)
+  if (sceneHoodUp({ ...input, outer })) items.push('hood')
   if (input.run === 'lsd') items.push('vest') // 물병 조끼는 겉옷 위에
   return items.join('-')
 }
@@ -76,14 +97,15 @@ export function sceneAccessories(input: { feltC: number | null; weather: SceneWe
 export function buildSceneOptions(input: {
   sex: AthleteProfile['sex']
   sessionType: RunType
-  weather: Pick<WeatherSnapshot['current'], 'condition' | 'symbolName' | 'apparentTemperatureC' | 'temperatureC'> | null
+  weather: Pick<WeatherSnapshot['current'], 'condition' | 'symbolName' | 'apparentTemperatureC' | 'temperatureC' | 'windMps'> | null
   now: Date
 }): BriefingSceneOptions {
   const { now } = input
   const run = sceneRunKind(input.sessionType)
   const weather = sceneWeather(input.weather)
   const feltC = input.weather?.apparentTemperatureC ?? input.weather?.temperatureC ?? null
-  const outfit = sceneOutfit(feltC, now.getMonth() + 1)
+  const band = sceneBand(feltC, now.getMonth() + 1)
+  const windMps = input.weather?.windMps ?? null
   const hour = Math.round((now.getHours() + now.getMinutes() / 60) * 4) / 4
   const start = new Date(now.getFullYear(), 0, 0)
   const dayOfYear = Math.min(365, Math.floor((now.getTime() - start.getTime()) / 86_400_000))
@@ -93,8 +115,8 @@ export function buildSceneOptions(input: {
     dy: dayOfYear,
     tm: hour,
     wx: weather,
-    tp: outfit,
-    ac: sceneAccessories({ feltC, weather, hour, run, outfit })
+    tp: band,
+    ac: sceneAccessories({ band, weather, windMps, hour, run })
   }
 }
 
@@ -110,13 +132,13 @@ const WEATHER_WORD: Record<SceneWeather, string> = { clear: '맑음', cloudy: '�
 export function forecastWeather(
   daily: WeatherSnapshot['daily'],
   date: string
-): { scene: Pick<WeatherSnapshot['current'], 'condition' | 'symbolName' | 'apparentTemperatureC' | 'temperatureC'> | null; badge: BriefingWeather | null } {
+): { scene: Pick<WeatherSnapshot['current'], 'condition' | 'symbolName' | 'apparentTemperatureC' | 'temperatureC' | 'windMps'> | null; badge: BriefingWeather | null } {
   const day = daily.find((point) => point.date === date)
   if (!day) return { scene: null, badge: null }
   const temps = [day.minTemperatureC, day.maxTemperatureC].filter((t): t is number => t !== null)
   const temperatureC = temps.length ? temps.reduce((a, b) => a + b, 0) / temps.length : null
   return {
-    scene: { condition: day.condition, symbolName: day.symbolName, apparentTemperatureC: null, temperatureC },
+    scene: { condition: day.condition, symbolName: day.symbolName, apparentTemperatureC: null, temperatureC, windMps: null }, // 예보엔 풍속이 없다
     badge: { label: day.condition && day.condition !== '정보 없음' ? day.condition : '', feltC: null }
   }
 }

@@ -2,7 +2,8 @@
 
 export type SceneRunKind = 'easy' | 'tempo' | 'lsd' | 'race' | 'interval'
 export type SceneWeather = 'clear' | 'cloudy' | 'rain' | 'snow'
-export type SceneOutfit = 'summer' | 'mild' | 'winter'
+/** 옷 단계 = 체감온도 5°C 단위(-10 … 35). 장면은 옛 이름(summer=30·mild=15·winter=0)도 받는다(스튜디오) */
+export type SceneBand = -10 | -5 | 0 | 5 | 10 | 15 | 20 | 25 | 30 | 35
 
 export type BriefingSceneOptions = {
   /** 모델 성별(표현 전용 — 처방과 무관) */
@@ -13,8 +14,8 @@ export type BriefingSceneOptions = {
   /** 시(0~24, 0.25 단위 소수 허용) — 밤이면 가로등이 켜진다 */
   tm: number
   wx: SceneWeather
-  tp: SceneOutfit
-  /** 악세사리를 '-' 로 이은 것(cap·sun·watch·glove·mask·buff·vest=물병 조끼 · 겉옷 jacket=바람막이·padvest=패딩 조끼), 빈 문자열 = 없음 */
+  tp: SceneBand
+  /** 악세사리를 '-' 로 이은 것(cap·beanie·sun·watch·glove·mask·buff·vest=물병 조끼 · 겉옷 thermo=보온 재킷·jacket=바람막이·padvest=패딩 조끼 · hood=후드 올림), 빈 문자열 = 없음 */
   ac: string
 }
 
