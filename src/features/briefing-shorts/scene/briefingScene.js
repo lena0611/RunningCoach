@@ -63,7 +63,9 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
 
   const RUN = RUNS[OPT.rn]; // 지금 러닝 타입
 
-  const W = 720, H = 819; // 위 16%·아래 20% 레터박스를 뺀 가운데 무대(9:10.24)
+  // 그림 버퍼 비율 = 캔버스가 화면에 그려지는 비율(팝업 무대 = 9:16 의 55% → 9:8.8). 예전엔 옛 배치(9:10.24) 숫자 720×819 로
+  // 고정돼 팝업에선 가로로 16% 늘어나 보였다(2026-11-06 발견). 크기를 못 재면 옛 비율
+  const W = 720, H = Math.round(W * (canvas.clientHeight / canvas.clientWidth || 819 / 720));
   const STEP = 1 / 12; // 페인터리(?fx=1)는 캐릭터·땅을 12fps 로 끊는다. 원본은 매 프레임
   const clock = new THREE.Clock();
 
@@ -2516,7 +2518,10 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   // 3. finish(): 다 읽으면 카메라맨이 서서히 멈추고, 옆을 지나 멀어지는 러너를 계속 바라보며 살짝 내려간다
   // camAnchor = 카메라가 '같이 뛰는 자리'보다 앞(+)·뒤(-)에 있는 거리(m), camRun = 카메라맨 속도 ÷ 러너 속도
   // 5m 앞에서 옆으로 2.2m 비켜 선다(멈출 때 러너가 옆을 지나간다). 망원(화각 22°)이라 5m 에서도 러너가 화면을 채운다 — 30° 면 얼굴이 작았다
-  const LEAD = { yaw: 0.45, dist: 5, h: 1.35, look: 1.05, fov: 22, roll: 0 };
+  // shift = 렌즈만 옆으로 민 양(화면 폭 비율, + = 러너가 오른쪽으로). 카메라 방향은 그대로라 원근이 안 바뀐다
+  const LEAD = { yaw: 0.45, dist: 5, h: 1.35, look: 1.05, fov: 22, roll: 0, shift: 0 };
+  // 읽는 동안(사용자 요청 2026-11-06): 더 다가가 머리~발이 무대 높이의 85% 를 채우고, 몸 가운데는 화면 오른쪽(62%)에 둔다
+  const TALK = { yaw: 0.45, dist: 4.65, h: 1.15, look: 0.8, fov: 22, roll: 0, shift: 0.12 };
   const APPROACH_M = 12, CATCH_M = 3, STOP_CAM_SEC = 2.4;
   let camAnchor = STORY && OPT.mv ? APPROACH_M : 0, camRun = 0, stopT = -1, reading = false;
   let camFrom = STORY ? LEAD : userCam(), camTo = camFrom, camT0 = 0, camDur = 1;
@@ -2777,7 +2782,9 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     }
     const d = cam.dist * (1 - push) * k;
     const yaw = FACING + cam.yaw + 0.015 * Math.sin(t * 0.7);
-    if (camera.fov !== cam.fov) { camera.fov = cam.fov; camera.updateProjectionMatrix(); }
+    // 렌즈 옆으로 밀기(filmOffset): 창이 화면 폭의 shift 만큼 왼쪽으로 가면 러너가 오른쪽으로 간다
+    const film = -(cam.shift ?? 0) * 2 * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2) * camera.aspect * camera.getFilmWidth();
+    if (camera.fov !== cam.fov || camera.filmOffset !== film) { camera.fov = cam.fov; camera.filmOffset = film; camera.updateProjectionMatrix(); }
     camera.position.set(Math.sin(yaw) * d, cam.h * k, Math.cos(yaw) * d);
     if (STORY) camera.position.add(new THREE.Vector3(Math.sin(FACING), 0, Math.cos(FACING)).multiplyScalar(camAnchor)); // 카메라맨이 러너보다 앞·뒤에 있는 만큼
     camera.lookAt(0, cam.look * k, 0);
@@ -2818,7 +2825,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
         // 다가올수록 카메라맨이 점점 빨리 뛰어 5m 앞 자리에 붙는다 / 다 읽으면 서서히 멈춘다(러너가 옆을 지나 멀어진다)
         camRun = stopT < 0 ? Math.min(1, Math.max(0, 1 - camAnchor / CATCH_M)) : 1 - ease((t - stopT) / STOP_CAM_SEC);
         camAnchor -= dz * (1 - camRun);
-        if (!reading && stopT < 0 && camAnchor < 0.5) { reading = true; onReadyToTalk?.(); }
+        if (!reading && stopT < 0 && camAnchor < 0.5) { reading = true; onReadyToTalk?.(); moveCam(TALK, t, 1.6); } // 읽기 시작하며 천천히 다가간다
       }
       stepSnow?.(dt, dz, st);
       mouth(st, dt);
