@@ -2389,7 +2389,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     const kneeAt = (x) => (x < 0.4 ? off.B - off.A + (peak - off.B + off.A) * ease(x / 0.4) : peak + (on.B - on.A - peak) * ease((x - 0.4) / 0.6));
     // 발 궤적: 관절 곡선은 양끝에서 멈췄다 출발해서, 발이 땅을 떠나는·닿는 순간 '속도'가 뚝 끊겼다(달릴 때 다리 덜덜).
     // 그래서 발목 자리를 한 줄의 매끈한 궤적(에르미트)으로 그리고 무릎은 IK 로 따라가게 한다 —
-    // 지나는 점 = 이륙 자리 → 뒤꿈치 차올림(관절 곡선 40%) → 무릎 몰기(85%) → 착지 자리, 양끝 속도 = 디딤발 속도
+    // 지나는 점 = 이륙 자리 → 뒤꿈치 차올림(관절 곡선 40%) → (55·70%) → 무릎 몰기(85%) → 착지 자리, 양끝 속도 = 디딤발 속도
     // (이륙 직후엔 차고 나간 기세로 떠오르고, 착지 직전엔 땅 속도로 뒤로 당기며 닿는다)
     // 궤적은 '엉덩이 기준'으로 그린다 — 땅 기준이면 엉덩이가 아직 떠 있는데 발을 땅까지 뻗게 돼 착지·이륙마다 무릎이 쫙 펴졌다
     const hy = (x) => dyAt(S.duty + x * (1 - S.duty) - u); // 스윙 x 지점 엉덩이 높이(지금과의 차이)
@@ -2397,20 +2397,25 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     const foot = (t, x) => { const f = stanceFoot(leg, t, amp); return new THREE.Vector2(leg.hipZ + f.z + f.ax - hip.z, leg.ankleY + f.ay - hip.y - hy(x)); };
     const fk = (x) => { const A = -flexAt(x), B = A + kneeAt(x); return new THREE.Vector2(-leg.thigh.len * Math.sin(A) - leg.shin.len * Math.sin(B), -leg.thigh.len * Math.cos(A) - leg.shin.len * Math.cos(B)); };
     const hv = (x) => (hy(x + E) - hy(x - E)) / (2 * E); // 엉덩이 오르내림 속도(스윙 s 당)
-    const K = [0, EP, 0.4, 0.85, 1], Pk = [foot(1, 0), fk(EP), fk(0.4), fk(0.85), foot(0, 1)]; // EP = 공중 최대 신전
+    // 지나는 점: EP = 공중 최대 신전, 0.4 = 뒤꿈치 차올림, 0.85 = 무릎 몰기. 0.4~0.85 사이에 관절 곡선 점을 둘(0.55·0.7) 더 둔다 —
+    // 점이 멀면 3차 곡선이 관절 곡선보다 바깥으로 부풀어, 허벅지가 71% 에서 먼저 정점(설정보다 6~12° 더 앞)을 찍고 되돌아오다
+    // 85% 점의 '허벅지 정점(속도 0)'에 붙잡혀 멈칫한 뒤 다시 당겨졌다 — 무릎이 가장 앞에서 내려올 때 다리가 덜덜(사용자 지적 2026-11-06).
+    // 촘촘히 두면 허벅지는 한 번 올라 85% 에서 정점, 한 번에 당겨 내린다. 85% 를 앞당기면(0.78) 마지막 구간이 길어져 레이스·인터벌에서 다리가 쫙 펴졌고,
+    // 85% 점을 빼면 같은 이유로 레이스·인터벌이 쫙 펴졌다(2026-11-06 결정론 샘플 측정)
+    const K = [0, EP, 0.4, 0.55, 0.7, 0.85, 1], Pk = K.map((x, i) => (i === 0 ? foot(1, 0) : i === K.length - 1 ? foot(0, 1) : fk(x)));
     const T0 = foot(1, 0).sub(foot(1 - E, 0)).multiplyScalar(kS), T3 = foot(E, 1).sub(foot(0, 1)).multiplyScalar(kS);
     // 이어 붙이는 건 앞뒤 속도(땅 속도 맞추기)만. 위아래는 착지·이륙 순간 끊기는 게 맞다(발이 땅에 '쿵' 멈추는 충격) —
     // 위아래까지 이으면 엉덩이가 떠 있는 동안 발을 더 아래로 뻗어 다리가 닿는 거리를 넘고 무릎이 쫙 펴졌다
     T0.y = 0; T3.y = 0;
     const dfk = (x) => fk(x + E).sub(fk(x - E)).divideScalar(2 * E); // 중간 점은 관절 곡선의 실제 속도 그대로(앞으로 넘쳐 나가지 않게)
-    const Tk = [T0, dfk(K[1]), dfk(K[2]), dfk(K[3]), T3];
+    const Tk = K.map((x, i) => (i === 0 ? T0 : i === K.length - 1 ? T3 : dfk(x)));
     let seg = 0;
     while (seg < K.length - 2 && s >= K[seg + 1]) seg++;
     const h = K[seg + 1] - K[seg], x = Math.min(Math.max((s - K[seg]) / h, 0), 1), x2 = x * x, x3 = x2 * x;
     const at = Pk[seg].clone().multiplyScalar(2 * x3 - 3 * x2 + 1).addScaledVector(Tk[seg], (x3 - 2 * x2 + x) * h)
       .addScaledVector(Pk[seg + 1], -2 * x3 + 3 * x2).addScaledVector(Tk[seg + 1], (x3 - x2) * h);
     at.x += hip.z;
-    at.y = Math.max(at.y + hip.y, Math.min(Pk[0].y + hip.y + hy(0), Pk[4].y + hip.y + hy(1))); // 땅 밑으로는 안 내려간다
+    at.y = Math.max(at.y + hip.y, Math.min(Pk[0].y + hip.y + hy(0), Pk[K.length - 1].y + hip.y + hy(1))); // 땅 밑으로는 안 내려간다
     const ik = reachLeg(leg, hip, at.x, at.y);
     // 발목: 차고 나간 뒤 발끝을 편 채(20°) 따라오다가, 착지 전에 발끝을 들어 뒤꿈치부터 닿을 준비
     const mid = 0.35 * amp;
