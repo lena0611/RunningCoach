@@ -117,6 +117,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   const OUTFITS = {
     female: {
       cap: { c: [0, 100, 0], r: [103, 113, 114], front: 106, back: 60, brim: 70, color: '#f2f0eb', shade: '#c3c2cc' },
+      beanie: { c: [0, 100, 0], r: [103, 113, 114], front: 116, back: 18, cuff: 26, color: '#232428', shade: '#121316' }, // 같은 돔 틀, 테두리만 낮다(아래 '비니')
       cut: /^J_Sec_Hair\d_01$/, // 정수리 바보털 — 모자 꼭대기를 뚫고 솟는다
       // 묶은 꼬리: 모자에 눌러 넣지 않고 원래 흔들림(스프링 뼈)을 살린다. 모델은 정수리 뒤에 높이 묶어서 모자를 쓰면 꼬리가 모자 위에 얹혀 보인다
       // → 모자를 쓰면 러너처럼 뒤 구멍(뒤 테두리 위 3~4cm) 높이로 꼬리째 내려 묶는다(root = 묶은 뿌리 새 자리)
@@ -128,6 +129,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       // 여자와 같은 VRoid 머리틀. 예전 검정 모자는 정면에서 챙이 돔과 한 덩어리로 보여 바가지(헬멧) 같았다(사용자 지적 2026-11-05) →
       // 밝은 회색 + 챙 밑 진회색(정면에서 챙 끝선이 또렷), 옆폭 103 → 96(옆으로 부푼 헬멧 실루엣을 줄인다 — 머리카락도 같은 돔으로 눌러 안 샌다)
       cap: { c: [0, 100, 0], r: [96, 113, 114], front: 106, back: 60, brim: 70, color: '#d9dce1', shade: '#a9adb6', brimUnder: '#3b3f47', brimUnderShade: '#25282e' },
+      beanie: { c: [0, 100, 0], r: [98, 113, 114], front: 116, back: 18, cuff: 26, color: '#232428', shade: '#121316' },
       trim: { fringe: 0.5, rest: 0.6 }, // 가닥 길이 비율: 앞머리는 눈썹 위로, 옆은 귀 중간·뒤는 목덜미 위로
       side: 0.45, // 귀 앞 옆머리를 짧은 구레나룻으로
       bare: { trim: { fringe: 0.65, rest: 0.6 }, side: 0.6 }, // 모자를 안 쓸 때: 앞머리는 눈썹 위까지만 줄인다
@@ -135,7 +137,8 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     },
   };
   const SEASON = OPT.tp, ACC = new Set(String(OPT.ac).split('-').filter(Boolean)); // 옷(계절)·악세사리(컨트롤러)
-  const OUT = { ...OUTFITS[CHAR], ...(!ACC.has('cap') && OUTFITS[CHAR].bare) }; // 모자를 안 쓰면 머리 손질을 바꾼다
+  const HAT = ACC.has('beanie') ? 'beanie' : ACC.has('cap') ? 'cap' : null; // 머리에 쓰는 것 — 겨울엔 비니(앱이 고른다, sceneOptions.ts)
+  const OUT = { ...OUTFITS[CHAR], ...(!HAT && OUTFITS[CHAR].bare) }; // 모자를 안 쓰면 머리 손질을 바꾼다
 
   const UP = new THREE.Vector3(0, 1, 0);
   const MM = new THREE.Vector3(1e-3, 1e-3, 1e-3);
@@ -381,7 +384,8 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   }
 
   // ---- 머리카락: 여자는 긴 가닥을 걷어 내고, 남자는 가닥을 줄이고, 둘 다 모자 속으로 눌러 넣는다(뒤통수 피부도) ----
-  const cap = OUT.cap, CC = new THREE.Vector3(...cap.c), CR = new THREE.Vector3(...cap.r);
+  // 비니도 같은 돔 틀(타원체)로 머리를 눌러 넣는다 — 테두리 높이만 다르다
+  const cap = HAT === 'beanie' ? OUT.beanie : OUT.cap, CC = new THREE.Vector3(...cap.c), CR = new THREE.Vector3(...cap.r);
   // 모자 테두리 높이: 앞이 높고 뒤가 낮게 기운 띠. cosTh = 타원체 방위각(0 = 앞)의 cos
   const rimAt = (cosTh) => (cap.front + cap.back) / 2 + ((cap.front - cap.back) / 2) * cosTh;
   // blend: 테두리 아래로 점점 풀리는 폭(mm). 머리카락은 2.5cm(눌린 채 삐져나온 머리), 피부는 0(테두리 위만)
@@ -395,7 +399,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     return true;
   }
   const tailRoot = OUT.ponytail ? headBone.children.find((b) => OUT.ponytail.re.test(b.name)) ?? null : null;
-  if (tailRoot && ACC.has('cap')) {
+  if (tailRoot && HAT) {
     // 꼬리 밑동(머리뼈에도 걸친 꼭짓점)을 뿌리 뼈에만 붙인다 → 뿌리를 옮기면 꼬리 전체가 늘어나지 않고 통째로 따라온다
     for (const mesh of meshes) {
       if (!mesh.isSkinnedMesh || !/HAIR/.test([mesh.material].flat()[0].name)) continue;
@@ -471,7 +475,8 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
         }
         toWorld.multiplyMatrices(skinM, mesh.bindMatrix);
         v.fromBufferAttribute(pos, i).applyMatrix4(toWorld).applyMatrix4(HEAD_INV);
-        if (!ACC.has('cap') || !pressUnderCap(v, hair ? 25 : 0)) continue; // 모자를 안 쓰면 머리를 안 누른다
+        // 모자를 안 쓰면 머리를 안 누른다. 비니는 귀 윗부분까지 덮어 피부(귀)도 1.2cm 에 걸쳐 풀리게 누른다 — 테두리에서 뚝 끊으면 귀가 계단처럼 늘어났다
+        if (!HAT || !pressUnderCap(v, hair ? 25 : HAT === 'beanie' ? 12 : 0)) continue;
         v.applyMatrix4(HEAD).applyMatrix4(toBind.copy(toWorld).invert());
         pos.setXYZ(i, v.x, v.y, v.z);
       }
@@ -516,12 +521,12 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     tex.flipY = false;
     return tex;
   }
-  // 돔: 방위각마다 꼭대기에서 테두리까지(이음매는 뒤). 법선은 타원체에서 바로 구한다
-  function domeGeometry() {
-    const NA = 48, NV = 12, pos = [], uv = [], normal = [], index = [];
+  // 돔: 방위각마다 꼭대기에서 테두리(+ lift mm)까지(이음매는 뒤). 법선은 타원체에서 바로 구한다
+  function domeGeometry(lift = 0, NV = 12) {
+    const NA = 48, pos = [], uv = [], normal = [], index = [];
     for (let i = 0; i <= NA; i++) {
       const th = Math.PI + (i / NA) * Math.PI * 2, s = Math.sin(th), c = Math.cos(th);
-      const psiRim = Math.acos(Math.min(1, Math.max(-1, (rimAt(c) - CC.y) / CR.y)));
+      const psiRim = Math.acos(Math.min(1, Math.max(-1, (rimAt(c) + lift - CC.y) / CR.y)));
       for (let j = 0; j <= NV; j++) {
         const psi = (psiRim * j) / NV, ex = Math.sin(psi) * s, ey = Math.cos(psi), ez = Math.sin(psi) * c;
         pos.push(CC.x + CR.x * ex, CC.y + CR.y * ey, CC.z + CR.z * ez);
@@ -562,7 +567,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     }
     return geometry(pos, uv, index);
   }
-  if (ACC.has('cap')) {
+  if (HAT === 'cap') {
     const domeMats = dress(CLOTH, cap.color, cap.shade, capTexture());
     domeMats[0].side = THREE.DoubleSide; // 밑에서 보면 안감이 보인다
     const button = new THREE.SphereGeometry(7, 12, 6).scale(1, 0.45, 1).translate(CC.x, CC.y + CR.y, CC.z);
@@ -570,6 +575,56 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     // 챙 밑·가장자리는 다른 색(brimUnder) — 같은 색이면 정면에서 챙이 안 보여 모자가 바가지(헬멧)처럼 보였다(사용자 지적 2026-11-05)
     const brimUnder = dress(CLOTH, cap.brimUnder ?? cap.color, cap.brimUnderShade ?? cap.shade);
     group.add(wear(domeGeometry(), domeMats), wear(brimGeometry('top'), dress(CLOTH, cap.color, cap.shade)), wear(brimGeometry('under'), brimUnder), wear(button, dress(CLOTH, cap.color, cap.shade)));
+    attach(headBone, HEAD, group);
+  }
+
+  // ---- 비니(겨울 — 사용자 요청 2026-11-06, 비니·선글라스·장갑을 함께 쓰는 겨울 러너): 머리에 붙는 니트 돔 + 접어 올린 밑단(커프) ----
+  // 모자와 같은 돔 틀로 머리카락·귀를 눌러 넣고, 테두리만 이마 중간(앞)·귀 윗부분(옆)·뒤통수 아래(뒤)로 낮춘다(실측: 눈 63mm·귀 25~85mm, 머리뼈 기준).
+  // 골지(세로 줄)는 정수리로 모인다. 밑단은 두 겹이라 5% 두껍고 아래 끝은 안으로 말려 머리에 닿는다 — 밑에서 올려다봐도 틈이 안 보인다
+  function beanieTexture(lift) {
+    const W = 1024, H = 128, RIBS = 96, cv = document.createElement('canvas');
+    cv.width = W;
+    cv.height = H;
+    const x = cv.getContext('2d');
+    x.fillStyle = '#fff';
+    x.fillRect(0, 0, W, H);
+    const rw = W / RIBS;
+    x.fillStyle = 'rgba(0,0,0,0.13)';
+    for (let k = 0; k < RIBS; k++) x.fillRect(k * rw + rw * 0.5, 0, rw * 0.5, H); // 골지: 겉뜨기·안뜨기 줄이 번갈아
+    if (lift !== null && holeY !== null) { // 뒤 구멍: 포니테일이 빠져나오는 자리(모자와 같은 높이)
+      const psiB = Math.acos((cap.back + lift - CC.y) / CR.y), vOf = (y) => Math.acos((y - CC.y) / CR.y) / psiB;
+      const v0 = vOf(holeY + 16) * H, v1 = vOf(holeY - 14) * H, du = (26 / (2 * Math.PI * CR.z)) * W;
+      x.fillStyle = '#3a261e';
+      for (const u of [0, W]) { x.beginPath(); x.ellipse(u, (v0 + v1) / 2, du, (v1 - v0) / 2, 0, 0, Math.PI * 2); x.fill(); }
+    }
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.flipY = false;
+    tex.anisotropy = 4;
+    return tex;
+  }
+  // 밑단: 방위각마다 단면을 아래에서 위로 — [옆으로 부푼 배율, 테두리에서 높이 mm]. 안으로 말린 끝 → 두 겹 바깥면 → 접힌 위 끝 → 돔 아래 끝(배율 1)
+  function cuffGeometry() {
+    const NA = 96, H = cap.cuff, pos = [], uv = [], index = [];
+    const prof = [[0.95, 5], [0.965, 1], [1.0, -0.5], [1.04, 2.5], [1.05, 8], [1.05, H - 6], [1.045, H - 2], [1.03, H], [1.0, H + 1.5]];
+    for (let i = 0; i <= NA; i++) {
+      const th = Math.PI + (i / NA) * Math.PI * 2, s = Math.sin(th), c = Math.cos(th), rim = rimAt(c);
+      prof.forEach(([n, dy], j) => {
+        const y = rim + dy, sp = Math.sqrt(Math.max(0, 1 - ((y - CC.y) / CR.y) ** 2));
+        pos.push(CC.x + n * CR.x * sp * s, y, CC.z + n * CR.z * sp * c);
+        uv.push(i / NA, j / (prof.length - 1));
+      });
+    }
+    const M = prof.length;
+    for (let i = 0; i < NA; i++) for (let j = 0; j < M - 1; j++) { const a = i * M + j, b = a + M; index.push(a, b, a + 1, a + 1, b, b + 1); }
+    return geometry(pos, uv, index);
+  }
+  if (HAT === 'beanie') {
+    const lift = cap.cuff + 1.5; // 돔은 밑단 위 끝에서 시작한다
+    const knit = dress(CLOTH, cap.color, cap.shade, beanieTexture(lift));
+    knit[0].side = THREE.DoubleSide; // 밑에서 보면 안쪽이 보인다
+    const group = new THREE.Group();
+    group.add(wear(domeGeometry(lift, 16), knit), wear(cuffGeometry(), dress(CLOTH, cap.color, cap.shade, beanieTexture(null))));
     attach(headBone, HEAD, group);
   }
 
@@ -2552,9 +2607,10 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   // setSpeech(): 지금 문장을 말하는 중인지 · 마지막 문장인지(입모양·웃음)
   // finish(): 다 읽었다 — 카메라맨이 서서히 멈춘다(위 '브리핑 연출' 3)
   // 손 흔들기(사용자 요청 2026-11-06 "읽고 난 뒤 '자, 출발!' 할 때 카메라 보고 손 한 번 흔들며 웃으면서 떠나자"):
-  // 마지막 문장을 말하기 시작하면 카메라 쪽 팔을 앞·위로 들어 아래팔을 세우고 좌우로 두 번 흔든 뒤 달리는 팔로 돌아온다(1.8초).
-  // 흔드는 동안은 고개가 카메라를 보고 활짝 웃는다 — 카메라맨이 멈추고 러너가 지나가기 시작할 때까지 이어진다
-  const WAVE = { sec: 1.8, up: 0.35, down: 0.4, hz: 2.2, ua: [-1.7, 0, -0.85], la: [0, -1.35, 0], swing: 0.32 }; // 손이 머리 옆 높이
+  // 카메라 쪽 팔을 앞·위로 들어 아래팔을 세우고 좌우로 두 번 흔든 뒤 달리는 팔로 돌아온다(1.8초). 흔드는 동안은 고개가 카메라를 보고 활짝 웃는다.
+  // 시작 = 다 읽고(finish) 카메라맨이 선 뒤, 옆을 지나가는 러너가 카메라와 직각(90°)이 되기 직전(at = 72°) — 지나가며 인사한다(사용자 요청 2026-11-06).
+  // 예전엔 마지막 문장을 말하기 시작할 때 흔들어, 카메라가 아직 앞에서 같이 뛰는 중이었다
+  const WAVE = { sec: 1.8, up: 0.35, down: 0.4, hz: 2.2, ua: [-1.45, 0, -0.85], la: [0, -1.35, 0], swing: 0.32, at: 1.25 }; // 손이 머리 옆 높이
   let waveT0 = -1, waveW = 0, waveSide = 'left';
   function waveArm() {
     const t = clock.getElapsedTime() - waveT0, sg = waveSide === 'left' ? 1 : -1; // 오른팔은 y·z 부호가 반대
@@ -2569,8 +2625,9 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     fist(waveSide, waveW); // 흔드는 동안 손을 편다(주먹이면 '파이팅'처럼 보였다)
   }
   let lineIsLast = false, speaking = false;
+  // 다 읽은 뒤부터 손을 다 흔들 때까지: 카메라를 계속 보며 웃는다(읽기가 끝나면 앞을 봤다가 흔들 때 다시 돌아보지 않게)
+  const greeting = () => stopT >= 0 && waveW >= 0;
   function setSpeech(next) {
-    if (next.speaking && next.last && waveT0 < 0) { waveT0 = clock.getElapsedTime(); waveSide = headLook >= 0 ? 'left' : 'right'; } // 카메라 쪽 팔(+ = 러너 왼쪽)
     speaking = Boolean(next.speaking);
     lineIsLast = Boolean(next.last);
   }
@@ -2592,7 +2649,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     let v = 0;
     // 기기 TTS 는 소리 크기를 읽을 수 없어서, 말하는 동안 입을 말하는 흉내로 움직인다
     if (speaking) v = Math.max(0, 0.3 + 0.5 * Math.sin(t * 15) * Math.sin(t * 4.7));
-    const target = reading || waveW > 0 ? (lineIsLast ? 0.6 : 0.4) : OPT.rn === 'easy' || OPT.rn === 'lsd' ? 0.15 : 0; // 손 흔드는 동안은 활짝
+    const target = reading || greeting() ? (lineIsLast || stopT >= 0 ? 0.6 : 0.4) : OPT.rn === 'easy' || OPT.rn === 'lsd' ? 0.15 : 0; // 다 읽고 손 흔드는 동안은 활짝
     const k = Math.min(1, dt * 4);
     smile += (target - smile) * k;
     const em = vrm.expressionManager;
@@ -2812,8 +2869,10 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       camDir.copy(camera.getWorldPosition(camDir)).sub(headBone.getWorldPosition(headW));
       const yawAbs = Math.atan2(camDir.x, camDir.z) - FACING, yawRel = Math.atan2(Math.sin(yawAbs), Math.cos(yawAbs));
       const pitchRel = Math.atan2(camDir.y, Math.hypot(camDir.x, camDir.z));
+      // 다 읽은 뒤 지나가며 직각 직전에 흔든다(카메라가 안 움직이는 정지 화면이면 지나가지 않으니 바로)
+      if (stopT >= 0 && waveT0 < 0 && (Math.abs(yawRel) > WAVE.at || !OPT.mv)) { waveT0 = clock.getElapsedTime(); waveSide = yawRel >= 0 ? 'left' : 'right'; } // 카메라 쪽 팔(+ = 러너 왼쪽)
       if (waveT0 >= 0 && waveW >= 0) { const wt = clock.getElapsedTime() - waveT0; waveW = wt > WAVE.sec ? 0 : ease(wt / WAVE.up) * (1 - ease((wt - (WAVE.sec - WAVE.down)) / WAVE.down)); if (wt > WAVE.sec) { fist(waveSide); waveW = -1; } } // 끝나면 주먹으로(한 번만)
-      const want = (reading || !STORY || waveW > 0 ? 1 : 0) * (1 - ease((Math.abs(yawRel) - 1.9) / 0.6));
+      const want = (reading || !STORY || greeting() ? 1 : 0) * (1 - ease((Math.abs(yawRel) - 1.9) / 0.6));
       headLook += (Math.max(-1.2, Math.min(1.2, yawRel)) * want - headLook) * Math.min(1, dt * 3);
       headPitch += (Math.max(-0.6, Math.min(0.45, pitchRel)) * want - headPitch) * Math.min(1, dt * 3);
       vrm.scene.rotation.y = baseYaw;
