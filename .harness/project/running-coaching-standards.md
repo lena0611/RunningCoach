@@ -226,6 +226,7 @@ PaceLAB 코칭의 정당성은 "우리가 똑똑해서"가 아니라 **외부의
 - **팔치기 — 앞으로 올 때 손이 중앙 쪽으로, 중앙선은 넘지 않게.** 앞뒤 흔들기가 기본이되 손은 엉덩이 옆 → 가슴 앞으로 살짝 안쪽 호를 그린다. 어깨선 그대로 앞뒤로만 흔드는 것도, 몸 앞을 가로지르는 것도 아니다. 팔꿈치는 ~90° 안팎, 앞에서 더 접고 뒤에서 조금 편다.
   - 근거 등급: **코칭 공통 기준**(러닝 매체 가이드). 팔치기가 좌우 균형·에너지에 주는 효과는 연구가 엇갈린다(Arellano & Kram 2011은 도움 시사, 외부 측면 안정화 후속 연구는 걸음 폭 조절이 주 수단이라 봄) → **"이렇게 흔들면 빨라진다"로 말하지 않는다.** 상체가 과하게 비틀려 손이 중앙선을 넘을 때만 "앞뒤로" 교정 큐.
   - 묘사 기준(#898 PoC 실측): 손목이 엉덩이 옆 15~18cm → 가슴 높이에서 중앙 4~7cm.
+  - **팔꿈치는 몸 가까이 — 날개처럼 벌리지 않는다.** 어깨너비 안에서 흔들고, 꽉 붙이지도(긴장) 벌리지도 않는다(코칭 공통 기준, 러닝 매체 가이드). 묘사 기준(#898, 2026-11-06 실측): 달릴 때 위팔이 몸통에서 평균 ~11°(최대 ~14°) — 20°(최대 25°)면 겨드랑이가 떠 팔을 벌려 뛰는 것처럼 보였다(사용자 지적). 두꺼운 겉옷·큰 체중이면 몸·옷을 뚫지 않게 그만큼만 더 벌린다. 런닝 중 어깨 벌림 각을 직접 잰 연구 수치는 찾지 못했다 → 묘사 기준일 뿐 채점·교정 큐 근거로 쓰지 않는다.
 
 ## 외부 조건(더위·습도·추위) 코칭 — 강도 판정과 사후 평가 (#712)
 
@@ -516,3 +517,5 @@ PaceLAB 코칭 알고리즘은 다섯 겹으로 동작한다.
 - Meardon & Derrick, "Effect of step width manipulation on tibial stress during running." J Biomech 2014. https://pubmed.ncbi.nlm.nih.gov/24935171/
 - Ferber, Davis & Williams, "Gender differences in lower extremity mechanics during running." Clin Biomech 2003. https://read.qxmd.com/read/12689785/gender-differences-in-lower-extremity-mechanics-during-running
 - "A runner's guide to proper arm swing." Canadian Running. https://runningmagazine.ca/?p=78687
+- "The Basics of Arm Form for Runners." Outside Run. https://run.outsideonline.com/training/getting-started/the-basics-of-arm-form-for-runners/
+- "Improve Arm Carriage for Faster Running." Active.com. https://www.active.com/running/articles/improve-arm-carriage-for-faster-running

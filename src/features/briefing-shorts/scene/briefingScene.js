@@ -272,6 +272,13 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     }
     vrm.springBoneManager?.setInitState?.();
   }
+  // 가슴(여자): VRoid 기본보다 조금 작게(사용자 요청 2026-11-06) — 가슴 뼈(J_Sec_*_Bust1, 뼈 z = 앞)를 앞으로 20%·옆·위로 10% 줄인다.
+  // 옷도 같은 뼈 가중치로 입혀 같이 줄어든다. 흔들림 뼈 시작 상태는 줄인 뒤 다시 잡는다
+  if (CHAR === 'female') {
+    vrm.scene.traverse((o) => { if (/^J_Sec_[LR]_Bust1$/.test(o.name)) o.scale.set(0.9, 0.9, 0.8); });
+    vrm.scene.updateMatrixWorld(true);
+    vrm.springBoneManager?.setInitState?.();
+  }
 
   // ---- 체중 → 몸 두께: 쉬는 자세 메시를 뼈 둘레 방향으로만 부풀린다(길이·관절 자리·걸음은 그대로) ----
   // 키가 같으면 부피 ∝ 체중 → 둘레 배율 ≈ √(체중 / 기본 체중). ±15~20% 굵기까지가 자연스럽다(그 밖은 막는다).
@@ -2186,6 +2193,10 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   // 걸음 값 S 는 러닝 타입·페이스·케이던스·주법(컨트롤러) + 인터벌의 걷기 구간을 섞어 매 프레임 정한다(updateGait)
   // 달리기: 한 발이 주기의 40% 를 딛는다(한 걸음의 20% 공중 — 더 늘리면 떠다녀 보인다).
   // 걷기: 62% 를 딛어 두 발이 같이 닿는 구간이 생기고, 무릎을 거의 편 채 엉덩이는 디딤 한가운데에서 가장 높다(뒤집힌 진자)
+  // 위팔 벌림(달리기): 팔꿈치를 몸 가까이 — 코칭 공통 기준 '어깨너비 안, 날개처럼 벌리지 않는다'(SSOT 러닝 폼 — 팔치기).
+  // armOut = T자에서 팔을 내린 각(rad). 1.25 였을 땐 위팔이 몸통에서 평균 20°(최대 25°) 벌어져 겨드랑이가 떠 보였다(사용자 지적 2026-11-06)
+  // → 1.40(평균 ~12°). 몸이 굵거나(체중) 두꺼운 겉옷이면 그만큼 덜 내린다 — 팔이 몸통·옷을 뚫지 않게
+  const ARM_OUT = 1.4 - 0.6 * (GIRTH - 1) - (ACC.has('jacket') || ACC.has('padvest') ? 0.05 : 0);
   const RUN_FORM = { duty: 0.4, dutyMin: 0.27, kneeStrike: 0.31, kneePush: 0.26, elbow: 1.45, stepX: 0.04, armIn: 0.35, extFlight: 0.06, extPeak: 0.13 };
   // stepX = 착지 때 발목이 몸 중앙에서 떨어진 거리(m, 걸음 폭 8cm). 쉬는 자세 그대로면 발이 고관절 바로 밑(여자 ±7.8cm)에 떨어져 넓었다.
   // armIn = 팔이 가장 앞일 때 어깨를 안쪽으로 돌리는 양(rad) — 손이 어깨선에서 몸 중앙 쪽으로 온다
@@ -2205,8 +2216,21 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     const u = mod(t, run + rest), x = 1.5;
     return u < run ? (u < x ? 1 - ease(u / x) : 0) : ease((u - run) / x);
   }
+  // 훈련 종류·주법을 바꾸면 페이스·케이던스·자세 값이 서서히 따라간다(시정수 0.7초 → 2초면 거의 다) — 속도가 감속·가속하고 팔·무릎 동작도 이어진다.
+  // 예전엔 값이 그 프레임에 바로 바뀌어 보폭·박자가 툭 끊겼다(사용자 요청 2026-11-06 "자연스럽게 감속·가속, 동작 연계도")
+  const GAIT_KEYS = ['pace', 'spm', 'arm', 'knee', 'thigh', 'lean', 'drop'];
+  const RCUR = { ...RUNS[OPT.rn], pace: OPT.pc || RUNS[OPT.rn].pace, spm: OPT.cd || RUNS[OPT.rn].spm, strike: STRIKES[OPT.st] };
+  let gaitT = -1;
   function updateGait(t) {
-    const R = RUNS[OPT.rn], pace = OPT.pc || R.pace, spm = OPT.cd || R.spm;
+    const tgt = RUNS[OPT.rn], dt = gaitT < 0 ? 0 : Math.min(0.1, Math.max(0, t - gaitT)), k = 1 - Math.exp(-dt / 0.7);
+    gaitT = t;
+    for (const key of GAIT_KEYS) {
+      const want = (key === 'pace' && OPT.pc) || (key === 'spm' && OPT.cd) || tgt[key]; // 페이스·케이던스는 직접 고른 값이 먼저
+      RCUR[key] += (want - RCUR[key]) * k;
+    }
+    RCUR.strike += (STRIKES[OPT.st] - RCUR.strike) * k;
+    RCUR.walk = tgt.walk;
+    const R = RCUR, pace = R.pace, spm = R.spm;
     const w0 = R.walk ? intervalWalk(t, R.walk) : 0;
     walkMix = Math.max(w0, stopWalk);
     const w = walkMix, m = (a, b) => a + (b - a) * w;
@@ -2214,7 +2238,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     Object.assign(S, {
       kneeStrike: m(RUN_FORM.kneeStrike, WALK.kneeStrike), kneePush: m(RUN_FORM.kneePush, WALK.kneePush),
       elbow: m(RUN_FORM.elbow, WALK.elbow), armIn: m(RUN_FORM.armIn, WALK.armIn), drop: m(R.drop, WALK.drop), knee: m(R.knee, WALK.knee), thigh: m(R.thigh, WALK.thigh),
-      arm: m(R.arm, WALK.arm), lean: m(R.lean, WALK.lean), strike: m(STRIKES[OPT.st], WALK.strike),
+      arm: m(R.arm, WALK.arm), lean: m(R.lean, WALK.lean), strike: m(R.strike, WALK.strike),
       speed: m(1000 / pace, 1000 / WALK.pace), cadence: m(spm, WALK.spm) / 120, // 속도(m/s), 주기(양발 한 번, Hz)
     });
   }
@@ -2311,7 +2335,10 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
 
   // 디딤 t(0=착지, 1=이륙): 평평 기준 발목 z 는 땅과 같은 속도로 앞→뒤. ax·ay = 구르기로 발목이 비켜나는 양
   function stanceFoot(leg, t, amp) {
-    const pitch = amp * (t < 0.18 ? S.strike * (1 - ease(t / 0.18)) : t < 0.5 ? 0 : PUSH * ((t - 0.5) / 0.5) ** 2);
+    // 착지 구르기(뒤꿈치·앞꿈치 → 발바닥): 디딤의 24% 동안, 가속도까지 이어지는 곡선(smootherstep)으로. 예전엔 18%·ease 라
+    // 레이스(디딤 0.18초)에선 30ms 만에 끝나며 가속도가 끊겨 무릎 굽는 속도가 줄었다 다시 늘었다 — 착지마다 다리가 털려 보였다(2026-11-06 측정)
+    const roll = (x) => { x = Math.min(Math.max(x, 0), 1); return x * x * x * (x * (x * 6 - 15) + 10); };
+    const pitch = amp * (t < 0.24 ? S.strike * (1 - roll(t / 0.24)) : t < 0.5 ? 0 : PUSH * ((t - 0.5) / 0.5) ** 2);
     const o = rollOffset(leg, pitch);
     return { z: amp * (FRONT - (FRONT + BACK) * t), ax: o.z, ay: o.y, pitch, toes: -Math.max(0, pitch) };
   }
@@ -2446,7 +2473,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     // 팔: 다리와 반대로 흔든다. 팔꿈치는 앞으로 올 때 더 접고 뒤로 갈 때 조금 편다
     // 앞으로 올수록 어깨를 안쪽으로 돌려 손이 몸 중앙 쪽으로 온다(중앙선은 넘지 않게) — 예전엔 어깨선 그대로 앞뒤로만 흔들었다
     const fwdL = 0.5 - 0.5 * s, fwdR = 0.5 + 0.5 * s; // 팔이 앞으로 나온 정도(1 = 가장 앞)
-    const armBias = 0.15 - 0.12 * walkMix, armOut = 1.25 + 0.13 * walkMix, elbowFwd = 0.3 - 0.12 * walkMix; // 걷기: 팔을 몸 옆에 늘어뜨린다
+    const armBias = 0.15 - 0.12 * walkMix, armOut = ARM_OUT + (1.42 - ARM_OUT) * walkMix, elbowFwd = 0.3 - 0.12 * walkMix; // 걷기: 팔을 몸 옆에 늘어뜨린다
     mix('leftUpperArm', [0.05, 0, -1.4], [armBias + S.arm * s, -S.armIn * fwdL, -armOut]);
     mix('rightUpperArm', [0.05, 0, 1.4], [armBias - S.arm * s, S.armIn * fwdR, armOut]);
     mix('leftLowerArm', [0, -0.35, 0], [0, -(S.elbow + elbowFwd * Math.max(0, -s)), 0]);
@@ -2456,14 +2483,16 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     // lean: 브레이크·출발 때 관성으로 상체가 쏠리는 양. 머리는 반쯤 되받아 시선을 유지한다
     mix('spine', [0.02 + breathe + lean, 0.15 * headLook, 0], [S.lean + lean, 0.1 * s + 0.15 * headLook, -roll]);
     mix('chest', [breathe, 0.2 * headLook, 0], [0, 0.1 * s + 0.2 * headLook, 0]);
-    mix('head', [-lean * 0.6 + talk.nod, 0.65 * headLook, talk.tilt], [-0.08 - lean * 0.6, -0.11 * s + 0.65 * headLook, 0]); // 고개 65%·가슴 20%·허리 15% 로 나눠 돈다
+    mix('neck', [-0.4 * headPitch, 0, 0], [-0.4 * headPitch, 0, 0]); // 위아래는 목 40%·고개 60%(- = 젖힌다)
+    mix('head', [-lean * 0.6 + talk.nod - 0.6 * headPitch, 0.65 * headLook, talk.tilt], [-0.08 - lean * 0.6 - 0.6 * headPitch, -0.11 * s + 0.65 * headLook, 0]); // 고개 65%·가슴 20%·허리 15% 로 나눠 돈다
   }
 
   // ---- 연출: 달리다 → 클릭하면 감속해 서고 카메라가 얼굴로 → 브리핑 → 카메라가 되감기며 다시 출발 ----
   const lerpCam = (a, b, x) => Object.fromEntries(Object.keys(a).map((key) => [key, a[key] + (b[key] - a[key]) * x]));
   // mode: run(달린다) 또는 hold(서 있다 — 컨트롤러로 연 정지 화면). 브리핑 중에도 러너는 멈추지 않는다
   let mode = OPT.mv ? 'run' : 'hold', speed = OPT.mv ? 1 : 0, phase = 0;
-  let headLook = 0; // 고개가 카메라 쪽으로 돈 양(rad) — 브리핑을 읽는 동안 카메라를 본다
+  let headLook = 0, headPitch = 0; // 고개가 카메라 쪽으로 돈 양(rad, 좌우·위아래) — 브리핑을 읽는 동안 카메라를 본다
+  const camDir = new THREE.Vector3(), headW = new THREE.Vector3();
   // 사용자 카메라(컨트롤러): 앵글 = 위아래(0° 눈높이 ~ 89° 바로 위), 포지션 = 러너 둘레 방향, 디스턴스 = 거리. 몸 가운데를 본다
   const CAM_LOOK = 0.9;
   function userCam() {
@@ -2731,18 +2760,25 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     if (st !== lastStep) {
       const dt = lastStep < 0 ? 0 : Math.min(st - lastStep, 0.1);
       lastStep = st;
-      if (mode === 'hold') speed = 0;
+      // 뛰기 ↔ 멈추기는 서서히(사용자 지적 2026-11-06 '탁 바뀐다'): 멈출 땐 1.8초에 걸쳐 느려지며 걷기로 넘어가 두 발을 모으고, 다시 뛸 땐 1.2초에 걸쳐 빨라진다
+      speed = mode === 'hold' ? Math.max(0, speed - dt / 1.8) : Math.min(1, speed + dt / 1.2);
       // 서 있을 땐(hold) 걷기 자세로 넘어가 두 발이 다 디딘 순간 박자를 세운다
       stopWalk = 1 - ease((speed - 0.3) / 0.45);
       updateGait(st);
       tuneGait();
       const amp = Math.min(1, (speed * S.speedBase) / S.speed); // 실제 속도 = 달리던 속도 × speed → 걷기 보폭으로 환산
       const freq = S.cadence * (0.5 + 0.5 * Math.min(1, amp / 0.5));
-      const settled = mode === 'hold' && LEGS.every((l) => l.stance);
+      const settled = mode === 'hold' && speed < 0.02 && LEGS.every((l) => l.stance); // 다 느려진 뒤 두 발이 디딘 순간에 선다
       if (!settled) phase += dt * Math.PI * 2 * freq;
-      // 브리핑을 읽는 동안 고개를 카메라 쪽으로(최대 43°)
-      const camRel = STORY ? camAt(t).yaw : 0;
-      headLook += (Math.max(-0.75, Math.min(0.75, camRel)) * (reading ? 1 : 0) - headLook) * Math.min(1, dt * 3);
+      // 고개: 카메라를 본다 — 앱 연출은 브리핑을 읽는 동안, 자유 시점(스튜디오)은 늘. 예전엔 좌우로만(최대 43°) 돌고 위아래는 눈만 움직였다
+      // (사용자 지적 2026-11-06 "아래서 보면 내려다보고, 옆이면 목 가동범위 안에서 돌아보게"). 목 가동범위 안에서만:
+      // 좌우 최대 69°(고개 65%·가슴 20%·허리 15%로 나눠 돈다), 숙이기 34°·젖히기 26°(목 40%·고개 60%). 등 뒤(110° 밖)는 앞을 본다
+      camDir.copy(camera.getWorldPosition(camDir)).sub(headBone.getWorldPosition(headW));
+      const yawAbs = Math.atan2(camDir.x, camDir.z) - FACING, yawRel = Math.atan2(Math.sin(yawAbs), Math.cos(yawAbs));
+      const pitchRel = Math.atan2(camDir.y, Math.hypot(camDir.x, camDir.z));
+      const want = (reading || !STORY ? 1 : 0) * (1 - ease((Math.abs(yawRel) - 1.9) / 0.6));
+      headLook += (Math.max(-1.2, Math.min(1.2, yawRel)) * want - headLook) * Math.min(1, dt * 3);
+      headPitch += (Math.max(-0.6, Math.min(0.45, pitchRel)) * want - headPitch) * Math.min(1, dt * 3);
       vrm.scene.rotation.y = baseYaw;
       body.rotation.y = FACING;
       body.updateMatrixWorld();
