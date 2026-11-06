@@ -326,6 +326,11 @@ onBeforeUnmount(() => {
 
 /* 9:16 틀 = 위 15% 제목 · 55% 영상 · 30% 코멘트·프로필·설명·진행 막대. 아이콘 줄은 틀 기준(영상 아래쪽~밑 검은 칸) */
 .briefing-shorts-frame {
+  /* 아이콘 줄 = 오른쪽 끝에서 rail-inset 떨어진 rail-w 폭(누르는 칸은 44px 아래로 안 줄인다).
+     가운데 정렬 글(자막·코치 코멘트)은 양옆을 똑같이 side 만큼 비운다 — 오른쪽만 비우면 글이 왼쪽으로 쏠린다(사용자 지적 2026-11-06) */
+  --shorts-rail-inset: 2cqw;
+  --shorts-rail-w: max(44px, 10cqw);
+  --shorts-side: calc(var(--shorts-rail-inset) + var(--shorts-rail-w) + 1.5cqw);
   position: relative;
   display: flex;
   flex-direction: column;
@@ -385,12 +390,12 @@ onBeforeUnmount(() => {
   font-size: max(var(--text-caption-size), 4cqw);
 }
 
-/* 자막: 영상 위 흰 굵은 글자 + 검은 테(8방향 그림자). 오른쪽은 아이콘 줄 자리만큼 비운다 */
+/* 자막: 영상 위 흰 굵은 글자 + 검은 테(8방향 그림자). 양옆을 아이콘 줄 자리만큼 똑같이 비워 진짜 가운데 */
 .briefing-shorts-subtitle {
   --o: 0.07em;
   position: absolute;
-  left: 5cqw;
-  right: 17cqw;
+  left: var(--shorts-side);
+  right: var(--shorts-side);
   bottom: 5cqw;
   margin: 0;
   font-size: max(var(--text-body-size), 6cqw);
@@ -424,31 +429,33 @@ onBeforeUnmount(() => {
 .briefing-shorts-sound {
   position: absolute;
   top: 3cqw;
-  right: 3cqw;
-  width: max(44px, 11cqw);
-  height: max(44px, 11cqw);
+  right: var(--shorts-rail-inset);
+  width: var(--shorts-rail-w);
+  height: var(--shorts-rail-w);
   display: grid;
   place-items: center;
 }
 
-.briefing-shorts-sound svg {
-  width: 72%;
-  height: 72%;
+/* 아이콘 그림 크기(스피커·아이콘 줄 같게). 누르는 칸은 그대로 44px 이상 */
+.briefing-shorts-sound svg,
+.briefing-shorts-rail-item svg {
+  width: max(24px, 7cqw);
+  height: max(24px, 7cqw);
 }
 
 .briefing-shorts-rail {
   position: absolute;
-  right: 2cqw;
+  right: var(--shorts-rail-inset);
   bottom: 14%;
   z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5cqw;
+  gap: 4cqw;
 }
 
 .briefing-shorts-rail-item {
-  min-width: max(44px, 12cqw);
+  width: var(--shorts-rail-w);
   min-height: 44px;
   display: flex;
   flex-direction: column;
@@ -459,11 +466,6 @@ onBeforeUnmount(() => {
   font-size: max(var(--text-caption-size), 3.8cqw);
   font-weight: 700;
   line-height: 1.2;
-}
-
-.briefing-shorts-rail-item svg {
-  width: max(30px, 9cqw);
-  height: max(30px, 9cqw);
 }
 
 .briefing-shorts-sound:focus-visible,
@@ -478,11 +480,12 @@ onBeforeUnmount(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 3.5cqw 18cqw 0 5cqw;
+  padding-top: 3.5cqw;
 }
 
-/* 쇼츠 '편집 코멘트' 자리 = 코치 코멘트(두 줄까지) */
+/* 쇼츠 '편집 코멘트' 자리 = 코치 코멘트(두 줄까지). 자막처럼 양옆을 똑같이 비워 진짜 가운데 */
 .briefing-shorts-comment {
+  padding-inline: var(--shorts-side);
   text-align: center;
 }
 
@@ -506,9 +509,10 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
+/* 프로필·설명은 쇼츠처럼 왼쪽 정렬 — 오른쪽만 아이콘 줄 자리를 비운다 */
 .briefing-shorts-channel {
   margin-top: auto;
-  padding-bottom: 5cqw;
+  padding: 0 var(--shorts-side) 5cqw 5cqw;
 }
 
 .briefing-shorts-profile {
