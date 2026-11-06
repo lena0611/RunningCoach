@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { suppressBriefingShorts } from './suppressAccountPrompts'
 
 /**
  * #639 코치 제안 → 기존 액션 화면 진입 브리지 렌더 E2E.
@@ -41,6 +42,10 @@ async function isoOffset(page: import('@playwright/test').Page, days: number) {
 }
 
 test.describe('#639 코치 제안 브리지', () => {
+  test.beforeEach(async ({ page }) => {
+    await suppressBriefingShorts(page)
+  })
+
   test('declare_rest 제안 → 대시보드 휴식 선언 시트가 명시 기간 프리셋으로 열린다', async ({ page }) => {
     await bootDashboard(page)
     const until = await isoOffset(page, 9) // 사용자가 "열흘쯤"이라고 명시한 경우

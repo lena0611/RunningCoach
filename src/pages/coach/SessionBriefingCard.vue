@@ -32,6 +32,8 @@ const emit = defineEmits<{
   reschedule: []
   revert: []
   'add-double': []
+  /** 이 날 브리핑을 쇼츠 영상(#898)으로 보기 */
+  'play-video': []
 }>()
 
 const evidenceOpen = ref(false)
@@ -88,6 +90,12 @@ watch(() => props.briefing, () => { detailOpen.value = false })
         {{ detailOpen ? '접기' : '자세히 보기' }}
       </button>
     </div>
+
+    <!-- 같은 브리핑을 쇼츠 영상으로(사용자 요청 2026-11-06) — 요약 탭 팝업은 하루 한 번이라 다시 볼 입구가 여기다 -->
+    <button type="button" class="brief-video-btn" @click="emit('play-video')">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" /></svg>
+      영상으로 브리핑 보기
+    </button>
 
     <div v-show="detailOpen" id="brief-details">
       <div v-if="briefing.why" class="brief-block">
@@ -285,6 +293,36 @@ watch(() => props.briefing, () => { detailOpen.value = false })
   font-weight: 700;
   cursor: pointer;
   white-space: nowrap;
+}
+
+/* 영상으로 보기: '자세히 보기'와 같은 테두리 알약(전역 button 베이스는 하나씩 지운다), 핵심 한 줄 바로 밑 */
+.brief-video-btn {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--color-border, rgba(120, 120, 120, 0.3));
+  border-radius: var(--radius-pill, 999px);
+  background: transparent;
+  box-shadow: none;
+  text-shadow: none;
+  color: var(--color-primary);
+  font-size: var(--text-caption-size);
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.brief-video-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.brief-video-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .brief-block {

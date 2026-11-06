@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildSceneOptions, sceneOuterwear, sceneOutfit, sceneRunKind, sceneSex, sceneWeather } from './sceneOptions'
+import { buildSceneOptions, forecastWeather, sceneOuterwear, sceneOutfit, sceneRunKind, sceneSex, sceneWeather } from './sceneOptions'
 
 describe('sceneOptions', () => {
   it('성별: 여성만 여자 모델, 나머지(남성·기타·선택 안 함)는 남자 모델', () => {
@@ -79,5 +79,20 @@ describe('sceneOptions', () => {
     })
     expect(o).toMatchObject({ sx: 'f', rn: 'easy', tp: 'mild', tm: 10 })
     expect(o.ac).toBe('cap-watch-sun')
+  })
+})
+
+describe('forecastWeather — 코치 탭에서 다른 날 다시 보기', () => {
+  const daily = [
+    { date: '2026-11-08', minTemperatureC: 4, maxTemperatureC: 14, precipitationChance: 60, precipitationAmountMm: 2, symbolName: 'cloud.rain', condition: '비' }
+  ]
+  it('그날 예보: 옷은 최저·최고 가운데, 아이콘 줄엔 체감온도를 지어내지 않는다', () => {
+    expect(forecastWeather(daily, '2026-11-08')).toEqual({
+      scene: { condition: '비', symbolName: 'cloud.rain', apparentTemperatureC: null, temperatureC: 9 },
+      badge: { label: '비', feltC: null }
+    })
+  })
+  it('예보 밖이면 날씨 없음', () => {
+    expect(forecastWeather(daily, '2026-11-20')).toEqual({ scene: null, badge: null })
   })
 })

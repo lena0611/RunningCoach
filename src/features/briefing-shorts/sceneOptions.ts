@@ -99,6 +99,24 @@ export type BriefingWeather = { label: string; feltC: number | null }
 
 const WEATHER_WORD: Record<SceneWeather, string> = { clear: '맑음', cloudy: '흐림', rain: '비', snow: '눈' }
 
+/**
+ * 다른 날(코치 탭 다시 보기)의 날씨 = 그날 예보. 예보엔 체감온도가 없어 아이콘 줄엔 날씨만(없는 체감을 지어내지 않는다),
+ * 옷은 그날 최저·최고 가운데로 고른다. 예보 범위 밖이면 날씨 없음(장면은 달로 옷을 고른다).
+ */
+export function forecastWeather(
+  daily: WeatherSnapshot['daily'],
+  date: string
+): { scene: Pick<WeatherSnapshot['current'], 'condition' | 'symbolName' | 'apparentTemperatureC' | 'temperatureC'> | null; badge: BriefingWeather | null } {
+  const day = daily.find((point) => point.date === date)
+  if (!day) return { scene: null, badge: null }
+  const temps = [day.minTemperatureC, day.maxTemperatureC].filter((t): t is number => t !== null)
+  const temperatureC = temps.length ? temps.reduce((a, b) => a + b, 0) / temps.length : null
+  return {
+    scene: { condition: day.condition, symbolName: day.symbolName, apparentTemperatureC: null, temperatureC },
+    badge: { label: day.condition && day.condition !== '정보 없음' ? day.condition : '', feltC: null }
+  }
+}
+
 /** 아이콘 줄 날씨 아이콘·글자. 맑은 밤은 달. 상태 문구가 없으면 장면 날씨 이름으로 */
 export function weatherBadge(weather: BriefingWeather | null, wx: SceneWeather, hour: number): { icon: SceneWeather | 'night'; label: string } {
   const night = hour < 6 || hour >= 19

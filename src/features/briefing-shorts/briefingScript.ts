@@ -20,10 +20,10 @@ const SKIPPED_STEP_LABELS = new Set(['강도', '판정', '옵션', '결과', '�
 
 export const CLOSING_LINE = '자, 출발!'
 
-export function buildBriefingScript(input: { title: string; distanceKm: number | null; briefing: SessionBriefing }): ScriptLine[] {
+export function buildBriefingScript(input: { title: string; distanceKm: number | null; briefing: SessionBriefing; when?: string }): ScriptLine[] {
   const { briefing } = input
   const name = input.distanceKm ? `${input.title} ${input.distanceKm}km` : input.title
-  const texts: string[] = [`오늘은 ${name}${copula(name)}.`]
+  const texts: string[] = [`${input.when ?? '오늘'}은 ${name}${copula(name)}.`]
 
   texts.push(...splitSubtitle(briefing.keyPoint))
   for (const step of briefing.execution) {

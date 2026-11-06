@@ -10,6 +10,7 @@ import { useTrainingScheduleStore } from '@/app/stores/trainingScheduleStore'
 import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
 import { useGoalAdjustStore } from '@/app/stores/goalAdjustStore'
 import { useBriefingShortsStore } from '@/app/stores/briefingShortsStore'
+import { sessionHeadline } from '@/features/briefing-shorts/briefingPayload'
 import SecondaryButton from '@/shared/ui/SecondaryButton.vue'
 import { useCoachActionBridgeStore } from '@/app/stores/coachActionBridgeStore'
 import { useCrossTrainingStore } from '@/app/stores/crossTrainingStore'
@@ -395,21 +396,10 @@ const todayHero = computed(() => {
   const s = activeDisplaySession.value
   if (!s) return null
   // 걷기·뛰기 날은 이름과 기준을 브리핑과 맞춘다 — 거리·페이스 대신 시간(입문), 코치 탭 "어떻게 뛰나"와 같은 판정.
-  const walkRun = walkRunHeadline(s.sessionType, { injury: activeInjury.value, beginnerWalkRun: beginnerWalkRun.value })
-  if (walkRun) {
-    return {
-      title: walkRun.title,
-      sessionType: s.sessionType,
-      distanceKm: walkRun.minutes ? null : s.prescription.distanceKm ?? null,
-      metaLine: walkRun.minutes ? `약 ${walkRun.minutes}분` : '',
-      keyPoint: activeBriefing.value?.keyPoint ?? ''
-    }
-  }
+  // 코치 탭 '영상으로 보기'도 같은 함수를 지난다(sessionHeadline).
   return {
-    title: sessionTypeLabel(s.sessionType),
+    ...sessionHeadline(s, { injury: activeInjury.value, beginnerWalkRun: beginnerWalkRun.value }),
     sessionType: s.sessionType,
-    distanceKm: s.prescription.distanceKm ?? null,
-    metaLine: s.prescription.paceRange ?? (s.prescription.durationMin ? `약 ${s.prescription.durationMin}분` : ''),
     keyPoint: activeBriefing.value?.keyPoint ?? ''
   }
 })
