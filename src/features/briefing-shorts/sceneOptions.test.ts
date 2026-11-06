@@ -37,7 +37,7 @@ describe('sceneOptions', () => {
     expect(sceneOutfit(null, 4)).toBe('mild')
   })
 
-  it('추운 밤 템포: 겨울 옷·장갑·넥워머, 밤이라 선글라스 없음', () => {
+  it('추운 밤 템포: 겨울 옷·비니·장갑·넥워머, 밤이라 선글라스 없음', () => {
     const o = buildSceneOptions({
       sex: 'unknown',
       sessionType: 'Tempo',
@@ -45,7 +45,18 @@ describe('sceneOptions', () => {
       now: new Date(2026, 0, 15, 20, 30)
     })
     expect(o).toMatchObject({ sx: 'm', rn: 'tempo', wx: 'clear', tp: 'winter', tm: 20.5, dy: 15 })
-    expect(o.ac.split('-')).toEqual(['cap', 'watch', 'glove', 'buff', 'jacket'])
+    expect(o.ac.split('-')).toEqual(['beanie', 'watch', 'glove', 'buff', 'jacket'])
+  })
+
+  it('맑은 겨울 낮: 비니에 선글라스·장갑', () => {
+    const o = buildSceneOptions({
+      sex: 'male',
+      sessionType: 'Easy',
+      weather: { condition: '맑음', symbolName: 'sun.max', apparentTemperatureC: 3, temperatureC: 5 },
+      now: new Date(2026, 11, 20, 11, 0)
+    })
+    expect(o.tp).toBe('winter')
+    expect(o.ac).toBe('beanie-watch-sun-glove-padvest')
   })
 
   it('겉옷: 쌀쌀한 봄가을·영하·비눈엔 바람막이, 그 밖의 겨울엔 패딩 조끼, 여름엔 없음', () => {

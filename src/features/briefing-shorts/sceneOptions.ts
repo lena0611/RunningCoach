@@ -58,9 +58,13 @@ export function sceneOuterwear(input: { feltC: number | null; weather: SceneWeat
   return outfit === 'winter' ? 'padvest' : null
 }
 
+/**
+ * 모자: 겨울엔 비니(귀 위까지 덮는 니트), 그 밖엔 러닝캡.
+ * 선글라스: 맑은 낮이면 겨울에도 쓴다 — 비니·선글라스·장갑을 함께 쓰는 겨울 러너 차림(사용자 요청 2026-11-06)
+ */
 export function sceneAccessories(input: { feltC: number | null; weather: SceneWeather; hour: number; run: SceneRunKind; outfit: SceneOutfit }): string {
-  const items = ['cap', 'watch']
-  if (input.weather === 'clear' && input.outfit !== 'winter' && input.hour >= 9 && input.hour < 17) items.push('sun')
+  const items = [input.outfit === 'winter' ? 'beanie' : 'cap', 'watch']
+  if (input.weather === 'clear' && input.hour >= 9 && input.hour < 17) items.push('sun')
   if (input.feltC !== null && input.feltC <= 5) items.push('glove')
   if (input.feltC !== null && input.feltC <= 0) items.push('buff')
   const outer = sceneOuterwear(input)
