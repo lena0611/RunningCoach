@@ -214,6 +214,7 @@ Issue 완료 책임 창은 Project `Done`과 Issue close까지 끝낸 뒤 로컬
 - 검증 명령을 실행하기 전에는 프로젝트 루트의 `.nvmrc` 존재를 확인하고, 존재하면 반드시 `nvm use`를 먼저 실행한다. `nvm use` 없이 하네스/빌드/테스트를 돌려 Node 버전 오류가 나면 검증 절차 미준수로 본다.
 - Codex 또는 새 터미널 셸에서 Node 버전이 낮아 npm 스크립트가 실패하면 작업을 포기하지 않는다. 프로젝트 루트에서 `. "$HOME/.nvm/nvm.sh" && nvm use`로 `.nvmrc` 버전을 활성화한 뒤 같은 npm 명령을 재시도한다.
 - Codex hook이 세션 시작 시 `nvm use`를 실행해도 이후 shell 명령에 영구 적용되지 않는다. 에이전트가 npm/tsc/build/test/harness 명령을 실행하는 실제 shell에서 다시 `nvm use`를 적용한다.
+- Node 버전은 `.nvmrc` 한 곳(현재 v24.22.2)이 정하고, `package.json` engines(`>=24.22.2 <25`)와 `.npmrc` `engine-strict=true`가 지킨다 — 패치 전 Node로 `npm i`·`npm ci`를 돌리면 **패키지를 받기 전에** EBADENGINE으로 거부된다(CVE-2026-111497: 패치 전 Node의 Brotli 해제기로 레지스트리 응답을 풀면 원격 코드 실행 위험, 2026-11-06). EBADENGINE이 나면 우회(`--engine-strict=false`·`--force`)하지 말고 `nvm use`부터 한다. Node를 올릴 땐 `.nvmrc`·engines·lock 루트 engines를 함께 바꾼다(워크플로우 yml은 `.nvmrc`를 읽으므로 숫자를 따로 적지 않는다).
 - Issue worktree에서 `node_modules`가 없으면 검증 실패로 해석하지 않고 먼저 `npm ci`로 의존성을 준비한다. `node_modules` 복사나 symlink는 캐시/경로 문제를 만들 수 있으므로 기본값으로 쓰지 않는다.
 - 기본 검증: `npm run build`
 - 단위/컴포넌트 회귀 검증: `npm run test:run`
