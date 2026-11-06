@@ -140,6 +140,10 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   // 옷 단계 = 체감온도 5°C 단위(-10 … 35, 앱이 고른다 — sceneOptions.ts sceneBand). 옛 이름(스튜디오 계절 버튼)도 받는다
   const BAND = (() => { const n = Number(OPT.tp); return Number.isFinite(n) ? Math.max(-10, Math.min(35, Math.round(n / 5) * 5)) : ({ summer: 30, mild: 15, winter: 0 })[OPT.tp] ?? 15; })();
   const SHELL = ACC.has('thermo') ? 'thermo' : ACC.has('jacket') ? 'jacket' : null; // 후드 달린 겉옷(보온 재킷·바람막이)
+  const LAT = 37.57, LON = 126.98, TZ = 9; // 해 위치(sunAt — 아래 '시간'): 옷을 지을 때도 쓰니 위에 둔다
+  // 밤(해가 지평선 2° 아래~): 가장 바깥 옷을 하이비즈로(가이드 1.4 — 밤·새벽엔 형광 상의·재킷 + 반사띠). 남 볼트·여 네온 코랄
+  const NIGHT = sunAt(OPT.dy, OPT.tm).elev < (2 * Math.PI) / 180;
+  const HIVIS = CHAR === 'male' ? { color: '#c9ec3c', shade: '#97b62a' } : { color: '#ff6b5a', shade: '#c94a3c' };
   const HAT = ACC.has('beanie') ? 'beanie' : ACC.has('cap') ? 'cap' : null; // 머리에 쓰는 것 — 겨울엔 비니(앱이 고른다, sceneOptions.ts)
   const OUT = { ...OUTFITS[CHAR], ...(!HAT && OUTFITS[CHAR].bare) }; // 모자를 안 쓰면 머리 손질을 바꾼다
 
@@ -1596,11 +1600,14 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   // 무엇을 입는지 = `.harness/project/running-apparel-style-guide.md` 1장 매트릭스(남녀 따로). 러너는 얇은 옷을 겹친다: 이너 → 미드(하프집) → 겉옷(바람막이·보온 재킷·조끼).
   // 겉옷(thermo·jacket·padvest)과 후드는 앱이 악세사리로 고른다(sceneOptions.ts). 집업 깃은 목 절반(4~5cm)까지만(사용자 관찰·가이드 2.3).
   // 색 = 한 벌에 2~3색: 큰 면 한 색 + 어두운 하의 + 포인트(가이드 7장). 남자 옷은 전부 새로 짰다(사용자 2026-11-06 "지금 남자 옷 전부 마음에 안 든다")
+  const bare = NIGHT && !SHELL && !ACC.has('padvest'); // 밤인데 겉옷이 없으면 상의를 하이비즈로
   const tee = ({ color, shade, sleeve = 0.135, hem = HEM, rib = color, ribShade = shade }) => { // 반팔 티: 소매는 위팔 가운데
+    if (bare) ({ color, shade } = HIVIS), (rib = color), (ribShade = shade);
     top({ sleeve, hem, neck: -0.09, off: 0.0055, color, shade });
     crewNeck({ color, shade, rib, ribShade });
   };
   const longTee = ({ color, shade, rib = color, ribShade = shade }) => { // 얇은 긴팔 크루
+    if (bare) ({ color, shade } = HIVIS), (rib = color), (ribShade = shade);
     top({ sleeve: WRIST - 0.008, hem: HEM, neck: -0.09, off: 0.0055, color, shade });
     crewNeck({ color, shade, rib, ribShade });
   };
@@ -1726,6 +1733,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       padvest: { color: '#25272c', shade: '#15161a', trim: '#25272c', trimShade: '#15161a', zip: '#c6ea3a' }, // 차콜 + 볼트 지퍼
     },
   };
+  if (NIGHT) for (const k of [SHELL, ACC.has('padvest') && 'padvest']) if (k) Object.assign(OUTERWEAR[CHAR][k], HIVIS, { trim: HIVIS.shade, trimShade: HIVIS.shade, zip: '#17181c' }); // 밤엔 겉옷(조끼 포함)을 하이비즈로
   if (SHELL === 'thermo') windJacket({ ...OUTERWEAR[CHAR].thermo, open: 0.02, loft: 1.2, chevron: RF, hood: true });
   else if (SHELL === 'jacket') windJacket({ ...OUTERWEAR[CHAR].jacket, open: BAND <= 5 ? 0.06 : 0.13, hood: true });
   if (ACC.has('padvest')) padVest({ ...OUTERWEAR[CHAR].padvest, base: SHELL ? 0.03 : 0.016 });
@@ -2410,7 +2418,6 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   const Y_AXIS = new THREE.Vector3(0, 1, 0);
   // 해 위치(NOAA 근사식): 서울(37.57°N 126.98°E, KST). 날짜(1월 1일부터 며칠째)·시각(시) → 고도(라디안)·방위(북 0, 시계 방향)
   // 달리는 방향 = 정북, 등 = 정남 → 아침 해는 오른쪽(동, 천·건너편 쪽)에서 떠서 정오엔 등 뒤 남쪽 하늘(하지 76° · 동지 29°), 저녁엔 왼쪽(서)으로 진다
-  const LAT = 37.57, LON = 126.98, TZ = 9;
   function sunAt(day, h) {
     const g = ((2 * Math.PI) / 365) * (day - 1 + (h - 12) / 24);
     const eqt = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g) - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g)); // 균시차(분)
