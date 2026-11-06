@@ -2478,6 +2478,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     mix('rightUpperArm', [0.05, 0, 1.4], [armBias - S.arm * s, S.armIn * fwdR, armOut]);
     mix('leftLowerArm', [0, -0.35, 0], [0, -(S.elbow + elbowFwd * Math.max(0, -s)), 0]);
     mix('rightLowerArm', [0, 0.35, 0], [0, S.elbow + elbowFwd * Math.max(0, s), 0]);
+    if (waveW > 0) waveArm();
 
     // 몸통: 어깨는 골반과 반대로 돈다(오른팔이 앞이면 오른어깨도 앞), 골반이 기운 만큼 되세운다. 머리는 되받아 정면을 본다
     // lean: 브레이크·출발 때 관성으로 상체가 쏠리는 양. 머리는 반쯤 되받아 시선을 유지한다
@@ -2520,23 +2521,44 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   // 예전엔 엄지 뿌리(three-vrm 이름 ThumbMetacarpal — VRM0 의 thumbProximal)를 안 돌려 엄지가 주먹 밖으로 삐죽 나와 덜렁거렸다.
   // 사용자 모델(VRoid Studio 2.x)로 바꾼 뒤 옛 값으론 엄지가 앞으로 쭉 뻗어 '손가락으로 가리키는' 손이 됐다(사용자 지적 2026-11-05) →
   // 후보 각도를 달리는 자세 같은 프레임으로 찍어 비교해 엄지가 주먹 안쪽으로 감기는 값으로 다시 잡았다(뿌리를 손바닥 쪽으로 크게 틀고 마디를 감는다)
-  for (const side of ['left', 'right']) {
-    const k = side === 'left' ? -1 : 1, m = -k;
+  // open = 손을 편 정도(0 = 주먹, 1 = 편 손 — 손 흔들 때)
+  function fist(side, open = 0) {
+    const k = side === 'left' ? -1 : 1, m = -k, c = 1 - 0.92 * open; // 다 펴도 손가락이 살짝 굽은 자연스러운 손
     for (const f of ['Index', 'Middle', 'Ring', 'Little']) {
-      rot(`${side}${f}Proximal`, 0, 0, 1.45 * k);
-      rot(`${side}${f}Intermediate`, 0, 0, 1.45 * k);
-      rot(`${side}${f}Distal`, 0, 0, 1.05 * k);
+      rot(`${side}${f}Proximal`, 0, 0, 1.45 * k * c);
+      rot(`${side}${f}Intermediate`, 0, 0, 1.45 * k * c);
+      rot(`${side}${f}Distal`, 0, 0, 1.05 * k * c);
     }
-    rot(`${side}ThumbMetacarpal`, 0.9, 1.2 * m, -0.2 * m);
-    rot(`${side}ThumbProximal`, 0.6, 0, -0.9 * m);
-    rot(`${side}ThumbDistal`, 0.4, 0, -0.8 * m);
+    rot(`${side}ThumbMetacarpal`, 0.9 * c, 1.2 * m * c, -0.2 * m * c);
+    rot(`${side}ThumbProximal`, 0.6 * c, 0, -0.9 * m * c);
+    rot(`${side}ThumbDistal`, 0.4 * c, 0, -0.8 * m * c);
   }
+  fist('left');
+  fist('right');
 
   // ---- 브리핑 진행(앱이 부른다) ----
   // setSpeech(): 지금 문장을 말하는 중인지 · 마지막 문장인지(입모양·웃음)
   // finish(): 다 읽었다 — 카메라맨이 서서히 멈춘다(위 '브리핑 연출' 3)
+  // 손 흔들기(사용자 요청 2026-11-06 "읽고 난 뒤 '자, 출발!' 할 때 카메라 보고 손 한 번 흔들며 웃으면서 떠나자"):
+  // 마지막 문장을 말하기 시작하면 카메라 쪽 팔을 앞·위로 들어 아래팔을 세우고 좌우로 두 번 흔든 뒤 달리는 팔로 돌아온다(1.8초).
+  // 흔드는 동안은 고개가 카메라를 보고 활짝 웃는다 — 카메라맨이 멈추고 러너가 지나가기 시작할 때까지 이어진다
+  const WAVE = { sec: 1.8, up: 0.35, down: 0.4, hz: 2.2, ua: [-1.7, 0, -0.85], la: [0, -1.35, 0], swing: 0.32 }; // 손이 머리 옆 높이
+  let waveT0 = -1, waveW = 0, waveSide = 'left';
+  function waveArm() {
+    const t = clock.getElapsedTime() - waveT0, sg = waveSide === 'left' ? 1 : -1; // 오른팔은 y·z 부호가 반대
+    const osc = Math.sin(Math.max(0, t - WAVE.up) * Math.PI * 2 * WAVE.hz) * WAVE.swing * ease((t - WAVE.up * 0.6) / 0.2);
+    const blend = (name, [x, y, z]) => {
+      const r = bone(name)?.rotation;
+      if (!r) return;
+      r.x += (x * flip - r.x) * waveW; r.y += (y - r.y) * waveW; r.z += (z * flip - r.z) * waveW;
+    };
+    blend(`${waveSide}UpperArm`, [WAVE.ua[0], (WAVE.ua[1] + osc) * sg, WAVE.ua[2] * sg]);
+    blend(`${waveSide}LowerArm`, [WAVE.la[0], WAVE.la[1] * sg, WAVE.la[2] * sg]);
+    fist(waveSide, waveW); // 흔드는 동안 손을 편다(주먹이면 '파이팅'처럼 보였다)
+  }
   let lineIsLast = false, speaking = false;
   function setSpeech(next) {
+    if (next.speaking && next.last && waveT0 < 0) { waveT0 = clock.getElapsedTime(); waveSide = headLook >= 0 ? 'left' : 'right'; } // 카메라 쪽 팔(+ = 러너 왼쪽)
     speaking = Boolean(next.speaking);
     lineIsLast = Boolean(next.last);
   }
@@ -2558,7 +2580,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     let v = 0;
     // 기기 TTS 는 소리 크기를 읽을 수 없어서, 말하는 동안 입을 말하는 흉내로 움직인다
     if (speaking) v = Math.max(0, 0.3 + 0.5 * Math.sin(t * 15) * Math.sin(t * 4.7));
-    const target = reading ? (lineIsLast ? 0.6 : 0.4) : OPT.rn === 'easy' || OPT.rn === 'lsd' ? 0.15 : 0;
+    const target = reading || waveW > 0 ? (lineIsLast ? 0.6 : 0.4) : OPT.rn === 'easy' || OPT.rn === 'lsd' ? 0.15 : 0; // 손 흔드는 동안은 활짝
     const k = Math.min(1, dt * 4);
     smile += (target - smile) * k;
     const em = vrm.expressionManager;
@@ -2776,7 +2798,8 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       camDir.copy(camera.getWorldPosition(camDir)).sub(headBone.getWorldPosition(headW));
       const yawAbs = Math.atan2(camDir.x, camDir.z) - FACING, yawRel = Math.atan2(Math.sin(yawAbs), Math.cos(yawAbs));
       const pitchRel = Math.atan2(camDir.y, Math.hypot(camDir.x, camDir.z));
-      const want = (reading || !STORY ? 1 : 0) * (1 - ease((Math.abs(yawRel) - 1.9) / 0.6));
+      if (waveT0 >= 0 && waveW >= 0) { const wt = clock.getElapsedTime() - waveT0; waveW = wt > WAVE.sec ? 0 : ease(wt / WAVE.up) * (1 - ease((wt - (WAVE.sec - WAVE.down)) / WAVE.down)); if (wt > WAVE.sec) { fist(waveSide); waveW = -1; } } // 끝나면 주먹으로(한 번만)
+      const want = (reading || !STORY || waveW > 0 ? 1 : 0) * (1 - ease((Math.abs(yawRel) - 1.9) / 0.6));
       headLook += (Math.max(-1.2, Math.min(1.2, yawRel)) * want - headLook) * Math.min(1, dt * 3);
       headPitch += (Math.max(-0.6, Math.min(0.45, pitchRel)) * want - headPitch) * Math.min(1, dt * 3);
       vrm.scene.rotation.y = baseYaw;
