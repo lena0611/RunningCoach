@@ -22,7 +22,7 @@ const RUNS = {
 // sx 성별 · rn 러닝 타입 · st 주법 · pc 페이스(0 = 타입 기본) · cd 케이던스(0 = 타입 기본) · wt 체중(0 = 모델 기본)
 // dy 날짜(1~365) · tm 시간(시) · wx 날씨 · tp 옷(계절) · ac 악세사리(- 로 잇는다) · df 심도(0 = 끔)
 // el·az·ds 달릴 때 카메라 앵글·포지션·디스턴스 · mv 뛰기(1)/멈추기(0) · ol 검은 외곽선(먹선) 1 = 그림 / 0 = 뺌(기본, 사용자 요청 2026-11-05)
-export const SCENE_DEFAULTS = { sx: 'f', rn: 'easy', st: 'rear', pc: 0, cd: 0, wt: 0, dy: 308, df: 0, tm: 9, wx: 'clear', tp: 'mild', ac: 'cap-watch', el: 6, az: 54, ds: 3.4, mv: 1, ol: 0 }
+export const SCENE_DEFAULTS = { sx: 'f', rn: 'easy', st: 'rear', pc: 0, cd: 0, wt: 0, dy: 308, df: 0, tm: 9, wx: 'clear', tp: 15, ac: 'cap-watch', fc: 1, el: 6, az: 54, ds: 3.4, mv: 1, ol: 0 }
 // 체중 기준(kg): 모델 기본 체형 = BMI 20 안팎의 마른 몸(여 키 1.57m → 50kg, 남 1.70m → 60kg). wt = 0 이면 이 값
 const WT_BASE = { f: 50, m: 60 }
 const STOPS = [0, 16, 11, 8, 5.6, 4, 2.8, 2, 1.4] // 조리개 단계 → f값
@@ -136,7 +136,10 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       watch: { strap: '#22252b', strapShade: '#131418', case: '#2a2c33', face: '#0d1015', ring: '#ffb547' }, // 그늘색도 줄 색 계열(여자 주황 그늘이면 검은 줄이 그늘에서 주황으로 보였다)
     },
   };
-  const SEASON = OPT.tp, ACC = new Set(String(OPT.ac).split('-').filter(Boolean)); // 옷(계절)·악세사리(컨트롤러)
+  const ACC = new Set(String(OPT.ac).split('-').filter(Boolean)); // 악세사리(컨트롤러)
+  // 옷 단계 = 체감온도 5°C 단위(-10 … 35, 앱이 고른다 — sceneOptions.ts sceneBand). 옛 이름(스튜디오 계절 버튼)도 받는다
+  const BAND = (() => { const n = Number(OPT.tp); return Number.isFinite(n) ? Math.max(-10, Math.min(35, Math.round(n / 5) * 5)) : ({ summer: 30, mild: 15, winter: 0 })[OPT.tp] ?? 15; })();
+  const SHELL = ACC.has('thermo') ? 'thermo' : ACC.has('jacket') ? 'jacket' : null; // 후드 달린 겉옷(보온 재킷·바람막이)
   const HAT = ACC.has('beanie') ? 'beanie' : ACC.has('cap') ? 'cap' : null; // 머리에 쓰는 것 — 겨울엔 비니(앱이 고른다, sceneOptions.ts)
   const OUT = { ...OUTFITS[CHAR], ...(!HAT && OUTFITS[CHAR].bare) }; // 모자를 안 쓰면 머리 손질을 바꾼다
 
@@ -383,6 +386,50 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     return g;
   }
 
+  // ---- 얼굴 윤곽(사용자 요청 2026-11-06 "실제 사람보다 얼굴이 너무 둥글어 모자 쓰면 안 예뻐 보인다 — 성형학적으로 균형 있는 얼굴로") ----
+  // 애니 얼굴은 아래턱이 넓고 턱끝이 짧아 둥글게 읽힌다(모자가 이마를 가리면 더). 안면 비율 기준 — 턱각 폭 ÷ 광대 폭(여 0.72~0.80·남 0.78~0.86),
+  // 아래 얼굴 입술선:턱끝 ≈ 1:2 — 쪽으로 아래턱 옆을 들이고(여 9%·남 6%) 턱끝을 앞쪽만 조금 내리고(여 5mm·남 4mm) 옆볼을 살짝 당긴다.
+  // 광대·눈·입은 그대로(가운데 2cm 안은 안 건드린다), 남자는 각진 턱을 남긴다. 피부(얼굴·몸) 꼭짓점을 같은 변위장으로 옮겨 얼굴·목 이음매가 안 벌어진다.
+  // fc = 0 이면 원래 얼굴(전후 비교용). 근거: .harness/project/running-apparel-style-guide.md 와 같은 날 조사한 안면 비율 문헌(턱각/광대 0.83~0.88 평균, 호감 0.72~0.86)
+  const FACE_K = CHAR === 'female' ? { jaw: 0.12, chin: 7, cheek: 0.06 } : { jaw: 0.09, chin: 6, cheek: 0.045 };
+  function faceField(v) { // 머리 틀(mm) 꼭짓점 v 를 제자리에서 옮긴다
+    const ax = Math.abs(v.x), sg = Math.sign(v.x);
+    // 아래 얼굴 폭: 눈 밑(55)부터 턱각(-25)까지 점점, 그 밑 목(-70)으로 가며 풀린다. 앞(입·턱끝 가운데)은 절반만 — 둥근 인상은 눈 밑 볼 높이부터 시작된다
+    const wy = v.y > -25 ? ease((55 - v.y) / 70) : 1 - ease((-25 - v.y) / 45);
+    const wj = wy * (1 - 0.5 * ease((v.z - 55) / 40)) * ease((v.z + 60) / 40);
+    v.x -= sg * FACE_K.jaw * Math.max(0, ax - 20) * wj;
+    // 옆볼: 입 높이 근처 옆쪽만 안으로
+    const wc = Math.exp(-(((v.y - 15) / 24) ** 2)) * ease((ax - 35) / 25) * ease((v.z - 15) / 30);
+    v.x -= sg * FACE_K.cheek * Math.max(0, ax - 20) * wc;
+    // 턱끝: 입 아래 앞쪽만 아래로(턱 밑 → 목으로 갈수록 풀린다)
+    v.y -= FACE_K.chin * ease((-12 - v.y) / 38) * ease((v.z - 30) / 30);
+  }
+  if (OPT.fc) {
+    const skinM = new THREE.Matrix4(), boneM = new THREE.Matrix4(), toWorld = new THREE.Matrix4(), toBind = new THREE.Matrix4(), v = new THREE.Vector3();
+    for (const mesh of meshes) {
+      if (!mesh.isSkinnedMesh || !/_SKIN/.test([mesh.material].flat()[0].name)) continue;
+      const pos = mesh.geometry.attributes.position, si = mesh.geometry.attributes.skinIndex, sw = mesh.geometry.attributes.skinWeight, bones = mesh.skeleton.bones, inverses = mesh.skeleton.boneInverses;
+      for (let i = 0; i < pos.count; i++) {
+        skinM.elements.fill(0);
+        for (let c = 0; c < 4; c++) {
+          const w = sw.getComponent(i, c);
+          if (!w) continue;
+          const b = si.getComponent(i, c);
+          boneM.multiplyMatrices(bones[b].matrixWorld, inverses[b]);
+          for (let e = 0; e < 16; e++) skinM.elements[e] += w * boneM.elements[e];
+        }
+        toWorld.multiplyMatrices(skinM, mesh.bindMatrix);
+        v.fromBufferAttribute(pos, i).applyMatrix4(toWorld).applyMatrix4(HEAD_INV);
+        if (v.y > 60 || v.y < -95 || Math.abs(v.x) > 120 || v.z < -80) continue; // 머리 아래쪽 앞만
+        const x0 = v.x, y0 = v.y;
+        faceField(v);
+        if (v.x === x0 && v.y === y0) continue;
+        v.applyMatrix4(HEAD).applyMatrix4(toBind.copy(toWorld).invert());
+        pos.setXYZ(i, v.x, v.y, v.z);
+      }
+      pos.needsUpdate = true;
+    }
+  }
   // ---- 머리카락: 여자는 긴 가닥을 걷어 내고, 남자는 가닥을 줄이고, 둘 다 모자 속으로 눌러 넣는다(뒤통수 피부도) ----
   // 비니도 같은 돔 틀(타원체)로 머리를 눌러 넣는다 — 테두리 높이만 다르다
   const cap = HAT === 'beanie' ? OUT.beanie : OUT.cap, CC = new THREE.Vector3(...cap.c), CR = new THREE.Vector3(...cap.r);
@@ -745,7 +792,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       ry = Math.max(ry, Math.abs(p.dot(dorsal)));
       rz = Math.max(rz, Math.abs(p.dot(across)));
     }
-    const sleeveOff = ACC.has('jacket') ? 10.5 : SEASON === 'winter' ? 7.5 : 0; // 겨울은 긴팔(띄움 6.5mm) 위, 바람막이면 소매 고무단(9mm) 위에 찬다
+    const sleeveOff = SHELL ? 10.5 : BAND <= 15 ? 7.5 : 0; // 긴팔(띄움 6.5mm) 위, 겉옷이면 소매 고무단(9mm) 위에 찬다
     ry = ry * 1000 + 1.2 + sleeveOff;
     rz = rz * 1000 + 1.2 + sleeveOff;
     // 줄: 손목 단면 타원을 따라 납작한 띠(폭 20mm·두께 2.6mm)를 두른다
@@ -1053,7 +1100,6 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   function panel(src, field, color, shade = color, off = 0.0008) {
     return clipShell({ src, field, off, color, shade });
   }
-  const between = (v, lo, hi) => Math.min(v - lo, hi - v); // lo~hi 사이면 +
   // 몸통 둘레 각(rad): 0 = 앞 가운데, π/2 = 옆선, π = 등 가운데
   const torsoAng = (p) => { const v = p.clone().sub(BM.hips); return Math.atan2(Math.abs(v.dot(ACROSS)), v.dot(facing)); };
   // 다리 바깥 각(rad): 0 = 그 다리 바깥 옆선(고관절 기준)
@@ -1070,16 +1116,9 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   const sidePanel = (src, color, shade, half = 0.3) => panel(src, (p, w) => Math.min(half - Math.abs(torsoAng(p) - Math.PI / 2), 0.5 - wsum(w, ARMS)), color, shade);
   const legStripe = (src, color, shade, half = 0.16) => panel(src, (p) => half - legOutAng(p), color, shade);
   const sleeveStripe = (src, color, shade, half = 0.3) => panel(src, (p, w) => Math.min(half - armTopAng(p), wsum(w, ARMS) - 0.5, armT(p) - 0.03), color, shade);
-  const chestBand = (src, y0, y1, color, shade) => panel(src, (p, w) => Math.min(between(p.y, y0, y1), 0.5 - wsum(w, ARMS)), color, shade);
   // 어깨 요크: 몸통은 y0 위, 팔은 어깨관절에서 10cm 까지
   const yoke = (src, y0, color, shade) => panel(src, (p, w) => (wsum(w, ARMS) > 0.5 ? 0.1 - armT(p) : p.y - y0), color, shade);
   const reflectBand = (src, y, width = 0.008) => panel(src, (p) => width / 2 - Math.abs(p.y - y), '#e3e7ee', '#a9b0bc', 0.001); // 반사띠(밤엔 빛을 받아 밝다)
-  // 스플릿 쇼츠: 다리 바깥 옆선 밑단을 ㅅ자로 튼다(트임 높이 h, 폭 = 바깥 각 ±half)
-  function splitShorts({ hem, off = 0.003, color, shade, h = 0.04, half = 0.32 }) {
-    const src = bottom({ hem, off, color, shade });
-    src.forEach((o) => { o.visible = false; });
-    return clipShell({ src, field: (p) => Math.max((legOutAng(p) - half) * 0.08, p.y - hem - h * (1 - legOutAng(p) / half)), off: 0, color, shade });
-  }
   // 하의: 허리(waist)에서 hem 높이까지. 반바지는 허벅지 중간, 타이츠는 발목
   function bottom({ hem, waist = BM.hips.y + 0.07, off = 0.003, color, shade }) {
     return skinShell({
@@ -1236,7 +1275,9 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   const neckAlong = (p) => p.clone().sub(BM.neck).dot(NECK_DIR); // 목 밑동에서 목을 따라 올라간 높이(m)
   // 바람막이: 안에 입은 옷 위에 걸친다. 지퍼를 가슴까지 내려 안에 입은 옷 목이 V 로 보이고, 깃(collar)은 목을 감싸 선다.
   // 밑단·소매 끝은 고무단(덜 띄워 몸에 붙는다), 소매는 손목까지 — 워치는 소매 위에 찬다(워치 쪽 JACKET_CUFF_MM)
-  function windJacket({ color, shade, trim, trimShade, zip = '#17181c', hem = HEM - 0.01, open = 0.13, collar = 0.045 }) {
+  // 보온 재킷(thermo)도 같은 함수: 지퍼를 깃 끝까지 올리고(open 작게) 솜만큼 더 띄우고(loft) 가슴 V 쉐브론 반사띠(chevron 색).
+  // hood = 후드 내림(목 뒤에 뭉친 자루 — hoodDown). 후드를 올리면(악세사리 hood) 내림 자루 대신 머리에 쓴 후드(hoodUp)를 따로 짓는다
+  function windJacket({ color, shade, trim, trimShade, zip = '#17181c', hem = HEM - 0.01, open = 0.13, collar = 0.045, loft = 1, chevron = null, hood = false }) {
     const sleeve = WRIST - 0.004, margin = 0.03, yV = BM.neck.y - open;
     const loose = looseShell({
       color, shade,
@@ -1246,7 +1287,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
         const arm = Math.min(1, wsum(w, ARMS) * 1.4), t = armT(p);
         const body = 0.021 - 0.009 * ease((p.y - (BM.shoulderY - 0.07)) / 0.08) - 0.008 * (1 - ease((p.y - hem) / 0.06)); // 가슴·배·등 2.1cm, 어깨 위 1.2cm, 밑단 고무단 1.3cm
         const sl = 0.013 + 0.007 * ease(t / BM.arm[0].elbowT) - 0.011 * ease((t - (sleeve - 0.075)) / 0.04); // 위팔 1.3 → 팔꿈치 2.0 → 소매 고무단 0.9cm
-        return body * (1 - arm) + sl * arm;
+        return (body * (1 - arm) + sl * arm) * loft;
       },
     });
     const Vf = (p) => (p.clone().sub(BM.neck).dot(facing) > -0.02 ? lat(p) - (p.y - yV) * 0.24 : 1); // 앞섶 V(+ = 옷): 꼭지점 yV 에서 위로 벌어진다
@@ -1261,8 +1302,65 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     panel(shell, (p) => 0.008 - topF(p), trim, trimShade); // 깃 끝
     panel(shell, (p) => hem + 0.022 - p.y, trim, trimShade); // 밑단 고무단
     panel(shell, (p, w) => Math.min(wsum(w, ARMS) - 0.5, armT(p) - (sleeve - 0.025)), trim, trimShade); // 소매 고무단
-    panel(shell, (p) => Math.min(0.007 - Math.abs(p.y - (BM.shoulderY - 0.1)), 0.12 - lat(p), p.clone().sub(BM.hips).dot(facing) < BM.chestZ - 0.08 ? 1 : -1), '#e3e7ee', '#a9b0bc'); // 등 반사띠(1.4cm — 더 좁으면 삼각형 사이로 끊긴다)
+    const backY = hood && !ACC.has('hood') ? BM.neck.y - 0.27 : BM.shoulderY - 0.1; // 후드를 내리면 자루 밑으로
+    panel(shell, (p) => Math.min(0.007 - Math.abs(p.y - backY), 0.12 - lat(p), p.clone().sub(BM.hips).dot(facing) < BM.chestZ - 0.08 ? 1 : -1), '#e3e7ee', '#a9b0bc'); // 등 반사띠(1.4cm — 더 좁으면 삼각형 사이로 끊긴다)
+    if (chevron) { // 가슴 V 쉐브론(가이드 2.2): 가운데가 가장 낮고 양쪽 겨드랑이 쪽으로 올라가는 6cm 띠. 중간 회색 — 빛을 받으면 희게. 지퍼 양옆 7mm 는 비운다
+      const tip = BM.neck.y - 0.33;
+      panel(shell, (p, w) => Math.min(0.03 - Math.abs(p.y - (tip + lat(p) * 0.6)), lat(p) - 0.007, 0.18 - lat(p), 0.5 - wsum(w, ARMS), front(p) ? 1 : -1), chevron[0], chevron[1]);
+    }
+    if (hood && !ACC.has('hood')) hoodDown(shell, { color, shade, collar });
     OUTER = shell;
+  }
+  // 후드 내림(가이드 3.1 — 뒷목에 뭉친 말린 칼라 + 등 윗부분에 얹힌 자루, 어깨까지 내려앉지 않는다):
+  // ① 자루 = 겉옷 등판을 방패꼴(폭 24cm·길이 25cm, 아래가 둥글다)로 오려 부풀린다 — 겉옷과 같은 뼈 가중치라 같이 움직인다. 위쪽(목 뒤)이 가장 두껍게 뭉친다
+  // ② 말린 테두리 = 깃 꼭대기 바깥을 따라 뒤로 감은 굵은 관(얼굴 테두리가 접힌 자리). 앞 양옆으로 갈수록 가늘어지며 깃 옆에서 끝난다
+  function hoodDown(src, { color, shade, collar }) {
+    const top = BM.neck.y + 0.015, L = 0.25, back = (p) => -p.clone().sub(BM.neck).dot(facing);
+    const W = (v) => (v < 0.6 ? 0.118 * (1 - 0.12 * v) : 0.118 * 0.928 * Math.sqrt(Math.max(0, 1 - ((v - 0.6) / 0.4) ** 2)));
+    const vOf = (p) => (top - p.y) / L;
+    const flap = clipShell({ src, field: (p) => { const v = vOf(p); return Math.min(back(p) - 0.01, W(Math.max(0, v)) - lat(p), (1 - v) * L, collar - 0.004 - neckAlong(p)); }, off: 0.003, color, shade });
+    twoSided(flap, 0.25);
+    quilt(flap, (p) => {
+      const v = Math.max(0, vOf(p)), u = Math.min(1, lat(p) / Math.max(W(v), 1e-4));
+      return 0.042 * Math.sqrt(1 - u * u) * (0.45 + 0.55 * (1 - ease(v / 0.7))) * ease((1 - v) / 0.25);
+    });
+    // 자루 가장자리 바이어스(6mm, 그늘색) + 등 가운데 솔기 — 겉옷과 같은 색이라 이게 없으면 등판과 구분이 안 됐다
+    const Fh = (p) => { const v = vOf(p); return Math.min(W(Math.max(0, v)) - lat(p), (1 - v) * L); };
+    const D = surfaceDist(Fh);
+    clipShell({ src: flap, field: (p, w, nrm) => 0.006 - D(p, nrm), off: 0.0012, color: shade, shade });
+    clipShell({ src: flap, field: (p) => Math.min(0.0015 - lat(p), vOf(p) * L + 0.02), off: 0.0012, color: shade, shade });
+    // 깃 꼭대기 바깥 반경(방위각마다 — 0 = 앞): 겉옷·자루 꼭짓점에서 잰다
+    const Zf = facing.clone().addScaledVector(NECK_DIR, -facing.dot(NECK_DIR)).normalize(), Xl = new THREE.Vector3().crossVectors(NECK_DIR, Zf);
+    const NB = 48, rad = new Float32Array(NB), q = new THREE.Vector3(), O = BM.neck.clone().addScaledVector(NECK_DIR, collar - 0.006);
+    for (const o of [...src, ...flap]) {
+      const a = o.geometry.attributes.position;
+      for (let i = 0; i < a.count; i++) {
+        q.fromBufferAttribute(a, i).applyMatrix4(o.matrixWorld);
+        const al = neckAlong(q);
+        if (al < collar - 0.02 || al > collar + 0.004) continue;
+        q.sub(BM.neck).addScaledVector(NECK_DIR, -al);
+        const b = Math.floor((((Math.atan2(q.dot(Xl), q.dot(Zf)) / (2 * Math.PI)) + 1) % 1) * NB);
+        rad[b] = Math.max(rad[b], q.length());
+      }
+    }
+    for (let b = 0; b < NB; b++) if (!rad[b]) rad[b] = Math.max(rad[(b + NB - 1) % NB], rad[(b + 1) % NB]);
+    const ends = 1.3, N = 40, pts = [], radii = []; // 앞 75° 에서 끝난다(더 앞까지 감으면 끝이 지퍼 옆에 뿔처럼 솟았다)
+    for (let k = 0; k <= N; k++) {
+      const phi = ends + (k / N) * (2 * Math.PI - 2 * ends), sdeg = 1 - Math.abs(phi - Math.PI) / (Math.PI - ends); // sdeg 1 = 등 가운데
+      const r = 0.009 + 0.011 * ease(sdeg / 0.55), R = rad[Math.floor((phi / (2 * Math.PI)) * NB) % NB];
+      pts.push(O.clone().addScaledVector(Zf, Math.cos(phi) * (R + r * 0.55)).addScaledVector(Xl, Math.sin(phi) * (R + r * 0.55)).addScaledVector(NECK_DIR, r * 0.25));
+      radii.push(r);
+    }
+    const curve = new THREE.CatmullRomCurve3(pts), T = 80, RS = 12, g = new THREE.TubeGeometry(curve, T, 1, RS, false), gp = g.attributes.position, c = new THREE.Vector3();
+    for (let i = 0; i <= T; i++) { // 관 굵기를 구간마다 바꾼다(반경 1 로 만든 고리를 줄인다)
+      curve.getPointAt(i / T, c);
+      const r = radii[Math.min(N, Math.round((i / T) * N))];
+      for (let j = 0; j <= RS; j++) { const v = i * (RS + 1) + j; q.fromBufferAttribute(gp, v).sub(c).multiplyScalar(r).add(c); gp.setXYZ(v, q.x, q.y, q.z); }
+    }
+    g.computeVertexNormals();
+    const roll = wear(g, dress(CLOTH, color, shade));
+    for (const k of [0, N]) roll.add(wear(new THREE.SphereGeometry(radii[k], 12, 8).translate(...pts[k].toArray()), dress(CLOTH, color, shade))); // 끝은 둥글게 막는다
+    attach(vrm.humanoid.getRawBoneNode('upperChest') ?? vrm.humanoid.getRawBoneNode('chest'), new THREE.Matrix4(), roll);
   }
   // 패딩 조끼: 안에 입은 긴팔 위, 몸통만(진동은 크게 판다). 가로 칸(q)마다 부풀리고 박음선은 눌려 그늘이 진다. 높은 깃 + 앞 지퍼 끝까지
   function padVest({ color, shade, trim, trimShade, zip = '#17181c', hem = HEM + 0.01, collar = 0.05, q = 0.068, base = 0.016 }) {
@@ -1442,69 +1540,240 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   // 디자인 = 2025~26 러닝복 흐름에서 여러 브랜드가 함께 쓰는 요소만(특정 브랜드 디자인·로고는 따라 하지 않는다, 사용자 요청 2026-11-05):
   // 크롭 싱글렛·짧은 스플릿 쇼츠·바이크 쇼츠·하프집 하이넥 + 옆선 배색·소매 줄·가슴 띠·어깨 요크·반사띠, 올블랙 대신 어스톤 + 네온 포인트
   const HEM = BM.hips.y - 0.02;
+  // 테이퍼 팬츠(가이드 4.2 — 윈터 팬츠 실측: 허벅지 단면 32cm·밑단 15.5cm, 사용자 지목 "허벅지가 조금 여유 있게"):
+  // 허벅지는 다리보다 둘레 +6~10cm(띄움 1.4cm), 무릎 아래로 좁아져 종아리에서 발목까지 곧게 떨어진다(발목은 가늘어 띄움이 다시 커진다 — 밑단 둘레 31cm).
+  // 가랑이 쪽(두 다리가 마주 보는 안쪽)은 덜 띄워 서로 뚫지 않게. 헐렁한 껍질(looseShell)로 근육 굴곡을 펴고, 허리·밑단은 거리장으로 오린다
+  function taperPants({ color, shade, trim, trimShade, waist = BM.hips.y + 0.055, hem = BM.ankle + 0.012 }) {
+    const margin = 0.03, k1 = BM.hips.y - 0.03, k2 = BM.hips.y - 0.11;
+    const offY = (y) => {
+      // 만화 음영에선 실측 여유(1.4cm)로는 타이츠처럼 보여 조금 더 띄운다(허벅지 2cm)
+      if (y > k1) return 0.006 + 0.006 * (1 - ease((y - k1) / 0.06)); // 허리 고무단
+      if (y > k2) return 0.012 + 0.008 * ease((k1 - y) / (k1 - k2)); // 엉덩이 → 허벅지
+      if (y > BM.knee + 0.04) return 0.02; // 허벅지
+      if (y > BM.knee - 0.12) return 0.02 - 0.004 * ease((BM.knee + 0.04 - y) / 0.16); // 무릎 → 종아리
+      return 0.016 + 0.002 * ease((BM.knee - 0.12 - y) / (BM.knee - 0.12 - hem)); // 종아리 → 발목(곧게 떨어진다)
+    };
+    const loose = looseShell({
+      color, shade, drape: 0, minOff: 0.004, relax: 10,
+      pick: (p, w) => p.y < waist + margin && p.y > hem - margin && wsum(w, ARMS) < 0.3 && wsum(w, /Foot|Toe/) < 0.5,
+      edge: (p) => { p.y = Math.min(Math.max(p.y, hem - margin), waist + margin); },
+      off: (p) => {
+        const sd = sideOf(p), out = p.clone().sub(LEG_C[sd]).dot(ACROSS) * (sd === 0 ? 1 : -1); // + = 다리 바깥쪽
+        const inner = Math.min(1, Math.max(0, -out / 0.05)) * (p.y > BM.knee ? 1 : 0.4);
+        return offY(p.y) * (1 - 0.5 * inner);
+      },
+    });
+    loose.forEach((o) => { o.visible = false; });
+    const shell = clipShell({ src: loose, field: (p) => Math.min(waist - p.y, p.y - hem), off: 0, color, shade });
+    twoSided(shell);
+    panel(shell, (p) => p.y - (waist - 0.035), trim, trimShade); // 허리 고무단 3.5cm
+    panel(shell, (p) => hem + 0.022 - p.y, trim, trimShade); // 발목 고무단 2.2cm
+    panel(shell, (p) => Math.min(0.0018 - Math.abs(legOutAng(p)), waist - 0.035 - p.y, p.y - hem - 0.022), trimShade, trimShade); // 바깥 옆 솔기(바지로 읽힌다)
+    panel(shell, (p) => Math.min(0.016 - Math.abs(p.y - (hem + 0.075)), 0.42 - legOutAng(p)), '#c9ced6', '#9aa1ad'); // 발목 위 바깥 반사 패널(가이드 4.2)
+    return shell;
+  }
+  // 러닝 반바지(가이드 4.1 — 스플릿 쇼츠 인심 12.5~14cm, 밑단 둘레가 허벅지보다 넉넉하다): 허리는 붙고 밑단으로 갈수록 퍼지는 A라인(밑단 띄움 2.2cm).
+  // 몸에 붙는 하의(bottom)로 지으면 압박 반바지처럼 보였다 → 헐렁한 껍질로 짓고 바깥 옆선 밑단을 ㅅ자로 튼다(달릴 때 허벅지가 보인다)
+  // tuck = 상의 밑단 높이(그 위는 상의 속이라 상의보다 덜 띄운다 — 더 띄우면 허리가 상의를 뚫고 나와 얼룩졌다). 크롭 상의면 null
+  function runShorts({ hem, color, shade, waist = BM.hips.y + 0.07, h = 0.045, half = 0.3, flare = 0.022, tuck = HEM }) {
+    const margin = 0.03, crotch = BM.hips.y - 0.09, hug = tuck === null ? waist - 0.03 : tuck - 0.012;
+    const loose = looseShell({
+      color, shade, drape: 0, minOff: 0.0025, relax: 8,
+      pick: (p, w) => p.y < waist + margin && p.y > hem - margin && wsum(w, ARMS) < 0.3 && wsum(w, /Foot|Toe/) < 0.5,
+      edge: (p) => { p.y = Math.min(Math.max(p.y, hem - margin), waist + margin); },
+      off: (p) => {
+        const base = p.y > hug ? (tuck === null ? 0.005 : 0.0028) : p.y > crotch ? 0.005 + 0.007 * ease((hug - p.y) / (hug - crotch)) : 0.012 + (flare - 0.012) * ease((crotch - p.y) / (crotch - hem));
+        const sd = sideOf(p), out = p.clone().sub(LEG_C[sd]).dot(ACROSS) * (sd === 0 ? 1 : -1), inner = Math.min(1, Math.max(0, -out / 0.05));
+        return base * (1 - 0.45 * inner * (p.y < crotch ? 1 : 0));
+      },
+    });
+    loose.forEach((o) => { o.visible = false; });
+    const shell = clipShell({ src: loose, field: (p) => Math.min(waist - p.y, Math.max((legOutAng(p) - half) * 0.08, p.y - hem - h * (1 - legOutAng(p) / half))), off: 0, color, shade });
+    twoSided(shell);
+    return shell;
+  }
+  // ---- 옷장: 체감온도 5°C 단위 10단계(사용자 요청 2026-11-06 — "-10~35 까지 5 단위로 조합할 수 있는 옷을 준비해서 입혀봐") ----
+  // 무엇을 입는지 = `.harness/project/running-apparel-style-guide.md` 1장 매트릭스(남녀 따로). 러너는 얇은 옷을 겹친다: 이너 → 미드(하프집) → 겉옷(바람막이·보온 재킷·조끼).
+  // 겉옷(thermo·jacket·padvest)과 후드는 앱이 악세사리로 고른다(sceneOptions.ts). 집업 깃은 목 절반(4~5cm)까지만(사용자 관찰·가이드 2.3).
+  // 색 = 한 벌에 2~3색: 큰 면 한 색 + 어두운 하의 + 포인트(가이드 7장). 남자 옷은 전부 새로 짰다(사용자 2026-11-06 "지금 남자 옷 전부 마음에 안 든다")
+  const tee = ({ color, shade, sleeve = 0.135, hem = HEM, rib = color, ribShade = shade }) => { // 반팔 티: 소매는 위팔 가운데
+    top({ sleeve, hem, neck: -0.09, off: 0.0055, color, shade });
+    crewNeck({ color, shade, rib, ribShade });
+  };
+  const longTee = ({ color, shade, rib = color, ribShade = shade }) => { // 얇은 긴팔 크루
+    top({ sleeve: WRIST - 0.008, hem: HEM, neck: -0.09, off: 0.0055, color, shade });
+    crewNeck({ color, shade, rib, ribShade });
+  };
+  const midZip = ({ color, shade, rib = color, ribShade = shade }) => { // 하프집 미드(모크넥 깃 3.2cm + 가슴 중앙까지 지퍼)
+    top({ sleeve: WRIST - 0.008, hem: HEM, neck: -0.09, off: 0.0065, color, shade });
+    halfZip({ color, shade, rib, ribShade });
+  };
+  const tights = ({ color = '#1b1c20', shade = '#0e0f12', hem = BM.ankle + 0.03, waist } = {}) => bottom({ hem, off: 0.002, color, shade, ...(waist && { waist }) });
+  const RF = ['#c9ced6', '#9aa1ad']; // 반사(중간 회색)
   const WEAR = {
-    female: {
-      summer: () => { // 크롭 싱글렛(오프화이트 · 라임 바이어스·옆선) + 짧은 스플릿 쇼츠(차콜 · 라임 옆선)
-        tankTop({ color: '#f4f1ea', shade: '#cfcac0', trim: '#c6f432', trimShade: '#93b81f', hem: BM.hips.y + 0.15 });
-        sidePanel(OUTER, '#c6f432', '#93b81f', 0.2);
-        legStripe(splitShorts({ hem: BM.knee + 0.23, color: '#2b2b2b', shade: '#1a1a1a' }), '#c6f432', '#93b81f', 0.1);
-        socks(0.06);
-      },
-      mild: () => { // 몸에 붙는 긴팔(세이지 · 크림 소매 줄) + 바이크 쇼츠(테라코타 · 밑단 반사띠)
-        top({ sleeve: WRIST - 0.008, hem: HEM, neck: -0.09, off: 0.0055, color: '#8a9a7b', shade: '#66745a' });
-        crewNeck({ color: '#8a9a7b', shade: '#66745a', rib: '#7d8d6e', ribShade: '#5b6950' });
-        sleeveStripe(OUTER, '#ede6da', '#c4bba9');
-        const hem = BM.knee + 0.15;
-        reflectBand(bottom({ hem, color: '#c77d5e', shade: '#9a5a40' }), hem + 0.015);
-        socks(0.085);
-      },
-      winter: () => { // 하프집 하이넥(모카 · 블러시 어깨 요크) + 풀 타이츠(발목 반사띠)
-        reflectBand(bottom({ hem: BM.ankle + 0.03, off: 0.002, color: '#1e1e24', shade: '#111115' }), BM.ankle + 0.075);
-        top({ sleeve: WRIST - 0.008, hem: HEM, neck: -0.09, off: 0.0065, color: '#5a3e36', shade: '#3e2a24' });
-        halfZip({ color: '#5a3e36', shade: '#3e2a24', rib: '#4e352e', ribShade: '#35241f' });
-        yoke(OUTER, BM.shoulderY - 0.05, '#d8b7a6', '#a88a7b');
-        socks(0.03); // 타이츠 밑으로 — 높이 신으면 발목 반사띠를 덮는다
-      },
-    },
+    // 남: 짧은 스플릿 쇼츠(인심 12.5~14cm) · 하프타이츠 위 쇼츠 · 풀타이츠 · 테이퍼 팬츠. 상의는 엉덩이뼈 위까지, 직선 밑단
     male: {
-      summer: () => { // 네온 싱글렛(네이비 바이어스) + 짧은 스플릿 쇼츠(네이비 · 흰 옆선)
-        tankTop({ color: '#ff6a1a', shade: '#c24c0c', trim: '#1f2a44', trimShade: '#141c2e' });
-        legStripe(splitShorts({ hem: BM.knee + 0.19, color: '#1f2a44', shade: '#141c2e' }), '#f4f4f2', '#c9cbd0', 0.1);
+      35: () => { // 흰 싱글렛(라임 바이어스) + 네이비 쇼츠(라임 옆선)
+        tankTop({ color: '#f6f8fa', shade: '#c7cdd6', trim: '#c6f432', trimShade: '#93b81f' });
+        sidePanel(OUTER, '#c6f432', '#93b81f', 0.14);
+        legStripe(runShorts({ hem: BM.knee + 0.21, color: '#1f2a44', shade: '#141c2e' }), '#c6f432', '#93b81f', 0.1);
+        socks(0.05);
+      },
+      30: () => { // 스카이 싱글렛(흰 바이어스) + 차콜 쇼츠(라임 옆선)
+        tankTop({ color: '#8fc6e6', shade: '#5f97b8', trim: '#f4f6f4', trimShade: '#c8ccd2' });
+        legStripe(runShorts({ hem: BM.knee + 0.21, color: '#2d3037', shade: '#1b1d22' }), '#c6f432', '#93b81f', 0.1);
+        socks(0.05);
+      },
+      25: () => { // 코랄 오렌지 반팔(옆 메쉬 패널) + 네이비 쇼츠(흰 옆선)
+        tee({ color: '#ff7440', shade: '#c9532a' });
+        sidePanel(OUTER, '#e0602f', '#ad4520', 0.22);
+        legStripe(runShorts({ hem: BM.knee + 0.2, color: '#1f2a44', shade: '#141c2e' }), '#f4f4f2', '#c9cbd0', 0.1);
+        socks(0.07);
+      },
+      20: () => { // 틸 반팔(어깨 반사 줄) + 검정 쇼츠
+        tee({ color: '#2f8a86', shade: '#1f615e' });
+        sleeveStripe(OUTER, ...RF, 0.16);
+        runShorts({ hem: BM.knee + 0.2, color: '#1d1e22', shade: '#101114' });
+        socks(0.07);
+      },
+      15: () => { // 슬레이트 블루 긴팔 크루 + 검정 쇼츠(밑단 반사띠)
+        longTee({ color: '#4d6a92', shade: '#344b6b' });
+        sleeveStripe(OUTER, ...RF, 0.14);
+        const hem = BM.knee + 0.2;
+        reflectBand(runShorts({ hem, color: '#1d1e22', shade: '#101114' }), hem + 0.016);
+        socks(0.07);
+      },
+      10: () => { // 세이지 하프집 + 하프타이츠 위 차콜 쇼츠
+        bottom({ hem: BM.knee + 0.07, off: 0.002, color: '#1b1c20', shade: '#0e0f12' });
+        runShorts({ hem: BM.knee + 0.2, color: '#34373e', shade: '#212328', flare: 0.018 });
+        midZip({ color: '#7d9472', shade: '#5a6d51', rib: '#6e8463', ribShade: '#4f5f47' });
         socks(0.085);
       },
-      mild: () => { // 몸에 붙는 긴팔(세이지 · 오프화이트 가슴 띠) + 무릎 하프 타이츠 위 쇼츠(슬레이트)
-        bottom({ hem: BM.knee - 0.02, off: 0.002, color: '#1e1e24', shade: '#111115' });
-        bottom({ hem: BM.knee + 0.17, off: 0.0045, color: '#3a3f4b', shade: '#262a33' });
-        top({ sleeve: WRIST - 0.008, hem: HEM, neck: -0.09, off: 0.0065, color: '#7c8f6a', shade: '#5a6a4c' });
-        crewNeck({ color: '#7c8f6a', shade: '#5a6a4c', rib: '#6e805d', ribShade: '#4f5e43' });
-        chestBand(OUTER, BM.shoulderY - 0.14, BM.shoulderY - 0.08, '#e9e4d8', '#bdb6a5');
-        socks(0.085);
-      },
-      winter: () => { // 하프집 하이넥(딥퍼플 · 레드 어깨 요크) + 풀 타이츠(레드 옆선 · 발목 반사띠)
-        const tights = bottom({ hem: BM.ankle + 0.03, off: 0.002, color: '#1e1e24', shade: '#111115' });
-        legStripe(tights, '#b3322e', '#7f2320', 0.1);
-        reflectBand(tights, BM.ankle + 0.075);
-        top({ sleeve: WRIST - 0.008, hem: HEM, neck: -0.09, off: 0.0065, color: '#3b2f4a', shade: '#271f31' });
-        halfZip({ color: '#3b2f4a', shade: '#271f31', rib: '#32283f', ribShade: '#211a29' });
-        yoke(OUTER, BM.shoulderY - 0.05, '#b3322e', '#7f2320');
+      5: () => { // 딥블루 하프집(볼트 깃 끝) + 검정 풀타이츠(발목 반사)
+        reflectBand(tights(), BM.ankle + 0.075);
+        midZip({ color: '#22406c', shade: '#152a4a', rib: '#c6ea3a', ribShade: '#93b324' });
         socks(0.03);
       },
+      0: () => { // 차콜 하프집 + 검정 테이퍼 팬츠
+        taperPants({ color: '#1b1c20', shade: '#0e0f12', trim: '#25272c', trimShade: '#141518' });
+        midZip({ color: '#3a3d44', shade: '#24262b' });
+      },
+      '-5': () => WEAR.male[0](),
+      '-10': () => WEAR.male[0](),
+    },
+    // 여: 크롭 싱글렛(스포츠브라 위) · 짧은 쇼츠 · 바이크 쇼츠 · 7/8 레깅스 · 풀 레깅스(하이웨이스트) · 영하엔 레깅스 위 테이퍼 팬츠. 파스텔 상의 + 검정 하의
+    female: {
+      35: () => { // 라이트 블루 크롭 싱글렛(라임 바이어스) + 오렌지 짧은 쇼츠
+        tankTop({ color: '#cfe5f4', shade: '#9fbdd2', trim: '#c6f432', trimShade: '#93b81f', hem: BM.hips.y + 0.15 });
+        legStripe(runShorts({ hem: BM.knee + 0.25, h: 0.035, tuck: null, color: '#ff8a4c', shade: '#c9642f' }), '#f4f4f2', '#c9cbd0', 0.08);
+        socks(0.05);
+      },
+      30: () => { // 민트 크롭 싱글렛(흰 바이어스) + 차콜 쇼츠(라임 옆선)
+        tankTop({ color: '#a9dfcd', shade: '#78b29e', trim: '#f4f6f4', trimShade: '#c8ccd2', hem: BM.hips.y + 0.15 });
+        legStripe(runShorts({ hem: BM.knee + 0.25, h: 0.035, tuck: null, color: '#2b2b2f', shade: '#1a1a1d' }), '#c6f432', '#93b81f', 0.1);
+        socks(0.05);
+      },
+      25: () => { // 라벤더 반팔 + 검정 바이크 쇼츠(라임 옆선)
+        tee({ color: '#b6a6e2', shade: '#8a79b8' });
+        legStripe(bottom({ hem: BM.knee + 0.15, color: '#1b1c20', shade: '#0e0f12', waist: BM.hips.y + 0.1 }), '#c6f432', '#93b81f', 0.06);
+        socks(0.06);
+      },
+      20: () => { // 세이지 반팔(어깨 반사 줄) + 검정 바이크 쇼츠
+        tee({ color: '#9cb48d', shade: '#728a65' });
+        sleeveStripe(OUTER, ...RF, 0.16);
+        bottom({ hem: BM.knee + 0.15, color: '#1b1c20', shade: '#0e0f12', waist: BM.hips.y + 0.1 });
+        socks(0.06);
+      },
+      15: () => { // 소프트 핑크 긴팔 + 검정 7/8 레깅스(발목 위 3cm, 하이웨이스트)
+        tights({ hem: BM.ankle + 0.07, waist: BM.hips.y + 0.1 });
+        longTee({ color: '#e7b3bc', shade: '#b98892' });
+        socks(0.06);
+      },
+      10: () => { // 아이보리 하프집 + 검정 레깅스
+        tights({ hem: BM.ankle + 0.04, waist: BM.hips.y + 0.1 });
+        midZip({ color: '#eee8dc', shade: '#c4bcab', rib: '#e2dacb', ribShade: '#b5ac99' });
+        socks(0.04);
+      },
+      5: () => { // 모카 하프집(블러시 어깨 요크) + 검정 풀 레깅스(발목 반사)
+        reflectBand(tights({ waist: BM.hips.y + 0.1 }), BM.ankle + 0.075);
+        midZip({ color: '#5a3e36', shade: '#3e2a24', rib: '#4e352e', ribShade: '#35241f' });
+        yoke(OUTER, BM.shoulderY - 0.05, '#d8b7a6', '#a88a7b');
+        socks(0.03);
+      },
+      0: () => WEAR.female[5](),
+      '-5': () => WEAR.female[5](),
+      '-10': () => { // 레깅스 위에 테이퍼 팬츠(슬림)
+        tights({ waist: BM.hips.y + 0.1 });
+        taperPants({ color: '#1b1c20', shade: '#0e0f12', trim: '#25272c', trimShade: '#141518' });
+        midZip({ color: '#5a3e36', shade: '#3e2a24', rib: '#4e352e', ribShade: '#35241f' });
+      },
     },
   };
-  WEAR[CHAR][SEASON]?.();
-  // 겉옷(악세사리 jacket·padvest — 체감온도·비로 앱이 고른다, sceneOptions.ts): 계절 옷 위에 걸친다. 색은 안에 입은 옷과 어울리게
+  WEAR[CHAR][BAND]?.();
+  // 겉옷(악세사리 thermo·jacket·padvest + 후드 hood — 체감온도·비·눈·바람으로 앱이 고른다, sceneOptions.ts): 단계 옷 위에 걸친다
+  // 보온 재킷 = 나이키 마일러 윈터라이즈드 같은 차림(사용자 참고 사진 2026-11-06): 남은 볼트(0°C)·검정+볼트(-5)·딥네이비+오렌지(-10), 여는 아이보리·검정
   const OUTERWEAR = {
     female: {
-      jacket: { color: '#e4ddcf', shade: '#b3aa98', trim: '#3b3f46', trimShade: '#25282d' }, // 스톤 + 차콜 고무단
-      padvest: { color: '#eee8dc', shade: '#c2b9a7', trim: '#5a3e36', trimShade: '#3e2a24' }, // 아이보리 + 모카(안에 입은 하프집과 같은 색)
+      thermo: BAND <= -5 ? { color: '#1d1e23', shade: '#0f1013', trim: '#1d1e23', trimShade: '#0f1013', zip: '#ff8a4c' } : { color: '#ece6d8', shade: '#bfb6a3', trim: '#d9d1c0', trimShade: '#aaa08b' },
+      jacket: { color: '#7c2f40', shade: '#55202c', trim: '#2b2c31', trimShade: '#18191c' }, // 와인(모카 하프집 위 — 아이보리 보온 재킷과 구분) + 차콜 고무단
+      padvest: { color: '#1d1e23', shade: '#0f1013', trim: '#1d1e23', trimShade: '#0f1013', zip: '#c6f432' }, // 검정(크림 이너가 소매·깃으로 보인다)
     },
     male: {
-      jacket: { color: '#2d5bb0', shade: '#1d3d7a', trim: '#1f2a44', trimShade: '#141c2e' }, // 코발트 + 네이비 고무단
-      padvest: { color: '#2b2e35', shade: '#191b20', trim: '#b3322e', trimShade: '#7f2320', zip: '#b3322e' }, // 차콜 + 레드(어깨 요크·타이츠 옆선과 같은 색)
+      thermo: BAND <= -10 ? { color: '#1f2c45', shade: '#121a2b', trim: '#1f2c45', trimShade: '#121a2b', zip: '#ff7a2f' }
+        : BAND <= -5 ? { color: '#1c1d21', shade: '#0e0f11', trim: '#c6ea3a', trimShade: '#93b324', zip: '#c6ea3a' }
+          : { color: '#c9ec3c', shade: '#97b62a', trim: '#b9dc33', trimShade: '#8aa925' },
+      jacket: { color: '#2f4636', shade: '#1e2e23', trim: '#1d1e22', trimShade: '#101114' }, // 다크 그린 쉘 + 검정 고무단
+      padvest: { color: '#25272c', shade: '#15161a', trim: '#25272c', trimShade: '#15161a', zip: '#c6ea3a' }, // 차콜 + 볼트 지퍼
     },
   };
-  if (ACC.has('jacket')) windJacket(OUTERWEAR[CHAR].jacket);
-  if (ACC.has('padvest')) padVest({ ...OUTERWEAR[CHAR].padvest, base: ACC.has('jacket') ? 0.03 : 0.016 });
+  if (SHELL === 'thermo') windJacket({ ...OUTERWEAR[CHAR].thermo, open: 0.02, loft: 1.2, chevron: RF, hood: true });
+  else if (SHELL === 'jacket') windJacket({ ...OUTERWEAR[CHAR].jacket, open: BAND <= 5 ? 0.06 : 0.13, hood: true });
+  if (ACC.has('padvest')) padVest({ ...OUTERWEAR[CHAR].padvest, base: SHELL ? 0.03 : 0.016 });
+  // 후드 올림(가이드 3.2·3.3 — 바람이 세면 모자 위로 후드를 쓰고 달린다, 사용자 요청 2026-11-06):
+  // 모자 돔(머리 틀 CC·CR)에서 3~4cm 부푼 달걀 + 아래는 목을 감싸 깃 위까지 내려온다. 얼굴 앞은 기울어진 면(이마 위 → 턱 밑)으로 잘라 낸 타원 개구부 —
+  // 캡이면 챙이 개구부 밖으로 튀어나오고(후드를 챙 위에서 끌어내리지 않는다) 비니는 안에 묻힌다. 행마다 개구부 각을 구해 그 사이만 지어 테두리가 매끈하다.
+  // 테두리엔 고무 바이어스 관 + 턱 옆에 조임끈 두 가닥. 머리뼈에 붙어 고개를 따라 돈다(머리를 줄인 뒤라 같은 비율로 줄여 붙인다). 포니테일은 후드 안으로 넣는다
+  function hoodUp({ color, shade, trim, trimShade }) {
+    const C0 = { y: 92, z: -14 }, R0 = { x: CR.x + 36, y: CR.y + 38, z: CR.z + 40 }, NK = { y: -128, z: -24, x: 104, zr: 100 }, top = C0.y + R0.y;
+    const ring = (y) => { // 그 높이의 가로 반경·중심 z: 위는 달걀, 아래(달걀 가운데 밑)는 목 둘레로 섞는다
+      if (y >= C0.y) { const k = Math.sqrt(Math.max(0, 1 - ((y - C0.y) / R0.y) ** 2)); return { rx: R0.x * k, rz: R0.z * k, cz: C0.z }; }
+      const e = ease((C0.y - y) / (C0.y - NK.y));
+      return { rx: R0.x + (NK.x - R0.x) * e, rz: R0.z + (NK.zr - R0.z) * e, cz: C0.z + (NK.z - C0.z) * e };
+    };
+    const zEdge = (y) => 40 + 0.36 * (y + 45); // 개구부 면: 이마 위(y 150 → z 110) ~ 턱 밑(y -45 → z 40)
+    const thc = (y) => { const r = ring(y); return Math.acos(Math.min(1, Math.max(-1, (zEdge(y) - r.cz) / Math.max(r.rz, 1e-3)))); };
+    const S = (u, y) => { const r = ring(y), a = thc(y), th = a + u * (2 * Math.PI - 2 * a); return new THREE.Vector3(r.rx * Math.sin(th), y, r.cz + r.rz * Math.cos(th)); };
+    const NA = 72, NV = 44, pos = [], normal = [], uv = [], index = [], y0 = top - 0.6, yAt = (j) => y0 - (j / NV) * (y0 - NK.y);
+    for (let i = 0; i <= NA; i++) {
+      for (let j = 0; j <= NV; j++) {
+        const u = i / NA, y = yAt(j), P = S(u, y);
+        const du = S(Math.min(1, u + 1e-3), y).sub(S(Math.max(0, u - 1e-3), y)), dv = S(u, y + 0.5).sub(S(u, y - 0.5));
+        const n = du.cross(dv).normalize(); // 바깥쪽
+        pos.push(P.x, P.y, P.z); normal.push(n.x, n.y, n.z); uv.push(u, j / NV);
+      }
+    }
+    for (let i = 0; i < NA; i++) for (let j = 0; j < NV; j++) { const a = i * (NV + 1) + j, b = a + NV + 1; index.push(a, a + 1, b, b, a + 1, b + 1); }
+    const mats = dress(CLOTH, color, shade);
+    mats[0].side = THREE.DoubleSide; // 개구부로 안감이 보인다
+    const group = new THREE.Group();
+    group.add(wear(geometry(pos, uv, index, normal), mats));
+    // 테두리 관(왼쪽 아래 → 이마 위 → 오른쪽 아래) + 조임끈
+    const rim = [];
+    for (let j = NV; j >= 0; j--) if (thc(yAt(j)) > 0.02) rim.push(S(0, yAt(j)));
+    for (let j = 0; j <= NV; j++) if (thc(yAt(j)) > 0.02) rim.push(S(1, yAt(j)));
+    const tube = (pts, r, seg = 64) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), seg, r, 8, false);
+    const tr = dress(CLOTH, trim ?? shade, trimShade ?? shade);
+    group.add(wear(tube(rim, 5, 160), tr));
+    for (const u of [0, 1]) { // 턱 옆(개구부 아래쪽)에서 늘어진 조임끈 + 끈 끝 마개
+      const P = S(u, -30), d = u ? 1 : -1;
+      const pts = [P, P.clone().add(new THREE.Vector3(-d * 6, -28, 8)), P.clone().add(new THREE.Vector3(-d * 4, -62, 6))];
+      group.add(wear(tube(pts, 2.2, 16), tr));
+      group.add(wear(new THREE.CylinderGeometry(3, 3, 13, 10).translate(pts[2].x, pts[2].y - 6, pts[2].z), dress(CLOTH, '#2a2c31', '#15161a')));
+    }
+    attach(headBone, HEAD.clone().multiply(new THREE.Matrix4().makeScale(headScale, headScale, headScale)), group);
+    if (tailRoot) { tailRoot.scale.setScalar(0.05); vrm.scene.updateMatrixWorld(true); vrm.springBoneManager?.setInitState?.(); } // 포니테일은 후드 안에 넣는다(줄여서 감춘다 — 0.35 면 끝이 후드 뒤로 삐져나왔다)
+  }
+  if (ACC.has('hood') && SHELL) hoodUp(OUTERWEAR[CHAR][SHELL]);
 
   // ---- 악세사리(피부 위): 장갑·마스크·넥워머·조끼 ----
   const faceY = (p) => p.clone().applyMatrix4(HEAD_INV); // 머리 틀(mm)
@@ -1516,9 +1785,10 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     if (ACC.has('mask')) { // 황사 마스크(KF94): 콧등부터 턱 밑까지, 볼까지 감싼다
       skinShell({ src: FACES, off: 0.009, color: '#f4f5f7', shade: '#c7cad1', pick: (p) => { const q = faceY(p); return q.y < ey - 16 && q.y > -46 && q.z > ez - 25 && Math.abs(q.x) < 66; } });
     }
-    if (ACC.has('buff')) { // 넥워머를 코까지 올려 쓴다(추위): 목 전체 + 얼굴 아래쪽을 한 바퀴
-      skinShell({ src: FACES, off: 0.012, color: '#3a404c', shade: '#232831', pick: (p) => { const q = faceY(p); return q.y < ey - 14 && q.y > -60 && Math.abs(q.x) < 92; } });
-      skinShell({ off: 0.012, color: '#3a404c', shade: '#232831', pick: (p, w) => wsum(w, /Neck|Head/) > 0.4 && faceY(p).y < ey - 14 && p.y > BM.shoulderY - 0.01 });
+    if (ACC.has('buff')) { // 넥워머(추위): 목을 턱 밑선까지 감싼다. 턱·입은 덮지 않는다 — 브리핑은 말하는 입이 보여야 하고, 턱을 덮으면 멀리선 수염처럼 보였다(실측 입 -15~10mm·턱끝 -45mm, 머리뼈 기준)
+      const top = -50;
+      skinShell({ src: FACES, off: 0.012, color: '#3a404c', shade: '#232831', pick: (p) => { const q = faceY(p); return q.y < top && q.y > -60 && Math.abs(q.x) < 92; } });
+      skinShell({ off: 0.012, color: '#3a404c', shade: '#232831', pick: (p, w) => wsum(w, /Neck|Head/) > 0.4 && faceY(p).y < top && p.y > BM.shoulderY - 0.01 });
     }
   }
   if (ACC.has('vest')) { // LSD 조끼: 등판 + 어깨끈 + 앞끈, 가슴에 물병(소프트 플라스크) 두 개 — 피부가 아니라 몸통 가장 바깥 옷 위에
@@ -2255,7 +2525,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   // 위팔 벌림(달리기): 팔꿈치를 몸 가까이 — 코칭 공통 기준 '어깨너비 안, 날개처럼 벌리지 않는다'(SSOT 러닝 폼 — 팔치기).
   // armOut = T자에서 팔을 내린 각(rad). 1.25 였을 땐 위팔이 몸통에서 평균 20°(최대 25°) 벌어져 겨드랑이가 떠 보였다(사용자 지적 2026-11-06)
   // → 1.40(평균 ~12°). 몸이 굵거나(체중) 두꺼운 겉옷이면 그만큼 덜 내린다 — 팔이 몸통·옷을 뚫지 않게
-  const ARM_OUT = 1.4 - 0.6 * (GIRTH - 1) - (ACC.has('jacket') || ACC.has('padvest') ? 0.05 : 0);
+  const ARM_OUT = 1.4 - 0.6 * (GIRTH - 1) - (SHELL || ACC.has('padvest') ? 0.05 : 0);
   const RUN_FORM = { duty: 0.4, dutyMin: 0.27, kneeStrike: 0.31, kneePush: 0.26, elbow: 1.45, stepX: 0.04, armIn: 0.35, extFlight: 0.06, extPeak: 0.13 };
   // stepX = 착지 때 발목이 몸 중앙에서 떨어진 거리(m, 걸음 폭 8cm). 쉬는 자세 그대로면 발이 고관절 바로 밑(여자 ±7.8cm)에 떨어져 넓었다.
   // armIn = 팔이 가장 앞일 때 어깨를 안쪽으로 돌리는 양(rad) — 손이 어깨선에서 몸 중앙 쪽으로 온다
