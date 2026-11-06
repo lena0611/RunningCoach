@@ -2,7 +2,7 @@
 /**
  * 브리핑 쇼츠 화면(#898) — 유튜브 쇼츠처럼 보이게(사용자 결정 2026-11-05, 사용자가 보낸 쇼츠 화면 기준):
  * 위 = 노란 굵은 제목 · 가운데 = 3D 영상(자막은 영상 위에 흰 글자+검은 테) · 오른쪽 = 아이콘 줄(영상 아래쪽~밑 검은 칸)
- * · 영상 밑 = 코치 코멘트(쇼츠 편집 코멘트 자리 — 자막으로 안 읽는 '훈련 효과') · 왼쪽 아래 = 코치 프로필 + 대회 D-day 알약 · 설명(거리·페이스·해시태그)
+ * · 영상 밑 = 코치 코멘트(쇼츠 편집 코멘트 자리 — 코치 탭 '오늘의 핵심' 앞 구절) · 왼쪽 아래 = 코치 프로필 + 대회 D-day 알약 · 설명(거리·페이스·해시태그)
  * · 맨 아래 = 진행 막대(읽은 문장만큼). 쇼츠 로고·구독 버튼 같은 남의 브랜드 요소는 쓰지 않는다.
  *
  * 흐름(사용자 결정 2026-11-05 — 말 걸기 탭은 없앴다):
@@ -56,8 +56,9 @@ const abort = new AbortController()
 let scene: BriefingScene | null = null
 let finished = false
 
+const when = computed(() => props.payload.when ?? '오늘')
 const script = computed(() =>
-  buildBriefingScript({ title: props.payload.title, distanceKm: props.payload.distanceKm, briefing: props.payload.briefing })
+  buildBriefingScript({ title: props.payload.title, distanceKm: props.payload.distanceKm, briefing: props.payload.briefing, when: when.value })
 )
 const sfx = computed(() => sceneSfx(props.options.rn))
 const badge = computed(() => weatherBadge(props.weather, props.options.wx, props.options.tm))
@@ -69,8 +70,11 @@ const soundOn = ref(settingsStore.briefingSound)
 /** 읽던 문장을 새 소리 상태로 처음부터 다시 */
 let restartLine: (() => void) | null = null
 const meta = computed(() => buildShortsMeta(props.payload))
-/** 코치 코멘트 = 훈련 효과(자막으로는 안 읽는 '왜 좋은가'). 없으면 핵심의 앞 구절 */
-const comment = computed(() => props.payload.briefing.effect || props.payload.briefing.keyPoint.split(' — ')[0])
+/**
+ * 코치 코멘트 = 코치 탭 '오늘의 핵심' 한 줄의 앞 구절(" — " 앞). 사용자 결정 2026-11-06: 훈련 효과는 길어서 말줄임표로 잘렸다
+ * → 앱에 이미 나오는 짧은 한 줄을 쓰고, 말줄임표 없이 끝까지 보인다. 핵심은 포스트런이 채점하는 기준이기도 하다.
+ */
+const comment = computed(() => props.payload.briefing.keyPoint.split(' — ')[0])
 const avatarUrl = `${import.meta.env.BASE_URL}pacelab-icon.svg`
 /** 진행 막대: 문장을 시작할 때 그 문장 끝 위치까지 그 문장 길이만큼 차오른다 */
 const progress = ref({ to: 0, ms: 0 })
@@ -176,7 +180,7 @@ onBeforeUnmount(() => {
     :style="fadeMs > 0 ? { transitionDuration: `${fadeMs}ms` } : undefined"
     role="dialog"
     aria-modal="true"
-    aria-label="오늘 훈련 브리핑"
+    :aria-label="`${when} 훈련 브리핑`"
     data-no-swipe
   >
     <!-- 닫기(사용자 요청: 위쪽 검은 띠 오른쪽 위에 앱 닫기 X — 직관적으로 닫게). 불러오는 중에도 닫을 수 있다 -->
@@ -188,7 +192,7 @@ onBeforeUnmount(() => {
 
     <div class="briefing-shorts-frame">
       <header class="briefing-shorts-top">
-        <p class="briefing-shorts-title">오늘은 {{ payload.title }} <span aria-hidden="true">{{ sfx }}</span></p>
+        <p class="briefing-shorts-title">{{ when }}은 {{ payload.title }} <span aria-hidden="true">{{ sfx }}</span></p>
       </header>
 
       <div class="briefing-shorts-stage">
@@ -483,7 +487,7 @@ onBeforeUnmount(() => {
   padding-top: 3.5cqw;
 }
 
-/* 쇼츠 '편집 코멘트' 자리 = 코치 코멘트(두 줄까지). 자막처럼 양옆을 똑같이 비워 진짜 가운데 */
+/* 쇼츠 '편집 코멘트' 자리 = 코치 코멘트(짧은 한 줄이라 말줄임표 없이 끝까지). 자막처럼 양옆을 똑같이 비워 진짜 가운데 */
 .briefing-shorts-comment {
   padding-inline: var(--shorts-side);
   text-align: center;
@@ -503,10 +507,7 @@ onBeforeUnmount(() => {
   line-height: 1.35;
   color: var(--briefing-shorts-ink-soft);
   word-break: keep-all;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
+  text-wrap: balance;
 }
 
 /* 프로필·설명은 쇼츠처럼 왼쪽 정렬 — 오른쪽만 아이콘 줄 자리를 비운다 */

@@ -17,6 +17,10 @@ import { useInjuryFlowStore } from '@/app/stores/injuryFlowStore'
 import { useCoachActionBridgeStore } from '@/app/stores/coachActionBridgeStore'
 import { destinationActionLabel } from '@/pages/coach/proposalDestination'
 import { useCoachStore } from '@/app/stores/coachStore'
+import { useBriefingShortsStore } from '@/app/stores/briefingShortsStore'
+import { useSettingsStore } from '@/app/stores/settingsStore'
+import { buildBriefingPayload } from '@/features/briefing-shorts/briefingPayload'
+import { unlockSpeech } from '@/features/briefing-shorts/speech'
 import { isActiveSession, type ScheduledSession } from '@/entities/training-schedule/model'
 import { isSelfRaceRun } from '@/entities/competition/model'
 import { computeIntentFulfillment } from '@/entities/session-intent/computeIntentFulfillment'
@@ -355,6 +359,28 @@ function onMomentAction(moment: { key: string; action?: { kind: string; goalId?:
 }
 function onBriefingAck() {
   toastStore.success('좋아요, 오늘은 이 훈련에 집중해요.')
+}
+/** 고른 날 브리핑을 쇼츠 영상(#898)으로 — 팝업은 App 레벨 호스트가 띄운다. 값은 요약 탭과 같은 함수(sessionHeadline)를 지난다 */
+const briefingShortsStore = useBriefingShortsStore()
+const settingsStore = useSettingsStore()
+function onPlayBriefingVideo() {
+  const session = activeSession.value
+  const briefing = activeBriefing.value
+  const day = scheduleDays.value[activeDayIndex.value]
+  if (!session || !briefing || !day) return
+  // 웹은 탭 안에서 소리를 열어야 이후 발화가 난다(앱은 필요 없다). 소리 켜고 시작이 꺼져 있으면 열 필요 없다
+  if (settingsStore.briefingSound) unlockSpeech()
+  briefingShortsStore.replay(
+    buildBriefingPayload({
+      date: day.date,
+      dayState: day.state,
+      today: todayDate.value,
+      session,
+      briefing,
+      ctx: { injury: activeInjury.value, beginnerWalkRun: beginnerWalkRun.value },
+      goal: activeGoal.value
+    })
+  )
 }
 async function onBriefingAlternative(direction: 'easier' | 'harder') {
   const session = activeSession.value
@@ -757,6 +783,7 @@ const phaseSheet = computed<{ title: string; subtitle: string; rows: PlanStepRow
           @reschedule="onBriefingReschedule"
           @revert="onBriefingRevert"
           @add-double="openDoublesAdd(activeSession)"
+          @play-video="onPlayBriefingVideo"
         />
         <!-- 안 뛴 날(open/missed)·포기(skipped): 조정 액션 인라인 카드 -->
         <article

@@ -20,7 +20,7 @@ import { isSupabaseConfigured } from '@/shared/api/supabase'
 import { hasNativeBridge } from '@/shared/lib/runtime'
 import { briefingVerdict, type BriefingVerdict } from './briefingGate'
 import { closeNativeIntro } from './introBridge'
-import { buildSceneOptions, type BriefingWeather } from './sceneOptions'
+import { buildSceneOptions, forecastWeather, type BriefingWeather } from './sceneOptions'
 import type { BriefingSceneOptions } from './scene/briefingScene'
 import BriefingShortsPopup from './BriefingShortsPopup.vue'
 
@@ -37,7 +37,8 @@ const store = useBriefingShortsStore()
 const bootAt = Date.now() - performance.now()
 
 const decided = ref(false)
-const shown = ref<{ payload: TodayBriefingPayload; options: BriefingSceneOptions; weather: BriefingWeather | null } | null>(null)
+/** replay = 코치 탭 '영상으로 보기'로 띄운 것(인트로·오늘 상태와 무관) */
+const shown = ref<{ payload: TodayBriefingPayload; options: BriefingSceneOptions; weather: BriefingWeather | null; replay?: boolean } | null>(null)
 
 const healthKitSettled = computed(() => {
   if (!hasNativeBridge()) return true
@@ -101,21 +102,50 @@ const deadlineTimer = window.setTimeout(() => {
 
 watch(verdict, decide, { immediate: true })
 
-// 팝업이 떠 있는 동안 오늘 런이 들어오면(늦은 동기화) 더 볼 이유가 없다 — 닫는다.
+/**
+ * 다시 보기(코치 탭에서 고른 날). 오늘이면 지금 날씨, 다른 날이면 그날 예보 — 예보엔 체감온도가 없어
+ * 아이콘 줄엔 날씨만 두고(없는 체감을 지어내지 않는다) 옷은 그날 최저·최고 가운데로 고른다. 예보 밖이면 날씨 없음.
+ */
+function replayWeather(payload: TodayBriefingPayload): {
+  scene: Parameters<typeof buildSceneOptions>[0]['weather']
+  badge: BriefingWeather | null
+} {
+  if (payload.dayState === 'today') return { scene: weatherStore.current, badge: briefingWeather() }
+  return forecastWeather(weatherStore.daily, payload.date)
+}
+
+watch(
+  () => store.replayRequest,
+  (payload) => {
+    if (!payload) return
+    store.replayRequest = null
+    if (store.open) return
+    const weather = replayWeather(payload)
+    shown.value = {
+      payload,
+      options: buildSceneOptions({ sex: memoryStore.memory.athleteProfile.sex, sessionType: payload.sessionType, weather: weather.scene, now: new Date() }),
+      weather: weather.badge,
+      replay: true
+    }
+    store.open = true
+  }
+)
+
+// 팝업이 떠 있는 동안 오늘 런이 들어오면(늦은 동기화) 더 볼 이유가 없다 — 닫는다. 다시 보기는 사용자가 고른 것이라 그대로 둔다.
 watch(
   () => store.today?.dayState ?? null,
   (state) => {
-    if (store.open && store.todaySettled && state !== 'today') close()
+    if (store.open && !shown.value?.replay && store.todaySettled && state !== 'today') close()
   }
 )
 
 function onReady() {
   // 첫 프레임이 화면에 올라간 뒤 인트로를 걷는다 → 인트로가 걷힐 때 팝업이 이미 그려져 있다.
-  closeNativeIntro()
+  if (!shown.value?.replay) closeNativeIntro()
 }
 
 function onFailed() {
-  closeNativeIntro()
+  if (!shown.value?.replay) closeNativeIntro()
   close()
 }
 

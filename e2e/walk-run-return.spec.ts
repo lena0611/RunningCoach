@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { suppressBriefingShorts } from './suppressAccountPrompts'
 
 /**
  * #501 부상 복귀 walk-run(걷기-뛰기) 처방 렌더 E2E.
@@ -18,6 +19,10 @@ type WalkRunHook = {
 }
 
 test.describe('#501 부상 복귀 walk-run 처방', () => {
+  test.beforeEach(async ({ page }) => {
+    await suppressBriefingShorts(page)
+  })
+
   test('급성 통증성 부상 + 오늘 Easy → 작전 카드가 걷기-뛰기 사다리로 렌더', async ({ page }) => {
     await page.goto('/')
     await page.waitForLoadState('networkidle')

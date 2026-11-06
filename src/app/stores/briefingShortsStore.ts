@@ -11,8 +11,10 @@ import type { SessionBriefing } from '@/shared/lib/coaching/sessionBriefing'
  */
 export type TodayBriefingPayload = {
   date: string
-  /** 요약 탭 데이-스트립의 오늘 상태. 'today' 일 때만 팝업 대상이다. */
+  /** 요약 탭 데이-스트립의 오늘 상태. 'today' 일 때만 팝업 대상이다. 코치 탭에서 다시 볼 땐 그날 상태('today'·'future') */
   dayState: string
+  /** 여는 말·제목의 '언제'(오늘·내일·목요일). 없으면 오늘 — 코치 탭에서 다른 날을 다시 볼 때만 채운다 */
+  when?: string
   sessionType: RunType
   title: string
   distanceKm: number | null
@@ -39,9 +41,14 @@ export const useBriefingShortsStore = defineStore('briefingShorts', {
     today: null as TodayBriefingPayload | null,
     /** 요약 탭이 오늘 판정을 끝냈나(스케줄·런·메모리 로드 완료). today 가 null 이어도 true 면 "오늘 브리핑 없음"이 확정. */
     todaySettled: false,
-    open: false
+    open: false,
+    /** 코치 탭 '영상으로 보기'가 맡긴 그날 값. 호스트가 받아 팝업을 띄우고 비운다(하루 한 번 규칙과 무관) */
+    replayRequest: null as TodayBriefingPayload | null
   }),
   actions: {
+    replay(payload: TodayBriefingPayload) {
+      this.replayRequest = payload
+    },
     publishToday(payload: TodayBriefingPayload | null, settled: boolean) {
       this.today = payload
       this.todaySettled = settled

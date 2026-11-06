@@ -11,6 +11,7 @@ import type { Page } from '@playwright/test'
  * 주의: 알림 설정을 실제로 토글하는 테스트에는 쓰지 말 것(읽기가 고정된다).
  */
 export async function suppressAccountStatePrompts(page: Page) {
+  await suppressBriefingShorts(page)
   await page.addInitScript(() => {
     const orig = Storage.prototype.getItem
     Storage.prototype.getItem = function (this: Storage, key: string) {
@@ -20,6 +21,22 @@ export async function suppressAccountStatePrompts(page: Page) {
           notificationSettings: { allEnabled: true, scheduledWorkout: true, workoutMorning: true, healthKitNewRun: true }
         })
       }
+      return orig.call(this, key)
+    }
+  })
+}
+
+/**
+ * 하루 한 번 뜨는 브리핑 쇼츠 팝업(#898)을 "오늘 이미 봤다"로 읽게 한다 — 전체 화면 팝업이 탭바·버튼 클릭을 가로챈다.
+ * 시드로 오늘 세션을 깔면 라우트 스모크(Supabase OFF)에서도 판정이 'show'가 된다. 클라이언트 읽기만 가로챈다(계정 무손상).
+ */
+export async function suppressBriefingShorts(page: Page) {
+  await page.addInitScript(() => {
+    const orig = Storage.prototype.getItem
+    const t = new Date()
+    const today = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`
+    Storage.prototype.getItem = function (this: Storage, key: string) {
+      if (typeof key === 'string' && key.startsWith('pacelab:briefing-shorts:shown:')) return today
       return orig.call(this, key)
     }
   })
