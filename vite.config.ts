@@ -44,6 +44,9 @@ export default defineConfig({
     // .claude/worktrees/** — repo 안에 중첩된 git worktree 의 테스트를 메인 트리 실행이 주워
     // 22건 오탐 실패한 사고(2026-07-03) 재발 방지. worktree 는 자기 경로에서 자체 실행된다.
     exclude: ['e2e/**', 'node_modules/**', 'dist/**', '.claude/**'],
+    // 동시 작업자 2개(= node 3개). 기본값은 코어−1(10코어 맥에서 9개)이라 개발 서버·브라우저 QA와 겹치면
+    // 맥이 통째로 멈췄다(2026-11-06). 2개로 전체 1869건 약 60초 — 커밋 훅(harness:check)도 이 값을 쓴다.
+    maxWorkers: 2,
     globals: true,
     setupFiles: ['./tests/setup.ts']
   },
