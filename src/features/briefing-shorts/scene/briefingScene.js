@@ -1277,12 +1277,18 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     }
   }
   const neckAlong = (p) => p.clone().sub(BM.neck).dot(NECK_DIR); // 목 밑동에서 목을 따라 올라간 높이(m)
-  // 바람막이: 안에 입은 옷 위에 걸친다. 지퍼를 가슴까지 내려 안에 입은 옷 목이 V 로 보이고, 깃(collar)은 목을 감싸 선다.
-  // 밑단·소매 끝은 고무단(덜 띄워 몸에 붙는다), 소매는 손목까지 — 워치는 소매 위에 찬다(워치 쪽 JACKET_CUFF_MM)
-  // 보온 재킷(thermo)도 같은 함수: 지퍼를 깃 끝까지 올리고(open 작게) 솜만큼 더 띄우고(loft) 가슴 V 쉐브론 반사띠(chevron 색).
-  // hood = 후드 내림(목 뒤에 뭉친 자루 — hoodDown). 후드를 올리면(악세사리 hood) 내림 자루 대신 머리에 쓴 후드(hoodUp)를 따로 짓는다
-  function windJacket({ color, shade, trim, trimShade, zip = '#17181c', hem = HEM - 0.01, open = 0.13, collar = 0.045, loft = 1, chevron = null, hood = false }) {
-    const sleeve = WRIST - 0.004, margin = 0.03, yV = BM.neck.y - open;
+  // 후드 달린 겉옷의 목선(목 축을 따라 목 밑동에서 m): 앞 가운데는 목의 1/3, 옆·뒤는 4.8cm 깃(후드가 여기서 이어진다).
+  // 사용자 지적 2026-11-07: "후드 있는 점퍼류는 앞이 목 밑에서 1/3 지점까지 올라온다 — 목으로 바람이 들어가면 추우니까", "후드를 쓸 정도면 지퍼를 다 올린다".
+  // 실측(쉬는 자세, 남녀 같다): 앞목 = 흉골 패임(목뼈 2.5cm 아래) ~ 턱 밑 꺾임(3.5cm 위) 6cm → 1/3 = 목뼈 0.5cm 아래.
+  // 겉옷 앞 깃은 목에서 1.4cm 떠 있어 목 축(9.5° 앞으로 기욺)으로 재면 0.006
+  const HOOD_NECK = { front: 0.006, back: 0.048 }; // 뒤는 안에 입은 하프집 깃(목 반)을 덮는 높이 — 낮으면 후드 내림 테두리 위로 안 옷 깃이 띠처럼 삐져나왔다
+  const neckCos = (p) => { const d = p.clone().sub(BM.neck); d.addScaledVector(NECK_DIR, -d.dot(NECK_DIR)); return d.dot(facing) / (d.length() || 1); }; // 목 둘레 방위(1 = 앞 가운데)
+  const hoodNeck = (p) => HOOD_NECK.back - (HOOD_NECK.back - HOOD_NECK.front) * Math.max(0, neckCos(p)) ** 1.5;
+  // 바람막이·보온 재킷(둘 다 후드 달린 점퍼): 안에 입은 옷 위에 걸친다. 지퍼는 목선 끝까지 잠그고(위 hoodNeck), 밑단·소매 끝은 고무단(덜 띄워 몸에 붙는다),
+  // 소매는 손목까지 — 워치는 소매 위에 찬다(워치 쪽 JACKET_CUFF_MM). 보온 재킷은 솜만큼 더 띄우고(loft) 가슴 V 쉐브론 반사띠(chevron 색).
+  // 후드는 내리면 목 뒤에 뭉친 자루(hoodDown), 올리면(악세사리 hood) 목선에서 이어 머리에 쓴 후드(hoodUp)
+  function windJacket({ color, shade, trim, trimShade, zip = '#17181c', hem = HEM - 0.01, loft = 1, chevron = null }) {
+    const sleeve = WRIST - 0.004, margin = 0.03, collar = HOOD_NECK.back;
     const loose = looseShell({
       color, shade,
       pick: (p, w) => wsum(w, HANDS) < 0.3 && wsum(w, LEGS_RE) < 0.5 && wsum(w, /C_Head$/) < 0.5 && p.y > hem - margin && neckAlong(p) < collar + margin && armT(p) < sleeve + margin,
@@ -1294,45 +1300,124 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
         return (body * (1 - arm) + sl * arm) * loft;
       },
     });
-    const Vf = (p) => (p.clone().sub(BM.neck).dot(facing) > -0.02 ? lat(p) - (p.y - yV) * 0.24 : 1); // 앞섶 V(+ = 옷): 꼭지점 yV 에서 위로 벌어진다
-    const topF = (p) => collar - neckAlong(p);
-    const F = (p) => Math.min(p.y - hem, topF(p), sleeve - armT(p), Vf(p));
+    const topF = (p) => hoodNeck(p) - neckAlong(p);
+    const F = (p) => Math.min(p.y - hem, topF(p), sleeve - armT(p));
     loose.forEach((o) => { o.visible = false; });
     const shell = clipShell({ src: loose, field: F, off: 0, color, shade });
     twoSided(shell, 0.35);
     // 가장자리 띠는 이미 오린 끝단에서 안쪽으로 한쪽만 잰다(0.007 - f) — 양쪽(min(f, 0.007 - f))으로 재면 띠가 삼각형보다 좁아 군데군데 끊겼다
-    panel(shell, (p) => Math.min(0.007 - Vf(p), p.y - yV + 0.004), zip, zip); // 열린 섶 지퍼 테이프
-    panel(shell, (p) => Math.min(0.0035 - lat(p), yV - p.y, front(p) ? 1 : -1), zip, zip); // 잠긴 지퍼(앞 가운데 꼭짓점 줄을 따라간다)
+    panel(shell, (p) => Math.min(0.0035 - lat(p), front(p) ? 1 : -1), zip, zip); // 잠근 지퍼(앞 가운데 꼭짓점 줄을 따라 목선까지)
     panel(shell, (p) => 0.008 - topF(p), trim, trimShade); // 깃 끝
     panel(shell, (p) => hem + 0.022 - p.y, trim, trimShade); // 밑단 고무단
     panel(shell, (p, w) => Math.min(wsum(w, ARMS) - 0.5, armT(p) - (sleeve - 0.025)), trim, trimShade); // 소매 고무단
-    const backY = hood && !ACC.has('hood') ? BM.neck.y - 0.27 : BM.shoulderY - 0.1; // 후드를 내리면 자루 밑으로
+    const backY = ACC.has('hood') ? BM.shoulderY - 0.1 : BM.neck.y - 0.21; // 후드를 내리면 자루 밑으로
     panel(shell, (p) => Math.min(0.007 - Math.abs(p.y - backY), 0.12 - lat(p), p.clone().sub(BM.hips).dot(facing) < BM.chestZ - 0.08 ? 1 : -1), '#e3e7ee', '#a9b0bc'); // 등 반사띠(1.4cm — 더 좁으면 삼각형 사이로 끊긴다)
     if (chevron) { // 가슴 V 쉐브론(가이드 2.2): 가운데가 가장 낮고 양쪽 겨드랑이 쪽으로 올라가는 6cm 띠. 중간 회색 — 빛을 받으면 희게. 지퍼 양옆 7mm 는 비운다
       const tip = BM.neck.y - 0.33;
       panel(shell, (p, w) => Math.min(0.03 - Math.abs(p.y - (tip + lat(p) * 0.6)), lat(p) - 0.007, 0.18 - lat(p), 0.5 - wsum(w, ARMS), front(p) ? 1 : -1), chevron[0], chevron[1]);
     }
-    if (hood && !ACC.has('hood')) hoodDown(shell, { color, shade, collar });
+    if (ACC.has('hood')) hoodUp(shell, { color, shade, trim, trimShade });
+    else hoodDown(shell, { color, shade });
     OUTER = shell;
   }
+  // ---- 흔들림 뼈(사용자 지적 2026-11-07 "후드에 본이 없어 살짝도 안 흔들리니 어색하다") ----
+  // 고정점 뼈를 부모 뼈(가슴·머리·목)에 새로 달고, 끝점이 관성으로 늦게 따라오게(Verlet: 스프링 → 쉬는 자리 + 감쇠) 해 그 방향으로 뼈를 돌린다.
+  // 메시는 꼭짓점마다 그 뼈 몫(0~1)을 나눠 붙이고(bindSway — 바인드 역행렬을 쉬는 자세에 맞춰 처음엔 안 움직인다), 묶음(조임끈)은 뼈에 그대로 붙인다.
+  // 러너는 제자리에서 뛰므로 흔들림은 몸의 위아래 출렁임·몸통 회전·고개 돌림에서 나온다. keepOut = 끝점이 그쪽(월드 방향)으로는 못 들어간다(등판을 뚫지 않게).
+  // lift = 위아래 가속을 keepOut 반대쪽(바깥)으로 거는 몫 — 등에 얹힌 자루는 진자 방향이 거의 수직이라 출렁임이 각도로 안 바뀌었다(1° — 안 보임).
+  // 실제 천은 몸이 떠 있는 동안(가속 −) 등에서 들뜨고 착지(+)에 눌린다
+  // 시험판 브랜치(claude/898-cloth-sway)의 swayRig·stepSway 를 줄였다
+  const SWAY = [];
+  function swayBone(parent, pivotW, tipW, { k = 400, drag = 5, maxAng = 0.2, keepOut = null, lift = 0 } = {}) {
+    parent.updateWorldMatrix(true, false);
+    const bone = new THREE.Bone(), inv = parent.getWorldQuaternion(new THREE.Quaternion()).invert();
+    bone.name = `sway_${SWAY.length}`;
+    parent.add(bone);
+    bone.position.copy(parent.worldToLocal(pivotW.clone()));
+    bone.updateMatrixWorld(true);
+    SWAY.push({
+      bone, parent, len: tipW.distanceTo(pivotW), dir: tipW.clone().sub(pivotW).normalize().applyQuaternion(inv), k, drag, maxAng,
+      out: keepOut && keepOut.clone().applyQuaternion(inv), lift, ay: 0, vy: 0, y1: null, tail: new THREE.Vector3(), prev: new THREE.Vector3(),
+    });
+    return bone;
+  }
+  function bindSway(meshes, bone, share) { // share(p) = 쉬는 자세 월드 점 p 의 흔들림 뼈 몫(0~1)
+    const v = new THREE.Vector3();
+    for (const o of meshes) {
+      o.updateMatrixWorld(true);
+      const base = o.skeleton.bones.length, inv = bone.matrixWorld.clone().invert().multiply(o.matrixWorld).multiply(o.bindMatrix.clone().invert());
+      o.bind(new THREE.Skeleton([...o.skeleton.bones, bone], [...o.skeleton.boneInverses, inv]), o.bindMatrix);
+      const g = o.geometry, si = g.attributes.skinIndex.clone(), sw = g.attributes.skinWeight.clone();
+      for (let i = 0; i < si.count; i++) {
+        const k = share(v.fromBufferAttribute(g.attributes.position, i).applyMatrix4(o.matrixWorld));
+        if (k < 0.002) continue;
+        const old = [0, 1, 2, 3].map((c) => [si.getComponent(i, c), sw.getComponent(i, c)]).filter(([, x]) => x > 0).sort((a, b) => b[1] - a[1]).slice(0, 3);
+        const sum = old.reduce((t, [, x]) => t + x, 0) || 1, out = [...old.map(([b, x]) => [b, (x / sum) * (1 - k)]), [base, k]];
+        for (let c = 0; c < 4; c++) { si.setComponent(i, c, out[c]?.[0] ?? 0); sw.setComponent(i, c, out[c]?.[1] ?? 0); }
+      }
+      g.setAttribute('skinIndex', si);
+      g.setAttribute('skinWeight', sw);
+    }
+  }
+  const SW = { P: new THREE.Vector3(), rest: new THREE.Vector3(), next: new THREE.Vector3(), d: new THREE.Vector3(), r: new THREE.Vector3(), o: new THREE.Vector3(), q: new THREE.Quaternion() };
+  function swayFrame(dt) { // 프레임마다(잘게 나누기 전에) 고정점의 위아래 가속 — 나눈 걸음마다 재면 첫 걸음에 한 프레임 이동이 몰려 튄다
+    for (const s of SWAY) {
+      if (!s.lift) continue;
+      s.parent.updateWorldMatrix(true, false);
+      const y = SW.P.copy(s.bone.position).applyMatrix4(s.parent.matrixWorld).y;
+      if (dt > 0 && s.y1 !== null) { const v = (y - s.y1) / dt; s.ay += ((v - s.vy) / dt - s.ay) * 0.5; s.vy = v; } else { s.vy = 0; s.ay = 0; }
+      s.y1 = y;
+    }
+  }
+  function stepSway(dt) { // dt = 0 이면 끝점을 지금 쉬는 자리에 놓는다(첫 프레임 — 자세가 잡힌 뒤)
+    const { P, rest, next, d, r, o, q } = SW;
+    for (const s of SWAY) {
+      s.parent.updateWorldMatrix(true, false);
+      s.parent.getWorldQuaternion(q);
+      P.copy(s.bone.position).applyMatrix4(s.parent.matrixWorld);
+      rest.copy(s.dir).applyQuaternion(q).multiplyScalar(s.len).add(P);
+      if (dt <= 0) { s.tail.copy(rest); s.prev.copy(rest); s.bone.quaternion.identity(); continue; }
+      next.copy(s.tail).sub(s.prev).multiplyScalar(Math.exp(-s.drag * dt)).add(s.tail).addScaledVector(d.copy(rest).sub(s.tail), Math.min(1, s.k * dt * dt));
+      if (s.out) {
+        o.copy(s.out).applyQuaternion(q);
+        next.addScaledVector(o, s.lift * Math.max(-12, Math.min(12, s.ay)) * dt * dt);
+        const k = d.copy(next).sub(rest).dot(o);
+        if (k > 0) next.addScaledVector(o, -k);
+      }
+      d.copy(next).sub(P).normalize();
+      r.copy(rest).sub(P).normalize();
+      const ang = Math.acos(Math.max(-1, Math.min(1, d.dot(r))));
+      if (ang > s.maxAng) d.lerp(r, 1 - s.maxAng / ang).normalize();
+      s.prev.copy(s.tail);
+      s.tail.copy(P).addScaledVector(d, s.len);
+      s.bone.quaternion.setFromUnitVectors(s.dir, d.applyQuaternion(q.invert()));
+    }
+  }
   // 후드 내림(가이드 3.1 — 뒷목에 뭉친 말린 칼라 + 등 윗부분에 얹힌 자루, 어깨까지 내려앉지 않는다):
-  // ① 자루 = 겉옷 등판을 방패꼴(폭 24cm·길이 25cm, 아래가 둥글다)로 오려 부풀린다 — 겉옷과 같은 뼈 가중치라 같이 움직인다. 위쪽(목 뒤)이 가장 두껍게 뭉친다
-  // ② 말린 테두리 = 깃 꼭대기 바깥을 따라 뒤로 감은 굵은 관(얼굴 테두리가 접힌 자리). 앞 양옆으로 갈수록 가늘어지며 깃 옆에서 끝난다
-  function hoodDown(src, { color, shade, collar }) {
-    const top = BM.neck.y + 0.015, L = 0.25, back = (p) => -p.clone().sub(BM.neck).dot(facing);
-    const W = (v) => (v < 0.6 ? 0.118 * (1 - 0.12 * v) : 0.118 * 0.928 * Math.sqrt(Math.max(0, 1 - ((v - 0.6) / 0.4) ** 2)));
+  // ① 자루 = 겉옷 등판을 방패꼴(폭 18cm·길이 19cm, 아래가 둥글다)로 오려 2cm 부풀린다 — 겉옷과 같은 뼈 가중치 + 아래로 갈수록 흔들림 뼈(가슴에 매단 진자)
+  //    몫이 커져 뛸 때 등에서 살짝 들썩인다(등 쪽으로는 못 들어간다). 사용자 지적 2026-11-07 "후드가 너무 크고 두껍다"(예전 24×25cm·4.2cm)
+  // ② 말린 테두리 = 깃 꼭대기 바깥을 따라 뒤로 감은 관(얼굴 테두리가 접힌 자리, 굵기 0.8~2.6cm). 앞 양옆으로 갈수록 가늘어지며 깃 옆에서 끝난다
+  function hoodDown(src, { color, shade }) {
+    const collar = HOOD_NECK.back, top = BM.neck.y + 0.015, L = 0.19, back = (p) => -p.clone().sub(BM.neck).dot(facing);
+    const W = (v) => (v < 0.6 ? 0.09 * (1 - 0.12 * v) : 0.09 * 0.928 * Math.sqrt(Math.max(0, 1 - ((v - 0.6) / 0.4) ** 2)));
     const vOf = (p) => (top - p.y) / L;
-    const flap = clipShell({ src, field: (p) => { const v = vOf(p); return Math.min(back(p) - 0.01, W(Math.max(0, v)) - lat(p), (1 - v) * L, collar - 0.004 - neckAlong(p)); }, off: 0.003, color, shade });
+    const flap = clipShell({ src, field: (p) => { const v = vOf(p); return Math.min(back(p) - 0.01, W(Math.max(0, v)) - lat(p), (1 - v) * L, hoodNeck(p) - 0.004 - neckAlong(p)); }, off: ACC.has('vest') ? 0.014 : 0.003, color, shade }); // 물병 조끼를 메면 자루는 조끼 위에 얹힌다(조끼 등판이 자루 가장자리를 뚫고 나왔다)
     twoSided(flap, 0.25);
     quilt(flap, (p) => {
       const v = Math.max(0, vOf(p)), u = Math.min(1, lat(p) / Math.max(W(v), 1e-4));
-      return 0.042 * Math.sqrt(1 - u * u) * (0.45 + 0.55 * (1 - ease(v / 0.7))) * ease((1 - v) / 0.25);
+      return 0.02 * Math.sqrt(1 - u * u) * (0.45 + 0.55 * (1 - ease(v / 0.7))) * ease((1 - v) / 0.25);
     });
     // 자루 가장자리 바이어스(6mm, 그늘색) + 등 가운데 솔기 — 겉옷과 같은 색이라 이게 없으면 등판과 구분이 안 됐다
     const Fh = (p) => { const v = vOf(p); return Math.min(W(Math.max(0, v)) - lat(p), (1 - v) * L); };
     const D = surfaceDist(Fh);
-    clipShell({ src: flap, field: (p, w, nrm) => 0.006 - D(p, nrm), off: 0.0012, color: shade, shade });
-    clipShell({ src: flap, field: (p) => Math.min(0.0015 - lat(p), vOf(p) * L + 0.02), off: 0.0012, color: shade, shade });
+    const bias = clipShell({ src: flap, field: (p, w, nrm) => 0.006 - D(p, nrm), off: 0.0012, color: shade, shade });
+    const seam = clipShell({ src: flap, field: (p) => Math.min(0.0015 - lat(p), vOf(p) * L + 0.02), off: 0.0012, color: shade, shade });
+    const chest = vrm.humanoid.getRawBoneNode('upperChest') ?? vrm.humanoid.getRawBoneNode('chest');
+    { // 흔들림: 자루 위 가운데(목 뒤)에 매달아 아래 끝이 늦게 따라온다
+      const at = (v0, v1) => { const c = new THREE.Vector3(); let n = 0; for (const o of flap) for (let i = 0, a = o.geometry.attributes.position, p = new THREE.Vector3(); i < a.count; i++) { p.fromBufferAttribute(a, i).applyMatrix4(o.matrixWorld); const v = vOf(p); if (lat(p) < 0.02 && v >= v0 && v <= v1) { c.add(p); n++; } } return n ? c.divideScalar(n) : null; };
+      const pivot = at(-0.2, 0.06), tip = at(0.85, 1);
+      if (pivot && tip) bindSway([...flap, ...bias, ...seam], swayBone(chest, pivot, tip, { k: 220, drag: 2.6, maxAng: 0.26, keepOut: facing, lift: 0.5 }), (p) => ease((vOf(p) - 0.04) / 0.86) ** 1.2);
+    }
     // 깃 꼭대기 바깥 반경(방위각마다 — 0 = 앞): 겉옷·자루 꼭짓점에서 잰다
     const Zf = facing.clone().addScaledVector(NECK_DIR, -facing.dot(NECK_DIR)).normalize(), Xl = new THREE.Vector3().crossVectors(NECK_DIR, Zf);
     const NB = 48, rad = new Float32Array(NB), q = new THREE.Vector3(), O = BM.neck.clone().addScaledVector(NECK_DIR, collar - 0.006);
@@ -1351,7 +1436,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     const ends = 1.75, N = 40, pts = [], radii = []; // 앞 100° 에서 끝난다(더 앞까지 감으면 끝이 목 옆에 뿔처럼 솟았다)
     for (let k = 0; k <= N; k++) {
       const phi = ends + (k / N) * (2 * Math.PI - 2 * ends), sdeg = 1 - Math.abs(phi - Math.PI) / (Math.PI - ends); // sdeg 1 = 등 가운데
-      const r = 0.006 + 0.014 * ease(sdeg / 0.6), R = rad[Math.floor((phi / (2 * Math.PI)) * NB) % NB];
+      const r = 0.004 + 0.009 * ease(sdeg / 0.6), R = rad[Math.floor((phi / (2 * Math.PI)) * NB) % NB];
       pts.push(O.clone().addScaledVector(Zf, Math.cos(phi) * (R + r * 0.55)).addScaledVector(Xl, Math.sin(phi) * (R + r * 0.55)).addScaledVector(NECK_DIR, r * 0.25));
       radii.push(r);
     }
@@ -1364,7 +1449,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     g.computeVertexNormals();
     const roll = wear(g, dress(CLOTH, color, shade));
     for (const k of [0, N]) roll.add(wear(new THREE.SphereGeometry(radii[k], 12, 8).translate(...pts[k].toArray()), dress(CLOTH, color, shade))); // 끝은 둥글게 막는다
-    attach(vrm.humanoid.getRawBoneNode('upperChest') ?? vrm.humanoid.getRawBoneNode('chest'), new THREE.Matrix4(), roll);
+    attach(chest, new THREE.Matrix4(), roll);
   }
   // 패딩 조끼: 안에 입은 긴팔 위, 몸통만(진동은 크게 판다). 가로 칸(q)마다 부풀리고 박음선은 눌려 그늘이 진다. 높은 깃 + 앞 지퍼 끝까지
   function padVest({ color, shade, trim, trimShade, zip = '#17181c', hem = HEM + 0.01, collar = 0.05, q = 0.068, base = 0.016 }) {
@@ -1735,54 +1820,137 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     },
   };
   if (NIGHT) for (const k of [SHELL, ACC.has('padvest') && 'padvest']) if (k) Object.assign(OUTERWEAR[CHAR][k], HIVIS, { trim: HIVIS.shade, trimShade: HIVIS.shade, zip: '#17181c' }); // 밤엔 겉옷(조끼 포함)을 하이비즈로
-  if (SHELL === 'thermo') windJacket({ ...OUTERWEAR[CHAR].thermo, open: 0.02, loft: 1.2, chevron: RF, hood: true });
-  else if (SHELL === 'jacket') windJacket({ ...OUTERWEAR[CHAR].jacket, open: BAND <= 5 ? 0.06 : 0.13, hood: true });
+  if (SHELL === 'thermo') windJacket({ ...OUTERWEAR[CHAR].thermo, loft: 1.2, chevron: RF });
+  else if (SHELL === 'jacket') windJacket({ ...OUTERWEAR[CHAR].jacket });
   if (ACC.has('padvest')) padVest({ ...OUTERWEAR[CHAR].padvest, base: SHELL ? 0.03 : 0.016 });
-  // 후드 올림(가이드 3.2·3.3 — 바람이 세면 모자 위로 후드를 쓰고 달린다, 사용자 요청 2026-11-06):
-  // 모자 돔(머리 틀 CC·CR)에서 3~4cm 부푼 달걀 + 아래는 목을 감싸 깃 위까지 내려온다. 얼굴 앞은 기울어진 면(이마 위 → 턱 밑)으로 잘라 낸 타원 개구부 —
-  // 캡이면 챙이 개구부 밖으로 튀어나오고(후드를 챙 위에서 끌어내리지 않는다) 비니는 안에 묻힌다. 행마다 개구부 각을 구해 그 사이만 지어 테두리가 매끈하다.
-  // 테두리엔 고무 바이어스 관 + 턱 옆에 조임끈 두 가닥. 머리뼈에 붙어 고개를 따라 돈다(머리를 줄인 뒤라 같은 비율로 줄여 붙인다). 포니테일은 후드 안으로 넣는다
-  function hoodUp({ color, shade, trim, trimShade }) {
-    const C0 = { y: 92, z: -14 }, R0 = { x: CR.x + 36, y: CR.y + 38, z: CR.z + 40 }, NK = { y: -128, z: -24, x: 104, zr: 100 }, top = C0.y + R0.y;
-    const ring = (y) => { // 그 높이의 가로 반경·중심 z: 위는 달걀, 아래(달걀 가운데 밑)는 목 둘레로 섞는다
-      if (y >= C0.y) { const k = Math.sqrt(Math.max(0, 1 - ((y - C0.y) / R0.y) ** 2)); return { rx: R0.x * k, rz: R0.z * k, cz: C0.z }; }
-      const e = ease((C0.y - y) / (C0.y - NK.y));
-      return { rx: R0.x + (NK.x - R0.x) * e, rz: R0.z + (NK.zr - R0.z) * e, cz: C0.z + (NK.z - C0.z) * e };
-    };
-    const zEdge = (y) => 40 + 0.36 * (y + 45); // 개구부 면: 이마 위(y 150 → z 110) ~ 턱 밑(y -45 → z 40)
-    const thc = (y) => { const r = ring(y); return Math.acos(Math.min(1, Math.max(-1, (zEdge(y) - r.cz) / Math.max(r.rz, 1e-3)))); };
-    const S = (u, y) => { const r = ring(y), a = thc(y), th = a + u * (2 * Math.PI - 2 * a); return new THREE.Vector3(r.rx * Math.sin(th), y, r.cz + r.rz * Math.cos(th)); };
-    const NA = 72, NV = 44, pos = [], normal = [], uv = [], index = [], y0 = top - 0.6, yAt = (j) => y0 - (j / NV) * (y0 - NK.y);
-    for (let i = 0; i <= NA; i++) {
-      for (let j = 0; j <= NV; j++) {
-        const u = i / NA, y = yAt(j), P = S(u, y);
-        const du = S(Math.min(1, u + 1e-3), y).sub(S(Math.max(0, u - 1e-3), y)), dv = S(u, y + 0.5).sub(S(u, y - 0.5));
-        const n = du.cross(dv).normalize(); // 바깥쪽
-        pos.push(P.x, P.y, P.z); normal.push(n.x, n.y, n.z); uv.push(u, j / NV);
+  // 후드 올림(가이드 3.2·3.3 — 바람이 세면 모자 위로 후드를 쓰고 달린다). 사용자 지적 2026-11-07: "뒤에서 보면 머리가 엄청 커 보인다 ·
+  // 상의랑 따로 논다 · 목 주변 깃에 이어져야 한다 · 후드를 쓸 정도면 지퍼를 다 올린다" → 예전엔 모자 돔에서 4cm 부푼 달걀을 머리뼈에 따로 붙였다.
+  // 이제 후드 밑단 = 겉옷 목선(지퍼 끝까지 잠근 깃 꼭대기)을 방위각마다 재서 그 둘레에서 시작하고 그 뼈 가중치를 받는다 → 상체와 같이 움직이고 고개를 돌리면 천이 비틀린다.
+  // 위는 모자 돔(CC·CR)을 1~2cm 감싼 돔(머리뼈) → 적도 밑에서 얼굴 옆으로 붙었다가(귀는 덮는다) 목선으로 모인다 — 옆·뒤에서 머리→목→어깨가 한 덩이로 이어진다.
+  // 얼굴 구멍 = 앞에서 본 U 자(이마 위 → 볼 옆 → 턱 밑 → 지퍼 끝에서 닫힘): 행마다 경계 방위각을 풀어 그 사이만 지어 테두리가 매끈하고, 턱 밑으로 넥워머·마스크가 보인다.
+  // 뒤쪽 돔은 흔들림 뼈(머리에 매단 진자)에 나눠 붙어 뛸 때 살짝 출렁이고, 조임끈 두 가닥은 목에 매단 진자로 흔들린다. 포니테일은 후드 안으로 넣는다.
+  // 틀 q = 원래 머리 mm(모자 돔과 같은 틀, 머리를 줄이기 전) — 월드 = HEAD × 머리 배율 × q
+  function hoodUp(src, { color, shade, trim, trimShade }) {
+    const HS = HEAD.clone().multiply(new THREE.Matrix4().makeScale(headScale, headScale, headScale)), HS_INV = HS.clone().invert();
+    // 돔: 모자를 감싸고(앞 RzT) 귀(머리 틀 |x| 109mm)를 덮는다. 볼 높이 앞(RzF)은 얼굴 옆으로 당긴다 — 안 당기면 얼굴 앞에 굴처럼 튀어나왔다
+    const cz = CC.z, yC = CC.y, Rx = Math.max(CR.x + 14, 120), Ry = CR.y + 10, RzT = CR.z + 12, RzB = CR.z + 16, RzF = 84;
+    // ① 목선: 깃 꼭대기 띠(위 4mm) 꼭짓점을 방위각 칸(5°)마다 — 가장 바깥 반경·평균 높이·가장 꼭대기 점의 뼈 가중치
+    const NB = 72, bins = Array.from({ length: NB }, () => ({ r: 0, y: 0, n: 0, gap: 9, w: null })), p = new THREE.Vector3(), q = new THREE.Vector3();
+    const binOf = (x, z) => Math.floor(((Math.atan2(x, z - cz) / (2 * Math.PI) + 1) % 1) * NB) % NB;
+    for (const o of src) {
+      const a = o.geometry.attributes.position, si = o.geometry.attributes.skinIndex, sw = o.geometry.attributes.skinWeight;
+      for (let i = 0; i < a.count; i++) {
+        p.fromBufferAttribute(a, i).applyMatrix4(o.matrixWorld);
+        const gap = hoodNeck(p) - neckAlong(p);
+        if (gap < -0.002 || gap > 0.004) continue;
+        q.copy(p).applyMatrix4(HS_INV);
+        const e = bins[binOf(q.x, q.z)];
+        e.r = Math.max(e.r, Math.hypot(q.x, q.z - cz)); e.y += q.y; e.n++;
+        if (gap < e.gap) { e.gap = gap; e.w = [0, 1, 2, 3].map((c) => [o.skeleton.bones[si.getComponent(i, c)], sw.getComponent(i, c)]).filter(([, x]) => x > 0); }
       }
     }
-    for (let i = 0; i < NA; i++) for (let j = 0; j < NV; j++) { const a = i * (NV + 1) + j, b = a + NV + 1; index.push(a, a + 1, b, b, a + 1, b + 1); }
-    const mats = dress(CLOTH, color, shade);
-    mats[0].side = THREE.DoubleSide; // 개구부로 안감이 보인다
-    const group = new THREE.Group();
-    group.add(wear(geometry(pos, uv, index, normal), mats));
-    // 테두리 관(왼쪽 아래 → 이마 위 → 오른쪽 아래) + 조임끈
-    const rim = [];
-    for (let j = NV; j >= 0; j--) if (thc(yAt(j)) > 0.02) rim.push(S(0, yAt(j)));
-    for (let j = 0; j <= NV; j++) if (thc(yAt(j)) > 0.02) rim.push(S(1, yAt(j)));
-    const tube = (pts, r, seg = 64) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), seg, r, 8, false);
-    const tr = dress(CLOTH, trim ?? shade, trimShade ?? shade);
-    group.add(wear(tube(rim, 5, 160), tr));
-    for (const u of [0, 1]) { // 턱 옆(개구부 아래쪽)에서 늘어진 조임끈 + 끈 끝 마개
-      const P = S(u, -30), d = u ? 1 : -1;
-      const pts = [P, P.clone().add(new THREE.Vector3(-d * 6, -28, 8)), P.clone().add(new THREE.Vector3(-d * 4, -62, 6))];
-      group.add(wear(tube(pts, 2.2, 16), tr));
-      group.add(wear(new THREE.CylinderGeometry(3, 3, 13, 10).translate(pts[2].x, pts[2].y - 6, pts[2].z), dress(CLOTH, '#2a2c31', '#15161a')));
+    const fill = bins.map((e, b) => { for (let d = 0; d < NB; d++) for (const k of [(b + d) % NB, (b - d + NB) % NB]) if (bins[k].n) return bins[k]; return null; });
+    const neckRing = fill.map((_, b) => { // 이웃 칸과 섞어 매끈하게. 밑단은 깃 꼭대기 4mm 밑·2mm 바깥(깃 끝을 덮는다)
+      let r = 0, y = 0;
+      for (const [d, k] of [[-2, 1], [-1, 2], [0, 3], [1, 2], [2, 1]]) { const e = fill[(b + d + NB) % NB]; r += e.r * k; y += (e.y / e.n) * k; }
+      return { r: r / 9 + 2, y: y / 9 - 4, w: fill[b].w };
+    });
+    const neckAt = (phi) => { const t = (((phi / (2 * Math.PI)) % 1) + 1) % 1 * NB - 0.5, b0 = Math.floor(t), f = t - b0, A = neckRing[(b0 + NB) % NB], B = neckRing[(b0 + 1) % NB]; return { r: A.r + (B.r - A.r) * f, y: A.y + (B.y - A.y) * f, w: (f < 0.5 ? A : B).w }; };
+    // ② 단면: 행 j = 0(정수리) … NU(적도, 모자 돔 가운데 높이) … NU + NE(귀 밑 yE) … NU + NE + NL(목선).
+    // 위는 타원체, 적도 → 귀 밑은 곧게 내려오며 앞만 얼굴 옆으로 당기고(귀는 덮는다 — 일찍 모으면 귀가 뚫고 나왔다), 귀 밑 → 목선은 r·y 평면 3차 곡선으로 모인다
+    const ringR = (phi, rzf) => 1 / Math.hypot(Math.sin(phi) / Rx, Math.cos(phi) / (Math.cos(phi) > 0 ? rzf : RzB));
+    const bez = (a, b, c, d, t) => { const s = 1 - t; return s * s * s * a + 3 * s * s * t * b + 3 * s * t * t * c + t * t * t * d; };
+    const NU = 16, NE = 12, NL = 26, NA = 96, rows = NU + NE + NL + 1, yE = 30;
+    const at = (phi, j) => { // → [r, y, u(귀 밑 → 목선 위치 0~1, 그 위는 0)]
+      const r0 = ringR(phi, RzT), r1 = ringR(phi, RzF);
+      if (j <= NU) { const be = (Math.PI / 2) * (1 - j / NU); return [Math.cos(be) * r0, yC + Ry * Math.sin(be), 0]; }
+      if (j <= NU + NE) { const t = (j - NU) / NE; return [r0 + (r1 - r0) * ease(t), yC + (yE - yC) * t, 0]; }
+      const u = (j - NU - NE) / NL, n = neckAt(phi), h = yE - n.y;
+      return [bez(r1, r1, n.r + (r1 - n.r) * 0.55, n.r, u), bez(yE, yE - 0.3 * h, n.y + 0.35 * h, n.y, u), u]; // 비스듬히 모은다(늦게 꺾으면 뒤에서 상자처럼 보였다)
+    };
+    // ③ 얼굴 구멍(앞에서 본 반폭 w(y)): 이마 위 yT 에서 닫히고, 이마~턱 위는 WM, 턱 밑에선 목선 가까이까지 넓게 가다가 지퍼 끝(앞 목선)에서 닫힌다 —
+    // 일찍 좁히면 후드 앞자락이 목 앞을 바짝 덮어 넥워머가 조각조각 뚫고 나왔다
+    const yZ = neckAt(0).y, yT = yC + 0.55 * Ry, WM = 88, yM0 = -10;
+    const wOpen = (y) => (y >= yT || y <= yZ ? 0 : y >= yC ? WM * Math.sqrt(1 - ((y - yC) / (yT - yC)) ** 2) : y >= yM0 ? WM : WM * Math.sqrt(1 - ((yM0 - y) / (yM0 - yZ)) ** 4));
+    const phiC = (j) => { // 그 행에서 구멍 경계 방위각(0 = 구멍 없음): |x| = w(y) 인 곳
+      const g = (phi) => { const [r, y] = at(phi, j); return r * Math.sin(phi) - wOpen(y); };
+      if (g(1e-4) >= 0) return 0;
+      let lo = 1e-4, hi = Math.PI / 2;
+      if (g(hi) < 0) return hi;
+      for (let k = 0; k < 28; k++) { const m = (lo + hi) / 2; if (g(m) < 0) lo = m; else hi = m; }
+      return hi;
+    };
+    const pc = Array.from({ length: rows }, (_, j) => phiC(j));
+    // ④ 뼈: 목선 가중치(아래로 갈수록) + 머리뼈 + 흔들림 뼈(머리에 매단 진자 — 이마 위 → 뒤통수 아래, 뒤쪽 돔이 몫을 받는다)
+    const HQ = (x, y, z) => new THREE.Vector3(x, y, z).applyMatrix4(HS);
+    const sway = swayBone(headBone, HQ(0, yC + 0.55 * Ry, cz + RzT * 0.8), HQ(0, yC - 40, cz - RzB), { k: 700, drag: 8, maxAng: 0.05 });
+    const weightsAt = (phi, u) => {
+      const wn = ease((u - 0.3) / 0.7), sg = 0.85 * ease((0.3 - Math.cos(phi)) / 1.0), nw = neckAt(phi).w.slice().sort((a, b) => b[1] - a[1]).slice(0, 2), ns = nw.reduce((t, [, x]) => t + x, 0) || 1;
+      return [...nw.map(([b, x]) => [b, (x / ns) * wn]), [headBone, (1 - wn) * (1 - sg)], [sway, (1 - wn) * sg]];
+    };
+    const posW = [], wts = [], index = [];
+    for (let j = 0; j < rows; j++) for (let i = 0; i <= NA; i++) {
+      const phi = pc[j] + (i / NA) * (2 * Math.PI - 2 * pc[j]), [r, y, u] = at(phi, j);
+      posW.push(HQ(r * Math.sin(phi), y, cz + r * Math.cos(phi)));
+      wts.push(weightsAt(phi, u));
     }
-    attach(headBone, HEAD.clone().multiply(new THREE.Matrix4().makeScale(headScale, headScale, headScale)), group);
-    if (tailRoot) { tailRoot.scale.setScalar(0.05); vrm.scene.updateMatrixWorld(true); vrm.springBoneManager?.setInitState?.(); } // 포니테일은 후드 안에 넣는다(줄여서 감춘다 — 0.35 면 끝이 후드 뒤로 삐져나왔다)
+    for (let j = 0; j < rows - 1; j++) for (let i = 0; i < NA; i++) { const a = j * (NA + 1) + i, b = a + NA + 1; index.push(a, b, a + 1, a + 1, b, b + 1); }
+    // ⑤ 테두리 관(왼쪽 아래 → 이마 위 → 오른쪽 아래) + 조임끈
+    const rimIdx = [];
+    for (let j = rows - 1; j >= 0; j--) if (pc[j] > 0) rimIdx.push(j * (NA + 1));
+    for (let j = 0; j < rows; j++) if (pc[j] > 0) rimIdx.push(j * (NA + 1) + NA);
+    const T = src[0], toLocal = T.matrixWorld.clone().invert();
+    const bones = [...new Set(wts.flatMap((w) => w.map(([b]) => b)))];
+    const skel = new THREE.Skeleton(bones, bones.map((b) => b.matrixWorld.clone().invert().multiply(T.matrixWorld).multiply(T.bindMatrix.clone().invert())));
+    const rigged = (g, wlist, mats) => { // 월드 좌표로 지은 g 를 겉옷과 같은 자리·바인드로 입힌다
+      g.applyMatrix4(toLocal);
+      const si = [], sw = [];
+      for (const w of wlist) {
+        const top = w.filter(([, x]) => x > 1e-4).sort((a, b) => b[1] - a[1]).slice(0, 4), sum = top.reduce((t, [, x]) => t + x, 0) || 1;
+        for (let c = 0; c < 4; c++) { si.push(top[c] ? bones.indexOf(top[c][0]) : 0); sw.push(top[c] ? top[c][1] / sum : 0); }
+      }
+      g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
+      g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+      mats.forEach((_, k) => g.addGroup(0, Infinity, k));
+      const m = new THREE.SkinnedMesh(g, mats);
+      m.frustumCulled = false;
+      m.position.copy(T.position); m.quaternion.copy(T.quaternion); m.scale.copy(T.scale);
+      T.parent.add(m);
+      m.bind(skel, T.bindMatrix);
+      return m;
+    };
+    const hoodGeo = geometry(posW.flatMap((v) => v.toArray()), posW.map((_, k) => [(k % (NA + 1)) / NA, Math.floor(k / (NA + 1)) / (rows - 1)]).flat(), index);
+    { // 앞 가운데 이음매(구멍 없는 행의 첫·끝 열)의 법선을 맞춘다 — 따로 재면 이마 위에 줄이 비쳤다
+      const na = hoodGeo.attributes.normal;
+      for (let j = 0; j < rows; j++) if (!pc[j]) { const a = j * (NA + 1), b = a + NA, n = new THREE.Vector3().fromBufferAttribute(na, a).add(new THREE.Vector3().fromBufferAttribute(na, b)).normalize(); na.setXYZ(a, n.x, n.y, n.z); na.setXYZ(b, n.x, n.y, n.z); }
+    }
+    const mats = dress(CLOTH, color, shade);
+    mats[0].side = THREE.DoubleSide; // 구멍으로 안감이 보인다
+    rigged(hoodGeo, wts, mats);
+    const rimPts = rimIdx.map((k) => posW[k]), rimW = rimIdx.map((k) => wts[k]);
+    const rimGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rimPts), 180, 0.0032, 8, false), rp = rimGeo.attributes.position, rv = new THREE.Vector3();
+    const rimWts = [];
+    for (let i = 0; i < rp.count; i++) { rv.fromBufferAttribute(rp, i); let best = 0, bd = Infinity; rimPts.forEach((pt, k) => { const d = pt.distanceToSquared(rv); if (d < bd) { bd = d; best = k; } }); rimWts.push(rimW[best]); }
+    rigged(rimGeo, rimWts, dress(CLOTH, trim ?? shade, trimShade ?? shade));
+    // 조임끈: 구멍 테두리 턱 밑 높이(q -62)에서 늘어진 두 가닥 + 끈 끝 마개 — 목에 매단 진자(뛸 때 달랑인다)
+    const neckBone = vrm.humanoid.getRawBoneNode('neck'), down = UP.clone().negate();
+    for (const side of [0, 1]) {
+      const col = rimIdx.slice(side ? Math.floor(rimIdx.length / 2) : 0, side ? undefined : Math.floor(rimIdx.length / 2));
+      const k = col.reduce((best, c) => (Math.abs(posW[c].clone().applyMatrix4(HS_INV).y + 62) < Math.abs(posW[best].clone().applyMatrix4(HS_INV).y + 62) ? c : best), col[0]);
+      const P = posW[k], len = 0.06, end = P.clone().addScaledVector(down, len).addScaledVector(facing, 0.006);
+      const bone = swayBone(neckBone, P, end, { k: 220, drag: 3.5, maxAng: 0.45 });
+      const cord = new THREE.Group();
+      cord.add(wear(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([P, P.clone().lerp(end, 0.5).addScaledVector(facing, 0.004), end]), 12, 0.0019, 6, false), dress(CLOTH, trim ?? shade, trimShade ?? shade)));
+      cord.add(wear(new THREE.CylinderGeometry(0.0026, 0.0026, 0.012, 10).translate(end.x, end.y - 0.005, end.z), dress(CLOTH, '#2a2c31', '#15161a')));
+      attach(bone, new THREE.Matrix4(), cord);
+    }
+    if (tailRoot) { // 포니테일은 후드 안에 넣는다: 뿌리를 뒤통수 속으로 옮기고 줄여서 감춘다(0.35 면 끝이, 뿌리가 모자 구멍 자리면 묶은 끈이 후드 뒤로 점처럼 비쳤다)
+      tailRoot.position.copy(headBone.worldToLocal(HQ(0, 90, -85)));
+      tailRoot.scale.setScalar(0.05);
+      vrm.scene.updateMatrixWorld(true);
+      vrm.springBoneManager?.setInitState?.();
+    }
   }
-  if (ACC.has('hood') && SHELL) hoodUp(OUTERWEAR[CHAR][SHELL]);
 
   // ---- 악세사리(피부 위): 장갑·마스크·넥워머·조끼 ----
   const faceY = (p) => p.clone().applyMatrix4(HEAD_INV); // 머리 틀(mm)
@@ -1795,10 +1963,17 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       skinShell({ src: FACES, off: 0.009, color: '#f4f5f7', shade: '#c7cad1', pick: (p) => { const q = faceY(p); return q.y < ey - 16 && q.y > -46 && q.z > ez - 25 && Math.abs(q.x) < 66; } });
     }
     if (ACC.has('buff')) { // 넥워머(추위): 목을 턱 밑선까지 감싼다. 턱·입은 덮지 않는다 — 브리핑은 말하는 입이 보여야 하고, 턱을 덮으면 멀리선 수염처럼 보였다(실측 입 -15~10mm·턱끝 -45mm, 머리뼈 기준)
-      // 겉옷(깃 4.5cm)을 입으면 넥워머는 깃 안으로 넣는다: 깃 위로 나온 부분만 짓고 덜 띄운다 — 같은 두께면 깃을 뚫고 검은 얼룩처럼 비쳤다
-      const top = -50, off = SHELL ? 0.008 : 0.012, above = SHELL ? 0.025 : -1;
-      skinShell({ src: FACES, off, color: '#3a404c', shade: '#232831', pick: (p) => { const q = faceY(p); return q.y < top && q.y > -60 && Math.abs(q.x) < 92; } });
-      skinShell({ off, color: '#3a404c', shade: '#232831', pick: (p, w) => wsum(w, /Neck|Head/) > 0.4 && faceY(p).y < top && p.y > BM.shoulderY - 0.01 && neckAlong(p) > above });
+      // 겉옷(후드 점퍼)을 입으면 넥워머는 깃 안으로 넣는다: 목선(hoodNeck — 앞은 목 1/3) 8mm 밑부터만 짓고 덜 띄운다 — 같은 두께면 깃을 뚫고 검은 얼룩처럼 비쳤다.
+      // 후드를 쓰면 옆·뒤는 후드에 덮이고 앞(턱 밑 ~ 지퍼 끝)만 얼굴 구멍으로 보인다(사용자 지적 2026-11-07 "후드 쓰고 워머를 시도했지만 안 되더라")
+      // 넉넉히 떠서(skinShell) 경계를 따라 잘라 낸다(clipShell) — 꼭짓점째 고르면 목 밑동(가슴뼈 가중치)이 빠져 구멍이 숭숭 났다(앞 목선을 낮춘 뒤 드러남)
+      const top = -50, off = SHELL ? 0.008 : 0.012, low = (p) => (SHELL ? hoodNeck(p) - 0.008 : -0.01);
+      const neckR = (p) => { const d = p.clone().sub(BM.neck); return d.addScaledVector(NECK_DIR, -d.dot(NECK_DIR)).length(); };
+      const knit = { color: '#3a404c', shade: '#232831' };
+      const face = skinShell({ src: FACES, off, ...knit, pick: (p) => { const q = faceY(p); return q.y < top + 15 && q.y > -75 && Math.abs(q.x) < 105; } });
+      const neck = skinShell({ off, ...knit, pick: (p) => faceY(p).y < top + 15 && neckAlong(p) > low(p) - 0.02 && neckR(p) < 0.09 });
+      for (const o of [...face, ...neck]) o.visible = false;
+      clipShell({ src: face, field: (p) => { const q = faceY(p); return 1e-3 * Math.min(top - q.y, q.y + 60, 92 - Math.abs(q.x)); }, off: 0, ...knit });
+      clipShell({ src: neck, field: (p) => Math.min(1e-3 * (top - faceY(p).y), neckAlong(p) - low(p), 0.075 - neckR(p)), off: 0, ...knit });
     }
   }
   if (ACC.has('vest')) { // LSD 조끼: 등판 + 어깨끈 + 앞끈, 가슴에 물병(소프트 플라스크) 두 개 — 피부가 아니라 몸통 가장 바깥 옷 위에
@@ -3170,6 +3345,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       const n = FX ? 5 : 1; // 12fps 로 끊을 땐 흔들림 물리를 잘게 나눠 돌린다
       for (let i = 0; i < n; i++) vrm.update(dt / n);
       stepBreath?.(dt, dz, st);
+      if (SWAY.length) { const m = Math.max(1, Math.ceil(dt * 120)); swayFrame(dt); for (let i = 0; i < m; i++) stepSway(dt / m); } // 흔들림 뼈(후드·조임끈): 자세가 다 정해진 뒤, 잘게 나눠(프레임이 늘어져도 안 튀게). 첫 프레임(dt 0)은 쉬는 자리에
       post.uniforms.stepT.value = st;
     }
 
