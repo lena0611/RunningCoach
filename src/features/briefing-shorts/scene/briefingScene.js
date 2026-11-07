@@ -1041,14 +1041,16 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   // 목 축(목뼈→머리뼈)에서 잰다: 옆은 목 밑동(반경 5.8cm), 앞은 쇄골 패임까지 조금 더(7cm·3.5cm 아래), 뒤는 높이로 끊는다(뒷목은 축에 가까워 반경으로는 등까지 파인다).
   // 예전엔 목뼈 1.2cm 밑 수평면으로 잘라 승모근 비탈을 따라 넓은 보트넥이 되고 옆 끝단이 계단처럼 찢어졌다
   const NECK_DIR = RB('head').sub(BM.neck).normalize();
-  const neckField = (p) => {
+  // up(m) = 목선을 목 따라 올린 높이(하프집 깃). 높이 경계만 올린다 — 예전엔 거리장 전체에 더해 반경 경계까지 밀려 목 둘레(반경 4.5cm)가
+  // 통째로 남아 깃이 턱 밑까지 덮었다(사용자 기준 "집업 깃은 목 반까지" 위반, 넥워머가 그 깃에 가려 안 보였다 — 2026-11-07)
+  const neckField = (p, up = 0) => {
     const d = p.clone().sub(BM.neck), along = d.dot(NECK_DIR), rad = d.addScaledVector(NECK_DIR, -along), r = rad.length(), cf = rad.dot(facing) / (r || 1);
     const fr = Math.max(0, cf) ** 2, bk = Math.max(0, -cf);
-    const a = r - (0.058 + 0.012 * fr), b = -0.035 * fr + 0.008 * bk - along, k = 0.014;
+    const a = r - (0.058 + 0.012 * fr), b = -0.035 * fr + 0.008 * bk - along + up, k = 0.014;
     return 0.5 * (a + b + Math.sqrt((a - b) ** 2 + k * k)); // + = 옷이 남는 쪽. 부드러운 max — 반경 경계·높이 경계가 만나는 뒷목 모서리를 둥글게
   };
   function crewNeck({ color, shade, rib, ribShade }) {
-    const F = neckField;
+    const F = (p) => neckField(p); // 거리장 인자(p, w, nrm)를 그대로 넘기면 w 가 깃 높이 자리(up)에 들어가 NaN — 상의가 통째로 사라졌다
     const src = OUTER;
     src.forEach((o) => { o.visible = false; });
     OUTER = clipShell({ src, field: F, off: 0, color, shade });
@@ -1056,7 +1058,7 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   }
   // 하프집(하이넥 긴팔): 크루넥 선보다 목을 collar 만큼 더 덮는 스탠드 깃 + 앞 가운데 지퍼(목뼈 13cm 아래까지) + 깃 끝 시보리
   function halfZip({ color, shade, rib, ribShade, zip = '#17181c', collar = 0.032 }) {
-    const F = (p) => neckField(p) + collar, src = OUTER;
+    const F = (p) => neckField(p, collar), src = OUTER;
     src.forEach((o) => { o.visible = false; });
     OUTER = clipShell({ src, field: F, off: 0, color, shade });
     clipShell({ src, field: (p) => { const f = F(p); return Math.min(f, 0.01 - f); }, off: 0.0012, color: rib, shade: ribShade });
@@ -1277,13 +1279,14 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     }
   }
   const neckAlong = (p) => p.clone().sub(BM.neck).dot(NECK_DIR); // 목 밑동에서 목을 따라 올라간 높이(m)
-  // 후드 달린 겉옷의 목선(목 축을 따라 목 밑동에서 m): 앞 가운데는 목의 1/3, 옆·뒤는 4.8cm 깃(후드가 여기서 이어진다).
+  // 후드 달린 겉옷의 목선(목 축을 따라 목 밑동에서 m): 앞 가운데는 목의 1/3 → 옆 2.3cm → 뒤 3.6cm 로 완만하게 오른다(후드가 여기서 이어진다).
   // 사용자 지적 2026-11-07: "후드 있는 점퍼류는 앞이 목 밑에서 1/3 지점까지 올라온다 — 목으로 바람이 들어가면 추우니까", "후드를 쓸 정도면 지퍼를 다 올린다".
   // 실측(쉬는 자세, 남녀 같다): 앞목 = 흉골 패임(목뼈 2.5cm 아래) ~ 턱 밑 꺾임(3.5cm 위) 6cm → 1/3 = 목뼈 0.5cm 아래.
   // 겉옷 앞 깃은 목에서 1.4cm 떠 있어 목 축(9.5° 앞으로 기욺)으로 재면 0.006
-  const HOOD_NECK = { front: 0.006, back: 0.048 }; // 뒤는 안에 입은 하프집 깃(목 반)을 덮는 높이 — 낮으면 후드 내림 테두리 위로 안 옷 깃이 띠처럼 삐져나왔다
+  // 옆까지 뒤 높이(4.8cm)로 세웠더니 앞에서 가파르게 솟은 깃 + 그 위 말린 테두리가 목 양옆에 날개처럼 보였다(하프집 깃이 턱까지 덮던 버그를 덮으려던 높이였다)
+  const HOOD_NECK = { front: 0.006, back: 0.036 };
   const neckCos = (p) => { const d = p.clone().sub(BM.neck); d.addScaledVector(NECK_DIR, -d.dot(NECK_DIR)); return d.dot(facing) / (d.length() || 1); }; // 목 둘레 방위(1 = 앞 가운데)
-  const hoodNeck = (p) => HOOD_NECK.back - (HOOD_NECK.back - HOOD_NECK.front) * Math.max(0, neckCos(p)) ** 1.5;
+  const hoodNeck = (p) => HOOD_NECK.front + (HOOD_NECK.back - HOOD_NECK.front) * ((1 - neckCos(p)) / 2) ** 0.8;
   // 바람막이·보온 재킷(둘 다 후드 달린 점퍼): 안에 입은 옷 위에 걸친다. 지퍼는 목선 끝까지 잠그고(위 hoodNeck), 밑단·소매 끝은 고무단(덜 띄워 몸에 붙는다),
   // 소매는 손목까지 — 워치는 소매 위에 찬다(워치 쪽 JACKET_CUFF_MM). 보온 재킷은 솜만큼 더 띄우고(loft) 가슴 V 쉐브론 반사띠(chevron 색).
   // 후드는 내리면 목 뒤에 뭉친 자루(hoodDown), 올리면(악세사리 hood) 목선에서 이어 머리에 쓴 후드(hoodUp)
@@ -1396,19 +1399,20 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
   // 후드 내림(가이드 3.1 — 뒷목에 뭉친 말린 칼라 + 등 윗부분에 얹힌 자루, 어깨까지 내려앉지 않는다):
   // ① 자루 = 겉옷 등판을 방패꼴(폭 18cm·길이 19cm, 아래가 둥글다)로 오려 2cm 부풀린다 — 겉옷과 같은 뼈 가중치 + 아래로 갈수록 흔들림 뼈(가슴에 매단 진자)
   //    몫이 커져 뛸 때 등에서 살짝 들썩인다(등 쪽으로는 못 들어간다). 사용자 지적 2026-11-07 "후드가 너무 크고 두껍다"(예전 24×25cm·4.2cm)
-  // ② 말린 테두리 = 깃 꼭대기 바깥을 따라 뒤로 감은 관(얼굴 테두리가 접힌 자리, 굵기 0.8~2.6cm). 앞 양옆으로 갈수록 가늘어지며 깃 옆에서 끝난다
+  // ② 말린 테두리 = 깃 꼭대기(목선 — 방위각마다 높이가 다르다) 바깥을 따라 뒤로 감은 관(얼굴 테두리가 접힌 자리, 굵기 0.8~2.6cm). 앞 양옆으로 갈수록 가늘어지며 깃 옆에서 끝난다
   function hoodDown(src, { color, shade }) {
-    const collar = HOOD_NECK.back, top = BM.neck.y + 0.015, L = 0.19, back = (p) => -p.clone().sub(BM.neck).dot(facing);
-    const W = (v) => (v < 0.6 ? 0.09 * (1 - 0.12 * v) : 0.09 * 0.928 * Math.sqrt(Math.max(0, 1 - ((v - 0.6) / 0.4) ** 2)));
+    const top = BM.neck.y + 0.015, L = 0.19, back = (p) => -p.clone().sub(BM.neck).dot(facing);
+    // 반폭: 목에 꿰맨 위쪽(깃 꼭대기 v ≈ -0.18)은 목 둘레만큼(5.6cm)으로 좁고 등으로 내려오며 9cm 까지 퍼진다 — 위까지 넓으면 자루 윗모서리가 목 양옆으로 날개처럼 비쳤다
+    const W = (v) => (v < 0.6 ? 0.09 * (1 - 0.12 * Math.max(0, v)) : 0.09 * 0.928 * Math.sqrt(Math.max(0, 1 - ((v - 0.6) / 0.4) ** 2))) * (0.62 + 0.38 * ease((v + 0.18) / 0.45));
     const vOf = (p) => (top - p.y) / L;
-    const flap = clipShell({ src, field: (p) => { const v = vOf(p); return Math.min(back(p) - 0.01, W(Math.max(0, v)) - lat(p), (1 - v) * L, hoodNeck(p) - 0.004 - neckAlong(p)); }, off: ACC.has('vest') ? 0.014 : 0.003, color, shade }); // 물병 조끼를 메면 자루는 조끼 위에 얹힌다(조끼 등판이 자루 가장자리를 뚫고 나왔다)
+    const flap = clipShell({ src, field: (p) => { const v = vOf(p); return Math.min(back(p) - 0.01, W(v) - lat(p), (1 - v) * L, hoodNeck(p) - 0.004 - neckAlong(p)); }, off: ACC.has('vest') ? 0.014 : 0.003, color, shade }); // 물병 조끼를 메면 자루는 조끼 위에 얹힌다(조끼 등판이 자루 가장자리를 뚫고 나왔다)
     twoSided(flap, 0.25);
     quilt(flap, (p) => {
-      const v = Math.max(0, vOf(p)), u = Math.min(1, lat(p) / Math.max(W(v), 1e-4));
+      const v = Math.max(0, vOf(p)), u = Math.min(1, lat(p) / Math.max(W(vOf(p)), 1e-4));
       return 0.02 * Math.sqrt(1 - u * u) * (0.45 + 0.55 * (1 - ease(v / 0.7))) * ease((1 - v) / 0.25);
     });
     // 자루 가장자리 바이어스(6mm, 그늘색) + 등 가운데 솔기 — 겉옷과 같은 색이라 이게 없으면 등판과 구분이 안 됐다
-    const Fh = (p) => { const v = vOf(p); return Math.min(W(Math.max(0, v)) - lat(p), (1 - v) * L); };
+    const Fh = (p) => { const v = vOf(p); return Math.min(W(v) - lat(p), (1 - v) * L); };
     const D = surfaceDist(Fh);
     const bias = clipShell({ src: flap, field: (p, w, nrm) => 0.006 - D(p, nrm), off: 0.0012, color: shade, shade });
     const seam = clipShell({ src: flap, field: (p) => Math.min(0.0015 - lat(p), vOf(p) * L + 0.02), off: 0.0012, color: shade, shade });
@@ -1420,24 +1424,25 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
     }
     // 깃 꼭대기 바깥 반경(방위각마다 — 0 = 앞): 겉옷·자루 꼭짓점에서 잰다
     const Zf = facing.clone().addScaledVector(NECK_DIR, -facing.dot(NECK_DIR)).normalize(), Xl = new THREE.Vector3().crossVectors(NECK_DIR, Zf);
-    const NB = 48, rad = new Float32Array(NB), q = new THREE.Vector3(), O = BM.neck.clone().addScaledVector(NECK_DIR, collar - 0.006);
+    const NB = 48, rad = new Float32Array(NB), q = new THREE.Vector3();
     for (const o of [...src, ...flap]) {
       const a = o.geometry.attributes.position;
       for (let i = 0; i < a.count; i++) {
         q.fromBufferAttribute(a, i).applyMatrix4(o.matrixWorld);
-        const al = neckAlong(q);
-        if (al < collar - 0.02 || al > collar + 0.004) continue;
+        const al = neckAlong(q), h = hoodNeck(q);
+        if (al < h - 0.02 || al > h + 0.004) continue;
         q.sub(BM.neck).addScaledVector(NECK_DIR, -al);
         const b = Math.floor((((Math.atan2(q.dot(Xl), q.dot(Zf)) / (2 * Math.PI)) + 1) % 1) * NB);
         if (q.length() < 0.1) rad[b] = Math.max(rad[b], q.length()); // 어깨(목에서 10cm 밖)는 빼고 깃만
       }
     }
     for (let b = 0; b < NB; b++) if (!rad[b]) rad[b] = Math.max(rad[(b + NB - 1) % NB], rad[(b + 1) % NB]);
-    const ends = 1.75, N = 40, pts = [], radii = []; // 앞 100° 에서 끝난다(더 앞까지 감으면 끝이 목 옆에 뿔처럼 솟았다)
+    const ends = 1.95, N = 40, pts = [], radii = []; // 앞 112° 에서 끝난다(더 앞까지 감으면 끝이 목 옆에 뿔처럼 솟았다 — 100° 도 정면에서 목 옆에 말려 보였다)
     for (let k = 0; k <= N; k++) {
       const phi = ends + (k / N) * (2 * Math.PI - 2 * ends), sdeg = 1 - Math.abs(phi - Math.PI) / (Math.PI - ends); // sdeg 1 = 등 가운데
       const r = 0.004 + 0.009 * ease(sdeg / 0.6), R = rad[Math.floor((phi / (2 * Math.PI)) * NB) % NB];
-      pts.push(O.clone().addScaledVector(Zf, Math.cos(phi) * (R + r * 0.55)).addScaledVector(Xl, Math.sin(phi) * (R + r * 0.55)).addScaledVector(NECK_DIR, r * 0.25));
+      const dir = Zf.clone().multiplyScalar(Math.cos(phi)).addScaledVector(Xl, Math.sin(phi)), h = hoodNeck(BM.neck.clone().addScaledVector(dir, 0.05));
+      pts.push(BM.neck.clone().addScaledVector(NECK_DIR, h - 0.006 + r * 0.25).addScaledVector(dir, R + r * 0.55));
       radii.push(r);
     }
     const curve = new THREE.CatmullRomCurve3(pts), T = 80, RS = 12, g = new THREE.TubeGeometry(curve, T, 1, RS, false), gp = g.attributes.position, c = new THREE.Vector3();
@@ -1966,7 +1971,9 @@ export async function createBriefingScene({ canvas, modelUrl, options = {}, onRe
       // 겉옷(후드 점퍼)을 입으면 넥워머는 깃 안으로 넣는다: 목선(hoodNeck — 앞은 목 1/3) 8mm 밑부터만 짓고 덜 띄운다 — 같은 두께면 깃을 뚫고 검은 얼룩처럼 비쳤다.
       // 후드를 쓰면 옆·뒤는 후드에 덮이고 앞(턱 밑 ~ 지퍼 끝)만 얼굴 구멍으로 보인다(사용자 지적 2026-11-07 "후드 쓰고 워머를 시도했지만 안 되더라")
       // 넉넉히 떠서(skinShell) 경계를 따라 잘라 낸다(clipShell) — 꼭짓점째 고르면 목 밑동(가슴뼈 가중치)이 빠져 구멍이 숭숭 났다(앞 목선을 낮춘 뒤 드러남)
-      const top = -50, off = SHELL ? 0.008 : 0.012, low = (p) => (SHELL ? hoodNeck(p) - 0.008 : -0.01);
+      // 두께: 안에 입은 옷 깃(6.5~7.7mm) 바깥에 감는다(겉옷 깃 위로 나온 데는 1.2cm) — 겉옷 깃 안쪽 8mm 띠만 겉옷(1.2cm~)보다 얇게 8mm.
+      // 예전엔 겉옷을 입으면 통째로 8mm 라 안 옷 하프집 깃과 겹쳐 가려졌다(사용자 지적 2026-11-07 "워머에 체크했지만 안 씀")
+      const top = -50, low = (p) => (SHELL ? hoodNeck(p) - 0.008 : -0.01), off = SHELL ? (p) => 0.008 + 0.004 * ease((neckAlong(p) - hoodNeck(p) + 0.003) / 0.006) : 0.012;
       const neckR = (p) => { const d = p.clone().sub(BM.neck); return d.addScaledVector(NECK_DIR, -d.dot(NECK_DIR)).length(); };
       const knit = { color: '#3a404c', shade: '#232831' };
       const face = skinShell({ src: FACES, off, ...knit, pick: (p) => { const q = faceY(p); return q.y < top + 15 && q.y > -75 && Math.abs(q.x) < 105; } });
